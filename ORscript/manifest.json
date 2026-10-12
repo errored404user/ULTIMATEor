@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ORscript",
-  "version": "1.19.8",
+  "version": "1.20.0",
   "minimum_chrome_version": "111",
   "description": "Turn ChatGPT, Claude, DeepSeek, Gemini, Kimi, NVIDIA NIM Kimi K3, GLM, Qwen, Arena, Meta AI, Crax GPT, Notion AI or Ox Alpha into a Roblox Studio / AgentScript agent. Two engines (RS/AS), work modes, image-to-model, auto-fix playtest errors, and Extra Thinking.",
   "permissions": [
@@ -74,15 +74,18 @@
     "service_worker": "background.js"
   },
   "icons": {
-    "16": "assets/icon.png",
-    "48": "assets/icon.png",
-    "128": "assets/icon.png"
+    "16": "assets/icon16.png",
+    "32": "assets/icon32.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
   },
   "web_accessible_resources": [
     {
       "resources": [
         "ui/*.jpg",
-        "assets/icon.png"
+        "assets/icon.png",
+        "assets/icon128.png",
+        "assets/logo.svg"
       ],
       "matches": [
         "https://*/*",
@@ -103,9 +106,10 @@
     "default_popup": "popup.html",
     "default_title": "OR — RS/AS — 1.19.0 BETA",
     "default_icon": {
-      "16": "assets/icon.png",
-      "48": "assets/icon.png",
-      "128": "assets/icon.png"
+      "16": "assets/icon16.png",
+      "32": "assets/icon32.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
     }
   },
   "content_scripts": [
@@ -137,6 +141,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -180,6 +185,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -214,6 +220,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -245,6 +252,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -279,6 +287,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -323,6 +332,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -354,6 +364,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -385,6 +396,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -417,6 +429,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -458,6 +471,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -499,6 +513,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -533,6 +548,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -576,6 +592,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [
@@ -611,6 +628,7 @@
         "src/core/template_registry.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
+        "src/core/paint.js",
         "src/core/main.js"
       ],
       "css": [

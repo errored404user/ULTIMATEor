@@ -703,7 +703,8 @@
     { name: "Arena", url: "https://arena.ai/text/direct" },
     { name: "Meta AI", url: "https://www.meta.ai/" },
     { name: "Crax GPT", url: "https://gpt.crax.lol/" },
-    { name: "Notion AI", url: "https://www.notion.so/ai" },
+    { name: "Ox Alpha", url: "https://oxalpha.com/" },
+    { name: "Notion AI", url: "https://www.notion.so/chat" },
     { name: "MiniMax Agent", url: "https://agent.minimax.io/" },
     { name: "Overchat", url: "https://overchat.ai/" },
     { name: "HuggingChat", url: "https://huggingface.co/chat/" },
@@ -4074,6 +4075,64 @@
     } catch {}
   }
 
+  // ═════════════════════════════════════════════════════════════════
+  //  PAINT → AI hand-off (src/core/paint.js)
+  //  The painting is sent as a normal user turn: if no session is running the
+  //  agent is started first (so the model already knows the command protocol),
+  //  a busy loop is waited out, then the message (+ PNG where the site accepts
+  //  images) is typed into the composer and the loop is kicked for the reply.
+  // ═════════════════════════════════════════════════════════════════
+  async function paintCaptureStudio() {
+    try { await ensureTools(); } catch {}
+    const screenTool = studioToolByBare("screen_capture") || studioCaptureTool();
+    if (!screenTool) return null;
+    const callArgs = await screenCaptureArgs({}, screenTool);
+    const r = await bg({ type: "call_tool", name: screenTool.name, arguments: callArgs, timeout: 90000 });
+    return r && r.images && r.images.length ? r.images : null;
+  }
+  async function sendPainting(text, images, onStatus) {
+    const say = (m) => { try { onStatus && onStatus(m); } catch {} };
+    if (!A.started) {
+      say("Starting the agent first…");
+      diag("paint.autoStart", { chatEmpty: P.chatIsEmpty() });
+      await startSession({ restart: !P.chatIsEmpty() });
+      const up = await waitFor(() => A.started && !A.starting, 240000);
+      if (!up) throw new Error("the agent did not finish starting — press Start, then send again");
+    }
+    if (A.running || A.injecting) {
+      say("Agent is busy — your drawing goes out as soon as this step finishes…");
+      const free = await waitFor(() => !A.running && !A.injecting, 600000);
+      if (!free) throw new Error("the agent stayed busy — stop it and send again");
+    }
+    const base = P.assistantCount();
+    let sent = false;
+    if (images && images.length) {
+      try { ui.showImages(images, "paint"); } catch {}
+      try { sent = (await P.typeAndSend(text, images)) !== false; } catch (e) { diag("paint.sendImageFail", { err: String(e && e.message || e).slice(0, 160) }); }
+      if (!sent) say("Image upload refused — sending the vector description instead…");
+    }
+    if (!sent) { try { sent = (await P.typeAndSend(text)) !== false; } catch (e) { diag("paint.sendFail", { err: String(e && e.message || e).slice(0, 160) }); } }
+    if (!sent) return false;
+    A.userStopped = false; bumpSys("users");
+    try { ui.steeringProgress("waiting", "Drawing sent — waiting for the AI's reading", 0); } catch {}
+    setTimeout(() => { if (A.started && !A.running && !A.userStopped) agentLoop(base); }, 350);
+    diag("paint.sent", { chars: text.length, images: images ? images.length : 0 });
+    return true;
+  }
+  function openPaint() {
+    if (typeof ORPaint === "undefined") { ui.toast("Paint module missing — reload the extension"); return; }
+    ORPaint.open({
+      send: sendPainting,
+      captureStudio: paintCaptureStudio,
+      engine: () => activeEngine(),
+      canAttachImages: () => typeof P.attachImages === "function" || /\bimages\b/.test(String(P.typeAndSend)),
+      workMode: () => { try { return window.__rsWorkMode ? window.__rsWorkMode() : "adaptive"; } catch { return "adaptive"; } },
+      toast: (m) => ui.toast(m),
+      diag,
+    });
+  }
+  window.__rsOpenPaint = openPaint;
+
   async function startSession(opts = {}) {
     const isRestart = !!(opts && opts.restart);
     if (A.running || A.starting) { diag("start.duplicateIgnored", { running:A.running, starting:A.starting }); return; }
@@ -4916,6 +4975,7 @@
           <div class="rs-cluster rs-cluster-left">
           <span id="rs-dot" class="off" title=""></span>
           <span id="rs-ornament" aria-hidden="true"></span>
+          <img id="rs-logo" class="rs-logo" alt="" aria-hidden="true" draggable="false" src="${chrome.runtime.getURL("assets/logo.svg")}">
           <span id="rs-brand" data-rs-brand>OrScript</span>
           <span id="rs-work-badge" hidden></span>
           <div id="rs-engine" data-engine="roblox">
@@ -4936,6 +4996,7 @@
           <button id="rs-voice" type="button" aria-pressed="false" title="Enable voice coding">🎙 Voice</button>
           <button id="rs-undo" hidden title="Undo last Studio change the agent made">Undo</button>
           <button id="rs-discord" aria-label="Discord" title="OR Discord"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.8 19.8 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg></button>
+          <button id="rs-paint-btn" aria-label="Paint" title="Paint — draw it, the AI builds it (Ctrl+Shift+P)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 4c-3 1-8 6-10 9l2 2c3-2 8-7 9-10z"/><path d="M8 15c-2 0-4 1-4 4 0 1-1 1-1 1s4 1 6-1c1-1 1-2 1-2z"/></svg></button>
           <button id="rs-settings-btn" aria-label="Settings" title="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
           </div>
 
@@ -5164,6 +5225,9 @@
         setMenuOpen(!!menuEl.hidden, toSupport);
       };
       supportBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleMenu(true); });
+      const paintBtn = root.querySelector("#rs-paint-btn");
+      if (paintBtn) paintBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenPaint) window.__rsOpenPaint(); });
+      document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "P" || e.key === "p") && !e.altKey) { if (typeof ORPaint !== "undefined" && ORPaint.isOpen()) return; e.preventDefault(); if (window.__rsOpenPaint) window.__rsOpenPaint(); } }, true);
       // Engine toggle (Roblox ↔ AgentScript ↔ Animation)
       const engineEl = root.querySelector("#rs-engine");
       currentEngine = "roblox";
@@ -5967,7 +6031,7 @@
         mcpList += `<div class="rs-mcp-item"><span class="rs-mcp-health rs-mcp-health-${healthClass}" title="${healthTitle}"></span><div class="rs-mcp-info"><span class="rs-mcp-name">${esc(s.name)}</span><span class="rs-mcp-url">${esc(s.command || s.id)}</span></div><button class="rs-mcp-remove" data-id="${esc(s.id)}" title="Remove">✕</button></div>`;
       });
       menuEl.innerHTML =
-        `<div class="rs-menu-head"><span class="rs-menu-mark" aria-hidden="true"></span><div class="rs-menu-head-txt"><span class="rs-menu-logo">Settings</span><span class="rs-menu-tag"><span data-rs-brand>${orTheme==="void"?"VoidScript":"OrScript"}</span> · v${EXT_VERSION}</span></div><button type="button" class="rs-menu-close" id="rs-menu-close" aria-label="Close settings" title="Close">×</button></div>
+        `<div class="rs-menu-head"><span class="rs-menu-mark rs-menu-mark-logo" aria-hidden="true" style="background-image:url(${chrome.runtime.getURL("assets/logo.svg")})"></span><div class="rs-menu-head-txt"><span class="rs-menu-logo">Settings</span><span class="rs-menu-tag"><span data-rs-brand>${orTheme==="void"?"VoidScript":"OrScript"}</span> · v${EXT_VERSION}</span></div><button type="button" class="rs-menu-close" id="rs-menu-close" aria-label="Close settings" title="Close">×</button></div>
          <section class="rs-menu-sec">
            <div class="rs-sec-label"><span>Switch AI</span></div>
            ${sites}
@@ -6506,7 +6570,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const body = cardsTab === "activity" ? activityHtml() : (local ? summaryHtml() : libraryHtml());
       panel.innerHTML =
         '<div class="rs-cards-top">'
-        + '<div class="rs-cards-brand"><span class="rs-cards-kicker" data-rs-brand-short>' + (orTheme==="void"?"VoidScript":"OrScript") /* selected-skin branding */ + '</span><span class="rs-cards-heading">Templates</span><span class="rs-cards-subheading">Reusable workflows · v' + EXT_VERSION + '</span></div>'
+        + '<div class="rs-cards-brand"><img class="rs-logo rs-cards-logo" alt="" aria-hidden="true" src="' + chrome.runtime.getURL("assets/logo.svg") + '"><span class="rs-cards-kicker" data-rs-brand-short>' + (orTheme==="void"?"VoidScript":"OrScript") /* selected-skin branding */ + '</span><span class="rs-cards-heading">Templates</span><span class="rs-cards-subheading">Reusable workflows · v' + EXT_VERSION + '</span></div>'
         + '<div class="rs-cards-tabs">'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "library" ? " on" : "") + '" data-tab="library">' + mainLabel + '</button>'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "activity" ? " on" : "") + '" data-tab="activity">Activity' + actN + '</button>'

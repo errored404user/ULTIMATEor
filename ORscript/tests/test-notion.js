@@ -17,7 +17,7 @@ assert(NOTION.every((u) => entry.matches.includes(u)), "bundle covers every Noti
 assert(!manifest.content_scripts.some((c) => c !== entry && c.world !== "MAIN" && c.matches.some((m) => /notion/.test(m))), "Notion injected exactly once");
 assert(NOTION.every((u) => bg.includes(u)), "background broadcasts status to Notion tabs");
 assert(popup.includes('"www.notion.so": "Notion"') && popup.includes('"notion.com", "oxalpha.com"'), "popup recognises Notion");
-assert(main.includes('{ name: "Notion AI", url: "https://www.notion.so/ai" }'), "AI switcher lists Notion AI");
+assert(main.includes('{ name: "Notion AI", url: "https://www.notion.so/chat" }'), "AI switcher lists Notion AI");
 assert(css.includes("#rs-bar.rs-prov-notion {"), "overlay has the Notion skin");
 assert(/Notion AI/.test(manifest.description), "manifest description mentions Notion AI");
 
