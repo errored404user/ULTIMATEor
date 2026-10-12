@@ -1,15 +1,15 @@
 "use strict";
+// Ultimate Work Mode replaces the former Adaptive workflow as the default.
 const fs=require("fs"),assert=require("assert");
 const main=fs.readFileSync("src/core/main.js","utf8"),config=fs.readFileSync("src/core/config.js","utf8"),css=fs.readFileSync("overlay.css","utf8");
-assert(main.includes('let workMode = "adaptive"'));
-assert(!main.includes('data-work="fast"')&&!main.includes('data-work="balanced"')&&!main.includes('data-work="thorough"'));
-assert(main.includes('Inspect → Plan → Approve once → Build → Diagnose → Verify'));
-assert(main.includes('rsWorkMode:"adaptive"'),"legacy presets must migrate");
-for(const phase of ['1. INSPECT','2. PLAN IN CHAT','3. APPROVAL GATE','4. EXECUTE','5. VERIFY BROADLY','6. FINISH TRUTHFULLY'])assert(config.includes(phase),phase);
-assert(config.includes('Approve this plan to begin.'));
-assert(config.includes('do not re-plan or request another approval'));
-assert(config.includes('inspect Studio Output with or_debug'));
-assert(config.includes('permission, publication, payment, destructive-action, and platform confirmation rules still apply'));
-assert(main.includes('workmode:{title:"Adaptive Work Mode"'));
-assert(css.includes('.rs-work-row.rs-work-adaptive'));
-console.log('PASS  Adaptive Work Mode is approval-gated, autonomous, broadly verified, and compact');
+assert(main.includes('let workMode = "ultimate"'),"ultimate is the default");
+assert(!main.includes('data-work="fast"')&&!main.includes('data-work="balanced"')&&!main.includes('data-work="thorough"')&&!main.includes('data-work="adaptive"'));
+assert(main.includes('Luau systems · Modeling · Architecture — production-grade, verified'),"ultimate card subtitle");
+assert(main.includes('rsWorkMode:"ultimate"'),"legacy presets and adaptive must migrate to ultimate");
+assert(main.includes('name: "Ultimate", badge: "ULTIMATE", short: "Ultimate"'),"ultimate shows a bar badge");
+for(const phase of ['1. ASSESS','2. READ BEFORE YOU WRITE','3. PLAN INTERNALLY, THEN EXECUTE CONTINUOUSLY','4. APPROVAL ONLY FOR RISK','5. VERIFY DEEPLY','6. RECOVER','7. FINISH WITH EVIDENCE'])assert(config.includes(phase),phase);
+assert(config.includes('LUAU ENGINEERING MANDATE')&&config.includes('MODELING MANDATE'),"both mandates present");
+assert(config.includes('do not ask "Approve this plan to begin."'),"continuous by default");
+assert(config.includes('Existing permission and platform confirmation rules always win.'));
+assert(css.includes('.rs-work-row.rs-work-ultimate'));
+console.log('PASS  Ultimate Work Mode is the default: Luau engineering + modeling mandates, continuous, deeply verified');

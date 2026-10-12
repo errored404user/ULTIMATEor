@@ -1692,37 +1692,41 @@
   // are handled (see the `r.images.length` branch) and turned into a plain
   // error on non-vision providers, so nothing needs to be predicted here.
   // ── Work modes ────────────────────────────────────────────────────────
-  // adaptive   = the reliability-first generalist workflow (default).
+  // ultimate   = the flagship default: senior Luau engineer + 3D modeler.
+  //              Pushes the whole script_*/execute_luau/instance_*/part_*/
+  //              model_*/physics_*/terrain_*/build families, deep verification.
   // visualizer = VFX / lighting / UI specialist: pushes the whole fx_*, vfx_*,
   //              lighting_*, ui_* families and screenshot-verifies every pass.
   // animator   = animation specialist: animation_* editor pipeline, tweens,
   //              springs, IK, camera work, preview-verified.
   // `focus` picks the commands each specialist mode surfaces first in
-  // list_commands; config.js layers the matching prompt on top of Adaptive.
+  // list_commands; config.js layers the matching prompt on top of the
+  // Ultimate workflow (which is also the base for the two specialists).
   const WORK_MODES = {
-    adaptive: {
-      name: "Adaptive workflow", badge: "", short: "Adaptive",
-      sub: "Inspect → Plan → Approve once → Build → Diagnose → Verify",
-      note: "Reliability-first generalist: inspect, plan, one approval, then build and verify every phase.",
-      toast: "Adaptive Work Mode — approve the plan once, then OrScript builds and verifies it",
+    ultimate: {
+      name: "Ultimate", badge: "ULTIMATE", short: "Ultimate",
+      sub: "Luau systems · Modeling · Architecture — production-grade, verified",
+      note: "Flagship mode: senior Luau engineer and 3D modeler in one. Full scripting, instance, physics, build and terrain arsenal, continuous autonomy, deep verification.",
+      toast: "Ultimate Work Mode — senior Luau engineer + modeler, full arsenal, every build verified",
+      focus: /^(script_|execute_luau|multi_edit|search_game_tree|search_files|inspect_instance|get_studio_state|get_console_output|audit_(script_errors|unanchored_parts)|instance_|part_(create|at|above)|meshpart_create|wedge_create|model_group|(scale|rotate|mirror|flatten|raise|ungroup)_model|set_primary_part|pivot_(set|to)|cframe_set|rotation_set|size_set|snap_(position|to_grid)|grid_clone|duplicate_n|weld_(assemble|constraint)|constraint_create|constraints_clear|rigid_constraint_create|hinge_create|rope_create|attachment_create|align_(position|orientation)_create|material_set|color_set|brickcolor_set|transparency_set|reflectance_set|texture_add|decal_(add|set)|mesh_set_texture|generate_(mesh|material|procedural_model)|terrain_|staircase_generate|archway_generate|roof_structure_build|fence_line_build|road_path_build|bridge_suspension_make|window_glass_install|tree_forest_scatter|dungeon_room_generate|ground_make|water_body|folder_create|attribute_(get|set)|tag_(add|remove)|remote_|bindable_|datastore_setup|ds_|leaderstats_|collision_(set|group_set)|physics_|anchored_set|get_(children|descendants|property|service|template)|set_property|property_copy|selection_(info|set)|script_analysis|or_debug|or_screenshot|start_stop_play|place_backup_save|workspace_(stats|list|export|import))/,
     },
     visualizer: {
       name: "Visualizer", badge: "VISUALIZER", short: "Visualizer",
       sub: "VFX · Lighting · UI — layered, cinematic, screenshot-verified",
-      note: "VFX, lighting and UI specialist on top of Adaptive: mood, layered effects, design-system UI, screenshot-verified polish.",
+      note: "VFX, lighting and UI specialist on top of Ultimate: mood, layered effects, design-system UI, screenshot-verified polish.",
       toast: "Visualizer Work Mode — full VFX, lighting and UI arsenal, screenshot-verified",
       focus: /^(fx_|vfx_|sfx_|ui_|gui_|lighting|light_|atmosphere|sky_|bloom|blur|color_correction|fog_|film_|weather_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|point_light|spot_light|surface_light|explosion|shadows|cast_shadow|set_future_lighting|snowfall|volcanic|firefly|portal_vfx|screen_shake|toast_show|notification_toast|radial_menu|level_up_ui|loading_screen|performance_monitor_gui|surface_gui|billboard_gui|starter_gui|text_label|text_button|image_label|frame_create|texture_add|mesh_set_texture|directional_audio|query_(particle|beams|trails|lights|lighting|screen_guis|frames|text_labels|buttons|image_labels|ui_)|inspect_(lighting|startergui|coregui)|or_screenshot)/,
     },
     animator: {
       name: "Animator", badge: "ANIMATOR", short: "Animator",
       sub: "Rigs · Keyframes · Tweens · Camera — motion-first, preview-verified",
-      note: "Animation specialist on top of Adaptive: rigs, keyframes, easing, tweens, IK and camera beats, preview-verified.",
+      note: "Animation specialist on top of Ultimate: rigs, keyframes, easing, tweens, IK and camera beats, preview-verified.",
       toast: "Animator Work Mode — full animation editor, tween and camera arsenal, preview-verified",
       focus: /^(animation_|anim_|tween|spring_|motor6d|ik_|character_emote|facial_animation|camera_|cutscene|walkspeed|query_(animations|keyframes)|inspect_tweenservice|or_screenshot)/,
     },
   };
   const WORK_MODE_IDS = Object.keys(WORK_MODES);
-  const normalizeWorkMode = (id) => (WORK_MODE_IDS.includes(id) ? id : "adaptive"); // fast/balanced/thorough → adaptive
+  const normalizeWorkMode = (id) => (WORK_MODE_IDS.includes(id) ? id : "ultimate"); // fast/balanced/thorough/adaptive → ultimate
   function workModeFocusNames(modeId, names) {
     const mode = WORK_MODES[modeId];
     if (!mode || !mode.focus) return [];
@@ -1751,13 +1755,13 @@
       const n = A.toolList.length || 0;
       const bridge = A.bridge || {};
       const connected = bridge.connected === true;
-      let extra = "OFF", plan = "OFF", lvl = "default", wm = "adaptive", perm = "sandbox", dbg = "ON", multi = "OFF";
+      let extra = "OFF", plan = "OFF", lvl = "default", wm = "ultimate", perm = "sandbox", dbg = "ON", multi = "OFF";
       try { if (window.__rsExtraThinking && window.__rsExtraThinking()) extra = "ON"; } catch {}
       try { if (window.__rsPlanMode && window.__rsPlanMode()) plan = "ON"; } catch {}
       try { if (window.__rsAutoDebug && window.__rsAutoDebug() === false) dbg = "OFF"; } catch {}
       try { if (window.__rsMultiAgent && window.__rsMultiAgent()) multi = "ON"; } catch {}
       try { lvl = (window.__rsThinkingLevel && window.__rsThinkingLevel()) || "default"; } catch {}
-      try { wm = (window.__rsWorkMode && window.__rsWorkMode()) || "adaptive"; } catch {}
+      try { wm = (window.__rsWorkMode && window.__rsWorkMode()) || "ultimate"; } catch {}
       try { perm = (window.__rsPermMode && window.__rsPermMode()) || "sandbox"; } catch {}
       const blender = !!bridge.blender;
       // Browser↔or-core connectivity is not Studio connectivity. or-core can be
@@ -2426,7 +2430,7 @@
     const roadmapName = bareToolName(name);
     if (roadmapName.startsWith("public_item")) return typeof dispatchPublicItemTool === "function" ? dispatchPublicItemTool(roadmapName, args) : `ERROR: '${roadmapName}' is not available in this build. Use list_commands and continue with the listed commands.`;
     if(roadmapName==="orscript_help"){
-      const question=String(args.question||"").toLowerCase(),aliases={templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|adaptive workflow|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
+      const question=String(args.question||"").toLowerCase(),aliases={templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|ultimate mode|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
     }
     if (["search_commands","get_command","command_registry_stats","generate_command_docs","orscript_help"].includes(roadmapName)) {
       const reg=typeof ORCommandRegistry!=="undefined"?ORCommandRegistry:null;if(!reg)return `ERROR in ${roadmapName}: command registry unavailable; reload this page.`;await hydrateCommandRegistry();
@@ -2685,13 +2689,13 @@
       return "Output of 'or_agent':\nROLE=" + role + "\n" + brief + "\nTASK: " + (task || "(continue the user's request)") + "\nReply as this agent only. ONE command.";
     }
     if (name === "or_status" || name === "status") {
-      let extra = false, plan = false, lvl = "default", wm = "adaptive", perm = "sandbox", autoDbg = true, multi = false;
+      let extra = false, plan = false, lvl = "default", wm = "ultimate", perm = "sandbox", autoDbg = true, multi = false;
       try { extra = !!(window.__rsExtraThinking && window.__rsExtraThinking()); } catch {}
       try { plan = !!(window.__rsPlanMode && window.__rsPlanMode()); } catch {}
       try { autoDbg = !(window.__rsAutoDebug) || window.__rsAutoDebug() !== false; } catch {}
       try { multi = !!(window.__rsMultiAgent && window.__rsMultiAgent()); } catch {}
       try { lvl = (window.__rsThinkingLevel && window.__rsThinkingLevel()) || "default"; } catch {}
-      try { wm = (window.__rsWorkMode && window.__rsWorkMode()) || "adaptive"; } catch {}
+      try { wm = (window.__rsWorkMode && window.__rsWorkMode()) || "ultimate"; } catch {}
       try { perm = (window.__rsPermMode && window.__rsPermMode()) || "sandbox"; } catch {}
       const bridge = A.bridge || {};
       const info = {
@@ -2863,9 +2867,9 @@
       // see the full VFX/UI or animation arsenal before anything else.
       const nameFromLine = (line) => (String(line).match(/^\s*([A-Za-z_][\w.-]*)\s*[:({]/) || [])[1];
       let focusBlock = "";
-      let focusMode = "adaptive";
+      let focusMode = "ultimate";
       try { focusMode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
-      if (!commandQuery && focusMode !== "adaptive") {
+      if (!commandQuery && WORK_MODES[focusMode] && WORK_MODES[focusMode].focus) {
         const focusNames = workModeFocusNames(focusMode, [
           ...scoped.map((t) => t.name), ...[...animLines, ...skillLines, ...agentLines, ...webLines].map(nameFromLine),
         ]);
@@ -4126,7 +4130,7 @@
       captureStudio: paintCaptureStudio,
       engine: () => activeEngine(),
       canAttachImages: () => typeof P.attachImages === "function" || /\bimages\b/.test(String(P.typeAndSend)),
-      workMode: () => { try { return window.__rsWorkMode ? window.__rsWorkMode() : "adaptive"; } catch { return "adaptive"; } },
+      workMode: () => { try { return window.__rsWorkMode ? window.__rsWorkMode() : "ultimate"; } catch { return "ultimate"; } },
       toast: (m) => ui.toast(m),
       diag,
     });
@@ -5415,7 +5419,7 @@
     // reload - they used to silently reset to these defaults on every page
     // refresh because only the setters ever touched chrome.storage.
     let autoFixEnabled = true, extraThinking = false, planMode = false, steeringMode = false, forgeMode = false, autoFixStopPlay = true, autoDebugEnabled = true, multiAgent = false;
-    let workMode = "adaptive";
+    let workMode = "ultimate";
     try { window.__rsWorkMode = () => workMode; } catch {}
     try { window.__rsWorkModes = () => WORK_MODES; } catch {}
     try { window.__rsPlanMode = () => planMode; } catch {}
@@ -5456,9 +5460,10 @@
         }
         if (typeof r.rsAutoFixStopPlay === "boolean") autoFixStopPlay = r.rsAutoFixStopPlay;
         // v1.17 migrated the former speed presets to the adaptive workflow;
-        // 1.19.8 adds the Visualizer and Animator specialist modes on top.
+        // 1.19.8 added the Visualizer and Animator specialists; 1.21 replaces
+        // Adaptive with Ultimate (legacy adaptive values migrate here).
         workMode = normalizeWorkMode(r.rsWorkMode);
-        try { window.__rsWorkMode = () => workMode; if (r.rsWorkMode !== workMode) chrome.storage.local.set({rsWorkMode:"adaptive"}); } catch {}
+        try { window.__rsWorkMode = () => workMode; if (r.rsWorkMode !== workMode) chrome.storage.local.set({rsWorkMode:"ultimate"}); } catch {}
         try { syncWorkModeUi(); } catch {}
         if (!menuEl.hidden) buildMenu();
       });
@@ -5639,12 +5644,11 @@
       try { window.__rsWorkMode = () => workMode; } catch {}
       syncWorkModeUi();
       buildMenu(); renderBar(); markModesChanged();
-      if (!silent) { try { playSfx(workMode === "adaptive" ? "click" : "special"); } catch {} toast(WORK_MODES[workMode].toast); }
+      if (!silent) { try { playSfx("special"); } catch {} toast(WORK_MODES[workMode].toast); }
     }
-    // Bar badge + <html data-rs-work> for CSS; the badge only shows for the
-    // specialist modes so the default bar stays as compact as before.
+    // Bar badge + <html data-rs-work> for CSS; every mode has a badge.
     function syncWorkModeUi(){
-      const mode = WORK_MODES[workMode] || WORK_MODES.adaptive;
+      const mode = WORK_MODES[workMode] || WORK_MODES.ultimate;
       try { document.documentElement.setAttribute("data-rs-work", workMode); } catch {}
       const badge = root && root.querySelector("#rs-work-badge");
       if (badge) { badge.textContent = mode.badge; badge.dataset.work = workMode; badge.hidden = !mode.badge; badge.title = mode.name + " work mode — " + mode.sub; }
@@ -6048,7 +6052,7 @@
             <section class="rs-menu-sec">
               <div class="rs-sec-label"><span>Work mode</span><span class="rs-sec-state">${WORK_MODES[workMode].short}</span></div>
               <div class="rs-menu-note">${WORK_MODES[workMode].note}</div>
-              <div class="rs-work-row rs-work-adaptive rs-work-modes" role="radiogroup" aria-label="Work mode">
+              <div class="rs-work-row rs-work-ultimate rs-work-modes" role="radiogroup" aria-label="Work mode">
                 ${WORK_MODE_IDS.map((id) => `<button type="button" class="rs-work-card ${workMode===id?"on":""}" data-work="${id}" role="radio" aria-checked="${workMode===id?"true":"false"}"><span class="rs-work-name">${WORK_MODES[id].name}</span><span class="rs-work-sub">${WORK_MODES[id].sub}</span></button>`).join("")}
               </div>
             </section>
