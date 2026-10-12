@@ -1,0 +1,34 @@
+// Static architecture contracts for the event-driven roadmap.
+const fs=require("fs");
+const main=fs.readFileSync("src/core/main.js","utf8");
+const config=fs.readFileSync("src/core/config.js","utf8");
+const css=fs.readFileSync("overlay.css","utf8");
+let failed=0; const check=(name,ok)=>{console.log(`${ok?"PASS":"FAIL"}  ${name}`);if(!ok)failed++;};
+for(const field of ["id","title","description","status","createdAt","updatedAt","currentTaskId","progress","phases"])check(`roadmap field ${field}`,main.includes(field));
+for(const field of ["phaseId","dependsOn","startedAt","completedAt","error","result","agentActivity"])check(`task field ${field}`,main.includes(field));
+for(const state of ["pending","in_progress","completed","failed","blocked","skipped"])check(`status ${state}`,main.includes(`"${state}"`)&&css.includes(`rs-roadmap-${state}`));
+const events=["roadmap.created","roadmap.updated","roadmap.completed","roadmap.failed","phase.started","phase.completed","task.created","task.started","task.updated","task.completed","task.failed","task.blocked","task.skipped","agent.thinking","agent.activity","agent.tool_started","agent.tool_completed","agent.error","agent.warning","validation.started","validation.completed","validation.failed"];
+for(const event of events)check(`event ${event}`,main.includes(`"${event}"`));
+check("single deterministic reducer",main.includes("function reduceRoadmapEvent(event"));
+check("duplicate event protection",main.includes("roadmapSeenEvents.has(event.id)"));
+check("stale event protection",main.includes("event.timestamp<target._lastEventAt"));
+check("unknown IDs rejected",main.includes('error:"unknown task id"')&&main.includes('error:"unknown roadmap id"'));
+check("unknown event types rejected",main.includes("!ROADMAP_EVENT_TYPES.has(event.type)"));
+check("bounded persisted event log",main.includes("events:roadmapEvents.slice(-500)"));
+check("event replay supported",main.includes("reduceRoadmapEvent(event,{replay:true})"));
+check("progress derived from task states",main.includes("function calculateRoadmapProgress")&&main.includes("state.progress=calculateRoadmapProgress(state)"));
+check("UI reads reducer state",main.includes("roadmap.currentTaskId?roadmapFind")&&main.includes("task.status"));
+check("actual tools emit lifecycle events",main.includes('emitAgentRoadmapEvent("agent.tool_started"')&&main.includes('emitAgentRoadmapEvent("agent.tool_completed"'));
+const manifest=JSON.parse(fs.readFileSync("manifest.json","utf8"));
+const providerScripts=manifest.content_scripts.filter((entry)=>entry.world!=="MAIN"&&entry.js.includes("src/core/main.js")&&entry.js.some((file)=>file.startsWith("src/providers/")));
+check("roadmap core loads for every provider adapter",providerScripts.length>=12&&providerScripts.every((entry)=>entry.js.includes("src/core/config.js")&&entry.js.includes("src/core/main.js")));
+check("roadmap has no Arena-only runtime gate",!/(?:P\.id|displayName)\s*={0,2}\s*["']arena["'][\s\S]{0,120}roadmap/i.test(main));
+check("shared parser handles roadmap commands",manifest.content_scripts.filter((entry)=>entry.world!=="MAIN"&&entry.js.includes("src/core/main.js")).every((entry)=>entry.js.includes("src/core/parser.js")));
+check("completion requires verification",main.includes("completed requires a real verification result"));
+check("agent prompt mandates verification",config.includes("never mark a task completed merely because code was written"));
+check("reduced motion",css.includes("prefers-reduced-motion:reduce"));
+process.exitCode=failed?1:0;
+// Restored/imported Roadmaps are bounded and reject ambiguous duplicate IDs.
+check('roadmap normalization bounds nested untrusted tasks',main.includes('depth<20&&Array.isArray(raw.subtasks)'));
+check('roadmap normalization rejects duplicate phase and task IDs',main.includes('phaseIds.has(phase.id)')&&main.includes('ids.has(task.id)'));
+check('roadmap normalization clears a stale current task pointer',main.includes('state.currentTaskId&&!ids.has(state.currentTaskId)'));

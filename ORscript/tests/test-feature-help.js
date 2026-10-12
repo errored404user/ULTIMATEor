@@ -1,0 +1,11 @@
+"use strict";
+const fs=require("fs"),assert=require("assert"),main=fs.readFileSync("src/core/main.js","utf8"),config=fs.readFileSync("src/core/config.js","utf8"),manifest=JSON.parse(fs.readFileSync("manifest.json"));
+for(const topic of ["templates","roadmap","commands","studio","workmode","figma","projects","themes","permissions","providers","troubleshooting"])assert(main.includes(`${topic}:`),topic);
+assert(main.includes('name:"orscript_help"'));
+assert(main.includes('roadmapName==="orscript_help"'));
+assert(main.includes("agentStarted:false,executedCommands:false"));
+assert(main.includes("VoidScript is OrScript's partner visual identity"));
+assert(config.includes("call orscript_help {question, topic?} before answering"));
+assert(config.includes("do not start a new task, execute Studio commands, create a roadmap, or mutate anything"));
+for(const cs of manifest.content_scripts.filter(x=>x.js&&x.js.includes("src/core/main.js")))assert(cs.js.includes("src/core/config.js"));
+console.log("PASS  automatic feature help is factual, provider-wide, and non-mutating");

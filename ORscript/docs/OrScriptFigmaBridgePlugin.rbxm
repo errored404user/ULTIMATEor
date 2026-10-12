@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<roblox version="4">
+  <Item class="Model" referent="OR0">
+    <Properties><string name="Name">OrScriptFigmaBridgePlugin</string></Properties>
+    <Item class="Script" referent="OR1">
+      <Properties><string name="Name">OrScriptFigmaBridgePlugin</string><ProtectedString name="Source"><![CDATA[-- OrScript Figma companion plugin for Roblox Studio.
+-- This is a Roblox-side helper, not a replacement for the official Figma plugin.
+-- It verifies that the local OrScript agent is reachable and exposes the
+-- FigmaImporter module for applying validated Figma-to-Roblox UI trees.
+local HttpService = game:GetService("HttpService")
+local toolbar = plugin:CreateToolbar("OrScript")
+local button = toolbar:CreateButton("Figma Bridge", "Check the OrScript bridge and import validated Figma UI", "")
+button.ClickableWhenViewportHidden = true
+
+local function checkBridge()
+    local ok, raw = pcall(function()
+        return HttpService:GetAsync("http://127.0.0.1:3000/api/status", true)
+    end)
+    if not ok then
+        warn("[OrScript] Local agent is unavailable. Start bin/or-core.exe.")
+        return false
+    end
+    local decoded = HttpService:JSONDecode(raw)
+    print("[OrScript] Local agent reachable: " .. tostring(decoded.status or decoded.state or "ready"))
+    print("[OrScript] Figma commands still run through the official Figma Plugin API bridge.")
+    return true
+end
+
+button.Click:Connect(checkBridge)
+print("[OrScript] Figma companion plugin loaded. Click Figma Bridge to test the local agent.")
+]]></ProtectedString></Properties>
+    </Item>
+    <Item class="ModuleScript" referent="OR2">
+      <Properties><string name="Name">FigmaImporter</string><ProtectedString name="Source"><![CDATA[-- OrScript Figma-to-Roblox importer companion.
+-- The browser extension and official Figma plugin produce the validated tree;
+-- this module applies only that tree inside Roblox Studio.
+local Importer = {}
+local ALLOWED = { ScreenGui=true, Frame=true, TextLabel=true, TextButton=true, ImageLabel=true, ImageButton=true }
+local function color(value)
+    if type(value) ~= "string" then return nil end
+    local r,g,b = value:match("^#(%x%x)(%x%x)(%x%x)$")
+    if not r then return nil end
+    return Color3.fromRGB(tonumber(r,16), tonumber(g,16), tonumber(b,16))
+end
+local function make(node, parent)
+    assert(type(node) == "table", "Figma node must be a table")
+    local className = ALLOWED[node.className] and node.className or "Frame"
+    local object = Instance.new(className)
+    object.Name = tostring(node.name or className)
+    object.Parent = parent
+    local props = node.properties or {}
+    if object:IsA("GuiObject") then
+        local size,position = props.Size or {0,0},props.Position or {0,0}
+        object.Size=UDim2.fromOffset(tonumber(size[1]) or 0,tonumber(size[2]) or 0)
+        object.Position=UDim2.fromOffset(tonumber(position[1]) or 0,tonumber(position[2]) or 0)
+        local fill=color(props.BackgroundColor); if fill then object.BackgroundColor3=fill end
+        if props.BackgroundTransparency~=nil then object.BackgroundTransparency=tonumber(props.BackgroundTransparency) or 0 end
+    end
+    if object:IsA("TextLabel") or object:IsA("TextButton") then object.Text=tostring(props.Text or ""); object.TextWrapped=true end
+    if object:IsA("ImageLabel") or object:IsA("ImageButton") then object.Image=tostring(props.Image or "") end
+    if node.layout and object:IsA("GuiObject") then
+        local layout=node.layout.className=="UIGridLayout" and Instance.new("UIGridLayout") or Instance.new("UIListLayout")
+        layout.Parent=object; layout.Padding=UDim.new(0,tonumber(node.layout.gap) or 0)
+        if layout:IsA("UIListLayout") then layout.FillDirection=node.layout.direction=="HORIZONTAL" and Enum.FillDirection.Horizontal or Enum.FillDirection.Vertical end
+    end
+    if node.decorations then
+        if node.decorations.corner then local c=Instance.new("UICorner");c.CornerRadius=UDim.new(0,tonumber(node.decorations.corner) or 0);c.Parent=object end
+        local stroke=color(node.decorations.stroke);if stroke then local s=Instance.new("UIStroke");s.Color=stroke;s.Parent=object end
+    end
+    for _,child in ipairs(node.children or {}) do make(child,object) end
+    return object
+end
+function Importer.import(tree,parent)
+    assert(typeof(parent)=="Instance","parent must be an Instance")
+    return make(tree,parent)
+end
+return Importer
+]]></ProtectedString></Properties>
+    </Item>
+  </Item>
+</roblox>

@@ -1,0 +1,15 @@
+"use strict";
+const fs=require("fs"),assert=require("assert");
+const main=fs.readFileSync("src/core/main.js","utf8"),config=fs.readFileSync("src/core/config.js","utf8"),css=fs.readFileSync("overlay.css","utf8");
+assert(main.includes('let workMode = "adaptive"'));
+assert(!main.includes('data-work="fast"')&&!main.includes('data-work="balanced"')&&!main.includes('data-work="thorough"'));
+assert(main.includes('Inspect → Plan → Approve once → Build → Diagnose → Verify'));
+assert(main.includes('rsWorkMode:"adaptive"'),"legacy presets must migrate");
+for(const phase of ['1. INSPECT','2. PLAN IN CHAT','3. APPROVAL GATE','4. EXECUTE','5. VERIFY BROADLY','6. FINISH TRUTHFULLY'])assert(config.includes(phase),phase);
+assert(config.includes('Approve this plan to begin.'));
+assert(config.includes('do not re-plan or request another approval'));
+assert(config.includes('inspect Studio Output with or_debug'));
+assert(config.includes('permission, publication, payment, destructive-action, and platform confirmation rules still apply'));
+assert(main.includes('workmode:{title:"Adaptive Work Mode"'));
+assert(css.includes('.rs-work-row.rs-work-adaptive'));
+console.log('PASS  Adaptive Work Mode is approval-gated, autonomous, broadly verified, and compact');
