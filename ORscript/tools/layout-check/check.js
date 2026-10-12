@@ -7,6 +7,7 @@ const puppeteer = require("puppeteer-core");
 const fs = require("fs"), path = require("path");
 const HERE = __dirname, EXT = process.env.EXT || path.resolve(HERE, "..", "..");
 const VH = Number(process.argv[2] || 800);
+const MODE = process.argv[3] || ""; // "centered" = empty chat with the composer in the middle of the viewport
 (async () => {
   const m = JSON.parse(fs.readFileSync(path.join(EXT, "manifest.json"), "utf8"));
   const cs = m.content_scripts.find(c => c.matches.some(x => x.includes("deepseek")));
@@ -15,7 +16,7 @@ const VH = Number(process.argv[2] || 800);
   const browser = await puppeteer.launch({ executablePath: exe, args, headless: true, defaultViewport: { width: 1280, height: VH } });
   const page = await browser.newPage();
   page.on("pageerror", e => console.log("[pageerror]", String(e.message).slice(0, 200)));
-  await page.goto("https://chat.deepseek.com/", { waitUntil: "load" });
+  await page.goto("https://chat.deepseek.com/" + (MODE ? "?" + MODE : ""), { waitUntil: "load" });
   await page.addScriptTag({ content: fs.readFileSync(path.join(HERE, "chrome-shim.js"), "utf8") });
   for (const css of cs.css || []) await page.addStyleTag({ url: "/__ext/" + css });
   for (const js of cs.js) { try { await page.addScriptTag({ url: "/__ext/" + js }); } catch (e) { console.log("script fail", js, e.message); } }
@@ -30,9 +31,9 @@ const VH = Number(process.argv[2] || 800);
     await page.screenshot({ path: path.join(HERE, shot) });
   };
   await page.evaluate(() => document.querySelector("#rs-settings-btn").click()); await wait(900);
-  await report("settings tray  ", "#rs-menu", `shot-settings-${VH}.png`);
+  await report("settings tray  ", "#rs-menu", `shot-settings-${VH}${MODE ? "-" + MODE : ""}.png`);
   await page.evaluate(() => document.querySelector("#rs-settings-btn").click()); await wait(400);
   await page.evaluate(() => document.querySelector("#rs-cards-btn").click()); await wait(900);
-  await report("templates panel", "#rs-cards-panel", `shot-templates-${VH}.png`);
+  await report("templates panel", "#rs-cards-panel", `shot-templates-${VH}${MODE ? "-" + MODE : ""}.png`);
   await browser.close();
 })().catch(e => { console.error("ERR", e.message); process.exit(1); });

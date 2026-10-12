@@ -156,6 +156,8 @@ assert(/#rs-bar\.rs-menu-contained #rs-menu\.rs-menu-top,[\s\S]*?bottom: calc\(1
 assert(tray.includes("#rs-bar.rs-bar-inline.rs-cards-open #rs-cards-panel"), "templates panel must sit above the bar in inline mounts too");
 assert(tray.includes("#rs-bar.rs-tray-below.rs-menu-contained #rs-menu.rs-menu-top"), "below-fallback must exist");
 assert(main.includes('bar.classList.toggle("rs-tray-below", below)') && main.includes("return below ? h : 0;"), "main.js must only reserve composer space when the tray falls back below");
+assert(main.includes("const TRAY_MIN_ABOVE = 140") && main.includes('bar.style.setProperty("--rs-room-above", px)'), "trays must clamp to the room above the bar instead of falling below (centred composer)");
+assert(tray.includes("height: min(280px, 42vh, var(--rs-room-above, 280px)) !important") && tray.includes("max-height: min(42vh, 360px, var(--rs-room-above, 360px)) !important"), "settings tray + templates panel must clamp to --rs-room-above");
 
 // 7) VoidScript finally has real swatch art everywhere the other classics do.
 assert(fs.existsSync(path.join(root, "ui", "swatch-void.jpg")), "ui/swatch-void.jpg must ship");

@@ -11,7 +11,8 @@ npm init -y >/dev/null && npm i --no-save @sparticuz/chromium puppeteer-core
 openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 2 -subj "/CN=chat.deepseek.com"
 node server.js &                         # https stand-in for chat.deepseek.com
 node check.js            # 1280x800 window  → expects ABOVE for both surfaces
-node check.js 420        # very short window → expects BELOW (rs-tray-below fallback)
+node check.js 800 centered  # empty chat, composer centred → expects ABOVE (clamped height)
+node check.js 300        # tiny window → expects BELOW (rs-tray-below fallback)
 ```
 
 The Sparticuz build is a headless shell (no extension loading), so `check.js` injects

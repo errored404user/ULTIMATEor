@@ -7323,6 +7323,8 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     // transparent overlay: the host's editor, controls, and final response all
     // reflow away from the ORscript surface.
     const BAR_GAP = 6;
+    const TRAY_MIN_ABOVE = 140; // px of room above the bar below which a tray falls back below it
+    let trayRoomPx = null;
 
     // Save inline declarations byte-for-byte (including !important). Clearing a
     // property with `style.foo = ""` destroyed host-authored inline layout on SPA
@@ -7510,12 +7512,21 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const surface = menuOpen ? menuEl : (cardsOpen ? cardsPanel : (embedOpen ? cardEmbedEl : (setupOpen ? setupCard : null)));
       const h = surface ? (surface.offsetHeight || 0) : 0;
       // Trays open ABOVE the bar, overlaying the transcript, so they take no
-      // composer space. Only when the bar sits too close to the top of the
-      // viewport for the tray to fit do they fall back below it (rs-tray-below),
-      // and only then does their height join the reserved strip.
-      let below = false;
-      if (bar && h) { try { below = bar.getBoundingClientRect().top < h + BAR_GAP + 8; } catch {} }
-      if (bar) bar.classList.toggle("rs-tray-below", below);
+      // composer space. The room between the viewport top and the bar is
+      // published as --rs-room-above and the CSS clamps the tray to it, so a
+      // vertically centred composer (empty DeepSeek chat) still gets the tray
+      // above - just shorter, scrolling inside. Only when that room is smaller
+      // than TRAY_MIN_ABOVE (a tiny window) does the tray fall back below the
+      // bar (rs-tray-below), and only then does its height join the reserved
+      // strip.
+      let room = Infinity;
+      if (bar) { try { room = Math.max(0, bar.getBoundingClientRect().top - (BAR_GAP + 8)); } catch {} }
+      const below = h > 0 && room < TRAY_MIN_ABOVE;
+      if (bar) {
+        bar.classList.toggle("rs-tray-below", below);
+        const px = Number.isFinite(room) ? Math.round(room) + "px" : "";
+        if (px !== trayRoomPx) { trayRoomPx = px; try { bar.style.setProperty("--rs-room-above", px); } catch {} }
+      }
       return below ? h : 0;
     }
 

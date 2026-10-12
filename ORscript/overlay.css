@@ -6995,7 +6995,17 @@ html[data-rs-theme] .rs-menu-glyph { font-size: 0 !important; width: 14px; heigh
 #rs-bar.rs-bar-inline.rs-setup-open { flex-wrap: nowrap !important; position: relative !important; overflow: visible !important; }
 #rs-bar.rs-cards-open #rs-cards-panel, #rs-bar.rs-bar-inline.rs-cards-open #rs-cards-panel { max-height: min(42vh, 360px) !important; }
 #rs-bar.rs-setup-open #rs-setup, #rs-bar.rs-bar-inline.rs-setup-open #rs-setup { max-height: min(42vh, 320px) !important; overflow-y: auto !important; }
-/* no room above → fall back below the bar (composer padding is reserved for it) */
+/* Clamp each tray to the room above the bar (main.js publishes --rs-room-above),
+   so a centred composer still gets the tray above, just shorter and scrolling. */
+#rs-bar.rs-menu-contained #rs-menu.rs-menu-top,
+#rs-bar.rs-bar-inline.rs-menu-contained #rs-menu.rs-menu-top {
+  height: min(280px, 42vh, var(--rs-room-above, 280px)) !important;
+  max-height: none !important;
+}
+#rs-bar.rs-cards-open #rs-cards-panel, #rs-bar.rs-bar-inline.rs-cards-open #rs-cards-panel { max-height: min(42vh, 360px, var(--rs-room-above, 360px)) !important; }
+#rs-bar.rs-setup-open #rs-setup, #rs-bar.rs-bar-inline.rs-setup-open #rs-setup { max-height: min(42vh, 320px, var(--rs-room-above, 320px)) !important; }
+#rs-bar.rs-card-embed-open #rs-card-embed, #rs-bar.rs-bar-inline.rs-card-embed-open #rs-card-embed { max-height: max(76px, var(--rs-room-above, 9999px)) !important; overflow-y: auto !important; }
+/* almost no room above (tiny window) → fall back below the bar (composer padding is reserved for it) */
 #rs-bar.rs-tray-below.rs-menu-contained #rs-menu.rs-menu-top,
 #rs-bar.rs-tray-below.rs-cards-open #rs-cards-panel,
 #rs-bar.rs-tray-below.rs-card-embed-open #rs-card-embed,
@@ -7008,3 +7018,8 @@ html[data-rs-theme] .rs-menu-glyph { font-size: 0 !important; width: 14px; heigh
   bottom: auto !important;
   transform-origin: top center !important;
 }
+#rs-bar.rs-tray-below.rs-menu-contained #rs-menu.rs-menu-top,
+#rs-bar.rs-tray-below.rs-bar-inline.rs-menu-contained #rs-menu.rs-menu-top { height: 280px !important; max-height: min(42vh, 320px) !important; }
+#rs-bar.rs-tray-below.rs-cards-open #rs-cards-panel, #rs-bar.rs-tray-below.rs-bar-inline.rs-cards-open #rs-cards-panel { max-height: min(42vh, 360px) !important; }
+#rs-bar.rs-tray-below.rs-setup-open #rs-setup, #rs-bar.rs-tray-below.rs-bar-inline.rs-setup-open #rs-setup { max-height: min(42vh, 320px) !important; }
+#rs-bar.rs-tray-below.rs-card-embed-open #rs-card-embed, #rs-bar.rs-tray-below.rs-bar-inline.rs-card-embed-open #rs-card-embed { max-height: none !important; }
