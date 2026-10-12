@@ -162,6 +162,9 @@
     .work-name{font-size:12.5px; font-weight:800; letter-spacing:-.1px}
     .work-sub{font-size:10px; color:var(--text-faint); line-height:1.35; font-weight:600}
     .work-card.on .work-sub{color:#5c4e3d}
+    #work-visualizer.on{background:linear-gradient(135deg,#7c3aed,#06b6d4); color:#fff}
+    #work-animator.on{background:linear-gradient(135deg,#f97316,#ec4899); color:#fff}
+    #work-visualizer.on .work-sub, #work-animator.on .work-sub{color:rgba(255,255,255,.82)}
 
     #theme-row{grid-template-columns:1fr 1fr; gap:9px}
     #theme-row .work-card{padding:0 0 10px; overflow:hidden}
@@ -345,8 +348,16 @@ html[data-theme="void"] #theme-void .theme-art{background-image:url(ui/swatch-vo
           <span class="work-name">Adaptive Workflow</span>
           <span class="work-sub">Quality-first, autonomous, deeply verified</span>
         </button>
+        <button type="button" class="work-card" data-work="visualizer" id="work-visualizer">
+          <span class="work-name">Visualizer</span>
+          <span class="work-sub">VFX · Lighting · UI, screenshot-verified</span>
+        </button>
+        <button type="button" class="work-card" data-work="animator" id="work-animator">
+          <span class="work-name">Animator</span>
+          <span class="work-sub">Rigs · Keyframes · Tweens · Camera, previewed</span>
+        </button>
       </div>
-      <div class="row work-help">Classifies scope and risk automatically. It runs safe work continuously, asks only before risky actions, and reports verification evidence when finished.</div>
+      <div class="row work-help" id="work-help">Classifies scope and risk automatically. It runs safe work continuously, asks only before risky actions, and reports verification evidence when finished.</div>
       <div class="sec-label">Visual skin</div>
       <div class="work" id="theme-row">
         <button type="button" class="work-card" data-theme="night" id="theme-night">

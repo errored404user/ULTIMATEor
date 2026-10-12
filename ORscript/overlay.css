@@ -7023,3 +7023,49 @@ html[data-rs-theme] .rs-menu-glyph { font-size: 0 !important; width: 14px; heigh
 #rs-bar.rs-tray-below.rs-cards-open #rs-cards-panel, #rs-bar.rs-tray-below.rs-bar-inline.rs-cards-open #rs-cards-panel { max-height: min(42vh, 360px) !important; }
 #rs-bar.rs-tray-below.rs-setup-open #rs-setup, #rs-bar.rs-tray-below.rs-bar-inline.rs-setup-open #rs-setup { max-height: min(42vh, 320px) !important; }
 #rs-bar.rs-tray-below.rs-card-embed-open #rs-card-embed, #rs-bar.rs-tray-below.rs-bar-inline.rs-card-embed-open #rs-card-embed { max-height: none !important; }
+
+/* ── 8. Work modes: Visualizer / Animator ─────────────────────────────────────
+   Three selectable cards in Settings (adaptive keeps the plain theme styling);
+   the specialist modes get a signature gradient on the active card and a small
+   badge on the bar next to the brand. <html data-rs-work> mirrors the mode.
+   ─────────────────────────────────────────────────────────────────────────── */
+#rs-work-badge {
+  display: inline-flex; align-items: center; flex: none;
+  margin-left: 6px; padding: 2px 7px 2px;
+  border-radius: 999px;
+  font: 800 8.5px/1.4 ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  letter-spacing: .16em; text-transform: uppercase;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.22);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.25) inset, 0 0 14px -4px var(--orx-glow, rgba(255,255,255,.35));
+  user-select: none; white-space: nowrap;
+}
+#rs-work-badge[hidden] { display: none !important; }
+#rs-work-badge[data-work="visualizer"] { background: linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%); }
+#rs-work-badge[data-work="animator"]   { background: linear-gradient(135deg, #f97316 0%, #ec4899 100%); }
+@media (max-width: 760px) { #rs-work-badge { display: none !important; } }
+
+.rs-work-modes .rs-work-card { position: relative; overflow: hidden; cursor: pointer !important; min-height: 0 !important; padding: 8px 9px 7px; }
+.rs-work-modes .rs-work-card:hover { transform: translateY(-1px) !important; }
+.rs-work-modes .rs-work-sub { font-size: 9px; }
+.rs-work-modes .rs-work-card::before {
+  content: ""; position: absolute; left: 10px; right: 10px; top: 0; height: 2px;
+  border-radius: 0 0 2px 2px; opacity: 0; transition: opacity .18s ease;
+}
+.rs-work-modes .rs-work-card[data-work="visualizer"]::before { background: linear-gradient(90deg, #7c3aed, #06b6d4); }
+.rs-work-modes .rs-work-card[data-work="animator"]::before   { background: linear-gradient(90deg, #f97316, #ec4899); }
+.rs-work-modes .rs-work-card:hover::before, .rs-work-modes .rs-work-card.on::before { opacity: 1; }
+html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="visualizer"].on {
+  background: linear-gradient(135deg, rgba(124,58,237,.42), rgba(6,182,212,.30)) !important;
+  border-color: rgba(103,232,249,.55) !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.08) inset, 0 10px 24px -10px rgba(124,58,237,.9) !important;
+  color: #fff !important;
+}
+html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="animator"].on {
+  background: linear-gradient(135deg, rgba(249,115,22,.42), rgba(236,72,153,.30)) !important;
+  border-color: rgba(251,146,60,.6) !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.08) inset, 0 10px 24px -10px rgba(236,72,153,.9) !important;
+  color: #fff !important;
+}
+html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="visualizer"].on .rs-work-sub,
+html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="animator"].on .rs-work-sub { color: rgba(255,255,255,.8) !important; }

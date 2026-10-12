@@ -15,8 +15,18 @@ const SUPPORTED_HOSTS = [
 const DEFAULT_AI_URL = "https://chat.deepseek.com/";
 const ENGINE_KEY = "rs-engine"; // "roblox" | "local"
 const ENGINES = ["roblox", "local"];
-const WORK_MODES = ["adaptive"];
-const WORK_PRESETS = { adaptive: { thinking: "high", extra: false } };
+const WORK_MODES = ["adaptive", "visualizer", "animator"];
+// Specialist modes run on top of Adaptive and want the deeper self-review loop.
+const WORK_PRESETS = {
+  adaptive:   { thinking: "high", extra: false },
+  visualizer: { thinking: "max",  extra: false },
+  animator:   { thinking: "max",  extra: false },
+};
+const WORK_HELP = {
+  adaptive:   "Classifies scope and risk automatically. It runs safe work continuously, asks only before risky actions, and reports verification evidence when finished.",
+  visualizer: "VFX, lighting and UI specialist. Sets the mood with lighting and post-FX, layers particles, beams, trails and lights, builds UI from a design system, then screenshots and polishes until it looks shipped.",
+  animator:   "Animation specialist. Drives the animation editor (rigs, poses, keyframes, easing, markers), tweens, springs, IK and camera beats, and previews every clip before calling it done.",
+};
 
 const PERM_MODES = ["sandbox", "ask", "full"];
 const settings = {
@@ -73,6 +83,8 @@ function renderSettings() {
     const el = document.getElementById("work-" + id);
     if (el) el.classList.toggle("on", settings.workMode === id);
   }
+  const help = document.getElementById("work-help");
+  if (help) help.textContent = WORK_HELP[settings.workMode] || WORK_HELP.adaptive;
   for (const id of PERM_MODES) {
     const el = document.getElementById("perm-" + id);
     if (el) el.classList.toggle("on", settings.permMode === id);

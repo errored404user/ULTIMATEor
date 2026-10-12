@@ -41,6 +41,7 @@ Large `execute_luau` scripts are auto-chunked around 24 KB so Studio's parser ne
 - Native crate: `agent/` (`or-agent` 1.18.3). It runs as a background bridge only; the removed desktop status window is not part of ORscript.
 - Service worker skips stale-socket reconnect and MCP heal while a `call_tool` is in flight (the 25 s stale window used to kill long tools).
 - 30 Studio skills, a 24-command animation suite, AgentScript file/terminal tools.
+- Work modes (Settings → Work mode, also in the popup): **Adaptive** (default generalist workflow), **Visualizer** (VFX, lighting and UI specialist — layers `fx_*`/`vfx_*`/`lighting*`/`ui_*`, screenshot-verifies every pass) and **Animator** (animation specialist — `animation_*` editor pipeline, tweens, springs, IK, camera beats, preview-verified). The specialists run on top of Adaptive, add their own mandate to the system prompt, show a badge on the bar, and make `list_commands` surface their command family first. `node tests/test-work-modes.js` guards them.
 
 ---
 

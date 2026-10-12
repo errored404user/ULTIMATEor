@@ -1689,6 +1689,43 @@
   // any tool result carrying images is caught generically at the point results
   // are handled (see the `r.images.length` branch) and turned into a plain
   // error on non-vision providers, so nothing needs to be predicted here.
+  // ── Work modes ────────────────────────────────────────────────────────
+  // adaptive   = the reliability-first generalist workflow (default).
+  // visualizer = VFX / lighting / UI specialist: pushes the whole fx_*, vfx_*,
+  //              lighting_*, ui_* families and screenshot-verifies every pass.
+  // animator   = animation specialist: animation_* editor pipeline, tweens,
+  //              springs, IK, camera work, preview-verified.
+  // `focus` picks the commands each specialist mode surfaces first in
+  // list_commands; config.js layers the matching prompt on top of Adaptive.
+  const WORK_MODES = {
+    adaptive: {
+      name: "Adaptive workflow", badge: "", short: "Adaptive",
+      sub: "Inspect → Plan → Approve once → Build → Diagnose → Verify",
+      note: "Reliability-first generalist: inspect, plan, one approval, then build and verify every phase.",
+      toast: "Adaptive Work Mode — approve the plan once, then OrScript builds and verifies it",
+    },
+    visualizer: {
+      name: "Visualizer", badge: "VISUALIZER", short: "Visualizer",
+      sub: "VFX · Lighting · UI — layered, cinematic, screenshot-verified",
+      note: "VFX, lighting and UI specialist on top of Adaptive: mood, layered effects, design-system UI, screenshot-verified polish.",
+      toast: "Visualizer Work Mode — full VFX, lighting and UI arsenal, screenshot-verified",
+      focus: /^(fx_|vfx_|sfx_|ui_|gui_|lighting|light_|atmosphere|sky_|bloom|blur|color_correction|fog_|film_|weather_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|point_light|spot_light|surface_light|explosion|shadows|cast_shadow|set_future_lighting|snowfall|volcanic|firefly|portal_vfx|screen_shake|toast_show|notification_toast|radial_menu|level_up_ui|loading_screen|performance_monitor_gui|surface_gui|billboard_gui|starter_gui|text_label|text_button|image_label|frame_create|texture_add|mesh_set_texture|directional_audio|query_(particle|beams|trails|lights|lighting|screen_guis|frames|text_labels|buttons|image_labels|ui_)|inspect_(lighting|startergui|coregui)|or_screenshot)/,
+    },
+    animator: {
+      name: "Animator", badge: "ANIMATOR", short: "Animator",
+      sub: "Rigs · Keyframes · Tweens · Camera — motion-first, preview-verified",
+      note: "Animation specialist on top of Adaptive: rigs, keyframes, easing, tweens, IK and camera beats, preview-verified.",
+      toast: "Animator Work Mode — full animation editor, tween and camera arsenal, preview-verified",
+      focus: /^(animation_|anim_|tween|spring_|motor6d|ik_|character_emote|facial_animation|camera_|cutscene|walkspeed|query_(animations|keyframes)|inspect_tweenservice|or_screenshot)/,
+    },
+  };
+  const WORK_MODE_IDS = Object.keys(WORK_MODES);
+  const normalizeWorkMode = (id) => (WORK_MODE_IDS.includes(id) ? id : "adaptive"); // fast/balanced/thorough → adaptive
+  function workModeFocusNames(modeId, names) {
+    const mode = WORK_MODES[modeId];
+    if (!mode || !mode.focus) return [];
+    return [...new Set(names.filter((n) => n && mode.focus.test(String(n).replace(/^[^.]*\./, ""))))].sort();
+  }
   const ALWAYS_BLOCKED_TOOLS = new Set([]);
   const VISION_TOOLS = new Set(["screen_capture"]);
   const bareToolName = (name) => (name && name.includes("/") ? name.split("/").pop() : name) || "";
@@ -2379,7 +2416,7 @@
     const roadmapName = bareToolName(name);
     if (roadmapName.startsWith("public_item")) return dispatchPublicItemTool(roadmapName, args);
     if(roadmapName==="orscript_help"){
-      const question=String(args.question||"").toLowerCase(),aliases={templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|adaptive workflow|fast mode|balanced mode|thorough mode/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
+      const question=String(args.question||"").toLowerCase(),aliases={templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|adaptive workflow|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
     }
     if (["search_commands","get_command","command_registry_stats","generate_command_docs","orscript_help"].includes(roadmapName)) {
       const reg=typeof ORCommandRegistry!=="undefined"?ORCommandRegistry:null;if(!reg)return `ERROR in ${roadmapName}: command registry unavailable; reload this page.`;await hydrateCommandRegistry();
@@ -2811,8 +2848,20 @@
       // name index and fetch ONE exact schema on demand. Broad queries are also
       // folded back to names so a query like "ui" cannot recreate the same huge
       // payload on the next turn.
+      // Specialist work modes surface their command family FIRST, by exact
+      // name, on every broad catalogue request - so even compact providers
+      // see the full VFX/UI or animation arsenal before anything else.
+      const nameFromLine = (line) => (String(line).match(/^\s*([A-Za-z_][\w.-]*)\s*[:({]/) || [])[1];
+      let focusBlock = "";
+      let focusMode = "adaptive";
+      try { focusMode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
+      if (!commandQuery && focusMode !== "adaptive") {
+        const focusNames = workModeFocusNames(focusMode, [
+          ...scoped.map((t) => t.name), ...[...animLines, ...skillLines, ...agentLines, ...webLines].map(nameFromLine),
+        ]);
+        if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily ━━━\n${focusNames.join(", ")}\n(Request any exact schema with list_commands {query:"exact_name"} before first use.)\n\n`;
+      }
       if (P.compactCommandList) {
-        const nameFromLine = (line) => (String(line).match(/^\s*([A-Za-z_][\w.-]*)\s*[:({]/) || [])[1];
         const virtualNames = [...animLines, ...skillLines, ...agentLines].map(nameFromLine).filter(Boolean);
         const helperNames = [
           "or_screenshot", "or_debug", "get_template", "or_status", "web_fetch",
@@ -2863,11 +2912,11 @@
           }
           const omitted = allNames.length - chosen.length;
           const marker = omitted > 0 ? `\n[${omitted} additional names omitted; search by task keyword, then request one exact schema.]` : "";
-          return intro + chosen.join(", ") + marker + guide;
+          return intro + focusBlock + chosen.join(", ") + marker + guide;
         }
       }
 
-      return `Output of '${name}':\n${requested} commands (${scoped.length}${virtualCount ?  ` + ${virtualCount} OR virtual tools` : ""}):\n\n${lines.join("\n\n")}${animLines.length ?  "\n\n" + animLines.join("\n\n") : ""}${skillLines.length ?  "\n\n" + skillLines.join("\n\n") : ""}${agentLines.length ?  "\n\n" + agentLines.join("\n\n") : ""}\n\n${webLines.join("\n")}`;
+      return `Output of '${name}':\n${focusBlock}${requested} commands (${scoped.length}${virtualCount ?  ` + ${virtualCount} OR virtual tools` : ""}):\n\n${lines.join("\n\n")}${animLines.length ?  "\n\n" + animLines.join("\n\n") : ""}${skillLines.length ?  "\n\n" + skillLines.join("\n\n") : ""}${agentLines.length ?  "\n\n" + agentLines.join("\n\n") : ""}\n\n${webLines.join("\n")}`;
     }
     // ── Virtual animation tools ──────────────────────────────────────────
     // Create/edit Roblox animation KEYFRAME DATA (KeyframeSequence/Keyframe/
@@ -4840,6 +4889,7 @@
           <span id="rs-dot" class="off" title=""></span>
           <span id="rs-ornament" aria-hidden="true"></span>
           <span id="rs-brand" data-rs-brand>OrScript</span>
+          <span id="rs-work-badge" hidden></span>
           <div id="rs-engine" data-engine="roblox">
             <span id="rs-engine-thumb"></span>
             <button data-mode="roblox" class="rs-mode-btn on" title="RobloxScript">RS</button>
@@ -5275,6 +5325,7 @@
     let autoFixEnabled = true, extraThinking = false, planMode = false, steeringMode = false, forgeMode = false, autoFixStopPlay = true, autoDebugEnabled = true, multiAgent = false;
     let workMode = "adaptive";
     try { window.__rsWorkMode = () => workMode; } catch {}
+    try { window.__rsWorkModes = () => WORK_MODES; } catch {}
     try { window.__rsPlanMode = () => planMode; } catch {}
     try { window.__rsSteeringMode = () => steeringMode; } catch {}
     try { window.__rsAutoDebug = () => autoDebugEnabled; } catch {}
@@ -5312,9 +5363,11 @@
           } catch {}
         }
         if (typeof r.rsAutoFixStopPlay === "boolean") autoFixStopPlay = r.rsAutoFixStopPlay;
-        // v1.17 migrates the former speed presets to one reliability-first adaptive workflow.
-        workMode = "adaptive";
-        try { window.__rsWorkMode = () => workMode; chrome.storage.local.set({rsWorkMode:"adaptive"}); } catch {}
+        // v1.17 migrated the former speed presets to the adaptive workflow;
+        // 1.19.8 adds the Visualizer and Animator specialist modes on top.
+        workMode = normalizeWorkMode(r.rsWorkMode);
+        try { window.__rsWorkMode = () => workMode; if (r.rsWorkMode !== workMode) chrome.storage.local.set({rsWorkMode:"adaptive"}); } catch {}
+        try { syncWorkModeUi(); } catch {}
         if (!menuEl.hidden) buildMenu();
       });
     } catch {}
@@ -5376,9 +5429,10 @@
           try { window.__rsThinkingLevel = () => thinkingLevel; } catch {}
           dirty = true;
         }
-        if (changes.rsWorkMode && changes.rsWorkMode.newValue === "adaptive") {
+        if (changes.rsWorkMode && WORK_MODE_IDS.includes(changes.rsWorkMode.newValue)) {
           workMode = changes.rsWorkMode.newValue;
           try { window.__rsWorkMode = () => workMode; } catch {}
+          try { syncWorkModeUi(); } catch {}
           dirty = true;
         }
         if (changes.rsPermMode && ["sandbox","ask","full"].includes(changes.rsPermMode.newValue)) {
@@ -5487,12 +5541,21 @@
         ? "\u{1F310} Background mode ON \u2014 the agent keeps working while you're on other sites"
         : "Background mode OFF \u2014 the agent pauses when this tab is hidden");
     }
-    function setWorkMode(_id, silent){
-      workMode = "adaptive";
-      try { chrome.storage.local.set({rsWorkMode:"adaptive"}); } catch {}
-      try { window.__rsWorkMode = () => "adaptive"; } catch {}
+    function setWorkMode(id, silent){
+      workMode = normalizeWorkMode(id);
+      try { chrome.storage.local.set({rsWorkMode: workMode}); } catch {}
+      try { window.__rsWorkMode = () => workMode; } catch {}
+      syncWorkModeUi();
       buildMenu(); renderBar(); markModesChanged();
-      if (!silent) toast("Adaptive Work Mode — approve the plan once, then OrScript builds and verifies it");
+      if (!silent) { try { playSfx(workMode === "adaptive" ? "click" : "special"); } catch {} toast(WORK_MODES[workMode].toast); }
+    }
+    // Bar badge + <html data-rs-work> for CSS; the badge only shows for the
+    // specialist modes so the default bar stays as compact as before.
+    function syncWorkModeUi(){
+      const mode = WORK_MODES[workMode] || WORK_MODES.adaptive;
+      try { document.documentElement.setAttribute("data-rs-work", workMode); } catch {}
+      const badge = root && root.querySelector("#rs-work-badge");
+      if (badge) { badge.textContent = mode.badge; badge.dataset.work = workMode; badge.hidden = !mode.badge; badge.title = mode.name + " work mode — " + mode.sub; }
     }
     function setExtraThinking(v){ extraThinking=!!v; try{chrome.storage.local.set({rsExtraThinking: extraThinking});}catch{}; try{ window.__rsExtraThinking = () => extraThinking; }catch{}; buildMenu(); updateExtraButton(); renderBar(); toast(v ? "Think ON — it will grill every solution" : "Think off"); markModesChanged(); }
     const STEERING_QUEUE_MAX = 5;
@@ -5890,10 +5953,10 @@
              <div class="rs-rbx-grid">${passes}</div>
             </section>
             <section class="rs-menu-sec">
-              <div class="rs-sec-label"><span>Work mode</span><span class="rs-sec-state">Adaptive</span></div>
-              <div class="rs-menu-note">Reliability-first workflow: inspect, propose a concise plan in chat, wait for one approval, then implement and verify every meaningful phase. It pauses only on failure or when you stop it.</div>
-              <div class="rs-work-row rs-work-adaptive" role="status" aria-label="Adaptive Work Mode is active">
-                <div class="rs-work-card on"><span class="rs-work-name">Adaptive workflow</span><span class="rs-work-sub">Inspect → Plan → Approve once → Build → Diagnose → Verify</span></div>
+              <div class="rs-sec-label"><span>Work mode</span><span class="rs-sec-state">${WORK_MODES[workMode].short}</span></div>
+              <div class="rs-menu-note">${WORK_MODES[workMode].note}</div>
+              <div class="rs-work-row rs-work-adaptive rs-work-modes" role="radiogroup" aria-label="Work mode">
+                ${WORK_MODE_IDS.map((id) => `<button type="button" class="rs-work-card ${workMode===id?"on":""}" data-work="${id}" role="radio" aria-checked="${workMode===id?"true":"false"}"><span class="rs-work-name">${WORK_MODES[id].name}</span><span class="rs-work-sub">${WORK_MODES[id].sub}</span></button>`).join("")}
               </div>
             </section>
             <section class="rs-menu-sec">
