@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>ORscript theme preview harness</title>
-<!-- Click any ♪ pill (or Start/Stop) to hear the theme's sound pack; browsers need one click before audio starts. -->
+<!-- The gear toggles the settings tray (opens above the bar, like the extension). Click any ♪ pill (or Start/Stop) to hear the theme's sound pack; browsers need one click before audio starts. -->
 <link rel="stylesheet" href="/overlay.css">
 <style>
   body{margin:0;min-height:100vh;background:#1e1e22 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M0 39.5h40M39.5 0v40' stroke='%23303036' stroke-width='1'/%3E%3C/svg%3E");font:14px system-ui,sans-serif;color:#ddd}
@@ -15,7 +15,6 @@
   #rs-root{position:fixed;inset:0;pointer-events:none}
   #rs-root>*{pointer-events:auto}
   #rs-bar{position:fixed;left:50%;bottom:48px;transform:translateX(-50%);width:760px}
-  #rs-menu{position:fixed;right:40px;top:90px;bottom:140px;width:380px;overflow:auto}
   #rs-approve{position:fixed;left:40px;bottom:140px;width:340px}
   #rs-approve .rs-approve-card{max-width:none}
   #rs-cards-panel{position:fixed;left:40px;top:90px;width:340px;height:300px;overflow:hidden}
@@ -24,7 +23,7 @@
 <body>
 <div id="picker"></div>
 <div id="rs-root">
-  <div id="rs-bar">
+  <div id="rs-bar" class="rs-bar-inline rs-menu-open rs-menu-contained">
     <div class="rs-cluster rs-cluster-left">
       <span id="rs-dot" class="on"></span>
       <span id="rs-ornament" aria-hidden="true"></span>
@@ -43,14 +42,7 @@
       <button id="rs-discord" aria-label="Discord"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg></button>
       <button id="rs-settings-btn" aria-label="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg></button>
     </div>
-  </div>
-
-  <div id="rs-cards-panel">
-    <div class="rs-cards-tabs"><button class="on">Work</button><button>Memory</button></div>
-    <div style="padding:12px;opacity:.8">Cards panel surface — same background recipe.</div>
-  </div>
-
-  <div id="rs-menu">
+    <div id="rs-menu" class="rs-menu-top">
     <div class="rs-menu-head"><span class="rs-menu-mark" aria-hidden="true"></span><div class="rs-menu-head-txt"><span class="rs-menu-logo"><span class="rs-menu-glyph"></span> Settings</span><span class="rs-menu-tag"><span data-rs-brand>OrScript</span> · v1.19.7 · <span id="pv-theme-name">Night</span></span></div></div>
     <section class="rs-menu-sec">
       <div class="rs-sec-label"><span>Buttons</span></div>
@@ -67,6 +59,13 @@
     </section>
     <div class="rs-menu-foot">OR v1.19.7 • RS • preview harness</div>
   </div>
+  </div>
+
+  <div id="rs-cards-panel">
+    <div class="rs-cards-tabs"><button class="on">Work</button><button>Memory</button></div>
+    <div style="padding:12px;opacity:.8">Cards panel surface — same background recipe.</div>
+  </div>
+
 
   <div id="rs-approve">
     <div class="rs-approve-card">

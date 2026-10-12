@@ -7508,7 +7508,15 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         bar.classList.toggle("rs-setup-open", setupOpen);
       }
       const surface = menuOpen ? menuEl : (cardsOpen ? cardsPanel : (embedOpen ? cardEmbedEl : (setupOpen ? setupCard : null)));
-      return surface ? (surface.offsetHeight || 0) : 0;
+      const h = surface ? (surface.offsetHeight || 0) : 0;
+      // Trays open ABOVE the bar, overlaying the transcript, so they take no
+      // composer space. Only when the bar sits too close to the top of the
+      // viewport for the tray to fit do they fall back below it (rs-tray-below),
+      // and only then does their height join the reserved strip.
+      let below = false;
+      if (bar && h) { try { below = bar.getBoundingClientRect().top < h + BAR_GAP + 8; } catch {} }
+      if (bar) bar.classList.toggle("rs-tray-below", below);
+      return below ? h : 0;
     }
 
     function dockBarInReservedStrip(anchorEl, modeClass) {

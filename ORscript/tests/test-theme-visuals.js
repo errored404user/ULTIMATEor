@@ -149,7 +149,15 @@ for (const kw of ["createBuffer", "freqEnd", "highpass", "lowpass", "detune", "v
 assert(main.includes("never loops"), "sound packs must document the no-loop rule");
 assert(sec.includes("html[data-rs-theme] .rs-theme-sound-list button"), "sound strip must be styled");
 
-// 6) VoidScript finally has real swatch art everywhere the other classics do.
+// 6) Settings tray / templates panel open ABOVE the bar (below only as a no-room fallback).
+const tray = css.slice(css.indexOf("7. Trays open ABOVE the bar"));
+assert(tray.length > 100, "tray-above section must exist");
+assert(/#rs-bar\.rs-menu-contained #rs-menu\.rs-menu-top,[\s\S]*?bottom: calc\(100% \+ 6px\) !important/.test(tray), "settings tray must sit above the bar");
+assert(tray.includes("#rs-bar.rs-bar-inline.rs-cards-open #rs-cards-panel"), "templates panel must sit above the bar in inline mounts too");
+assert(tray.includes("#rs-bar.rs-tray-below.rs-menu-contained #rs-menu.rs-menu-top"), "below-fallback must exist");
+assert(main.includes('bar.classList.toggle("rs-tray-below", below)') && main.includes("return below ? h : 0;"), "main.js must only reserve composer space when the tray falls back below");
+
+// 7) VoidScript finally has real swatch art everywhere the other classics do.
 assert(fs.existsSync(path.join(root, "ui", "swatch-void.jpg")), "ui/swatch-void.jpg must ship");
 assert(popup.includes("#theme-void .theme-art{background-image:url(ui/swatch-void.jpg)}"), "popup theme card for void must use the swatch");
 assert(popup.includes('html[data-theme="void"] .hero{background-image:url(ui/swatch-void.jpg)}'), "popup hero for void must use the swatch");

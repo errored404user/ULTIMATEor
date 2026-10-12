@@ -42,6 +42,8 @@
   mk("glass", "data-rs-glass", ["true", "false"]); mk("effects", "data-meme-effects", ["full", "reduced", "off"]);
   const kinds = ["start", "restart", "start-degraded"]; let k = 0; const act = document.getElementById("rs-action");
   act.onclick = () => { SFX.playSfx(act.dataset.kind === "restart" ? "done" : "start"); k = (k + 1) % (kinds.length + 1); act.disabled = k === kinds.length; act.dataset.kind = kinds[k % kinds.length]; act.textContent = act.disabled ? "Start" : { start: "▶ Start", restart: "↻ Restart", "start-degraded": "▶ Start (degraded)" }[act.dataset.kind]; };
+  const gear = document.getElementById("rs-settings-btn"), menu = document.getElementById("rs-menu"), bar = document.getElementById("rs-bar");
+  gear.onclick = () => { const open = menu.hidden; menu.hidden = !open; bar.classList.toggle("rs-menu-open", open); bar.classList.toggle("rs-menu-contained", open); if (open) SFX.playSfx("click"); };
   const stop = document.getElementById("rs-stop"); stop.onclick = () => { SFX.playSfx(stop.dataset.state ? "error" : "stop"); if (stop.dataset.state) delete stop.dataset.state; else stop.dataset.state = "stopping"; };
   apply(new URLSearchParams(location.search).get("theme") || "night");
 })();

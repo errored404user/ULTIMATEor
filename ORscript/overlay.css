@@ -6961,3 +6961,50 @@ html[data-rs-theme] .rs-theme-card .rs-work-glyph::after {
 html[data-rs-theme] .rs-menu-glyph { font-size: 0 !important; width: 14px; height: 14px; display: inline-block; background: var(--orx-grad); -webkit-mask: var(--orx-orn) 0 0 / 200% 200% no-repeat; mask: var(--orx-orn) 0 0 / 200% 200% no-repeat; }
 @media (prefers-reduced-motion: reduce) { #rs-root .rs-theme-corner::after { filter: none; } }
 
+
+/* ── 7. Trays open ABOVE the bar ───────────────────────────────────────────────
+   The 1.18.x collision patch parked the settings tray / templates panel / embed /
+   setup card BELOW the status row. They float above it again (overlaying the
+   transcript, like the original tray), for both the anchored and the inline
+   mounts. main.js adds .rs-tray-below only when the bar sits too close to the
+   top of the viewport for the tray to fit — then the old below-layout applies.
+   ─────────────────────────────────────────────────────────────────────────── */
+#rs-bar.rs-menu-contained #rs-menu.rs-menu-top,
+#rs-bar.rs-cards-open #rs-cards-panel,
+#rs-bar.rs-card-embed-open #rs-card-embed,
+#rs-bar.rs-setup-open #rs-setup,
+#rs-bar.rs-bar-inline.rs-menu-contained #rs-menu.rs-menu-top,
+#rs-bar.rs-bar-inline.rs-cards-open #rs-cards-panel,
+#rs-bar.rs-bar-inline.rs-card-embed-open #rs-card-embed,
+#rs-bar.rs-bar-inline.rs-setup-open #rs-setup {
+  position: absolute !important;
+  left: 0 !important; right: 0 !important;
+  top: auto !important;
+  bottom: calc(100% + 6px) !important;
+  width: 100% !important;
+  margin: 0 !important;
+  order: 0 !important;
+  flex: none !important;
+  box-sizing: border-box !important;
+  transform-origin: bottom center !important;
+  z-index: 40 !important;
+}
+#rs-bar.rs-bar-inline.rs-menu-contained,
+#rs-bar.rs-bar-inline.rs-cards-open,
+#rs-bar.rs-bar-inline.rs-card-embed-open,
+#rs-bar.rs-bar-inline.rs-setup-open { flex-wrap: nowrap !important; position: relative !important; overflow: visible !important; }
+#rs-bar.rs-cards-open #rs-cards-panel, #rs-bar.rs-bar-inline.rs-cards-open #rs-cards-panel { max-height: min(42vh, 360px) !important; }
+#rs-bar.rs-setup-open #rs-setup, #rs-bar.rs-bar-inline.rs-setup-open #rs-setup { max-height: min(42vh, 320px) !important; overflow-y: auto !important; }
+/* no room above → fall back below the bar (composer padding is reserved for it) */
+#rs-bar.rs-tray-below.rs-menu-contained #rs-menu.rs-menu-top,
+#rs-bar.rs-tray-below.rs-cards-open #rs-cards-panel,
+#rs-bar.rs-tray-below.rs-card-embed-open #rs-card-embed,
+#rs-bar.rs-tray-below.rs-setup-open #rs-setup,
+#rs-bar.rs-tray-below.rs-bar-inline.rs-menu-contained #rs-menu.rs-menu-top,
+#rs-bar.rs-tray-below.rs-bar-inline.rs-cards-open #rs-cards-panel,
+#rs-bar.rs-tray-below.rs-bar-inline.rs-card-embed-open #rs-card-embed,
+#rs-bar.rs-tray-below.rs-bar-inline.rs-setup-open #rs-setup {
+  top: calc(100% + 6px) !important;
+  bottom: auto !important;
+  transform-origin: top center !important;
+}
