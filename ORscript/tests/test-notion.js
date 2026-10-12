@@ -50,7 +50,10 @@ assert(P.id === "notion" && P.displayName === "Notion AI", "provider identity");
 for (const k of ["init", "allItems", "isUserItem", "isAssistantItem", "itemText", "classifyText", "assistantCount", "userCount", "lastAssistant", "lastAssistantId", "itemKey", "readAssistant", "streamLen", "snapshot", "getEditor", "editorText", "chatIsEmpty", "isFreshChat", "composerFrame", "barAnchor", "setInputLock", "typeAndSend", "stopGeneration", "isGenerating", "isBusyNow", "isHardGenerating", "enforceComposer", "ensureComposerReady", "turnHalted", "findContinueBtn", "clickContinueBtn", "scanError", "isTooLongMsg", "isBusyMsg", "attachImages", "clearAttachments", "conversationKey", "installSendHooks", "findToolBlockSpot", "timings", "renderImmutableChip", "reserveBarSpace", "modeWarning"]) {
   assert(k in P, "provider exports " + k);
 }
-assert(P.immutableTranscript === true && P.barOutside === true && P.forceBootstrapCatalogue === true, "provider flags");
+assert(P.immutableTranscript === true && P.barOutside === true && P.forceBootstrapCatalogue === true && P.keepBarVisible === true, "provider flags");
+// Bar never vanishes on Notion: placeholder anchor / no composer -> viewport-bottom dock, with a pre-start line that says why.
+assert(main.includes("function dockBarAtViewportBottom()") && main.includes("if (!providerReserved && P.barOutside && P.reserveBarSpace) {") && main.includes("if (P.keepBarVisible) { dockBarAtViewportBottom(); return; }"), "keep-visible fallback in the core");
+assert(typeof P.modeWarning() === "string" && /notion\.so\/chat|waiting for the chat composer/.test(P.modeWarning()), "modeWarning explains a missing composer");
 assert(typeof P.timings.STABLE_MS === "number" && typeof P.timings.RESPONSE_TIMEOUT_MS === "number", "timings the watcher reads");
 // Preferences bootstrap stays plain text and carries the camouflage marker.
 const RS = new Function("window", config + "\n;return typeof RS !== 'undefined' ? RS : (typeof RobloxScript !== 'undefined' ? RobloxScript : null);")(undefined);

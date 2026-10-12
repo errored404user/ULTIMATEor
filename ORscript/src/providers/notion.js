@@ -2837,7 +2837,19 @@ const RSProvider = (() => {
     }
     return editor;
   };
-  const modeWarning = () => null;
+  // Pre-start bar line. The ORscript core shows this instead of "Ready" and
+  // disables Start while it is non-null, so it doubles as the user-facing
+  // diagnosis of WHY the bar is sitting at the viewport bottom instead of on a
+  // composer: wrong Notion route, or the AI composer not mounted yet.
+  const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const modeWarning = () => {
+    if (!isAiSurface()) {
+      const here = esc((location.pathname || "/").slice(0, 40));
+      return `<b>Notion</b> — open <b>notion.so/chat</b> (Notion AI) to use ORscript. This page: <code>${here}</code>`;
+    }
+    if (!getEditor()) return `<b>Notion AI</b> — waiting for the chat composer… (if it is already on screen, report this page's URL)`;
+    return null;
+  };
   const captchaPresent = () => false;
   // Settings opens above the AI chat without changing its route. Do not let
   // the floating bar cover settings actions, including nested model controls.
@@ -3365,7 +3377,7 @@ const RSProvider = (() => {
     thinkingStopWaitMs: 7000,
     thinkingRecoveryLimit: 3,
     barTrackIntervalMs: 250,
-    barOutside: true, reserveBarSpace,
+    barOutside: true, reserveBarSpace, keepBarVisible: true,
     observeCharacterData: true,
     mutationAttributeFilter: ["data-block-id"],
     timings,

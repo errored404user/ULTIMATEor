@@ -32,4 +32,6 @@ ed.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefa
 window.__answer=(text)=>{const row=document.createElement("div"); row.className="ev-ai"; row.setAttribute("data-agent-service-scroll-anchor","a"+(++n)); row.style.justifyContent="flex-start";
   const b=document.createElement("div"); b.className="bubble"; row.appendChild(b); thread.appendChild(row);
   let i=0; const iv=setInterval(()=>{ i+=12; b.textContent=text.slice(0,i); if(i>=text.length) clearInterval(iv); },40); };
+// ?late=<ms>: mount the composer late, like Notion's real shell does (bar must stay visible meanwhile).
+(() => { const late = Number(new URLSearchParams(location.search).get("late") || 0); if (!late) return; const c = document.getElementById("composer"); const ph = document.createElement("div"); ph.id = "composer-slot"; c.replaceWith(ph); setTimeout(() => ph.replaceWith(c), late); })();
 </script></body></html>

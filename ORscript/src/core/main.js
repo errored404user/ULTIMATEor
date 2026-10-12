@@ -7626,6 +7626,26 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       return below ? h : 0;
     }
 
+    // Keep-visible fallback: a slim floating bar docked to the BOTTOM of the
+    // viewport (never over the composer, never floated above transcript text).
+    // Used while a provider's real composer is not resolvable - Notion mounts
+    // its full-page AI editor seconds after the shell, and on non-AI Notion
+    // pages the bar has to stay on screen to tell the user where to go.
+    function dockBarAtViewportBottom() {
+      bar.classList.remove("rs-bar-inline", "rs-bar-inside", "rs-bar-anchored", "rs-bar-docked");
+      bar.classList.add("rs-bar-float");
+      if (root && bar.parentElement !== root) root.appendChild(bar);
+      clearAnchorReserve();
+      bar.style.display = "flex";
+      const bh = bar.offsetHeight || 44;
+      const bw = bar.offsetWidth || Math.min(window.innerWidth - 24, 720);
+      bar.style.width = "";
+      bar.style.left = Math.max(4, Math.round((window.innerWidth - bw) / 2)) + "px";
+      bar.style.top = Math.max(4, Math.round(window.innerHeight - bh - 14)) + "px";
+      bar.style.borderRadius = "";
+      return true;
+    }
+
     function dockBarInReservedStrip(anchorEl, modeClass) {
       if (!anchorEl || !anchorEl.isConnected) return false;
       bar.classList.remove("rs-bar-inline", "rs-bar-inside", "rs-bar-float", "rs-bar-anchored", "rs-bar-docked");
@@ -7646,6 +7666,13 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       let reservation = null;
       let providerReserved = false;
       if (P.reserveBarSpace) { try { providerReserved = P.reserveBarSpace(anchorEl, occupied) === true; } catch {} }
+      // The provider owns reservation but declined this anchor: it is its own
+      // stand-in placeholder (no composer on screen yet). Padding a placeholder
+      // reserves nothing real, so keep the bar visible at the viewport bottom.
+      if (!providerReserved && P.barOutside && P.reserveBarSpace) {
+        if (anchorPad) { restoreInline(anchorPad.saved); anchorPad = null; }
+        return dockBarAtViewportBottom();
+      }
       if (providerReserved) {
         if (anchorPad) { restoreInline(anchorPad.saved); anchorPad = null; }
         let cs = null;
@@ -7781,9 +7808,13 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       }
 
       // Without a live composer there is no safe host-owned region to reserve.
-      // Hiding briefly during page/login loading is preferable to covering page
-      // text with a viewport-fixed fallback; the bar returns on the first frame
-      // that the provider exposes its composer.
+      // Providers whose chat lives on a sub-route of a larger app (Notion) opt
+      // in to a bottom-of-viewport bar so the user is never left wondering
+      // whether the extension loaded - the bar's warning line says where to go.
+      if (P.keepBarVisible) { dockBarAtViewportBottom(); return; }
+      // Otherwise hiding briefly during page/login loading is preferable to
+      // covering page text with a viewport-fixed fallback; the bar returns on
+      // the first frame that the provider exposes its composer.
       bar.classList.remove("rs-bar-float", "rs-bar-docked");
       bar.style.display = "none";
       clearAnchorReserve();
