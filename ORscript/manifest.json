@@ -130,9 +130,6 @@
         "src/core/screenshot.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"
@@ -176,9 +173,6 @@
         "src/providers/chatgpt.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"
@@ -213,9 +207,6 @@
         "src/providers/claude.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"
@@ -247,9 +238,6 @@
         "src/providers/gemini.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"
@@ -284,9 +272,6 @@
         "src/providers/kimi.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"
@@ -331,9 +316,6 @@
         "src/core/screenshot.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"
@@ -365,9 +347,6 @@
         "src/providers/glm.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"
@@ -399,9 +378,6 @@
         "src/providers/arena.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"
@@ -434,9 +410,6 @@
         "src/providers/meta.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"
@@ -478,9 +451,6 @@
         "src/providers/qwen.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"
@@ -522,9 +492,6 @@
         "src/providers/crax.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"
@@ -559,9 +526,6 @@
         "src/providers/oxalpha.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"
@@ -570,17 +534,6 @@
         "overlay.css"
       ],
       "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://www.figma.com/*",
-        "https://figma.com/*"
-      ],
-      "js": [
-        "src/integrations/figma_bridge.js"
-      ],
-      "all_frames": true,
-      "run_at": "document_start"
     },
     {
       "matches": [
@@ -616,9 +569,6 @@
         "src/providers/multichat.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
-        "src/core/figma_design.js",
-        "src/core/figma_provider.js",
-        "src/core/forge_gui.js",
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/main.js"

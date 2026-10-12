@@ -2,7 +2,7 @@
 // Provider-independent command metadata, validation, discovery and dispatch.
 const ORCommandRegistry = (() => {
   "use strict";
-  const ENVIRONMENTS = new Set(["ROBLOX_STUDIO", "BLENDER", "FIGMA", "WEB", "GENERAL"]);
+  const ENVIRONMENTS = new Set(["ROBLOX_STUDIO", "BLENDER", "WEB", "GENERAL"]);
   const commands = new Map();
   const aliases = new Map();
   const failures = [];

@@ -1,7 +1,7 @@
 "use strict";
 const fs=require("fs"),assert=require("assert");
 const main=fs.readFileSync("src/core/main.js","utf8");
-for(const id of ["rs-set-text","rs-set-save","rs-set-status","rs-mcp-blender","rs-blender-site","rs-figma-card","rs-figma-connect","rs-figma-check","rs-figma-refresh","rs-figma-disconnect","rs-mcp-add","rs-mcp-repair"]){
+for(const id of ["rs-set-text","rs-set-save","rs-set-status","rs-mcp-blender","rs-blender-site","rs-mcp-add","rs-mcp-repair"]){
   assert(main.includes(`id=\"${id}\"`),`settings markup missing #${id}`);
 }
 for(const mode of ["autodebug","multiagent","sounds"]){assert(main.includes(`data-mode=\"${mode}\"`),`settings lost ${mode}`);}

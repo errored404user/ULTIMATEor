@@ -1,6 +1,6 @@
 "use strict";
 const fs=require("fs"),assert=require("assert"),main=fs.readFileSync("src/core/main.js","utf8"),config=fs.readFileSync("src/core/config.js","utf8"),manifest=JSON.parse(fs.readFileSync("manifest.json"));
-for(const topic of ["templates","roadmap","commands","studio","workmode","figma","projects","themes","permissions","providers","troubleshooting"])assert(main.includes(`${topic}:`),topic);
+for(const topic of ["templates","roadmap","commands","studio","workmode","projects","themes","permissions","providers","troubleshooting"])assert(main.includes(`${topic}:`),topic);
 assert(main.includes('name:"orscript_help"'));
 assert(main.includes('roadmapName==="orscript_help"'));
 assert(main.includes("agentStarted:false,executedCommands:false"));

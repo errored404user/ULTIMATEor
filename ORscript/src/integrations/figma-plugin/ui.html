@@ -1,6 +1,0 @@
-<!doctype html><meta charset="utf-8"><style>body{margin:12px;background:#16181d;color:#e8eaee;font:12px Inter,sans-serif}b{display:block;margin-bottom:6px}small{color:#9298a3}</style><b>OrScript Figma Bridge</b><small id="s">Connecting to OrScript…</small><script>
-const s=document.querySelector('#s');const bridgePost=(m)=>{try{window.postMessage(m,'*');}catch{}try{if(window.top!==window)window.top.postMessage(m,'*');}catch{}};parent.postMessage({pluginMessage:{type:'OR_FIGMA_READY'}},'*');
-window.onmessage=e=>{const m=e.data;if(m&&m.source==='orscript-extension'&&m.type==='OR_FIGMA_REQUEST'){parent.postMessage({pluginMessage:{type:'OR_FIGMA_EXECUTE',requestId:m.requestId,operation:m.operation,args:m.args}},'*');}};
-window.addEventListener('message',e=>{const m=e.data&&e.data.pluginMessage;if(m&&m.type==='OR_FIGMA_RESULT'){bridgePost({source:'orscript-figma-plugin',type:'OR_FIGMA_RESULT',requestId:m.requestId,result:m.result});s.textContent=m.result&&m.result.success?'Connected · last operation succeeded':'Connected · operation failed';}});
-bridgePost({source:'orscript-figma-plugin',type:'OR_FIGMA_READY'});setInterval(()=>bridgePost({source:'orscript-figma-plugin',type:'OR_FIGMA_READY'}),15000);
-</script>

@@ -122,7 +122,7 @@ ok("assistant plugin noise stripped", mainSrc.includes("function stripStudioNois
 ok("web search has fallbacks", bg.includes("api.duckduckgo.com") && bg.includes("lite.duckduckgo.com") && bg.includes("en.wikipedia.org/w/api.php") && bg.includes("list=search") && bg.includes("search.brave.com") && bg.includes("r.jina.ai"));
 ok("screenshot on every provider", !mainSrc.includes("or_screenshot cannot send a shot") && mainSrc.includes('or_capture: "or_screenshot"') && !mainSrc.includes("VISION_TOOLS.has(bare) && !P.supportsVision"));
 ok("technical branding stays ORscript while visible brand is dynamic", manifest.name === "ORscript" && cfgSrc.includes('const APP_NAME = "ORscript"') && popupHtml.includes('data-rs-brand>OrScript</span>'));
-ok("figma ui auto layout", guiSrc.includes("ui_auto_layout") && guiSrc.includes("ui_constraints") && cfgSrc.includes("Lay out like Figma"));
+ok("ui auto layout", guiSrc.includes("ui_auto_layout") && guiSrc.includes("ui_constraints") && cfgSrc.includes("Lay out like a design tool"));
 ok("vfx extras", skillSrc.includes("VFX_BUILDERS.shockwave") && skillSrc.includes("VFX_BUILDERS.holy_burst") && skillSrc.includes("VFX_BUILDERS.confetti"));
 ok("animation acting notes", cfgSrc.includes("anticipation") && cfgSrc.includes("follow-through"));
 ok("provider templates", manJs.includes("src/core/templates.js") && fs.readFileSync(path.join(root, "src/core/templates.js"), "utf8").includes("ORTemplates") && mainSrc.includes("get_template") && mainSrc.includes("CLONES a match") && mainSrc.includes("<h3>4 · Screenshot</h3>") && !popupHtml.includes("tpl-row") && !mainSrc.includes("data-tpl") && cfgSrc.includes("get_template"));

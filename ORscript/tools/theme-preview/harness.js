@@ -4,9 +4,8 @@
 (async () => {
   const src = await (await fetch("/src/core/main.js")).text();
   const grab = (name) => { const m = src.match(new RegExp("const " + name + " ?= ?(\\{[\\s\\S]*?\\n  \\});")); return m ? Function("return " + m[1])() : {}; };
-  const OR_THEMES = grab("OR_THEMES"), MEME = grab("MEME_THEME_DATA"), CLASSIC = grab("CLASSIC_THEME_DECOR");
-  for (const [id, d] of Object.entries(MEME)) Object.assign(OR_THEMES[id] ||= {}, { background: d[0] + "," + d[1], decorations: d[2] });
-  for (const [id, d] of Object.entries(CLASSIC)) (OR_THEMES[id] ||= {}).decorations ||= d;
+  const OR_THEMES = grab("OR_THEMES"), MEME = grab("MEME_THEME_DATA");
+  for (const [id, d] of Object.entries(MEME)) Object.assign(OR_THEMES[id] ||= {}, { background: d[0] + "," + d[1] });
   const memeIds = ["epicface","headooh","ragequit","killfeed","shitpost","skillissue","pogchamp","glitchlord","npcenergy"];
   const html = document.documentElement, root = document.getElementById("rs-root");
   const picker = document.getElementById("picker"), grid = document.getElementById("pv-grid");
@@ -25,13 +24,8 @@
     document.getElementById("pv-theme-name").textContent = th?.name || id;
     document.querySelectorAll("[data-rs-brand]").forEach((b) => (b.textContent = id === "void" ? "VoidScript" : "OrScript"));
     document.getElementById("rs-ornament").dataset.theme = id;
-    const dec = th?.decorations || [];
     rail.dataset.kind = memeIds.includes(id) ? "meme" : "classic";
-    rail.hidden = html.dataset.memeEffects === "off" || dec.length === 0;
-    rail.querySelector(".rs-corner-tl").textContent = dec.slice(0, 6).join("  ");
-    rail.querySelector(".rs-corner-tr").textContent = dec.slice(6, 12).join("  ");
-    rail.querySelector(".rs-corner-bl").textContent = dec.slice(12, 17).join("  ");
-    rail.querySelector(".rs-corner-br").textContent = dec.slice(17, 23).join("  ");
+    rail.hidden = html.dataset.memeEffects === "off";
     picker.querySelectorAll("button[data-t]").forEach((b) => b.classList.toggle("on", b.dataset.t === id));
     SFX.setTheme(id);
     soundList.innerHTML = `<span class="rs-theme-sound-name">♪ ${SFX.THEME_SOUNDS[id]?.label || ""}</span>` + SFX.SFX_KINDS.map((k) => `<button type="button" data-theme-sound-preview="${id}" data-effect="${k}">${SFX.SFX_LABELS[k]}</button>`).join("");
@@ -41,7 +35,7 @@
   for (const id of Object.keys(OR_THEMES)) {
     const b = document.createElement("button"); b.dataset.t = id; b.textContent = OR_THEMES[id].name || id; b.onclick = () => apply(id); picker.appendChild(b);
     const c = document.createElement("article"); c.className = "rs-work-card rs-theme-card"; c.dataset.theme = id; c.dataset.themeCard = id;
-    c.innerHTML = `<span class="rs-theme-art" style="background-image:url(/${art(id)})"></span><span class="rs-work-name">${OR_THEMES[id].name}</span><span class="rs-work-sub">${OR_THEMES[id].sub || ""}</span>`;
+    c.innerHTML = `<span class="rs-theme-art" style="background-image:url(/${art(id)})"></span><span class="rs-work-glyph">${OR_THEMES[id].glyph || ""}</span><span class="rs-work-name">${OR_THEMES[id].name}</span><span class="rs-work-sub">${OR_THEMES[id].sub || ""}</span>`;
     c.onclick = () => apply(id); grid.appendChild(c);
   }
   const mk = (label, attr, vals) => { const l = document.createElement("label"); l.textContent = label; const s = document.createElement("select"); vals.forEach((v) => s.append(new Option(v, v))); s.onchange = () => { html.setAttribute(attr, s.value); apply(html.dataset.rsTheme); }; l.appendChild(s); picker.appendChild(l); };

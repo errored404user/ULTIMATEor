@@ -68,7 +68,7 @@ python3 -m http.server 8080            # from the ORscript root
 # open http://localhost:8080/tools/theme-preview/index.html?theme=void
 ```
 
-`node tests/test-theme-visuals.js` guards the 1.19.7 visual layer (per-theme tokens, swatch photos for all 16 themes, corner rail, pill button states) and the sound packs.
+`node tests/test-theme-visuals.js` guards the 1.19.7 visual layer (per-theme tokens, swatch photos for all 16 themes, SVG corner ornaments + inside textures, pill button states) and the sound packs. Decorations are designed SVG motifs (`--orx-orn` in `overlay.css`) painted with the theme gradient — never emoji or text.
 
 ### Sound packs
 

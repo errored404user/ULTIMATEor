@@ -1448,9 +1448,6 @@ async function robloxListDevProducts(msg) {
   return { ok: true, products: res.data, text: typeof res.text === "string" ? res.text.slice(0, 4000) : JSON.stringify(res.data) };
 }
 
-const figmaBridge={tabId:null,frameId:null,lastSeen:0,pending:new Map()};
-function figmaState(){const live=figmaBridge.tabId!==null&&Date.now()-figmaBridge.lastSeen<45000;return {success:true,state:live?"CONNECTED":"DISCONNECTED",connection:live?"OFFICIAL_PLUGIN_API":null,capabilities:live?["READ","DESIGN","WRITE","EXPORT"]:[],message:live?"Official OrScript Figma plugin is reachable":"Open Figma and run the OrScript Figma Bridge development plugin"};}
-async function figmaExecute(operation,args={}){if(operation==="status"||operation==="health")return figmaState();if(operation==="connect"){try{await chrome.tabs.create({url:"https://www.figma.com/design/"});}catch{}return {success:false,error:{code:"FIGMA_AUTH_REQUIRED",message:"Run the OrScript Figma Bridge development plugin in an authenticated editable Figma Design file, then retry health."}};}if(operation==="disconnect"){figmaBridge.tabId=null;figmaBridge.frameId=null;figmaBridge.lastSeen=0;return {success:true,state:"DISCONNECTED"};}if(operation==="authenticate")return {success:false,error:{code:"NOT_SUPPORTED_IN_CURRENT_FIGMA_CONNECTION",message:"Authentication is owned by the Figma application. OrScript never receives Figma credentials."}};if(operation==="createFile")return {success:false,error:{code:"NOT_SUPPORTED_IN_CURRENT_FIGMA_CONNECTION",message:"The official Plugin API cannot create cloud files. Create or open a Figma Design file, run the bridge plugin, then create native design nodes."}};const state=figmaState();if(state.state!=="CONNECTED")return {success:false,error:{code:"FIGMA_NOT_CONNECTED",message:state.message}};const requestId=`figma-${Date.now()}-${Math.random().toString(36).slice(2)}`;return new Promise(async resolve=>{const timer=setTimeout(()=>{figmaBridge.pending.delete(requestId);resolve({success:false,error:{code:"FIGMA_READ_FAILED",message:"Figma plugin operation timed out"}});},30000);figmaBridge.pending.set(requestId,{resolve,timer});try{await chrome.tabs.sendMessage(figmaBridge.tabId,{type:"figma_plugin_execute",requestId,operation,args},{frameId:figmaBridge.frameId});}catch(e){clearTimeout(timer);figmaBridge.pending.delete(requestId);figmaBridge.tabId=null;resolve({success:false,error:{code:"FIGMA_NOT_CONNECTED",message:String(e&&e.message||e)}});}});}
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     if (!msg || typeof msg !== "object" || typeof msg.type !== "string") {
@@ -1458,13 +1455,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return;
     }
     switch (msg.type) {
-      case "figma_plugin_ready":
-        if(sender&&sender.tab&&sender.frameId>0&&/figma\.com\/plugin-sandbox(?:[/?#]|$)/i.test(String(sender.url||""))){figmaBridge.tabId=sender.tab.id;figmaBridge.frameId=sender.frameId;figmaBridge.lastSeen=Date.now();sendResponse({ok:true});}else sendResponse({ok:false,error:"untrusted Figma bridge frame"});break;
-      case "figma_plugin_result": {
-        const p=figmaBridge.pending.get(String(msg.requestId||""));if(p){clearTimeout(p.timer);figmaBridge.pending.delete(String(msg.requestId));p.resolve(msg.result||{success:false,error:{code:"FIGMA_READ_FAILED",message:"Empty plugin result"}});}sendResponse({ok:true});break;
-      }
-      case "figma_execute":
-        sendResponse(await figmaExecute(String(msg.operation||"status"),msg.args||{}));break;
       case "creator_asset_info":
         sendResponse(await creatorAssetInfo(msg.assetId));break;
       case "command_catalog":

@@ -41,21 +41,40 @@ assert(/html\[data-rs-theme\] #rs-menu,[\s\S]*?background:\s*var\(--orx-marks\),
 assert(sec.includes("html[data-rs-theme] .rs-menu-head {"), "settings head must take the theme photo");
 assert(sec.includes('html[data-rs-theme][data-rs-glass="true"] #rs-bar'), "glass bar must get the themed background");
 
-// 2) Corner decorations — bracket marks on panels, glyph rail for every theme.
+// 2) Corner decorations — bracket marks on panels, and a designed SVG ornament
+//    per theme (no emoji, no text) painted on the rail, head, foot, cards, bar.
 assert((sec.match(/linear-gradient\(var\(--orx-mark\), var\(--orx-mark\)\)/g) || []).length === 8, "--orx-marks must draw 8 bracket layers (4 corners x 2 edges)");
-for (const c of ["tl", "tr", "bl", "br"]) assert(sec.includes(`#rs-root .rs-corner-${c}::before`), `viewport rail corner ${c} must have a bracket frame`);
-assert(sec.includes('.rs-theme-corners[data-kind="classic"]'), "classic rail styling must exist");
-assert(sec.includes('.rs-theme-corners[data-kind="meme"]'), "meme rail styling must exist");
-assert(main.includes("const CLASSIC_THEME_DECOR = {"), "main.js must define classic theme corner decorations");
-for (const id of CLASSIC) {
-  const m = main.match(new RegExp(`^\\s*"?${id}"?:\\s*\\[([^\\]]*)\\]`, "m"));
-  assert(m, `CLASSIC_THEME_DECOR must include "${id}"`);
-  const n = m[1].split(",").filter((x) => x.trim()).length;
-  assert(n >= 23, `"${id}" needs >= 23 decoration tokens for the 6/6/5/6 corner split (got ${n})`);
+for (const c of ["tl", "tr", "bl", "br"]) {
+  assert(sec.includes(`#rs-root .rs-corner-${c}::before`), `viewport rail corner ${c} must have a bracket frame`);
+  assert(sec.includes(`#rs-root .rs-corner-${c}::after`), `viewport rail corner ${c} must place the ornament`);
 }
-assert(main.includes('rail.dataset.kind=memeIds.includes(orTheme)?"meme":"classic"'), "rail must be tagged classic/meme for CSS");
-assert(main.includes('rail.hidden=memeEffects==="off"||dec.length===0'), "rail must show for any theme with decorations and honour effects=off");
-assert(!main.includes("rail.hidden=!memeIds.includes(orTheme)"), "rail must no longer be meme-only");
+const ornaments = {};
+for (const id of THEMES) {
+  const m = sec.match(new RegExp(`html\\[data-rs-theme="${id}"\\], \\.rs-theme-card\\[data-theme="${id}"\\] \\{ --orx-orn: url\\("data:image/svg\\+xml;utf8,(<svg[^"]*</svg>)"\\); \\}`));
+  assert(m, `theme "${id}" must define an SVG ornament (--orx-orn)`);
+  assert(!ornaments[m[1]], `ornament for "${id}" must be unique`); ornaments[m[1]] = id;
+  assert(m[1].includes("viewBox='0 0 64 64'"), `ornament "${id}" must be a 64x64 motif`);
+  assert(sec.match(new RegExp(`html\\[data-rs-theme="${id}"\\] \\{ --orx-tile: `)), `theme "${id}" must define an inside texture (--orx-tile)`);
+}
+for (const sel of [
+  "#rs-root .rs-theme-corner::after",
+  "html[data-rs-theme] .rs-menu-head::before", "html[data-rs-theme] .rs-menu-head::after",
+  "html[data-rs-theme] .rs-menu-foot::before", "html[data-rs-theme] .rs-menu-foot::after",
+  "html[data-rs-theme] .rs-approve-card::before", "html[data-rs-theme] #rs-setup::after",
+  "html[data-rs-theme] #rs-ornament {", "html[data-rs-theme] .rs-theme-card .rs-work-glyph::after",
+  "html[data-rs-theme] .rs-sec-label::after", "html[data-rs-theme] .rs-menu-mark::before",
+]) assert(sec.includes(sel), `ornament placement missing: ${sel}`);
+assert(/var\(--orx-marks\), var\(--orx-fade\), var\(--orx-tile\), var\(--orx-wash\), var\(--orx-img\), var\(--orx-bg\)/.test(sec), "panels must layer the inside texture");
+assert(sec.includes("html[data-rs-theme] #rs-bar::after { content: none !important; }"), "old emoji strip under the bar must be retired");
+// No emoji anywhere in theme data, corner rails or the popup theme cards.
+const emoji = /[\u{1F000}-\u{1FAFF}\u{1F900}-\u{1F9FF}\u{2700}-\u{27BF}\u{FE0F}]/u;
+const themeData = main.slice(main.indexOf("const OR_THEMES"), main.indexOf("let orTheme"));
+const nonEmojiSymbols = /[\u2600-\u26FF\u2700-\u27BF]/g; // ☾ ✦ ✿ ❧ ✺ are text symbols, allowed
+assert(!emoji.test(themeData.replace(nonEmojiSymbols, "")), "theme data must not contain emoji");
+assert(!main.includes("CLASSIC_THEME_DECOR") && !main.includes("th.decorations=") && !main.includes("--rs-theme-decor"), "text/emoji corner decorations must be gone");
+assert(!main.includes(".textContent=dec."), "rail must not receive text");
+assert(main.includes('rail.dataset.kind=memeIds.includes(orTheme)?"meme":"classic";rail.hidden=memeEffects==="off";'), "rail must be CSS-drawn and honour effects=off");
+for (const g of popup.match(/data-glyph="([^"]*)"/g)) assert(!emoji.test(g.replace(nonEmojiSymbols, "")), `popup glyph must not be emoji: ${g}`);
 
 // 3) Buttons — gradient pills with glow, every state covered.
 assert(sec.includes("--orx-grad: linear-gradient(135deg, var(--orx-a)"), "accent gradient token must exist");
@@ -137,4 +156,4 @@ assert(popup.includes('html[data-theme="void"] .hero{background-image:url(ui/swa
 assert(manifest.web_accessible_resources.some((w) => (w.resources || []).includes("ui/*.jpg")), "swatches must stay web-accessible for the content script");
 assert(manifest.version === "1.19.7", "visual refresh ships as 1.19.7");
 
-console.log("theme visuals: ok (16 themes with photos, corners, gradient buttons, 112 sound effects)");
+console.log("theme visuals: ok (16 themes with photos, SVG ornaments, gradient buttons, 112 sound effects)");
