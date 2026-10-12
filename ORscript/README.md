@@ -1,6 +1,6 @@
 # OR — Roblox Studio + AgentScript AI agent
 
-Turn a supported AI chat (**DeepSeek, ChatGPT, Claude, Google Gemini, Kimi, NVIDIA NIM Kimi K3, GLM, Qwen, Arena, Meta AI, Crax GPT, or Ox Alpha**) into an autonomous development agent. Two switchable engines:
+Turn a supported AI chat (**DeepSeek, ChatGPT, Claude, Google Gemini, Kimi, NVIDIA NIM Kimi K3, GLM, Qwen, Arena, Meta AI, Crax GPT, Ox Alpha, or Notion AI (experimental)**) into an autonomous development agent. Two switchable engines:
 
 | Engine | Toggle | Target | Port |
 |---|---|---|---|
@@ -34,6 +34,11 @@ Large `execute_luau` scripts are auto-chunked around 24 KB so Studio's parser ne
 3. **RS:** Roblox Studio → Assistant AI → ⋯ → Manage MCP Servers → Enable Studio as MCP Server.
 4. Open a supported chat and click **Start agent**.
 
+### Provider notes
+
+- **Crax GPT** (`gpt.crax.lol`) — the site sends its own `role: system` prompt ahead of every request ("you have no tools"), which made every Crax model ignore the ORscript protocol even though the bar showed *RS Connected*. ORscript now runs a MAIN-world tap (`src/providers/crax-net.js`) that prepends the agent instructions to Crax's chat request while a session is starting or running, so all Crax models link to Studio again. Nothing is sent while the agent is off.
+- **Notion AI** (`notion.so/ai`, `/chat`) — **experimental**, ported from the PlazCode Notion adapter. Notion's transcript is immutable, so command status is shown as ORscript cards next to each AI message instead of in-place chips; the bar sits on a provider-reserved strip above the composer; the Start message is phrased as plain-text *user preferences* (no Markdown blocks) so Notion's reviewer does not drop it; long tool results (the command catalogue, big script reads) are attached as `orscript_*.txt` files. Notion's own Agent is not reconfigured — ORscript only reads and writes the chat. Hooks that exist only in the PlazCode core (native-generation respect, fresh-response gating, activity summaries) are ignored by the ORscript core.
+
 ---
 
 ## Agent
@@ -54,6 +59,8 @@ node test-chatgpt.js
 node test-animlib.js
 node test-v111.js
 node test-v112.js
+node tests/test-crax-net.js        # Crax request tap
+node tests/test-notion.js          # Notion AI provider wiring + core hooks
 node --check src/core/main.js && node --check src/core/config.js && node --check background.js
 cd agent && cargo test
 ```

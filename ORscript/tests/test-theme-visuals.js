@@ -164,6 +164,6 @@ assert(fs.existsSync(path.join(root, "ui", "swatch-void.jpg")), "ui/swatch-void.
 assert(popup.includes("#theme-void .theme-art{background-image:url(ui/swatch-void.jpg)}"), "popup theme card for void must use the swatch");
 assert(popup.includes('html[data-theme="void"] .hero{background-image:url(ui/swatch-void.jpg)}'), "popup hero for void must use the swatch");
 assert(manifest.web_accessible_resources.some((w) => (w.resources || []).includes("ui/*.jpg")), "swatches must stay web-accessible for the content script");
-assert(manifest.version === "1.19.7", "visual refresh ships as 1.19.7");
+assert(/^1\.19\.(?:[7-9]|[1-9]\d)$|^1\.[2-9]\d\./.test(manifest.version), "visual refresh shipped in 1.19.7; later packages keep it");
 
 console.log("theme visuals: ok (16 themes with photos, SVG ornaments, gradient buttons, 112 sound effects)");

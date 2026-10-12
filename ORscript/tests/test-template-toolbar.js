@@ -7,5 +7,5 @@ for(const text of ["Reusable workflows","Your templates","Create, review, and ru
 for(const obsolete of [">Log' + actN",">+ Add Template<","Search templates..."])assert(!main.includes(obsolete),`obsolete copy: ${obsolete}`);
 assert(main.includes('data-template-count')&&main.includes('count.textContent=String(visibleLibCache.length)'),"result count needs a live badge");
 for(const hook of ['.rs-template-toolbar','.rs-template-head-copy','.rs-btn-primary','#rs-cards-panel:has(.rs-template-library)'])assert(css.includes(hook),hook);
-assert(manifest.version==="1.19.7","corrected UI package must have a distinct version");
+assert(/^1\.19\.(?:[7-9]|[1-9]\d)$|^1\.[2-9]\d\./.test(manifest.version),"corrected UI package must have a distinct version (>= 1.19.7)");
 console.log("PASS  Template workspace has coherent hierarchy, controls, branding, and responsive layout");

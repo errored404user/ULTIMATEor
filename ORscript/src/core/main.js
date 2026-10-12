@@ -703,6 +703,7 @@
     { name: "Arena", url: "https://arena.ai/text/direct" },
     { name: "Meta AI", url: "https://www.meta.ai/" },
     { name: "Crax GPT", url: "https://gpt.crax.lol/" },
+    { name: "Notion AI", url: "https://www.notion.so/ai" },
     { name: "MiniMax Agent", url: "https://agent.minimax.io/" },
     { name: "Overchat", url: "https://overchat.ai/" },
     { name: "HuggingChat", url: "https://huggingface.co/chat/" },
@@ -921,7 +922,7 @@
     A.lifecycle="INITIALIZING";
     try {
       if (!P || typeof P.init !== "function") throw new Error("provider adapter has no init() function");
-      P.init({ diag });
+      P.init({ diag, isStopped: () => A.stop, isSessionActive: () => !!(A.started || A.running), requestStart: () => startSession() });
       providerInitError = null;providerInitialized=true;A.lifecycle="READY";
       diag("provider.initReady", { provider:P.id,agent_init:Math.round(performance.now()-OR_BOOT_AT) });
       return true;
@@ -3883,6 +3884,7 @@
         customPrompt: ui.getCustomPrompt(),
         memory: ui.getCustomMemory(),
         providerNotes: P.promptExtra || "",
+        providerId: P.id,
         engine,
         fullAccess: !!(typeof window.__rsFullAccess === "function" && window.__rsFullAccess()),
         maxChars: P.sysMaxChars || 0,
@@ -4306,6 +4308,7 @@
   // virtualize (recycle) turn nodes: a node that was a command/result card can
   // be reused to render unrelated text.
   function resetDecoration(item) {
+    if (P.immutableTranscript && P.clearImmutableChip) { try { P.clearImmutableChip(item, { force: true }); } catch {} }
     const chip = item.querySelector(".rs-chip");
     if (chip) chip.remove();
     item.classList.remove("rs-hidden");
@@ -4324,6 +4327,15 @@
     // Core renderer. opts: {label, detail, body, category, phase, cls, whole}
     chip(item, opts) {
       const { label, detail = "", body = "", category = "tool", phase, cls, whole } = opts;
+      // Immutable transcripts (Notion): the response editor is DOM-locked, so
+      // the provider draws the card through its own stylesheet and nothing is
+      // inserted into, or classed on, the host's nodes.
+      if (P.immutableTranscript && P.renderImmutableChip && (!whole || !P.canRenderImmutableChip || P.canRenderImmutableChip(item, opts))) {
+        try { P.renderImmutableChip(item, opts); } catch {}
+        item.dataset.rs = cls || "1";
+        item.__rsChip = { ...opts };
+        return null;
+      }
       let chip = item.querySelector(".rs-chip");
       const hasBody = !!body;
       // While a command streams, the site re-renders the raw block on every token
@@ -4410,6 +4422,13 @@
     // and/or the .rs-tool-hide classes stripped). The loop owns the label/phase,
     // so we rebuild from the stored opts rather than re-running classification.
     ensureOwnedChip(item) {
+      if (P.immutableTranscript && P.renderImmutableChip) {
+        // The provider retains the settled state across Notion DOM remounts; an
+        // old node's cached running options must not restart its spinner.
+        const retained = P.immutableChipPresent && P.immutableChipPresent(item);
+        try { P.renderImmutableChip(item, retained ? {} : (item.__rsChip || {})); } catch {}
+        return;
+      }
       const opts = item.__rsChip;
       if (!opts) return;
       const chipEl = item.querySelector(".rs-chip");
@@ -4473,7 +4492,7 @@
     },
 
     classify(item, next) {
-      if (item.dataset.zloop) { this.ensureOwnedChip(item); return; } // loop owns it
+      if (item.dataset.zloop || (P.immutableTranscript && P.immutableChipOwned && P.immutableChipOwned(item))) { this.ensureOwnedChip(item); return; } // loop owns it
       const txt = P.classifyText(item, ".rs-chip"); // excludes thinking AND our chip
 
       // NOTE on the "needs re-apply" guards below: some sites (Gemini/Angular)
@@ -4481,7 +4500,7 @@
       // .rs-tool-hide classes are wiped while the dataset flags on the turn
       // element itself survive. So "already decorated" must always be
       // double-checked against the chip actually being present in the DOM.
-      const chipGone = !item.querySelector(".rs-chip");
+      const chipGone = P.immutableTranscript && P.immutableChipPresent ? !P.immutableChipPresent(item) : !item.querySelector(".rs-chip");
 
       // 1a. A mid-session RE-STATEMENT of the system prompt. Checked before the
       //     bootstrap branch because it carries SYS_MARKER too (that marker is
@@ -4845,6 +4864,7 @@
     },
 
     sweep() {
+      if (P.immutableTranscript && P.syncImmutableChips) { try { P.syncImmutableChips(); } catch {} }
       // Pass each turn's FOLLOWING turn too: a command chip needs it to know
       // whether its injected result was an ERROR (error-aware settle above).
       const items = P.allItems();
@@ -6812,6 +6832,9 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     //  • fresh blank chat → "Standby…" (or a bridge/Studio warning), action = Start
     //  • existing chat    → "No agent in this chat" (informs only, no action)
     function renderBar() {
+      // Agent state for MAIN-world taps (crax-net.js reads it to decide whether a
+      // chat request belongs to an OR session). The DOM is shared across worlds.
+      try { document.documentElement.setAttribute("data-rs-agent", A.started ? "on" : (A.starting ? "starting" : "off")); } catch {}
       if (!bar) return;
       // Recover from any stale composer mask left by an interrupted template,
       // provider, or bootstrap operation. A cover must never block Start Agent.
@@ -7423,6 +7446,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     function clearAnchorReserve() {
       if (anchorPad) restoreInline(anchorPad.saved);
       anchorPad = null;
+      if (P.reserveBarSpace) { try { P.reserveBarSpace(null, 0); } catch {} }
     }
     function clearInlineWiden() {
       if (inlineWiden) restoreInline(inlineWiden.saved);
@@ -7614,7 +7638,27 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const bh = bar.offsetHeight || 44;
       const expanded = expandedSurfaceHeight();
       const occupied = bh + BAR_GAP + (expanded ? expanded + BAR_GAP : 0);
-      const reservation = reserveAnchorStrip(anchorEl, occupied);
+      // Immutable providers (Notion) reserve the strip through their own
+      // stylesheet so the framework-owned composer attributes stay untouched.
+      // When the provider declines (e.g. its own placeholder anchor on a page
+      // without a composer) the bar falls back to the inline reservation and
+      // is still seated INSIDE the reserved strip - never floated over text.
+      let reservation = null;
+      let providerReserved = false;
+      if (P.reserveBarSpace) { try { providerReserved = P.reserveBarSpace(anchorEl, occupied) === true; } catch {} }
+      if (providerReserved) {
+        if (anchorPad) { restoreInline(anchorPad.saved); anchorPad = null; }
+        let cs = null;
+        try { cs = getComputedStyle(anchorEl); } catch {}
+        const px = (v) => Number.isFinite(parseFloat(v)) ? parseFloat(v) : 0;
+        reservation = {
+          borderTop: cs ? px(cs.borderTopWidth) : 0,
+          borderLeft: cs ? px(cs.borderLeftWidth) : 0,
+          borderRight: cs ? px(cs.borderRightWidth) : 0,
+        };
+      } else {
+        reservation = reserveAnchorStrip(anchorEl, occupied);
+      }
       if (!reservation) return false;
 
       // Re-measure after reservation: flex/sticky composer layouts can move the
@@ -7916,6 +7960,17 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
             if (right - left > 40) r = new DOMRect(left, r.top, right - left, r.height);
           }
         }
+        // Never blanket the ORscript bar itself. A provider whose coverTarget is
+        // the whole composer card (Notion) has the bar seated in the reserved
+        // strip at the TOP of that card, so an unclipped cover would hide the
+        // Stop button for the whole loop. Trim the cover to start below the bar.
+        if (bar && bar.classList.contains("rs-bar-anchored") && bar.style.display !== "none") {
+          const br = bar.getBoundingClientRect();
+          if (br.height > 0 && br.bottom > r.top && br.top < r.bottom && br.right > r.left && br.left < r.right) {
+            const top = Math.min(r.bottom, br.bottom + 2);
+            if (r.bottom - top > 20) r = new DOMRect(r.left, top, r.width, r.bottom - top);
+          }
+        }
         // Optionally overshoot the editor box by PAD px on every side. Some
         // composers (Gemini's Quill) keep typed text near rounded corners, so a
         // cover sized EXACTLY to the editor leaves slivers of text peeking; those
@@ -8074,6 +8129,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
   }
 
   function setChipDetail(item, text) {
+    if (P.immutableTranscript && P.updateImmutableChipDetail) { try { P.updateImmutableChipDetail(item, text); } catch {} return; }
     const dt = item && item.querySelector(".rs-chip .rs-chip-dt");
     if (dt) dt.textContent = text;
   }
@@ -8081,6 +8137,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
   // Update ONLY the chip's label text (no innerHTML rebuild), so live-correcting
   // the name mid-stream doesn't restart the spinner or wipe the token meter.
   function setChipLabel(item, text) {
+    if (P.immutableTranscript && P.updateImmutableChipLabel) { try { P.updateImmutableChipLabel(item, text); } catch {} return; }
     const tx = item && item.querySelector(".rs-chip .rs-chip-tx");
     if (tx && tx.textContent !== text) tx.textContent = text;
   }

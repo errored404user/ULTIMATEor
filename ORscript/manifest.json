@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "ORscript",
-  "version": "1.19.7",
+  "version": "1.19.8",
   "minimum_chrome_version": "111",
-  "description": "Turn ChatGPT, Claude, DeepSeek, Gemini, Kimi, NVIDIA NIM Kimi K3, GLM, Qwen, Arena, Meta AI, Crax GPT or Ox Alpha into a Roblox Studio / AgentScript agent. Two engines (RS/AS), work modes, image-to-model, auto-fix playtest errors, and Extra Thinking.",
+  "description": "Turn ChatGPT, Claude, DeepSeek, Gemini, Kimi, NVIDIA NIM Kimi K3, GLM, Qwen, Arena, Meta AI, Crax GPT, Notion AI or Ox Alpha into a Roblox Studio / AgentScript agent. Two engines (RS/AS), work modes, image-to-model, auto-fix playtest errors, and Extra Thinking.",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -60,7 +60,12 @@
     "https://dashboard.cohere.com/*",
     "https://api.together.ai/*",
     "https://fireworks.ai/*",
-    "https://app.fireworks.ai/*"
+    "https://app.fireworks.ai/*",
+    "https://www.notion.so/*",
+    "https://app.notion.so/*",
+    "https://www.notion.com/*",
+    "https://notion.com/*",
+    "https://*.notion.com/*"
   ],
   "content_security_policy": {
     "extension_pages": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://* ws://127.0.0.1:* http://127.0.0.1:* http://localhost:*"
@@ -567,6 +572,41 @@
         "src/core/skills/agent_skills.js",
         "src/core/command_registry.js",
         "src/providers/multichat.js",
+        "src/core/ui_collision_manager.js",
+        "src/core/template_registry.js",
+        "src/core/project_worker.js",
+        "src/core/project_analyzer.js",
+        "src/core/main.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.notion.so/*",
+        "https://app.notion.so/*",
+        "https://www.notion.com/*",
+        "https://notion.com/*",
+        "https://*.notion.com/*"
+      ],
+      "js": [
+        "src/core/config.js",
+        "src/core/parser.js",
+        "src/core/animlib.js",
+        "src/core/skills/studio_skills.js",
+        "src/core/skills/studio_daily.js",
+        "src/core/skills/studio_gui.js",
+        "src/core/skills/studio_plus.js",
+        "src/core/skills/studio_extra40.js",
+        "src/core/skills/studio_200.js",
+        "src/core/skills/studio_100.js",
+        "src/core/skills/studio_extra100.js",
+        "src/core/skills/creative_pro.js",
+        "src/core/skills/agent_skills.js",
+        "src/core/command_registry.js",
+        "src/providers/notion.js",
         "src/core/ui_collision_manager.js",
         "src/core/template_registry.js",
         "src/core/project_worker.js",
