@@ -450,8 +450,8 @@
     applyOrSkin();
     try { chrome.storage.local.set({ rsTheme: id }); } catch {}
   }
-  function previewOrTheme(id){if(!OR_THEMES[id])return;if(!themePreviewId)themeBeforePreview=orTheme;themePreviewId=id;orTheme=id;applyOrSkin();try{playSfx("special");buildMenu();}catch{}}
-  function exitThemePreview(){if(!themePreviewId)return;orTheme=themeBeforePreview||orTheme;themePreviewId=null;themeBeforePreview=null;applyOrSkin();buildMenu();}
+  function previewOrTheme(id){if(!OR_THEMES[id])return;if(!themePreviewId)themeBeforePreview=orTheme;themePreviewId=id;orTheme=id;applyOrSkin();try{playSfx("special");(window.__rsBuildMenu||buildMenu)();}catch{}}
+  function exitThemePreview(){if(!themePreviewId)return;orTheme=themeBeforePreview||orTheme;themePreviewId=null;themeBeforePreview=null;applyOrSkin();(window.__rsBuildMenu||buildMenu)();}
   function applyThemeVolume(v){themeVolume=Math.max(0,Math.min(100,Number(v)||0));try{chrome.storage.local.set({rsThemeVolume:themeVolume});}catch{}}
   function setMemeEffects(v){memeEffects=["full","reduced","off"].includes(v)?v:"full";applyOrSkin();try{chrome.storage.local.set({rsMemeEffects:memeEffects});}catch{} }
   function setMemeIntensity(v){memeIntensity=["low","medium","maximum"].includes(v)?v:"medium";applyOrSkin();try{chrome.storage.local.set({rsMemeIntensity:memeIntensity});}catch{} }
@@ -2363,6 +2363,14 @@
   function studioToolByBare(name) {
     return (A.toolList || []).find((tool) => bareToolName(tool && tool.name) === name) || null;
   }
+  // The Studio MCP's viewport capture has shipped under more than one name; also
+  // honour any Roblox-server tool we have already SEEN return an image.
+  function studioCaptureTool() {
+    const list = (A.toolList || []).filter((t) => t && t.name && (t.server || "roblox") !== "local");
+    const byName = list.find((t) => /^(screen_capture|screenshot|take_screenshot|capture_screen(shot)?|get_screenshot|viewport_(screenshot|capture)|capture_viewport)$/i.test(bareToolName(t.name)));
+    if (byName) return byName;
+    return list.find((t) => A.imageTools && A.imageTools.has(bareToolName(t.name)) && !/^or_/.test(bareToolName(t.name))) || null;
+  }
 
   function studioIdFromList(value) {
     const text = String(value && (value.text || value.result) || value || "");
@@ -2414,7 +2422,7 @@
     if (!name) return RS.FEEDBACK.parseError("malformed");
     try { name = remapToolName(name); } catch {}
     const roadmapName = bareToolName(name);
-    if (roadmapName.startsWith("public_item")) return dispatchPublicItemTool(roadmapName, args);
+    if (roadmapName.startsWith("public_item")) return typeof dispatchPublicItemTool === "function" ? dispatchPublicItemTool(roadmapName, args) : `ERROR: '${roadmapName}' is not available in this build. Use list_commands and continue with the listed commands.`;
     if(roadmapName==="orscript_help"){
       const question=String(args.question||"").toLowerCase(),aliases={templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|adaptive workflow|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
     }
@@ -2542,7 +2550,7 @@
       if (typeof ORScreenshot === "undefined") return "ERROR: screenshot module missing — reload the extension.";
       const bridge = A.bridge || {};
       const rbxServer = (bridge.servers || []).find((s) => s && (s.id === "roblox" || s.id === "studio"));
-      const screenTool = studioToolByBare("screen_capture");
+      const screenTool = studioToolByBare("screen_capture") || studioCaptureTool();
       // `connected` means the browser reached or-core, not that Studio itself is
       // online. Prefer editor-specific status, but a freshly fetched native tool
       // is also enough to attempt capture while a status push is still in flight.
@@ -2551,7 +2559,7 @@
       const captureStudio = async () => {
         if (!screenTool) return { ok: false, error: "Studio MCP does not expose screen_capture; update Studio and restart or-core" };
         const callArgs = await screenCaptureArgs(args, screenTool);
-        return bg({ type: "call_tool", name: screenTool.name, arguments: callArgs, timeout: 30000 });
+        return bg({ type: "call_tool", name: screenTool.name, arguments: callArgs, timeout: 90000, requestId: A.activeRequestId });
       };
       const result = await ORScreenshot.run(args, {
         studio: studioOn ? captureStudio : null,
@@ -5910,6 +5918,7 @@
     // One popover holding every secondary control: other AI sites, the custom
     // prompt, and support (Robux). Opens above the bar.
     function buildMenu() {
+      try { window.__rsBuildMenu = buildMenu; } catch {}
       const here = (P.displayName || "").toLowerCase();
       const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
       let sites = "";
@@ -6322,7 +6331,7 @@
 <section data-editor-section="validation" hidden><label>Validation Rules<textarea name="validation" rows="12">${escRs(JSON.stringify(t.validation||{},null,2))}</textarea></label><button type="button" data-template-validate>Validate Template</button><pre data-validation-output></pre></section>
 <section data-editor-section="ai-improvement" hidden><label>Improvement Mode<select name="improvementMode">${["Full AI Review","Improve Quality","Improve Reliability","Improve Efficiency","Improve Reusability","Improve Roblox Compatibility","Improve Blender Compatibility","Improve UI Quality","Improve Instructions"].map(x=>`<option>${x}</option>`).join("")}</select></label><div class="rs-template-inline"><button type="button" data-template-improve ${templateEditorId?"":"disabled"}>Improve with AI</button><button type="button" data-template-test ${templateEditorId?"":"disabled"}>Test Template</button></div><p>AI proposals are reviewed before a new version is created. Testing is labeled STATIC ANALYSIS unless commands really execute.</p></section>
 <section data-editor-section="versions" hidden><div class="rs-template-versions">${(t.versions||[]).slice().reverse().map(v=>`<div><span>v${v.version} · ${escRs(v.createdAt||"")}</span><button type="button" data-restore-version="${v.version}">Restore</button></div>`).join("")||"No saved versions yet."}</div></section>
-</main><footer><span data-editor-status></span><button type="button" data-editor-close>Cancel</button><button type="submit">${templateEditorId?"Save New Version":"Save Template"}</button></footer></form></div>`;root.appendChild(modal);templateEditorEl=modal;const form=modal.querySelector("form"),status=modal.querySelector("[data-editor-status]");const advancedBtn=modal.querySelector("[data-editor-advanced]");let advancedVisible=false;const paintAdvanced=()=>{modal.classList.toggle("show-advanced",advancedVisible);advancedBtn.setAttribute("aria-pressed",String(advancedVisible));advancedBtn.textContent=advancedVisible?"Simple view":"Advanced";};advancedBtn.onclick=()=>{advancedVisible=!advancedVisible;paintAdvanced();};paintAdvanced();modal.querySelectorAll("[data-editor-close]").forEach(x=>x.onclick=closeTemplateEditor);modal.querySelectorAll("[data-editor-tab]").forEach(btn=>btn.onclick=()=>{modal.querySelectorAll("[data-editor-tab]").forEach(x=>x.classList.toggle("on",x===btn));modal.querySelectorAll("[data-editor-section]").forEach(x=>x.hidden=x.dataset.editorSection!==btn.dataset.editorTab);});modal.querySelector("[data-add-workflow]").onclick=()=>modal.querySelector("[data-workflow-rows]").insertAdjacentHTML("beforeend",workflowRowHtml({},modal.querySelectorAll("[data-workflow-row]").length));modal.querySelector("[data-add-variable]").onclick=()=>modal.querySelector("[data-variable-rows]").insertAdjacentHTML("beforeend",variableRowHtml({}));modal.addEventListener("click",e=>{const remove=e.target.closest&&e.target.closest("[data-remove-row]");if(remove)remove.closest("[data-workflow-row],[data-variable-row]").remove();});form.onsubmit=async e=>{e.preventDefault();const saveBtn=form.querySelector('button[type="submit"]');if(saveBtn.disabled)return;saveBtn.disabled=true;saveBtn.textContent="Saving…";status.textContent="Saving to this browser…";try{await ORTemplateRegistry.initialize();const value=templateFromForm(form),audit=ORTemplateRegistry.validateTemplate(value,{registry:globalThis.ORCommandRegistry});if(!audit.success){status.textContent=audit.errors.map(x=>x.message).join(" · ");return;}const editingId=templateEditorId,r=editingId?await ORTemplateRegistry.updateTemplate(editingId,value):await ORTemplateRegistry.createTemplate(value);if(!r.success){status.textContent=`${r.error.code||"TEMPLATE_SAVE_FAILED"}: ${r.error.message}`;return;}const saved=ORTemplateRegistry.getTemplate(r.template.id);if(!saved){status.textContent="TEMPLATE_SAVE_FAILED: The saved template could not be verified.";return;}cardsQuery="";cardsCategory="All";closeTemplateEditor();renderCards(cardsPanel);toast(editingId?`Saved ${saved.name} v${saved.currentVersion}`:`Template saved: ${saved.name}`);}catch(err){status.textContent=`TEMPLATE_SAVE_FAILED: ${String(err.message||err)}`;}finally{if(saveBtn&&saveBtn.isConnected){saveBtn.disabled=false;saveBtn.textContent=templateEditorId?"Save New Version":"Save Template";}}};modal.querySelector("[data-template-validate]").onclick=()=>{try{const a=ORTemplateRegistry.validateTemplate(templateFromForm(form),{registry:globalThis.ORCommandRegistry});modal.querySelector("[data-validation-output]").textContent=JSON.stringify({valid:a.success,errors:a.errors,warnings:a.warnings},null,2);}catch(e){status.textContent=String(e.message||e);}};const improve=modal.querySelector("[data-template-improve]");if(improve)improve.onclick=()=>requestTemplateAI("improve",templateEditorId,form.elements.improvementMode.value);const test=modal.querySelector("[data-template-test]");if(test)test.onclick=()=>requestTemplateAI("test",templateEditorId);modal.querySelectorAll("[data-restore-version]").forEach(btn=>btn.onclick=async()=>{if(!confirm(`Restore v${btn.dataset.restoreVersion} as a new version?`))return;const r=await ORTemplateRegistry.restoreVersion(templateEditorId,+btn.dataset.restoreVersion);if(r.success){openTemplateEditor(r.template);renderCards(cardsPanel);}});if(projectFile)scanProject(projectFile);}
+</main><footer><span data-editor-status></span><button type="button" data-editor-close>Cancel</button><button type="submit">${templateEditorId?"Save New Version":"Save Template"}</button></footer></form></div>`;root.appendChild(modal);templateEditorEl=modal;const form=modal.querySelector("form"),status=modal.querySelector("[data-editor-status]");const advancedBtn=modal.querySelector("[data-editor-advanced]");let advancedVisible=false;const paintAdvanced=()=>{modal.classList.toggle("show-advanced",advancedVisible);advancedBtn.setAttribute("aria-pressed",String(advancedVisible));advancedBtn.textContent=advancedVisible?"Simple view":"Advanced";};advancedBtn.onclick=()=>{advancedVisible=!advancedVisible;paintAdvanced();};paintAdvanced();modal.querySelectorAll("[data-editor-close]").forEach(x=>x.onclick=closeTemplateEditor);modal.querySelectorAll("[data-editor-tab]").forEach(btn=>btn.onclick=()=>{modal.querySelectorAll("[data-editor-tab]").forEach(x=>x.classList.toggle("on",x===btn));modal.querySelectorAll("[data-editor-section]").forEach(x=>x.hidden=x.dataset.editorSection!==btn.dataset.editorTab);});modal.querySelector("[data-add-workflow]").onclick=()=>modal.querySelector("[data-workflow-rows]").insertAdjacentHTML("beforeend",workflowRowHtml({},modal.querySelectorAll("[data-workflow-row]").length));modal.querySelector("[data-add-variable]").onclick=()=>modal.querySelector("[data-variable-rows]").insertAdjacentHTML("beforeend",variableRowHtml({}));modal.addEventListener("click",e=>{const remove=e.target.closest&&e.target.closest("[data-remove-row]");if(remove)remove.closest("[data-workflow-row],[data-variable-row]").remove();});form.onsubmit=async e=>{e.preventDefault();const saveBtn=form.querySelector('button[type="submit"]');if(saveBtn.disabled)return;saveBtn.disabled=true;saveBtn.textContent="Saving…";status.textContent="Saving to this browser…";try{await ORTemplateRegistry.initialize();const value=templateFromForm(form),audit=ORTemplateRegistry.validateTemplate(value,{registry:globalThis.ORCommandRegistry});if(!audit.success){status.textContent=audit.errors.map(x=>x.message).join(" · ");return;}const editingId=templateEditorId,r=editingId?await ORTemplateRegistry.updateTemplate(editingId,value):await ORTemplateRegistry.createTemplate(value);if(!r.success){status.textContent=`${r.error.code||"TEMPLATE_SAVE_FAILED"}: ${r.error.message}`;return;}const saved=ORTemplateRegistry.getTemplate(r.template.id);if(!saved){status.textContent="TEMPLATE_SAVE_FAILED: The saved template could not be verified.";return;}cardsQuery="";cardsCategory="All";closeTemplateEditor();renderCards(cardsPanel);toast(editingId?`Saved ${saved.name} v${saved.currentVersion}`:`Template saved: ${saved.name}`);}catch(err){status.textContent=`TEMPLATE_SAVE_FAILED: ${String(err.message||err)}`;}finally{if(saveBtn&&saveBtn.isConnected){saveBtn.disabled=false;saveBtn.textContent=templateEditorId?"Save New Version":"Save Template";}}};modal.querySelector("[data-template-validate]").onclick=()=>{try{const a=ORTemplateRegistry.validateTemplate(templateFromForm(form),{registry:globalThis.ORCommandRegistry});modal.querySelector("[data-validation-output]").textContent=JSON.stringify({valid:a.success,errors:a.errors,warnings:a.warnings},null,2);}catch(e){status.textContent=String(e.message||e);}};const improve=modal.querySelector("[data-template-improve]");if(improve)improve.onclick=()=>requestTemplateAI("improve",templateEditorId,form.elements.improvementMode.value);const test=modal.querySelector("[data-template-test]");if(test)test.onclick=()=>requestTemplateAI("test",templateEditorId);modal.querySelectorAll("[data-restore-version]").forEach(btn=>btn.onclick=async()=>{if(!confirm(`Restore v${btn.dataset.restoreVersion} as a new version?`))return;const r=await ORTemplateRegistry.restoreVersion(templateEditorId,+btn.dataset.restoreVersion);if(r.success){openTemplateEditor(r.template);renderCards(cardsPanel);}});if(projectFile){try{importRobloxProject(projectFile);}catch{}}}
 
     function requestTemplateAI(kind,id,mode="Full AI Review"){const t=ORTemplateRegistry.getTemplate(id);if(!t)return;const audit=ORTemplateRegistry.analyzeTemplate(t,{registry:globalThis.ORCommandRegistry});const aiTemplate=JSON.parse(JSON.stringify(t));let projectContext=null;if(aiTemplate.projectReference?.analysis&&globalThis.ORProjectAnalyzer){const c=ORProjectAnalyzer.context(aiTemplate.projectReference.analysis,aiTemplate.projectReference.mode||"Template Extraction",`${t.name} ${t.description}`);projectContext=c.success?c.context:{error:c.error};aiTemplate.projectReference={fileName:aiTemplate.projectReference.fileName,status:aiTemplate.projectReference.status,summary:aiTemplate.projectReference.analysis.summary,context:projectContext};}const tool=kind==="improve"?"template_propose_improvement":"template_test_result";const prompt=kind==="improve"?`Perform ${mode} on this user-owned OrScript template. Analyze structure, commands, variables, workflow ordering, validation, dependencies, ambiguity, safety, reliability, efficiency and reusability. Preserve intent. Return a complete improved object via ${tool}; originalId must be ${t.id}. Include only truthful summary items. Do not save or execute it.\n\nTemplate:\n${JSON.stringify(aiTemplate,null,2)}\n\nStatic audit:\n${JSON.stringify(audit,null,2)}`:`Perform STATIC ANALYSIS only on this template. Check dependencies, order, commands, ambiguity, validation and likely failures. Do not claim execution. Submit findings via ${tool}.\n\n${JSON.stringify(aiTemplate,null,2)}`;runLibraryCard({engine:"rs",icon:"T",cat:"Templates",title:kind==="improve"?"AI Template Review":"Template Static Test",desc:t.name,prompt},true);}
     function showTemplateProposal(original,improved,summary){
@@ -7067,7 +7076,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
           const isSim = false;
           const procUp = robloxProcUp;
           const isConnected = A.bridge && A.bridge.roblox_connected;
-          const legacyConnected = studioConnected;
+          const legacyConnected = !!(A.bridge && (A.bridge.studio === true || A.bridge.connected === true));
           const wsConnected = isConnected !== undefined ?  isConnected : legacyConnected;
           const connected = wsConnected && procUp;
           pill.hidden = false;
@@ -7078,7 +7087,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
             if (dot) dot.className = "rs-status-dot";
           } else if (connected) {
             pill.classList.add("rs-status-connected");
-            txt.textContent = currentMode === "local" ? "AS Connected" : "RS Connected";
+            txt.textContent = currentEngine === "local" ? "AS Connected" : "RS Connected";
             if (dot) dot.className = "rs-status-dot";
           } else {
             pill.classList.add("rs-status-offline");
@@ -7099,8 +7108,8 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       actionBtn.disabled = disabled;
       // Tooltip shows the target engine without stretching the button text
       try {
-      if (kind === "restart") actionBtn.title = currentMode === "local" ? "Restart AgentScript agent" : "Restart Roblox agent";
-      else if (kind === "start" || kind === "start-degraded") actionBtn.title = currentMode === "local" ? "▶︎ Start AgentScript agent" : "▶︎ Start OR agent";
+      if (kind === "restart") actionBtn.title = currentEngine === "local" ? "Restart AgentScript agent" : "Restart Roblox agent";
+      else if (kind === "start" || kind === "start-degraded") actionBtn.title = currentEngine === "local" ? "▶︎ Start AgentScript agent" : "▶︎ Start OR agent";
         else actionBtn.title = "";
       } catch {}
       // Context meter: approximate system-prompt cost beside Start/Restart so

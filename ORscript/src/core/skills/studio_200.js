@@ -540,7 +540,7 @@
     var name = String(a.name || "Remote").replace(/[^A-Za-z0-9_]/g, "");
     var inner;
     if (behavior === "count") inner = "local counter=0\nrem.OnServerEvent:Connect(function(pl,arg1) counter+=1 print('[OR] " + name + " fired ' + counter + ' times from ' + pl.Name) end)";
-    else if (behavior === "print") inner = "rem.OnServerEvent:Connect(function(pl,arg1) print('[OR] " + name + " from " + pl.Name + ": ' + tostring(arg1)) end)";
+    else if (behavior === "print") inner = "rem.OnServerEvent:Connect(function(pl,arg1) print('[OR] " + name + " from ' .. pl.Name .. ': ' .. tostring(arg1)) end)";
     else inner = "rem.OnServerEvent:Connect(function(pl,arg1) local echo=ReplicatedStorage:FindFirstChild('" + name + "_Echo') if echo then echo:FireClient(pl,'echo: ' + tostring(arg1)) end end)";
     var src = "local ReplicatedStorage=game:GetService('ReplicatedStorage')\nlocal rem=ReplicatedStorage:FindFirstChild('" + name + "',true)\nif not rem then warn('OR handler: remote not found') return end\n" + inner + "\n";
     return "local old=ServerScriptService:FindFirstChild('OR_Handler_" + name + "') if old then old:Destroy() end\n" +

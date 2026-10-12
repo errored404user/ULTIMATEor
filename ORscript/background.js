@@ -121,6 +121,7 @@ let robloxProc = false;
 let robloxEditorConnected = false;
 let localReady = false; // agent's workspace is up (from /api/status local_ready)
 let localFull = false; // AgentScript FULL PC ACCESS (agent is source of truth)
+let fullSyncedOnce = false; // one-shot FULL re-sync after an agent restart (refreshProcStatus)
 let localRoot = ""; // workspace path, injected into the AI's state line
 let blenderAddon = false; // blender-mcp addon listening on TCP 9876
 let blenderError = "";
@@ -1879,8 +1880,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               if (ret && typeof ret.then === "function") ret.then((url) => done(url)).catch((e) => { if (!settled) { settled = true; reject(e); } });
             } catch (e) { reject(e); }
           });
-          const tabId = _sender.tab && _sender.tab.id;
-          let windowId = (_sender.tab && _sender.tab.windowId);
+          const tabId = sender && sender.tab && sender.tab.id;
+          let windowId = (sender && sender.tab && sender.tab.windowId);
           if (windowId == null) {
             for (const query of [{ active: true, lastFocusedWindow: true }, { active: true, currentWindow: true }, { highlighted: true, lastFocusedWindow: true }]) {
               const tabs = await qtabs(query);
