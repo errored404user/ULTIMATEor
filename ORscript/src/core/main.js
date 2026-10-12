@@ -4975,7 +4975,7 @@
           <div class="rs-cluster rs-cluster-left">
           <span id="rs-dot" class="off" title=""></span>
           <span id="rs-ornament" aria-hidden="true"></span>
-          <img id="rs-logo" class="rs-logo" alt="" aria-hidden="true" draggable="false" src="${chrome.runtime.getURL("assets/logo.svg")}">
+          <img id="rs-logo" class="rs-logo" alt="" aria-hidden="true" draggable="false" src="${chrome.runtime.getURL("assets/icon128.png")}">
           <span id="rs-brand" data-rs-brand>OrScript</span>
           <span id="rs-work-badge" hidden></span>
           <div id="rs-engine" data-engine="roblox">
@@ -6031,7 +6031,7 @@
         mcpList += `<div class="rs-mcp-item"><span class="rs-mcp-health rs-mcp-health-${healthClass}" title="${healthTitle}"></span><div class="rs-mcp-info"><span class="rs-mcp-name">${esc(s.name)}</span><span class="rs-mcp-url">${esc(s.command || s.id)}</span></div><button class="rs-mcp-remove" data-id="${esc(s.id)}" title="Remove">✕</button></div>`;
       });
       menuEl.innerHTML =
-        `<div class="rs-menu-head"><span class="rs-menu-mark rs-menu-mark-logo" aria-hidden="true" style="background-image:url(${chrome.runtime.getURL("assets/logo.svg")})"></span><div class="rs-menu-head-txt"><span class="rs-menu-logo">Settings</span><span class="rs-menu-tag"><span data-rs-brand>${orTheme==="void"?"VoidScript":"OrScript"}</span> · v${EXT_VERSION}</span></div><button type="button" class="rs-menu-close" id="rs-menu-close" aria-label="Close settings" title="Close">×</button></div>
+        `<div class="rs-menu-head"><span class="rs-menu-mark rs-menu-mark-logo" aria-hidden="true" style="background-image:url(${chrome.runtime.getURL("assets/icon128.png")})"></span><div class="rs-menu-head-txt"><span class="rs-menu-logo">Settings</span><span class="rs-menu-tag"><span data-rs-brand>${orTheme==="void"?"VoidScript":"OrScript"}</span> · v${EXT_VERSION}</span></div><button type="button" class="rs-menu-close" id="rs-menu-close" aria-label="Close settings" title="Close">×</button></div>
          <section class="rs-menu-sec">
            <div class="rs-sec-label"><span>Switch AI</span></div>
            ${sites}
@@ -6570,7 +6570,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const body = cardsTab === "activity" ? activityHtml() : (local ? summaryHtml() : libraryHtml());
       panel.innerHTML =
         '<div class="rs-cards-top">'
-        + '<div class="rs-cards-brand"><img class="rs-logo rs-cards-logo" alt="" aria-hidden="true" src="' + chrome.runtime.getURL("assets/logo.svg") + '"><span class="rs-cards-kicker" data-rs-brand-short>' + (orTheme==="void"?"VoidScript":"OrScript") /* selected-skin branding */ + '</span><span class="rs-cards-heading">Templates</span><span class="rs-cards-subheading">Reusable workflows · v' + EXT_VERSION + '</span></div>'
+        + '<div class="rs-cards-brand"><img class="rs-logo rs-cards-logo" alt="" aria-hidden="true" src="' + chrome.runtime.getURL("assets/icon128.png") + '"><span class="rs-cards-kicker" data-rs-brand-short>' + (orTheme==="void"?"VoidScript":"OrScript") /* selected-skin branding */ + '</span><span class="rs-cards-heading">Templates</span><span class="rs-cards-subheading">Reusable workflows · v' + EXT_VERSION + '</span></div>'
         + '<div class="rs-cards-tabs">'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "library" ? " on" : "") + '" data-tab="library">' + mainLabel + '</button>'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "activity" ? " on" : "") + '" data-tab="activity">Activity' + actN + '</button>'

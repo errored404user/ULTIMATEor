@@ -669,7 +669,7 @@
     host.innerHTML = `
       <div class="rsp-shell">
         <div class="rsp-title">
-          <span class="rsp-brand"><img class="rsp-logo" alt="" src="${esc((window.chrome && chrome.runtime && chrome.runtime.getURL) ? chrome.runtime.getURL("assets/logo.svg") : "")}">ORscript Paint</span>
+          <span class="rsp-brand"><img class="rsp-logo" alt="" src="${esc((window.chrome && chrome.runtime && chrome.runtime.getURL) ? chrome.runtime.getURL("assets/icon128.png") : "")}">ORscript Paint</span>
           <span class="rsp-sub">Draw it → the AI builds it</span>
           <div class="rsp-title-actions">
             <button type="button" class="rsp-ib" data-act="undo" title="Undo (Ctrl+Z)">${ICONS.undo}</button>

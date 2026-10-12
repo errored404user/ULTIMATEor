@@ -84,8 +84,7 @@
       "resources": [
         "ui/*.jpg",
         "assets/icon.png",
-        "assets/icon128.png",
-        "assets/logo.svg"
+        "assets/icon128.png"
       ],
       "matches": [
         "https://*/*",
@@ -95,7 +94,9 @@
     },
     {
       "resources": [
-        "src/core/project_worker.js"
+        "src/core/project_worker.js",
+        "assets/icon128.png",
+        "assets/icon.png"
       ],
       "matches": [
         "<all_urls>"
