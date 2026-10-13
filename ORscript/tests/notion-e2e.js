@@ -3,6 +3,7 @@
 //
 //   cd ORscript && npm i --no-save jsdom && node tests/notion-e2e.js
 //   NOTION_MODE=blocks node tests/notion-e2e.js   # block-editor transcript shape
+//   CREW=1 node tests/notion-e2e.js               # Multi-Agent crew protocol (1.22.0)
 //   DIAG=1 ...                                    # print the [rs-diag] trace
 //
 // It builds a fake Notion /chat page (textarea composer with Notion's
@@ -242,6 +243,10 @@ function background(msg) {
     case "call_tool": {
       toolCalls.push({ name: msg.name, arguments: msg.arguments });
       log("TOOL CALL:", msg.name, JSON.stringify(msg.arguments || {}).slice(0, 160));
+      if (msg.name === "execute_luau" && /GetLogHistory/.test(String(msg.arguments && msg.arguments.code || ""))) {
+        // Studio Output probes (or_debug / Automatic Debugger): a clean console.
+        return { ok: true, text: /MessageError/.test(msg.arguments.code) ? "[]" : JSON.stringify({ errors: [], warnings: [], info: [], errorCount: 0, warningCount: 0 }) };
+      }
       if (msg.name === "execute_luau") return { ok: true, text: "OK: Part created (SimPart)" };
       if (msg.name === "get_studio_state") return { ok: true, text: "{\"place\":\"Baseplate\",\"selection\":[]}" };
       return { ok: true, text: "OK" };
@@ -279,7 +284,8 @@ w.chrome = {
   storage: { local: storageApi("local"), sync: storageApi("sync"), session: storageApi("session"), onChanged: { addListener() {}, removeListener() {} } },
   i18n: { getMessage: () => "" },
 };
-w.chrome.storage.local.set({ rsAllowPlaytest: true, rsDebugDiagnostics: !!process.env.DIAG });
+const CREW = !!process.env.CREW; // CREW=1 → Multi-Agent crew scenario (1.22.0)
+w.chrome.storage.local.set({ rsAllowPlaytest: true, rsDebugDiagnostics: !!process.env.DIAG, rsMultiAgent: CREW });
 
 // ── load the bundle ───────────────────────────────────────────────────────
 w.addEventListener("error", (e) => { console.error("[page error]", e.message, e.error && e.error.stack); });
@@ -327,8 +333,22 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     // catalogue → "ORscript is ready"; then build request → execute_luau; then
     // tool result → done.
     let phase = 0;
+    const cmd = (name, params) => "```json\n" + JSON.stringify({ command: name, params }) + "\n```";
     onUserMessage = async (text) => {
       phase++;
+      if (CREW && phase >= 3) {
+        // Crew protocol: planner → (guarded mutation) → builder → build → done (refused) → done.
+        if (phase === 3) await replyWith("Planning first.\n" + cmd("or_agent", { role: "planner", task: "plan the request" }));
+        else if (phase === 4) await replyWith("Let me just build it.\n###LUA###\nlocal p = Instance.new(\"Part\")\np.Name = \"SimPart\"\np.Parent = workspace\n###END_LUA###");
+        else if (phase === 5) await replyWith("Handing off.\n" + cmd("or_agent", { role: "builder", goal: "SimPart in Workspace", plan: ["Create SimPart", "Verify it"], step: 1, task: "create the part" }));
+        else if (phase === 6) await replyWith("Creating the part now.\n###LUA###\nlocal p = Instance.new(\"Part\")\np.Name = \"SimPart\"\np.Parent = workspace\nprint(\"OK\")\n###END_LUA###");
+        else if (phase === 7) await replyWith("Finishing.\n" + cmd("or_agent", { role: "done", summary: "SimPart created" }));
+        else if (phase === 8) await replyWith("Verifying as tester.\n" + cmd("or_agent", { role: "tester", task: "verify", step_done: 2 }));
+        else if (phase === 9) await replyWith("Reading the console.\n" + cmd("or_debug", {}));
+        else if (phase === 10) await replyWith("Finishing.\n" + cmd("or_agent", { role: "done", summary: "SimPart created and verified" }));
+        else await replyWith("Done — SimPart was created in Workspace and verified.");
+        return;
+      }
       if (phase === 1) {
         await replyWith("Understood. I will start by loading the command catalogue.\n```json\n{\"command\":\"list_commands\"}\n```");
       } else if (phase === 2) {
@@ -358,6 +378,28 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     await sleep(100);
     if (userMessages.length < 3) { send.click(); }
     await waitFor(() => userMessages.length >= 3, 5000, "user request send");
+    if (CREW) {
+      ok("bootstrap carries the crew protocol", /MULTI-AGENT/.test(userMessages[0]) && /ROLE GUARD/.test(userMessages[0]));
+      await waitFor(() => userMessages.length >= 4, 30000, "planner handoff result");
+      ok("or_agent planner handoff shows the board", /CREW HANDOFF #1/.test(userMessages[3]) && /ROLE=planner/.test(userMessages[3]), userMessages[3].slice(0, 100).replace(/\n/g, " "));
+      await waitFor(() => userMessages.length >= 5, 30000, "guarded mutation result");
+      ok("planner mutation refused by the role guard, nothing executed", /ROLE GUARD/.test(userMessages[4]) && !toolCalls.some((c) => c.name === "execute_luau"), userMessages[4].slice(0, 100).replace(/\n/g, " "));
+      await waitFor(() => userMessages.length >= 6, 30000, "builder handoff result");
+      ok("builder handoff shows GOAL + PLAN", /GOAL: SimPart in Workspace/.test(userMessages[5]) && /1\. \[>\] Create SimPart/.test(userMessages[5]));
+      const badge = d.getElementById("rs-crew-badge");
+      ok("bar shows the crew badge for the builder", !!badge && !badge.hidden && badge.textContent === "BUILD", badge && badge.textContent);
+      await waitFor(() => toolCalls.some((c) => c.name === "execute_luau"), 30000, "builder execute_luau");
+      await waitFor(() => userMessages.length >= 8, 30000, "done refused");
+      ok("done is refused before verification", /NOT DONE YET/.test(userMessages[7]) && /TESTER has not verified/.test(userMessages[7]), userMessages[7].slice(0, 100).replace(/\n/g, " "));
+      await waitFor(() => userMessages.length >= 11, 45000, "done accepted");
+      ok("tester verification unlocks done", /run verified/.test(userMessages[9]) && /CREW DONE/.test(userMessages[10]), userMessages[10].slice(0, 100).replace(/\n/g, " "));
+      await waitFor(() => (w.__rsDiag || []).some((e) => e.event === "loop.end"), 30000, "loop.end");
+      ok("agent loop ended after the final text reply", true);
+      ok("exactly one SimPart execute_luau ran", toolCalls.filter((c) => c.name === "execute_luau" && /SimPart/.test(c.arguments.code)).length === 1);
+      await sleep(1500);
+      ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
+      return;
+    }
     await waitFor(() => toolCalls.some((c) => c.name === "execute_luau"), 30000, "execute_luau call");
     ok("execute_luau executed from Notion reply", true, JSON.stringify(toolCalls.find((c) => c.name === "execute_luau").arguments).slice(0, 120));
     await waitFor(() => userMessages.length >= 4, 30000, "tool feedback send");

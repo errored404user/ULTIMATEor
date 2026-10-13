@@ -1765,6 +1765,7 @@
       try { if (window.__rsPlanMode && window.__rsPlanMode()) plan = "ON"; } catch {}
       try { if (window.__rsAutoDebug && window.__rsAutoDebug() === false) dbg = "OFF"; } catch {}
       try { if (window.__rsMultiAgent && window.__rsMultiAgent()) multi = "ON"; } catch {}
+      try { if (multi === "ON" && typeof ORAgentCrew !== "undefined" && ORAgentCrew) multi = ORAgentCrew.stateTag(); } catch {}
       try { lvl = (window.__rsThinkingLevel && window.__rsThinkingLevel()) || "default"; } catch {}
       try { wm = (window.__rsWorkMode && window.__rsWorkMode()) || "ultimate"; } catch {}
       try { perm = (window.__rsPermMode && window.__rsPermMode()) || "sandbox"; } catch {}
@@ -2509,6 +2510,15 @@
       const ok = await requestApproval(bareName, args);
       if (!ok) return `ERROR in ${bareName}: the user declined this action (Ask mode). Do not retry unless they ask.`;
     }
+    // Multi-Agent role guard: planner / reviewer / tester are read-only. The
+    // crew module refuses the mutation with a handoff recipe (and auto-promotes
+    // after the second attempt so the loop can never dead-lock).
+    try {
+      if (typeof ORAgentCrew !== "undefined" && ORAgentCrew && ORAgentCrew.active()) {
+        const guarded = ORAgentCrew.guard(bareName, args);
+        if (guarded) { diag("tool.roleGuard", { name: bareName, role: ORAgentCrew.role() }); return guarded; }
+      }
+    } catch {}
     // Web tools — bridge-level, no Studio needed. Uses background fetch so it works
     // even when Studio is offline.
     if (bareName === "web_fetch" || bareName === "web_search") {
@@ -2699,6 +2709,15 @@
     }
 
     if (name === "or_agent" || name === "multi_agent") {
+      // Agent Crew (src/core/agent_crew.js): shared board, role guard,
+      // completion gate. The inline briefs below are only the fallback when
+      // the module failed to load.
+      if (typeof ORAgentCrew !== "undefined" && ORAgentCrew && typeof ORAgentCrew.handoff === "function") {
+        const out = ORAgentCrew.handoff(args);
+        A.agentRole = ORAgentCrew.role() || "";
+        try { if (typeof window.__rsSyncCrewBadge === "function") window.__rsSyncCrewBadge(); } catch {}
+        return out;
+      }
       const role = String(args.role || args.agent || "builder").toLowerCase();
       const task = String(args.task || args.prompt || args.goal || "").slice(0, 2000);
       A.agentRole = role;
@@ -2730,6 +2749,7 @@
         auto_debug: autoDbg,
         multi_agent: multi,
         agent_role: A.agentRole || "",
+        crew: (typeof ORAgentCrew !== "undefined" && ORAgentCrew && multi) ? ORAgentCrew.summary() : undefined,
         thinking_level: lvl,
         permissions: perm,
         bridge_connected: bridge.connected === true,
@@ -2848,7 +2868,7 @@
       let animLines = requested === "roblox" ? RSAnim.describeCommands() : [];
       let skillLines = (requested === "roblox" && typeof RobloxScriptSkills !== "undefined") ? RobloxScriptSkills.describeCommands() : [];
       let agentLines = (requested === "local" && typeof AgentScriptSkills !== "undefined") ? AgentScriptSkills.describeCommands() : [];
-      let webLines = [`— Screenshot: or_screenshot {target?: auto|studio|game|viewport|blender|tab} — PHOTO of the real Studio/game viewport when MCP is on. Use target:studio or game for gameplay; target:tab is only for this browser chat. A failed Studio capture returns an error and NEVER substitutes the browser. NOT capture_id (IDs only).`, `— Debugger: or_debug {} — classified Output errors + NEXT fix. Automatic Debugger appends new errors after edits.`, `— Templates: get_template {name} searches the place then Creator Store and CLONES a match.`, `— OR Status: or_status {} — live engine, work mode, extra thinking, bridge, blender. Call this if you are unsure which mode you are in.`, `— Web Tools (bridge-level, no Studio needed): web_fetch {url?, query?, max_chars?} — fetch a URL, OR pass query to search the web then fetch the top result; web_search {query, limit?} — DuckDuckGo titles+URLs`, `— IDs (not a photo): capture_id {path?} — UniqueId + MeshId/Image/SoundId/AnimationId from the Studio selection. For a PHOTO use or_screenshot.`, `— Screenshot: or_screenshot {target?: auto|studio|game|viewport|tab|blender} — capture Studio/game through MCP and attach it to the next message. Use tab only for the browser. Aliases: screenshot, take_screenshot, send_screenshot.`, `— Debugger: or_debug {} — Studio LogService errors/warnings. Automatic Debugger (Settings) appends new errors after mutating commands.`, `— Multi-Agent: or_agent {role: planner|builder|reviewer|debugger, task?} — hand off to a specialist. Enable Multi-Agent in Settings.`, `— Developer Products: developer_product_create {name, price, description?, reward?} — create a real Roblox Developer Product on this published universe (sign into roblox.com in Chrome). developer_product_list {} lists them. Aliases: create_developer_product, create_dev_product.`];
+      let webLines = [`— Screenshot: or_screenshot {target?: auto|studio|game|viewport|blender|tab} — PHOTO of the real Studio/game viewport when MCP is on. Use target:studio or game for gameplay; target:tab is only for this browser chat. A failed Studio capture returns an error and NEVER substitutes the browser. NOT capture_id (IDs only).`, `— Debugger: or_debug {} — classified Output errors + NEXT fix. Automatic Debugger appends new errors after edits.`, `— Templates: get_template {name} searches the place then Creator Store and CLONES a match.`, `— OR Status: or_status {} — live engine, work mode, extra thinking, bridge, blender. Call this if you are unsure which mode you are in.`, `— Web Tools (bridge-level, no Studio needed): web_fetch {url?, query?, max_chars?} — fetch a URL, OR pass query to search the web then fetch the top result; web_search {query, limit?} — DuckDuckGo titles+URLs`, `— IDs (not a photo): capture_id {path?} — UniqueId + MeshId/Image/SoundId/AnimationId from the Studio selection. For a PHOTO use or_screenshot.`, `— Screenshot: or_screenshot {target?: auto|studio|game|viewport|tab|blender} — capture Studio/game through MCP and attach it to the next message. Use tab only for the browser. Aliases: screenshot, take_screenshot, send_screenshot.`, `— Debugger: or_debug {} — Studio LogService errors/warnings. Automatic Debugger (Settings) appends new errors after mutating commands.`, `— Multi-Agent: or_agent {role: planner|builder|scripter|reviewer|tester|debugger|done, task?, goal?, plan?:[...], step?, step_done?, findings?:[...], fixed?:[...], summary?} — hand off to a specialist on a shared board (plan, findings, verification). Read-only roles are guarded; done is refused until the tester verified. Enable Multi-Agent in Settings.`, `— Developer Products: developer_product_create {name, price, description?, reward?} — create a real Roblox Developer Product on this published universe (sign into roblox.com in Chrome). developer_product_list {} lists them. Aliases: create_developer_product, create_dev_product.`];
       if (commandQuery) {
         const exactLine = (line) => {
           const match = String(line).match(/^\s*([A-Za-z_][\w.-]*)\s*[:({]/);
@@ -3644,6 +3664,15 @@
               feedback = stripped || rawFb;
             }
           } catch {}
+          // Multi-Agent board bookkeeping + [CREW] handoff hints (appended, so
+          // feedbackIsError()'s startsWith("ERROR") stays intact).
+          try {
+            if (typeof ORAgentCrew !== "undefined" && ORAgentCrew && ORAgentCrew.active()) {
+              feedback = ORAgentCrew.afterTool(call.tool, call.arguments, feedback);
+              A.agentRole = ORAgentCrew.role() || "";
+              try { if (typeof window.__rsSyncCrewBadge === "function") window.__rsSyncCrewBadge(); } catch {}
+            }
+          } catch {}
           // Persistent environment header (see asStateTag) — appended, never
           // prefixed, so feedbackIsError()'s startsWith("ERROR") stays intact.
           { const _tag = asStateTag(); if (_tag && !feedback.includes("[SYSTEM_STATE:")) feedback += "\n" + _tag; }
@@ -4291,6 +4320,8 @@
   async function startSession(opts = {}) {
     const isRestart = !!(opts && opts.restart);
     if (A.running || A.starting) { diag("start.duplicateIgnored", { running:A.running, starting:A.starting }); return; }
+    // A new session = a new crew board (plan, findings, verification).
+    try { if (typeof ORAgentCrew !== "undefined" && ORAgentCrew) { ORAgentCrew.reset(); A.agentRole = ""; } } catch {}
     if (providerInitError && !initializeProvider()) {
       ui.banner("warn", `${P.displayName || "AI provider"} failed to initialize`, `${providerInitError.message}. Reload the provider page; Start can be retried after the adapter loads.`);
       return;
@@ -5133,6 +5164,7 @@
           <img id="rs-logo" class="rs-logo" alt="" aria-hidden="true" draggable="false" src="${chrome.runtime.getURL("assets/icon128.png")}">
           <span id="rs-brand" data-rs-brand>OrScript</span>
           <span id="rs-work-badge" hidden></span>
+          <span id="rs-crew-badge" hidden></span>
           <div id="rs-engine" data-engine="roblox">
             <span id="rs-engine-thumb"></span>
             <button data-mode="roblox" class="rs-mode-btn on" title="RobloxScript">RS</button>
@@ -5606,6 +5638,7 @@
         if (typeof r.rsMultiAgent === "boolean") {
           multiAgent = r.rsMultiAgent;
           try { window.__rsMultiAgent = () => multiAgent; } catch {}
+          try { syncCrewBadge(); } catch {}
         }
         if (typeof r.rsForgeMode === "boolean") {
           forgeMode = r.rsForgeMode;
@@ -5658,6 +5691,7 @@
         if (changes.rsMultiAgent && typeof changes.rsMultiAgent.newValue === "boolean") {
           multiAgent = changes.rsMultiAgent.newValue;
           try { window.__rsMultiAgent = () => multiAgent; } catch {}
+          try { syncCrewBadge(); } catch {}
           dirty = true;
         }
         if (changes.rsForgeMode && typeof changes.rsForgeMode.newValue === "boolean") {
@@ -5802,6 +5836,18 @@
       buildMenu(); renderBar(); markModesChanged();
       if (!silent) { try { playSfx("special"); } catch {} toast(WORK_MODES[workMode].toast); }
     }
+    // Multi-Agent crew badge: which specialist is active + plan progress.
+    function syncCrewBadge(){
+      const el = root && root.querySelector("#rs-crew-badge");
+      if (!el) return;
+      let b = { text: "", title: "", role: "" };
+      try { if (typeof ORAgentCrew !== "undefined" && ORAgentCrew) b = ORAgentCrew.badge(); } catch {}
+      const show = !!(multiAgent && b && b.text);
+      el.hidden = !show;
+      if (show) { el.textContent = b.text; el.title = b.title; el.dataset.role = b.role || ""; }
+    }
+    try { window.__rsSyncCrewBadge = syncCrewBadge; } catch {}
+    try { window.addEventListener("or-crew-change", () => { try { syncCrewBadge(); } catch {} }); } catch {}
     // Bar badge + <html data-rs-work> for CSS; every mode has a badge.
     function syncWorkModeUi(){
       const mode = WORK_MODES[workMode] || WORK_MODES.ultimate;
@@ -5892,7 +5938,7 @@
     }
     function setPlanMode(v){ planMode=!!v; try{chrome.storage.local.set({rsPlanMode: planMode});}catch{}; try{ window.__rsPlanMode = () => planMode; }catch{}; buildMenu(); renderBar(); toast(v ? "Plan mode on — the AI writes a plan, then production code" : "Plan mode off"); markModesChanged(); }
     function setAutoDebug(v){ autoDebugEnabled=!!v; try{chrome.storage.local.set({rsAutoDebug: autoDebugEnabled});}catch{}; try{ window.__rsAutoDebug = () => autoDebugEnabled; }catch{}; buildMenu(); toast(v ? "Automatic Debugger on — new Studio errors are sent to the AI" : "Automatic Debugger off"); markModesChanged(); }
-    function setMultiAgent(v){ multiAgent=!!v; try{chrome.storage.local.set({rsMultiAgent: multiAgent});}catch{}; try{ window.__rsMultiAgent = () => multiAgent; }catch{}; buildMenu(); toast(v ? "Multi-Agent on — planner, builder, reviewer, debugger" : "Multi-Agent off"); markModesChanged(); }
+    function setMultiAgent(v){ multiAgent=!!v; try{chrome.storage.local.set({rsMultiAgent: multiAgent});}catch{}; try{ window.__rsMultiAgent = () => multiAgent; }catch{}; buildMenu(); try { if (typeof ORAgentCrew !== "undefined" && ORAgentCrew) ORAgentCrew.reset(); } catch {} try { syncCrewBadge(); } catch {} toast(v ? "Multi-Agent on — planner, builder, scripter, reviewer, tester, debugger" : "Multi-Agent off"); markModesChanged(); }
     // Toggling a mode mid-session must reach the AI on the NEXT turn, not ~12
     // results later: force the full system prompt (which now carries the
     // EXTRA THINKING / FORGE sections) to ride the next outgoing result.
@@ -6256,7 +6302,7 @@
               <span class="rs-tgl ${autoDebugEnabled ? "on" : ""}"></span>
             </div>
             <div class="rs-tgl-row" data-mode="multiagent" role="switch" aria-checked="${multiAgent}" tabindex="0">
-              <span class="rs-tgl-info"><span class="rs-tgl-name">Multi-Agent</span><span class="rs-tgl-sub">Planner → builder → reviewer → debugger. Call or_agent to hand off.</span></span>
+              <span class="rs-tgl-info"><span class="rs-tgl-name">Multi-Agent</span><span class="rs-tgl-sub">Crew with a shared board: planner → builder / scripter → reviewer → tester → debugger. Read-only roles cannot edit; "done" needs a verified playtest.</span></span>
               <span class="rs-tgl ${multiAgent ? "on" : ""}"></span>
             </div>
             <div class="rs-tgl-row" data-mode="sounds" role="switch" aria-checked="${soundOn}" tabindex="0">

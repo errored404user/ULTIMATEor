@@ -7118,6 +7118,28 @@ html[data-rs-theme] .rs-menu-glyph { font-size: 0 !important; width: 14px; heigh
 #rs-work-badge[data-work="animator"]   { background: linear-gradient(135deg, #f97316 0%, #ec4899 100%); }
 @media (max-width: 760px) { #rs-work-badge { display: none !important; } }
 
+/* Multi-Agent crew badge: the specialist currently holding the board. */
+#rs-crew-badge {
+  display: inline-flex; align-items: center; flex: none;
+  margin-left: 4px; padding: 2px 7px 2px;
+  border-radius: 999px;
+  font: 800 8.5px/1.4 ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  letter-spacing: .16em; text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(120,120,140,.9) 0%, rgba(70,70,90,.9) 100%);
+  border: 1px solid rgba(255,255,255,.22);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.25) inset, 0 0 14px -4px var(--orx-glow, rgba(255,255,255,.35));
+  user-select: none; white-space: nowrap;
+}
+#rs-crew-badge[hidden] { display: none !important; }
+#rs-crew-badge[data-role="planner"]  { background: linear-gradient(135deg, #38bdf8 0%, #1d4ed8 100%); }
+#rs-crew-badge[data-role="builder"]  { background: linear-gradient(135deg, #e9c46a 0%, #b8862b 100%); color: #1a1408; }
+#rs-crew-badge[data-role="scripter"] { background: linear-gradient(135deg, #34d399 0%, #047857 100%); }
+#rs-crew-badge[data-role="reviewer"] { background: linear-gradient(135deg, #a78bfa 0%, #6d28d9 100%); }
+#rs-crew-badge[data-role="tester"]   { background: linear-gradient(135deg, #fb923c 0%, #c2410c 100%); }
+#rs-crew-badge[data-role="debugger"] { background: linear-gradient(135deg, #f87171 0%, #b91c1c 100%); }
+@media (max-width: 760px) { #rs-crew-badge { display: none !important; } }
+
 .rs-work-modes .rs-work-card { position: relative; overflow: hidden; cursor: pointer !important; min-height: 0 !important; padding: 8px 9px 7px; }
 .rs-work-modes .rs-work-card:hover { transform: translateY(-1px) !important; }
 .rs-work-modes .rs-work-sub { font-size: 9px; }
