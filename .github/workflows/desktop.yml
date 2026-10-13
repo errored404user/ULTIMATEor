@@ -1,51 +1,29 @@
-name: ORscript Desktop (Windows build)
+name: ORscript Desktop (Rust)
 
 on:
   push:
     paths:
-      - "ORscript-Desktop/**"
+      - "ORscript/agent/**"
       - ".github/workflows/desktop.yml"
-    tags:
-      - "desktop-v*"
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     defaults:
       run:
-        working-directory: ORscript-Desktop
+        working-directory: ORscript/agent
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: ORscript-Desktop/package-lock.json
-      - name: Install
-        run: npm ci --no-audit --no-fund
-      - name: Test
-        run: npm test
-      - name: Build installer + portable
-        run: npm run dist
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+          workspaces: ORscript/agent
+      - name: Build (release)
+        run: cargo build --release --locked || cargo build --release
+      - name: Smoke test (headless flag parses)
+        run: .\target\release\or-core.exe --help
+      - uses: actions/upload-artifact@v4
         with:
-          name: ORscript-Desktop-windows
-          path: |
-            ORscript-Desktop/release/*.exe
-            ORscript-Desktop/release/*.blockmap
-            ORscript-Desktop/release/latest.yml
-          if-no-files-found: error
-      - name: Publish release (tags only)
-        if: startsWith(github.ref, 'refs/tags/desktop-v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            ORscript-Desktop/release/*.exe
-            ORscript-Desktop/release/latest.yml
+          name: or-core-windows-x64
+          path: ORscript/agent/target/release/or-core.exe

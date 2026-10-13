@@ -132,8 +132,10 @@ fn win_alert(title: &str, msg: &str) {
 #[derive(Parser, Debug)]
 #[command(name = "or-agent", version = env!("CARGO_PKG_VERSION"), about = "OR Native Agent — Roblox Studio MCP + AgentScript")]
 struct Args {
-    #[arg(long, help = "Run without the status window (for autostart/background use)")]
+    #[arg(long, help = "Run without the desktop window (for autostart/background use)")]
     headless: bool,
+    #[arg(long, help = "Start with the desktop window hidden in the notification area")]
+    hidden: bool,
     #[arg(long, default_value = "127.0.0.1:3000")]
     roblox_addr: String,
     #[arg(long, help = "Workspace root for the LOCAL (FS) engine [env: OR_WORKSPACE_ROOT]")]
@@ -156,10 +158,12 @@ struct AppState {
     mcp_in_flight: Arc<AtomicUsize>,
     roblox_proc: Arc<AtomicBool>,
     roblox_editor_connected: Arc<AtomicBool>,
+    /// Desktop window state (status, tool catalog, recent activity).
+    ui: Arc<gui::UiShared>,
 }
 
 impl AppState {
-    fn new(result_tx: broadcast::Sender<ExecResult>, mcp_alive: Arc<AtomicBool>, roblox_proc: Arc<AtomicBool>, workspace: Arc<workspace::Workspace>) -> Self {
+    fn new(result_tx: broadcast::Sender<ExecResult>, mcp_alive: Arc<AtomicBool>, roblox_proc: Arc<AtomicBool>, workspace: Arc<workspace::Workspace>, ui: Arc<gui::UiShared>) -> Self {
         Self {
             roblox_queue: Arc::new(Mutex::new(VecDeque::new())),
             roblox_clients: Arc::new(RwLock::new(HashMap::new())),
@@ -170,8 +174,24 @@ impl AppState {
             mcp_in_flight: Arc::new(AtomicUsize::new(0)),
             roblox_proc,
             roblox_editor_connected: Arc::new(AtomicBool::new(false)),
+            ui,
         }
     }
+}
+
+/// Single place that flips the "Studio linked" flag so the desktop window and
+/// the activity feed always agree with the bridge.
+fn set_editor(state: &AppState, on: bool) {
+    let was = state.roblox_editor_connected.swap(on, Ordering::Relaxed);
+    state.ui.studio_connected.store(on, Ordering::Relaxed);
+    if was != on {
+        state.ui.track("studio", if on { "Roblox Studio linked through the MCP helper" } else { "Roblox Studio link lost" });
+    }
+}
+
+async fn publish_clients(state: &AppState, engine: &str) {
+    let count = if engine == "local" { state.local_clients.read().await.len() } else { state.roblox_clients.read().await.len() };
+    state.ui.set_clients(engine, count);
 }
 
 /// Persistent stdio client for Roblox Studio's built-in MCP server.
@@ -396,7 +416,7 @@ fn reclaim_port(port: u16) -> anyhow::Result<()> {
     let Some(pid) = port_owner_pid(port) else { return Ok(()); };
     if pid == std::process::id() { return Ok(()); }
     let image = process_image(pid).unwrap_or_default();
-    if image.contains("or-agent") || image.contains("totalscript-agent") || image.contains("robloxscript-agent") {
+    if image.contains("or-agent") || image.contains("or-core") || image.contains("totalscript-agent") || image.contains("robloxscript-agent") {
         tracing::info!("killing stale OR Agent (pid {pid}) on port {port}...");
         let _ = std::process::Command::new("taskkill")
             .args(["/F", "/T", "/PID", &pid.to_string()])
@@ -458,6 +478,13 @@ fn main() {
 #[tokio::main]
 async fn start() -> anyhow::Result<()> {
     let args = Arc::new(Args::parse());
+    let settings = gui::Settings::load();
+    // Settings saved from the desktop window are applied before anything reads
+    // the environment, so the launcher override and workspace root behave
+    // exactly as if they had been passed through OR_* variables.
+    if !settings.mcp_command.trim().is_empty() && env_first(&["OR_MCP_COMMAND", "ROBLOXSCRIPT_MCP_COMMAND"]).is_none() {
+        std::env::set_var("OR_MCP_COMMAND", settings.mcp_command.trim());
+    }
     let mcp_alive = Arc::new(AtomicBool::new(false));
     let roblox_proc = Arc::new(AtomicBool::new(false));
     let shared = Arc::new(gui::UiShared::new(mcp_alive.clone()));
@@ -467,33 +494,21 @@ async fn start() -> anyhow::Result<()> {
     let (result_tx, _) = broadcast::channel::<ExecResult>(128);
     let addr: SocketAddr = args.roblox_addr.parse().unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], 3000)));
     let ws_override = env_first(&["OR_WORKSPACE_ROOT", "ROBLOXSCRIPT_WORKSPACE_ROOT"])
-        .or_else(|| args.workspace.clone());
+        .or_else(|| args.workspace.clone())
+        .or_else(|| if settings.workspace_root.trim().is_empty() { None } else { Some(settings.workspace_root.trim().to_string()) });
     let workspace = Arc::new(workspace::Workspace::new(ws_override.as_deref())?);
-    if env_first(&["OR_FULL_ACCESS", "ROBLOXSCRIPT_FULL_ACCESS"]).map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false) {
+    if settings.full_access || env_first(&["OR_FULL_ACCESS", "ROBLOXSCRIPT_FULL_ACCESS"]).map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false) {
         workspace.set_full_access(true);
     }
     shared.attach_workspace(workspace.root_display(), workspace.full_flag());
-    shared.log(&format!("or-agent v{} — native bridge for roblox studio / local fs", env!("CARGO_PKG_VERSION")));
+    shared.log(&format!("ORscript Desktop v{} — native bridge for roblox studio / local fs", env!("CARGO_PKG_VERSION")));
     shared.log(&format!("workspace: {}", workspace.root_display()));
     if workspace.full_access() { shared.log("FULL PC ACCESS enabled at boot (OR_FULL_ACCESS=1)"); }
     shared.log("listening: http://127.0.0.1:3000 · ws 17613 (roblox) · 17615 (agentscript)");
-    shared.log("keys: [R] restart mcp · [C] clear console · [1-4] filter level");
-    let state = AppState::new(result_tx, mcp_alive, roblox_proc.clone(), workspace);
-    let (restart_tx, mut restart_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
-    let rr_state = state.clone();
-    tokio::spawn(async move {
-        while let Some(()) = restart_rx.recv().await {
-            info!("status window requested MCP restart — resetting helper then re-ensuring");
-            {
-                let mut mcp = rr_state.roblox_mcp.lock().await;
-                mcp.reset().await;
-            }
-            match roblox_tools(&rr_state).await {
-                Ok(_) => info!("MCP helper re-ensured after GUI restart"),
-                Err(e) => tracing::warn!("MCP re-ensure after GUI restart failed: {e:#}"),
-            }
-        }
-    });
+    shared.log(&format!("settings: {}", gui::Settings::path().display()));
+    let state = AppState::new(result_tx, mcp_alive, roblox_proc.clone(), workspace, shared.clone());
+    let (cmd_tx, cmd_rx) = tokio::sync::mpsc::unbounded_channel::<gui::UiCommand>();
+    tokio::spawn(ui_command_loop(state.clone(), cmd_rx));
     let ui_for_server = shared.clone();
     let ui_for_fatal = shared.clone();
     let shutdown_state = state.clone();
@@ -507,7 +522,8 @@ async fn start() -> anyhow::Result<()> {
         let _ = server.await;
         Ok(())
     } else {
-        match gui::run_gui(shared, restart_tx) {
+        let start_hidden = args.hidden || settings.start_hidden;
+        match gui::run_gui(shared, cmd_tx, settings, start_hidden) {
             Ok(()) => {
                 info!("ORscript quit requested — killing MCP helper tree and exiting");
                 shutdown_state.roblox_mcp.lock().await.reset().await;
@@ -517,14 +533,178 @@ async fn start() -> anyhow::Result<()> {
                 tracing::error!("GUI unavailable ({e:#}) — continuing headless");
                 #[cfg(windows)]
                 win_alert(
-                    "OR Agent",
-                    &format!("The status window could not open ({e:#}).\nThe bridge is still running in the background (ports 3000 / 17613 / 17615)."),
+                    "ORscript",
+                    &format!("The desktop window could not open ({e:#}).\nThe bridge is still running in the background (ports 3000 / 17613 / 17615)."),
                 );
                 let _ = server.await;
                 Ok(())
             }
         }
     }
+}
+
+fn gui_truncate(text: &str, max: usize) -> String {
+    if text.chars().count() <= max { text.to_string() } else { format!("{}…", text.chars().take(max).collect::<String>()) }
+}
+
+/// Serve requests coming from the desktop window (and the tray menu).
+async fn ui_command_loop(state: AppState, mut rx: tokio::sync::mpsc::UnboundedReceiver<gui::UiCommand>) {
+    while let Some(cmd) = rx.recv().await {
+        match cmd {
+            gui::UiCommand::RestartMcp => {
+                info!("desktop window requested MCP restart — resetting helper then re-ensuring");
+                state.ui.track("studio", "MCP helper restart requested");
+                {
+                    let mut mcp = state.roblox_mcp.lock().await;
+                    mcp.reset().await;
+                }
+                set_editor(&state, false);
+                match roblox_tools(&state).await {
+                    Ok(tools) => {
+                        let studio = {
+                            let mut mcp = state.roblox_mcp.lock().await;
+                            mcp.probe_studio().await.is_ok()
+                        };
+                        set_editor(&state, studio);
+                        info!("MCP helper re-ensured ({} tools, studio={studio})", tools.len());
+                    }
+                    Err(e) => {
+                        tracing::warn!("MCP re-ensure after restart failed: {e:#}");
+                        state.ui.track("error", format!("MCP restart failed: {}", gui_truncate(&format!("{e:#}"), 160)));
+                    }
+                }
+            }
+            gui::UiCommand::ProbeStudio => {
+                if state.mcp_in_flight.load(Ordering::Relaxed) > 0 {
+                    state.ui.track("studio", "probe skipped — a Studio tool is still running");
+                    continue;
+                }
+                let _busy = InFlight::enter(&state.mcp_in_flight);
+                let probed = {
+                    let mut mcp = state.roblox_mcp.lock().await;
+                    match mcp.probe_studio().await {
+                        Ok(()) => true,
+                        Err(e) => { tracing::warn!("probe_studio: {e:#}"); if helper_is_dead(&e) { mcp.reset().await; } false }
+                    }
+                };
+                set_editor(&state, probed && state.roblox_proc.load(Ordering::Relaxed));
+                state.ui.track("studio", if probed { "probe OK — Studio answered get_studio_state" } else { "probe failed — Studio is not linked" });
+            }
+            gui::UiCommand::KillStudio => {
+                let killed = kill_studio_processes();
+                state.ui.track("studio", format!("kill requested — {killed} Roblox Studio process(es) terminated"));
+                set_editor(&state, false);
+            }
+            gui::UiCommand::SetFullAccess(on) => {
+                state.workspace.set_full_access(on);
+                info!("FULL PC ACCESS set to {on} from the desktop window");
+                state.ui.track("bridge", format!("FULL PC ACCESS {}", if on { "enabled" } else { "disabled" }));
+            }
+            gui::UiCommand::RunTool { engine, name, args, reply } => {
+                let state2 = state.clone();
+                tokio::spawn(async move {
+                    let started = std::time::Instant::now();
+                    let outcome: anyhow::Result<McpToolOutput> = match engine.as_str() {
+                        "local" => workspace::dispatch(&state2.workspace, &name, args).await
+                            .map(|text| McpToolOutput { text, images: Vec::new() })
+                            .map_err(anyhow::Error::msg),
+                        _ => roblox_tool(&state2, &name, args).await,
+                    };
+                    let elapsed_ms = started.elapsed().as_millis();
+                    let out = match outcome {
+                        Ok(o) => {
+                            state2.ui.track("tool", format!("{name} ({engine}) · {elapsed_ms} ms · toolkit"));
+                            gui::ToolReply { ok: true, text: o.text, images: o.images.len(), elapsed_ms }
+                        }
+                        Err(e) => {
+                            state2.ui.track("error", format!("{name} ({engine}) failed: {}", gui_truncate(&e.to_string(), 140)));
+                            gui::ToolReply { ok: false, text: format!("{e:#}"), images: 0, elapsed_ms }
+                        }
+                    };
+                    let _ = reply.send(out);
+                });
+            }
+            gui::UiCommand::RunCommand { command, reply } => {
+                let state2 = state.clone();
+                tokio::spawn(async move {
+                    let started = std::time::Instant::now();
+                    let result = workspace::dispatch(&state2.workspace, "run_command", serde_json::json!({"command": command})).await;
+                    let elapsed_ms = started.elapsed().as_millis();
+                    let out = match result {
+                        Ok(text) => { state2.ui.track("tool", format!("run_command · {elapsed_ms} ms · terminal")); gui::ToolReply { ok: true, text, images: 0, elapsed_ms } }
+                        Err(e) => { state2.ui.track("error", format!("run_command failed: {}", gui_truncate(&e, 140))); gui::ToolReply { ok: false, text: e, images: 0, elapsed_ms } }
+                    };
+                    let _ = reply.send(out);
+                });
+            }
+            gui::UiCommand::CheckUpdates { reply } => {
+                tokio::spawn(async move {
+                    let _ = reply.send(check_github_release().await);
+                });
+            }
+        }
+    }
+}
+
+fn kill_studio_processes() -> usize {
+    let mut sys = sysinfo::System::new_all();
+    sys.refresh_all();
+    let mut killed = 0;
+    for (pid, process) in sys.processes() {
+        if process.name().to_string_lossy().to_lowercase().contains("robloxstudio") {
+            #[cfg(windows)]
+            {
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/F", "/T", "/PID", &pid.to_string()])
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .output();
+                killed += 1;
+            }
+            #[cfg(not(windows))]
+            {
+                if process.kill() { killed += 1; }
+                let _ = pid;
+            }
+        }
+    }
+    killed
+}
+
+fn version_tuple(v: &str) -> Vec<u64> {
+    v.trim().trim_start_matches(|c: char| !c.is_ascii_digit())
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|p| !p.is_empty())
+        .filter_map(|p| p.parse::<u64>().ok())
+        .collect()
+}
+
+async fn check_github_release() -> gui::UpdateReply {
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    let releases_url = format!("https://github.com/{}/releases", gui::REPO);
+    let api = format!("https://api.github.com/repos/{}/releases/latest", gui::REPO);
+    let client = match reqwest::Client::builder().user_agent(format!("ORscript-Desktop/{current}")).timeout(Duration::from_secs(15)).build() {
+        Ok(c) => c,
+        Err(e) => return gui::UpdateReply { ok: false, current, latest: String::new(), up_to_date: false, message: format!("http client: {e}"), url: releases_url },
+    };
+    let response = match client.get(&api).header("Accept", "application/vnd.github+json").send().await {
+        Ok(r) => r,
+        Err(e) => return gui::UpdateReply { ok: false, current, latest: String::new(), up_to_date: false, message: format!("GitHub unreachable: {e}"), url: releases_url },
+    };
+    if response.status().as_u16() == 404 {
+        return gui::UpdateReply { ok: true, current: current.clone(), latest: current, up_to_date: true, message: "No GitHub release has been published yet — you are running a source build.".into(), url: releases_url };
+    }
+    if !response.status().is_success() {
+        return gui::UpdateReply { ok: false, current, latest: String::new(), up_to_date: false, message: format!("GitHub answered HTTP {}", response.status()), url: releases_url };
+    }
+    let body: serde_json::Value = match response.json().await {
+        Ok(v) => v,
+        Err(e) => return gui::UpdateReply { ok: false, current, latest: String::new(), up_to_date: false, message: format!("bad release payload: {e}"), url: releases_url },
+    };
+    let latest = body.get("tag_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let url = body.get("html_url").and_then(|v| v.as_str()).map(str::to_string).unwrap_or(releases_url);
+    let up_to_date = version_tuple(&latest) <= version_tuple(&current);
+    let message = if up_to_date { format!("Latest release {latest}; this build is {current}.") } else { format!("Release {latest} is newer than this build ({current}).") };
+    gui::UpdateReply { ok: true, current, latest, up_to_date, message, url }
 }
 
 async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant, ui: Arc<gui::UiShared>) -> anyhow::Result<()> {
@@ -544,7 +724,8 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
             watcher_state.roblox_proc.store(has_roblox, Ordering::Relaxed);
             if !has_roblox {
                 watcher_state.roblox_clients.write().await.clear();
-                watcher_state.roblox_editor_connected.store(false, Ordering::Relaxed);
+                watcher_state.ui.set_clients("roblox", 0);
+                set_editor(&watcher_state, false);
             }
         }
     });
@@ -583,9 +764,11 @@ async fn connect_handler(State(state): State<AppState>, Json(req): Json<serde_js
     let engine = req.get("engine").and_then(|v| v.as_str()).unwrap_or("roblox").to_string();
     let editor_connected = if engine.to_lowercase() == "local" {
         state.local_clients.write().await.insert(client_id.clone(), engine.clone());
+        publish_clients(&state, "local").await;
         state.workspace.ready()
     } else {
         state.roblox_clients.write().await.insert(client_id.clone(), engine.clone());
+        publish_clients(&state, "roblox").await;
         state.roblox_editor_connected.load(Ordering::Relaxed)
     };
     Json(serde_json::json!({
@@ -617,6 +800,8 @@ async fn disconnect_handler(State(state): State<AppState>, Json(req): Json<serde
     if let Some(id) = req.get("client_id").and_then(|v| v.as_str()) {
         state.roblox_clients.write().await.remove(id);
         state.local_clients.write().await.remove(id);
+        publish_clients(&state, "roblox").await;
+        publish_clients(&state, "local").await;
     }
     Json(serde_json::json!({"ok": true}))
 }
@@ -625,6 +810,7 @@ async fn disconnect_handler(State(state): State<AppState>, Json(req): Json<serde
 struct LocalFullReq { enabled: bool }
 async fn local_full_handler(State(state): State<AppState>, Json(req): Json<LocalFullReq>) -> impl IntoResponse {
     state.workspace.set_full_access(req.enabled);
+    state.ui.track("bridge", format!("FULL PC ACCESS {} via HTTP", if req.enabled { "enabled" } else { "disabled" }));
     info!("local_full set to {} via HTTP", req.enabled);
     Json(serde_json::json!({"ok": true, "local_full": req.enabled}))
 }
@@ -666,13 +852,13 @@ async fn roblox_tools(state: &AppState) -> anyhow::Result<Vec<serde_json::Value>
     let _busy = InFlight::enter(&state.mcp_in_flight);
     let mut mcp = state.roblox_mcp.lock().await;
     match mcp.list_tools().await {
-        Ok(tools) => Ok(tools),
+        Ok(tools) => { state.ui.set_roblox_tools(&tools); Ok(tools) },
         Err(error) => {
             if !helper_is_dead(&error) { return Err(error); }
             tracing::warn!("list_tools failed ({error:#}) — recycling helper once");
             mcp.reset().await;
             match mcp.list_tools().await {
-                Ok(tools) => Ok(tools),
+                Ok(tools) => { state.ui.set_roblox_tools(&tools); Ok(tools) },
                 Err(error2) => {
                     tracing::warn!("list_tools retry failed: {error2:#}");
                     if helper_is_dead(&error2) { mcp.reset().await; }
@@ -748,6 +934,8 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
     } else {
         state.roblox_clients.write().await.insert(client_key.clone(), engine.clone());
     }
+    publish_clients(&state, &engine).await;
+    state.ui.track("bridge", format!("extension connected on the {engine} channel"));
     info!("legacy WS [{engine}] client connected");
     let (mut write, mut read) = ws_stream.split();
     // Outbound channel so ping/status keep flowing while a tool runs on another task.
@@ -773,7 +961,7 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                         let mut mcp = state.roblox_mcp.lock().await;
                         mcp.probe_studio().await.is_ok()
                     };
-                    state.roblox_editor_connected.store(studio, Ordering::Relaxed);
+                    set_editor(&state, studio);
                     serde_json::json!({"type":"connected","id":0,"ok":studio,"mcp_alive":true,"studio":studio,"tools":tools,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":studio,"tools":if studio { tools.len() } else { 0 }}]})
                 },
                 Err(_) => serde_json::json!({"type":"connected","id":0,"ok":false,"mcp_alive":false,"studio":false,"tools":[],"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":false,"tools":0}]}),
@@ -806,7 +994,7 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                                         let mut mcp = state.roblox_mcp.lock().await;
                                         mcp.probe_studio().await.is_ok()
                                     };
-                                    state.roblox_editor_connected.store(studio, Ordering::Relaxed);
+                                    set_editor(&state, studio);
                                     serde_json::json!({"type":"tools","id":id,"ok":studio,"mcp_alive":true,"studio":studio,"tools":tools,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":studio,"tools":if studio { tools.len() } else { 0 }}]})
                                 },
                                 Err(error) => serde_json::json!({"type":"tools","id":id,"ok":false,"mcp_alive":false,"studio":false,"tools":[],"error":error.to_string()}),
@@ -834,7 +1022,7 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                             _ => false,
                         };
                         if engine == "roblox" {
-                            state.roblox_editor_connected.store(online, Ordering::Relaxed);
+                            set_editor(&state, online);
                         }
                         if last_online != Some(online) {
                             info!("studio_status [{engine}]: {}", if online { "CONNECTED" } else { "OFFLINE" });
@@ -848,14 +1036,14 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                                 let mut mcp = state.roblox_mcp.lock().await;
                                 mcp.reset().await;
                             }
-                            state.roblox_editor_connected.store(false, Ordering::Relaxed);
+                            set_editor(&state, false);
                             match roblox_tools(&state).await {
                                 Ok(tools) => {
                                     let studio = {
                                         let mut mcp = state.roblox_mcp.lock().await;
                                         mcp.probe_studio().await.is_ok()
                                     };
-                                    state.roblox_editor_connected.store(studio, Ordering::Relaxed);
+                                    set_editor(&state, studio);
                                     send_json(&out_tx, serde_json::json!({"type":"mcp_status","id":id,"ok":true,"alive":true,"studio":studio,"tools":tools}));
                                     true
                                 }
@@ -878,6 +1066,7 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                         let eng = engine.clone();
                         let tx = out_tx.clone();
                         tokio::spawn(async move {
+                            let started = std::time::Instant::now();
                             let outcome: anyhow::Result<McpToolOutput> = match eng.as_str() {
                                 "local" => workspace::dispatch(&state2.workspace, &name, args).await
                                     .map(|text| McpToolOutput { text, images: Vec::new() })
@@ -885,6 +1074,10 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                                 "roblox" => roblox_tool(&state2, &name, args).await,
                                 _ => Err(anyhow::anyhow!("unknown engine")),
                             };
+                            match &outcome {
+                                Ok(_) => state2.ui.track("tool", format!("{name} ({eng}) · {} ms", started.elapsed().as_millis())),
+                                Err(e) => state2.ui.track("error", format!("{name} ({eng}) failed: {}", gui_truncate(&e.to_string(), 140))),
+                            }
                             let response = match outcome {
                                 Ok(output) => serde_json::json!({
                                     "type":"tool_result", "id":id, "ok":true,
@@ -916,8 +1109,10 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
     } else {
         state.roblox_clients.write().await.remove(&client_key);
     }
+    publish_clients(&state, &engine).await;
+    state.ui.track("bridge", format!("extension disconnected from the {engine} channel"));
     if engine == "roblox" {
-        state.roblox_editor_connected.store(false, Ordering::Relaxed);
+        set_editor(&state, false);
     }
     info!("legacy WS [{engine}] client disconnected");
 }
