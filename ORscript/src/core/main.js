@@ -7917,23 +7917,25 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       // card when its height grows. The bar follows the final geometry, not the
       // pre-reservation snapshot.
       r = anchorEl.getBoundingClientRect();
+      // Off-screen / degenerate strip: report failure so the caller decides
+      // (hide on ordinary providers, viewport-bottom dock on keep-visible ones).
       if (!r.width || r.bottom <= 0 || r.top >= window.innerHeight) {
         bar.style.display = "none";
-        return true;
+        return false;
       }
       const viewportPad = 4;
       const left = Math.max(viewportPad, r.left + reservation.borderLeft);
       const right = Math.min(window.innerWidth - viewportPad, r.right - reservation.borderRight);
       if (right - left < 80) {
         bar.style.display = "none";
-        return true;
+        return false;
       }
       // Never clamp the row into unrelated page content. If the reserved strip
       // itself is off-screen, hide until the composer returns instead.
       const top = r.top + reservation.borderTop;
       if (top < 0 || top + bh > window.innerHeight) {
         bar.style.display = "none";
-        return true;
+        return false;
       }
       bar.style.display = "flex";
       bar.style.left = Math.round(left) + "px";
@@ -8012,6 +8014,10 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const anchorEl = (P.barAnchor && P.barAnchor()) || null;
       if (anchorEl && anchorEl.isConnected) {
         if (!dockBarInReservedStrip(anchorEl, "rs-bar-anchored")) {
+          // keep-visible providers (Notion) never lose the bar to a zero-width
+          // or off-screen anchor frame - they get the viewport-bottom dock,
+          // exactly like the "no composer yet" case below.
+          if (P.keepBarVisible) { dockBarAtViewportBottom(); return; }
           bar.style.display = "none";
           clearAnchorReserve();
           if (menuEl) menuEl.hidden = true;
@@ -8028,7 +8034,10 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       try { f = (P.composerFrame && P.composerFrame()) || null; } catch {}
       if (!f || !f.isConnected) { try { f = (P.getEditor && P.getEditor()) || null; } catch {} }
       if (f && f.isConnected && f.getBoundingClientRect().width) {
-        if (!dockBarInReservedStrip(f, "rs-bar-docked")) bar.style.display = "none";
+        if (!dockBarInReservedStrip(f, "rs-bar-docked")) {
+          if (P.keepBarVisible) { dockBarAtViewportBottom(); return; }
+          bar.style.display = "none";
+        }
         return;
       }
 
