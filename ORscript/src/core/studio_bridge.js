@@ -646,6 +646,17 @@
     if (extra) return extra;
     return orig(op, args);
   };
-  for (const c of BRIDGE) RobloxScriptSkills.SKILL_COMMANDS.push(c);
+  // Never advertise the same command twice: an earlier skill file may already
+  // define script_grep / instance_new with different parameter names. The
+  // bridge handler above accepts both spellings, so merge the parameter docs
+  // into the existing catalogue entry instead of listing a conflicting twin.
+  for (const c of BRIDGE) {
+    const existing = RobloxScriptSkills.SKILL_COMMANDS.find(function (x) { return x.name === c.name; });
+    if (!existing) { RobloxScriptSkills.SKILL_COMMANDS.push(c); continue; }
+    existing.params = existing.params || {};
+    for (const k of Object.keys(c.params || {})) {
+      if (!existing.params[k]) existing.params[k] = Object.assign({}, c.params[k], { req: false, desc: (c.params[k].desc ? c.params[k].desc + " " : "") + "(alias)" });
+    }
+  }
   RobloxScriptSkills.SKILL_OPS = RobloxScriptSkills.SKILL_COMMANDS.map(function (c) { return c.name; });
 })();

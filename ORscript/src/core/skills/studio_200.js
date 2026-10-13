@@ -31,7 +31,9 @@
     a = Array.isArray(a) ? a : d || [0, 0, 0];
     return "Vector3.new(" + nn(a[0]) + "," + nn(a[1]) + "," + nn(a[2]) + ")";
   };
-  const strArr = (a, d) => "[" + (Array.isArray(a) && a.length ? a : d || []).map(q).join(",") + "]";
+  const strArr = (a, d) => "{" + (Array.isArray(a) && a.length ? a : d || []).map(q).join(",") + "}";
+  // Lua table of resolved Instances from a list of paths (for RaycastParams etc.).
+  const instArr = (a, d) => "(function() local t={} for _,p in ipairs(" + strArr(a, d) + ") do local i=resolve(p) if i then t[#t+1]=i end end return t end)()";
   const cls = (s) => String(s || "").replace(/[^A-Za-z0-9]/g, "") || "";
 
   const HEAD = [
@@ -106,7 +108,7 @@
   B.instance_count = function (a) {
     return "local c_filter='" + (cls(a.class) || "") + "'\n" +
       "local root=resolve(" + q(a.path || "Workspace") + ") if not root then return fail('path not found') end\n" +
-      "local total=0 local byClass={} for _,d in ipairs(root:GetDescendants()) do total+=1 if c_filter~='' then if d.ClassName==c_filter then byClass[d.ClassName]=(byClass[d.ClassName] or 0)+1 end else byClass[d.ClassName]=(byClass[d.ClassName] or 0)+1 end end end\n" +
+      "local total=0 local byClass={} for _,d in ipairs(root:GetDescendants()) do total+=1 if c_filter~='' then if d.ClassName==c_filter then byClass[d.ClassName]=(byClass[d.ClassName] or 0)+1 end else byClass[d.ClassName]=(byClass[d.ClassName] or 0)+1 end end\n" +
       "return ok({total=total,byClass=byClass},'holds '..total..' descendants')";
   };
   B.instance_ancestors = function (a) {
@@ -118,7 +120,7 @@
     return "local a1=resolve(" + q(a.a || "") + ") local a2=resolve(" + q(a.b || "") + ")\n" +
       "if not a1 then return fail('a not found') end if not a2 then return fail('b not found') end\n" +
       "local is=a1:IsAncestorOf(a2)\n" +
-      "return ok({ancestor=is},if is then 'a is an ancestor of b' else 'a is NOT an ancestor of b' end)";
+      "return ok({ancestor=is},if is then 'a is an ancestor of b' else 'a is NOT an ancestor of b')";
   };
   B.property_copy = function (a) {
     return "local from=resolve(" + q(a["from"] || "") + ") local to=resolve(" + q(a.to || "") + ")\n" +
@@ -192,14 +194,14 @@
   };
   B.raycast_do = function (a) {
     return "local from=" + vv(a["from"]) + " local to=" + vv(a.to) + "\n" +
-      "local params=RaycastParams.new() params.FilterType=Enum.RaycastFilterType.Blacklist params.FilterDescendantsInstances=" + strArr(a.blacklist, []) + "\n" +
+      "local params=RaycastParams.new() params.FilterType=Enum.RaycastFilterType.Blacklist params.FilterDescendantsInstances=" + instArr(a.blacklist, []) + "\n" +
       "local hit=Workspace:Raycast(from,to,params)\n" +
       "if not hit then return fail('raycast hit nothing') end\n" +
       "return ok({part=hit.Instance:GetFullName(),position={hit.Position.x,hit.Position.y,hit.Position.z},normal={hit.Normal.x,hit.Normal.y,hit.Normal.z},distance=math.floor(hit.Distance*10)/10},'raycast hit')";
   };
   B.swept_ray = function (a) {
     return "local from=" + vv(a["from"]) + " local to=" + vv(a.to) + " local r=" + nn(a.radius, 2) + "\n" +
-      "local params=RaycastParams.new() params.FilterType=Enum.RaycastFilterType.Blacklist params.FilterDescendantsInstances=" + strArr(a.blacklist, []) + "\n" +
+      "local params=RaycastParams.new() params.FilterType=Enum.RaycastFilterType.Blacklist params.FilterDescendantsInstances=" + instArr(a.blacklist, []) + "\n" +
       "local hits=Workspace:SweptSphereWithExtensions(from,to,Vector2.new(r,r),params)\n" +
       "local out={} for _,h in ipairs(hits) do out[#out+1]=h.Instance:GetFullName()..' @ '..tostring(math.floor(h.Distance*10)/10) end\n" +
       "if #out==0 then return fail('swept sphere hit nothing') end\n" +
@@ -424,7 +426,7 @@
       "local on=" + bb(a.on, true) + "\n" +
       "local tag='ORGodmode_'..tostring(pl.UserId)\n" +
       "if on then pl:SetAttribute(tag,true) local hum=humOf(pl) if hum then hum.Health=hum.MaxHealth end else pl:SetAttribute(tag,false) end\n" +
-      "return ok({godmode=on},'godmode ' .. (if on then 'ON' else 'OFF' end))";
+      "return ok({godmode=on},'godmode ' .. (if on then 'ON' else 'OFF'))";
   };
   B.player_kick = function (a) {
     return "local pl=findPlayer(" + q(a.player || "") + ") if not pl then return fail('player not found') end\n" +
@@ -461,14 +463,14 @@
   B.ragdoll_make = function (a) {
     return "local target=resolve(" + q(a.path || "") + ")\n" +
       "local pl=findPlayer(" + q(a.player || a.path || "") + ")\n" +
-      "local hum=if target and target:IsA('Humanoid') then target elseif pl then humOf(pl) else nil end\n" +
+      "local hum=if target and target:IsA('Humanoid') then target elseif pl then humOf(pl) else nil\n" +
       "if not hum then return fail('humanoid not found') end\n" +
       "local c=hum.Parent local n=0 for _,d in ipairs(c:GetDescendants()) do if d:IsA('Motor6D') then d:Destroy() n+=1 end end\n" +
-      "return ok({removed=n},'ragdoll: '..(if n>0 then 'motors removed' else 'already loose' end))";
+      "return ok({removed=n},'ragdoll: '..(if n>0 then 'motors removed' else 'already loose'))";
   };
   B.ragdoll_restore = function (a) {
     return "local hum=resolve(" + q(a.path || "") + ") local pl=findPlayer(" + q(a.player || "") + ")\n" +
-      "hum=if hum and hum:IsA('Humanoid') then hum elseif pl then humOf(pl) else nil end\n" +
+      "hum=if hum and hum:IsA('Humanoid') then hum elseif pl then humOf(pl) else nil\n" +
       "if not hum then return fail('humanoid not found') end\n" +
       "local okc,err=pcall(function() hum:RestoreRig() end)\n" +
       "return ok({restored=okc},'rig restored')";
@@ -584,7 +586,7 @@
       "local old=gui:FindFirstChild('OR_Announce') if old then old:Destroy() end\n" +
       "local sg=Instance.new('ScreenGui') sg.Name='OR_Announce' sg.IgnoreGuiInset=true sg.DisplayOrder=50 sg.Parent=gui\n" +
       "local lbl=Instance.new('TextLabel') lbl.Size=UDim2.new(0,420,0,56) lbl.Position=UDim2.new(0.5,-210,0,42) lbl.BackgroundTransparency=1 lbl.TextScaled=true lbl.Font=Enum.Font.GothamBold lbl.TextXAlignment=Enum.TextXAlignment.Center lbl.Text=" + q(a.text || "Announcement") + " lbl.TextColor3=Color3.fromRGB(255,255,255) lbl.TextShadowColor=Color3.new() lbl.TextTransparency=0.15 lbl.Parent=sg\n" +
-      "local bar=Instance.new('Frame') bar.Size=UDim2.new(1,0,1,0) bar.BackgroundColor3=Color3.fromRGB(" + cc(a.color, [30, 30, 40]) + ") bar.BackgroundTransparency=0.25 bar.BorderSizePixel=0 bar.Parent=lbl\n" +
+      "local bar=Instance.new('Frame') bar.Size=UDim2.new(1,0,1,0) bar.BackgroundColor3=(" + cc(a.color, [30, 30, 40]) + ") bar.BackgroundTransparency=0.25 bar.BorderSizePixel=0 bar.Parent=lbl\n" +
       "lbl:BringToFront()\n" +
       "task.delay(" + nn(a.seconds, 4) + ",function() sg:Destroy() end)\n" +
       "return ok({seconds=" + nn(a.seconds, 4) + "},'announcement shown')";
@@ -732,7 +734,7 @@
       "local box=Instance.new('Frame') box.Size=UDim2.new(0,340,0,150) box.Position=UDim2.new(0.5,-170,0.5,-75) box.BackgroundColor3=Color3.fromRGB(22,22,26) box.BorderSizePixel=0 box.Parent=sg\n" +
       "local t=Instance.new('TextLabel') t.Size=UDim2.new(1,-24,0,34) t.Position=UDim2.new(0,12,0,10) t.BackgroundTransparency=1 t.Text=" + q(a.title || "Confirm?") + " t.Font=Enum.Font.GothamBold t.TextXAlignment=Enum.TextXAlignment.Left t.TextColor3=Color3.new(1,1,1) t.TextScaled=true t.Parent=box\n" +
       "local d=Instance.new('TextLabel') d.Size=UDim2.new(1,-24,0,44) d.Position=UDim2.new(0,12,0,52) d.BackgroundTransparency=1 d.Text=" + q(a.text || "Continue?") + " d.Font=Enum.Font.Gotham d.TextXAlignment=Enum.TextXAlignment.Left d.TextYAlignment=Enum.TextYAlignment.Top d.TextColor3=Color3.fromRGB(200,200,205) d.TextWrapped=true d.TextScaled=true d.Parent=box\n" +
-      "local yes=Instance.new('TextButton') yes.Size=UDim2.new(0,110,0,38) yes.Position=UDim2.new(1,-130,1,-50) yes.BackgroundColor3=Color3.fromRGB(" + cc(a.color, [80, 160, 255]) + ") yes.BorderSizePixel=0 yes.Text='Yes' yes.Font=Enum.Font.GothamBold yes.TextColor3=Color3.new(1,1,1) yes.TextScaled=true yes.Parent=box\n" +
+      "local yes=Instance.new('TextButton') yes.Size=UDim2.new(0,110,0,38) yes.Position=UDim2.new(1,-130,1,-50) yes.BackgroundColor3=(" + cc(a.color, [80, 160, 255]) + ") yes.BorderSizePixel=0 yes.Text='Yes' yes.Font=Enum.Font.GothamBold yes.TextColor3=Color3.new(1,1,1) yes.TextScaled=true yes.Parent=box\n" +
       "local no=Instance.new('TextButton') no.Size=UDim2.new(0,110,0,38) no.Position=UDim2.new(0,12,1,-50) no.BackgroundColor3=Color3.fromRGB(45,45,52) no.BorderSizePixel=0 no.Text='No' no.Font=Enum.Font.GothamBold no.TextColor3=Color3.new(1,1,1) no.TextScaled=true no.Parent=box\n" +
       "local cr=Instance.new('UICorner') cr.CornerRadius=UDim.new(0,10) cr.Parent=box yes.CornerRadius=UDim.new(0,8) no.CornerRadius=UDim.new(0,8)\n" +
       "yes.MouseButton1Click:Connect(function() sg:Destroy() end) no.MouseButton1Click:Connect(function() sg:Destroy() end)\n" +
@@ -746,7 +748,7 @@
       "local box=Instance.new('Frame') box.Size=UDim2.new(0,300,0,54) box.Position=UDim2.new(0.5,-150,1,-90) box.BackgroundColor3=Color3.fromRGB(20,20,24) box.BackgroundTransparency=0.2 box.BorderSizePixel=0 box.Parent=sg\n" +
       "local lbl=Instance.new('TextLabel') lbl.Size=UDim2.new(1,-16,0,20) lbl.Position=UDim2.new(0,8,0,6) lbl.BackgroundTransparency=1 lbl.Text=" + q(a.label || "Loading") + " lbl.Font=Enum.Font.GothamMedium lbl.TextXAlignment=Enum.TextXAlignment.Left lbl.TextColor3=Color3.new(1,1,1) lbl.TextScaled=true lbl.Parent=box\n" +
       "local track=Instance.new('Frame') track.Size=UDim2.new(1,-16,0,10) track.Position=UDim2.new(0,8,1,-20) track.BackgroundColor3=Color3.fromRGB(50,50,58) track.BorderSizePixel=0 track.Parent=box\n" +
-      "local fill=Instance.new('Frame') fill.Size=UDim2.new(" + Math.max(0, Math.min(1, (a.value != null ? Number(a.value) : 0.2))) + ",0,1,0) fill.BackgroundColor3=Color3.fromRGB(" + cc(a.color, [80, 160, 255]) + ") fill.BorderSizePixel=0 fill.Parent=track\n" +
+      "local fill=Instance.new('Frame') fill.Size=UDim2.new(" + Math.max(0, Math.min(1, (a.value != null ? Number(a.value) : 0.2))) + ",0,1,0) fill.BackgroundColor3=(" + cc(a.color, [80, 160, 255]) + ") fill.BorderSizePixel=0 fill.Parent=track\n" +
       "task.spawn(function() for i=1,60 do task.wait(0.03) fill.Size=UDim2.new(math.min(1,fill.Size.X.Scale+i*0.012),0,1,0) end end)\n" +
       "task.delay(" + nn(a.seconds, 3) + ",function() if sg.Parent then sg:Destroy() end end)\n" +
       "return ok({startValue=" + nn(a.value, 0.2) + "},'progress bar animating')";
@@ -769,7 +771,7 @@
       "local sg=Instance.new('ScreenGui') sg.Name='OR_Shop' sg.DisplayOrder=80 sg.IgnoreGuiInset=true sg.Parent=pgui\n" +
       "local panel=Instance.new('Frame') panel.Size=UDim2.new(0,340,0," + (70 + items.length * 52) + ") panel.Position=UDim2.new(1,-352,0.5," + (-(35 + items.length * 26)) + ") panel.BackgroundColor3=Color3.fromRGB(20,20,25) panel.BackgroundTransparency=0.15 panel.BorderSizePixel=0 panel.Parent=sg\n" +
       "local head=Instance.new('TextLabel') head.Size=UDim2.new(1,-20,0,30) head.Position=UDim2.new(0,10,0,8) head.BackgroundTransparency=1 head.Text='SHOP' head.Font=Enum.Font.GothamBold head.TextXAlignment=Enum.TextXAlignment.Left head.TextColor3=Color3.new(1,1,1) head.TextScaled=true head.Parent=panel\n" +
-      "local items=" + JSON.stringify(items.map(String)) + "\n" +
+      "local items=" + strArr(items.map(String), []) + "\n" +
       "for i,item in ipairs(items) do local btn=Instance.new('TextButton') btn.Size=UDim2.new(1,-20,0,44) btn.Position=UDim2.new(0,10,0,44+(i-1)*50) btn.BackgroundColor3=Color3.fromRGB(40,40,48) btn.BorderSizePixel=0 btn.Text=item btn.Font=Enum.Font.GothamMedium btn.TextXAlignment=Enum.TextXAlignment.Left btn.TextColor3=Color3.new(1,1,1) btn.TextScaled=true btn.Parent=panel local cr=Instance.new('UICorner') cr.CornerRadius=UDim.new(0,8) cr.Parent=btn btn.MouseButton1Click:Connect(function() local rem=ReplicatedStorage:FindFirstChild('Buy',true) if rem then rem:FireServer(item) end end) end\n" +
       "return ok({items=items},'shop UI shown (buttons fire Buy RemoteEvent)')";
   };
@@ -794,7 +796,7 @@
       "local ui=Instance.new('UIListLayout') ui.SortOrder=Enum.SortOrder.LayoutOrder ui.Padding=UDim.new(0,4) ui.Parent=list\n" +
       "local bar=Instance.new('Frame') bar.Size=UDim2.new(1,-12,0,30) bar.Position=UDim2.new(0,6,1,-36) bar.BackgroundColor3=Color3.fromRGB(32,32,40) bar.BorderSizePixel=0 bar.Parent=box\n" +
       "local tb=Instance.new('TextBox') tb.Size=UDim2.new(1,-80,1,0) tb.Position=UDim2.new(0,4,0,0) tb.BackgroundTransparency=1 tb.PlaceholderText='Message...' tb.Text='' tb.Font=Enum.Font.Gotham tb.TextColor3=Color3.new(1,1,1) tb.ClearTextOnFocus=false tb.Parent=bar\n" +
-      "local send=Instance.new('TextButton') send.Size=UDim2.new(0,70,1,-6) send.Position=UDim2.new(1,-74,0,3) send.BackgroundColor3=Color3.fromRGB(" + cc(a.color, [80, 160, 255]) + ") send.BorderSizePixel=0 send.Text='Send' send.Font=Enum.Font.GothamBold send.TextColor3=Color3.new(1,1,1) send.TextScaled=true send.Parent=bar\n" +
+      "local send=Instance.new('TextButton') send.Size=UDim2.new(0,70,1,-6) send.Position=UDim2.new(1,-74,0,3) send.BackgroundColor3=(" + cc(a.color, [80, 160, 255]) + ") send.BorderSizePixel=0 send.Text='Send' send.Font=Enum.Font.GothamBold send.TextColor3=Color3.new(1,1,1) send.TextScaled=true send.Parent=bar\n" +
       "local function addLine(t) local l=Instance.new('TextLabel') l.Size=UDim2.new(1,0,0,20) l.BackgroundTransparency=1 l.Text=t l.Font=Enum.Font.Gotham l.TextColor3=Color3.fromRGB(230,230,235) l.TextXAlignment=Enum.TextXAlignment.Left l.TextWrapped=true l.Parent=list end\n" +
       "send.MouseButton1Click:Connect(function() local msg=tb.Text:sub(1,200) if msg~='' then addLine(pl.Name..': '..msg) tb.Text='' local rem=ReplicatedStorage:FindFirstChild('ChatSend',true) if rem then rem:FireServer(msg) end end end)\n" +
       "tb.FocusLost:Connect(function(enter) if enter then send.MouseButton1Click:Fire() end end)\n" +
@@ -806,7 +808,7 @@
       "local old=pgui:FindFirstChild('OR_Tabs') if old then old:Destroy() end\n" +
       "local sg=Instance.new('ScreenGui') sg.Name='OR_Tabs' sg.DisplayOrder=65 sg.IgnoreGuiInset=true sg.Parent=pgui\n" +
       "local panel=Instance.new('Frame') panel.Size=UDim2.new(0,320,0,360) panel.Position=UDim2.new(0.5,-160,0.5,-180) panel.BackgroundColor3=Color3.fromRGB(18,18,22) panel.BackgroundTransparency=0.1 panel.BorderSizePixel=0 panel.Parent=sg\n" +
-      "local tabs=" + JSON.stringify(tabs.map(String)) + "\n" +
+      "local tabs=" + strArr(tabs.map(String), []) + "\n" +
       "for i,t in ipairs(tabs) do local btn=Instance.new('TextButton') btn.Size=UDim2.new(0,96,0,34) btn.Position=UDim2.new(0,8+(i-1)*100,0,8) btn.BackgroundColor3=Color3.fromRGB(34,34,42) btn.BorderSizePixel=0 btn.Text=t btn.Font=Enum.Font.GothamMedium btn.TextColor3=Color3.new(1,1,1) btn.TextScaled=true btn.Parent=panel local cr=Instance.new('UICorner') cr.CornerRadius=UDim.new(0,8) cr.Parent=btn end\n" +
       "local content=Instance.new('Frame') content.Size=UDim2.new(1,-16,1,-60) content.Position=UDim2.new(0,8,0,50) content.BackgroundColor3=Color3.fromRGB(28,28,34) content.BorderSizePixel=0 content.Parent=panel\n" +
       "local label=Instance.new('TextLabel') label.Size=UDim2.new(1,0,1,0) label.BackgroundTransparency=1 label.Text='Select a tab' label.Font=Enum.Font.Gotham label.TextColor3=Color3.fromRGB(180,180,188) label.TextScaled=true label.Parent=content\n" +
@@ -819,7 +821,7 @@
       "local sg=Instance.new('ScreenGui') sg.Name='OR_Dropdown' sg.DisplayOrder=75 sg.IgnoreGuiInset=true sg.Parent=pgui\n" +
       "local panel=Instance.new('Frame') panel.Size=UDim2.new(0,220,0," + (50 + items.length * 36) + ") panel.Position=UDim2.new(0.5,-110,0.3,0) panel.BackgroundColor3=Color3.fromRGB(18,18,22) panel.BackgroundTransparency=0.1 panel.BorderSizePixel=0 panel.Parent=sg\n" +
       "local head=Instance.new('TextLabel') head.Size=UDim2.new(1,-16,0,26) head.Position=UDim2.new(0,8,0,8) head.BackgroundTransparency=1 head.Text=" + q(a.title || "Choose") + " head.Font=Enum.Font.GothamBold head.TextXAlignment=Enum.TextXAlignment.Left head.TextColor3=Color3.new(1,1,1) head.TextScaled=true head.Parent=panel\n" +
-      "local items=" + JSON.stringify(items.map(String)) + "\n" +
+      "local items=" + strArr(items.map(String), []) + "\n" +
       "for i,item in ipairs(items) do local btn=Instance.new('TextButton') btn.Size=UDim2.new(1,-16,0,32) btn.Position=UDim2.new(0,8,0,36+(i-1)*36) btn.BackgroundColor3=Color3.fromRGB(36,36,44) btn.BorderSizePixel=0 btn.Text=item btn.Font=Enum.Font.GothamMedium btn.TextXAlignment=Enum.TextXAlignment.Left btn.TextColor3=Color3.new(1,1,1) btn.TextScaled=true btn.Parent=panel local cr=Instance.new('UICorner') cr.CornerRadius=UDim.new(0,7) cr.Parent=btn btn.MouseButton1Click:Connect(function() panel:Destroy() local rem=ReplicatedStorage:FindFirstChild('Choose',true) if rem then rem:FireServer(item) end end) end\n" +
       "return ok({items=items},'dropdown shown (picks fire Choose RemoteEvent)')";
   };
@@ -833,11 +835,11 @@
       "local panel=Instance.new('Frame') panel.Size=UDim2.new(0,280,0,84) panel.Position=UDim2.new(0.5,-140,0.5,-42) panel.BackgroundColor3=Color3.fromRGB(18,18,22) panel.BackgroundTransparency=0.1 panel.BorderSizePixel=0 panel.Parent=sg\n" +
       "local lbl=Instance.new('TextLabel') lbl.Size=UDim2.new(1,-16,0,24) lbl.Position=UDim2.new(0,8,0,8) lbl.BackgroundTransparency=1 lbl.Text=" + q(a.label || "Value") + " lbl.Font=Enum.Font.GothamBold lbl.TextXAlignment=Enum.TextXAlignment.Left lbl.TextColor3=Color3.new(1,1,1) lbl.TextScaled=true lbl.Parent=panel\n" +
       "local track=Instance.new('Frame') track.Size=UDim2.new(1,-16,0,10) track.Position=UDim2.new(0,8,0,44) track.BackgroundColor3=Color3.fromRGB(48,48,58) track.BorderSizePixel=0 track.Parent=panel\n" +
-      "local fill=Instance.new('Frame') fill.Size=UDim2.new(" + frac + ",0,1,0) fill.BackgroundColor3=Color3.fromRGB(" + cc(a.color, [80, 160, 255]) + ") fill.BorderSizePixel=0 fill.Parent=track\n" +
+      "local fill=Instance.new('Frame') fill.Size=UDim2.new(" + frac + ",0,1,0) fill.BackgroundColor3=(" + cc(a.color, [80, 160, 255]) + ") fill.BorderSizePixel=0 fill.Parent=track\n" +
       "local knob=Instance.new('Frame') knob.Size=UDim2.new(0,20,0,20) knob.Position=UDim2.new(" + frac + ",-10,0.5,-10) knob.BackgroundColor3=Color3.new(1,1,1) knob.BorderSizePixel=0 knob.Parent=track local kc=Instance.new('UICorner') kc.CornerRadius=UDim.new(1,0) kc.Parent=knob\n" +
       "local dragging=false knob.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then dragging=true end end)\n" +
       "UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then dragging=false end end)\n" +
-      "UserInputService.InputChanged:Connect(function(i) if dragging and i.UserInputType==Enum.UserInputType.MouseMovement then local mx=UserInputService:GetMouseLocation().X local r=track.AbsolutePosition.X local w=track.AbsoluteSize.X local f=math.clamp((mx-r)/w,0,1) local v=" + min + "+f*(" + max + "-" + min + ") fill.Size=UDim2.new(f,0,1,0) knob.Position=UDim2.new(f,-10,0.5,-10) lbl.Text=" + q(a.label || "Value") + " ' = '..tostring(math.floor(v)) end end)\n" +
+      "UserInputService.InputChanged:Connect(function(i) if dragging and i.UserInputType==Enum.UserInputType.MouseMovement then local mx=UserInputService:GetMouseLocation().X local r=track.AbsolutePosition.X local w=track.AbsoluteSize.X local f=math.clamp((mx-r)/w,0,1) local v=" + min + "+f*(" + max + "-" + min + ") fill.Size=UDim2.new(f,0,1,0) knob.Position=UDim2.new(f,-10,0.5,-10) lbl.Text=" + q(a.label || "Value") + "..' = '..tostring(math.floor(v)) end end)\n" +
       "task.delay(" + nn(a.seconds, 30) + ",function() if sg.Parent then sg:Destroy() end end)\n" +
       "return ok({min=" + min + ",max=" + max + ",value=" + val + "},'slider shown (drag to set)')";
   };
@@ -849,9 +851,9 @@
       "local panel=Instance.new('Frame') panel.Size=UDim2.new(0,220,0,60) panel.Position=UDim2.new(0.5,-110,0.2,0) panel.BackgroundColor3=Color3.fromRGB(18,18,22) panel.BackgroundTransparency=0.1 panel.BorderSizePixel=0 panel.Parent=sg\n" +
       "local lbl=Instance.new('TextLabel') lbl.Size=UDim2.new(1,-70,1,0) lbl.Position=UDim2.new(0,10,0,0) lbl.BackgroundTransparency=1 lbl.Text=" + q(a.label || "Enabled") + " lbl.Font=Enum.Font.GothamMedium lbl.TextXAlignment=Enum.TextXAlignment.Left lbl.TextColor3=Color3.new(1,1,1) lbl.TextScaled=true lbl.Parent=panel\n" +
       "local state=" + bb(on, true) + "\n" +
-      "local track=Instance.new('Frame') track.Size=UDim2.new(0,46,0,24) track.Position=UDim2.new(1,-56,0.5,-12) track.BackgroundColor3=if state then Color3.fromRGB(" + cc(a.color, [80, 200, 120]) + ") else Color3.fromRGB(58,58,66) end track.BorderSizePixel=0 track.Parent=panel local tc=Instance.new('UICorner') tc.CornerRadius=UDim.new(1,0) tc.Parent=track\n" +
-      "local knob=Instance.new('Frame') knob.Size=UDim2.new(0,18,0,18) knob.Position=UDim2.new(1,if state then -26 else 4 end,0.5,-9) knob.BackgroundColor3=Color3.new(1,1,1) knob.BorderSizePixel=0 knob.Parent=track local kc=Instance.new('UICorner') kc.CornerRadius=UDim.new(1,0) kc.Parent=knob\n" +
-      "track.MouseButton1Click:Connect(function() state=not state track.BackgroundColor3=if state then Color3.fromRGB(" + cc(a.color, [80, 200, 120]) + ") else Color3.fromRGB(58,58,66) end knob.Position=UDim2.new(1,if state then -26 else 4 end,0.5,-9) end)\n" +
+      "local track=Instance.new('Frame') track.Size=UDim2.new(0,46,0,24) track.Position=UDim2.new(1,-56,0.5,-12) track.BackgroundColor3=if state then (" + cc(a.color, [80, 200, 120]) + ") else Color3.fromRGB(58,58,66) track.BorderSizePixel=0 track.Parent=panel local tc=Instance.new('UICorner') tc.CornerRadius=UDim.new(1,0) tc.Parent=track\n" +
+      "local knob=Instance.new('Frame') knob.Size=UDim2.new(0,18,0,18) knob.Position=UDim2.new(1,if state then -26 else 4,0.5,-9) knob.BackgroundColor3=Color3.new(1,1,1) knob.BorderSizePixel=0 knob.Parent=track local kc=Instance.new('UICorner') kc.CornerRadius=UDim.new(1,0) kc.Parent=knob\n" +
+      "track.MouseButton1Click:Connect(function() state=not state track.BackgroundColor3=if state then (" + cc(a.color, [80, 200, 120]) + ") else Color3.fromRGB(58,58,66) knob.Position=UDim2.new(1,if state then -26 else 4,0.5,-9) end)\n" +
       "task.delay(" + nn(a.seconds, 30) + ",function() if sg.Parent then sg:Destroy() end end)\n" +
       "return ok({on=" + bb(on, true) + "},'toggle shown')";
   };
@@ -887,7 +889,7 @@
     return guiTarget(a) +
       "local old=pgui:FindFirstChild('OR_Countdown') if old then old:Destroy() end\n" +
       "local sg=Instance.new('ScreenGui') sg.Name='OR_Countdown' sg.DisplayOrder=150 sg.IgnoreGuiInset=true sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling sg.Parent=pgui\n" +
-      "local lbl=Instance.new('TextLabel') lbl.Size=UDim2.new(1,0,0,160) lbl.Position=UDim2.new(0,0,0.5,-80) lbl.BackgroundTransparency=1 lbl.Text='" + nn(a.seconds, 5) + "' lbl.Font=Enum.Font.GothamBlack lbl.TextColor3=Color3.fromRGB(" + cc(a.color, [255, 180, 60]) + ") lbl.TextScaled=true lbl.Parent=sg\n" +
+      "local lbl=Instance.new('TextLabel') lbl.Size=UDim2.new(1,0,0,160) lbl.Position=UDim2.new(0,0,0.5,-80) lbl.BackgroundTransparency=1 lbl.Text='" + nn(a.seconds, 5) + "' lbl.Font=Enum.Font.GothamBlack lbl.TextColor3=(" + cc(a.color, [255, 180, 60]) + ") lbl.TextScaled=true lbl.Parent=sg\n" +
       "local n=" + nn(a.seconds, 5) + "\n" +
       "for i=n,1,-1 do lbl.Text=tostring(i) if i>1 then task.wait(1) end end\n" +
       "lbl.Text='GO' task.wait(0.8) sg:Destroy()\n" +
@@ -909,7 +911,7 @@
       "local target=partOf(resolve(" + q(a.path || "") + ")) if not target then return fail('part not found') end\n" +
       "local old=pgui:FindFirstChild('OR_Waypoint') if old then old:Destroy() end\n" +
       "local sg=Instance.new('ScreenGui') sg.Name='OR_Waypoint' sg.DisplayOrder=110 sg.IgnoreGuiInset=true sg.Parent=pgui\n" +
-      "local arrow=Instance.new('Frame') arrow.Size=UDim2.new(0,26,0,26) arrow.BackgroundColor3=Color3.fromRGB(" + cc(a.color, [255, 120, 60]) + ") arrow.BorderSizePixel=0 arrow.Parent=sg\n" +
+      "local arrow=Instance.new('Frame') arrow.Size=UDim2.new(0,26,0,26) arrow.BackgroundColor3=(" + cc(a.color, [255, 120, 60]) + ") arrow.BorderSizePixel=0 arrow.Parent=sg\n" +
       "local cl=Instance.new('UIAspectRatioConstraint') cl.AspectRatio=1 cl.Parent=arrow local cr=Instance.new('UICorner') cr.CornerRadius=UDim.new(0,6) cr.Parent=arrow\n" +
       "local hrp=hrpOf(firstPlayer()) or partOf(resolve('Workspace'))\n" +
       "local cam=Workspace.CurrentCamera\n" +
@@ -920,7 +922,7 @@
     return guiTarget(a) +
       "local old=pgui:FindFirstChild('OR_Crosshair') if old then old:Destroy() end\n" +
       "local sg=Instance.new('ScreenGui') sg.Name='OR_Crosshair' sg.DisplayOrder=95 sg.IgnoreGuiInset=true sg.Parent=pgui\n" +
-      "local dot=Instance.new('Frame') dot.Size=UDim2.new(0," + nn(a.size, 4) + ",0," + nn(a.size, 4) + ") dot.Position=UDim2.new(0.5," + (-(nn(a.size, 4) / 2)) + ",0.5," + (-(nn(a.size, 4) / 2)) + ") dot.BackgroundColor3=Color3.fromRGB(" + cc(a.color, [255, 255, 255]) + ") dot.BorderSizePixel=0 dot.Parent=sg\n" +
+      "local dot=Instance.new('Frame') dot.Size=UDim2.new(0," + nn(a.size, 4) + ",0," + nn(a.size, 4) + ") dot.Position=UDim2.new(0.5," + (-(nn(a.size, 4) / 2)) + ",0.5," + (-(nn(a.size, 4) / 2)) + ") dot.BackgroundColor3=(" + cc(a.color, [255, 255, 255]) + ") dot.BorderSizePixel=0 dot.Parent=sg\n" +
       "local dc=Instance.new('UICorner') dc.CornerRadius=UDim.new(1,0) dc.Parent=dot\n" +
       "return ok({size=" + nn(a.size, 4) + "},'crosshair set')";
   };
@@ -1005,15 +1007,12 @@
   };
   B.camera_zoom = function (a) {
     var dir = String(a.dir || "in").toLowerCase();
-    var amt = nn(a.amount, 10);
+    var amt = Math.abs(Number(nn(a.amount, 10)));
+    var delta = (dir === "out" ? amt : -amt);
     return "local cam=Workspace.CurrentCamera if not cam then return fail('no camera') end\n" +
-      "local subject=cam.CameraSubject\n" +
-      "local from=if subject and subject:IsA('BasePart') then subject.Position else cam.CFrame.Position\n" +
-      "local dir=if " + bb(dir === "in") + " then (cam.CFrame.Position-from) else (from-cam.CFrame.Position)\n" +
-      "if dir.Magnitude<0.01 then dir=cam.CFrame.LookVector end\n" +
-      "local step=dir.Unit*" + amt + "\n" +
-      "cam.CFrame=cam.CFrame+CFrame.new(step)\n" +
-      "return ok({steps=" + amt + "},'camera zoomed')";
+      "local before=cam.FieldOfView\n" +
+      "cam.FieldOfView=math.clamp(before+(" + delta + "),1,120)\n" +
+      "return ok({from=before,to=cam.FieldOfView,dir='" + (dir === "out" ? "out" : "in") + "'},'camera FOV '..string.format('%.0f',before)..' -> '..string.format('%.0f',cam.FieldOfView))";
   };
   B.camera_shake = function (a) {
     return "local cam=Workspace.CurrentCamera if not cam then return fail('no camera') end\n" +
@@ -1091,7 +1090,7 @@
   };
   B.light_flicker = function (a) {
     return "local p=partOf(resolve(" + q(a.path || "") + "))\n" +
-      "local light=if p then p:FindFirstChildOfClass('PointLight') else nil end\n" +
+      "local light=if p then p:FindFirstChildOfClass('PointLight') else nil\n" +
       "if not light then light=Instance.new('PointLight') light.Color=" + cc(a.color, [255, 180, 90]) + " light.Brightness=2 light.Range=14 if p then light.Parent=p else light.Parent=Lighting end end\n" +
       "task.spawn(function() while light.Parent do light.Brightness=1.4+math.random()*1.4 task.wait(0.06) end end)\n" +
       "return ok({path=light:GetFullName()},'flickering candle light on')";
@@ -1181,25 +1180,25 @@
       "return ok({stopped=n},'all sounds stopped')";
   };
   B.audio_loop = function (a) {
-    return "local i=resolve(" + q(a.path || "") + ") local s=if i and i:IsA('Sound') then i else (i and i:FindFirstChildOfClass('Sound')) end\n" +
+    return "local i=resolve(" + q(a.path || "") + ") local s=if i and i:IsA('Sound') then i else (i and i:FindFirstChildOfClass('Sound'))\n" +
       "if not s then return fail('sound not found') end\n" +
       "s.Looped=" + bb(a.loop, true) + "\n" +
       "return ok({looped=" + bb(a.loop, true) + "},'sound looped')";
   };
   B.audio_pitch = function (a) {
-    return "local i=resolve(" + q(a.path || "") + ") local s=if i and i:IsA('Sound') then i else (i and i:FindFirstChildOfClass('Sound')) end\n" +
+    return "local i=resolve(" + q(a.path || "") + ") local s=if i and i:IsA('Sound') then i else (i and i:FindFirstChildOfClass('Sound'))\n" +
       "if not s then return fail('sound not found') end\n" +
       "s.Pitch=" + nn(a.pitch, 1) + "\n" +
       "return ok({pitch=" + nn(a.pitch, 1) + "},'pitch set')";
   };
   B.audio_pan = function (a) {
-    return "local i=resolve(" + q(a.path || "") + ") local s=if i and i:IsA('Sound') then i else (i and i:FindFirstChildOfClass('Sound')) end\n" +
+    return "local i=resolve(" + q(a.path || "") + ") local s=if i and i:IsA('Sound') then i else (i and i:FindFirstChildOfClass('Sound'))\n" +
       "if not s then return fail('sound not found') end\n" +
       "s.Pan=" + nn(a.pan, 0) + "\n" +
       "return ok({pan=" + nn(a.pan, 0) + "},'pan set')";
   };
   B.audio_id = function (a) {
-    return "local i=resolve(" + q(a.path || "") + ") local s=if i and i:IsA('Sound') then i else (i and i:FindFirstChildOfClass('Sound')) end\n" +
+    return "local i=resolve(" + q(a.path || "") + ") local s=if i and i:IsA('Sound') then i else (i and i:FindFirstChildOfClass('Sound'))\n" +
       "if not s then return fail('sound not found') end\n" +
       "s.SoundId='rbxassetid://" + nn(a.assetid, 0) + "'\n" +
       "return ok({assetId=" + nn(a.assetid, 0) + "},'sound asset set')";
@@ -1274,7 +1273,7 @@
       "local hrp=c:FindFirstChild('HumanoidRootPart') if not hrp then return fail('no HRP') end\n" +
       "local old=hrp:FindFirstChild('OR_Aura') if old then old:Destroy() end\n" +
       "local pe=Instance.new('ParticleEmitter') pe.Name='OR_Aura' pe.Parent=hrp\n" +
-      "pe.Rate=24 pe.Lifetime=NumberRange.new(0.8,1.4) pe.Speed=NumberRange.new(0.5,1.5) pe.SpreadAngle=Vector2.new(180,180) pe.Acceleration=Vector3.new(0,-2,0) pe.ParticleColor=ColorSequence.new(Color3.fromRGB(" + cc(a.color, [120, 200, 255]) + ").Color:ToRGB()) pe.Size=NumberSequence.new(0.15,0.02) pe.Transparency=NumberSequence.new(0.1,1) pe.LightEmission=0.8\n" +
+      "pe.Rate=24 pe.Lifetime=NumberRange.new(0.8,1.4) pe.Speed=NumberRange.new(0.5,1.5) pe.SpreadAngle=Vector2.new(180,180) pe.Acceleration=Vector3.new(0,-2,0) pe.ParticleColor=ColorSequence.new((" + cc(a.color, [120, 200, 255]) + ").Color:ToRGB()) pe.Size=NumberSequence.new(0.15,0.02) pe.Transparency=NumberSequence.new(0.1,1) pe.LightEmission=0.8\n" +
       "task.delay(" + nn(a.seconds, 10) + ",function() if pe.Parent then pe:Destroy() end end)\n" +
       "return ok({seconds=" + nn(a.seconds, 10) + "},'aura on character')";
   };
@@ -1283,8 +1282,8 @@
       "local pos=if p then p.Position else " + vv(a.position || a.point, [0, 1, 0]) + "\n" +
       "local r=" + nn(a.radius, 8) + " local parent=p or Workspace\n" +
       "local group=Instance.new('Folder') group.Name='OR_MagicCircle' group.Parent=parent\n" +
-      "local n=8 for i=1,n do local beam=Instance.new('Beam') local a0=math.rad(i*45) local a1=math.rad((i+1)*45) local p0=Vector3.new(math.cos(a0)*r,0,math.sin(a0)*r) local p1=Vector3.new(math.cos(a1)*r,0,math.sin(a1)*r) local att0=Instance.new('Attachment') att0.Parent=group att0.Position=p0 local att1=Instance.new('Attachment') att1.Parent=group att1.Position=p1 beam.Attachment0=att0 beam.Attachment1=att1 beam.Width0=0.25 beam.Width1=0.25 beam.Color=ColorSequence.new(Color3.fromRGB(" + cc(a.color, [140, 100, 255]) + ").Color:ToRGB()) beam.FaceCamera=false beam.Parent=group end\n" +
-      "local pe=Instance.new('ParticleEmitter') local host=Instance.new('Part') host.Name='host' host.Anchored=true host.CanCollide=false host.Transparency=1 host.Size=Vector3.new(0.5,0.5,0.5) host.Parent=group host.CFrame=CFrame.new(pos) pe.Parent=host pe.Rate=18 pe.Lifetime=NumberRange.new(1,2) pe.Speed=NumberRange.new(1,3) pe.SpreadAngle=Vector2.new(180,180) pe.Acceleration=Vector3.new(0,3,0) pe.ParticleColor=ColorSequence.new(Color3.fromRGB(" + cc(a.color, [140, 100, 255]) + ").Color:ToRGB()) pe.Size=NumberSequence.new(0.1,0.01) pe.LightEmission=0.9\n" +
+      "local n=8 for i=1,n do local beam=Instance.new('Beam') local a0=math.rad(i*45) local a1=math.rad((i+1)*45) local p0=Vector3.new(math.cos(a0)*r,0,math.sin(a0)*r) local p1=Vector3.new(math.cos(a1)*r,0,math.sin(a1)*r) local att0=Instance.new('Attachment') att0.Parent=group att0.Position=p0 local att1=Instance.new('Attachment') att1.Parent=group att1.Position=p1 beam.Attachment0=att0 beam.Attachment1=att1 beam.Width0=0.25 beam.Width1=0.25 beam.Color=ColorSequence.new(" + cc(a.color, [140, 100, 255]) + ") beam.FaceCamera=false beam.Parent=group end\n" +
+      "local pe=Instance.new('ParticleEmitter') local host=Instance.new('Part') host.Name='host' host.Anchored=true host.CanCollide=false host.Transparency=1 host.Size=Vector3.new(0.5,0.5,0.5) host.Parent=group host.CFrame=CFrame.new(pos) pe.Parent=host pe.Rate=18 pe.Lifetime=NumberRange.new(1,2) pe.Speed=NumberRange.new(1,3) pe.SpreadAngle=Vector2.new(180,180) pe.Acceleration=Vector3.new(0,3,0) pe.Color=ColorSequence.new(" + cc(a.color, [140, 100, 255]) + ") pe.Size=NumberSequence.new(0.1,0.01) pe.LightEmission=0.9\n" +
       "task.delay(" + nn(a.seconds, 15) + ",function() if group.Parent then group:Destroy() end end)\n" +
       "return ok({beams=n,radius=r},'magic circle running')";
   };
@@ -1449,10 +1448,11 @@
       "return ok({chars=#src},'source compiles clean')";
   };
   B.log_tag = function (a) {
-    var tag = String(a.tag || "OR").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 12);
+    var tag = String(a.tag || "OR").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 12) || "OR";
+    var src = "local realprint = print\nprint = function(...) realprint('[" + tag + "]', ...) end\nwarn('[" + tag + "] console tag active')";
     return "local old=ServerScriptService:FindFirstChild('OR_LogTag') if old then old:Destroy() end\n" +
-      "local s=mkScript('Script','OR_LogTag',ServerScriptService,'print(\\'[OR] tag '" + tag + "' active')\\nlocal realprint=print\\nprint=function(...) realprint(\\'[OR:'" + tag + "]\\',...)\\nprint=realprint\\n')\n" +
-      "return ok({tag='" + tag + "'},'output now tagged [OR:" + tag + "] (run again without tag to note)')";
+      "local s=mkScript('Script','OR_LogTag',ServerScriptService," + q(src) + ")\n" +
+      "return ok({tag='" + tag + "',path=s:GetFullName()},'server output will be prefixed with [" + tag + "] at play time (ServerScriptService.OR_LogTag)')";
   };
   B.game_stats = function (a) {
     return "local parts=0 for _,d in ipairs(Workspace:GetDescendants()) do if d:IsA('BasePart') then parts+=1 end end\n" +

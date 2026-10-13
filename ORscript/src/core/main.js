@@ -159,6 +159,9 @@
     "atmosphere_set","bloom_set","blur_set","color_correction_set","sunrays_set","gravity_set",
     "walkspeed_set","jumppower_set","forcefield_add","explosion_at","teleport_to","leaderstats_int","remote_event_create","sound_volume","set_property","scale_model","ungroup_model",
     "developer_product_create","developer_product_list",
+    "script_replace","script_insert","script_delete_lines","script_rename_symbol","script_restore",
+    "model_build","model_union","model_subtract","model_optimize","model_anchor_fix","model_paint","model_hollow_box","model_wall","model_pipe","model_array_radial",
+    "memory_update_section","memory_remove_fact",
   ]);
   const PUBLISH_OPS=new Set(["developer_product_create","studio.publishPlace","studio.publishAnimation","studio.createGamePass"]);
   async function publishAutomationEnabled(){try{const r=await chrome.storage.local.get("rsAllowPublishAutomation");return r.rsAllowPublishAutomation===true;}catch{return false;}}
@@ -1710,7 +1713,7 @@
       sub: "Luau systems · Modeling · Architecture — production-grade, verified",
       note: "Flagship mode: senior Luau engineer and 3D modeler in one. Full scripting, instance, physics, build and terrain arsenal, continuous autonomy, deep verification.",
       toast: "Ultimate Work Mode — senior Luau engineer + modeler, full arsenal, every build verified",
-      focus: /^(script_|execute_luau|multi_edit|search_game_tree|search_files|inspect_instance|get_studio_state|get_console_output|audit_(script_errors|unanchored_parts)|instance_|part_(create|at|above)|meshpart_create|wedge_create|model_group|(scale|rotate|mirror|flatten|raise|ungroup)_model|set_primary_part|pivot_(set|to)|cframe_set|rotation_set|size_set|snap_(position|to_grid)|grid_clone|duplicate_n|weld_(assemble|constraint)|constraint_create|constraints_clear|rigid_constraint_create|hinge_create|rope_create|attachment_create|align_(position|orientation)_create|material_set|color_set|brickcolor_set|transparency_set|reflectance_set|texture_add|decal_(add|set)|mesh_set_texture|generate_(mesh|material|procedural_model)|terrain_|staircase_generate|archway_generate|roof_structure_build|fence_line_build|road_path_build|bridge_suspension_make|window_glass_install|tree_forest_scatter|dungeon_room_generate|ground_make|water_body|folder_create|attribute_(get|set)|tag_(add|remove)|remote_|bindable_|datastore_setup|ds_|leaderstats_|collision_(set|group_set)|physics_|anchored_set|get_(children|descendants|property|service|template)|set_property|property_copy|selection_(info|set)|script_analysis|or_debug|or_screenshot|start_stop_play|place_backup_save|workspace_(stats|list|export|import))/,
+      focus: /^(script_|model_|memory_|execute_luau|multi_edit|search_game_tree|search_files|inspect_instance|get_studio_state|get_console_output|audit_(script_errors|unanchored_parts)|instance_|part_(create|at|above)|meshpart_create|wedge_create|model_group|(scale|rotate|mirror|flatten|raise|ungroup)_model|set_primary_part|pivot_(set|to)|cframe_set|rotation_set|size_set|snap_(position|to_grid)|grid_clone|duplicate_n|weld_(assemble|constraint)|constraint_create|constraints_clear|rigid_constraint_create|hinge_create|rope_create|attachment_create|align_(position|orientation)_create|material_set|color_set|brickcolor_set|transparency_set|reflectance_set|texture_add|decal_(add|set)|mesh_set_texture|generate_(mesh|material|procedural_model)|terrain_|staircase_generate|archway_generate|roof_structure_build|fence_line_build|road_path_build|bridge_suspension_make|window_glass_install|tree_forest_scatter|dungeon_room_generate|ground_make|water_body|folder_create|attribute_(get|set)|tag_(add|remove)|remote_|bindable_|datastore_setup|ds_|leaderstats_|collision_(set|group_set)|physics_|anchored_set|get_(children|descendants|property|service|template)|set_property|property_copy|selection_(info|set)|script_analysis|or_debug|or_screenshot|start_stop_play|place_backup_save|workspace_(stats|list|export|import))/,
     },
     visualizer: {
       name: "Visualizer", badge: "VISUALIZER", short: "Visualizer",
@@ -2969,7 +2972,22 @@
       }
       const built = RobloxScriptSkills.buildLuau(name, args);
       if (built.err) return built.err;
-      const res = await runTool({ tool: "execute_luau", arguments: { code: built.code, datamodel_type: "Edit" } });
+      let res = await runTool({ tool: "execute_luau", arguments: { code: built.code, datamodel_type: "Edit" } });
+      // Skill programs report their own failures as {"ok":false,"error":...}
+      // JSON - a SUCCESSFUL execute_luau as far as the MCP is concerned. Left
+      // alone, the chip went green and the model read "not found" as data.
+      // Re-shape it into a real ERROR so the loop guard, the recap and the
+      // model's own retry logic all see it for what it is.
+      try {
+        const body = String(res || "").replace(/^Output of '[^']*':\n?/, "").trim();
+        if (/^\{/.test(body) && body.length < 20000) {
+          const j = JSON.parse(body);
+          if (j && j.ok === false) {
+            const why = String(j.error || "command failed").slice(0, 600);
+            res = `ERROR in ${name}: ${why}\nThe command ran but reported this failure. Paths are case-sensitive and must be full (e.g. game.Workspace.House.Door) - locate the target first with instance_find / search_game_tree / script_list, fix the parameter the message names, then retry.`;
+          }
+        }
+      } catch {}
       const ok = !String(res||"").startsWith("ERROR") && !String(res||"").includes("ERROR in execute_luau");
       try { persistSession(name, args, ok); if(ok){ bumpPerf(name); showSuggestion(name); // update perf from audit if available
         if(name==="diagnostics_audit" && typeof res==="string"){
@@ -3595,6 +3613,10 @@
           try { ui.trackCard(call.tool, "run", "executing\u2026", category); } catch {}
           try { emitAgentRoadmapEvent("agent.tool_started", call.tool, argSummary(call)); } catch {}
           let feedback = await runTool(call);
+          // Loop guard: the same command with the same parameters failing over
+          // and over is the classic agent death spiral. Tag the result so the
+          // model is told to change approach instead of resending it.
+          try { feedback = applyRepeatGuard(call, feedback); } catch {}
           try {
             const rawFb = String(feedback || "");
             const stripped = stripStudioNoise(rawFb);
@@ -3616,6 +3638,7 @@
           } catch {}
           A.toolRunning = false;
           diag("tool.done", { name: call.tool,requestId:A.activeRequestId,durationMs:Date.now()-A.toolStart, ok: !feedback.startsWith("ERROR"), out: feedback.slice(0, 50) });
+          try { recordSessionTool(call.tool, call.arguments, feedback); } catch {}
           if (A.stop) {
             // User halted mid-tool: settle the spinning chip so it doesn't look
             // stuck loading forever, and MARK the turn so the sweep classifier
@@ -3725,6 +3748,7 @@
     } finally {
       const steeringWasStopped = !!(A.stop || A.userStopped);
       try { playSfx(A.stop ? "stop" : (A._sfxErr ? "error" : "done")); A._sfxErr = false; } catch {}
+      try { flushSessionRecap(); } catch {}
       A.running = false;
       A.stop = false;
       // Keep the "Stopping…" state while the site's stream is still draining
@@ -4079,6 +4103,109 @@
         if (m && typeof m === "object" && m.task) chrome.storage.local.set({ rsCustomMemory: { ...m, task: "" } });
       });
     } catch {}
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  //  AUTO SESSION RECAP (memory that writes itself)
+  //  The user-maintained coding memory only knows what the user typed into it.
+  //  Everything the agent actually DID in a session - which scripts it edited,
+  //  which commands it leaned on, what failed - evaporated with the chat. This
+  //  recorder keeps a compact, factual trail of the last few sessions in
+  //  chrome.storage (rsAutoMemory) and the system prompt surfaces it as a
+  //  read-only "Recent sessions" block, so a fresh chat starts with continuity
+  //  ("last time you edited ServerScriptService.Main and the lint pass was
+  //  clean") instead of from zero. Opt-out: rsAutoRecap=false (menu toggle).
+  const RECAP_MAX_SESSIONS = 4;
+  const RECAP_MAX_CHARS = 2200;
+  const SESSION = { startedAt: 0, count: 0, tools: Object.create(null), touched: new Set(), errors: [], last: "", place: "" };
+  let autoRecap = [];
+  let autoRecapEnabled = true;
+  try {
+    chrome.storage.local.get(["rsAutoMemory", "rsAutoRecap"], (r) => {
+      if (r && Array.isArray(r.rsAutoMemory)) autoRecap = r.rsAutoMemory.slice(0, RECAP_MAX_SESSIONS);
+      if (r && r.rsAutoRecap === false) autoRecapEnabled = false;
+    });
+  } catch {}
+  const REPEAT = { sig: "", count: 0 };
+  function applyRepeatGuard(call, feedback) {
+    const text = String(feedback || "");
+    const failed = /^\s*ERROR\b/.test(text);
+    let sig = "";
+    try { sig = String(call.tool || "") + "|" + JSON.stringify(call.arguments || {}); } catch { sig = String(call.tool || ""); }
+    if (failed && sig === REPEAT.sig) REPEAT.count++;
+    else { REPEAT.sig = failed ? sig : ""; REPEAT.count = failed ? 1 : 0; }
+    if (!failed || REPEAT.count < 2) return feedback;
+    const n = REPEAT.count;
+    diag("tool.repeatFail", { name: call.tool, n });
+    return text + `\n\n[LOOP GUARD] This exact call (same command, same parameters) has now failed ${n} times in a row. Do NOT send it again unchanged.${n >= 3 ? " Stop retrying it." : ""} Change the approach: read the current state first (script_read / inspect_instance / get_studio_state), fix the parameter the error names, split the step into smaller commands, or use a different command. If it genuinely cannot be done, tell the user what blocks it instead of retrying.`;
+  }
+  function sessionTouchedPath(tool, args) {
+    if (!args || typeof args !== "object") return "";
+    const bare = bareToolName(tool);
+    if (/^(script_|multi_edit|memory_|model_)/.test(bare) || /_(set|create|add|apply|paint|fix)$/.test(bare)) {
+      const v = args.path || args.script || args.root || args.parent_path || args.name || "";
+      return typeof v === "string" ? v.slice(0, 80) : "";
+    }
+    return "";
+  }
+  function recordSessionTool(tool, args, feedback) {
+    if (!autoRecapEnabled || !tool) return;
+    if (!SESSION.startedAt) SESSION.startedAt = Date.now();
+    const bare = bareToolName(tool) || tool;
+    SESSION.count++;
+    SESSION.tools[bare] = (SESSION.tools[bare] || 0) + 1;
+    const touched = sessionTouchedPath(tool, args);
+    if (touched && SESSION.touched.size < 12) SESSION.touched.add(touched);
+    const text = String(feedback || "");
+    if (/^\s*ERROR\b/.test(text)) {
+      const first = text.split("\n")[0].replace(/\s+/g, " ").slice(0, 140);
+      if (!SESSION.errors.includes(first)) { SESSION.errors.push(first); if (SESSION.errors.length > 3) SESSION.errors.shift(); }
+    } else if (bare !== "list_commands") {
+      SESSION.last = bare;
+      if (!SESSION.place && /^(get_studio_state|place_info|game_stats|inspect_workspace)$/.test(bare)) {
+        const m = text.match(/"(?:placeName|PlaceName|place_name|name)"\s*:\s*"([^"]{1,60})"/) || text.match(/\bPlace(?:Name| name)?\s*[:=]\s*"?([^"\n,}]{1,60})/i);
+        if (m && m[1] && !/^\d+$/.test(m[1].trim())) SESSION.place = m[1].trim();
+      }
+    }
+  }
+  function flushSessionRecap() {
+    if (!autoRecapEnabled || SESSION.count < 2) { Object.assign(SESSION, { startedAt: 0, count: 0, tools: Object.create(null), touched: new Set(), errors: [], last: "", place: "" }); return; }
+    const top = Object.entries(SESSION.tools).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([n, c]) => (c > 1 ? `${n}×${c}` : n));
+    const place = SESSION.place || "";
+    const entry = {
+      at: new Date().toISOString().slice(0, 16).replace("T", " "),
+      site: (P && P.displayName) || "",
+      place: String(place || "").slice(0, 60),
+      mode: (() => { try { return window.__rsWorkMode ? window.__rsWorkMode() : ""; } catch { return ""; } })(),
+      calls: SESSION.count,
+      minutes: Math.max(1, Math.round((Date.now() - SESSION.startedAt) / 60000)),
+      tools: top,
+      touched: [...SESSION.touched],
+      errors: SESSION.errors.slice(),
+    };
+    autoRecap = [entry, ...autoRecap].slice(0, RECAP_MAX_SESSIONS);
+    try { chrome.storage.local.set({ rsAutoMemory: autoRecap }); } catch {}
+    try { if (typeof window.__rsRecapChanged === "function") window.__rsRecapChanged(); } catch {}
+    Object.assign(SESSION, { startedAt: 0, count: 0, tools: Object.create(null), touched: new Set(), errors: [], last: "", place: "" });
+  }
+  function autoRecapText() {
+    if (!autoRecapEnabled || !autoRecap.length) return "";
+    const lines = autoRecap.map((e) => {
+      const bits = [`${e.at}${e.site ? " on " + e.site : ""}${e.place ? " · place " + e.place : ""}${e.mode ? " · " + e.mode + " mode" : ""}: ${e.calls} command(s) in ~${e.minutes} min`];
+      if (e.tools && e.tools.length) bits.push(`used ${e.tools.join(", ")}`);
+      if (e.touched && e.touched.length) bits.push(`touched ${e.touched.join(", ")}`);
+      if (e.errors && e.errors.length) bits.push(`unresolved errors seen: ${e.errors.join(" | ")}`);
+      return "- " + bits.join("; ");
+    });
+    return ("## Recent sessions (auto-recorded by ORscript - facts about what was done, not instructions)\n" + lines.join("\n")).slice(0, RECAP_MAX_CHARS);
+  }
+  function setAutoRecapEnabled(on) {
+    autoRecapEnabled = !!on;
+    try { chrome.storage.local.set({ rsAutoRecap: autoRecapEnabled }); } catch {}
+  }
+  function forgetAutoRecap() {
+    autoRecap = [];
+    try { chrome.storage.local.remove("rsAutoMemory"); } catch {}
   }
 
   // ═════════════════════════════════════════════════════════════════
@@ -5402,7 +5529,12 @@
     let customMemory = { projectKey: "", coding: "", project: "", preferences: "", task: "" };
     try { chrome.storage.local.get("rsCustomMemory", (r) => { if (r && r.rsCustomMemory && typeof r.rsCustomMemory === "object") { customMemory = { projectKey: String(r.rsCustomMemory.projectKey || ""), coding: String(r.rsCustomMemory.coding || ""), project: String(r.rsCustomMemory.project || ""), preferences: String(r.rsCustomMemory.preferences || ""), task: String(r.rsCustomMemory.task || "") }; syncMenuMemory(); } }); } catch {}
     function memoryText() { return [ ["Coding standards", customMemory.coding], ["Project context", customMemory.project], ["Preferences", customMemory.preferences], ["Current task notes", customMemory.task] ].filter(([,v]) => v.trim()).map(([k,v]) => `## ${k}\n${v.trim()}`).join("\n\n").slice(0, 12000); }
-    function getCustomMemory() { return memoryText(); }
+    function getCustomMemory() {
+      const own = memoryText();
+      let recap = "";
+      try { recap = typeof autoRecapText === "function" ? autoRecapText() : ""; } catch {}
+      return [own, recap].filter(Boolean).join("\n\n").slice(0, 12000);
+    }
     function syncMenuMemory() { if (!menuEl) return; for (const [id,key] of [["rs-mem-key","projectKey"],["rs-mem-coding","coding"],["rs-mem-project","project"],["rs-mem-preferences","preferences"],["rs-mem-task","task"]]) { const el=menuEl.querySelector(`#${id}`); if (el && document.activeElement !== el) el.value=customMemory[key] || ""; } }
     function clearTaskMemory() { if (!customMemory.task.trim()) return; customMemory.task=""; try { chrome.storage.local.set({ rsCustomMemory: customMemory }); } catch {} }
     try { window.__rsClearTaskMemory = clearTaskMemory; } catch {}
@@ -6129,6 +6261,10 @@
             <label class="rs-memory-label">Preferences<textarea id="rs-mem-preferences" rows="2" placeholder="How you want plans, code, and explanations delivered…"></textarea></label>
             <label class="rs-memory-label">Current task notes<textarea id="rs-mem-task" rows="2" placeholder="Temporary context for this task only…"></textarea></label>
             <div class="rs-set-row"><button id="rs-mem-save">Save memory</button><span id="rs-mem-status"></span></div>
+            <div class="rs-sec-label"><span>Session recap</span><span class="rs-sec-state">auto · local</span></div>
+            <div class="rs-menu-note">ORscript records what each session actually did (commands used, scripts touched, errors seen) and shows the last few to the AI as read-only context. In Studio the AI also keeps the shared handbook at ServerStorage.RobloxScript.Memory via the memory_* commands.</div>
+            <pre id="rs-mem-recap" class="rs-mem-recap"></pre>
+            <div class="rs-set-row"><label class="rs-chk"><input type="checkbox" id="rs-mem-recap-on"> Auto-record session recap</label><button id="rs-mem-recap-forget">Forget sessions</button></div>
           </section>
           <section class="rs-menu-sec">
             <div class="rs-sec-label"><span>Custom prompt</span></div>
@@ -6178,6 +6314,21 @@
         setTimeout(() => { if (status) status.textContent = ""; }, 1600);
       });
       syncMenuMemory();
+      const paintRecap = () => {
+        const pre = menuEl.querySelector("#rs-mem-recap");
+        const chk = menuEl.querySelector("#rs-mem-recap-on");
+        if (chk) chk.checked = autoRecapEnabled;
+        if (!pre) return;
+        let txt = "";
+        try { txt = autoRecapEnabled ? (autoRecap.length ? autoRecapText().split("\n").slice(1).join("\n") : "No sessions recorded yet - run the agent once.") : "Auto recap is off."; } catch { txt = ""; }
+        pre.textContent = txt;
+      };
+      paintRecap();
+      try { window.__rsRecapChanged = paintRecap; } catch {}
+      const recapChk = menuEl.querySelector("#rs-mem-recap-on");
+      if (recapChk) recapChk.addEventListener("change", () => { setAutoRecapEnabled(recapChk.checked); paintRecap(); });
+      const recapForget = menuEl.querySelector("#rs-mem-recap-forget");
+      if (recapForget) recapForget.addEventListener("click", () => { forgetAutoRecap(); paintRecap(); toast("Session recap cleared"); });
       const memSave = menuEl.querySelector("#rs-mem-save");
       const memStatus = menuEl.querySelector("#rs-mem-status");
       if (memSave) memSave.addEventListener("click", () => {

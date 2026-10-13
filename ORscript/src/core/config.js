@@ -50,6 +50,46 @@ const RS = (() => {
   }
 
   // Feedback strings sent back to the model so it can self-correct.
+  // Closest catalogue names for an unknown command: token overlap first
+  // (model usually swaps/drops one word, e.g. create_part vs part_create),
+  // then substring, then a cheap edit distance. Returns up to 8 names.
+  function suggestToolNames(name, valid) {
+    const raw = String(name || "").toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^.*\./, "");
+    if (!raw) return [];
+    const toks = new Set(raw.split("_").filter(Boolean));
+    const lev = (a, b) => {
+      if (Math.abs(a.length - b.length) > 6) return 99;
+      let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+      for (let i = 1; i <= a.length; i++) {
+        const cur = [i];
+        for (let j = 1; j <= b.length; j++) {
+          cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        }
+        prev = cur;
+      }
+      return prev[b.length];
+    };
+    const scored = [];
+    for (const v of valid) {
+      const cand = String(v || "").toLowerCase().replace(/^.*\./, "");
+      if (!cand) continue;
+      let score = 0;
+      const ctoks = cand.split("_").filter(Boolean);
+      let overlap = 0;
+      for (const t of ctoks) if (toks.has(t)) overlap++;
+      if (overlap) score += overlap * 10 - Math.abs(ctoks.length - toks.size) * 2;
+      if (cand.includes(raw) || raw.includes(cand)) score += 12;
+      if (cand.startsWith(raw.split("_")[0] + "_")) score += 3;
+      const d = lev(raw, cand);
+      if (d <= 3) score += (4 - d) * 6;
+      if (score > 0) scored.push([score, v]);
+    }
+    scored.sort((a, b) => b[0] - a[0] || String(a[1]).localeCompare(String(b[1])));
+    const out = [];
+    for (const [, v] of scored) { if (!out.includes(v)) out.push(v); if (out.length >= 8) break; }
+    return out;
+  }
+
   const FEEDBACK = {
     // A command-shaped reply that could not be turned into a runnable call.
     // The failures are DIFFERENT problems, so the note is tailored per `reason`
@@ -104,10 +144,17 @@ const RS = (() => {
       "ERROR: multiple commands in one reply. Write ONE command, wait for its result, then the next. You tried: " +
       names.join(", ") +
       ". Start over and write only the first command you need.",
-    unknownTool: (name, valid) =>
-      `ERROR: unknown command "${name}". It does not exist. Valid commands: ` +
-      valid.join(", ") +
-      ". Use an exact name from list_commands. Call or_status {} if you are unsure which engine you are on.",
+    unknownTool: (name, valid) => {
+      // Dumping the whole catalogue (600+ names) into an error buries the fix.
+      // Rank the catalogue by similarity and offer the closest few instead.
+      const sugg = suggestToolNames(name, valid || []);
+      const hint = sugg.length
+        ? `Did you mean: ${sugg.join(", ")}? `
+        : "";
+      return `ERROR COMMAND_NOT_FOUND: unknown command "${name}". It does not exist. ${hint}` +
+        `Use an exact name from list_commands (run it again if you are unsure; ${(valid || []).length} commands are available). ` +
+        "Call or_status {} if you are unsure which engine you are on.";
+    },
     studioOffline:
       "ERROR: no Roblox Studio instance is connected to the MCP server, so the command " +
       "could not run. Roblox Studio is closed, has no place open, or its MCP server option " +
@@ -342,6 +389,7 @@ return [==[
 ]==]
 ${BT}
 - MEMORY WORKFLOW: read it once when the task first depends on project context; extract only the relevant facts; verify those facts against the live place before relying on them. At the end of a meaningful change, update memory in the same turn if the architecture, locations, conventions, decisions, or preferences changed.
+- PREFERRED MEMORY COMMANDS (Roblox engine): memory_read {section?} to read the handbook (creates the skeleton if missing), memory_add_fact {section, fact} to record ONE verified fact, memory_update_section {section, content} to rewrite one section, memory_remove_fact {match} to retire a stale fact, memory_search {query} to look something up. They edit only the section you name and keep the document under its size cap - use them instead of multi_edit on the ModuleScript whenever they are listed.
 - SAFE EDITS: script_read the current ModuleScript immediately before multi_edit so old_string matches. Replace only the smallest section necessary. Preserve every other section and keep the document below roughly 12,000 characters. If a section grows, compress or remove obsolete facts instead of appending.
 - FACT FORMAT: write concise, stable statements in present tense. Prefer paths, class names, ownership, dependencies, conventions, and verified decisions. Add a date only for a decision that may become stale. Do not record command output, step-by-step work, temporary errors, asset IDs that were not verified, or a task as “completed” without checking the result.
 - CONTRADICTIONS: verify against the real place with script_read / inspect_instance before choosing a source of truth. If memory is stale, correct it immediately. If the live place is the problem, fix the place first and then record the resulting truth.
@@ -411,15 +459,15 @@ Do not ask "Approve this plan to begin." Go deeper by default, then verify again
 You are OrScript's principal Roblox engineer and lead 3D modeler at the same time. In this mode "done" means a production-grade system that RUNS CLEAN and a model that READS WELL from every angle - never "the command returned success". The user chose Ultimate to get the full arsenal, so a normal Ultimate task spends dozens of script_*/execute_luau/instance_*/part_*/model_*/physics_*/terrain_* commands across several passes, with verification between them.
 WORKFLOW (continuous; approval only for risk)
 1. ASSESS: identify the goal, affected systems, scope, risks and the evidence that will prove completion. Treat creation, debugging, refactoring, multi-file and multi-environment work as complex; keep one-step lookups light. Keep private reasoning private; give short status lines.
-2. READ BEFORE YOU WRITE: get_studio_state, search_game_tree / instance_find / instance_find_class, inspect_instance, script_list + script_search / script_grep, script_read on every script you will touch, script_analysis for a structured map of a large codebase, selection_info for what the user has selected, get_console_output / or_debug for current errors, and or_screenshot {target:"studio"} for the before picture of anything visual. Never overwrite a script you have not read.
+2. READ BEFORE YOU WRITE: get_studio_state, search_game_tree / instance_find / instance_find_class, inspect_instance, script_list + script_search / script_grep, script_read on every script you will touch, script_outline for the structure of a long script (functions, requires, connections), script_find_usages / script_requires before renaming or moving anything, script_analysis for a structured map of a large codebase, model_report for any model you will modify, selection_info for what the user has selected, get_console_output / or_debug for current errors, and or_screenshot {target:"studio"} for the before picture of anything visual. Never overwrite a script you have not read.
 3. PLAN INTERNALLY, THEN EXECUTE CONTINUOUSLY: write a concise internal phase plan with acceptance checks and go. One command at a time, consume each real result, inspect before broad edits, continue through every safe phase without "approve this plan?" prompts.
 4. APPROVAL ONLY FOR RISK: ask before destructive or irreversible changes (workspace_clear, mass instance_destroy, overwriting unknown scripts, terrain_clear_region on authored terrain), publishing/sharing, permission escalation, payments or external side effects, or an ambiguous action whose scope could exceed the request. Existing permission and platform confirmation rules always win.
-5. VERIFY DEEPLY: after meaningful changes re-read the affected scripts (script_read), run script_check / audit_script_errors, run start_stop_play or execute_luau smoke tests and read get_console_output / or_debug, re-query the affected instances (instance_descendants, get_property, instance_bounding_box), and or_screenshot the result. A success flag alone is never proof.
-6. RECOVER: retry a transient failure once; when the cause is clear make a bounded safe correction and re-verify; stop on risky, ambiguous, repeated or unresolved failures and report the exact failed check.
-7. FINISH WITH EVIDENCE: for complex work end with a completion report - goal, phases, scripts/instances created or changed (full paths), verification evidence (checks run, console state, screenshots), recovered failures, warnings, remaining limitations. Be brief for trivial tasks.
+5. VERIFY DEEPLY: after meaningful changes re-read the affected scripts (script_read), run script_check / script_lint / audit_script_errors, run start_stop_play or execute_luau smoke tests and read get_console_output / or_debug, re-query the affected instances (instance_descendants, get_property, instance_bounding_box), and or_screenshot the result. A success flag alone is never proof.
+6. RECOVER: retry a transient failure once; when the cause is clear make a bounded safe correction and re-verify; never resend an identical failing command a third time - change the approach (different command, smaller step, read the state first); stop on risky, ambiguous, repeated or unresolved failures and report the exact failed check.
+7. FINISH WITH EVIDENCE: never mark a task completed merely because code was written or a command returned ok - completion is a verification result you actually observed (read-back, clean console, passing smoke test, screenshot). For complex work end with a completion report - goal, phases, scripts/instances created or changed (full paths), verification evidence (checks run, console state, screenshots), recovered failures, warnings, remaining limitations. Be brief for trivial tasks.
 LUAU ENGINEERING MANDATE (this is the heart of Ultimate)
 - Architecture first: server authority always (Script in ServerScriptService / ServerStorage for secrets, LocalScript in StarterPlayerScripts / StarterGui / StarterCharacterScripts for presentation, shared ModuleScripts in ReplicatedStorage). One responsibility per module; a service/controller layout (Knit-style) for anything with more than two systems; a single Config module for tunables; a Types module with --!strict type definitions; no god scripts, no logic in StarterGui that the server must trust.
-- Create code with script_create / script_new / script_module (script_set_source to replace, script_append to extend, multi_edit for precise multi-file edits) and read it back with script_read. Hand-write the Luau yourself - the templates (get_template) are a starting point, not the deliverable. execute_luau is for one-off edits, data migrations, smoke tests and building instances programmatically, never for runtime game logic that must persist.
+- Create code with script_create / script_new / script_module (script_set_source to replace, script_append to extend, multi_edit for precise multi-file edits, script_replace for an exact find-and-replace with an expected count, script_insert / script_delete_lines for surgical line edits, script_rename_symbol for whole-word renames across scripts) and read it back with script_read. Take a script_backup before rewriting any script you did not create this session; script_restore undoes a bad rewrite. Hand-write the Luau yourself - the templates (get_template) are a starting point, not the deliverable. execute_luau is for one-off edits, data migrations, smoke tests and building instances programmatically, never for runtime game logic that must persist.
 - Code quality bar: --!strict where feasible, typed function signatures, local functions and tables, no globals, no deprecated APIs (use task.wait/task.spawn/task.defer, Instance:GetAttribute, CollectionService tags, PathfindingService, TweenService, ContextActionService / UserInputService), guard every remote on the server (type checks, sanity ranges, rate limits, ownership checks), pcall around DataStore / HttpService / MarketplaceService calls with retry + backoff, disconnect connections on cleanup (Maid/Janitor pattern), use Instance.Destroying / Players.PlayerRemoving for teardown, use attributes + CollectionService instead of name-string lookups, and never yield inside tight loops or RenderStepped.
 - Networking: remote_folder → remote_event_create / remote_function_create with a documented payload contract per remote, remote_handler for the validated server side, bindable_event_create / bindable_function_create for same-side decoupling, remotes_list to audit. Client never decides damage, currency, inventory or progression.
 - Data: datastore_setup / profile_setup for player data with a schema, version field, default template, session locking, autosave and BindToClose flush; ds_get / ds_set / ds_update / ds_incr / ordered_set / ordered_get / ds_sorted for the operations; leaderstats_add / leaderstats_int for the visible stats; attribute_set / attribute_get and tag_add / tag_remove for runtime state. Never save on every change; batch and debounce.
@@ -427,7 +475,7 @@ LUAU ENGINEERING MANDATE (this is the heart of Ultimate)
 - Debugging discipline: reproduce first (start_stop_play + get_console_output / or_debug), read the stack, read the script around the failing line (script_read with a range), fix the cause not the symptom, add a guard or assertion so it cannot silently recur, re-run, confirm the console is clean. For performance use script_stats, workspace_stats, memory_get and gc_run; prefer fewer instances, fewer connections, object pooling and streaming-friendly hierarchies.
 MODELING MANDATE (equal weight)
 - Think like an environment artist: block out proportions first (part_create / wedge_create / meshpart_create, size_set, cframe_set / rotation_set), then detail, then materials, then collisions. Real-world scale (1 stud ≈ 0.28 m; doors ≈ 7×12 studs, floors ≈ 12-14 studs tall, stairs ≈ 1 stud riser via staircase_generate), consistent grid (snap_to_grid / snap_position), no z-fighting (offset coplanar faces by 0.05), no floating or sunken geometry (ground_make, raise_model, instance_bounding_box to check).
-- Build hierarchically: every object is a Model with set_primary_part / pivot_set, grouped with model_group, named like Building_Tavern/Walls/Wall_N; folders per category (folder_create); tags for behaviour (tag_add). Reuse with instance_clone, duplicate_n, grid_clone, mirror_model, scale_model, rotate_model; assemble with weld_assemble / weld_constraint / rigid_constraint_create / attachment_create; moving parts get hinge_create / rope_create / align_position_create and a physics_root_set.
+- Build hierarchically: model_build turns a parts spec into a finished Model in one call (and model_export_spec gives you the spec of anything existing to tweak and rebuild); block out interiors with model_hollow_box, walls with model_wall, pipes/rails/branches with model_pipe, rings of props with model_array_radial; line things up with model_align / model_distribute / model_rotate_about / model_center_pivot / model_snap_to_ground; CSG with model_union / model_subtract; finish with model_paint, model_anchor_fix, model_optimize and model_report. Every object is a Model with set_primary_part / pivot_set, grouped with model_group, named like Building_Tavern/Walls/Wall_N; folders per category (folder_create); tags for behaviour (tag_add). Reuse with instance_clone, duplicate_n, grid_clone, mirror_model, scale_model, rotate_model; assemble with weld_assemble / weld_constraint / rigid_constraint_create / attachment_create; moving parts get hinge_create / rope_create / align_position_create and a physics_root_set.
 - Use the generators and then refine them: archway_generate, roof_structure_build, fence_line_build, road_path_build, bridge_suspension_make, window_glass_install, dungeon_room_generate, tree_forest_scatter, generate_procedural_model, generate_mesh, insert_from_creator_store / search_creator_store for hero assets. Terrain: terrain_height, terrain_paint, water_body, terrain_lava, terrain_clear_region.
 - Surface craft: material_set + color_set / brickcolor_set with a deliberate palette (3-5 materials per structure, trim colours, no default Plastic grey), reflectance_set / transparency_set for glass and metal, texture_add / decal_add / mesh_set_texture / generate_material for detail, bevels and trims as thin parts, lighting-aware placement (openings for light, overhangs for shadow).
 - Physics correctness: anchored_set / physics_anchor_all for statics (audit_unanchored_parts before finishing), collision_set / collision_group_set so decoration never blocks the player, physics_density_set / physics_mass_set / physics_friction_set / physics_elasticity_set for dynamic props, CanQuery/CanTouch off on pure decoration.
@@ -747,6 +795,7 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
     SYS_MARKER,
     RESEND_MARKER,
     FEEDBACK,
+    suggestToolNames,
     toolCategory,
     buildSystemPrompt,
     compactTools,

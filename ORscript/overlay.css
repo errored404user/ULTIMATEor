@@ -6476,6 +6476,11 @@ html.rs-light .rs-template-export-all{background:#fff!important;border-color:rgb
 .rs-memory-label { display:block; margin:8px 0; color:var(--rs-text, #e5e7eb); font-size:11px; }
 .rs-memory-label textarea { display:block; width:100%; box-sizing:border-box; margin-top:5px; min-height:42px; resize:vertical; border:1px solid rgba(148,163,184,.25); border-radius:7px; background:rgba(15,23,42,.55); color:inherit; padding:8px; font:inherit; line-height:1.35; }
 .rs-memory-label textarea:focus { outline:2px solid rgba(129,140,248,.45); border-color:rgba(129,140,248,.8); }
+.rs-mem-recap { margin:6px 0 8px; max-height:150px; overflow:auto; white-space:pre-wrap; word-break:break-word; border:1px solid rgba(148,163,184,.22); border-radius:7px; background:rgba(15,23,42,.45); color:var(--rs-text, #e5e7eb); opacity:.9; padding:8px; font:inherit; font-size:10.5px; line-height:1.4; }
+.rs-mem-recap:empty { display:none; }
+.rs-memory-sec .rs-chk { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--rs-text, #e5e7eb); }
+.rs-memory-sec .rs-chk input { accent-color:var(--orx-a, #f4c542); margin:0; }
+.rs-memory-sec .rs-sec-label + .rs-menu-note { margin-top:2px; }
 
 /* Customizable keyboard shortcut fields */
 .rs-keybind-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }

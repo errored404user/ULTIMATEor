@@ -80,8 +80,7 @@ end
 local function luauUnbalanced(src)
 	local s = src
 	s = s:gsub("%-%-%[%[.-%]%]", " ")
-	s = s:gsub("%-%-[^
-]*", " ")
+	s = s:gsub("%-%-[^\\n]*", " ")
 	s = s:gsub("%[%[.-%]%]", " ")
 	s = s:gsub("%b''", " ")
 	s = s:gsub('%b""', " ")
@@ -259,7 +258,7 @@ function api.lighting_set_preset(a)
 	local pName = tostring(a.preset or "realistic_noon"):lower():gsub("[%s%-]+", "_"):gsub("_+", "_")
 	local cfg = LIGHTING_PRESETS[pName]
 	-- alias: "warm night" / "warm-night" with space/dash → warm_night
-	if not cfg and pName:find("warm") and pName:find("night") then cfg = LIGHTING_PRESETS["warm_night"]; if cfg then pName = "warm_night" end
+	if not cfg and pName:find("warm") and pName:find("night") then cfg = LIGHTING_PRESETS["warm_night"]; if cfg then pName = "warm_night" end end
 	if not cfg then
 		local valid = {}
 		for k in pairs(LIGHTING_PRESETS) do valid[#valid + 1] = k end
@@ -1055,6 +1054,7 @@ function api.ui_create_component(a)
 		copy.Text = "Forge workbench ready.\\nGold hairline, metal rail, inset body.\\nBuild your content here."
 		copy.Parent = card
 		return okdata({ path = pathOf(win), type = kind, forge = true }, "created Forge window at " .. pathOf(win))
+	end
 
 	return fail("unknown component_type '" .. compType .. "' (use health_stamina_hud, dialog_box, notification_toast, card_inventory, forge_panel, forge_hud, forge_button, forge_inventory, forge_shop)")
 end
@@ -2408,7 +2408,7 @@ function api.script_analysis(a)
 			end
 		end
 		local lineCount = 1
-		for _ in src:gmatch("\n") do lineCount += 1 end
+		for _ in src:gmatch("\\n") do lineCount += 1 end
 		issueCount += #issues
 		if #issues > 0 then
 			local cn = ""
@@ -2481,8 +2481,8 @@ function api.script_analysis(a)
 			end
 		end
 	end
-	local text = table.concat(lines, "\n")
-	if #text > 12000 then text = text:sub(1, 12000) .. "\n…[truncated]" end
+	local text = table.concat(lines, "\\n")
+	if #text > 12000 then text = text:sub(1, 12000) .. "\\n…[truncated]" end
 	return okdata({
 		scripts = #scripts,
 		syntax_ok = syntaxOk,
@@ -2506,7 +2506,7 @@ function api.web_fetch(a)
 	if not res.Success then return fail("fetch failed: HTTP " .. tostring(res.StatusCode) .. " " .. tostring(res.StatusMessage or "")) end
 	local body = tostring(res.Body or "")
 	local truncated = false
-	if #body > maxChars then body = body:sub(1, maxChars) .. "\n\n…[truncated " .. (#body - maxChars) .. " chars, use max_chars to adjust]"; truncated = true end
+	if #body > maxChars then body = body:sub(1, maxChars) .. "\\n\\n…[truncated " .. (#body - maxChars) .. " chars, use max_chars to adjust]"; truncated = true end
 	return okdata({ url = url, status = res.StatusCode, bytes = #body, truncated = truncated }, body)
 end
 
@@ -2564,7 +2564,7 @@ function api.web_search(a)
 	end
 	if #results == 0 then return fail("no results for '" .. q .. "' (try a different query or web_fetch a direct URL)") end
 	local txt = ""
-	for i, r in ipairs(results) do txt = txt .. i .. ". " .. r.title .. "\n   " .. r.url .. "\n" end
+	for i, r in ipairs(results) do txt = txt .. i .. ". " .. r.title .. "\\n   " .. r.url .. "\\n" end
 	return okdata({ query = q, results = results }, txt)
 end
 
