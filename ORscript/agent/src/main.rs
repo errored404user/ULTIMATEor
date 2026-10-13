@@ -48,6 +48,11 @@ fn init_file_logger(ui: Option<Arc<gui::UiShared>>) {
         .unwrap_or_else(|| PathBuf::from("logs"));
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("agent.log");
+    // Rotate once the log passes 4 MB so a long-running tray instance never
+    // fills the disk; one previous generation is kept as agent.log.1.
+    if std::fs::metadata(&path).map(|m| m.len() > 4 * 1024 * 1024).unwrap_or(false) {
+        let _ = std::fs::rename(&path, dir.join("agent.log.1"));
+    }
     match File::options().create(true).append(true).open(&path) {
         Ok(file) => {
             tracing_subscriber::fmt()
@@ -338,11 +343,11 @@ impl McpRuntime {
         self.stdin = child.stdin.take();
         self.stdout = child.stdout.take().map(|s| BufReader::new(s).lines());
         self.child = Some(child);
-        let _ = self.request("initialize", serde_json::json!({
+        let _ = self.request_within("initialize", serde_json::json!({
             "protocolVersion": "2025-06-18",
             "capabilities": {},
             "clientInfo": {"name": "OR", "version": "1.14.1"}
-        })).await.map_err(|e| { tracing::warn!("MCP initialize failed: {e:#}"); e })?;
+        }), Duration::from_secs(25)).await.map_err(|e| { tracing::warn!("MCP initialize failed: {e:#}"); e })?;
         self.notify("notifications/initialized", serde_json::json!({})).await?;
         self.alive.store(true, Ordering::Relaxed);
         Ok(())
@@ -355,14 +360,21 @@ impl McpRuntime {
     }
 
     async fn request(&mut self, method: &str, params: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+        self.request_within(method, params, Duration::from_secs(120)).await
+    }
+
+    /// Same as `request`, with an explicit deadline. Handshake and discovery
+    /// calls use short deadlines so a wedged helper is recycled in seconds,
+    /// not after the 120 s tool budget.
+    async fn request_within(&mut self, method: &str, params: serde_json::Value, deadline: Duration) -> anyhow::Result<serde_json::Value> {
         let request_id = self.next_id; self.next_id += 1;
         let line = serde_json::json!({"jsonrpc":"2.0", "id":request_id, "method":method, "params":params}).to_string() + "\n";
         self.stdin.as_mut().ok_or_else(|| anyhow::anyhow!("MCP stdin unavailable"))?.write_all(line.as_bytes()).await?;
         self.stdin.as_mut().unwrap().flush().await?;
         let stdout = self.stdout.as_mut().ok_or_else(|| anyhow::anyhow!("MCP stdout unavailable"))?;
         loop {
-            let line = tokio::time::timeout(Duration::from_secs(120), stdout.next_line()).await
-                .map_err(|_| anyhow::anyhow!("MCP request timed out: {method}"))??
+            let line = tokio::time::timeout(deadline, stdout.next_line()).await
+                .map_err(|_| anyhow::anyhow!("MCP request timed out after {}s: {method}", deadline.as_secs()))??
                 .ok_or_else(|| anyhow::anyhow!("MCP server exited while handling {method}"))?;
             let Ok(message) = serde_json::from_str::<serde_json::Value>(&line) else { continue; };
             if message.get("id").and_then(|v| v.as_u64()) != Some(request_id) { continue; }
@@ -373,13 +385,13 @@ impl McpRuntime {
 
     async fn list_tools(&mut self) -> anyhow::Result<Vec<serde_json::Value>> {
         self.ensure().await?;
-        let result = self.request("tools/list", serde_json::json!({})).await?;
+        let result = self.request_within("tools/list", serde_json::json!({}), Duration::from_secs(25)).await?;
         self.tools = result.get("tools").and_then(|v| v.as_array()).cloned().unwrap_or_default();
         Ok(self.tools.clone())
     }
 
     async fn probe_studio(&mut self) -> anyhow::Result<()> {
-        let output = self.call_tool("get_studio_state", serde_json::json!({})).await?;
+        let output = self.call_tool_within("get_studio_state", serde_json::json!({}), Duration::from_secs(15)).await?;
         let text = output.text;
         if text.is_empty() || text.contains("Unable to find an active Studio instance")
             || text.contains("previously active Studio has disconnected")
@@ -390,8 +402,12 @@ impl McpRuntime {
     }
 
     async fn call_tool(&mut self, name: &str, args: serde_json::Value) -> anyhow::Result<McpToolOutput> {
+        self.call_tool_within(name, args, Duration::from_secs(120)).await
+    }
+
+    async fn call_tool_within(&mut self, name: &str, args: serde_json::Value, deadline: Duration) -> anyhow::Result<McpToolOutput> {
         self.ensure().await?;
-        let result = self.request("tools/call", serde_json::json!({"name":name, "arguments":args})).await?;
+        let result = self.request_within("tools/call", serde_json::json!({"name":name, "arguments":args}), deadline).await?;
         let is_error = result.get("isError").and_then(|v| v.as_bool()).unwrap_or(false);
         let mut text_parts = Vec::new();
         let mut images = Vec::new();
@@ -933,6 +949,7 @@ async fn roblox_tools(state: &AppState) -> anyhow::Result<Vec<serde_json::Value>
         Err(error) => {
             if !helper_is_dead(&error) { return Err(error); }
             tracing::warn!("list_tools failed ({error:#}) — recycling helper once");
+            state.ui.track("studio", "Studio MCP helper stopped responding — restarting it");
             mcp.reset().await;
             match mcp.list_tools().await {
                 Ok(tools) => { state.ui.set_roblox_tools(&tools); Ok(tools) },
@@ -959,6 +976,7 @@ async fn roblox_tool(state: &AppState, name: &str, args: serde_json::Value) -> a
                 return Err(error);
             }
             tracing::warn!("call_tool '{name}' failed ({error:#}) — recycling helper once");
+            state.ui.track("studio", "Studio MCP helper stopped responding — restarting it");
             mcp.reset().await;
             match mcp.call_tool(name, args).await {
                 Ok(result) => {

@@ -367,8 +367,18 @@ function connect() {
   };
 }
 
+const RECONNECT_SLOW_MS = 15000; // after the fast attempts, keep knocking gently
 function scheduleReconnect() {
-  if (manualStudioDisconnect || reconnectAttempts >= MCP_MAX_RECONNECT_ATTEMPTS) { if(!manualStudioDisconnect)setMcpLifecycle("ERROR",{errorCode:"MCP_SERVER_UNAVAILABLE"});return; }
+  if (manualStudioDisconnect) return;
+  if (reconnectAttempts >= MCP_MAX_RECONNECT_ATTEMPTS) {
+    // Fast attempts exhausted: report ERROR for the UI, but never stop trying.
+    // or-core is usually started AFTER the browser, so a slow background
+    // retry (plus the /api/status nudge) is what makes Start unlock on its own.
+    if (mcpLifecycle !== "ERROR") setMcpLifecycle("ERROR", { errorCode: "MCP_SERVER_UNAVAILABLE" });
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connect, RECONNECT_SLOW_MS);
+    return;
+  }
   clearTimeout(reconnectTimer);reconnectAttempts++;
   const delay=Math.min(RECONNECT_MAX,reconnectDelay)+Math.floor(Math.random()*Math.max(50,reconnectDelay*.2));
   setMcpLifecycle("RECONNECTING",{retryCount:reconnectAttempts});

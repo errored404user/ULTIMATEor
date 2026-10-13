@@ -97,6 +97,8 @@ pub struct UiShared {
     pub quit_requested: AtomicBool,
     /// HTTP 3000 + WS 17613 / 17615 are bound and accepting connections.
     pub bridge_listening: AtomicBool,
+    /// Monotonic count of `track()` calls so the window can toast new events.
+    pub activity_seq: AtomicUsize,
     pub boot: Instant,
 }
 
@@ -117,6 +119,7 @@ impl UiShared {
             activity: Mutex::new(VecDeque::with_capacity(ACTIVITY_CAP)),
             quit_requested: AtomicBool::new(false),
             bridge_listening: AtomicBool::new(false),
+            activity_seq: AtomicUsize::new(0),
             boot: Instant::now(),
         }
     }
@@ -163,6 +166,7 @@ impl UiShared {
             kind: kind.to_string(),
             text: text.into(),
         });
+        self.activity_seq.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn set_roblox_tools(&self, tools: &[serde_json::Value]) {
@@ -214,6 +218,11 @@ pub struct Settings {
     pub mcp_command: String,
     pub full_access: bool,
     pub compact: bool,
+    /// Last window size in logical points (0 = default). Restored on launch.
+    pub window_width: f32,
+    pub window_height: f32,
+    /// Show the setup checklist on Home even when everything is green.
+    pub show_checklist: bool,
 }
 
 impl Default for Settings {
@@ -227,6 +236,9 @@ impl Default for Settings {
             mcp_command: String::new(),
             full_access: false,
             compact: false,
+            window_width: 0.0,
+            window_height: 0.0,
+            show_checklist: true,
         }
     }
 }
@@ -465,6 +477,8 @@ pub struct App {
     start_hidden: bool,
     quit_now: bool,
     toast: Option<(String, Instant, bool)>,
+    seen_activity: usize,
+    last_size_save: Instant,
     // home
     snapshot: Option<Snapshot>,
     snapshot_run: Option<ToolRun>,
@@ -529,6 +543,7 @@ impl App {
             .filter_map(|t| ToolInfo::from_mcp(t, "local"))
             .collect();
         let root = PathBuf::from(shared.root());
+        let seen_activity = shared.activity_seq.load(Ordering::Relaxed);
         let mut app = Self {
             draft_workspace: shared.root(),
             draft_mcp: settings.mcp_command.clone(),
@@ -542,6 +557,8 @@ impl App {
             start_hidden,
             quit_now: false,
             toast: None,
+            seen_activity,
+            last_size_save: Instant::now(),
             snapshot: None,
             snapshot_run: None,
             tool_query: String::new(),
@@ -707,6 +724,22 @@ impl App {
     }
 
     fn poll_async(&mut self, ctx: &egui::Context) {
+        // Event toasts: surface bridge / Studio / error events the runtime
+        // recorded since the last frame, so the user does not have to watch
+        // the activity feed to know the extension connected or a helper died.
+        let seq = self.shared.activity_seq.load(Ordering::Relaxed);
+        if seq > self.seen_activity {
+            let fresh = (seq - self.seen_activity).min(3);
+            let items: Vec<Activity> = self.shared.activity.lock().unwrap_or_else(|e| e.into_inner()).iter().take(fresh).cloned().collect();
+            self.seen_activity = seq;
+            for a in items.into_iter().rev() {
+                match a.kind.as_str() {
+                    "bridge" | "studio" => self.toast(a.text.clone(), true),
+                    "error" => self.toast(a.text.clone(), false),
+                    _ => {}
+                }
+            }
+        }
         // Studio snapshot
         let snap = self.snapshot_run.as_ref().map(|run| run.receiver.try_recv());
         if let Some(result) = snap {
@@ -804,6 +837,7 @@ impl App {
         let mut restart = false;
         let mut refresh = false;
         let mut capture = false;
+        let mut escape = false;
         ctx.input(|i| {
             if i.modifiers.command {
                 for page in Page::ALL {
@@ -813,7 +847,17 @@ impl App {
                 if i.modifiers.shift && i.key_pressed(egui::Key::S) { capture = true; }
             }
             if i.key_pressed(egui::Key::F5) { refresh = true; }
+            if i.key_pressed(egui::Key::Escape) { escape = true; }
         });
+        if escape {
+            match self.page {
+                Page::Tools => { if self.selected_tool.is_some() { self.selected_tool = None; } else { self.tool_query.clear(); } }
+                Page::Explorer => { self.explorer_note.clear(); self.delete_armed = None; }
+                Page::Servers => { self.kill_armed = None; }
+                _ => {}
+            }
+            self.toast = None;
+        }
         if let Some(page) = nav { self.page = page; }
         if restart { self.send(UiCommand::RestartMcp, "Restarting Studio MCP helper"); }
         if capture { self.capture_studio(); }
@@ -851,6 +895,8 @@ impl App {
 
     fn handle_close(&mut self, ctx: &egui::Context) {
         if !ctx.input(|i| i.viewport().close_requested()) { return; }
+        if self.explorer_dirty { self.save_file(); }
+        let _ = self.settings.save();
         let quit = self.quit_now || self.shared.quit_requested.load(Ordering::Relaxed) || !self.settings.close_to_tray;
         #[cfg(not(windows))]
         let quit = true;
@@ -1040,6 +1086,56 @@ impl App {
             });
         });
         ui.add_space(14.0);
+
+        // Setup checklist — the "what do I do next" card. Hidden once every
+        // step is green unless the user keeps it on in Settings.
+        {
+            let ext_ok = channels > 0;
+            let all_ok = fatal.is_none() && listening && ext_ok && studio_proc && studio_link && ws_ready;
+            if !all_ok || self.settings.show_checklist {
+                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, if all_ok { t.ok.linear_multiply(0.5) } else { t.border2 })).rounding(Rounding::same(14.0)).inner_margin(Margin::same(14.0));
+                frame.show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(if all_ok { "Everything is connected" } else { "Setup checklist" }).size(16.0).strong().color(t.text));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if all_ok && ui.small_button("Hide").clicked() { self.settings.show_checklist = false; let _ = self.settings.save(); }
+                        });
+                    });
+                    ui.add_space(4.0);
+                    let step = |ui: &mut egui::Ui, done: bool, title: &str, hint: &str| {
+                        ui.horizontal(|ui| {
+                            let (rect, _) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::hover());
+                            if done {
+                                ui.painter().circle_filled(rect.center(), 8.0, t.ok);
+                                ui.painter().line_segment([rect.center() + Vec2::new(-4.0, 0.0), rect.center() + Vec2::new(-1.0, 3.0)], Stroke::new(2.0, t.accent_ink));
+                                ui.painter().line_segment([rect.center() + Vec2::new(-1.0, 3.0), rect.center() + Vec2::new(4.5, -3.5)], Stroke::new(2.0, t.accent_ink));
+                            } else {
+                                ui.painter().circle_stroke(rect.center(), 8.0, Stroke::new(1.6, t.warn));
+                            }
+                            ui.label(RichText::new(title).strong().color(if done { t.text } else { t.warn }));
+                            if !done { ui.label(RichText::new(hint).small().color(t.muted)); }
+                        });
+                    };
+                    step(ui, fatal.is_none() && listening, "Bridge running", "starting the local ports…");
+                    step(ui, ext_ok, "Browser extension connected", "open a supported AI chat (ChatGPT, Claude, Gemini, DeepSeek…) in a browser with the ORscript extension — it connects by itself within a few seconds");
+                    step(ui, studio_proc, "Roblox Studio is open", "start Roblox Studio and open a place");
+                    step(ui, studio_link, "Studio MCP enabled and linked", "in Studio: Assistant → ⋯ → Manage MCP Servers → Enable Studio as MCP server, then press Probe Studio");
+                    step(ui, ws_ready, "Workspace folder ready", "pick a folder in Settings → Workspace (used by the AgentScript file tools)");
+                    if !all_ok {
+                        ui.add_space(6.0);
+                        ui.horizontal_wrapped(|ui| {
+                            if !studio_link && studio_proc && pill(ui, t, if mcp { "Probe Studio" } else { "Start MCP helper" }, true).clicked() {
+                                if mcp { self.send(UiCommand::ProbeStudio, "Probing Studio"); } else { self.send(UiCommand::RestartMcp, "Starting Studio MCP helper"); }
+                            }
+                            if !ws_ready && pill(ui, t, "Open Settings", false).clicked() { self.page = Page::Settings; }
+                            if !ext_ok && pill(ui, t, "Install / open the extension", false).clicked() { open_external(&format!("https://github.com/{REPO}")); }
+                        });
+                    }
+                });
+                ui.add_space(14.0);
+            }
+        }
 
         // Status cards
         let cards: [(&str, String, String, Color32); 4] = [
@@ -1627,10 +1723,16 @@ impl App {
         let t = self.theme;
         let avail = ui.available_height();
         let studio_link = self.shared.studio_connected.load(Ordering::Relaxed);
-        ui.columns(2, |cols| {
+        let half = (ui.available_width() * 0.5).round();
+        let max_left = (ui.available_width() - 320.0).max(320.0);
+        egui::SidePanel::left("terminal-console")
+            .frame(egui::Frame::none())
+            .resizable(true)
+            .default_width(half)
+            .width_range(320.0..=max_left)
+            .show_inside(ui, |ui| {
             // console
             {
-                let ui = &mut cols[0];
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Bridge console").strong().color(t.text));
                     for (lvl, label) in [(0u8, "all"), (1, "info+"), (2, "warn+"), (3, "error")] {
@@ -1661,9 +1763,12 @@ impl App {
                     });
                 });
             }
+        });
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none().inner_margin(Margin { left: 10.0, right: 0.0, top: 0.0, bottom: 0.0 }))
+            .show_inside(ui, |ui| {
             // runner
             {
-                let ui = &mut cols[1];
                 ui.horizontal(|ui| {
                     for (mode, label) in [(RunnerMode::Command, "Workspace command"), (RunnerMode::Luau, "Luau in Studio")] {
                         if ui.selectable_label(self.runner_mode == mode, RichText::new(label).strong()).clicked() { self.runner_mode = mode; }
@@ -1783,6 +1888,7 @@ impl App {
             settings_section(ui, t, "Behaviour", |ui| {
                 if ui.checkbox(&mut self.settings.close_to_tray, "Keep running in the notification area when the window is closed").changed() { save = true; }
                 if ui.checkbox(&mut self.settings.start_hidden, "Start hidden in the notification area").changed() { save = true; }
+                if ui.checkbox(&mut self.settings.show_checklist, "Always show the setup checklist on Home").changed() { save = true; }
                 #[cfg(windows)]
                 if ui.checkbox(&mut self.settings.launch_at_login, "Launch at Windows sign-in (hidden)").changed() {
                     match set_launch_at_login(self.settings.launch_at_login) {
@@ -1902,6 +2008,17 @@ impl eframe::App for App {
         }
         self.poll_async(ctx);
         self.handle_shortcuts(ctx);
+        // Remember the window size (saved with the other settings on close / quit).
+        if let Some(rect) = ctx.input(|i| i.viewport().inner_rect) {
+            if rect.width() >= 600.0 && rect.height() >= 400.0 {
+                self.settings.window_width = rect.width();
+                self.settings.window_height = rect.height();
+            }
+        }
+        if self.last_size_save.elapsed() > Duration::from_secs(30) {
+            self.last_size_save = Instant::now();
+            let _ = self.settings.save();
+        }
         self.handle_close(ctx);
         self.update_tray();
 
@@ -2366,7 +2483,9 @@ impl App {
         let studio = if s.studio_connected.load(Ordering::Relaxed) { "Studio linked" }
             else if s.studio_running.load(Ordering::Relaxed) { "Studio open, MCP not linked" }
             else { "Studio closed" };
-        let tooltip = format!("ORscript {} — {} · ext {}", env!("CARGO_PKG_VERSION"), studio, s.roblox_clients.load(Ordering::Relaxed) + s.local_clients.load(Ordering::Relaxed));
+        let ext = s.roblox_clients.load(Ordering::Relaxed) + s.local_clients.load(Ordering::Relaxed);
+        let bridge = if s.fatal.lock().unwrap_or_else(|e| e.into_inner()).is_some() { "bridge ERROR" } else if !s.bridge_listening.load(Ordering::Relaxed) { "bridge starting" } else if ext > 0 { "extension connected" } else { "waiting for extension" };
+        let tooltip = format!("ORscript Desktop {}\n{} · {}", env!("CARGO_PKG_VERSION"), bridge, studio);
         if tooltip != tray.last_tooltip {
             let _ = tray.icon.set_tooltip(Some(tooltip.clone()));
             tray.last_tooltip = tooltip;
@@ -2379,10 +2498,15 @@ impl App {
 /// Run the window on the calling (main) thread. Returns when the user quits.
 pub fn run_gui(shared: Arc<UiShared>, cmd_tx: UnboundedSender<UiCommand>, settings: Settings, start_hidden: bool) -> anyhow::Result<()> {
     let logo = load_logo();
+    let size = if settings.window_width >= 960.0 && settings.window_height >= 620.0 {
+        [settings.window_width, settings.window_height]
+    } else {
+        [1280.0, 820.0]
+    };
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(WINDOW_TITLE)
         .with_app_id("orscript-desktop")
-        .with_inner_size([1280.0, 820.0])
+        .with_inner_size(size)
         .with_min_inner_size([960.0, 620.0])
         .with_decorations(false)
         .with_resizable(true)
