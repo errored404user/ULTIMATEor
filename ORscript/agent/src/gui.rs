@@ -13,7 +13,7 @@ use std::{
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{Receiver, Sender},
-        Arc, Mutex, RwLock,
+        Arc, Mutex, OnceLock, RwLock,
     },
     time::{Duration, Instant},
 };
@@ -35,6 +35,85 @@ pub const APP_NAME: &str = "ORscript";
 pub const WINDOW_TITLE: &str = "ORscript Desktop";
 pub const REPO: &str = "errored404user/ULTIMATEor";
 const LOG_CAP: usize = 800;
+
+/// egui context of the running window, so the tray thread / HTTP "show"
+/// request can raise or hide the window on every platform.
+static UI_CTX: OnceLock<egui::Context> = OnceLock::new();
+
+/// Bring the window back (tray click, second launch, `/api/window`).
+pub fn show_window() {
+    #[cfg(windows)]
+    if let Some(hwnd) = crate::agent_window() {
+        crate::show_agent_window(hwnd);
+        return;
+    }
+    if let Some(ctx) = UI_CTX.get() {
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        ctx.request_repaint();
+    }
+}
+
+/// Hide the window while the bridge keeps running.
+pub fn hide_window() {
+    #[cfg(windows)]
+    if let Some(hwnd) = crate::agent_window() {
+        crate::hide_agent_window(hwnd);
+        return;
+    }
+    if let Some(ctx) = UI_CTX.get() {
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        ctx.request_repaint();
+    }
+}
+
+/// Ask the window to close for real (quit path). Falls back to a hard exit
+/// when no window exists (headless or window creation failed).
+pub fn request_quit(shared: &UiShared) {
+    shared.quit_requested.store(true, Ordering::Relaxed);
+    #[cfg(windows)]
+    if let Some(hwnd) = crate::agent_window() {
+        crate::close_agent_window(hwnd);
+        return;
+    }
+    match UI_CTX.get() {
+        Some(ctx) => {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            ctx.request_repaint();
+        }
+        None => std::process::exit(0),
+    }
+}
+
+/// Where settings.json and logs/ live.
+/// Windows: next to the executable (portable, unchanged from or-core 1.18).
+/// macOS: ~/Library/Application Support/ORscript. Linux: $XDG_CONFIG_HOME/orscript.
+pub fn data_dir() -> PathBuf {
+    #[cfg(windows)]
+    {
+        std::env::current_exe().ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            .unwrap_or_else(|| PathBuf::from("."))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        PathBuf::from(home).join("Library").join("Application Support").join("ORscript")
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let base = std::env::var("XDG_CONFIG_HOME").ok().filter(|s| !s.trim().is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".config"));
+        base.join("orscript")
+    }
+}
+
+/// True when this build has a notification-area icon to come back from.
+pub const HAS_TRAY: bool = cfg!(has_tray);
+pub const OS_LABEL: &str = if cfg!(windows) { "Windows" } else if cfg!(target_os = "macos") { "macOS" } else { "Linux" };
 const ACTIVITY_CAP: usize = 120;
 const HISTORY_CAP: usize = 60;
 
@@ -245,10 +324,7 @@ impl Default for Settings {
 
 impl Settings {
     pub fn path() -> PathBuf {
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.join("settings.json")))
-            .unwrap_or_else(|| PathBuf::from("settings.json"))
+        data_dir().join("settings.json")
     }
 
     pub fn load() -> Self {
@@ -260,6 +336,7 @@ impl Settings {
 
     pub fn save(&self) -> Result<(), String> {
         let text = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        let _ = std::fs::create_dir_all(data_dir());
         std::fs::write(Self::path(), text).map_err(|e| e.to_string())
     }
 }
@@ -534,6 +611,7 @@ impl App {
     ) -> Self {
         let theme = Theme::by_id(&settings.theme);
         theme.apply(&cc.egui_ctx, settings.compact);
+        let _ = UI_CTX.set(cc.egui_ctx.clone());
         let logo = logo_rgba.as_ref().map(|(rgba, w, h)| {
             let image = egui::ColorImage::from_rgba_unmultiplied([*w as usize, *h as usize], rgba);
             cc.egui_ctx.load_texture("orscript-logo", image, egui::TextureOptions::LINEAR)
@@ -898,15 +976,14 @@ impl App {
         if self.explorer_dirty { self.save_file(); }
         let _ = self.settings.save();
         let quit = self.quit_now || self.shared.quit_requested.load(Ordering::Relaxed) || !self.settings.close_to_tray;
-        #[cfg(not(windows))]
-        let quit = true;
         if quit { return; }
         ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-        #[cfg(windows)]
-        {
-            if let Some(hwnd) = crate::agent_window() { crate::hide_agent_window(hwnd); }
-            self.shared.track("app", "window hidden to the notification area — bridge keeps running");
-        }
+        hide_window();
+        self.shared.track("app", if HAS_TRAY {
+            "window hidden to the notification area — bridge keeps running"
+        } else {
+            "window hidden — bridge keeps running; launch or-core again to bring it back"
+        });
     }
 
     // ── chrome ──
@@ -1652,7 +1729,7 @@ impl App {
                 });
                 ui.horizontal_wrapped(|ui| {
                     if ui.small_button("Open launcher folder").clicked() {
-                        if let Some(local) = std::env::var_os("LOCALAPPDATA") { open_external(&PathBuf::from(local).join("Roblox").to_string_lossy()); }
+                        if let Some(dir) = crate::mcp_launcher_folder() { open_external(&dir.to_string_lossy()); }
                     }
                     if ui.small_button("Change launcher…").clicked() { self.page = Page::Settings; }
                     if ui.small_button("Browse Studio tools").clicked() { self.tool_filter = ToolFilter::Roblox; self.page = Page::Tools; }
@@ -1886,23 +1963,20 @@ impl App {
                 if ui.checkbox(&mut self.settings.compact, "Compact density").changed() { retheme = true; save = true; }
             });
             settings_section(ui, t, "Behaviour", |ui| {
-                if ui.checkbox(&mut self.settings.close_to_tray, "Keep running in the notification area when the window is closed").changed() { save = true; }
-                if ui.checkbox(&mut self.settings.start_hidden, "Start hidden in the notification area").changed() { save = true; }
+                if ui.checkbox(&mut self.settings.close_to_tray, if HAS_TRAY { "Keep running in the notification area when the window is closed" } else { "Keep running in the background when the window is closed (run or-core again to reopen it)" }).changed() { save = true; }
+                if ui.checkbox(&mut self.settings.start_hidden, if HAS_TRAY { "Start hidden in the notification area" } else { "Start hidden (background bridge only)" }).changed() { save = true; }
                 if ui.checkbox(&mut self.settings.show_checklist, "Always show the setup checklist on Home").changed() { save = true; }
-                #[cfg(windows)]
-                if ui.checkbox(&mut self.settings.launch_at_login, "Launch at Windows sign-in (hidden)").changed() {
+                if ui.checkbox(&mut self.settings.launch_at_login, &format!("Launch at {OS_LABEL} sign-in (hidden)")).changed() {
                     match set_launch_at_login(self.settings.launch_at_login) {
                         Ok(()) => save = true,
                         Err(e) => { self.settings.launch_at_login = !self.settings.launch_at_login; self.settings_note = format!("Autostart failed: {e}"); }
                     }
                 }
-                #[cfg(not(windows))]
-                ui.label(RichText::new("Launch at sign-in is available on Windows.").small().color(t.muted));
             });
             settings_section(ui, t, "Workspace", |ui| {
                 ui.label(RichText::new(format!("Active root: {}", self.shared.root())).monospace().color(t.muted));
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut self.draft_workspace).hint_text("C:\\Users\\you\\ORWorkspace").desired_width(420.0).font(TextStyle::Monospace));
+                    ui.add(egui::TextEdit::singleline(&mut self.draft_workspace).hint_text(if cfg!(windows) { "C:\\Users\\you\\ORWorkspace" } else { "~/ORWorkspace" }).desired_width(420.0).font(TextStyle::Monospace));
                     let picking = self.picker_rx.is_some();
                     if ui.add_enabled(!picking, egui::Button::new(if picking { "Choosing…" } else { "Browse…" })).clicked() {
                         self.picker_rx = Some(pick_folder(&self.draft_workspace));
@@ -1926,7 +2000,7 @@ impl App {
             settings_section(ui, t, "Roblox Studio MCP", |ui| {
                 ui.label(RichText::new(format!("Active launcher: {}", mcp_launcher_display())).monospace().color(t.muted));
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut self.draft_mcp).hint_text("empty = %LOCALAPPDATA%\\Roblox\\mcp.bat").desired_width(420.0).font(TextStyle::Monospace));
+                    ui.add(egui::TextEdit::singleline(&mut self.draft_mcp).hint_text(format!("empty = {}", crate::default_mcp_launcher_hint())).desired_width(420.0).font(TextStyle::Monospace));
                     if pill(ui, t, "Apply & restart helper", true).clicked() {
                         self.settings.mcp_command = self.draft_mcp.trim().to_string();
                         save = true;
@@ -1999,12 +2073,10 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.first_frame {
             self.first_frame = false;
-            #[cfg(windows)]
             if self.start_hidden {
-                if let Some(hwnd) = crate::agent_window() { crate::hide_agent_window(hwnd); }
-                self.shared.track("app", "started hidden in the notification area");
+                hide_window();
+                self.shared.track("app", "started hidden — bridge running in the background");
             }
-            let _ = self.start_hidden;
         }
         self.poll_async(ctx);
         self.handle_shortcuts(ctx);
@@ -2260,10 +2332,7 @@ pub fn human_duration(d: Duration) -> String {
 }
 
 fn log_path() -> PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join("logs").join("agent.log")))
-        .unwrap_or_else(|| PathBuf::from("logs/agent.log"))
+    data_dir().join("logs").join("agent.log")
 }
 
 fn mcp_launcher_display() -> String {
@@ -2271,7 +2340,7 @@ fn mcp_launcher_display() -> String {
         .ok()
         .or_else(|| std::env::var("ROBLOXSCRIPT_MCP_COMMAND").ok())
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| "%LOCALAPPDATA%\\Roblox\\mcp.bat (Studio built-in)".to_string())
+        .unwrap_or_else(|| format!("{} (Studio built-in)", crate::default_mcp_launcher_hint()))
 }
 
 /// Decode a base64 PNG/JPEG payload into RGBA8.
@@ -2307,9 +2376,42 @@ fn pick_folder(initial: &str) -> Receiver<Option<String>> {
             });
             let _ = tx.send(picked);
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
         {
-            let _ = tx.send(if initial.trim().is_empty() { None } else { Some(initial) });
+            let default = if std::path::Path::new(&initial).is_dir() {
+                format!(" default location POSIX file \"{}\"", initial.replace('\\', "\\\\").replace('"', "\\\""))
+            } else { String::new() };
+            let script = format!("POSIX path of (choose folder with prompt \"Choose the ORscript workspace folder\"{default})");
+            let out = std::process::Command::new("osascript").args(["-e", &script]).output();
+            let picked = out.ok().and_then(|o| {
+                let text = String::from_utf8_lossy(&o.stdout).trim().trim_end_matches('/').to_string();
+                if text.is_empty() { None } else { Some(text) }
+            });
+            let _ = tx.send(picked);
+        }
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            // zenity (GNOME) then kdialog (KDE); without either the user types the path.
+            let mut picked: Option<String> = None;
+            let mut tried = false;
+            if let Ok(o) = std::process::Command::new("zenity")
+                .args(["--file-selection", "--directory", "--title=Choose the ORscript workspace folder", &format!("--filename={}/", initial.trim_end_matches('/'))])
+                .output()
+            {
+                tried = true;
+                let text = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                if o.status.success() && !text.is_empty() { picked = Some(text); }
+            }
+            if !tried {
+                if let Ok(o) = std::process::Command::new("kdialog")
+                    .args(["--getexistingdirectory", if initial.trim().is_empty() { "." } else { initial.as_str() }, "--title", "Choose the ORscript workspace folder"])
+                    .output()
+                {
+                    let text = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                    if o.status.success() && !text.is_empty() { picked = Some(text); }
+                }
+            }
+            let _ = tx.send(picked);
         }
     });
     rx
@@ -2357,6 +2459,57 @@ fn set_launch_at_login(enable: bool) -> Result<(), String> {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn set_launch_at_login(enable: bool) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    let dir = PathBuf::from(home).join("Library").join("LaunchAgents");
+    let plist = dir.join("com.orscript.desktop.plist");
+    if enable {
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let body = format!(r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.orscript.desktop</string>
+  <key>ProgramArguments</key><array><string>{}</string><string>--hidden</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><false/>
+</dict></plist>
+"#, exe.display());
+        std::fs::write(&plist, body).map_err(|e| e.to_string())?;
+        let _ = std::process::Command::new("launchctl").args(["load", "-w", &plist.to_string_lossy()]).output();
+        Ok(())
+    } else {
+        let _ = std::process::Command::new("launchctl").args(["unload", "-w", &plist.to_string_lossy()]).output();
+        match std::fs::remove_file(&plist) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn set_launch_at_login(enable: bool) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let base = std::env::var("XDG_CONFIG_HOME").ok().filter(|s| !s.trim().is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".config"));
+    let dir = base.join("autostart");
+    let entry = dir.join("orscript-desktop.desktop");
+    if enable {
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let body = format!("[Desktop Entry]\nType=Application\nName=ORscript Desktop\nComment=Roblox Studio MCP + AgentScript bridge\nExec=\"{}\" --hidden\nTerminal=false\nX-GNOME-Autostart-enabled=true\n", exe.display());
+        std::fs::write(&entry, body).map_err(|e| e.to_string())
+    } else {
+        match std::fs::remove_file(&entry) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}
+
 /// Decode the bundled PNG logo into RGBA (window icon, tray icon, in-app logo).
 fn load_logo() -> Option<(Vec<u8>, u32, u32)> {
     const PNG: &[u8] = include_bytes!("../../assets/icon.png");
@@ -2365,7 +2518,7 @@ fn load_logo() -> Option<(Vec<u8>, u32, u32)> {
 }
 
 /// Nearest-neighbour downscale for the notification-area icon.
-#[cfg(windows)]
+#[cfg(has_tray)]
 fn downscale_rgba(rgba: &[u8], w: u32, h: u32, size: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity((size * size * 4) as usize);
     for y in 0..size {
@@ -2379,21 +2532,61 @@ fn downscale_rgba(rgba: &[u8], w: u32, h: u32, size: u32) -> Vec<u8> {
     out
 }
 
-// ───────────────────────────── tray (Windows) ─────────────────────────────
+// ───────────────────────────── tray ─────────────────────────────
+// Windows + macOS: tray-icon on the main thread. Linux: opt-in `linux-tray`
+// feature (needs GTK + libayatana-appindicator); the icon lives on a dedicated
+// GTK thread because tray-icon's Linux backend requires a GTK main loop.
 
-#[cfg(windows)]
+#[cfg(has_tray)]
 pub struct TrayState {
-    icon: tray_icon::TrayIcon,
-    _menu: tray_icon::menu::Menu,
+    /// `None` on Linux: the icon is owned by the GTK thread (tooltip updates are skipped there).
+    icon: Option<tray_icon::TrayIcon>,
+    _menu: Option<tray_icon::menu::Menu>,
     last_tooltip: String,
 }
 
-#[cfg(windows)]
+#[cfg(all(has_tray, not(target_os = "linux")))]
 fn build_tray(
     logo: Option<&(Vec<u8>, u32, u32)>,
     shared: Arc<UiShared>,
     cmd_tx: UnboundedSender<UiCommand>,
 ) -> anyhow::Result<TrayState> {
+    let (icon, menu) = tray_menu_and_icon(logo, shared, cmd_tx)?;
+    Ok(TrayState { icon: Some(icon), _menu: Some(menu), last_tooltip: String::new() })
+}
+
+#[cfg(all(has_tray, target_os = "linux"))]
+fn build_tray(
+    logo: Option<&(Vec<u8>, u32, u32)>,
+    shared: Arc<UiShared>,
+    cmd_tx: UnboundedSender<UiCommand>,
+) -> anyhow::Result<TrayState> {
+    let logo = logo.cloned();
+    let (tx, rx) = std::sync::mpsc::channel::<anyhow::Result<()>>();
+    std::thread::Builder::new().name("tray-gtk".into()).spawn(move || {
+        if let Err(e) = gtk::init() {
+            let _ = tx.send(Err(anyhow::anyhow!("GTK init failed: {e}")));
+            return;
+        }
+        match tray_menu_and_icon(logo.as_ref(), shared, cmd_tx) {
+            Ok(keep) => {
+                let _ = tx.send(Ok(()));
+                let _keep = keep; // the icon must stay alive on this thread
+                gtk::main();
+            }
+            Err(e) => { let _ = tx.send(Err(e)); }
+        }
+    })?;
+    rx.recv().map_err(|_| anyhow::anyhow!("tray thread exited early"))??;
+    Ok(TrayState { icon: None, _menu: None, last_tooltip: String::new() })
+}
+
+#[cfg(has_tray)]
+fn tray_menu_and_icon(
+    logo: Option<&(Vec<u8>, u32, u32)>,
+    shared: Arc<UiShared>,
+    cmd_tx: UnboundedSender<UiCommand>,
+) -> anyhow::Result<(tray_icon::TrayIcon, tray_icon::menu::Menu)> {
     use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
     use tray_icon::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
@@ -2415,7 +2608,7 @@ fn build_tray(
 
     let mut builder = TrayIconBuilder::new()
         .with_menu(Box::new(menu.clone()))
-        .with_tooltip("ORscript — bridge running")
+        .with_tooltip("ORscript Desktop — bridge running")
         .with_menu_on_left_click(false);
     if let Some((rgba, w, h)) = logo {
         let small = downscale_rgba(rgba, *w, *h, 32);
@@ -2432,7 +2625,7 @@ fn build_tray(
         let receiver = MenuEvent::receiver();
         while let Ok(event) = receiver.recv() {
             if event.id == ids.0 {
-                if let Some(hwnd) = crate::agent_window() { crate::show_agent_window(hwnd); }
+                show_window();
             } else if event.id == ids.1 {
                 open_external(&shared_menu.root());
             } else if event.id == ids.2 {
@@ -2442,11 +2635,7 @@ fn build_tray(
             } else if event.id == ids.4 {
                 let _ = tx_menu.send(UiCommand::KillStudio);
             } else if event.id == ids.5 {
-                shared_menu.quit_requested.store(true, Ordering::Relaxed);
-                match crate::agent_window() {
-                    Some(hwnd) => crate::close_agent_window(hwnd),
-                    None => std::process::exit(0),
-                }
+                request_quit(&shared_menu);
             }
         }
     })?;
@@ -2458,27 +2647,26 @@ fn build_tray(
                 TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } => true,
                 _ => false,
             };
-            if show {
-                if let Some(hwnd) = crate::agent_window() { crate::show_agent_window(hwnd); }
-            }
+            if show { show_window(); }
         }
     })?;
 
-    Ok(TrayState { icon, _menu: menu, last_tooltip: String::new() })
+    Ok((icon, menu))
 }
 
-#[cfg(not(windows))]
+#[cfg(not(has_tray))]
 pub struct TrayState;
 
-#[cfg(not(windows))]
+#[cfg(not(has_tray))]
 impl App {
     fn update_tray(&mut self) {}
 }
 
-#[cfg(windows)]
+#[cfg(has_tray)]
 impl App {
     fn update_tray(&mut self) {
         let Some(tray) = self.tray.as_mut() else { return; };
+        let Some(icon) = tray.icon.as_ref() else { return; };
         let s = &self.shared;
         let studio = if s.studio_connected.load(Ordering::Relaxed) { "Studio linked" }
             else if s.studio_running.load(Ordering::Relaxed) { "Studio open, MCP not linked" }
@@ -2487,7 +2675,7 @@ impl App {
         let bridge = if s.fatal.lock().unwrap_or_else(|e| e.into_inner()).is_some() { "bridge ERROR" } else if !s.bridge_listening.load(Ordering::Relaxed) { "bridge starting" } else if ext > 0 { "extension connected" } else { "waiting for extension" };
         let tooltip = format!("ORscript Desktop {}\n{} · {}", env!("CARGO_PKG_VERSION"), bridge, studio);
         if tooltip != tray.last_tooltip {
-            let _ = tray.icon.set_tooltip(Some(tooltip.clone()));
+            let _ = icon.set_tooltip(Some(tooltip.clone()));
             tray.last_tooltip = tooltip;
         }
     }
@@ -2516,12 +2704,12 @@ pub fn run_gui(shared: Arc<UiShared>, cmd_tx: UnboundedSender<UiCommand>, settin
     }
     let options = eframe::NativeOptions { viewport, centered: true, persist_window: false, ..Default::default() };
 
-    #[cfg(windows)]
+    #[cfg(has_tray)]
     let tray: Option<TrayState> = match build_tray(logo.as_ref(), shared.clone(), cmd_tx.clone()) {
         Ok(t) => Some(t),
         Err(e) => { shared.log(&format!("WARN tray icon unavailable: {e:#}")); None }
     };
-    #[cfg(not(windows))]
+    #[cfg(not(has_tray))]
     let tray: Option<TrayState> = None;
 
     shared.track("app", format!("ORscript Desktop {} window opened", env!("CARGO_PKG_VERSION")));

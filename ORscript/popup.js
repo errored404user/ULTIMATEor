@@ -168,8 +168,10 @@ async function setFlag(key, field, v) {
 
 document.getElementById("ver").textContent = `v${chrome.runtime.getManifest().version}`;
 const runHint = document.getElementById("run-hint");
+const IS_WINDOWS_HOST = /win/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "");
+const RUN_CMD = IS_WINDOWS_HOST ? "bin/or-core.exe" : "bin/or-core";
 if (runHint) {
-  runHint.textContent = "bin/or-core.exe";
+  runHint.textContent = RUN_CMD;
 }
 (async () => {
   try {
@@ -218,8 +220,8 @@ function render(s) {
     ? (ok ? (isLocal ? "Connected — AgentScript is ready" : "Connected — Studio is ready")
         : studioOff ? "Studio MCP is off — enable it in Assistant settings"
         : (isLocal ? "Bridge is up — AgentScript ready" : "Bridge is up — open Studio"))
-    : "Bridge is offline — run bin/or-core.exe";
-  tools.textContent = s.connected ? `${s.tools || 0} tools ready` : "Run bin/or-core.exe";
+    : `Bridge is offline — run ${RUN_CMD}`;
+  tools.textContent = s.connected ? `${s.tools || 0} tools ready` : `Run ${RUN_CMD}`;
   servers.textContent = s.connected
     ? list.map((x) => `${x.alive ? "●" : "○"} ${x.id} (${x.alive ? x.tools + " tools" : "down"})`).join("\n")
     : "";

@@ -43,9 +43,8 @@ impl std::io::Write for FileLog {
 }
 
 fn init_file_logger(ui: Option<Arc<gui::UiShared>>) {
-    let dir = std::env::current_exe().ok()
-        .and_then(|p| p.parent().map(|d| d.join("logs")))
-        .unwrap_or_else(|| PathBuf::from("logs"));
+    // Windows: <exe dir>/logs. macOS/Linux: the per-user data dir (see gui::data_dir).
+    let dir = gui::data_dir().join("logs");
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("agent.log");
     // Rotate once the log passes 4 MB so a long-running tray instance never
@@ -147,6 +146,117 @@ fn bridge_alive_on(port: u16) -> bool {
     let _ = stream.take(8192).read_to_end(&mut buf);
     let text = String::from_utf8_lossy(&buf);
     text.contains("\"service\":\"or-agent\"") || text.contains("or-agent")
+}
+
+/// Platform default for the Roblox Studio MCP helper (stdio JSON-RPC):
+///   Windows  cmd /C %LOCALAPPDATA%\Roblox\mcp.bat
+///   macOS    /Applications/RobloxStudio.app/Contents/MacOS/StudioMCP (run directly)
+///   Linux    Studio only runs through Wine (Vinegar / Grapejuice / plain prefix):
+///            the mcp.bat inside the prefix is started with `wine cmd /c`.
+/// `OR_MCP_COMMAND` (or Settings → MCP launcher) always wins over this.
+fn default_mcp_launcher() -> anyhow::Result<(String, Vec<String>)> {
+    const ENABLE_HINT: &str = "In Studio: Assistant → … → Manage MCP Servers → Enable Studio as MCP server.";
+    #[cfg(windows)]
+    {
+        let local = std::env::var("LOCALAPPDATA").map_err(|_| anyhow::anyhow!("LOCALAPPDATA is unavailable; set OR_MCP_COMMAND to Studio's MCP launcher"))?;
+        let bat = PathBuf::from(local).join("Roblox").join("mcp.bat");
+        if !bat.is_file() {
+            anyhow::bail!("Roblox Studio MCP launcher not found at {}. {ENABLE_HINT}", bat.display());
+        }
+        Ok(("cmd".to_string(), vec!["/C".to_string(), bat.to_string_lossy().to_string()]))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/".into());
+        let candidates = [
+            PathBuf::from("/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP"),
+            PathBuf::from(&home).join("Applications/RobloxStudio.app/Contents/MacOS/StudioMCP"),
+        ];
+        match candidates.iter().find(|p| p.is_file()) {
+            Some(p) => Ok((p.to_string_lossy().to_string(), Vec::new())),
+            None => anyhow::bail!(
+                "Roblox Studio MCP helper not found at {} (Studio not installed, or too old). {ENABLE_HINT}",
+                candidates[0].display()
+            ),
+        }
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        match linux_wine_mcp_bat() {
+            Some(bat) => Ok(("wine".to_string(), vec!["cmd".to_string(), "/c".to_string(), bat.to_string_lossy().to_string()])),
+            None => anyhow::bail!(
+                "No Roblox Studio MCP launcher found. Roblox Studio only runs on Linux through Wine \
+                 (Vinegar / Grapejuice). {ENABLE_HINT} Then set the launcher in Settings → MCP launcher \
+                 (or OR_MCP_COMMAND), e.g.: wine cmd /c /home/you/.wine/drive_c/users/you/AppData/Local/Roblox/mcp.bat"
+            ),
+        }
+    }
+}
+
+/// Search the usual Wine prefixes for Studio's mcp.bat.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn linux_wine_mcp_bat() -> Option<PathBuf> {
+    let home = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()));
+    let mut prefixes: Vec<PathBuf> = Vec::new();
+    if let Ok(p) = std::env::var("WINEPREFIX") { if !p.trim().is_empty() { prefixes.push(PathBuf::from(p)); } }
+    prefixes.push(home.join(".wine"));
+    prefixes.push(home.join(".local/share/vinegar/prefixes/studio"));
+    prefixes.push(home.join(".var/app/org.vinegarhq.Vinegar/data/vinegar/prefixes/studio"));
+    if let Ok(rd) = std::fs::read_dir(home.join(".local/share/grapejuice/prefixes")) {
+        for e in rd.flatten() { prefixes.push(e.path()); }
+    }
+    for prefix in prefixes {
+        let users = prefix.join("drive_c").join("users");
+        let Ok(rd) = std::fs::read_dir(&users) else { continue; };
+        for user in rd.flatten() {
+            let bat = user.path().join("AppData").join("Local").join("Roblox").join("mcp.bat");
+            if bat.is_file() { return Some(bat); }
+        }
+    }
+    None
+}
+
+/// Human-readable default launcher, shown as the Settings placeholder.
+pub(crate) fn default_mcp_launcher_hint() -> String {
+    #[cfg(windows)]
+    { r"%LOCALAPPDATA%\Roblox\mcp.bat (Studio default)".to_string() }
+    #[cfg(target_os = "macos")]
+    { "/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP (Studio default)".to_string() }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        match linux_wine_mcp_bat() {
+            Some(bat) => format!("wine cmd /c {} (auto-detected)", bat.display()),
+            None => "wine cmd /c <prefix>/drive_c/users/<you>/AppData/Local/Roblox/mcp.bat".to_string(),
+        }
+    }
+}
+
+/// Folder that contains the default launcher (for "Open launcher folder").
+pub(crate) fn mcp_launcher_folder() -> Option<PathBuf> {
+    #[cfg(windows)]
+    { std::env::var("LOCALAPPDATA").ok().map(|l| PathBuf::from(l).join("Roblox")) }
+    #[cfg(target_os = "macos")]
+    { Some(PathBuf::from("/Applications/RobloxStudio.app/Contents/MacOS")) }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    { linux_wine_mcp_bat().and_then(|b| b.parent().map(|p| p.to_path_buf())) }
+}
+
+/// Ask an already-running ORscript Desktop (any OS) to raise its window.
+fn ask_running_instance_to_show() -> bool {
+    use std::io::{Read, Write};
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
+    let Ok(mut stream) = std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(600)) else { return false; };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(1500)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(800)));
+    let body = br#"{"action":"show"}"#;
+    let req = format!(
+        "POST /api/window HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    if stream.write_all(req.as_bytes()).is_err() || stream.write_all(body).is_err() { return false; }
+    let mut buf = Vec::with_capacity(512);
+    let _ = stream.take(4096).read_to_end(&mut buf);
+    String::from_utf8_lossy(&buf).contains("\"ok\":true")
 }
 
 #[cfg(windows)]
@@ -279,12 +389,7 @@ impl McpRuntime {
             let program = parts.next().ok_or_else(|| anyhow::anyhow!("OR_MCP_COMMAND is empty"))?;
             return Ok((program.to_string(), parts.map(str::to_string).collect()));
         }
-        let local = std::env::var("LOCALAPPDATA").map_err(|_| anyhow::anyhow!("LOCALAPPDATA is unavailable; set OR_MCP_COMMAND to Studio's MCP launcher"))?;
-        let bat = PathBuf::from(local).join("Roblox").join("mcp.bat");
-        if !bat.is_file() {
-            anyhow::bail!("Roblox Studio MCP launcher not found at {}. In Studio: Assistant → … → Manage MCP Servers → Enable Studio as MCP server.", bat.display());
-        }
-        Ok(("cmd".to_string(), vec!["/C".to_string(), bat.to_string_lossy().to_string()]))
+        default_mcp_launcher()
     }
 
     async fn reset(&mut self) {
@@ -460,7 +565,14 @@ fn port_owner_pid(port: u16) -> Option<u32> {
     None
 }
 #[cfg(not(windows))]
-fn port_owner_pid(_port: u16) -> Option<u32> { None }
+fn port_owner_pid(port: u16) -> Option<u32> {
+    // lsof is present on macOS and nearly every Linux desktop; -sTCP:LISTEN
+    // ignores clients that merely connected to the port.
+    let out = std::process::Command::new("lsof")
+        .args(["-nP", &format!("-iTCP:{port}"), "-sTCP:LISTEN", "-t"])
+        .output().ok()?;
+    String::from_utf8_lossy(&out.stdout).lines().find_map(|l| l.trim().parse::<u32>().ok())
+}
 
 #[cfg(windows)]
 fn process_image(pid: u32) -> Option<String> {
@@ -474,7 +586,15 @@ fn process_image(pid: u32) -> Option<String> {
         .map(|s| s.trim_matches('"').to_lowercase())
 }
 #[cfg(not(windows))]
-fn process_image(_pid: u32) -> Option<String> { None }
+fn process_image(pid: u32) -> Option<String> {
+    let out = std::process::Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "comm="])
+        .output().ok()?;
+    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if text.is_empty() { None } else {
+        Some(std::path::Path::new(&text).file_name().map(|f| f.to_string_lossy().to_lowercase()).unwrap_or(text.to_lowercase()))
+    }
+}
 
 #[cfg(windows)]
 fn reclaim_port(port: u16) -> anyhow::Result<()> {
@@ -509,7 +629,31 @@ fn reclaim_port(port: u16) -> anyhow::Result<()> {
     );
 }
 #[cfg(not(windows))]
-fn reclaim_port(_port: u16) -> anyhow::Result<()> { Ok(()) }
+fn reclaim_port(port: u16) -> anyhow::Result<()> {
+    let Some(pid) = port_owner_pid(port) else { return Ok(()); };
+    if pid == std::process::id() { return Ok(()); }
+    let image = process_image(pid).unwrap_or_default();
+    if image.contains("or-agent") || image.contains("or-core") || image.contains("totalscript-agent") || image.contains("robloxscript-agent") {
+        tracing::info!("killing stale OR Agent (pid {pid}) on port {port}...");
+        let _ = std::process::Command::new("kill").args(["-9", &pid.to_string()]).output();
+        std::thread::sleep(Duration::from_millis(800));
+        if port_owner_pid(port).is_some() {
+            anyhow::bail!("Could not free port {port} — close the old agent manually.");
+        }
+        tracing::info!("port {port} is free, starting fresh agent.");
+        return Ok(());
+    }
+    if image.starts_with("python") {
+        let _ = std::process::Command::new("kill").args(["-9", &pid.to_string()]).output();
+        tracing::info!("killed stale python bridge (pid {pid}) on port {port}");
+        std::thread::sleep(Duration::from_millis(600));
+        return Ok(());
+    }
+    anyhow::bail!(
+        "Port {port} is held by '{image}' (pid {pid}). Close that program or pick a\
+        \ndifferent port, then start the agent again."
+    );
+}
 
 fn env_first(keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|k| std::env::var(k).ok().filter(|s| !s.trim().is_empty()))
@@ -522,6 +666,12 @@ fn main() {
     #[cfg(windows)]
     if let Some(hwnd) = other_agent_window() {
         show_agent_window(hwnd);
+        return;
+    }
+    // Every OS: a live bridge on 3000 that answers /api/window is ours — raise
+    // it instead of failing on the busy ports. (`--headless` instances still
+    // get replaced by reclaim_port below when they do not own a window.)
+    if bridge_alive_on(3000) && !std::env::args().any(|a| a == "--headless") && ask_running_instance_to_show() {
         return;
     }
 
@@ -837,6 +987,7 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
         .route("/api/disconnect", post(disconnect_handler))
         .route("/api/status", get(status_handler))
         .route("/api/local-full", post(local_full_handler))
+        .route("/api/window", post(window_handler))
         .route("/ws", get(ws_handler))
         .with_state(state)
         .layer(cors);
@@ -906,6 +1057,17 @@ async fn local_full_handler(State(state): State<AppState>, Json(req): Json<Local
     state.ui.track("bridge", format!("FULL PC ACCESS {} via HTTP", if req.enabled { "enabled" } else { "disabled" }));
     info!("local_full set to {} via HTTP", req.enabled);
     Json(serde_json::json!({"ok": true, "local_full": req.enabled}))
+}
+
+/// Window control from a second launch (`{"action":"show"|"hide"}`). Loopback only.
+async fn window_handler(State(state): State<AppState>, Json(req): Json<serde_json::Value>) -> impl IntoResponse {
+    let action = req.get("action").and_then(|v| v.as_str()).unwrap_or("show");
+    match action {
+        "hide" => gui::hide_window(),
+        _ => gui::show_window(),
+    }
+    state.ui.track("app", &format!("window {action} requested by another launch"));
+    Json(serde_json::json!({ "ok": true, "action": action }))
 }
 
 async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {    Json(serde_json::json!({
