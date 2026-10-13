@@ -79,20 +79,69 @@ mod win_msg {
         pub fn ShowWindow(hwnd: *mut core::ffi::c_void, command: i32) -> i32;
         pub fn SetForegroundWindow(hwnd: *mut core::ffi::c_void) -> i32;
         pub fn PostMessageW(hwnd: *mut core::ffi::c_void, msg: u32, wparam: usize, lparam: isize) -> i32;
+        pub fn EnumWindows(callback: unsafe extern "system" fn(*mut core::ffi::c_void, isize) -> i32, lparam: isize) -> i32;
+        pub fn GetWindowTextW(hwnd: *mut core::ffi::c_void, text: *mut u16, max: i32) -> i32;
+        pub fn GetWindowThreadProcessId(hwnd: *mut core::ffi::c_void, pid: *mut u32) -> u32;
     }
 }
 
 #[cfg(windows)]
 fn wide(s: &str) -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() }
 
-/// Find the eframe root window even while it is hidden. eframe 0.29 cannot
-/// reliably process `ViewportCommand::Visible(true)` after a window becomes
-/// invisible on Windows 11, so tray actions use Win32 directly.
+/// Every top-level window whose title is exactly `title`, with its owning pid.
+/// `FindWindowW` alone was not safe: an Explorer window open on a folder named
+/// "ORscript" matched too, so a fresh or-core "found itself", showed Explorer
+/// and exited without ever starting the bridge.
+#[cfg(windows)]
+fn windows_titled(title: &str) -> Vec<(isize, u32)> {
+    struct Ctx { title: Vec<u16>, found: Vec<(isize, u32)> }
+    unsafe extern "system" fn visit(hwnd: *mut core::ffi::c_void, lparam: isize) -> i32 {
+        let ctx = &mut *(lparam as *mut Ctx);
+        let mut buf = [0u16; 512];
+        let n = win_msg::GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+        if n > 0 && buf[..n as usize] == ctx.title[..] {
+            let mut pid = 0u32;
+            win_msg::GetWindowThreadProcessId(hwnd, &mut pid);
+            ctx.found.push((hwnd as isize, pid));
+        }
+        1
+    }
+    let mut ctx = Ctx { title: title.encode_utf16().collect(), found: Vec::new() };
+    unsafe { win_msg::EnumWindows(visit, &mut ctx as *mut Ctx as isize); }
+    ctx.found
+}
+
+/// Find THIS process's eframe root window even while it is hidden. eframe 0.29
+/// cannot reliably process `ViewportCommand::Visible(true)` after a window
+/// becomes invisible on Windows 11, so tray actions use Win32 directly.
 #[cfg(windows)]
 pub(crate) fn agent_window() -> Option<isize> {
-    let title = wide("ORscript");
-    let hwnd = unsafe { win_msg::FindWindowW(std::ptr::null(), title.as_ptr()) };
-    if hwnd.is_null() { None } else { Some(hwnd as isize) }
+    let me = std::process::id();
+    windows_titled(gui::WINDOW_TITLE).into_iter().find(|(_, pid)| *pid == me).map(|(hwnd, _)| hwnd)
+}
+
+/// Window of ANOTHER running ORscript Desktop instance (if any). Only trusted
+/// when its bridge really answers on 127.0.0.1:3000, so a stray window with the
+/// same title can never stop a new agent from starting.
+#[cfg(windows)]
+fn other_agent_window() -> Option<isize> {
+    let me = std::process::id();
+    let other = windows_titled(gui::WINDOW_TITLE).into_iter().find(|(_, pid)| *pid != me)?;
+    if bridge_alive_on(3000) { Some(other.0) } else { None }
+}
+
+/// Blocking probe: does an or-agent/or-core bridge answer HTTP on this port?
+fn bridge_alive_on(port: u16) -> bool {
+    use std::io::{Read, Write};
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let Ok(mut stream) = std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(600)) else { return false; };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(800)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(800)));
+    if stream.write_all(b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").is_err() { return false; }
+    let mut buf = Vec::with_capacity(1024);
+    let _ = stream.take(8192).read_to_end(&mut buf);
+    let text = String::from_utf8_lossy(&buf);
+    text.contains("\"service\":\"or-agent\"") || text.contains("or-agent")
 }
 
 #[cfg(windows)]
@@ -455,7 +504,7 @@ fn main() {
     // should reopen that instance, not start a doomed second bridge on the same
     // ports. FindWindowW sees hidden windows too.
     #[cfg(windows)]
-    if let Some(hwnd) = agent_window() {
+    if let Some(hwnd) = other_agent_window() {
         show_agent_window(hwnd);
         return;
     }
@@ -667,11 +716,6 @@ async fn ui_command_loop(state: AppState, mut rx: tokio::sync::mpsc::UnboundedRe
                 }
                 info!("MCP launcher override updated from the desktop window");
             }
-            gui::UiCommand::CheckUpdates { reply } => {
-                tokio::spawn(async move {
-                    let _ = reply.send(check_github_release().await);
-                });
-            }
         }
     }
 }
@@ -700,43 +744,6 @@ fn kill_studio_processes() -> usize {
     killed
 }
 
-fn version_tuple(v: &str) -> Vec<u64> {
-    v.trim().trim_start_matches(|c: char| !c.is_ascii_digit())
-        .split(|c: char| !c.is_ascii_digit())
-        .filter(|p| !p.is_empty())
-        .filter_map(|p| p.parse::<u64>().ok())
-        .collect()
-}
-
-async fn check_github_release() -> gui::UpdateReply {
-    let current = env!("CARGO_PKG_VERSION").to_string();
-    let releases_url = format!("https://github.com/{}/releases", gui::REPO);
-    let api = format!("https://api.github.com/repos/{}/releases/latest", gui::REPO);
-    let client = match reqwest::Client::builder().user_agent(format!("ORscript-Desktop/{current}")).timeout(Duration::from_secs(15)).build() {
-        Ok(c) => c,
-        Err(e) => return gui::UpdateReply { ok: false, current, latest: String::new(), up_to_date: false, message: format!("http client: {e}"), url: releases_url },
-    };
-    let response = match client.get(&api).header("Accept", "application/vnd.github+json").send().await {
-        Ok(r) => r,
-        Err(e) => return gui::UpdateReply { ok: false, current, latest: String::new(), up_to_date: false, message: format!("GitHub unreachable: {e}"), url: releases_url },
-    };
-    if response.status().as_u16() == 404 {
-        return gui::UpdateReply { ok: true, current: current.clone(), latest: current, up_to_date: true, message: "No GitHub release has been published yet — you are running a source build.".into(), url: releases_url };
-    }
-    if !response.status().is_success() {
-        return gui::UpdateReply { ok: false, current, latest: String::new(), up_to_date: false, message: format!("GitHub answered HTTP {}", response.status()), url: releases_url };
-    }
-    let body: serde_json::Value = match response.json().await {
-        Ok(v) => v,
-        Err(e) => return gui::UpdateReply { ok: false, current, latest: String::new(), up_to_date: false, message: format!("bad release payload: {e}"), url: releases_url },
-    };
-    let latest = body.get("tag_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let url = body.get("html_url").and_then(|v| v.as_str()).map(str::to_string).unwrap_or(releases_url);
-    let up_to_date = version_tuple(&latest) <= version_tuple(&current);
-    let message = if up_to_date { format!("Latest release {latest}; this build is {current}.") } else { format!("Release {latest} is newer than this build ({current}).") };
-    gui::UpdateReply { ok: true, current, latest, up_to_date, message, url }
-}
-
 async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant, ui: Arc<gui::UiShared>) -> anyhow::Result<()> {
     let watcher_state = state.clone();
     let watcher_ui = ui.clone();
@@ -757,6 +764,44 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
                 watcher_state.ui.set_clients("roblox", 0);
                 set_editor(&watcher_state, false);
             }
+        }
+    });
+    // Warm the Studio MCP helper so the Tools page and the Studio card are
+    // populated before any extension connects, then keep the Studio link probed
+    // every 10 s while nothing else owns the helper (a running execute_luau
+    // always wins: we never touch the mutex while mcp_in_flight > 0).
+    let warm_state = state.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let mut tick: u32 = 0;
+        loop {
+            let studio_proc = warm_state.roblox_proc.load(Ordering::Relaxed);
+            let tools_known = !warm_state.ui.roblox_tools.lock().unwrap_or_else(|e| e.into_inner()).is_empty();
+            let busy = warm_state.mcp_in_flight.load(Ordering::Relaxed) > 0;
+            if !busy {
+                if !tools_known {
+                    // Retry every 30 s while Studio runs, every 3 min otherwise; only when the launcher exists.
+                    let due = if studio_proc { tick % 3 == 0 } else { tick % 18 == 0 };
+                    if due && McpRuntime::launcher().is_ok() {
+                        match roblox_tools(&warm_state).await {
+                            Ok(tools) => {
+                                info!("MCP helper warmed: {} Studio tools", tools.len());
+                                warm_state.ui.track("studio", format!("MCP helper ready — {} Studio tools", tools.len()));
+                            }
+                            Err(e) => tracing::warn!("MCP warm-up failed: {e:#}"),
+                        }
+                    }
+                } else if studio_proc {
+                    let _busy = InFlight::enter(&warm_state.mcp_in_flight);
+                    let probed = {
+                        let mut mcp = warm_state.roblox_mcp.lock().await;
+                        mcp.probe_studio().await.is_ok()
+                    };
+                    set_editor(&warm_state, probed);
+                }
+            }
+            tick = tick.wrapping_add(1);
+            tokio::time::sleep(Duration::from_secs(10)).await;
         }
     });
     reclaim_port(17613).map_err(|e| { tracing::error!("{e}"); e })?;
@@ -784,6 +829,8 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
     info!("OR bridge listening on http://{} (WS /ws)", addr);
     info!("Legacy WS on ws://127.0.0.1:17613 (roblox) and 17615 (AgentScript FS: {})", ws_root_display);
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    ui.bridge_listening.store(true, Ordering::Relaxed);
+    ui.track("bridge", "listening on http 3000 · ws 17613 (roblox) · ws 17615 (local)");
     info!("Boot completed in {}ms", start.elapsed().as_millis());
     axum::serve(listener, app).await?;
     Ok(())
@@ -948,7 +995,18 @@ async fn handle_ws(socket: axum::extract::ws::WebSocket, state: AppState) {
 
 async fn run_legacy_ws(state: AppState, port: u16, engine: &str) -> anyhow::Result<()> {
     let addr: SocketAddr = format!("127.0.0.1:{}", port).parse()?;
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            // Previously swallowed: the extension then dialled a port nobody
+            // listened on and the window still claimed the bridge was fine.
+            let msg = format!("WebSocket port {port} ({engine}) could not be opened: {e}. Close the program holding it and restart ORscript.");
+            tracing::error!("{msg}");
+            state.ui.set_fatal(msg.clone());
+            anyhow::bail!(msg);
+        }
+    };
+    info!("legacy WS [{engine}] listening on ws://127.0.0.1:{port}");
     loop {
         let (stream, _) = listener.accept().await?;
         let state = state.clone();

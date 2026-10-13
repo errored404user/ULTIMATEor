@@ -673,6 +673,14 @@ async function refreshProcStatus() {
   try {
     const r = await fetch(`${RUST_ROBLOX_HTTP}/api/status`, { method: "GET" });
     if (!r.ok) return;
+    // or-core answers on 3000 but our WebSocket is down: the agent was started
+    // AFTER the worker gave up its bounded reconnect attempts. Re-arm the
+    // backoff and dial again right away so Start unlocks within one poll.
+    if (!connected && !manualStudioDisconnect && !(ws && ws.readyState === WebSocket.CONNECTING)) {
+      reconnectAttempts = 0;
+      reconnectDelay = RECONNECT_MIN;
+      connect();
+    }
     const j = await r.json();
     const nr = !!j.roblox_proc;
     const nl = j.local_ready === true;

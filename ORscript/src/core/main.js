@@ -5368,7 +5368,7 @@
       const kind = actionBtn && actionBtn.dataset.kind;
       diag("start.buttonClick", { kind: kind || "none", bridgeOk, addonOk, provider: P && P.id });
       if (kind === "start" || kind === "start-degraded" || kind === "restart") {
-        if (!(A.bridge && A.bridge.connected === true)) { ui.toast("Start or-core.exe first, then try again."); return; }
+        if (!(A.bridge && A.bridge.connected === true)) { ui.toast("Open ORscript Desktop (or-core.exe) first — the Start button unlocks as soon as the bridge connects."); return; }
         try { playSfx("start"); } catch {}
         ui.toast(kind === "restart" ? "Restarting agent…" : "Starting agent…");
         Promise.resolve(startSession({ restart: kind === "restart" })).catch((error) => {
@@ -7147,7 +7147,13 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       // tone - which occurs both started-with-bridge-down and standby-with-bridge-
       // down - so it's tracked explicitly in the signature.)
       const showExtras = !!A.started;
-      const sig = [toneClass, indicator, msg, label, kind, disabled, warn, busy, showExtras].join("|");
+      // HARD GATE: Start / Restart are only clickable once or-core.exe is up
+      // (bridge WebSocket connected). Without the bridge nothing can start, so
+      // a live button would only produce a "start or-core first" toast.
+      const coreReady = !!(A.bridge && A.bridge.connected === true);
+      const startKind = kind === "start" || kind === "start-degraded" || kind === "restart";
+      if (!A.starting && startKind && !coreReady) disabled = true;
+      const sig = [toneClass, indicator, msg, label, kind, disabled, warn, busy, showExtras, coreReady].join("|");
       if (sig === lastBarSig) return;
       lastBarSig = sig;
       // Set the tone WITHOUT clobbering other classes (e.g. rs-bar-inline, which
@@ -7189,14 +7195,12 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       } catch {}
       actionBtn.textContent = label;
       actionBtn.dataset.kind = kind;
-      // Start/Restart must remain an actionable control even when a prerequisite
-      // is missing. A disabled button hides the actual bridge/Studio diagnosis.
-      const coreReady = !!(A.bridge && A.bridge.connected === true);
-      if (!A.starting && (kind === "start" || kind === "start-degraded" || kind === "restart")) disabled = !coreReady;
-      actionBtn.title = !coreReady && (kind === "start" || kind === "start-degraded" || kind === "restart")
-        ? "Start or-core.exe first"
+      actionBtn.title = !coreReady && startKind
+        ? "Start or-core.exe (ORscript Desktop) first"
         : (kind === "restart" ? "Restart the agent" : actionBtn.title);
       actionBtn.disabled = disabled;
+      actionBtn.classList.toggle("rs-needs-core", startKind && !coreReady);
+      actionBtn.setAttribute("aria-disabled", disabled ? "true" : "false");
       // Tooltip shows the target engine without stretching the button text
       try {
       if (kind === "restart") actionBtn.title = currentEngine === "local" ? "Restart AgentScript agent" : "Restart Roblox agent";

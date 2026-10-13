@@ -3876,6 +3876,12 @@ html[data-rs-theme] #rs-action[data-kind="start"] {
   opacity: .42 !important;
   filter: none !important;
 }
+/* Start is locked until or-core.exe (ORscript Desktop) is connected */
+#rs-action.rs-needs-core {
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 6px, rgba(255,255,255,0) 6px 12px) !important;
+}
 
 #rs-discord, :is(#rs-settings-btn, #rs-paint-btn) {
   width: 30px !important;
