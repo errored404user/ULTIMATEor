@@ -36,14 +36,18 @@ ok("normal Close only hides when a usable tray exists",
   gui.includes("self.tray.is_some() && self.native_hwnd.is_some()")
     && gui.includes("!can_background")
     && gui.includes("Close will quit instead of hiding an unreachable background app"));
-ok("status window exposes an explicit Quit button", gui.includes('pill(ui, "Quit", false)'));
+ok("status window exposes an explicit Quit button", gui.includes('pill(ui, t, "Quit", false)') && gui.includes("request_quit(&self.shared)"));
 ok("launching or-core again reopens the existing hidden instance",
-  /fn main\(\)[\s\S]*if let Some\(hwnd\) = agent_window\(\)[\s\S]*show_agent_window\(hwnd\);[\s\S]*return;/.test(main)
+  /fn main\(\)[\s\S]*if let Some\(hwnd\) = (?:other_)?agent_window\(\)[\s\S]*show_agent_window\(hwnd\);[\s\S]*return;/.test(main)
     && main.includes("FindWindowW"));
 if (workflow !== null) ok("Windows build commits the rebuilt lockfile and executable",
   workflow.includes("git add agent/Cargo.lock bin/or-core.exe"));
 else console.log("SKIP  Windows release workflow is not distributed in the extension package");
 ok("background controls are documented",
   readme.includes("left-click the ORscript tray icon") && readme.includes("right-click → **Quit**"));
+ok("hidden window skips layout work and only ticks slowly",
+  gui.includes("static WINDOW_HIDDEN: AtomicBool") && gui.includes("if window_hidden() {") && gui.includes("ctx.request_repaint_after(Duration::from_secs(2));"));
+ok("quit has a process-exit fallback thread",
+  gui.includes('.name("orscript-quit-fallback".into())'));
 
 process.exitCode = failures ? 1 : 0;

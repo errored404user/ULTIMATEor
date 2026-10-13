@@ -39,9 +39,16 @@ const LOG_CAP: usize = 800;
 /// egui context of the running window, so the tray thread / HTTP "show"
 /// request can raise or hide the window on every platform.
 static UI_CTX: OnceLock<egui::Context> = OnceLock::new();
+/// True while the window is hidden to the tray. `App::update` then skips all
+/// layout work and repaints every 2 s only (background CPU ≈ 0 instead of a
+/// full UI frame every 700 ms for an invisible window).
+static WINDOW_HIDDEN: AtomicBool = AtomicBool::new(false);
+pub fn window_hidden() -> bool { WINDOW_HIDDEN.load(Ordering::Relaxed) }
 
 /// Bring the window back (tray click, second launch, `/api/window`).
 pub fn show_window() {
+    WINDOW_HIDDEN.store(false, Ordering::Relaxed);
+    if let Some(ctx) = UI_CTX.get() { ctx.request_repaint(); }
     #[cfg(windows)]
     if let Some(hwnd) = crate::agent_window() {
         crate::show_agent_window(hwnd);
@@ -57,6 +64,7 @@ pub fn show_window() {
 
 /// Hide the window while the bridge keeps running.
 pub fn hide_window() {
+    WINDOW_HIDDEN.store(true, Ordering::Relaxed);
     #[cfg(windows)]
     if let Some(hwnd) = crate::agent_window() {
         crate::hide_agent_window(hwnd);
@@ -71,9 +79,19 @@ pub fn hide_window() {
 /// Ask the window to close for real (quit path). Falls back to a hard exit
 /// when no window exists (headless or window creation failed).
 pub fn request_quit(shared: &UiShared) {
-    shared.quit_requested.store(true, Ordering::Relaxed);
+    let quit = &shared.quit_requested;
+    quit.store(true, Ordering::Release);
+    // Hard fallback: a hidden winit window may never deliver the close event
+    // (no frames are produced while invisible, and WM_CLOSE can be swallowed
+    // when the viewport is mid-recreation). Quit must ALWAYS end the process,
+    // otherwise the tray icon's "Quit" leaves an unreachable bridge behind.
+    let _ = std::thread::Builder::new().name("orscript-quit-fallback".into()).spawn(|| {
+        std::thread::sleep(Duration::from_millis(4000));
+        std::process::exit(0);
+    });
     #[cfg(windows)]
     if let Some(hwnd) = crate::agent_window() {
+        crate::show_agent_window(hwnd);
         crate::close_agent_window(hwnd);
         return;
     }
@@ -597,6 +615,19 @@ pub struct App {
     picker_rx: Option<Receiver<Option<String>>>,
     workspace_rx: Option<Receiver<Result<String, String>>>,
     tray: Option<TrayState>,
+    /// Handle the tray worker can use to raise this window again (Windows:
+    /// HWND; elsewhere a marker that the egui context is registered).
+    native_hwnd: Option<isize>,
+    /// Window size changed since the last settings save.
+    size_dirty: bool,
+}
+
+/// See `App::native_hwnd`.
+fn native_window_handle() -> Option<isize> {
+    #[cfg(windows)]
+    { crate::agent_window() }
+    #[cfg(not(windows))]
+    { UI_CTX.get().map(|_| 1) }
 }
 
 impl App {
@@ -670,6 +701,8 @@ impl App {
             picker_rx: None,
             workspace_rx: None,
             tray,
+            native_hwnd: None,
+            size_dirty: false,
         };
         app.refresh_explorer();
         app
@@ -975,8 +1008,19 @@ impl App {
         if !ctx.input(|i| i.viewport().close_requested()) { return; }
         if self.explorer_dirty { self.save_file(); }
         let _ = self.settings.save();
-        let quit = self.quit_now || self.shared.quit_requested.load(Ordering::Relaxed) || !self.settings.close_to_tray;
-        if quit { return; }
+        // Hiding is only safe when there is a way back: a working tray icon AND
+        // a native handle (Windows) / live egui context the tray worker can
+        // raise. Without both, "close to tray" produced an invisible process
+        // the user could neither reopen nor quit — so Close quits instead.
+        self.native_hwnd = native_window_handle();
+        let can_background = self.tray.is_some() && self.native_hwnd.is_some();
+        let quit = self.quit_now || self.shared.quit_requested.load(Ordering::Acquire) || !self.settings.close_to_tray || !can_background;
+        if quit {
+            if !can_background && self.settings.close_to_tray && !self.quit_now {
+                self.shared.track("app", "Close will quit instead of hiding an unreachable background app (no tray icon / window handle)");
+            }
+            return;
+        }
         ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         hide_window();
         self.shared.track("app", if HAS_TRAY {
@@ -1022,6 +1066,13 @@ impl App {
                         }
                         if window_button(ui, WinGlyph::Minimize, t.text, t).clicked() { ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true)); }
                         ui.add_space(8.0);
+                        // Explicit Quit: Close only hides to the tray, so the
+                        // window itself must offer a way to stop the bridge.
+                        if pill(ui, t, "Quit", false).on_hover_text("Stop the bridge and exit (Close only hides the window)").clicked() {
+                            self.quit_now = true;
+                            request_quit(&self.shared);
+                        }
+                        ui.add_space(6.0);
                         ui.label(RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).small().color(t.muted));
                     });
                 });
@@ -2052,7 +2103,7 @@ impl App {
                         retheme = true; save = true;
                         self.settings_note = "Settings reset to defaults (workspace kept).".into();
                     }
-                    if ui.button(RichText::new("Quit ORscript (stop bridge)").color(t.bad)).clicked() { self.quit_now = true; ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close); }
+                    if ui.button(RichText::new("Quit ORscript (stop bridge)").color(t.bad)).clicked() { self.quit_now = true; request_quit(&self.shared); }
                 });
             });
             if !self.settings_note.is_empty() {
@@ -2079,20 +2130,29 @@ impl eframe::App for App {
             }
         }
         self.poll_async(ctx);
+        self.handle_close(ctx);
+        self.update_tray();
+        if window_hidden() {
+            // Nothing to draw. Keep the runtime pollers alive at a slow tick so
+            // a quit/show request or a finished job is still picked up.
+            ctx.request_repaint_after(Duration::from_secs(2));
+            return;
+        }
         self.handle_shortcuts(ctx);
         // Remember the window size (saved with the other settings on close / quit).
         if let Some(rect) = ctx.input(|i| i.viewport().inner_rect) {
-            if rect.width() >= 600.0 && rect.height() >= 400.0 {
+            if rect.width() >= 600.0 && rect.height() >= 400.0
+                && (rect.width() != self.settings.window_width || rect.height() != self.settings.window_height) {
                 self.settings.window_width = rect.width();
                 self.settings.window_height = rect.height();
+                self.size_dirty = true;
             }
         }
-        if self.last_size_save.elapsed() > Duration::from_secs(30) {
+        if self.size_dirty && self.last_size_save.elapsed() > Duration::from_secs(30) {
             self.last_size_save = Instant::now();
+            self.size_dirty = false;
             let _ = self.settings.save();
         }
-        self.handle_close(ctx);
-        self.update_tray();
 
         self.titlebar(ctx);
         self.sidebar(ctx);
@@ -2619,35 +2679,40 @@ fn tray_menu_and_icon(
     let icon = builder.build()?;
 
     let ids = (open.id().clone(), folder.id().clone(), restart.id().clone(), probe.id().clone(), kill.id().clone(), quit.id().clone());
-    let shared_menu = shared.clone();
-    let tx_menu = cmd_tx.clone();
-    std::thread::Builder::new().name("tray-menu".into()).spawn(move || {
-        let receiver = MenuEvent::receiver();
-        while let Ok(event) = receiver.recv() {
-            if event.id == ids.0 {
-                show_window();
-            } else if event.id == ids.1 {
-                open_external(&shared_menu.root());
-            } else if event.id == ids.2 {
-                let _ = tx_menu.send(UiCommand::RestartMcp);
-            } else if event.id == ids.3 {
-                let _ = tx_menu.send(UiCommand::ProbeStudio);
-            } else if event.id == ids.4 {
-                let _ = tx_menu.send(UiCommand::KillStudio);
-            } else if event.id == ids.5 {
-                request_quit(&shared_menu);
+    // One dedicated worker drains BOTH tray channels. It must not live in
+    // App::update: eframe produces no frames while the window is hidden, so a
+    // tray click polled from update() would never be seen — the window could
+    // not be brought back and "Quit" did nothing (the original or-core bug).
+    // Left-click raises the window (menu is right-click only); act on the
+    // button-DOWN edge because the UP edge is lost when the raised window
+    // takes focus mid-click.
+    std::thread::Builder::new().name("orscript-tray".to_string()).spawn(move || {
+        loop {
+            let mut idle = true;
+            while let Ok(event) = MenuEvent::receiver().try_recv() {
+                idle = false;
+                if event.id == ids.0 {
+                    show_window();
+                } else if event.id == ids.1 {
+                    open_external(&shared.root());
+                } else if event.id == ids.2 {
+                    let _ = cmd_tx.send(UiCommand::RestartMcp);
+                } else if event.id == ids.3 {
+                    let _ = cmd_tx.send(UiCommand::ProbeStudio);
+                } else if event.id == ids.4 {
+                    let _ = cmd_tx.send(UiCommand::KillStudio);
+                } else if event.id == ids.5 {
+                    request_quit(&shared);
+                }
             }
-        }
-    })?;
-    std::thread::Builder::new().name("tray-click".into()).spawn(move || {
-        let receiver = TrayIconEvent::receiver();
-        while let Ok(event) = receiver.recv() {
-            let show = match event {
-                TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } => true,
-                TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } => true,
-                _ => false,
-            };
-            if show { show_window(); }
+            while let Ok(event) = TrayIconEvent::receiver().try_recv() {
+                idle = false;
+                let show = matches!(event,
+                    TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Down, .. }
+                    | TrayIconEvent::DoubleClick { button: MouseButton::Left, .. });
+                if show { show_window(); }
+            }
+            std::thread::sleep(Duration::from_millis(if idle { 60 } else { 10 }));
         }
     })?;
 
@@ -2704,22 +2769,29 @@ pub fn run_gui(shared: Arc<UiShared>, cmd_tx: UnboundedSender<UiCommand>, settin
     }
     let options = eframe::NativeOptions { viewport, centered: true, persist_window: false, ..Default::default() };
 
-    #[cfg(has_tray)]
-    let tray: Option<TrayState> = match build_tray(logo.as_ref(), shared.clone(), cmd_tx.clone()) {
-        Ok(t) => Some(t),
-        Err(e) => { shared.log(&format!("WARN tray icon unavailable: {e:#}")); None }
-    };
-    #[cfg(not(has_tray))]
-    let tray: Option<TrayState> = None;
-
     shared.track("app", format!("ORscript Desktop {} window opened", env!("CARGO_PKG_VERSION")));
     let app_shared = shared.clone();
     eframe::run_native(
         APP_NAME,
         options,
-        Box::new(move |cc| {
+        Box::new(move |_cc| {
+            // The notification-area icon is created HERE, on the event-loop
+            // thread after winit started pumping messages. Created before
+            // run_native, the icon's hidden message window had no running loop
+            // yet on Windows (clicks were never delivered) and macOS refuses a
+            // status item before NSApplication is running.
+            #[cfg(has_tray)]
+            let make_tray = || -> Option<TrayState> {
+                match build_tray(logo.as_ref(), app_shared.clone(), cmd_tx.clone()) {
+                    Ok(t) => Some(t),
+                    Err(e) => { app_shared.log(&format!("WARN tray icon unavailable: {e:#}")); None }
+                }
+            };
+            #[cfg(not(has_tray))]
+            let make_tray = || -> Option<TrayState> { None };
+            let tray = make_tray();
             Ok(Box::new(App::new(
-                cc,
+                _cc,
                 app_shared,
                 cmd_tx,
                 settings,

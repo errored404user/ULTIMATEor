@@ -3,7 +3,7 @@
 Native desktop app + bridge for the ORscript browser extension. One binary does both jobs:
 
 * **Bridge** — HTTP `127.0.0.1:3000`, WebSocket `17613` (Roblox Studio) and `17615` (AgentScript workspace), Roblox Studio MCP helper (Windows `%LOCALAPPDATA%\Roblox\mcp.bat`, macOS `RobloxStudio.app/Contents/MacOS/StudioMCP`, Linux via Wine — see below), 18 workspace tools. Protocol-identical to or-core 1.18, so the extension needs no change.
-* **Desktop window** — pure Rust (eframe/egui), 6 pages: **Home** (setup checklist that tells you the next step, status cards, live Studio viewport snapshot, quick access, recent activity), **Explorer** (workspace browser + editor), **Tools** (Studio + workspace tool catalog with a Run panel), **Servers** (Studio MCP, local bridge, channels), **Terminal** (workspace shell *and* a Luau runner that executes code inside Roblox Studio), **Settings** (workspace folder picker applied live, MCP launcher override, diagnostics, about). Closing the window hides it to the notification area; the bridge keeps running until you choose **Quit** from the tray menu. Runs on **Windows, macOS and Linux** (see *Platforms*).
+* **Desktop window** — pure Rust (eframe/egui), 6 pages: **Home** (setup checklist that tells you the next step, status cards, live Studio viewport snapshot, quick access, recent activity), **Explorer** (workspace browser + editor), **Tools** (Studio + workspace tool catalog with a Run panel), **Servers** (Studio MCP, local bridge, channels), **Terminal** (workspace shell *and* a Luau runner that executes code inside Roblox Studio), **Settings** (workspace folder picker applied live, MCP launcher override, diagnostics, about). Closing the window hides it to the notification area; the bridge keeps running. Left-click the tray icon (or launch `or-core` again) to reopen the window; right-click → **Quit**, or the **Quit** pill in the title bar, stops the bridge. Since 1.22.0 the tray icon is created on the event-loop thread and serviced by a dedicated worker, so it keeps working while the window is hidden; a hidden window does no layout work. Runs on **Windows, macOS and Linux** (see *Platforms*).
 
 Keyboard: `Esc` close panel / clear search · `Ctrl+1…6` pages · `Ctrl+R` restart Studio MCP · `F5` probe Studio + refresh tools · `Ctrl+Shift+S` Studio snapshot · `Ctrl+S` save file · `Ctrl+Enter` run Luau.
 
@@ -53,7 +53,7 @@ Environment overrides (same as before): `OR_WORKSPACE_ROOT`, `OR_FULL_ACCESS=1`,
 | | Windows | macOS | Linux |
 |---|---|---|---|
 | Window + bridge | yes | yes | yes |
-| Tray icon | yes | yes (menu bar) | with `--features linux-tray` (GTK + AppIndicator); otherwise *Close* hides the window and launching `or-core` again brings it back |
+| Tray icon | yes | yes (menu bar) | with `--features linux-tray` (GTK + AppIndicator); otherwise *Close* quits (the app never hides without a tray icon to bring it back); use `--headless` for a window-less bridge |
 | Launch at sign-in | `HKCU\…\Run` | `~/Library/LaunchAgents/com.orscript.desktop.plist` | `~/.config/autostart/orscript-desktop.desktop` |
 | Studio MCP launcher (default) | `%LOCALAPPDATA%\Roblox\mcp.bat` | `/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP` | auto-detected `mcp.bat` inside `$WINEPREFIX`, `~/.wine`, Vinegar or Grapejuice prefixes → `wine cmd /c …`; otherwise set it in **Settings → MCP launcher** |
 | Data dir (`settings.json`, `logs/agent.log`) | next to the binary | `~/Library/Application Support/ORscript` | `$XDG_CONFIG_HOME/orscript` (default `~/.config/orscript`) |
