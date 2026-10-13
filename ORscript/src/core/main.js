@@ -2205,6 +2205,24 @@
       "if not __orOk then error(tostring(__orRes)) end\n" +
       "return __orRes";
   }
+  // Bounded anti-drift reminder for compact providers: exact command names
+  // only (work-mode focus first), capped so it always fits a Notion message.
+  function compactToolsReminder(tools) {
+    const limit = Math.max(2000, Number(P.commandListMaxChars) || 6000);
+    let focus = [];
+    try { focus = workModeFocusNames(normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()), (tools || []).map((t) => t.name)); } catch {}
+    const names = [...new Set([...focus, ...(tools || []).map((t) => t.name).filter(Boolean).sort()])];
+    let list = "", omitted = 0;
+    for (const n of names) {
+      if (list.length + n.length + 2 > limit) { omitted++; continue; }
+      list += (list ? ", " : "") + n;
+    }
+    return "\n\n────────────────────────────────\n" +
+      "(System note from OR - this is an automatic REMINDER, not a request and not a new result. " +
+      "Do NOT reply to it or run any command because of it; just keep it in mind for your next command.)\n" +
+      "Exact command names: " + list + (omitted ? `\n[${omitted} more names omitted - search by keyword with list_commands.]` : "") +
+      "\nFetch any command's exact parameters with {\"command\":\"list_commands\",\"params\":{\"query\":\"exact_command_name\"}} before first use; never guess parameters.";
+  }
   function compressToolFeedback(text, name) {
     const s = String(text || "");
     const MAX = 10000;
@@ -3706,7 +3724,11 @@
               // needs the primary Roblox set; addon commands were listed on demand
               // and the bridge routes by name regardless.
               const roblox = A.toolList.filter((t) => (t.server || "roblox") === "roblox");
-              toSend += RS.toolsReminder(roblox) + "\n" + RS.memoryNudge();
+              // Compact providers (Notion, NVIDIA playground) cannot take the
+              // full one-line-per-command reminder either: with ~750 commands it
+              // is ~75k characters, far above what their composer delivers. Give
+              // them the same bounded name index list_commands gave them.
+              toSend += (P.compactCommandList ? compactToolsReminder(roblox) : RS.toolsReminder(roblox)) + "\n" + RS.memoryNudge();
               diag("tools.reminder", { after: REMIND_TOOLS_EVERY });
             }
           }
@@ -8875,16 +8897,41 @@ statusTimer = rsInterval(() => bg({ type: "status" }).then(onStatus), 5000);
   }
   let scopedMutationObserver = null;
   let observedChatRoot = null;
-  const pageShellObserver = new MutationObserver(() => {
+  // 1.21.4: providers with a cached transcript model (Notion keeps allItems()
+  // for 15 s) MUST be told about mutations, exactly as PlazCode's observer did
+  // (P.ignoreMutationRecords / P.invalidateItems / P.preprocessMutations).
+  // Without these hooks a new Notion reply stayed invisible to the response
+  // watcher for up to 15 s: the loop finalized on the PREVIOUS turn, ran its
+  // command a second time, and the chat looked dead afterwards.
+  function feedProviderMutations(records) {
+    try {
+      if (records && records.length && P.ignoreMutationRecords && P.ignoreMutationRecords(records)) return false;
+      if (P.invalidateItems) P.invalidateItems(records);
+      if (records && records.length && P.preprocessMutations) {
+        P.preprocessMutations(records, { active: !!(A.started || A.starting || A.running) });
+      }
+    } catch (e) { diag("observer.providerHookFailed", { error: String((e && e.message) || e) }); }
+    return true;
+  }
+  const pageShellObserver = new MutationObserver((records) => {
+    feedProviderMutations(records);
     bindScopedObserver();
     scheduleSweep();
   });
   function chatObservationRoot() {
     try {
       const items=P.allItems();
-      if(items.length&&items[0].parentElement)return items[0].parentElement;
-      const frame=P.composerFrame&&P.composerFrame();
-      return frame&&frame.parentElement||null;
+      const frame=(P.composerFrame&&P.composerFrame())||null;
+      const first=items.length&&items[0].parentElement||null;
+      // 1.21.4: observe the subtree that holds BOTH the transcript and the
+      // composer. Observing only the composer's parent on an empty chat (or
+      // only the transcript parent) left the first Notion reply unobserved:
+      // the provider's cached item list never saw it, and the bootstrap sat
+      // for the full 15 s cache TTL before "Starting" could progress.
+      if(first&&frame){let n=first;while(n&&n!==document.documentElement&&!n.contains(frame))n=n.parentElement;if(n&&n!==document.documentElement)return n;}
+      if(first)return first;
+      if(frame){const main=frame.closest("main,[role='main'],[role='region']");return main||frame.parentElement||null;}
+      return null;
     } catch { return null; }
   }
   function bindScopedObserver() {
@@ -8892,8 +8939,11 @@ statusTimer = rsInterval(() => bg({ type: "status" }).then(onStatus), 5000);
     if(!next||next===observedChatRoot)return;
     if(scopedMutationObserver)scopedMutationObserver.disconnect();
     observedChatRoot=next;
-    scopedMutationObserver=new MutationObserver(()=>{preHideWholeItems();scheduleSweep();});
+    scopedMutationObserver=new MutationObserver((records)=>{if(!feedProviderMutations(records))return;preHideWholeItems();scheduleSweep();});
     scopedMutationObserver.observe(next,{childList:true,subtree:true,characterData:true});
+    // Rows that appeared while the old root did not cover them were never
+    // reported: drop the provider's cached transcript model once per rebind.
+    try { if (P.invalidateItems) P.invalidateItems(); } catch {}
     diag("observer.rebound",{provider:P.id,tag:next.tagName});
   }
   // Watch only direct page-shell replacements; message mutations are observed

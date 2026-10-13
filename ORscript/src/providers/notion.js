@@ -1405,17 +1405,44 @@ const RSProvider = (() => {
   // the cache expires before any later DOM mutation/timer can be observed.
   const _transcriptTextCache = new WeakMap();
   let _textReadEpoch = 1, _textEpochQueued = false;
+  const BLOCK_TAG_RE = /^(?:P|DIV|LI|UL|OL|PRE|TR|H[1-6]|BLOCKQUOTE|SECTION|ARTICLE|TABLE|THEAD|TBODY|HR|DT|DD|FIGURE|FIGCAPTION|SUMMARY|DETAILS)$/;
+  function blockAwareText(root) {
+    let out = "";
+    const walk = (n) => {
+      const type = n.nodeType;
+      if (type === 3) { out += n.nodeValue || ""; return; }
+      if (type !== 1) return;
+      const tag = n.tagName;
+      if (tag === "SCRIPT" || tag === "STYLE" || tag === "TEMPLATE") return;
+      if (tag === "BR") { out += "\n"; return; }
+      // Legacy/injected-result chips are extension UI, never assistant tokens.
+      const cls = n.className;
+      if (typeof cls === "string" && cls && /(?:^|\s)rs-chip(?:\s|$)/.test(cls)) return;
+      const block = BLOCK_TAG_RE.test(tag) || n.hasAttribute("data-block-id");
+      if (block && out && !out.endsWith("\n")) out += "\n";
+      for (let c = n.firstChild; c; c = c.nextSibling) walk(c);
+      if (block && out && !out.endsWith("\n")) out += "\n";
+    };
+    walk(root);
+    // A root that is itself a block adds a trailing newline textContent would
+    // not have; keep callers' trim()/length expectations stable.
+    return out.endsWith("\n") ? out.slice(0, -1) : out;
+  }
   function transcriptText(item) {
     if (!item) return "";
     const cached = _transcriptTextCache.get(item);
     if (cached && cached.epoch === _textReadEpoch) return cached.text;
+    // 1.21.4: Notion renders every line of a reply as its own block element,
+    // so native textContent glues lines together ("p.Parent = workspaceprint"):
+    // a multi-line ###LUA### block read that way is a Luau syntax error in
+    // Studio and a JSON command split over lines no longer parses. Read the
+    // item block-aware instead: a newline at every block boundary (and <br>),
+    // nothing else changed. Inline token spans stay joined, so single-line
+    // text is byte-identical to textContent. Receipt matching compacts
+    // whitespace before comparing, so user rows are unaffected.
     let text;
-    if (safeQuery(item, ".rs-chip")) {
-      // Legacy/injected-result chips are extension UI, never assistant tokens.
-      const copy = item.cloneNode(true);
-      safeQueryAll(copy, ".rs-chip").forEach((node) => node.remove());
-      text = safeRead(() => copy.textContent, "") || "";
-    } else text = safeRead(() => item.textContent, "") || "";
+    try { text = blockAwareText(item); }
+    catch { text = safeRead(() => item.textContent, "") || ""; }
     _transcriptTextCache.set(item, { epoch: _textReadEpoch, text });
     if (!_textEpochQueued) {
       _textEpochQueued = true;
@@ -3401,6 +3428,14 @@ const RSProvider = (() => {
     settleStartupReply: true,
     startupReplySettled,
     sysMaxChars: 8000,
+    // 1.21.4: ORscript ships ~750 Studio commands. The full catalogue is
+    // ~180,000 characters - a single Notion message that size is never answered
+    // (Notion's agent silently drops it, the chat looks "dead" after Start).
+    // Hand Notion a bounded name index instead; it fetches one exact schema on
+    // demand with list_commands {query}. A ~12k-character startup digest is
+    // what Notion is known to answer reliably.
+    compactCommandList: true,
+    commandListMaxChars: 9000,
     // Never spend a 90-second response window after all send attempts failed.
     failHardOnSendFailure: true,
     authoritativeSendResult: true,

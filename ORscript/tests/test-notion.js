@@ -63,3 +63,48 @@ if (RS && RS.buildSystemPrompt) {
   assert(!/^\s*[-*] |^#{1,6} /m.test(text), "no Markdown list/heading markers (Notion converts them into blocks)");
 }
 console.log("PASS  Notion AI provider wired, loads, and the core hooks it relies on are present");
+
+// ── 1.21.4: "Notion does not respond / does nothing in Studio" ───────────────
+// (a) The catalogue must fit a Notion message. ORscript ships ~750 commands;
+//     the full schema dump is ~180k characters and Notion never answers it.
+assert(P.compactCommandList === true && Number(P.commandListMaxChars) >= 6000 && Number(P.commandListMaxChars) <= 16000,
+  "Notion receives the bounded command-name index (compactCommandList)");
+assert(main.includes("function compactToolsReminder(tools)") && main.includes("P.compactCommandList ? compactToolsReminder(roblox) : RS.toolsReminder(roblox)"),
+  "periodic command reminder is bounded for compact providers");
+// (b) The core must feed DOM mutations to the provider's cached transcript model
+//     (allItems() is cached 15 s): otherwise a new reply stays invisible, the
+//     watcher finalizes on the previous turn and re-runs its command.
+assert(main.includes("function feedProviderMutations(records)") && main.includes("if (P.invalidateItems) P.invalidateItems(records);") &&
+  main.includes("P.ignoreMutationRecords(records)") && main.includes("P.preprocessMutations(records, { active:"), "observer feeds provider hooks");
+assert(/scopedMutationObserver=new MutationObserver\(\(records\)=>\{if\(!feedProviderMutations\(records\)\)return;/.test(main), "scoped observer calls the hooks");
+assert(main.includes("try { if (P.invalidateItems) P.invalidateItems(); } catch {}"), "rebind invalidates the cached item list");
+assert(main.includes("while(n&&n!==document.documentElement&&!n.contains(frame))n=n.parentElement;"), "observer root covers transcript AND composer");
+// (c) Block-aware transcript reading: Notion renders each line as its own block,
+//     textContent glued them ("p.Parent = workspaceprint") -> broken Luau.
+const tnode = (v) => ({ nodeType: 3, nodeValue: v, nextSibling: null });
+const enode = (tag, children, opts = {}) => {
+  const n = { nodeType: 1, tagName: tag, className: opts.className || "", firstChild: null, nextSibling: null,
+    hasAttribute: (a) => !!(opts.attrs && a in opts.attrs), getAttribute: (a) => (opts.attrs && a in opts.attrs ? opts.attrs[a] : null),
+    querySelector: () => null, querySelectorAll: () => [], textContent: "" };
+  let prev = null;
+  for (const c of children) { if (!prev) n.firstChild = c; else prev.nextSibling = c; prev = c; n.textContent += c.nodeType === 3 ? c.nodeValue : c.textContent; }
+  return n;
+};
+const codeBlock = enode("DIV", [
+  enode("DIV", [tnode('local p = Instance.new("Part")')]),
+  enode("DIV", [tnode("p.Parent = workspace")]),
+  enode("DIV", [tnode('print("OK")')]),
+], { attrs: { "data-block-id": "b1" } });
+const reply = enode("DIV", [
+  enode("DIV", [enode("DIV", [tnode("Creating the part "), enode("SPAN", [tnode("now")]), tnode(".")])], { attrs: { "data-block-id": "b0" } }),
+  enode("DIV", [tnode("###LUA###")], { attrs: { "data-block-id": "b2" } }),
+  codeBlock,
+  enode("DIV", [tnode("###END_LUA###")], { attrs: { "data-block-id": "b3" } }),
+  enode("DIV", [tnode("hidden")], { className: "rs-chip" }),
+], { attrs: { "data-content-editable-root": "true" } });
+const text = P.itemText(reply);
+assert(text === 'Creating the part now.\n###LUA###\nlocal p = Instance.new("Part")\np.Parent = workspace\nprint("OK")\n###END_LUA###',
+  "block-aware transcript text keeps one line per block, joins inline spans, skips rs-chip: " + JSON.stringify(text));
+const single = enode("DIV", [tnode("ORscript is ready")]);
+assert(P.itemText(single) === "ORscript is ready", "single-line text is byte-identical to textContent");
+console.log("PASS  1.21.4 Notion loop: bounded catalogue, provider mutation hooks, block-aware transcript reading");
