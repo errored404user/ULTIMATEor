@@ -155,7 +155,7 @@ const RSProvider = (() => {
     ".ProseMirror, .tiptap, [role='textbox']";
   // Text currently shown by Notion's full-page AI composer. Keep older wording
   // as fallbacks because Notion A/B-tests this copy.
-  const COMPOSER_TEXT_RE = /(do anything with|anything with ai|ask notion ai|ask ai|ask anything|what would you like|message.*(?:ai|notion)|start typing|reply to|your message|frag(?:e)? notion[-\s]?(?:ki|ai)|frage.*(?:ki|notion)|demande[rz]? .*notion|pregunta.*notion|pergunte.*notion)/i;
+  const COMPOSER_TEXT_RE = /(do anything with|anything with ai|ask notion ai|ask notion|ask ai|ask anything|ask,? search|ask (?:the )?agent|ask a question|what would you like|what do you want to (?:do|know|build|make)|plan,? search|search,? ask|message.*(?:ai|notion)|type (?:a|your) message|write (?:a|your) message|start typing|reply to|your message|frag(?:e)? notion[-\s]?(?:ki|ai)|frage.*(?:ki|notion)|demande[rz]? .*notion|pregunta.*notion|pergunte.*notion)/i;
   // Placeholder wording that is only trusted as an attribute on (or labelling)
   // the composer: as free text, AI replies also say "How can I help...".
   const COMPOSER_PLACEHOLDER_RE = /how can i help|wie kann ich (?:dir|ihnen) helfen|was m[öo]chtest du|frag(?:e)? (?:die )?ki|ki etwas fragen|comment puis-je|comment (?:puis|peux).*aider|c[óo]mo puedo ayudar|como posso ajudar/i;
@@ -170,6 +170,7 @@ const RSProvider = (() => {
     _phCache = null; _phAt = 0; _phAttrEditor = null;
     _frameCache = null; _frameEditor = null;
     _lastEditorLogged = null;
+    _strictMissSince = 0;
   }
   function candidateVisible(el) {
     if (!el || !safeRead(() => el.isConnected, false) || safeRead(() => el.hidden, true)) return false;
@@ -365,6 +366,51 @@ const RSProvider = (() => {
         !strongComposerHint && !nearbyComposerHint && !definitiveSend) s -= 12;
     return s;
   }
+  // Strict ranking missed for a while: pick the chat-shaped editable nearest
+  // the bottom of the viewport. Only ever consulted on an AI route, only after
+  // RELAXED_AFTER_MS of misses, and never for transcript blocks (those are
+  // contenteditable="false" or sit above the composer).
+  const RELAXED_AFTER_MS = 2500;
+  let _strictMissSince = 0;
+  function relaxedComposerCandidate(cands) {
+    if (!isAiSurface()) { _strictMissSince = 0; return null; }
+    const now = Date.now();
+    if (!_strictMissSince) { _strictMissSince = now; return null; }
+    if (now - _strictMissSince < RELAXED_AFTER_MS) return null;
+    const pool = [];
+    const consider = (e) => {
+      if (!e || pool.includes(e) || !safeRead(() => e.isConnected, false)) return;
+      if (safeRead(() => e.closest, null) && safeClosest(e, "#rs-root, [data-orscript-notion-card]")) return;
+      if (safeRead(() => e.disabled, false) === true) return;
+      if (!isTextControl(e) && safeRead(() => e.getAttribute("contenteditable"), null) === "false") return;
+      if (safeRead(() => e.getAttribute("aria-readonly"), null) === "true" || safeRead(() => e.readOnly, false) === true) return;
+      if (isTextControl(e) && /^(search|email|password|number|url|tel)$/i.test(safeRead(() => e.getAttribute("type"), "") || "")) return;
+      if (!candidateVisible(e)) return;
+      pool.push(e);
+    };
+    (cands || []).forEach(consider);
+    try { safeQueryAll(document, "textarea, [role='textbox'], [contenteditable='true'], [contenteditable='plaintext-only'], .ProseMirror, .tiptap").forEach(consider); } catch {}
+    if (!pool.length) return null;
+    const vh = Math.max(200, innerHeight || 0);
+    let best = null, bestScore = -Infinity;
+    for (const e of pool) {
+      const r = safeRect(e);
+      if (r.readFailed || r.width < 200 || r.top < vh * 0.4) continue; // composer lives in the lower part of the chat
+      let sc = r.bottom; // lowest wins
+      if (safeRead(() => e.tagName, "") === "TEXTAREA") sc += 400;
+      if (safeRead(() => e.matches, null) && safeRead(() => e.matches("[role='textbox'], .ProseMirror, .tiptap"), false)) sc += 200;
+      // Any send/stop-looking control within a few wrappers is a strong sign.
+      for (let n = safeRead(() => e.parentElement, null), i = 0; n && i < 6; n = safeRead(() => n.parentElement, null), i++) {
+        if (controlsIn(n).some((b) => SEND_RE.test(ariaOf(b)) || SEND_RE.test(safeRead(() => b.getAttribute("data-testid"), null) || "") || STOP_RE.test(ariaOf(b)))) { sc += 600; break; }
+      }
+      if (sc > bestScore) { bestScore = sc; best = e; }
+    }
+    if (best) {
+      _phAttrEditor = best;
+      try { diag("notion.editor.relaxed", { tag: safeRead(() => best.tagName, ""), cls: String(safeRead(() => best.className, "") || "").slice(0, 60), pool: pool.length, path: location.pathname }); } catch {}
+    }
+    return best;
+  }
   function findEditorRaw() {
     // Absolutely never inspect normal Notion page editors. This one guard fixes
     // the exact /p/Welcome-to-Notion false positive in the v2.3.4 console trace.
@@ -388,7 +434,6 @@ const RSProvider = (() => {
     // missing composer still caused a full DOM scan on every mutation.
     if (_editorAt && now - _editorAt < 1200) return null;
     const cands = editorCandidates();
-    if (!cands.length) { _editorAt = now; _editorCache = null; return null; }
     const scored = cands.map((c) => {
       let bottom = 0;
       try { bottom = safeRect(c).bottom; } catch {}
@@ -397,8 +442,19 @@ const RSProvider = (() => {
     scored.sort((a, b) => (b.s - a.s) || (b.bottom - a.bottom));
     // Require real composer evidence. A generic Notion search input scores 4;
     // a real textarea plus its AI placeholder/local send control scores 9+.
-    if (scored[0].s < 9) { _editorAt = now; _editorCache = null; return null; }
-    const top = scored[0].c;
+    // ORscript 1.21.1: when the strict ranking keeps failing on a confirmed AI
+    // route (Notion renamed its placeholder copy / send test-id again), fall
+    // back to the lowest visible chat-shaped editable in the bottom half of the
+    // viewport. /chat and /ai never render page blocks, so this cannot pick a
+    // document editor; it only ends the "waiting for the chat composer" stall.
+    let top = null, relaxed = false;
+    if (scored.length && scored[0].s >= 9) top = scored[0].c;
+    else {
+      const r = relaxedComposerCandidate(cands);
+      if (r) { top = r; relaxed = true; }
+    }
+    if (!top) { _editorAt = now; _editorCache = null; return null; }
+    if (!relaxed) _strictMissSince = 0;
     _editorCache = top; _editorAt = now;
     if (_lastEditorLogged !== top) {
       _lastEditorLogged = top;
@@ -409,7 +465,7 @@ const RSProvider = (() => {
           role: safeRead(() => top.getAttribute, null) && safeRead(() => top.getAttribute("role"), null),
           placeholder: safeRead(() => top.getAttribute, null) && (safeRead(() => top.getAttribute("placeholder"), null) || safeRead(() => top.getAttribute("data-placeholder"), null)),
           cls: String(safeRead(() => top.className, "") || "").slice(0, 60), hint: scored[0].s,
-          cands: cands.length, bottom: Math.round(scored[0].bottom), path: location.pathname,
+          cands: cands.length, bottom: Math.round(scored.length ? scored[0].bottom : 0), relaxed, path: location.pathname,
         });
       } catch {}
     }
@@ -2847,7 +2903,11 @@ const RSProvider = (() => {
       const here = esc((location.pathname || "/").slice(0, 40));
       return `<b>Notion</b> — open <b>notion.so/chat</b> (Notion AI) to use ORscript. This page: <code>${here}</code>`;
     }
-    if (!getEditor()) return `<b>Notion AI</b> — waiting for the chat composer… (if it is already on screen, report this page's URL)`;
+    if (!getEditor()) {
+      let boxes = 0;
+      try { boxes = safeQueryAll(document, "textarea, [role='textbox'], [contenteditable='true']").filter((e) => !safeClosest(e, "#rs-root") && candidateVisible(e)).length; } catch {}
+      return `<b>Notion AI</b> — waiting for the chat composer… (${boxes} visible text box${boxes === 1 ? "" : "es"}; click into the composer once if it is already on screen)`;
+    }
     return null;
   };
   const captchaPresent = () => false;

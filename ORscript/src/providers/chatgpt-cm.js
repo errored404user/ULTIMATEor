@@ -35,6 +35,37 @@
 // and chatgpt.js falls back to joining .cm-line nodes (correct for short blocks).
 (() => {
   "use strict";
+  // Reads can fail while a framework remounts a surface. Do not hide write failures.
+  let domReadErrors = 0;
+  function safeRead(read, fallback) {
+    try { return read(); } catch { domReadErrors++; return fallback; }
+  }
+  function safeQuery(root, selector) {
+    return safeRead(() => root.querySelector(selector), null);
+  }
+  function safeQueryAll(root, selector) {
+    return safeRead(() => Array.from(root.querySelectorAll(selector)), []);
+  }
+  function safeClosest(node, selector) {
+    return safeRead(() => node.closest(selector), null);
+  }
+  function safeRect(node) {
+    return safeRead(() => node.getBoundingClientRect(), {x:0,y:0,left:0,top:0,right:0,bottom:0,width:0,height:0,readFailed:true});
+  }
+  function safeStyle(node) {
+    return safeRead(() => getComputedStyle(node), {display:'none',visibility:'hidden',opacity:'0',overflow:'hidden',overflowY:'hidden'});
+  }
+  function safePredicate(predicate) {
+    const before = domReadErrors;
+    const result = safeRead(predicate, false);
+    return before === domReadErrors ? result : false;
+  }
+  // A poll-count limit also bounds waits if the wall clock moves backwards.
+  function waitBudget(timeout, interval) {
+    const ms = Number.isFinite(timeout) ? Math.min(600000, Math.max(0, timeout)) : 30000;
+    return {ms, polls: Math.ceil(ms / interval)};
+  }
+
   if (window.__rsChatgptCm) return;
   window.__rsChatgptCm = true;
 
@@ -65,20 +96,20 @@
     const doc = docOf(content);
     if (!doc) return false;
     const len = doc.length;
-    if (seen.get(content) === len && content.hasAttribute(ATTR)) return true;
+    if (seen.get(content) === doc && safeRead(() => content.hasAttribute(ATTR), false)) return true;
     let text;
     try { text = doc.toString(); } catch { return false; }
     try {
       content.setAttribute(ATTR, text);
       content.setAttribute(LEN, String(len));
-      seen.set(content, len);
+      seen.set(content, doc);
     } catch { return false; }
     return true;
   }
 
   function syncAll() {
     let n = 0;
-    for (const c of document.querySelectorAll(".cm-content")) if (syncOne(c)) n++;
+    for (const c of safeQueryAll(document, ".cm-content")) if (syncOne(c)) n++;
     return n;
   }
 

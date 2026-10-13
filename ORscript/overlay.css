@@ -904,6 +904,27 @@ div[contenteditable].rs-typing {
   overflow-y: hidden !important;
 }
 
+/* ── ChatGPT: hide internal text while it is being inserted ───────────
+   React can replace the ProseMirror editor node mid-insert. A class on <html>
+   survives that replacement, so the new editor cannot flash the hidden
+   bootstrap / tool-result text on screen while ORscript types it. */
+html.rs-site-chatgpt.rs-chatgpt-injecting [contenteditable],
+html.rs-site-chatgpt.rs-chatgpt-injecting [contenteditable] * {
+  color: transparent !important;
+  caret-color: transparent !important;
+  text-shadow: none !important;
+}
+html.rs-site-chatgpt.rs-chatgpt-injecting [contenteditable],
+html.rs-site-chatgpt.rs-chatgpt-injecting textarea#prompt-textarea {
+  max-height: 72px !important;
+  overflow: hidden !important;
+}
+html.rs-site-chatgpt.rs-chatgpt-injecting [class*="prosemirror-parent"] {
+  max-height: 72px !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
 /* ── spinner element ───────────────────────────────────────── */
 .rs-spin {
   width: 12px; height: 12px; flex: none; display: inline-block;
