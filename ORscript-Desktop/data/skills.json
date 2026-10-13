@@ -1,0 +1,2628 @@
+{
+  "generated_at": "2026-10-13T12:44:52.418Z",
+  "total": 633,
+  "families": [
+    {
+      "id": "studio-core",
+      "title": "Studio production suite",
+      "engine": "roblox",
+      "description": "Lighting, UI, VFX, audio, terrain, camera, diagnostics, DataStore and NPC generators layered on execute_luau.",
+      "source": "studio_skills.js",
+      "skills": [
+        {
+          "name": "lighting_set_preset",
+          "description": "Instantly configure production lighting & atmosphere presets: cyberpunk, sunset_warm, warm_night (warm night 20h), horror_dark, fantasy_vibrant, overcast_moody, realistic_noon, vaporwave, space_void. Configures Atmosphere, Bloom, ColorCorrection, and SunRays (assumes Future technology is set manually - do not write Lighting.Technology via Luau). Use Glare (not Glaire) and EnvironmentDiffuseScale/E"
+        },
+        {
+          "name": "lighting_inspect",
+          "description": "Inspect active Lighting properties, Technology, Atmosphere settings, and all post-processing effects in the place."
+        },
+        {
+          "name": "lighting_setup_day_night",
+          "description": "Inject a clean, smooth Day/Night cycle controller script in ServerScriptService."
+        },
+        {
+          "name": "ui_create_screen",
+          "description": "Create a modern, responsive ScreenGui in StarterGui configured for clean layer rendering."
+        },
+        {
+          "name": "ui_create_component",
+          "description": "Generate styled UI in StarterGui. Types: health_stamina_hud, dialog_box, notification_toast, card_inventory, plus rewritten Forge language (forge_panel, forge_hud, forge_button, forge_inventory, forge_shop). forge:true (or the overlay Forge toggle) remaps HUDs/inventories into gold-metal Forge chrome."
+        },
+        {
+          "name": "ui_inspect",
+          "description": "Inspect the GUI hierarchy and components currently in StarterGui."
+        },
+        {
+          "name": "fx_create_emitter",
+          "description": "Attach high-fidelity tuned ParticleEmitter effects: fire, smoke, sparks, magic_portal, healing_aura."
+        },
+        {
+          "name": "fx_create_light",
+          "description": "Create a calibrated light source (PointLight, SpotLight, SurfaceLight) with shadow casting."
+        },
+        {
+          "name": "fx_create_vfx",
+          "description": "Assemble a complete composite VFX rig in one call (emitters + beams/trails + lights). Attach to a large transparent part for zone effects."
+        },
+        {
+          "name": "fx_create_beam",
+          "description": "Create a Beam between two Attachments with texture, color, width, and segments. Auto-creates attachments if target_path is a BasePart or omitted."
+        },
+        {
+          "name": "fx_create_trail",
+          "description": "Create a Trail with two Attachments that animates with movement. Ideal for swords, projectiles, and motion streaks."
+        },
+        {
+          "name": "fx_create_explosion",
+          "description": "Create a real Explosion with blast pressure/radius, optional crater type, and a flash + spark VFX anchor. Works at any Vector3 or attached to a part."
+        },
+        {
+          "name": "audio_setup_sound_hierarchy",
+          "description": "Configure industry-standard SoundService routing hierarchy: Master -> Music, SFX (Combat, Footsteps), Ambience, UI, Voice."
+        },
+        {
+          "name": "audio_create_sound",
+          "description": "Create and configure a Sound instance attached to a Part or routed to a SoundGroup."
+        },
+        {
+          "name": "terrain_fill_region",
+          "description": "Fill volumetric regions with voxel terrain materials (Grass, Rock, Sand, Water, Snow, Basalt, Lava, etc.)."
+        },
+        {
+          "name": "terrain_clear",
+          "description": "Clear terrain in a bounding box, or clear all terrain in the place if cframe/size omitted."
+        },
+        {
+          "name": "camera_set_style",
+          "description": "Inject high-performance camera controllers in StarterPlayerScripts: isometric, top_down, side_scroller."
+        },
+        {
+          "name": "diagnostics_audit",
+          "description": "Deep health and performance scan of the place: unanchored physics parts, missing humanoid roots, StreamingEnabled check."
+        },
+        {
+          "name": "diagnostics_fix_common",
+          "description": "Automatically apply optimizations: anchor static scenery parts, enable StreamingEnabled, enable Future lighting."
+        },
+        {
+          "name": "asset_bridge_import",
+          "description": "Import an FBX exported from Blender into Studio as Workspace.OR_Imported (EditableMesh). Pass asset = the filepath from blender_export_fbx. Also accepts rbxassetid://. Requires Connect Blender for FBX."
+        },
+        {
+          "name": "datastore_setup",
+          "description": "Scaffolds production DataStoreService player-data with session-lock-safe UpdateAsync, pcall retry, BindToClose flush, autosave loop and optional leaderstats folder (Coins + Level)."
+        },
+        {
+          "name": "leaderboard_setup",
+          "description": "Creates an OrderedDataStore global leaderboard with a SurfaceGui board part and a LeaderboardManager ModuleScript exposing GetTop(limit)."
+        },
+        {
+          "name": "remote_setup",
+          "description": "Creates a ReplicatedStorage RemoteEvent/RemoteFunction namespace with sample server handler script. Eliminates manual Remote wiring."
+        },
+        {
+          "name": "npc_spawn_pathfinding",
+          "description": "Spawns or reuses a Humanoid rig and injects a PathfindingService loop with CreatePath, ComputeAsync, Blocked re-compute, Jump handling and patrol/loop behaviours."
+        },
+        {
+          "name": "proximity_setup",
+          "description": "Adds a ProximityPrompt with Billboard handling, hold duration, max distance, cooldown debounce and optional leaderstats Coins reward to any BasePart."
+        },
+        {
+          "name": "tween_create",
+          "description": "Creates a TweenService tween on any instance property (Position, Transparency, Color3, UDim2, etc.) with EasingStyle/Direction, loop and yoyo. Generates a self-playing Script."
+        },
+        {
+          "name": "marketplace_setup",
+          "description": "Wires MarketplaceService for a GamePass or Developer Product: UserOwnsGamePassAsync check, PromptGamePassPurchaseFinished and ProcessReceipt templates with grant hook."
+        },
+        {
+          "name": "teams_setup",
+          "description": "Configures Teams service with coloured Team instances, TeamColor auto-distribution and an optional auto-balance assign script in ServerScriptService."
+        },
+        {
+          "name": "web_fetch",
+          "description": "Fetches any URL via HttpService (GET) and returns the body text. Use for docs, APIs, or reference pages. Respects max_chars (500-20000)."
+        },
+        {
+          "name": "web_search",
+          "description": "Web search via DuckDuckGo HTML, returns top results as title+URL. Perfect for the AI to get a quick reference before building."
+        },
+        {
+          "name": "script_analysis",
+          "description": "Read + lint scripts (alias: script_read_analysis). Walks SSS/StarterPlayer/StarterGui/RS/Workspace (not CoreGui). Luau block-balance (not loadstring), flags WaitForChild without timeout, bare wait/spawn/delay (not task.*), Instance.new parent arg, plus Output."
+        },
+        {
+          "name": "plugin_list",
+          "description": "List Studio plugin surfaces: PluginGuiService, CoreGui plugin/DockWidget GUIs, PluginDebugService, and ServerStorage.RobloxScript.Plugins skeletons created by plugin_create."
+        },
+        {
+          "name": "plugin_inspect",
+          "description": "Inspect one plugin instance (name, class, children) by dotted path from plugin_list."
+        },
+        {
+          "name": "plugin_create",
+          "description": "Write a local-plugin skeleton under ServerStorage.RobloxScript.Plugins.<name> with a toolbar button + DockWidget script. User must Save as Local Plugin — the plugin global is not available inside execute_luau."
+        }
+      ]
+    },
+    {
+      "id": "studio-daily",
+      "title": "Everyday Studio commands",
+      "engine": "roblox",
+      "description": "Parts, selection, tags, attributes and the small operations builders use all day.",
+      "source": "studio_daily.js",
+      "skills": [
+        {
+          "name": "part_create",
+          "description": "Create a Part (size, position, color, material, anchored). Daily building block."
+        },
+        {
+          "name": "model_group",
+          "description": "Group instances into a Model and set PrimaryPart."
+        },
+        {
+          "name": "weld_assemble",
+          "description": "WeldConstraint every BasePart in a model/part to the first part (keeps it rigid)."
+        },
+        {
+          "name": "tool_create",
+          "description": "Create a Tool with a Handle in StarterPack (or parent)."
+        },
+        {
+          "name": "dummy_spawn",
+          "description": "Spawn a simple Humanoid dummy (HRP + Torso + Head) in Workspace."
+        },
+        {
+          "name": "kill_brick",
+          "description": "Make a part kill on touch (or create a red kill brick)."
+        },
+        {
+          "name": "spawn_location",
+          "description": "Create a SpawnLocation."
+        },
+        {
+          "name": "instance_destroy",
+          "description": "Destroy an instance by dotted path."
+        },
+        {
+          "name": "instance_clone",
+          "description": "Clone an instance."
+        },
+        {
+          "name": "material_set",
+          "description": "Set Material (and optional color) on a part and its descendant parts."
+        },
+        {
+          "name": "click_detector",
+          "description": "Add a ClickDetector to a BasePart."
+        },
+        {
+          "name": "billboard",
+          "description": "Add an always-on-top BillboardGui label above a part."
+        },
+        {
+          "name": "attribute_set",
+          "description": "Set an Attribute on an instance."
+        },
+        {
+          "name": "tag_add",
+          "description": "CollectionService:AddTag."
+        },
+        {
+          "name": "selection_info",
+          "description": "List the current Studio Selection."
+        },
+        {
+          "name": "sky_set",
+          "description": "Quick sky/ambient: day, night, sunset, space."
+        },
+        {
+          "name": "health_pack",
+          "description": "Create a pickup that heals, then destroys itself."
+        },
+        {
+          "name": "sprint_setup",
+          "description": "LocalScript: hold LeftShift to sprint."
+        },
+        {
+          "name": "seat_create",
+          "description": "Create a Seat or VehicleSeat."
+        },
+        {
+          "name": "workspace_list",
+          "description": "List children of a path (default Workspace)."
+        },
+        {
+          "name": "instance_rename",
+          "description": "Rename an instance. Path is dotted from game (e.g. Workspace.Part)."
+        },
+        {
+          "name": "instance_reparent",
+          "description": "Move an instance to a new parent."
+        },
+        {
+          "name": "selection_set",
+          "description": "Set Studio Selection to the given instance paths."
+        },
+        {
+          "name": "script_append",
+          "description": "Append source to a Script/LocalScript/ModuleScript (does not overwrite)."
+        },
+        {
+          "name": "camera_look_at",
+          "description": "Point the Studio camera at an instance (edit-mode viewport)."
+        },
+        {
+          "name": "attribute_get",
+          "description": "Read one Attribute from an instance."
+        },
+        {
+          "name": "pivot_set",
+          "description": "Set an instance pivot world position [x,y,z]."
+        },
+        {
+          "name": "highlight_add",
+          "description": "Add/update a Highlight on an instance so you can see it in the viewport."
+        },
+        {
+          "name": "script_set_source",
+          "description": "Overwrite a Script/LocalScript/ModuleScript Source."
+        },
+        {
+          "name": "script_list",
+          "description": "List LuaSourceContainer scripts under a path (default whole game, capped)."
+        },
+        {
+          "name": "script_disable",
+          "description": "Set Script.Disabled (true to disable)."
+        },
+        {
+          "name": "sound_play",
+          "description": "Play a Sound on an instance (or a child Sound)."
+        },
+        {
+          "name": "anchored_set",
+          "description": "Set BasePart.Anchored."
+        },
+        {
+          "name": "collision_set",
+          "description": "Set CanCollide / CanTouch / CanQuery on a BasePart."
+        },
+        {
+          "name": "transparency_set",
+          "description": "Set Transparency on a part, decal, texture, or GuiObject (0-1)."
+        },
+        {
+          "name": "humanoid_set",
+          "description": "Set WalkSpeed / JumpPower / MaxHealth / HipHeight on a Humanoid."
+        },
+        {
+          "name": "lighting_set",
+          "description": "Set one Lighting property (ClockTime, Brightness, FogEnd, Ambient as [r,g,b] 0-255)."
+        },
+        {
+          "name": "folder_create",
+          "description": "Create a Folder under a parent path."
+        },
+        {
+          "name": "value_set",
+          "description": "Set .Value on a ValueBase (String/Int/Number/BoolValue)."
+        },
+        {
+          "name": "weld_constraint",
+          "description": "WeldConstraint two BaseParts together."
+        },
+        {
+          "name": "camera_subject",
+          "description": "Set Workspace.CurrentCamera.CameraSubject."
+        },
+        {
+          "name": "instance_move",
+          "description": "Move a part/model to world position [x,y,z]."
+        },
+        {
+          "name": "tag_remove",
+          "description": "Remove a CollectionService tag from an instance."
+        },
+        {
+          "name": "capture_id",
+          "description": "NOT a screenshot. Returns UniqueId + asset IDs (MeshId, Image, SoundId, AnimationId) from the Studio selection or path. For a PHOTO call or_screenshot."
+        }
+      ]
+    },
+    {
+      "id": "studio-gui",
+      "title": "GUI builder",
+      "engine": "roblox",
+      "description": "ScreenGui scaffolds, responsive layouts and component generators.",
+      "source": "studio_gui.js",
+      "skills": [
+        {
+          "name": "ui_build",
+          "description": "Build a production ScreenGui from a widgets[] spec. Each widget can set class, name, parent, size, position, text, image/texture (rbxassetid, numeric id, or builtin panel|button|circle|icon|close), corner, stroke, colors. Always creates ImageLabels for art — never grey placeholders."
+        },
+        {
+          "name": "ui_set_image",
+          "description": "Set the Image on an ImageLabel/ImageButton (or add one). Accepts rbxassetid://, numeric id, or rbxasset:// texture. Also ScaleType, ImageColor3, 9-slice."
+        },
+        {
+          "name": "ui_set_texture",
+          "description": "Replace textures/images on a GUI or 3D instance and (by default) its descendants: ImageLabel.Image, Decal/Texture, MeshPart.TextureID."
+        },
+        {
+          "name": "ui_set_text",
+          "description": "Set Text / font / color / stroke / alignment on a TextLabel, TextButton, or TextBox (creates a child label if needed)."
+        },
+        {
+          "name": "ui_set_color",
+          "description": "Set BackgroundColor3 / transparency / border on a GuiObject (or Part.Color)."
+        },
+        {
+          "name": "ui_set_size",
+          "description": "Set Size as UDim2 [scaleX, offsetX, scaleY, offsetY]."
+        },
+        {
+          "name": "ui_set_position",
+          "description": "Set Position UDim2, optional AnchorPoint [x,y] and ZIndex."
+        },
+        {
+          "name": "ui_set_font",
+          "description": "Set Font / TextSize on a widget and descendants."
+        },
+        {
+          "name": "ui_set_corner",
+          "description": "Add or update UICorner (pixel radius, optional scale)."
+        },
+        {
+          "name": "ui_set_stroke",
+          "description": "Add or update UIStroke color/thickness/transparency."
+        },
+        {
+          "name": "ui_set_gradient",
+          "description": "Add or update UIGradient (from/to colors, rotation)."
+        },
+        {
+          "name": "ui_set_padding",
+          "description": "Add or update UIPadding."
+        },
+        {
+          "name": "ui_set_layout",
+          "description": "UIListLayout, UIGridLayout, or UIPageLayout on a frame."
+        },
+        {
+          "name": "ui_set_visible",
+          "description": "Visible / Active / ZIndex / DisplayOrder."
+        },
+        {
+          "name": "ui_set_property",
+          "description": "Set ANY property on an instance. Colors as [r,g,b], UDim2 as [sx,ox,sy,oy], Enums as 'Enum.Font.Gotham' or Font='Gotham'. Use this to change everything the dedicated tools miss."
+        },
+        {
+          "name": "ui_paint",
+          "description": "Walk a ScreenGui/frame and restyle every widget: background, accent, text, font, corner, stroke, and optional image/texture on every ImageLabel."
+        },
+        {
+          "name": "ui_add_element",
+          "description": "Create Frame/TextLabel/TextButton/ImageLabel/ImageButton/ScrollingFrame/ViewportFrame/TextBox under a parent. Optional image/text/size/position/properties."
+        },
+        {
+          "name": "ui_set_scale",
+          "description": "Add or update UIScale on a GuiObject."
+        },
+        {
+          "name": "ui_list_tree",
+          "description": "Deep-list a GUI tree with Image, Text, Size, colors — so you can see current textures before changing them."
+        },
+        {
+          "name": "ui_apply_theme",
+          "description": "Paint a GUI tree with a named theme: dark, light, gold, sakura, night, horror, neon, stud. Optional image applied to every ImageLabel."
+        },
+        {
+          "name": "ui_set_slice",
+          "description": "Enable 9-slice ScaleType.Slice + SliceCenter on an image widget (optionally set the image too)."
+        },
+        {
+          "name": "ui_bind_button",
+          "description": "Attach a LocalScript click handler: print, destroy_parent, toggle_parent, or custom source."
+        },
+        {
+          "name": "decal_set",
+          "description": "Add/update a Decal on a BasePart face (Front/Back/Left/Right/Top/Bottom) with a texture id."
+        },
+        {
+          "name": "mesh_set_texture",
+          "description": "Set MeshPart.TextureID or SpecialMesh.TextureId."
+        },
+        {
+          "name": "surface_gui_create",
+          "description": "Put a SurfaceGui on a part, optional full-face image and/or text."
+        },
+        {
+          "name": "ui_clone",
+          "description": "Clone a GUI instance (optional new name / parent)."
+        },
+        {
+          "name": "ui_clear_children",
+          "description": "Remove every child of a GUI instance (the instance itself stays)."
+        },
+        {
+          "name": "ui_set_anchor",
+          "description": "Set AnchorPoint on a GuiObject (x/y 0-1)."
+        },
+        {
+          "name": "ui_bring_to_front",
+          "description": "Raise DisplayOrder (ScreenGui) or ZIndex (GuiObject) so it draws on top."
+        },
+        {
+          "name": "ui_auto_layout",
+          "description": "Auto Layout on a frame: UIListLayout + padding + hug (AutomaticSize). direction Horizontal|Vertical, gap, padding, hug."
+        },
+        {
+          "name": "ui_constraints",
+          "description": "Layout constraints: AnchorPoint, min/max size, aspect ratio."
+        }
+      ]
+    },
+    {
+      "id": "studio-plus",
+      "title": "Studio plus",
+      "engine": "roblox",
+      "description": "Advanced instance operations, batch edits and scripting helpers.",
+      "source": "studio_plus.js",
+      "skills": [
+        {
+          "name": "size_set",
+          "description": "Set BasePart.Size [x,y,z]."
+        },
+        {
+          "name": "color_set",
+          "description": "Set BasePart.Color from RGB 0-255."
+        },
+        {
+          "name": "cframe_set",
+          "description": "Set CFrame (position + rotation degrees) on a Part or Model."
+        },
+        {
+          "name": "rotation_set",
+          "description": "Set BasePart.Orientation in degrees."
+        },
+        {
+          "name": "massless_set",
+          "description": "Set BasePart.Massless."
+        },
+        {
+          "name": "can_touch_set",
+          "description": "Set BasePart.CanTouch."
+        },
+        {
+          "name": "can_query_set",
+          "description": "Set BasePart.CanQuery."
+        },
+        {
+          "name": "cast_shadow_set",
+          "description": "Set BasePart.CastShadow."
+        },
+        {
+          "name": "collision_group_set",
+          "description": "Register and assign a PhysicsService collision group."
+        },
+        {
+          "name": "brickcolor_set",
+          "description": "Set BasePart.BrickColor by name."
+        },
+        {
+          "name": "meshpart_create",
+          "description": "Create an anchored MeshPart."
+        },
+        {
+          "name": "wedge_create",
+          "description": "Create an anchored WedgePart."
+        },
+        {
+          "name": "spawn_box",
+          "description": "Build a floor + four walls arena box in Workspace."
+        },
+        {
+          "name": "ladder_create",
+          "description": "Create a climbable TrussPart ladder."
+        },
+        {
+          "name": "trampoline_create",
+          "description": "Create a bounce pad Part with a Touched script."
+        },
+        {
+          "name": "conveyor_create",
+          "description": "Create a conveyor Part using AssemblyLinearVelocity."
+        },
+        {
+          "name": "ice_part",
+          "description": "Create a slippery Ice material Part."
+        },
+        {
+          "name": "jump_pad",
+          "description": "Create a pad that launches characters up."
+        },
+        {
+          "name": "speed_pad",
+          "description": "Create a pad that sets Humanoid.WalkSpeed on touch."
+        },
+        {
+          "name": "attachment_create",
+          "description": "Add an Attachment under a part (for constraints)."
+        },
+        {
+          "name": "hinge_create",
+          "description": "HingeConstraint between part0 and part1."
+        },
+        {
+          "name": "spring_create",
+          "description": "SpringConstraint between part0 and part1."
+        },
+        {
+          "name": "rope_create",
+          "description": "RopeConstraint between part0 and part1."
+        },
+        {
+          "name": "vector_force_create",
+          "description": "VectorForce on a BasePart."
+        },
+        {
+          "name": "linear_velocity_create",
+          "description": "LinearVelocity on a BasePart."
+        },
+        {
+          "name": "fire_add",
+          "description": "Add a Fire effect to an instance."
+        },
+        {
+          "name": "smoke_add",
+          "description": "Add a Smoke effect to an instance."
+        },
+        {
+          "name": "sparkles_add",
+          "description": "Add Sparkles to an instance."
+        },
+        {
+          "name": "point_light_add",
+          "description": "Add a PointLight."
+        },
+        {
+          "name": "spot_light_add",
+          "description": "Add a SpotLight."
+        },
+        {
+          "name": "atmosphere_set",
+          "description": "Set Lighting Atmosphere density/offset."
+        },
+        {
+          "name": "bloom_set",
+          "description": "Set Lighting BloomEffect."
+        },
+        {
+          "name": "blur_set",
+          "description": "Set Lighting BlurEffect size."
+        },
+        {
+          "name": "color_correction_set",
+          "description": "Set Lighting ColorCorrectionEffect."
+        },
+        {
+          "name": "sunrays_set",
+          "description": "Set Lighting SunRaysEffect intensity."
+        },
+        {
+          "name": "gravity_set",
+          "description": "Set Workspace.Gravity."
+        },
+        {
+          "name": "walkspeed_set",
+          "description": "Set StarterPlayer and live Humanoid WalkSpeed."
+        },
+        {
+          "name": "jumppower_set",
+          "description": "Set StarterPlayer and live Humanoid JumpPower."
+        },
+        {
+          "name": "forcefield_add",
+          "description": "Add a ForceField under an instance."
+        },
+        {
+          "name": "explosion_at",
+          "description": "Create an Explosion at a world position (Edit preview)."
+        },
+        {
+          "name": "teleport_to",
+          "description": "Pivot a Model or Part to a world position."
+        },
+        {
+          "name": "leaderstats_int",
+          "description": "Install a PlayerAdded leaderstats IntValue script."
+        },
+        {
+          "name": "remote_event_create",
+          "description": "Create or reuse a RemoteEvent in ReplicatedStorage."
+        },
+        {
+          "name": "sound_volume",
+          "description": "Set Sound.Volume on a Sound instance."
+        },
+        {
+          "name": "set_property",
+          "description": "Set any instance property by name (string/number/bool)."
+        },
+        {
+          "name": "get_property",
+          "description": "Read any instance property and return its value."
+        },
+        {
+          "name": "scale_model",
+          "description": "Model:ScaleTo(scale)."
+        },
+        {
+          "name": "ungroup_model",
+          "description": "Move a Model's children to its parent and destroy the Model."
+        },
+        {
+          "name": "developer_product_create",
+          "description": "Create a real Roblox Developer Product on this published universe (name + Robux price). Browser must be signed into roblox.com. Then wires ProcessReceipt if reward is set."
+        },
+        {
+          "name": "developer_product_list",
+          "description": "List Developer Products on this universe."
+        }
+      ]
+    },
+    {
+      "id": "studio-100",
+      "title": "Studio 100",
+      "engine": "roblox",
+      "description": "One hundred focused primitives: physics, constraints, materials, sounds, scripting utilities.",
+      "source": "studio_100.js",
+      "skills": [
+        {
+          "name": "weapon_hitbox_create",
+          "description": "Create an animated or raycast melee hitbox attached to a weapon part."
+        },
+        {
+          "name": "projectile_launcher",
+          "description": "Spawn a physical or raycasted projectile launcher with impact explosion."
+        },
+        {
+          "name": "weapon_recoil_set",
+          "description": "Apply procedural camera/weapon recoil CFrame offsets."
+        },
+        {
+          "name": "shield_bubble_create",
+          "description": "Spawn a glowing forcefield shield bubble that blocks raycasts around a character."
+        },
+        {
+          "name": "damage_indicator_show",
+          "description": "Spawn floating 3D or ScreenGui damage numbers at a target position."
+        },
+        {
+          "name": "ammo_system_setup",
+          "description": "Wire weapon clip size, max ammo, reload timer, and HUD ammo counter."
+        },
+        {
+          "name": "target_dummy_spawn",
+          "description": "Spawn an animated target dummy with DPS tracking and health regeneration."
+        },
+        {
+          "name": "knockback_apply",
+          "description": "Apply directional velocity or impulse knockback to a character."
+        },
+        {
+          "name": "status_effect_apply",
+          "description": "Apply a timed status effect (Poison, Freeze, Burn, Stun, Haste) with visual aura."
+        },
+        {
+          "name": "weapon_trail_enable",
+          "description": "Attach a high-visibility weapon slash trail to a tool or part."
+        },
+        {
+          "name": "vehicle_chassis_create",
+          "description": "Create a basic 4-wheel vehicle chassis with VehicleSeat and Springs."
+        },
+        {
+          "name": "plane_seat_setup",
+          "description": "Setup an airplane seat with flight controls (Pitch, Roll, Yaw)."
+        },
+        {
+          "name": "boat_float_setup",
+          "description": "Setup a boat with buoyant body forces and steering."
+        },
+        {
+          "name": "teleport_pad_wire",
+          "description": "Create paired teleport pads with cooldown and visual portal."
+        },
+        {
+          "name": "zipline_create",
+          "description": "Spawn a zipline cable between two points with sliding harness."
+        },
+        {
+          "name": "conveyor_belt_create",
+          "description": "Create a moving conveyor belt using AssemblyLinearVelocity."
+        },
+        {
+          "name": "elevator_system_build",
+          "description": "Build a multi-floor elevator with floor buttons and door tweening."
+        },
+        {
+          "name": "rail_grind_setup",
+          "description": "Wire a grind rail system that snaps characters along a path."
+        },
+        {
+          "name": "launch_pad_create",
+          "description": "Create a launch pad with launch angle and velocity impulse."
+        },
+        {
+          "name": "checkpoint_track_build",
+          "description": "Create a race track checkpoint sequence with lap counter."
+        },
+        {
+          "name": "cutscene_camera_track",
+          "description": "Create a smooth multi-keyframe camera cutscene sequence."
+        },
+        {
+          "name": "character_emote_play",
+          "description": "Play an animation emote track on a player's character."
+        },
+        {
+          "name": "ik_control_setup",
+          "description": "Attach IKControl instances to character limbs for gun aiming or foot placement."
+        },
+        {
+          "name": "camera_shake_preset",
+          "description": "Apply realistic camera shake presets (Explosion, Earthquake, Gunfire)."
+        },
+        {
+          "name": "ragdoll_death_enable",
+          "description": "Enable instant client/server ragdoll on character death."
+        },
+        {
+          "name": "head_tracking_enable",
+          "description": "Wire procedural head/neck looking toward the camera or nearest player."
+        },
+        {
+          "name": "facial_animation_play",
+          "description": "Set face decal or DynamicHead facial expressions."
+        },
+        {
+          "name": "footstep_sound_wire",
+          "description": "Wire material-based footstep sound effects."
+        },
+        {
+          "name": "anim_blend_space",
+          "description": "Create a 2D locomotion blend space (Idle -> Walk -> Run)."
+        },
+        {
+          "name": "first_person_body_toggle",
+          "description": "Toggle visible first-person arms and body for local camera."
+        },
+        {
+          "name": "staircase_generate",
+          "description": "Procedurally generate spiral or straight staircases."
+        },
+        {
+          "name": "fence_line_build",
+          "description": "Build a procedural fence line between two points."
+        },
+        {
+          "name": "bridge_suspension_make",
+          "description": "Generate a wooden or rope suspension bridge with plank physics."
+        },
+        {
+          "name": "window_glass_install",
+          "description": "Insert glass window panes with frame border and reflectivity."
+        },
+        {
+          "name": "door_interactive_wire",
+          "description": "Create a swing or slide door with ProximityPrompt and sounds."
+        },
+        {
+          "name": "archway_generate",
+          "description": "Procedurally generate a stone or brick archway."
+        },
+        {
+          "name": "roof_structure_build",
+          "description": "Procedurally build pitched gable or flat roofs over a building footprint."
+        },
+        {
+          "name": "dungeon_room_generate",
+          "description": "Generate a grid room with walls, doorways, and torch lights."
+        },
+        {
+          "name": "road_path_build",
+          "description": "Create a paved road or dirt path curve over terrain."
+        },
+        {
+          "name": "tree_forest_scatter",
+          "description": "Scatter a variety of trees and foliage across a region."
+        },
+        {
+          "name": "spring_constraint_set",
+          "description": "Create a SpringConstraint between two parts."
+        },
+        {
+          "name": "rope_pulley_setup",
+          "description": "Create a rope pulley mechanism connecting two weights."
+        },
+        {
+          "name": "gear_mechanism_build",
+          "description": "Create interlocking rotating gear constraints."
+        },
+        {
+          "name": "destructible_wall_make",
+          "description": "Create a breakable wall composed of weld-connected bricks."
+        },
+        {
+          "name": "wind_force_zone",
+          "description": "Create a volumetric wind zone applying directional air resistance."
+        },
+        {
+          "name": "floating_water_craft",
+          "description": "Create buoyant body physics for floating objects."
+        },
+        {
+          "name": "magnetic_part_setup",
+          "description": "Create attractive or repulsive magnetic force fields."
+        },
+        {
+          "name": "ragdoll_joint_tune",
+          "description": "Adjust limits and friction on BallSocketConstraints."
+        },
+        {
+          "name": "gravity_zone_create",
+          "description": "Create a localized zero-g, high-g, or inverted gravity region."
+        },
+        {
+          "name": "chain_constraint_build",
+          "description": "Build a physics-simulated chain or rope composed of linked segments."
+        },
+        {
+          "name": "dialogue_tree_create",
+          "description": "Build a multi-node NPC dialogue system with choice options."
+        },
+        {
+          "name": "quest_tracker_wire",
+          "description": "Wire a quest system (Objective, Target Count, Reward)."
+        },
+        {
+          "name": "item_drop_spawn",
+          "description": "Spawn glowing 3D loot drops with pickup prompts."
+        },
+        {
+          "name": "chest_loot_create",
+          "description": "Build an interactive treasure chest with opening animation."
+        },
+        {
+          "name": "badge_award_setup",
+          "description": "Wire automated BadgeService awards upon reaching an objective."
+        },
+        {
+          "name": "daily_reward_system",
+          "description": "Setup a 7-day login streak reward system with DataStore tracking."
+        },
+        {
+          "name": "shop_category_build",
+          "description": "Create a tabbed shop UI (Weapons, Skins, Passes, Boosts)."
+        },
+        {
+          "name": "trading_system_setup",
+          "description": "Wire a two-player item trading window with accept locks."
+        },
+        {
+          "name": "crafting_bench_wire",
+          "description": "Build a crafting station UI with recipe checking."
+        },
+        {
+          "name": "spin_wheel_create",
+          "description": "Create a daily lucky wheel UI with spin animation and rewards."
+        },
+        {
+          "name": "snowfall_weather_set",
+          "description": "Create realistic ambient snowfall with ground snow tiles."
+        },
+        {
+          "name": "volcanic_eruption_fx",
+          "description": "Spawn a volcanic eruption with lava particles and meteor rocks."
+        },
+        {
+          "name": "rain_puddle_effect",
+          "description": "Create dynamic rain puddle reflections and water ripple attachments."
+        },
+        {
+          "name": "sandstorm_effect_set",
+          "description": "Create a dense desert sandstorm with swirling dust particles."
+        },
+        {
+          "name": "underwater_effect_enable",
+          "description": "Setup underwater post-processing, caustics light, and swim mechanics."
+        },
+        {
+          "name": "aurora_borealis_set",
+          "description": "Spawn a glowing celestial aurora night sky effect."
+        },
+        {
+          "name": "firefly_field_spawn",
+          "description": "Spawn floating glowing ambient fireflies that drift through scenes."
+        },
+        {
+          "name": "portal_vfx_create",
+          "description": "Create a swirling magic/sci-fi portal with particle vortex and sound."
+        },
+        {
+          "name": "beam_laser_grid",
+          "description": "Create security laser grids that trigger alarms or damage."
+        },
+        {
+          "name": "cloud_layer_build",
+          "description": "Create dense volumetric procedural clouds at custom altitude."
+        },
+        {
+          "name": "health_bar_boss_create",
+          "description": "Build a top-screen cinematic Boss Health Bar."
+        },
+        {
+          "name": "mini_map_setup",
+          "description": "Build a corner radar / mini-map UI tracking player position."
+        },
+        {
+          "name": "notification_toast_show",
+          "description": "Display animated toast notifications (Info, Success, Warning, Error)."
+        },
+        {
+          "name": "radial_menu_build",
+          "description": "Build a circular selection menu (Emotes, Weapons, Quick Commands)."
+        },
+        {
+          "name": "damage_vignette_setup",
+          "description": "Add a red edge vignette screen pulse when taking damage."
+        },
+        {
+          "name": "level_up_ui_show",
+          "description": "Show a banner celebration on level up."
+        },
+        {
+          "name": "crosshair_dynamic_wire",
+          "description": "Create a dynamic spread crosshair UI that expands during firing."
+        },
+        {
+          "name": "scoreboard_tab_setup",
+          "description": "Build a custom Tab key leaderboard overlay showing kills, deaths, ping."
+        },
+        {
+          "name": "status_bar_custom",
+          "description": "Create custom resource meters (Mana, Stamina, Oxygen, Energy, XP)."
+        },
+        {
+          "name": "loading_screen_build",
+          "description": "Build a custom ReplicatedFirst loading screen with progress bar."
+        },
+        {
+          "name": "background_music_playlist",
+          "description": "Wire a multi-track background music playlist with crossfading."
+        },
+        {
+          "name": "sound_zone_reverb",
+          "description": "Create spatial sound zones applying Echo, Reverb, or LowPass filters."
+        },
+        {
+          "name": "ui_sound_effects_wire",
+          "description": "Attach hover, click, open, and close sounds to all buttons in a ScreenGui."
+        },
+        {
+          "name": "radio_station_setup",
+          "description": "Build a car or boombox radio system with channel switching."
+        },
+        {
+          "name": "directional_audio_emitter",
+          "description": "Create 3D spatial sound emitters with custom RollOffMaxDistance."
+        },
+        {
+          "name": "voice_chat_proximity_set",
+          "description": "Configure Spatial Voice Chat distance and roll-off."
+        },
+        {
+          "name": "footstep_surface_map",
+          "description": "Map custom sound IDs to every Material and Terrain type."
+        },
+        {
+          "name": "ambient_creature_sounds",
+          "description": "Create periodic randomized ambient sound triggers (Birds, Crickets, Owls)."
+        },
+        {
+          "name": "impact_sound_effect",
+          "description": "Attach material collision sound effects to unanchored physics objects."
+        },
+        {
+          "name": "audio_muffler_underwater",
+          "description": "Wire dynamic audio muffling when camera goes underwater."
+        },
+        {
+          "name": "anti_exploit_speed_check",
+          "description": "Wire server-side Speed and Teleport sanity checks."
+        },
+        {
+          "name": "anti_exploit_fly_check",
+          "description": "Wire server-side Fly and Air time checks that reset exploits."
+        },
+        {
+          "name": "admin_command_bar",
+          "description": "Build a chat or console admin bar with commands (tp, kick, ban, god)."
+        },
+        {
+          "name": "performance_monitor_gui",
+          "description": "Build a real-time developer GUI displaying FPS, Ping, Memory."
+        },
+        {
+          "name": "audit_unanchored_parts",
+          "description": "Scan workspace for floating unanchored parts and return list."
+        },
+        {
+          "name": "audit_script_errors",
+          "description": "Collect and summarize all recent script errors from LogService."
+        },
+        {
+          "name": "session_analytics_track",
+          "description": "Track player session length, retention, and drop-off points."
+        },
+        {
+          "name": "place_backup_save",
+          "description": "Snapshot current place instance hierarchy into ServerStorage."
+        },
+        {
+          "name": "network_bandwidth_monitor",
+          "description": "Monitor incoming/outgoing remote event payload sizes."
+        },
+        {
+          "name": "server_auto_restart",
+          "description": "Setup automated server uptime warnings and soft-reloading."
+        }
+      ]
+    },
+    {
+      "id": "studio-200",
+      "title": "Studio 200",
+      "engine": "roblox",
+      "description": "Extended production catalogue: gameplay systems, tooling, UI kits and automation.",
+      "source": "studio_200.js",
+      "skills": [
+        {
+          "name": "api_request",
+          "description": "Perform any REST / Web API call (GET, POST, PUT, DELETE, PATCH) with custom JSON payload and HTTP headers."
+        },
+        {
+          "name": "web_api",
+          "description": "Perform any REST / Web API call (GET, POST, PUT, DELETE, PATCH) with custom payload."
+        },
+        {
+          "name": "api_json_get",
+          "description": "Fetch data from a JSON REST API endpoint (GET) and return parsed JSON data."
+        },
+        {
+          "name": "api_json_post",
+          "description": "Send JSON payload to a REST API endpoint (POST) and return response data."
+        },
+        {
+          "name": "instance_new",
+          "description": "Create a new Roblox instance (Part, Model, Folder, Script, SurfaceGui...) and parent it."
+        },
+        {
+          "name": "instance_descendants",
+          "description": "List full paths of descendants under a path (up to limit)."
+        },
+        {
+          "name": "instance_find",
+          "description": "Find instances by exact Name under a path (default Workspace)."
+        },
+        {
+          "name": "instance_find_class",
+          "description": "Find instances of a class (Part, Tool, Sound, ScreenGui...) under a path."
+        },
+        {
+          "name": "instance_count",
+          "description": "Count instances of a class (or everything) under a path."
+        },
+        {
+          "name": "instance_ancestors",
+          "description": "List the ancestor chain (parent paths) of an instance up to game."
+        },
+        {
+          "name": "instance_is_ancestor",
+          "description": "Check whether instance a is an ancestor of instance b."
+        },
+        {
+          "name": "property_copy",
+          "description": "Copy property values from one instance to another."
+        },
+        {
+          "name": "instance_look_at",
+          "description": "Rotate a part so it faces another instance (CFrame.lookAt)."
+        },
+        {
+          "name": "instance_bounding_box",
+          "description": "Get min/max corners and overall size of an instance's bounding box."
+        },
+        {
+          "name": "instance_surface_area",
+          "description": "Total SurfaceArea (studs^2) of all BaseParts inside an instance."
+        },
+        {
+          "name": "instance_mass_get",
+          "description": "Total Mass (kg) of all BaseParts inside an instance."
+        },
+        {
+          "name": "distance_measure",
+          "description": "Distance in studs between two instances (center to center)."
+        },
+        {
+          "name": "part_at",
+          "description": "First BasePart at a world position (point occupancy query)."
+        },
+        {
+          "name": "part_above",
+          "description": "First BasePart above a world position (ground check)."
+        },
+        {
+          "name": "nearest_part",
+          "description": "Nearest BasePart to a world position, optionally of a class."
+        },
+        {
+          "name": "overlap_box",
+          "description": "List BaseParts inside a box (position = center, size = extent)."
+        },
+        {
+          "name": "overlap_sphere",
+          "description": "List BaseParts inside a sphere (position = center)."
+        },
+        {
+          "name": "raycast_do",
+          "description": "Raycast from the camera toward a point; returns hit part, position, normal."
+        },
+        {
+          "name": "swept_ray",
+          "description": "Swept ray from the camera toward a point (thick beam, returns hits)."
+        },
+        {
+          "name": "grid_clone",
+          "description": "Clone an instance into a rows x cols grid of copies."
+        },
+        {
+          "name": "mirror_model",
+          "description": "Mirror an instance across its X or Z axis."
+        },
+        {
+          "name": "rotate_model",
+          "description": "Rotate an instance around its pivot by degrees."
+        },
+        {
+          "name": "flatten_model",
+          "description": "Lay all parts of an instance flat at their base Y (floor layout)."
+        },
+        {
+          "name": "raise_model",
+          "description": "Raise all parts of an instance to a target Y height."
+        },
+        {
+          "name": "workspace_stats",
+          "description": "Workspace inventory: part/model counts by class + totals."
+        },
+        {
+          "name": "tree_outline",
+          "description": "Compact name:class tree outline of an instance hierarchy."
+        },
+        {
+          "name": "physics_impulse",
+          "description": "Apply an instant impulse (Vector3) to a part."
+        },
+        {
+          "name": "physics_force",
+          "description": "Push a part with a force (Vector3) for N seconds."
+        },
+        {
+          "name": "physics_torque",
+          "description": "Apply a torque (Vector3) to spin a part."
+        },
+        {
+          "name": "physics_mass_set",
+          "description": "Set a part's Mass (kg)."
+        },
+        {
+          "name": "physics_density_set",
+          "description": "Set a part's Density."
+        },
+        {
+          "name": "physics_friction_set",
+          "description": "Set a part's Friction (0-10)."
+        },
+        {
+          "name": "physics_elasticity_set",
+          "description": "Set a part's Elasticity / bounce (0-1)."
+        },
+        {
+          "name": "physics_velocity_set",
+          "description": "Set a part's Velocity (Vector3 studs/s, part-relative)."
+        },
+        {
+          "name": "physics_linear_set",
+          "description": "Set a part's LinearVelocity (world-relative studs/s)."
+        },
+        {
+          "name": "physics_angular_set",
+          "description": "Set a part's AngularVelocity (radians/s)."
+        },
+        {
+          "name": "physics_pivot_set",
+          "description": "Move a part's Pivot to a world position."
+        },
+        {
+          "name": "physics_root_set",
+          "description": "Point a model's HumanoidRootPart at a specific part."
+        },
+        {
+          "name": "physics_anchor_all",
+          "description": "Anchor or unanchor every BasePart under a path."
+        },
+        {
+          "name": "physics_lock",
+          "description": "Anchor a part and zero its velocity (fully stop it)."
+        },
+        {
+          "name": "constraints_clear",
+          "description": "Remove all Motor6D/Weld/constraint children from a model or part."
+        },
+        {
+          "name": "constraint_create",
+          "description": "Create a constraint between two parts: weld, motor6d, hinge, pivot, ball, prismatic."
+        },
+        {
+          "name": "motor6d_set",
+          "description": "Tune a Motor6D: motor speed/force and U0-U2 limits."
+        },
+        {
+          "name": "physics_parts_on_ray",
+          "description": "List BaseParts intersecting a line from 'from' to 'to' (swept sphere)."
+        },
+        {
+          "name": "spring_adjust",
+          "description": "Tune a SpringConstraint: Length and Rigidness."
+        },
+        {
+          "name": "trampoline_set",
+          "description": "Set a part's TrampolineForce (jump pad power)."
+        },
+        {
+          "name": "float_part",
+          "description": "Make a part hover at a world Y height (LinearVelocity float)."
+        },
+        {
+          "name": "physics_zero",
+          "description": "Zero a part's velocity and angular velocity (stop it dead)."
+        },
+        {
+          "name": "players_list",
+          "description": "List all players: name, UserId, character path."
+        },
+        {
+          "name": "player_find",
+          "description": "Find a player by name or UserId; returns character + humanoid info."
+        },
+        {
+          "name": "player_count",
+          "description": "Number of players currently in the game."
+        },
+        {
+          "name": "player_kill",
+          "description": "Kill a player's character (Health=0); it respawns normally."
+        },
+        {
+          "name": "player_heal",
+          "description": "Fully heal a player's Humanoid."
+        },
+        {
+          "name": "player_damage",
+          "description": "Deal damage to a player's Humanoid."
+        },
+        {
+          "name": "player_max_health",
+          "description": "Set a player's Humanoid MaxHealth (heals to it)."
+        },
+        {
+          "name": "player_godmode",
+          "description": "Toggle a player's god mode (infinite health / no fall damage)."
+        },
+        {
+          "name": "player_kick",
+          "description": "Kick a player from the game with a reason message."
+        },
+        {
+          "name": "player_rename",
+          "description": "Set a player's DisplayName for this session."
+        },
+        {
+          "name": "player_teleport",
+          "description": "Teleport a player's character to a world position."
+        },
+        {
+          "name": "player_climb",
+          "description": "Set a player's ClimbSpeed (wall/ledge climbing power)."
+        },
+        {
+          "name": "player_swim",
+          "description": "Set a player's SwimSpeed."
+        },
+        {
+          "name": "humanoid_list",
+          "description": "List all Humanoids: owner, health, walk speed, position."
+        },
+        {
+          "name": "ragdoll_make",
+          "description": "Ragdoll a character: joints become BallSockets (physics tumble)."
+        },
+        {
+          "name": "ragdoll_restore",
+          "description": "Restore a ragdolled character's joints."
+        },
+        {
+          "name": "tools_list",
+          "description": "List Tools in a player's Backpack and character."
+        },
+        {
+          "name": "tool_equip",
+          "description": "Give a player a Tool (by StarterPack name or path) and equip it."
+        },
+        {
+          "name": "tool_strip",
+          "description": "Remove all Tools from a player's Backpack and character."
+        },
+        {
+          "name": "head_position",
+          "description": "World position of a player's Head."
+        },
+        {
+          "name": "player_attr",
+          "description": "Get or set an Attribute on a player (omit value to read)."
+        },
+        {
+          "name": "respawn_player",
+          "description": "Force-respawn a player's character."
+        },
+        {
+          "name": "remote_function_create",
+          "description": "Create a RemoteFunction in ReplicatedStorage (or a folder)."
+        },
+        {
+          "name": "remote_folder",
+          "description": "Create a folder in ReplicatedStorage pre-filled with RemoteEvents."
+        },
+        {
+          "name": "remotes_list",
+          "description": "List every RemoteEvent/RemoteFunction in ReplicatedStorage."
+        },
+        {
+          "name": "remote_fire",
+          "description": "Fire a RemoteEvent with a string payload (to a player if known, else FireServer)."
+        },
+        {
+          "name": "remote_handler",
+          "description": "Wire a server script reacting to a RemoteEvent: echo back, print, or count fires."
+        },
+        {
+          "name": "bindable_event_create",
+          "description": "Create a BindableEvent in ServerStorage."
+        },
+        {
+          "name": "bindable_function_create",
+          "description": "Create a BindableFunction in ServerStorage."
+        },
+        {
+          "name": "replicated_first",
+          "description": "Create a ReplicatedFirst server script (runs before all other server scripts)."
+        },
+        {
+          "name": "network_ping",
+          "description": "Ping of every player (sorted)."
+        },
+        {
+          "name": "network_owner",
+          "description": "Set NetworkOwner of a model's parts to a player (client physics)."
+        },
+        {
+          "name": "chat_say",
+          "description": "Send a chat message as the local player."
+        },
+        {
+          "name": "chat_announce",
+          "description": "Broadcast a colored announcement to everyone for N seconds."
+        },
+        {
+          "name": "leaderstats_add",
+          "description": "Create a leaderstats folder + stat for the local player."
+        },
+        {
+          "name": "leaderstats_set",
+          "description": "Set a value in a player's leaderstats."
+        },
+        {
+          "name": "premium_check",
+          "description": "Is the player Roblox Premium?"
+        },
+        {
+          "name": "gamepass_check",
+          "description": "Does the player own a game pass? (UserOwnsGamePassAsync)"
+        },
+        {
+          "name": "ds_get",
+          "description": "DataStore GetAsync: read a value by key (pcall-safe)."
+        },
+        {
+          "name": "ds_set",
+          "description": "DataStore SetAsync: write a value by key."
+        },
+        {
+          "name": "ds_update",
+          "description": "DataStore UpdateAsync: atomically read-modify-write a numeric key."
+        },
+        {
+          "name": "ds_remove",
+          "description": "DataStore RemoveAsync: delete a key."
+        },
+        {
+          "name": "ds_get_many",
+          "description": "DataStore GetAsync for several keys at once."
+        },
+        {
+          "name": "ds_set_many",
+          "description": "DataStore SetAsync a whole {key=value} table."
+        },
+        {
+          "name": "ds_incr",
+          "description": "Increment a DataStore counter (UpdateAsync +delta)."
+        },
+        {
+          "name": "ds_sorted",
+          "description": "OrderedDataStore GetSortedAsync (leaderboard read)."
+        },
+        {
+          "name": "ds_ping",
+          "description": "Touch a DataStore to test connectivity (GetAsync nil)."
+        },
+        {
+          "name": "session_lock_acquire",
+          "description": "Acquire a SessionLockStore lock (prevents double-join data races)."
+        },
+        {
+          "name": "session_lock_release",
+          "description": "Release a SessionLockStore lock."
+        },
+        {
+          "name": "ordered_set",
+          "description": "OrderedDataStore UpdateAsync: set/update a leaderboard score."
+        },
+        {
+          "name": "ordered_get",
+          "description": "OrderedDataStore GetAsync: read a leaderboard score."
+        },
+        {
+          "name": "profile_setup",
+          "description": "Build a player profile system: leaderstats + attributes + 30s autosave to a DataStore."
+        },
+        {
+          "name": "ds_json_put",
+          "description": "Store a JSON string under a DataStore key."
+        },
+        {
+          "name": "toast_show",
+          "description": "Show a toast popup to the player (auto-hides)."
+        },
+        {
+          "name": "dialog_confirm",
+          "description": "Modal-style confirm dialog with title and accent color."
+        },
+        {
+          "name": "progress_show",
+          "description": "Progress bar UI (value 0-1) with a label."
+        },
+        {
+          "name": "loading_show",
+          "description": "Full-screen loading overlay with text (hide=true removes it)."
+        },
+        {
+          "name": "shop_ui",
+          "description": "Shop panel with item buttons; clicks fire a Buy RemoteEvent with the item text."
+        },
+        {
+          "name": "inventory_ui",
+          "description": "Inventory slot grid (N slots)."
+        },
+        {
+          "name": "chat_ui",
+          "description": "In-game chat feed UI; Send fires a ChatSend RemoteEvent with the message."
+        },
+        {
+          "name": "tabs_ui",
+          "description": "Tab bar UI with named tabs."
+        },
+        {
+          "name": "dropdown_ui",
+          "description": "Dropdown selector UI with option labels."
+        },
+        {
+          "name": "slider_ui",
+          "description": "Slider UI (min..max) with a label."
+        },
+        {
+          "name": "toggle_ui",
+          "description": "Toggle switch UI with a label (click flips state)."
+        },
+        {
+          "name": "colors_ui",
+          "description": "Color swatch picker UI (8 presets)."
+        },
+        {
+          "name": "tooltip_add",
+          "description": "Surface label that appears on the part for 3s when touched."
+        },
+        {
+          "name": "tooltip_remove",
+          "description": "Remove the OR tooltip from a part."
+        },
+        {
+          "name": "countdown_show",
+          "description": "Big on-screen countdown (N..GO) for events."
+        },
+        {
+          "name": "timer_show",
+          "description": "On-screen elapsed/remaining timer (mode up counts up, down counts to 0)."
+        },
+        {
+          "name": "waypoint_arrow",
+          "description": "Screen arrow that tracks a part (follow-wayfinding marker)."
+        },
+        {
+          "name": "crosshair_set",
+          "description": "Custom crosshair at screen center."
+        },
+        {
+          "name": "fps_counter",
+          "description": "Live FPS counter HUD."
+        },
+        {
+          "name": "gui_hide_all",
+          "description": "Hide all OR_* ScreenGuis created by these tools."
+        },
+        {
+          "name": "gui_show_all",
+          "description": "Re-show all OR_* ScreenGuis."
+        },
+        {
+          "name": "input_bind",
+          "description": "Bind a key to an action via ContextActionService; firing it triggers <action>_Fired RemoteEvent + print."
+        },
+        {
+          "name": "input_unbind",
+          "description": "Unbind a ContextActionService action."
+        },
+        {
+          "name": "mouse_pos_get",
+          "description": "Current mouse viewport position + world point under the cursor."
+        },
+        {
+          "name": "mouse_region",
+          "description": "Is the mouse currently over the part at a path?"
+        },
+        {
+          "name": "gamepad_rumble",
+          "description": "Rumble the local gamepad (left/right motors, duration)."
+        },
+        {
+          "name": "haptics",
+          "description": "Fire HapticFeedback for a player (controller vibration)."
+        },
+        {
+          "name": "camera_type",
+          "description": "Set the camera type (Scriptable or Custom)."
+        },
+        {
+          "name": "camera_fov",
+          "description": "Set camera FOV (degrees)."
+        },
+        {
+          "name": "camera_zoom",
+          "description": "Zoom the camera FOV in or out by an amount."
+        },
+        {
+          "name": "camera_shake",
+          "description": "Shake the camera for N seconds."
+        },
+        {
+          "name": "camera_reset",
+          "description": "Reset the camera to default (Scriptable, FOV 70)."
+        },
+        {
+          "name": "tween_cancel",
+          "description": "Cancel all active tweens on an instance."
+        },
+        {
+          "name": "tweens_list",
+          "description": "List active tweens (optionally for one instance)."
+        },
+        {
+          "name": "tween_speed",
+          "description": "Set PlaybackSpeed on active tweens (global or one instance)."
+        },
+        {
+          "name": "screen_shake",
+          "description": "Shake a part/model around its position for N seconds."
+        },
+        {
+          "name": "snap_to_grid",
+          "description": "Snap a part's position to the nearest grid point."
+        },
+        {
+          "name": "fog_set",
+          "description": "Set Lighting fog (start distance + fog color)."
+        },
+        {
+          "name": "ambient_set",
+          "description": "Set Lighting ambient brightness + color."
+        },
+        {
+          "name": "exposure_set",
+          "description": "Set Lighting.ExposureCompensation (-3..3)."
+        },
+        {
+          "name": "film_grain",
+          "description": "Film effect: GrainIntensity (0..1)."
+        },
+        {
+          "name": "film_contrast",
+          "description": "Film effect: Contrast (-1..1)."
+        },
+        {
+          "name": "film_motion_blur",
+          "description": "Film effect: MotionBlurIntensity (0..1)."
+        },
+        {
+          "name": "light_flicker",
+          "description": "Make a light flicker like a candle (random intensity loop)."
+        },
+        {
+          "name": "light_pulse",
+          "description": "Pulse a light's brightness between min and max at a speed."
+        },
+        {
+          "name": "water_body",
+          "description": "Create a flat water volume (Water material) at a position."
+        },
+        {
+          "name": "weather_snow",
+          "description": "Toggle global snowfall particles."
+        },
+        {
+          "name": "weather_rain",
+          "description": "Toggle global rain particles."
+        },
+        {
+          "name": "weather_storm",
+          "description": "Toggle storm: heavy rain + lightning flashes + dark lighting."
+        },
+        {
+          "name": "clouds_set",
+          "description": "Set sky cloud coverage (Cloudiness) and scroll speed."
+        },
+        {
+          "name": "atmosphere_setup",
+          "description": "Set Atmosphere: Density, Offset and fog settings."
+        },
+        {
+          "name": "sun_set_angle",
+          "description": "Set the time of day from a sun angle (0-360, 90 = noon)."
+        },
+        {
+          "name": "day_night_cycle",
+          "description": "Start a day/night cycle script (full cycle in N minutes)."
+        },
+        {
+          "name": "audio_mute_all",
+          "description": "Mute every Sound in the game."
+        },
+        {
+          "name": "audio_unmute_all",
+          "description": "Restore all Sound volumes to 0.5."
+        },
+        {
+          "name": "audio_volume",
+          "description": "Set Volume on every Sound in the game."
+        },
+        {
+          "name": "audio_stop_all",
+          "description": "Stop every playing Sound."
+        },
+        {
+          "name": "audio_loop",
+          "description": "Set a Sound's Looped on/off."
+        },
+        {
+          "name": "audio_pitch",
+          "description": "Set a Sound's Pitch."
+        },
+        {
+          "name": "audio_pan",
+          "description": "Set a Sound's Pan (-1..1)."
+        },
+        {
+          "name": "audio_id",
+          "description": "Point a Sound at an asset id (rbxassetid) and play it."
+        },
+        {
+          "name": "sound_library",
+          "description": "Install a small preset sound library (Click/Pop/Win/Lose/Alert/Whoosh) in ReplicatedStorage."
+        },
+        {
+          "name": "jingle",
+          "description": "Play a preset jingle (win, lose, click, alert, pop, whoosh)."
+        },
+        {
+          "name": "ambient_loop",
+          "description": "Start a looping ambient Sound from an asset id."
+        },
+        {
+          "name": "voice_radio",
+          "description": "Create a VoiceRadio in ReplicatedStorage (team talk within 60 studs)."
+        },
+        {
+          "name": "fx_puff",
+          "description": "Dust puff particle burst at a point."
+        },
+        {
+          "name": "fx_bubbles",
+          "description": "Bubble particle burst at a point."
+        },
+        {
+          "name": "fx_confetti",
+          "description": "Confetti burst at a point."
+        },
+        {
+          "name": "fx_sparks",
+          "description": "Spark particle burst at a point."
+        },
+        {
+          "name": "fx_smoke_burst",
+          "description": "Smoke burst at a point."
+        },
+        {
+          "name": "fx_ring",
+          "description": "Expanding energy ring at a point."
+        },
+        {
+          "name": "fx_aura",
+          "description": "Aura particles around a player for N seconds."
+        },
+        {
+          "name": "fx_magic_circle",
+          "description": "Floating magic circle under a part/player."
+        },
+        {
+          "name": "fx_lightning",
+          "description": "Lightning strike effect (flash + beam) at a point."
+        },
+        {
+          "name": "fx_trails_clear",
+          "description": "Remove all OR trail effects."
+        },
+        {
+          "name": "fx_emitters_clear",
+          "description": "Remove all OR particle hosts (OR_FX_*)."
+        },
+        {
+          "name": "fx_burst",
+          "description": "Particle burst by element kind."
+        },
+        {
+          "name": "terrain_height",
+          "description": "Raise terrain to a target top height with a material."
+        },
+        {
+          "name": "terrain_clear_region",
+          "description": "Clear terrain (dig to air) between two Region3 corners."
+        },
+        {
+          "name": "terrain_lava",
+          "description": "Fill a terrain region with glowing Lava material."
+        },
+        {
+          "name": "terrain_paint",
+          "description": "Paint a terrain region with a material."
+        },
+        {
+          "name": "boundary_set",
+          "description": "Set Workspace Bounds to a box (keeps players in the area)."
+        },
+        {
+          "name": "ground_make",
+          "description": "Create a large ground plate (anchored part)."
+        },
+        {
+          "name": "place_info",
+          "description": "Place id, job id, name, version."
+        },
+        {
+          "name": "place_rename",
+          "description": "Set the place name (needs Studio save to persist)."
+        },
+        {
+          "name": "workspace_clear",
+          "description": "Destroy all Workspace children (keeps Terrain + Camera)."
+        },
+        {
+          "name": "workspace_export",
+          "description": "Export the workspace tree (names/classes/part pos+size) to ReplicatedStorage.OR_Export."
+        },
+        {
+          "name": "workspace_import",
+          "description": "Restore the last workspace_export into a new Model (OR_Restore)."
+        },
+        {
+          "name": "script_create",
+          "description": "Create a Script/LocalScript with source under a parent service."
+        },
+        {
+          "name": "script_module",
+          "description": "Create a ModuleScript under ServerStorage.OR_Modules; returns the require() path."
+        },
+        {
+          "name": "script_reload",
+          "description": "Re-apply a script's Source (reload after edits)."
+        },
+        {
+          "name": "script_grep",
+          "description": "Search script sources for text; returns matching paths + lines."
+        },
+        {
+          "name": "script_stats",
+          "description": "Script inventory: counts per service (SSS/SPS/ServerStorage/StarterGui...)."
+        },
+        {
+          "name": "script_check",
+          "description": "Syntax-check Lua source with loadstring; reports the first error line."
+        },
+        {
+          "name": "log_tag",
+          "description": "Install a print hook that prefixes console output with [TAG]."
+        },
+        {
+          "name": "game_stats",
+          "description": "Quick snapshot: players, parts, place id, ClockTime."
+        },
+        {
+          "name": "gc_run",
+          "description": "Force a garbage-collection cycle and report freed KB."
+        },
+        {
+          "name": "memory_get",
+          "description": "Current Lua memory usage in MB."
+        }
+      ]
+    },
+    {
+      "id": "studio-extra40",
+      "title": "Studio extras (40)",
+      "engine": "roblox",
+      "description": "Deduplicated high-utility primitives and automation helpers.",
+      "source": "studio_extra40.js",
+      "skills": [
+        {
+          "name": "reflectance_set",
+          "description": "Set BasePart Reflectance (0 to 1)."
+        },
+        {
+          "name": "cancollide_set",
+          "description": "Set BasePart or Model CanCollide state."
+        },
+        {
+          "name": "align_position_create",
+          "description": "Create an AlignPosition constraint and Attachments between two parts."
+        },
+        {
+          "name": "align_orientation_create",
+          "description": "Create an AlignOrientation constraint and Attachments between two parts."
+        },
+        {
+          "name": "rigid_constraint_create",
+          "description": "Create a RigidConstraint and Attachments between two parts."
+        },
+        {
+          "name": "billboard_gui_create",
+          "description": "Create a 3D BillboardGui attached to an instance."
+        },
+        {
+          "name": "particle_emitter_create",
+          "description": "Create a ParticleEmitter with custom rate and texture."
+        },
+        {
+          "name": "trail_create",
+          "description": "Create a Trail effect between two parts."
+        },
+        {
+          "name": "beam_create",
+          "description": "Create a visual Beam between two parts."
+        },
+        {
+          "name": "surface_light_add",
+          "description": "Add a SurfaceLight to a BasePart."
+        },
+        {
+          "name": "decal_add",
+          "description": "Add a Decal texture onto a BasePart face."
+        },
+        {
+          "name": "texture_add",
+          "description": "Add a repeating Texture onto a BasePart face."
+        },
+        {
+          "name": "sound_stop",
+          "description": "Stop a playing Sound instance."
+        },
+        {
+          "name": "dialog_create",
+          "description": "Create an NPC conversation Dialog on a BasePart."
+        },
+        {
+          "name": "proximity_prompt_create",
+          "description": "Create a ProximityPrompt on an instance for interaction."
+        },
+        {
+          "name": "click_detector_create",
+          "description": "Create a ClickDetector on a BasePart."
+        },
+        {
+          "name": "camera_type_set",
+          "description": "Set workspace.CurrentCamera CameraType (Custom, Scriptable, Fixed, Attach, Follow)."
+        },
+        {
+          "name": "camera_field_of_view_set",
+          "description": "Set workspace.CurrentCamera FieldOfView (degrees)."
+        },
+        {
+          "name": "team_create",
+          "description": "Create a Team in Teams service."
+        },
+        {
+          "name": "spawn_location_create",
+          "description": "Create a SpawnLocation part."
+        },
+        {
+          "name": "character_teleport",
+          "description": "Teleport the player character to a world position."
+        },
+        {
+          "name": "humanoid_health_set",
+          "description": "Set current Humanoid Health."
+        },
+        {
+          "name": "humanoid_max_health_set",
+          "description": "Set Humanoid MaxHealth."
+        },
+        {
+          "name": "starter_gui_screen_create",
+          "description": "Create a ScreenGui inside StarterGui."
+        },
+        {
+          "name": "text_label_create",
+          "description": "Create a TextLabel UI element."
+        },
+        {
+          "name": "text_button_create",
+          "description": "Create a TextButton UI element."
+        },
+        {
+          "name": "image_label_create",
+          "description": "Create an ImageLabel UI element."
+        },
+        {
+          "name": "frame_create",
+          "description": "Create a Frame UI element."
+        },
+        {
+          "name": "ui_corner_create",
+          "description": "Add rounded corners to a UI frame or button using UICorner."
+        },
+        {
+          "name": "ui_stroke_create",
+          "description": "Add an outline stroke to a UI element using UIStroke."
+        },
+        {
+          "name": "ui_gradient_create",
+          "description": "Add a UIGradient color transition to a UI element."
+        },
+        {
+          "name": "ui_list_layout_create",
+          "description": "Add a UIListLayout to automatically arrange child UI elements."
+        },
+        {
+          "name": "ui_grid_layout_create",
+          "description": "Add a UIGridLayout to automatically arrange child UI elements in a grid."
+        }
+      ]
+    },
+    {
+      "id": "studio-inspect",
+      "title": "Inspectors",
+      "engine": "roblox",
+      "description": "Read-only inspectors for every service - safe reconnaissance before edits.",
+      "source": "studio_extra100.js",
+      "skills": [
+        {
+          "name": "inspect_workspace",
+          "description": "Read-only inspect of the Workspace service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_lighting",
+          "description": "Read-only inspect of the Lighting service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_replicatedstorage",
+          "description": "Read-only inspect of the ReplicatedStorage service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_serverstorage",
+          "description": "Read-only inspect of the ServerStorage service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_serverscriptservice",
+          "description": "Read-only inspect of the ServerScriptService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_startergui",
+          "description": "Read-only inspect of the StarterGui service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_starterpack",
+          "description": "Read-only inspect of the StarterPack service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_starterplayer",
+          "description": "Read-only inspect of the StarterPlayer service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_soundservice",
+          "description": "Read-only inspect of the SoundService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_teams",
+          "description": "Read-only inspect of the Teams service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_textchatservice",
+          "description": "Read-only inspect of the TextChatService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_materialservice",
+          "description": "Read-only inspect of the MaterialService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_collectionservice",
+          "description": "Read-only inspect of the CollectionService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_physicsservice",
+          "description": "Read-only inspect of the PhysicsService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_pathfindingservice",
+          "description": "Read-only inspect of the PathfindingService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_teleportservice",
+          "description": "Read-only inspect of the TeleportService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_marketplaceservice",
+          "description": "Read-only inspect of the MarketplaceService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_datastoreservice",
+          "description": "Read-only inspect of the DataStoreService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_memorystoreservice",
+          "description": "Read-only inspect of the MemoryStoreService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_messagingservice",
+          "description": "Read-only inspect of the MessagingService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_badgeservice",
+          "description": "Read-only inspect of the BadgeService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_tweenservice",
+          "description": "Read-only inspect of the TweenService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_runservice",
+          "description": "Read-only inspect of the RunService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_httpservice",
+          "description": "Read-only inspect of the HttpService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_userinputservice",
+          "description": "Read-only inspect of the UserInputService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_contextactionservice",
+          "description": "Read-only inspect of the ContextActionService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_players",
+          "description": "Read-only inspect of the Players service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_camera",
+          "description": "Read-only inspect of the Camera service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_terrain",
+          "description": "Read-only inspect of the Terrain service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_coregui",
+          "description": "Read-only inspect of the CoreGui service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_voicechatservice",
+          "description": "Read-only inspect of the VoiceChatService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_proximitypromptservice",
+          "description": "Read-only inspect of the ProximityPromptService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_localizationservice",
+          "description": "Read-only inspect of the LocalizationService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_policyservice",
+          "description": "Read-only inspect of the PolicyService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_socialservice",
+          "description": "Read-only inspect of the SocialService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_avatareditorservice",
+          "description": "Read-only inspect of the AvatarEditorService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_assetservice",
+          "description": "Read-only inspect of the AssetService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_insertservice",
+          "description": "Read-only inspect of the InsertService service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_chat",
+          "description": "Read-only inspect of the Chat service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "inspect_debris",
+          "description": "Read-only inspect of the Debris service or root. Returns path, class, child count, and child names."
+        },
+        {
+          "name": "query_models",
+          "description": "Read-only query for models. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_parts",
+          "description": "Read-only query for parts. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_meshes",
+          "description": "Read-only query for meshes. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_unions",
+          "description": "Read-only query for unions. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_scripts",
+          "description": "Read-only query for scripts. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_localscripts",
+          "description": "Read-only query for localscripts. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_modulescripts",
+          "description": "Read-only query for modulescripts. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_remotes",
+          "description": "Read-only query for remotes. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_remoteevents",
+          "description": "Read-only query for remoteevents. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_remotefunctions",
+          "description": "Read-only query for remotefunctions. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_screen_guis",
+          "description": "Read-only query for screen guis. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_frames",
+          "description": "Read-only query for frames. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_text_labels",
+          "description": "Read-only query for text labels. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_buttons",
+          "description": "Read-only query for buttons. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_image_labels",
+          "description": "Read-only query for image labels. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_viewports",
+          "description": "Read-only query for viewports. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_particle_emitters",
+          "description": "Read-only query for particle emitters. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_beams",
+          "description": "Read-only query for beams. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_trails",
+          "description": "Read-only query for trails. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_lights",
+          "description": "Read-only query for lights. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_sounds",
+          "description": "Read-only query for sounds. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_attachments",
+          "description": "Read-only query for attachments. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_constraints",
+          "description": "Read-only query for constraints. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_welds",
+          "description": "Read-only query for welds. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_prompts",
+          "description": "Read-only query for prompts. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_tools",
+          "description": "Read-only query for tools. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_seats",
+          "description": "Read-only query for seats. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_vehicles",
+          "description": "Read-only query for vehicles. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_spawn_locations",
+          "description": "Read-only query for spawn locations. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_folders",
+          "description": "Read-only query for folders. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_values",
+          "description": "Read-only query for values. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_attributes",
+          "description": "Read-only query for attributes. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_tags",
+          "description": "Read-only query for tags. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_animations",
+          "description": "Read-only query for animations. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_keyframes",
+          "description": "Read-only query for keyframes. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_cameras",
+          "description": "Read-only query for cameras. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_teams",
+          "description": "Read-only query for teams. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_players",
+          "description": "Read-only query for players. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_characters",
+          "description": "Read-only query for characters. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_humanoids",
+          "description": "Read-only query for humanoids. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_backpacks",
+          "description": "Read-only query for backpacks. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_leaderstats",
+          "description": "Read-only query for leaderstats. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_datastores",
+          "description": "Read-only query for datastores. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_bindables",
+          "description": "Read-only query for bindables. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_events",
+          "description": "Read-only query for events. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_folders_in_workspace",
+          "description": "Read-only query for folders in workspace. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_scripts_in_server",
+          "description": "Read-only query for scripts in server. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_scripts_in_replicated",
+          "description": "Read-only query for scripts in replicated. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_ui_in_startergui",
+          "description": "Read-only query for ui in startergui. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_assets_in_replicated",
+          "description": "Read-only query for assets in replicated. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_unanchored_parts",
+          "description": "Read-only query for unanchored parts. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_empty_scripts",
+          "description": "Read-only query for empty scripts. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_duplicate_names",
+          "description": "Read-only query for duplicate names. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_deep_children",
+          "description": "Read-only query for deep children. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_descendant_counts",
+          "description": "Read-only query for descendant counts. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_streaming_settings",
+          "description": "Read-only query for streaming settings. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_workspace_settings",
+          "description": "Read-only query for workspace settings. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_lighting_settings",
+          "description": "Read-only query for lighting settings. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_collision_groups",
+          "description": "Read-only query for collision groups. Resolves the requested target and reports its immediate structure without changing the place."
+        },
+        {
+          "name": "query_network_ownership",
+          "description": "Read-only query for network ownership. Resolves the requested target and reports its immediate structure without changing the place."
+        }
+      ]
+    },
+    {
+      "id": "creative-pro",
+      "title": "Creative Pro",
+      "engine": "roblox",
+      "description": "High-fidelity VFX, sound design, interface and motion presets.",
+      "source": "creative_pro.js",
+      "skills": [
+        {
+          "name": "vfx_burst_create",
+          "description": "Create a polished one-shot particle burst with color, light, drag, rise, scale, and fade shaping."
+        },
+        {
+          "name": "vfx_aura_create",
+          "description": "Create an editable looping aura combining particles and restrained local lighting."
+        },
+        {
+          "name": "vfx_beam_arc_create",
+          "description": "Create a curved, textured, camera-facing beam between two parts."
+        },
+        {
+          "name": "sfx_layered_event_create",
+          "description": "Build a balanced multi-layer sound event from Roblox audio asset IDs."
+        },
+        {
+          "name": "sfx_ambient_zone_create",
+          "description": "Configure spatial looping ambience on a zone part with controlled falloff."
+        },
+        {
+          "name": "ui_design_system_create",
+          "description": "Create reusable native UI design tokens for accent, surfaces, text, spacing, corners, and font."
+        },
+        {
+          "name": "ui_card_compose",
+          "description": "Create a polished, readable UI card with hierarchy, spacing, border, title, and wrapped body copy."
+        },
+        {
+          "name": "ui_responsive_hud_create",
+          "description": "Create a responsive HUD foundation with safe margins, scalable hierarchy, and a polished top bar."
+        },
+        {
+          "name": "animation_motion_preset",
+          "description": "Apply tasteful looping secondary motion to a rig using reversible eased Motor6D transforms."
+        },
+        {
+          "name": "animation_stagger_parts",
+          "description": "Apply a polished staggered entrance motion across unanchored model parts."
+        }
+      ]
+    },
+    {
+      "id": "agentscript-extras",
+      "title": "AgentScript extras",
+      "engine": "local",
+      "description": "File helpers, JSON patching, git, npm, python/node runners mapped onto the native workspace tools.",
+      "source": "agent_skills.js",
+      "skills": [
+        {
+          "name": "append_file",
+          "description": "Append text to a file (creates it if missing)."
+        },
+        {
+          "name": "copy_file",
+          "description": "Copy a text file to a new path (parents created)."
+        },
+        {
+          "name": "replace_in_files",
+          "description": "Replace every occurrence of query with replacement across matching files."
+        },
+        {
+          "name": "touch_file",
+          "description": "Create an empty file if it does not exist; no-op if it does."
+        },
+        {
+          "name": "file_exists",
+          "description": "Check whether a path exists (file or folder)."
+        },
+        {
+          "name": "count_lines",
+          "description": "Count lines in a text file."
+        },
+        {
+          "name": "find_todos",
+          "description": "Search the workspace for TODO/FIXME/HACK comments."
+        },
+        {
+          "name": "write_json",
+          "description": "Write pretty JSON to a path. Pass data as an object or a JSON string."
+        },
+        {
+          "name": "patch_json",
+          "description": "Set a dotted key on a JSON file (creates nested objects as needed) and write it back."
+        },
+        {
+          "name": "run_python",
+          "description": "Run a .py file or an inline snippet with python."
+        },
+        {
+          "name": "run_node",
+          "description": "Run a .js file or an inline snippet with node."
+        },
+        {
+          "name": "git_status",
+          "description": "git status -sb in the workspace."
+        },
+        {
+          "name": "git_diff",
+          "description": "git diff (optional path)."
+        },
+        {
+          "name": "git_log",
+          "description": "git log --oneline (limit default 20)."
+        },
+        {
+          "name": "npm_install",
+          "description": "npm install, optionally a package name."
+        },
+        {
+          "name": "npm_script",
+          "description": "npm run <script>."
+        },
+        {
+          "name": "dir_size",
+          "description": "Sum file sizes under a folder (PowerShell)."
+        },
+        {
+          "name": "which_cmd",
+          "description": "Locate an executable on PATH (where.exe / command -v)."
+        },
+        {
+          "name": "concat_files",
+          "description": "Concatenate text files into dest."
+        },
+        {
+          "name": "list_by_ext",
+          "description": "List files by extension (e.g. js, py, lua)."
+        },
+        {
+          "name": "grep_count",
+          "description": "Count grep hits for a query."
+        },
+        {
+          "name": "scaffold_file",
+          "description": "Write a starter file from a tiny template (js/py/html/md/json/lua) if the path does not exist."
+        },
+        {
+          "name": "read_range",
+          "description": "Read a slice of a text file (1-based start line, inclusive end)."
+        },
+        {
+          "name": "file_stat",
+          "description": "File/folder info (size, type) for a path."
+        },
+        {
+          "name": "replace_once",
+          "description": "Replace the first occurrence of query in a file (leaves the rest)."
+        },
+        {
+          "name": "list_recent",
+          "description": "List files under a folder (native list_dir)."
+        },
+        {
+          "name": "env_info",
+          "description": "Workspace root + a short environment snapshot (cwd, node/python if present)."
+        }
+      ]
+    }
+  ]
+}

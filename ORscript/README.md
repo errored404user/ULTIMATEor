@@ -26,11 +26,14 @@ Large `execute_luau` scripts are auto-chunked around 24 KB so Studio's parser ne
 ## Setup
 
 1. Open `chrome://extensions` → Developer mode → **Load unpacked** → this folder (`manifest.json`).
-2. Start the native bridge in headless mode with **`bin/or-core.exe --headless`**. ORscript no longer includes a desktop status window. It starts:
+2. Start the bridge. Two options, same ports and protocol:
+   - **ORscript Desktop** (recommended) — the workspace app in `../ORscript-Desktop` (Home / Explorer / Tools / Toolkit / MCP Servers / Skills / Templates / Terminal / Updates / Settings). It keeps the bridge running in the tray after the window is closed. See `ORscript-Desktop/README.md` for the installer / run-from-source instructions.
+   - **`bin/or-core.exe --headless`** — the original headless Rust bridge (no window).
+   Either one starts:
    - HTTP API on `http://127.0.0.1:3000`
    - WS bridges on `17613` (RS) and `17615` (AS)
    - Workspace folder for AgentScript (`OR_WORKSPACE_ROOT` / `--workspace` / `%USERPROFILE%\ORWorkspace`)
-   - The bridge runs in the background without opening an ORscript desktop window. Stop the process from the shell when finished.
+   - or-core runs in the background without a window (stop it from the shell); ORscript Desktop shows live status and keeps running from the tray until you choose *Quit*.
 3. **RS:** Roblox Studio → Assistant AI → ⋯ → Manage MCP Servers → Enable Studio as MCP Server.
 4. Open a supported chat and click **Start agent**.
 

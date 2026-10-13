@@ -1,0 +1,62 @@
+{
+  "name": "orscript-desktop",
+  "productName": "ORscript Desktop",
+  "version": "1.21.0",
+  "description": "ORscript workspace app: Roblox Studio bridge, AgentScript workspace tools and MCP server manager with a background tray service.",
+  "license": "GPL-3.0-or-later",
+  "author": "ORscript",
+  "homepage": "https://github.com/errored404user/ULTIMATEor",
+  "main": "electron/main.js",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "electron .",
+    "start:hidden": "electron . --hidden",
+    "bridge": "node bridge/cli.js",
+    "test": "node --test test/*.test.js",
+    "sync-catalog": "node scripts/sync-catalog.js",
+    "dist": "electron-builder --win --x64",
+    "dist:dir": "electron-builder --win --x64 --dir"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.orscript.desktop",
+    "productName": "ORscript Desktop",
+    "copyright": "ORscript contributors",
+    "directories": { "output": "release", "buildResources": "build" },
+    "files": [
+      "electron/**",
+      "bridge/**",
+      "ui/**",
+      "data/**",
+      "assets/**",
+      "package.json",
+      "!**/*.map"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "artifactName": "${productName}-${version}-${arch}-${os}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ORscript Desktop",
+      "runAfterFinish": true
+    },
+    "portable": { "artifactName": "${productName}-${version}-portable.exe" }
+  }
+}
