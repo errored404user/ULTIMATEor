@@ -3,7 +3,9 @@
 Native desktop app + bridge for the ORscript browser extension. One binary does both jobs:
 
 * **Bridge** — HTTP `127.0.0.1:3000`, WebSocket `17613` (Roblox Studio) and `17615` (AgentScript workspace), Roblox Studio MCP helper (`%LOCALAPPDATA%\Roblox\mcp.bat`), 18 workspace tools. Protocol-identical to or-core 1.18, so the extension needs no change.
-* **Desktop window** — pure Rust (eframe/egui): Home, Explorer, Tools, Toolkit, MCP Servers, Skills, Templates, Terminal, Updates, Settings. Closing the window hides it to the notification area; the bridge keeps running until you choose **Quit** from the tray menu.
+* **Desktop window** — pure Rust (eframe/egui), 7 pages: **Home** (status cards, live Studio viewport snapshot, quick access, recent activity), **Explorer** (workspace browser + editor), **Tools** (Studio + workspace tool catalog with a Run panel), **Servers** (Studio MCP, local bridge, channels), **Terminal** (workspace shell *and* a Luau runner that executes code inside Roblox Studio), **Updates**, **Settings** (workspace folder picker applied live, MCP launcher override, diagnostics). Closing the window hides it to the notification area; the bridge keeps running until you choose **Quit** from the tray menu.
+
+Keyboard: `Ctrl+1…7` pages · `Ctrl+R` restart Studio MCP · `F5` probe Studio + refresh tools · `Ctrl+Shift+S` Studio snapshot · `Ctrl+S` save file · `Ctrl+Enter` run Luau.
 
 ## Build
 
@@ -44,9 +46,6 @@ agent/
   src/main.rs         bridge: HTTP/WS servers, Studio MCP client, UI command loop
   src/workspace.rs    AgentScript workspace engine (18 tools, sandbox rules)
   src/gui.rs          desktop window, theme, pages, tray icon
-  data/skills.json    skill catalog shown in the Skills page (synced from the extension)
-  data/templates.json Luau starter templates shown in the Templates page
-  data/ais.json       supported browser AIs
 ```
 
-Re-sync the catalogs after changing extension skills: regenerate `data/*.json` from the extension's `src/core/skills/*.js` (the previous `scripts/sync-catalog.js` logic) — the window embeds them at compile time with `include_str!`.
+The Tools page lists the Studio tools reported live by the MCP helper plus the built-in workspace tools, so there is nothing to re-sync when the extension changes.

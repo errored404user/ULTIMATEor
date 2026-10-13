@@ -34,6 +34,9 @@ regex = "1"
 # Desktop window: pure-Rust eframe/egui (glow renderer). Versions match the
 # original or-core 1.18 Cargo.lock so `cargo build --release` resolves offline-friendly.
 eframe = "0.29"
+# Studio viewport snapshots: base64 payload from screen_capture -> PNG/JPEG decode.
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [target.'cfg(windows)'.dependencies]
 tray-icon = "0.19"

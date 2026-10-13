@@ -614,11 +614,16 @@ async fn ui_command_loop(state: AppState, mut rx: tokio::sync::mpsc::UnboundedRe
                     let out = match outcome {
                         Ok(o) => {
                             state2.ui.track("tool", format!("{name} ({engine}) · {elapsed_ms} ms · toolkit"));
-                            gui::ToolReply { ok: true, text: o.text, images: o.images.len(), elapsed_ms }
+                            let images: Vec<(String, String)> = o.images.iter().filter_map(|img| {
+                                let data = img.get("data").and_then(|v| v.as_str())?.to_string();
+                                let mime = img.get("mimeType").and_then(|v| v.as_str()).unwrap_or("image/png").to_string();
+                                Some((mime, data))
+                            }).collect();
+                            gui::ToolReply { ok: true, text: o.text, images, elapsed_ms }
                         }
                         Err(e) => {
                             state2.ui.track("error", format!("{name} ({engine}) failed: {}", gui_truncate(&e.to_string(), 140)));
-                            gui::ToolReply { ok: false, text: format!("{e:#}"), images: 0, elapsed_ms }
+                            gui::ToolReply { ok: false, text: format!("{e:#}"), images: Vec::new(), elapsed_ms }
                         }
                     };
                     let _ = reply.send(out);
@@ -631,11 +636,36 @@ async fn ui_command_loop(state: AppState, mut rx: tokio::sync::mpsc::UnboundedRe
                     let result = workspace::dispatch(&state2.workspace, "run_command", serde_json::json!({"command": command})).await;
                     let elapsed_ms = started.elapsed().as_millis();
                     let out = match result {
-                        Ok(text) => { state2.ui.track("tool", format!("run_command · {elapsed_ms} ms · terminal")); gui::ToolReply { ok: true, text, images: 0, elapsed_ms } }
-                        Err(e) => { state2.ui.track("error", format!("run_command failed: {}", gui_truncate(&e, 140))); gui::ToolReply { ok: false, text: e, images: 0, elapsed_ms } }
+                        Ok(text) => { state2.ui.track("tool", format!("run_command · {elapsed_ms} ms · terminal")); gui::ToolReply { ok: true, text, images: Vec::new(), elapsed_ms } }
+                        Err(e) => { state2.ui.track("error", format!("run_command failed: {}", gui_truncate(&e, 140))); gui::ToolReply { ok: false, text: e, images: Vec::new(), elapsed_ms } }
                     };
                     let _ = reply.send(out);
                 });
+            }
+            gui::UiCommand::SetWorkspace { path, reply } => {
+                let result = match state.workspace.set_root(&path) {
+                    Ok(shown) => {
+                        state.ui.attach_workspace(shown.clone(), state.workspace.full_flag());
+                        state.ui.track("bridge", format!("workspace switched to {shown}"));
+                        Ok(shown)
+                    }
+                    Err(e) => {
+                        state.ui.track("error", format!("workspace switch failed: {}", gui_truncate(&format!("{e:#}"), 160)));
+                        Err(format!("{e:#}"))
+                    }
+                };
+                let _ = reply.send(result);
+            }
+            gui::UiCommand::SetMcpCommand(command) => {
+                let command = command.trim().to_string();
+                if command.is_empty() {
+                    std::env::remove_var("OR_MCP_COMMAND");
+                    state.ui.track("studio", "MCP launcher override cleared — using Studio's mcp.bat");
+                } else {
+                    std::env::set_var("OR_MCP_COMMAND", &command);
+                    state.ui.track("studio", format!("MCP launcher set to {}", gui_truncate(&command, 120)));
+                }
+                info!("MCP launcher override updated from the desktop window");
             }
             gui::UiCommand::CheckUpdates { reply } => {
                 tokio::spawn(async move {

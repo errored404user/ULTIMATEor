@@ -2,10 +2,10 @@
 //!
 //! Pure Rust (eframe/egui 0.29) with a notification-area icon (tray-icon 0.19
 //! on Windows). The window is a *view* over the bridge that `main.rs` runs on
-//! the tokio runtime: it reads shared state (`UiShared`), and asks the runtime
+//! the tokio runtime: it reads shared state (`UiShared`) and asks the runtime
 //! to do things through `UiCommand`s. Closing the window hides it to the tray;
 //! the bridge (HTTP 3000, WS 17613 / 17615, Studio MCP helper) keeps running
-//! until "Quit" is chosen from the tray menu.
+//! until "Quit" is chosen from the tray menu or Settings.
 
 use std::{
     collections::VecDeque,
@@ -33,10 +33,11 @@ pub const WINDOW_TITLE: &str = "ORscript";
 pub const REPO: &str = "errored404user/ULTIMATEor";
 const LOG_CAP: usize = 800;
 const ACTIVITY_CAP: usize = 120;
+const HISTORY_CAP: usize = 60;
 
 // ───────────────────────────── shared state ─────────────────────────────
 
-/// One tool the bridge can execute, as shown in the Tools / Toolkit pages.
+/// One tool the bridge can execute, as shown in the Tools page.
 #[derive(Clone, Debug)]
 pub struct ToolInfo {
     pub name: String,
@@ -177,7 +178,8 @@ impl UiShared {
 pub struct ToolReply {
     pub ok: bool,
     pub text: String,
-    pub images: usize,
+    /// `(mime type, base64 payload)` for every image block the tool returned.
+    pub images: Vec<(String, String)>,
     pub elapsed_ms: u128,
 }
 
@@ -196,6 +198,8 @@ pub enum UiCommand {
     ProbeStudio,
     KillStudio,
     SetFullAccess(bool),
+    SetWorkspace { path: String, reply: Sender<Result<String, String>> },
+    SetMcpCommand(String),
     RunTool { engine: String, name: String, args: serde_json::Value, reply: Sender<ToolReply> },
     RunCommand { command: String, reply: Sender<ToolReply> },
     CheckUpdates { reply: Sender<UpdateReply> },
@@ -210,7 +214,6 @@ pub struct Settings {
     pub close_to_tray: bool,
     pub start_hidden: bool,
     pub launch_at_login: bool,
-    pub effort: String,
     pub workspace_root: String,
     pub mcp_command: String,
     pub full_access: bool,
@@ -224,7 +227,6 @@ impl Default for Settings {
             close_to_tray: true,
             start_hidden: false,
             launch_at_login: false,
-            effort: "balanced".into(),
             workspace_root: String::new(),
             mcp_command: String::new(),
             full_access: false,
@@ -252,56 +254,6 @@ impl Settings {
         let text = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
         std::fs::write(Self::path(), text).map_err(|e| e.to_string())
     }
-}
-
-// ───────────────────────────── catalog data ─────────────────────────────
-
-#[derive(Clone, Debug, Deserialize)]
-struct SkillEntry { name: String, #[serde(default)] description: String }
-
-#[derive(Clone, Debug, Deserialize)]
-struct SkillFamily {
-    id: String,
-    title: String,
-    #[serde(default)] engine: String,
-    #[serde(default)] description: String,
-    #[serde(default)] source: String,
-    #[serde(default)] skills: Vec<SkillEntry>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct SkillsFile { #[serde(default)] total: usize, #[serde(default)] families: Vec<SkillFamily> }
-
-#[derive(Clone, Debug, Deserialize)]
-struct Template {
-    id: String,
-    name: String,
-    #[serde(default)] description: String,
-    #[serde(default)] tags: Vec<String>,
-    file: String,
-    #[serde(default)] language: String,
-    content: String,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct TemplatesFile { #[serde(default)] templates: Vec<Template> }
-
-#[derive(Clone, Debug, Deserialize)]
-struct AiEntry { name: String, url: String, #[serde(default)] host: String }
-
-#[derive(Clone, Debug, Deserialize)]
-struct AisFile { #[serde(default)] ais: Vec<AiEntry> }
-
-fn load_catalog() -> (SkillsFile, Vec<Template>, Vec<AiEntry>) {
-    let skills = serde_json::from_str::<SkillsFile>(include_str!("../data/skills.json"))
-        .unwrap_or(SkillsFile { total: 0, families: Vec::new() });
-    let templates = serde_json::from_str::<TemplatesFile>(include_str!("../data/templates.json"))
-        .map(|t| t.templates)
-        .unwrap_or_default();
-    let ais = serde_json::from_str::<AisFile>(include_str!("../data/ais.json"))
-        .map(|a| a.ais)
-        .unwrap_or_default();
-    (skills, templates, ais)
 }
 
 // ───────────────────────────── theme ─────────────────────────────
@@ -453,23 +405,17 @@ impl Theme {
 // ───────────────────────────── pages ─────────────────────────────
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Page { Home, Explorer, Tools, Toolkit, Servers, Skills, Templates, Terminal, Updates, Settings }
+enum Page { Home, Explorer, Tools, Servers, Terminal, Updates, Settings }
 
 impl Page {
-    const ALL: [Page; 10] = [
-        Page::Home, Page::Explorer, Page::Tools, Page::Toolkit, Page::Servers,
-        Page::Skills, Page::Templates, Page::Terminal, Page::Updates, Page::Settings,
-    ];
+    const ALL: [Page; 7] = [Page::Home, Page::Explorer, Page::Tools, Page::Servers, Page::Terminal, Page::Updates, Page::Settings];
 
     fn title(self) -> &'static str {
         match self {
             Page::Home => "Home",
             Page::Explorer => "Explorer",
             Page::Tools => "Tools",
-            Page::Toolkit => "Toolkit",
             Page::Servers => "MCP Servers",
-            Page::Skills => "Skills",
-            Page::Templates => "Templates",
             Page::Terminal => "Terminal",
             Page::Updates => "Updates",
             Page::Settings => "Settings",
@@ -480,14 +426,23 @@ impl Page {
         match self {
             Page::Home => "Bridge overview, Studio link and quick access",
             Page::Explorer => "Browse and edit the AgentScript workspace",
-            Page::Tools => "Every tool the extension can call through this bridge",
-            Page::Toolkit => "Run tools by hand, probe Studio, collect diagnostics",
-            Page::Servers => "Roblox Studio MCP and the local filesystem engine",
-            Page::Skills => "Skill families bundled with the ORscript extension",
-            Page::Templates => "Production Luau starters you can drop into the workspace",
-            Page::Terminal => "Bridge console and workspace command runner",
-            Page::Updates => "Version, release channel and GitHub releases",
-            Page::Settings => "Appearance, behaviour, workspace and Studio MCP",
+            Page::Tools => "Every tool the extension can call through this bridge — run any of them by hand",
+            Page::Servers => "Roblox Studio MCP, the local filesystem engine and the extension channels",
+            Page::Terminal => "Bridge console, workspace commands and Luau in Studio",
+            Page::Updates => "Version, build and GitHub releases",
+            Page::Settings => "Appearance, behaviour, workspace, Studio MCP and diagnostics",
+        }
+    }
+
+    fn shortcut_key(self) -> egui::Key {
+        match self {
+            Page::Home => egui::Key::Num1,
+            Page::Explorer => egui::Key::Num2,
+            Page::Tools => egui::Key::Num3,
+            Page::Servers => egui::Key::Num4,
+            Page::Terminal => egui::Key::Num5,
+            Page::Updates => egui::Key::Num6,
+            Page::Settings => egui::Key::Num7,
         }
     }
 }
@@ -497,9 +452,14 @@ impl Page {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ToolFilter { All, Roblox, Local }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RunnerMode { Command, Luau }
+
 struct ExplorerEntry { name: String, path: PathBuf, is_dir: bool, size: u64 }
 
 struct ToolRun { receiver: Receiver<ToolReply>, started: Instant, name: String }
+
+struct Snapshot { texture: egui::TextureHandle, size: [usize; 2], taken_at: String, source: String }
 
 pub struct App {
     shared: Arc<UiShared>,
@@ -508,27 +468,32 @@ pub struct App {
     theme: Theme,
     page: Page,
     logo: Option<egui::TextureHandle>,
-    started: Instant,
     first_frame: bool,
     start_hidden: bool,
     quit_now: bool,
     toast: Option<(String, Instant, bool)>,
+    // home
+    snapshot: Option<Snapshot>,
+    snapshot_run: Option<ToolRun>,
     // tools
     tool_query: String,
     tool_filter: ToolFilter,
     local_tools: Vec<ToolInfo>,
-    // toolkit
-    kit_engine: String,
-    kit_tool: String,
-    kit_args: String,
-    kit_output: String,
-    kit_run: Option<ToolRun>,
+    selected_tool: Option<(String, String)>,
+    run_args: String,
+    run_output: String,
+    run_job: Option<ToolRun>,
+    // servers
     kill_armed: Option<Instant>,
     // terminal
+    runner_mode: RunnerMode,
     term_cmd: String,
     term_history: Vec<String>,
+    history_cursor: Option<usize>,
     term_output: Vec<(bool, String)>,
     term_run: Option<ToolRun>,
+    luau_code: String,
+    luau_run: Option<ToolRun>,
     log_level: u8,
     log_query: String,
     // explorer
@@ -538,22 +503,18 @@ pub struct App {
     explorer_text: String,
     explorer_dirty: bool,
     explorer_note: String,
-    new_folder: String,
+    explorer_jump: String,
+    new_name: String,
     delete_armed: Option<Instant>,
-    // catalogs
-    skills: SkillsFile,
-    skills_query: String,
-    skills_open: Option<String>,
-    templates: Vec<Template>,
-    template_open: Option<String>,
-    ais: Vec<AiEntry>,
     // updates
     update: Option<UpdateReply>,
     update_rx: Option<Receiver<UpdateReply>>,
-    // settings drafts
+    // settings
     draft_workspace: String,
     draft_mcp: String,
     settings_note: String,
+    picker_rx: Option<Receiver<Option<String>>>,
+    workspace_rx: Option<Receiver<Result<String, String>>>,
     tray: Option<TrayState>,
 }
 
@@ -573,14 +534,13 @@ impl App {
             let image = egui::ColorImage::from_rgba_unmultiplied([*w as usize, *h as usize], rgba);
             cc.egui_ctx.load_texture("orscript-logo", image, egui::TextureOptions::LINEAR)
         });
-        let (skills, templates, ais) = load_catalog();
         let local_tools: Vec<ToolInfo> = crate::workspace::catalog()
             .iter()
             .filter_map(|t| ToolInfo::from_mcp(t, "local"))
             .collect();
         let root = PathBuf::from(shared.root());
         let mut app = Self {
-            draft_workspace: settings.workspace_root.clone(),
+            draft_workspace: shared.root(),
             draft_mcp: settings.mcp_command.clone(),
             shared,
             cmd_tx,
@@ -588,24 +548,28 @@ impl App {
             theme,
             page: Page::Home,
             logo,
-            started: Instant::now(),
             first_frame: true,
             start_hidden,
             quit_now: false,
             toast: None,
+            snapshot: None,
+            snapshot_run: None,
             tool_query: String::new(),
             tool_filter: ToolFilter::All,
             local_tools,
-            kit_engine: "roblox".into(),
-            kit_tool: "get_studio_state".into(),
-            kit_args: "{}".into(),
-            kit_output: String::new(),
-            kit_run: None,
+            selected_tool: None,
+            run_args: "{}".into(),
+            run_output: String::new(),
+            run_job: None,
             kill_armed: None,
+            runner_mode: RunnerMode::Command,
             term_cmd: String::new(),
             term_history: Vec::new(),
+            history_cursor: None,
             term_output: Vec::new(),
             term_run: None,
+            luau_code: "-- Runs inside Roblox Studio through execute_luau (Edit DataModel)\nlocal workspace = game:GetService(\"Workspace\")\nprint(\"ORscript: \" .. #workspace:GetChildren() .. \" children in Workspace\")\n".into(),
+            luau_run: None,
             log_level: 0,
             log_query: String::new(),
             explorer_dir: root,
@@ -614,17 +578,14 @@ impl App {
             explorer_text: String::new(),
             explorer_dirty: false,
             explorer_note: String::new(),
-            new_folder: String::new(),
+            explorer_jump: String::new(),
+            new_name: String::new(),
             delete_armed: None,
-            skills,
-            skills_query: String::new(),
-            skills_open: None,
-            templates,
-            template_open: None,
-            ais,
             update: None,
             update_rx: None,
             settings_note: String::new(),
+            picker_rx: None,
+            workspace_rx: None,
             tray,
         };
         app.refresh_explorer();
@@ -645,6 +606,18 @@ impl App {
         }
     }
 
+    /// Fire a tool call and return the receiver for the reply (None if the runtime is gone).
+    fn start_tool(&mut self, engine: &str, name: &str, args: serde_json::Value) -> Option<ToolRun> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let cmd = UiCommand::RunTool { engine: engine.to_string(), name: name.to_string(), args, reply: tx };
+        if self.cmd_tx.send(cmd).is_ok() {
+            Some(ToolRun { receiver: rx, started: Instant::now(), name: name.to_string() })
+        } else {
+            self.toast("Bridge runtime is not reachable", false);
+            None
+        }
+    }
+
     fn all_tools(&self) -> Vec<ToolInfo> {
         let mut list = self.shared.roblox_tools.lock().unwrap_or_else(|e| e.into_inner()).clone();
         list.extend(self.local_tools.iter().cloned());
@@ -654,9 +627,8 @@ impl App {
     fn workspace_root(&self) -> PathBuf { PathBuf::from(self.shared.root()) }
 
     fn inside_root(&self, path: &Path) -> bool {
-        let root = self.workspace_root();
         if self.shared.full_access() { return true; }
-        path.starts_with(&root)
+        path.starts_with(self.workspace_root())
     }
 
     fn refresh_explorer(&mut self) {
@@ -676,6 +648,15 @@ impl App {
             .collect();
         entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
         self.explorer_entries = entries;
+        self.explorer_jump = self.explorer_dir.to_string_lossy().to_string();
+    }
+
+    fn navigate(&mut self, dir: PathBuf) {
+        if !dir.is_dir() { self.explorer_note = format!("{} is not a folder", dir.display()); return; }
+        if !self.inside_root(&dir) { self.explorer_note = "Outside the workspace — enable FULL PC ACCESS to browse anywhere".into(); return; }
+        self.explorer_dir = dir;
+        self.explorer_note.clear();
+        self.refresh_explorer();
     }
 
     fn open_file(&mut self, path: PathBuf) {
@@ -710,44 +691,97 @@ impl App {
         }
     }
 
-    fn poll_async(&mut self) {
-        let kit = self.kit_run.as_ref().map(|run| (run.receiver.try_recv(), run.name.clone()));
-        if let Some((result, name)) = kit {
+    fn capture_studio(&mut self) {
+        if self.snapshot_run.is_some() { return; }
+        self.snapshot_run = self.start_tool("roblox", "screen_capture", serde_json::json!({}));
+        if self.snapshot_run.is_some() { self.toast("Capturing the Studio viewport", true); }
+    }
+
+    fn store_snapshot(&mut self, ctx: &egui::Context, images: &[(String, String)], source: &str) -> bool {
+        let Some((mime, data)) = images.first() else { return false; };
+        match decode_image(data) {
+            Ok((rgba, w, h)) => {
+                let image = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+                let texture = ctx.load_texture("studio-snapshot", image, egui::TextureOptions::LINEAR);
+                self.snapshot = Some(Snapshot {
+                    texture,
+                    size: [w as usize, h as usize],
+                    taken_at: chrono::Local::now().format("%H:%M:%S").to_string(),
+                    source: source.to_string(),
+                });
+                true
+            }
+            Err(e) => {
+                self.toast(format!("Image ({mime}) could not be decoded: {e}"), false);
+                false
+            }
+        }
+    }
+
+    fn poll_async(&mut self, ctx: &egui::Context) {
+        // Studio snapshot
+        let snap = self.snapshot_run.as_ref().map(|run| run.receiver.try_recv());
+        if let Some(result) = snap {
+            match result {
+                Ok(reply) => {
+                    self.snapshot_run = None;
+                    if reply.ok {
+                        if !self.store_snapshot(ctx, &reply.images, "screen_capture") {
+                            if reply.images.is_empty() { self.toast("Studio returned no image — is a place open?", false); }
+                        } else {
+                            self.toast("Studio viewport captured", true);
+                        }
+                    } else {
+                        self.toast(format!("Capture failed: {}", truncate(&reply.text, 120)), false);
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(_) => { self.snapshot_run = None; self.toast("Runtime dropped the capture request", false); }
+            }
+        }
+        // Tools page run
+        let job = self.run_job.as_ref().map(|run| (run.receiver.try_recv(), run.name.clone()));
+        if let Some((result, name)) = job {
             match result {
                 Ok(reply) => {
                     let status = if reply.ok { "OK" } else { "ERROR" };
-                    let extra = if reply.images > 0 { format!(" · {} image(s) returned", reply.images) } else { String::new() };
-                    self.kit_output = format!("[{status} · {name} · {} ms{extra}]\n{}", reply.elapsed_ms, reply.text);
-                    self.kit_run = None;
+                    let extra = if reply.images.is_empty() { String::new() } else { format!(" · {} image(s) — shown on Home", reply.images.len()) };
+                    self.run_output = format!("[{status} · {name} · {} ms{extra}]\n{}", reply.elapsed_ms, reply.text);
+                    if reply.ok && !reply.images.is_empty() { self.store_snapshot(ctx, &reply.images, &name); }
+                    self.run_job = None;
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
-                Err(_) => {
-                    self.kit_output = "[ERROR] runtime dropped the request".into();
-                    self.kit_run = None;
-                }
+                Err(_) => { self.run_output = "[ERROR] runtime dropped the request".into(); self.run_job = None; }
             }
         }
+        // Terminal: command
         let term = self.term_run.as_ref().map(|run| run.receiver.try_recv());
         if let Some(result) = term {
             match result {
-                Ok(reply) => {
-                    self.term_output.push((reply.ok, reply.text));
-                    self.term_run = None;
-                }
+                Ok(reply) => { self.term_output.push((reply.ok, reply.text)); self.term_run = None; }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
-                Err(_) => {
-                    self.term_output.push((false, "runtime dropped the request".into()));
-                    self.term_run = None;
-                }
+                Err(_) => { self.term_output.push((false, "runtime dropped the request".into())); self.term_run = None; }
             }
         }
+        // Terminal: Luau
+        let luau = self.luau_run.as_ref().map(|run| (run.receiver.try_recv(), run.started.elapsed().as_millis()));
+        if let Some((result, _)) = luau {
+            match result {
+                Ok(reply) => {
+                    let head = if reply.ok { format!("[Studio · {} ms]", reply.elapsed_ms) } else { format!("[Studio · ERROR · {} ms]", reply.elapsed_ms) };
+                    self.term_output.push((reply.ok, format!("{head}\n{}", if reply.text.trim().is_empty() { "(no output)".to_string() } else { reply.text })));
+                    if reply.ok && !reply.images.is_empty() { self.store_snapshot(ctx, &reply.images, "execute_luau"); }
+                    self.luau_run = None;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(_) => { self.term_output.push((false, "runtime dropped the Luau request".into())); self.luau_run = None; }
+            }
+        }
+        // Updates
         let upd = self.update_rx.as_ref().map(|rx| rx.try_recv());
         if let Some(result) = upd {
             match result {
-                Ok(reply) => {
-                    self.update = Some(reply);
-                    self.update_rx = None;
-                }
+                Ok(reply) => { self.update = Some(reply); self.update_rx = None; }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
                 Err(_) => {
                     self.update = Some(UpdateReply {
@@ -762,6 +796,62 @@ impl App {
                 }
             }
         }
+        // Folder picker
+        let picked = self.picker_rx.as_ref().map(|rx| rx.try_recv());
+        if let Some(result) = picked {
+            match result {
+                Ok(Some(path)) => { self.draft_workspace = path; self.picker_rx = None; }
+                Ok(None) => { self.picker_rx = None; }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(_) => { self.picker_rx = None; }
+            }
+        }
+        // Workspace switch
+        let ws = self.workspace_rx.as_ref().map(|rx| rx.try_recv());
+        if let Some(result) = ws {
+            match result {
+                Ok(Ok(shown)) => {
+                    self.workspace_rx = None;
+                    self.settings.workspace_root = shown.clone();
+                    let _ = self.settings.save();
+                    self.draft_workspace = shown.clone();
+                    self.explorer_file = None;
+                    self.explorer_text.clear();
+                    self.explorer_dirty = false;
+                    self.explorer_dir = PathBuf::from(&shown);
+                    self.refresh_explorer();
+                    self.settings_note = format!("Workspace is now {shown}");
+                    self.toast("Workspace switched", true);
+                }
+                Ok(Err(e)) => { self.workspace_rx = None; self.settings_note = format!("Workspace switch failed: {e}"); self.toast("Workspace switch failed", false); }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(_) => { self.workspace_rx = None; }
+            }
+        }
+    }
+
+    fn handle_shortcuts(&mut self, ctx: &egui::Context) {
+        let mut nav: Option<Page> = None;
+        let mut restart = false;
+        let mut refresh = false;
+        let mut capture = false;
+        ctx.input(|i| {
+            if i.modifiers.command {
+                for page in Page::ALL {
+                    if i.key_pressed(page.shortcut_key()) { nav = Some(page); }
+                }
+                if i.key_pressed(egui::Key::R) { restart = true; }
+                if i.modifiers.shift && i.key_pressed(egui::Key::S) { capture = true; }
+            }
+            if i.key_pressed(egui::Key::F5) { refresh = true; }
+        });
+        if let Some(page) = nav { self.page = page; }
+        if restart { self.send(UiCommand::RestartMcp, "Restarting Studio MCP helper"); }
+        if capture { self.capture_studio(); }
+        if refresh {
+            self.refresh_explorer();
+            self.send(UiCommand::ProbeStudio, "");
+        }
     }
 
     fn diagnostics_text(&self) -> String {
@@ -774,6 +864,7 @@ impl App {
         out.push_str(&format!("studio process: {}\n", s.studio_running.load(Ordering::Relaxed)));
         out.push_str(&format!("studio connected: {}\n", s.studio_connected.load(Ordering::Relaxed)));
         out.push_str(&format!("mcp helper alive: {}\n", s.mcp_alive.load(Ordering::Relaxed)));
+        out.push_str(&format!("mcp launcher: {}\n", mcp_launcher_display()));
         out.push_str(&format!("extension clients: roblox={} local={}\n", s.roblox_clients.load(Ordering::Relaxed), s.local_clients.load(Ordering::Relaxed)));
         out.push_str(&format!("workspace: {} (ready={}, full access={})\n", s.root(), s.workspace_ready.load(Ordering::Relaxed), s.full_access()));
         out.push_str(&format!("tools: {} ({} roblox, {} local)\n", tools.len(), tools.iter().filter(|t| t.engine == "roblox").count(), self.local_tools.len()));
@@ -875,10 +966,12 @@ impl App {
                 ui.add_space(14.0);
                 ui.label(RichText::new("WORKSPACE").small().strong().color(t.muted));
                 ui.add_space(4.0);
-                for page in Page::ALL {
+                for (n, page) in Page::ALL.iter().enumerate() {
+                    let page = *page;
                     if page == Page::Updates { ui.add_space(8.0); ui.label(RichText::new("SYSTEM").small().strong().color(t.muted)); ui.add_space(4.0); }
                     let selected = self.page == page;
                     let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 34.0), Sense::click());
+                    let resp = resp.on_hover_text(format!("{}  (Ctrl+{})", page.title(), n + 1));
                     if resp.hovered() { ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand); }
                     let fill = if selected { t.accent.linear_multiply(0.18) } else if resp.hovered() { t.panel2 } else { Color32::TRANSPARENT };
                     ui.painter().rect_filled(rect, Rounding::same(10.0), fill);
@@ -912,7 +1005,7 @@ impl App {
                     frame.show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         ui.label(RichText::new("BRIDGE").small().strong().color(t.muted));
-                        row_status(ui, t, "HTTP 3000", true);
+                        row_status(ui, t, "HTTP 3000", s.fatal.lock().unwrap_or_else(|e| e.into_inner()).is_none());
                         row_status(ui, t, "WS 17613 roblox", s.roblox_clients.load(Ordering::Relaxed) > 0);
                         row_status(ui, t, "WS 17615 local", s.local_clients.load(Ordering::Relaxed) > 0);
                         row_status(ui, t, "Studio MCP helper", s.mcp_alive.load(Ordering::Relaxed));
@@ -925,12 +1018,10 @@ impl App {
 
     fn page_header(&self, ui: &mut egui::Ui) {
         let t = self.theme;
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.spacing_mut().item_spacing.y = 2.0;
-                ui.label(RichText::new(self.page.title()).size(24.0).strong().color(t.text));
-                ui.label(RichText::new(self.page.subtitle()).color(t.muted));
-            });
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            ui.label(RichText::new(self.page.title()).size(24.0).strong().color(t.text));
+            ui.label(RichText::new(self.page.subtitle()).color(t.muted));
         });
         ui.add_space(12.0);
     }
@@ -972,10 +1063,11 @@ impl App {
             });
             ui.add_space(12.0);
             ui.horizontal_wrapped(|ui| {
-                if pill(ui, t, "Restart Studio MCP", true).clicked() { self.send(UiCommand::RestartMcp, "Restarting Studio MCP helper"); }
-                if pill(ui, t, "Probe Studio", false).clicked() { self.send(UiCommand::ProbeStudio, "Probing Studio"); }
+                if pill(ui, t, "Restart Studio MCP", true).on_hover_text("Ctrl+R").clicked() { self.send(UiCommand::RestartMcp, "Restarting Studio MCP helper"); }
+                if pill(ui, t, "Probe Studio", false).on_hover_text("F5").clicked() { self.send(UiCommand::ProbeStudio, "Probing Studio"); }
+                let capturing = self.snapshot_run.is_some();
+                if ui.add_enabled(!capturing, pill_widget(t, if capturing { "Capturing…" } else { "Capture Studio viewport" }, false)).on_hover_text("Ctrl+Shift+S").clicked() { self.capture_studio(); }
                 if pill(ui, t, "Open workspace folder", false).clicked() { open_external(&s.root()); }
-                if pill(ui, t, "Open Terminal", false).clicked() { self.page = Page::Terminal; }
                 if pill(ui, t, "Copy diagnostics", false).clicked() {
                     let text = self.diagnostics_text();
                     ui.output_mut(|o| o.copied_text = text);
@@ -987,7 +1079,10 @@ impl App {
 
         // Status cards
         let cards: [(&str, String, String, Color32); 4] = [
-            ("Bridge", "Online".into(), format!("{} ext · up {}", s.roblox_clients.load(Ordering::Relaxed) + s.local_clients.load(Ordering::Relaxed), human_duration(s.boot.elapsed())), t.ok),
+            ("Bridge",
+                if s.fatal.lock().unwrap_or_else(|e| e.into_inner()).is_some() { "Error".into() } else { "Online".into() },
+                format!("{} extension channel(s) · up {}", s.roblox_clients.load(Ordering::Relaxed) + s.local_clients.load(Ordering::Relaxed), human_duration(s.boot.elapsed())),
+                if s.fatal.lock().unwrap_or_else(|e| e.into_inner()).is_some() { t.bad } else { t.ok }),
             ("Roblox Studio",
                 if studio_link { "Connected".into() } else if studio_proc { "Open · not linked".into() } else { "Closed".into() },
                 if studio_link { "MCP helper linked to a Studio place".into() } else if studio_proc { if mcp { "Enable Studio as MCP server, then probe".into() } else { "Helper not running — restart MCP".into() } } else { "Start Roblox Studio to link".into() },
@@ -1011,63 +1106,95 @@ impl App {
         });
         ui.add_space(14.0);
 
-        ui.columns(2, |cols| {
-            // Quick access
-            {
-                let ui = &mut cols[0];
-                ui.label(RichText::new("Quick access").size(16.0).strong().color(t.text));
-                ui.add_space(6.0);
-                let items: [(&str, &str, Page); 6] = [
-                    ("Tools catalog", "Browse every Studio and workspace tool", Page::Tools),
-                    ("Run a tool", "Call any tool by hand with JSON arguments", Page::Toolkit),
-                    ("Explorer", "Edit files inside the AgentScript workspace", Page::Explorer),
-                    ("Templates", "Luau starters: controllers, remotes, data, state", Page::Templates),
-                    ("Skills", "Skill families bundled with the extension", Page::Skills),
-                    ("Settings", "Theme, tray behaviour, workspace, MCP command", Page::Settings),
-                ];
-                for (title, sub, page) in items {
-                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::symmetric(12.0, 10.0));
-                    let resp = frame.show(ui, |ui| {
+        egui::ScrollArea::vertical().id_salt("home-scroll").auto_shrink([false, false]).show(ui, |ui| {
+            ui.columns(2, |cols| {
+                // Left: Studio viewport + quick access
+                {
+                    let ui = &mut cols[0];
+                    ui.label(RichText::new("Studio viewport").size(16.0).strong().color(t.text));
+                    ui.add_space(6.0);
+                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
+                    frame.show(ui, |ui| {
                         ui.set_width(ui.available_width());
+                        match &self.snapshot {
+                            Some(snap) => {
+                                let avail = ui.available_width();
+                                let aspect = snap.size[1] as f32 / snap.size[0].max(1) as f32;
+                                let size = Vec2::new(avail, (avail * aspect).min(420.0));
+                                ui.add(egui::Image::from_texture(egui::load::SizedTexture::new(snap.texture.id(), size)).rounding(Rounding::same(8.0)));
+                                ui.horizontal(|ui| {
+                                    ui.label(RichText::new(format!("{}×{} · {} · via {}", snap.size[0], snap.size[1], snap.taken_at, snap.source)).small().color(t.muted));
+                                });
+                            }
+                            None => {
+                                ui.label(RichText::new("No snapshot yet. Capture the current Studio viewport through the same screen_capture tool the AI uses — handy to confirm what the agent is looking at.").color(t.muted));
+                            }
+                        }
                         ui.horizontal(|ui| {
-                            let (icon_rect, _) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::hover());
-                            nav_icon(ui.painter(), icon_rect, page, t.accent);
-                            ui.vertical(|ui| {
-                                ui.spacing_mut().item_spacing.y = 1.0;
-                                ui.label(RichText::new(title).strong().color(t.text));
-                                ui.label(RichText::new(sub).small().color(t.muted));
-                            });
+                            let capturing = self.snapshot_run.is_some();
+                            if ui.add_enabled(!capturing && studio_link, pill_widget(t, if capturing { "Capturing…" } else { "Capture" }, true)).clicked() { self.capture_studio(); }
+                            if self.snapshot.is_some() && ui.button("Clear").clicked() { self.snapshot = None; }
+                            if !studio_link { ui.label(RichText::new("Link Studio first").small().color(t.muted)); }
                         });
-                    }).response;
-                    let resp = resp.interact(Sense::click());
-                    if resp.hovered() { ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand); }
-                    if resp.clicked() { self.page = page; }
-                }
-            }
-            // Recent activity
-            {
-                let ui = &mut cols[1];
-                ui.label(RichText::new("Recent activity").size(16.0).strong().color(t.text));
-                ui.add_space(6.0);
-                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
-                frame.show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    let list = s.activity.lock().unwrap_or_else(|e| e.into_inner()).clone();
-                    if list.is_empty() {
-                        ui.label(RichText::new("No activity yet. Open the ORscript extension in your browser AI and press Start — tool calls, Studio links and workspace edits appear here.").color(t.muted));
+                    });
+                    ui.add_space(12.0);
+                    ui.label(RichText::new("Quick access").size(16.0).strong().color(t.text));
+                    ui.add_space(6.0);
+                    let items: [(&str, &str, Page); 6] = [
+                        ("Explorer", "Edit files inside the AgentScript workspace", Page::Explorer),
+                        ("Tools", "Browse and run every Studio and workspace tool", Page::Tools),
+                        ("MCP Servers", "Restart the helper, probe or kill Studio, FULL access", Page::Servers),
+                        ("Terminal", "Bridge console, shell commands, Luau in Studio", Page::Terminal),
+                        ("Updates", "Version and GitHub releases", Page::Updates),
+                        ("Settings", "Theme, tray behaviour, workspace, MCP launcher", Page::Settings),
+                    ];
+                    for (title, sub, page) in items {
+                        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::symmetric(12.0, 10.0));
+                        let resp = frame.show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            ui.horizontal(|ui| {
+                                let (icon_rect, _) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::hover());
+                                nav_icon(ui.painter(), icon_rect, page, t.accent);
+                                ui.vertical(|ui| {
+                                    ui.spacing_mut().item_spacing.y = 1.0;
+                                    ui.label(RichText::new(title).strong().color(t.text));
+                                    ui.label(RichText::new(sub).small().color(t.muted));
+                                });
+                            });
+                        }).response;
+                        let resp = resp.interact(Sense::click());
+                        if resp.hovered() { ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand); }
+                        if resp.clicked() { self.page = page; }
                     }
-                    egui::ScrollArea::vertical().id_salt("activity").max_height(380.0).auto_shrink([false, true]).show(ui, |ui| {
-                        for a in list.iter().take(60) {
+                }
+                // Right: recent activity
+                {
+                    let ui = &mut cols[1];
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Recent activity").size(16.0).strong().color(t.text));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if ui.small_button("Clear").clicked() { s.activity.lock().unwrap_or_else(|e| e.into_inner()).clear(); }
+                        });
+                    });
+                    ui.add_space(6.0);
+                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
+                    frame.show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        let list = s.activity.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                        if list.is_empty() {
+                            ui.label(RichText::new("No activity yet. Open the ORscript extension in your browser AI and press Start — tool calls, Studio links and workspace edits appear here.").color(t.muted));
+                        }
+                        for a in list.iter().take(80) {
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new(&a.at).monospace().small().color(t.muted));
                                 let color = match a.kind.as_str() { "tool" => t.accent, "studio" => t.ok, "bridge" => t.info, "error" => t.bad, _ => t.muted };
                                 tag(ui, &a.kind, color);
-                                ui.label(RichText::new(&a.text).small().color(t.text));
+                                ui.add(egui::Label::new(RichText::new(&a.text).small().color(t.text)).wrap());
                             });
                         }
                     });
-                });
-            }
+                }
+            });
         });
     }
 
@@ -1075,21 +1202,35 @@ impl App {
         let t = self.theme;
         let root = self.workspace_root();
         ui.horizontal(|ui| {
-            if pill(ui, t, "Root", false).clicked() { self.explorer_dir = root.clone(); self.refresh_explorer(); }
+            if pill(ui, t, "Root", false).clicked() { self.navigate(root.clone()); }
             let can_up = self.explorer_dir != root || self.shared.full_access();
             if ui.add_enabled(can_up, egui::Button::new("Up")).clicked() {
-                if let Some(parent) = self.explorer_dir.parent() { let p = parent.to_path_buf(); if self.inside_root(&p) { self.explorer_dir = p; self.refresh_explorer(); } }
+                if let Some(parent) = self.explorer_dir.parent().map(|p| p.to_path_buf()) { self.navigate(parent); }
             }
-            if ui.button("Refresh").clicked() { self.refresh_explorer(); }
+            if ui.button("Refresh").on_hover_text("F5").clicked() { self.refresh_explorer(); }
             if ui.button("Open in OS").clicked() { open_external(&self.explorer_dir.to_string_lossy()); }
-            ui.label(RichText::new(short_path(&self.explorer_dir.to_string_lossy(), 70)).monospace().color(t.muted));
+            let jump = ui.add(egui::TextEdit::singleline(&mut self.explorer_jump).font(TextStyle::Monospace).desired_width(ui.available_width() - 60.0));
+            if jump.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let target = PathBuf::from(self.explorer_jump.trim());
+                self.navigate(target);
+            }
+            if ui.button("Go").clicked() { let target = PathBuf::from(self.explorer_jump.trim()); self.navigate(target); }
         });
         ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut self.new_folder).hint_text("new folder name").desired_width(220.0));
-            if ui.button("Create folder").clicked() && !self.new_folder.trim().is_empty() {
-                let p = self.explorer_dir.join(self.new_folder.trim());
-                match std::fs::create_dir_all(&p) { Ok(()) => { self.new_folder.clear(); self.refresh_explorer(); self.toast("Folder created", true); } Err(e) => self.toast(format!("{e}"), false) }
+            ui.add(egui::TextEdit::singleline(&mut self.new_name).hint_text("new name…").desired_width(220.0));
+            let name = self.new_name.trim().to_string();
+            let valid = !name.is_empty() && !name.contains(['/', '\\']);
+            if ui.add_enabled(valid, egui::Button::new("New folder")).clicked() {
+                let p = self.explorer_dir.join(&name);
+                match std::fs::create_dir_all(&p) { Ok(()) => { self.new_name.clear(); self.refresh_explorer(); self.toast("Folder created", true); } Err(e) => self.toast(format!("{e}"), false) }
             }
+            if ui.add_enabled(valid, egui::Button::new("New file")).clicked() {
+                let p = self.explorer_dir.join(&name);
+                if p.exists() { self.toast("Already exists", false); } else {
+                    match std::fs::write(&p, b"") { Ok(()) => { self.new_name.clear(); self.refresh_explorer(); self.open_file(p); self.toast("File created", true); } Err(e) => self.toast(format!("{e}"), false) }
+                }
+            }
+            ui.label(RichText::new(format!("{} item(s)", self.explorer_entries.len())).small().color(t.muted));
             if !self.explorer_note.is_empty() { ui.label(RichText::new(&self.explorer_note).color(t.warn)); }
         });
         ui.add_space(8.0);
@@ -1107,11 +1248,11 @@ impl App {
                         let selected = self.explorer_file.as_ref() == Some(&e.path);
                         let label = if e.is_dir { format!("[{}]", e.name) } else { format!("  {}", e.name) };
                         let resp = ui.selectable_label(selected, RichText::new(label).color(if e.is_dir { t.accent } else { t.text }));
-                        if !e.is_dir { resp.clone().on_hover_text(human_size(e.size)); }
+                        let resp = if e.is_dir { resp } else { resp.on_hover_text(human_size(e.size)) };
                         if resp.clicked() { if e.is_dir { nav = Some(e.path.clone()); } else { open = Some(e.path.clone()); } }
                     }
                     if self.explorer_entries.is_empty() { ui.label(RichText::new("Empty folder").color(t.muted)); }
-                    if let Some(p) = nav { self.explorer_dir = p; self.refresh_explorer(); }
+                    if let Some(p) = nav { self.navigate(p); }
                     if let Some(p) = open { self.open_file(p); }
                 });
             });
@@ -1122,7 +1263,7 @@ impl App {
                 ui.set_min_height(avail - 20.0);
                 match self.explorer_file.clone() {
                     None => {
-                        ui.label(RichText::new("Select a file to preview and edit it. Files up to 2 MB open inline; everything else opens with the OS.").color(t.muted));
+                        ui.label(RichText::new("Select a file to preview and edit it. Files up to 2 MB open inline; everything else opens with the OS. Ctrl+S saves.").color(t.muted));
                     }
                     Some(path) => {
                         ui.horizontal(|ui| {
@@ -1138,7 +1279,8 @@ impl App {
                                     } else { self.delete_armed = Some(Instant::now()); }
                                 }
                                 if ui.button("Open in OS").clicked() { open_external(&path.to_string_lossy()); }
-                                if ui.add_enabled(self.explorer_dirty, egui::Button::new("Save")).clicked() { self.save_file(); }
+                                if ui.button("Copy path").clicked() { let p = path.to_string_lossy().to_string(); ui.output_mut(|o| o.copied_text = p); }
+                                if ui.add_enabled(self.explorer_dirty, egui::Button::new("Save")).on_hover_text("Ctrl+S").clicked() { self.save_file(); }
                             });
                         });
                         egui::ScrollArea::vertical().id_salt("explorer-editor").auto_shrink([false, false]).show(ui, |ui| {
@@ -1161,6 +1303,7 @@ impl App {
     fn page_tools(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
         let tools = self.all_tools();
+        let studio_tools = tools.iter().filter(|x| x.engine == "roblox").count();
         ui.horizontal(|ui| {
             ui.add(egui::TextEdit::singleline(&mut self.tool_query).hint_text("Search tools…").desired_width(280.0));
             for (f, label) in [(ToolFilter::All, "All"), (ToolFilter::Roblox, "Roblox Studio"), (ToolFilter::Local, "Local filesystem")] {
@@ -1168,16 +1311,11 @@ impl App {
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if pill(ui, t, "Refresh Studio tools", false).clicked() { self.send(UiCommand::RestartMcp, "Refreshing Studio MCP tools"); }
-                ui.label(RichText::new(format!("{} tools", tools.len())).color(t.muted));
+                ui.label(RichText::new(format!("{} tools · {} Studio · {} local", tools.len(), studio_tools, self.local_tools.len())).color(t.muted));
             });
         });
         ui.add_space(8.0);
-        let q = self.tool_query.trim().to_lowercase();
-        let filtered: Vec<&ToolInfo> = tools.iter().filter(|tool| {
-            let engine_ok = match self.tool_filter { ToolFilter::All => true, ToolFilter::Roblox => tool.engine == "roblox", ToolFilter::Local => tool.engine == "local" };
-            engine_ok && (q.is_empty() || tool.name.to_lowercase().contains(&q) || tool.description.to_lowercase().contains(&q))
-        }).collect();
-        if tools.iter().all(|x| x.engine == "local") {
+        if studio_tools == 0 {
             let frame = egui::Frame::none().fill(t.warn.linear_multiply(0.12)).stroke(Stroke::new(1.0, t.warn)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
@@ -1185,150 +1323,109 @@ impl App {
             });
             ui.add_space(8.0);
         }
-        let mut run_tool: Option<(String, String)> = None;
-        egui::ScrollArea::vertical().id_salt("tools").auto_shrink([false, false]).show(ui, |ui| {
-            let width = ui.available_width();
-            let cols = if width > 1100.0 { 3 } else if width > 720.0 { 2 } else { 1 };
-            let rows: Vec<&[&ToolInfo]> = filtered.chunks(cols).collect();
-            for row in rows {
-                ui.columns(cols, |cs| {
-                    for (i, tool) in row.iter().enumerate() {
-                        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
-                        frame.show(&mut cs[i], |ui| {
-                            ui.set_width(ui.available_width());
-                            ui.horizontal(|ui| {
-                                ui.label(RichText::new(&tool.name).monospace().strong().color(t.text));
-                                tag(ui, if tool.engine == "roblox" { "studio" } else { "local" }, if tool.engine == "roblox" { t.accent } else { t.info });
-                            });
-                            ui.label(RichText::new(truncate(&tool.description, 180)).small().color(t.muted));
-                            if !tool.params.is_empty() {
-                                ui.horizontal_wrapped(|ui| {
-                                    for (p, req) in &tool.params {
-                                        tag(ui, &format!("{p}{}", if *req { "*" } else { "" }), if *req { t.border2 } else { t.border });
+        let q = self.tool_query.trim().to_lowercase();
+        let filtered: Vec<ToolInfo> = tools.iter().filter(|tool| {
+            let engine_ok = match self.tool_filter { ToolFilter::All => true, ToolFilter::Roblox => tool.engine == "roblox", ToolFilter::Local => tool.engine == "local" };
+            engine_ok && (q.is_empty() || tool.name.to_lowercase().contains(&q) || tool.description.to_lowercase().contains(&q))
+        }).cloned().collect();
+
+        let selected = self.selected_tool.clone();
+        let panel_open = selected.is_some();
+        let avail = ui.available_height();
+        ui.horizontal_top(|ui| {
+            let grid_width = if panel_open { (ui.available_width() - 400.0).max(320.0) } else { ui.available_width() };
+            ui.allocate_ui_with_layout(Vec2::new(grid_width, avail), Layout::top_down(Align::Min), |ui| {
+                let mut pick: Option<(String, String)> = None;
+                egui::ScrollArea::vertical().id_salt("tools").auto_shrink([false, false]).show(ui, |ui| {
+                    let width = ui.available_width();
+                    let cols = if width > 1000.0 { 3 } else if width > 640.0 { 2 } else { 1 };
+                    for row in filtered.chunks(cols) {
+                        ui.columns(cols, |cs| {
+                            for (i, tool) in row.iter().enumerate() {
+                                let is_sel = selected.as_ref().map(|(e, n)| e == tool.engine && n == &tool.name).unwrap_or(false);
+                                let frame = egui::Frame::none()
+                                    .fill(if is_sel { t.panel2 } else { t.panel })
+                                    .stroke(Stroke::new(1.0, if is_sel { t.accent } else { t.border }))
+                                    .rounding(Rounding::same(12.0))
+                                    .inner_margin(Margin::same(12.0));
+                                let resp = frame.show(&mut cs[i], |ui| {
+                                    ui.set_width(ui.available_width());
+                                    ui.horizontal(|ui| {
+                                        ui.label(RichText::new(&tool.name).monospace().strong().color(t.text));
+                                        tag(ui, if tool.engine == "roblox" { "studio" } else { "local" }, if tool.engine == "roblox" { t.accent } else { t.info });
+                                    });
+                                    ui.label(RichText::new(truncate(&tool.description, 180)).small().color(t.muted));
+                                    if !tool.params.is_empty() {
+                                        ui.horizontal_wrapped(|ui| {
+                                            for (p, req) in &tool.params {
+                                                tag(ui, &format!("{p}{}", if *req { "*" } else { "" }), if *req { t.border2 } else { t.border });
+                                            }
+                                        });
                                     }
-                                });
+                                }).response.interact(Sense::click());
+                                if resp.hovered() { cs[i].output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand); }
+                                if resp.clicked() { pick = Some((tool.engine.to_string(), tool.name.clone())); }
                             }
-                            if ui.small_button("Run in Toolkit").clicked() { run_tool = Some((tool.engine.to_string(), tool.name.clone())); }
                         });
                     }
+                    if filtered.is_empty() { ui.label(RichText::new("No tools match.").color(t.muted)); }
                 });
-            }
-            if filtered.is_empty() { ui.label(RichText::new("No tools match.").color(t.muted)); }
-        });
-        if let Some((engine, name)) = run_tool {
-            self.kit_engine = engine;
-            self.kit_tool = name;
-            self.kit_args = default_args_for(&self.all_tools(), &self.kit_tool);
-            self.page = Page::Toolkit;
-        }
-    }
-
-    fn page_toolkit(&mut self, ui: &mut egui::Ui) {
-        let t = self.theme;
-        let tools = self.all_tools();
-        ui.columns(2, |cols| {
-            {
-                let ui = &mut cols[0];
-                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
+                if let Some((engine, name)) = pick {
+                    if self.selected_tool.as_ref() != Some(&(engine.clone(), name.clone())) {
+                        self.run_args = default_args_for(&tools, &name);
+                        self.run_output.clear();
+                    }
+                    self.selected_tool = Some((engine, name));
+                }
+            });
+            if let Some((engine, name)) = selected {
+                ui.add_space(10.0);
+                let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border2)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
                 frame.show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.label(RichText::new("Run a tool").size(16.0).strong().color(t.text));
-                    ui.label(RichText::new("Same code path the extension uses (call_tool over the bridge).").small().color(t.muted));
-                    ui.add_space(6.0);
+                    ui.set_min_height(avail - 20.0);
                     ui.horizontal(|ui| {
-                        ui.label("Engine");
-                        for (id, label) in [("roblox", "Roblox Studio"), ("local", "Local filesystem")] {
-                            if ui.selectable_label(self.kit_engine == id, label).clicked() { self.kit_engine = id.into(); }
-                        }
-                    });
-                    let names: Vec<String> = tools.iter().filter(|x| x.engine == self.kit_engine).map(|x| x.name.clone()).collect();
-                    ui.horizontal(|ui| {
-                        ui.label("Tool");
-                        egui::ComboBox::from_id_salt("kit-tool").selected_text(self.kit_tool.clone()).width(260.0).show_ui(ui, |ui| {
-                            for n in &names {
-                                if ui.selectable_label(self.kit_tool == *n, n).clicked() {
-                                    self.kit_tool = n.clone();
-                                    self.kit_args = default_args_for(&tools, n);
-                                }
-                            }
-                            if names.is_empty() { ui.label(RichText::new("no tools loaded for this engine").color(t.muted)); }
+                        ui.label(RichText::new(&name).monospace().strong().color(t.accent));
+                        tag(ui, if engine == "roblox" { "studio" } else { "local" }, if engine == "roblox" { t.accent } else { t.info });
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if ui.small_button("Close").clicked() { self.selected_tool = None; }
                         });
                     });
-                    if let Some(tool) = tools.iter().find(|x| x.name == self.kit_tool && x.engine == self.kit_engine) {
-                        ui.label(RichText::new(&tool.description).small().color(t.muted));
+                    if let Some(tool) = tools.iter().find(|x| x.name == name && x.engine == engine) {
+                        ui.add(egui::Label::new(RichText::new(&tool.description).small().color(t.muted)).wrap());
+                        if !tool.params.is_empty() {
+                            ui.label(RichText::new(format!("Parameters: {}", tool.params.iter().map(|(p, r)| if *r { format!("{p}*") } else { p.clone() }).collect::<Vec<_>>().join(", "))).small().color(t.muted));
+                        }
                     }
-                    ui.label(RichText::new("Arguments (JSON)").small().color(t.muted));
-                    ui.add(egui::TextEdit::multiline(&mut self.kit_args).code_editor().font(TextStyle::Monospace).desired_rows(6).desired_width(f32::INFINITY));
+                    ui.add_space(4.0);
+                    ui.label(RichText::new("Arguments (JSON)").small().strong().color(t.muted));
+                    ui.add(egui::TextEdit::multiline(&mut self.run_args).code_editor().font(TextStyle::Monospace).desired_rows(6).desired_width(f32::INFINITY));
                     ui.horizontal(|ui| {
-                        let running = self.kit_run.is_some();
-                        if ui.add_enabled(!running, egui::Button::new(RichText::new(if running { "Running…" } else { "Run tool" }).color(t.accent_ink)).fill(t.accent).rounding(Rounding::same(999.0))).clicked() {
-                            let raw: &str = if self.kit_args.trim().is_empty() { "{}" } else { self.kit_args.as_str() };
+                        let running = self.run_job.is_some();
+                        if ui.add_enabled(!running, pill_widget(t, if running { "Running…" } else { "Run tool" }, true)).clicked() {
+                            let raw: &str = if self.run_args.trim().is_empty() { "{}" } else { self.run_args.as_str() };
                             match serde_json::from_str::<serde_json::Value>(raw) {
                                 Ok(args) => {
-                                    let (tx, rx) = std::sync::mpsc::channel();
-                                    let name = self.kit_tool.clone();
-                                    let engine = self.kit_engine.clone();
-                                    if self.cmd_tx.send(UiCommand::RunTool { engine, name: name.clone(), args, reply: tx }).is_ok() {
-                                        self.kit_run = Some(ToolRun { receiver: rx, started: Instant::now(), name });
-                                        self.kit_output.clear();
-                                    } else { self.toast("Bridge runtime is not reachable", false); }
+                                    self.run_output.clear();
+                                    self.run_job = self.start_tool(&engine, &name, args);
                                 }
-                                Err(e) => self.kit_output = format!("[ERROR] arguments are not valid JSON: {e}"),
+                                Err(e) => self.run_output = format!("[ERROR] arguments are not valid JSON: {e}"),
                             }
                         }
-                        if ui.button("Clear").clicked() { self.kit_output.clear(); }
-                        if !self.kit_output.is_empty() && ui.button("Copy output").clicked() {
-                            let text = self.kit_output.clone();
+                        if ui.button("Reset args").clicked() { self.run_args = default_args_for(&tools, &name); }
+                        if !self.run_output.is_empty() && ui.button("Copy output").clicked() {
+                            let text = self.run_output.clone();
                             ui.output_mut(|o| o.copied_text = text);
                         }
-                        if let Some(run) = &self.kit_run { ui.label(RichText::new(format!("{:.1}s", run.started.elapsed().as_secs_f32())).color(t.muted)); }
+                        if let Some(run) = &self.run_job { ui.label(RichText::new(format!("{:.1}s", run.started.elapsed().as_secs_f32())).color(t.muted)); }
                     });
-                });
-                ui.add_space(10.0);
-                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
-                frame.show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.label(RichText::new("Studio controls").size(16.0).strong().color(t.text));
                     ui.add_space(4.0);
-                    ui.horizontal_wrapped(|ui| {
-                        if pill(ui, t, "Restart MCP helper", true).clicked() { self.send(UiCommand::RestartMcp, "Restarting Studio MCP helper"); }
-                        if pill(ui, t, "Probe Studio", false).clicked() { self.send(UiCommand::ProbeStudio, "Probing Studio"); }
-                        let armed = self.kill_armed.map(|a| a.elapsed() < Duration::from_secs(3)).unwrap_or(false);
-                        if ui.button(RichText::new(if armed { "Confirm: kill Roblox Studio" } else { "Kill Roblox Studio" }).color(t.bad)).clicked() {
-                            if armed { self.kill_armed = None; self.send(UiCommand::KillStudio, "Killing Roblox Studio processes"); } else { self.kill_armed = Some(Instant::now()); }
-                        }
-                    });
-                    ui.add_space(6.0);
-                    let mut full = self.shared.full_access();
-                    if ui.checkbox(&mut full, "FULL PC ACCESS for the local engine (absolute paths, process_kill, roaming cd)").changed() {
-                        self.settings.full_access = full;
-                        let _ = self.settings.save();
-                        self.send(UiCommand::SetFullAccess(full), if full { "FULL PC ACCESS enabled" } else { "FULL PC ACCESS disabled" });
-                    }
-                    ui.horizontal_wrapped(|ui| {
-                        if ui.button("Copy diagnostics").clicked() {
-                            let text = self.diagnostics_text();
-                            ui.output_mut(|o| o.copied_text = text);
-                            self.toast("Diagnostics copied", true);
-                        }
-                        if ui.button("Open log file").clicked() {
-                            if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("logs").join("agent.log"))) { open_external(&dir.to_string_lossy()); }
-                        }
-                        if ui.button("Open settings.json").clicked() { open_external(&Settings::path().to_string_lossy()); }
-                    });
-                });
-            }
-            {
-                let ui = &mut cols[1];
-                let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
-                frame.show(ui, |ui| {
-                    ui.set_width(ui.available_width());
                     ui.label(RichText::new("Output").small().strong().color(t.muted));
-                    egui::ScrollArea::vertical().id_salt("kit-output").auto_shrink([false, false]).max_height(600.0).show(ui, |ui| {
-                        if self.kit_output.is_empty() {
-                            ui.label(RichText::new(if self.kit_run.is_some() { "Waiting for the bridge…" } else { "Tool output appears here." }).color(t.muted));
+                    egui::ScrollArea::vertical().id_salt("tool-output").auto_shrink([false, false]).show(ui, |ui| {
+                        if self.run_output.is_empty() {
+                            ui.label(RichText::new(if self.run_job.is_some() { "Waiting for the bridge…" } else { "Tool output appears here." }).color(t.muted));
                         } else {
-                            ui.add(egui::Label::new(RichText::new(&self.kit_output).monospace().color(t.text)).wrap());
+                            ui.add(egui::Label::new(RichText::new(&self.run_output).monospace().color(t.text)).wrap());
                         }
                     });
                 });
@@ -1340,131 +1437,108 @@ impl App {
         let t = self.theme;
         let s = self.shared.clone();
         let roblox_tools = s.roblox_tools.lock().unwrap_or_else(|e| e.into_inner()).len();
-        let mcp_cmd = std::env::var("OR_MCP_COMMAND").ok().or_else(|| std::env::var("ROBLOXSCRIPT_MCP_COMMAND").ok())
-            .unwrap_or_else(|| "%LOCALAPPDATA%\\Roblox\\mcp.bat (Studio built-in)".to_string());
-        let servers: [(&str, &str, bool, String, String); 2] = [
-            ("Roblox Studio MCP", "roblox", s.mcp_alive.load(Ordering::Relaxed), format!("{roblox_tools} tools · stdio JSON-RPC"), mcp_cmd),
-            ("Local filesystem (AgentScript)", "local", s.workspace_ready.load(Ordering::Relaxed), format!("{} tools · sandboxed to the workspace{}", self.local_tools.len(), if s.full_access() { " · FULL PC ACCESS" } else { "" }), s.root()),
-        ];
-        for (name, id, alive, detail, command) in servers {
+        let studio_proc = s.studio_running.load(Ordering::Relaxed);
+        let studio_link = s.studio_connected.load(Ordering::Relaxed);
+        let mcp = s.mcp_alive.load(Ordering::Relaxed);
+
+        egui::ScrollArea::vertical().id_salt("servers").auto_shrink([false, false]).show(ui, |ui| {
+            // Roblox Studio MCP
             let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    status_dot(ui, if alive { t.ok } else { t.bad });
-                    ui.label(RichText::new(name).size(16.0).strong().color(t.text));
-                    tag(ui, id, t.border2);
+                    status_dot(ui, if studio_link { t.ok } else if mcp { t.warn } else { t.bad });
+                    ui.label(RichText::new("Roblox Studio MCP").size(16.0).strong().color(t.text));
+                    tag(ui, "roblox", t.accent);
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if id == "roblox" {
-                            if pill(ui, t, "Restart", true).clicked() { self.send(UiCommand::RestartMcp, "Restarting Studio MCP helper"); }
-                            if pill(ui, t, "Probe", false).clicked() { self.send(UiCommand::ProbeStudio, "Probing Studio"); }
-                        } else if pill(ui, t, "Open folder", false).clicked() { open_external(&command); }
+                        if pill(ui, t, "Restart helper", true).clicked() { self.send(UiCommand::RestartMcp, "Restarting Studio MCP helper"); }
+                        if pill(ui, t, "Probe", false).clicked() { self.send(UiCommand::ProbeStudio, "Probing Studio"); }
+                        let armed = self.kill_armed.map(|a| a.elapsed() < Duration::from_secs(3)).unwrap_or(false);
+                        if ui.add_enabled(studio_proc, egui::Button::new(RichText::new(if armed { "Confirm: kill Studio" } else { "Kill Roblox Studio" }).color(t.bad))).clicked() {
+                            if armed { self.kill_armed = None; self.send(UiCommand::KillStudio, "Killing Roblox Studio processes"); } else { self.kill_armed = Some(Instant::now()); }
+                        }
                     });
                 });
-                ui.label(RichText::new(detail).color(t.muted));
-                ui.label(RichText::new(command).monospace().small().color(t.muted));
+                egui::Grid::new("studio-grid").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
+                    ui.label(RichText::new("Helper process").color(t.muted)); ui.label(if mcp { "running (stdio JSON-RPC)" } else { "not running" }); ui.end_row();
+                    ui.label(RichText::new("Studio process").color(t.muted)); ui.label(if studio_proc { "RobloxStudio detected" } else { "not detected" }); ui.end_row();
+                    ui.label(RichText::new("Place link").color(t.muted)); ui.label(if studio_link { "connected — get_studio_state answers" } else { "not linked" }); ui.end_row();
+                    ui.label(RichText::new("Tools").color(t.muted)); ui.label(format!("{roblox_tools}")); ui.end_row();
+                    ui.label(RichText::new("Launcher").color(t.muted)); ui.label(RichText::new(mcp_launcher_display()).monospace()); ui.end_row();
+                });
+                ui.horizontal_wrapped(|ui| {
+                    if ui.small_button("Open launcher folder").clicked() {
+                        if let Some(local) = std::env::var_os("LOCALAPPDATA") { open_external(&PathBuf::from(local).join("Roblox").to_string_lossy()); }
+                    }
+                    if ui.small_button("Change launcher…").clicked() { self.page = Page::Settings; }
+                    if ui.small_button("Browse Studio tools").clicked() { self.tool_filter = ToolFilter::Roblox; self.page = Page::Tools; }
+                });
+                if !studio_link {
+                    ui.add_space(4.0);
+                    ui.label(RichText::new("To link: open a place in Roblox Studio -> Assistant -> Manage MCP Servers -> Enable Studio as MCP server, then press Probe.").small().color(t.muted));
+                }
             });
             ui.add_space(8.0);
-        }
-        let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
-        frame.show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.label(RichText::new("Custom MCP servers").strong().color(t.text));
-            ui.label(RichText::new("The native bridge speaks only to Roblox Studio's built-in MCP server and the local workspace engine. Additional MCP servers are not proxied by this build; the extension receives UNSUPPORTED_BRIDGE_OPERATION for add_server/remove_server so it can fall back gracefully.").color(t.muted));
-            ui.add_space(4.0);
-            ui.label(RichText::new("Override the Studio launcher with OR_MCP_COMMAND or in Settings -> Studio MCP command.").small().color(t.muted));
-        });
-    }
 
-    fn page_skills(&mut self, ui: &mut egui::Ui) {
-        let t = self.theme;
-        ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut self.skills_query).hint_text("Search skills…").desired_width(300.0));
-            ui.label(RichText::new(format!("{} skills in {} families", self.skills.total, self.skills.families.len())).color(t.muted));
-        });
-        ui.add_space(8.0);
-        let q = self.skills_query.trim().to_lowercase();
-        let families = self.skills.families.clone();
-        egui::ScrollArea::vertical().id_salt("skills").auto_shrink([false, false]).show(ui, |ui| {
-            for fam in &families {
-                let matches: Vec<&SkillEntry> = fam.skills.iter().filter(|s| q.is_empty() || s.name.to_lowercase().contains(&q) || s.description.to_lowercase().contains(&q)).collect();
-                if !q.is_empty() && matches.is_empty() && !fam.title.to_lowercase().contains(&q) { continue; }
-                let open = self.skills_open.as_deref() == Some(fam.id.as_str()) || !q.is_empty();
-                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
-                frame.show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    let head = ui.horizontal(|ui| {
-                        ui.label(RichText::new(if open { "-" } else { "+" }).strong().color(t.muted));
-                        ui.label(RichText::new(&fam.title).size(15.0).strong().color(t.text));
-                        tag(ui, if fam.engine == "local" { "local" } else { "studio" }, if fam.engine == "local" { t.info } else { t.accent });
-                        ui.label(RichText::new(format!("{} skills", fam.skills.len())).small().color(t.muted));
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| { ui.label(RichText::new(&fam.source).monospace().small().color(t.muted)); });
-                    }).response.interact(Sense::click());
-                    if head.clicked() { self.skills_open = if open { None } else { Some(fam.id.clone()) }; }
-                    ui.label(RichText::new(&fam.description).small().color(t.muted));
-                    if open {
-                        ui.add_space(4.0);
-                        for skill in matches.iter().take(400) {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label(RichText::new(&skill.name).monospace().color(t.accent));
-                                ui.label(RichText::new(truncate(&skill.description, 220)).small().color(t.muted));
-                            });
-                        }
-                    }
-                });
-                ui.add_space(6.0);
-            }
-        });
-    }
-
-    fn page_templates(&mut self, ui: &mut egui::Ui) {
-        let t = self.theme;
-        let templates = self.templates.clone();
-        let root = self.workspace_root();
-        egui::ScrollArea::vertical().id_salt("templates").auto_shrink([false, false]).show(ui, |ui| {
-            for tpl in &templates {
-                let open = self.template_open.as_deref() == Some(tpl.id.as_str());
-                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
-                frame.show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(&tpl.name).size(15.0).strong().color(t.text));
-                        tag(ui, &tpl.language, t.accent);
-                        for tag_name in &tpl.tags { tag(ui, tag_name, t.border2); }
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if pill(ui, t, "Save to workspace", true).clicked() {
-                                let dir = root.join("templates");
-                                let target = dir.join(&tpl.file);
-                                let result = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&target, tpl.content.as_bytes()));
-                                match result {
-                                    Ok(()) => { self.shared.track("explorer", format!("template {} -> {}", tpl.id, target.display())); self.toast(format!("Saved templates/{}", tpl.file), true); }
-                                    Err(e) => self.toast(format!("{e}"), false),
-                                }
-                            }
-                            if ui.button("Copy").clicked() { let c = tpl.content.clone(); ui.output_mut(|o| o.copied_text = c); self.toast("Template copied", true); }
-                            if ui.button(if open { "Hide" } else { "Preview" }).clicked() { self.template_open = if open { None } else { Some(tpl.id.clone()) }; }
-                        });
+            // Local filesystem
+            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
+            frame.show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                let ready = s.workspace_ready.load(Ordering::Relaxed);
+                ui.horizontal(|ui| {
+                    status_dot(ui, if ready { t.ok } else { t.bad });
+                    ui.label(RichText::new("Local filesystem (AgentScript)").size(16.0).strong().color(t.text));
+                    tag(ui, "local", t.info);
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if pill(ui, t, "Open folder", false).clicked() { open_external(&s.root()); }
+                        if pill(ui, t, "Change workspace…", false).clicked() { self.page = Page::Settings; }
+                        if pill(ui, t, "Explorer", false).clicked() { self.page = Page::Explorer; }
                     });
-                    ui.label(RichText::new(&tpl.description).small().color(t.muted));
-                    ui.label(RichText::new(format!("{} · {} lines", tpl.file, tpl.content.lines().count())).monospace().small().color(t.muted));
-                    if open {
-                        let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(8.0)).inner_margin(Margin::same(8.0));
-                        frame.show(ui, |ui| {
-                            ui.set_width(ui.available_width());
-                            egui::ScrollArea::vertical().id_salt(format!("tpl-{}", tpl.id)).max_height(360.0).show(ui, |ui| {
-                                ui.add(egui::Label::new(RichText::new(&tpl.content).monospace().color(t.text)).wrap());
-                            });
-                        });
+                });
+                egui::Grid::new("local-grid").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
+                    ui.label(RichText::new("Root").color(t.muted)); ui.label(RichText::new(s.root()).monospace()); ui.end_row();
+                    ui.label(RichText::new("State").color(t.muted)); ui.label(if ready { "ready" } else { "folder missing" }); ui.end_row();
+                    ui.label(RichText::new("Tools").color(t.muted)); ui.label(format!("{} (workspace_info, read/write/edit_file, grep, run_command, …)", self.local_tools.len())); ui.end_row();
+                });
+                let mut full = s.full_access();
+                if ui.checkbox(&mut full, "FULL PC ACCESS — absolute paths anywhere, process_kill, cd outside the workspace").changed() {
+                    self.settings.full_access = full;
+                    let _ = self.settings.save();
+                    self.send(UiCommand::SetFullAccess(full), if full { "FULL PC ACCESS enabled" } else { "FULL PC ACCESS disabled" });
+                }
+                if full { ui.label(RichText::new("The AI can now read, write and run anything your user account can. Turn it off when you are done.").small().color(t.warn)); }
+            });
+            ui.add_space(8.0);
+
+            // Extension channels
+            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
+            frame.show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label(RichText::new("Extension channels").size(16.0).strong().color(t.text));
+                ui.add_space(4.0);
+                let rc = s.roblox_clients.load(Ordering::Relaxed);
+                let lc = s.local_clients.load(Ordering::Relaxed);
+                egui::Grid::new("channels-grid").num_columns(3).spacing([16.0, 4.0]).show(ui, |ui| {
+                    ui.label(RichText::new("HTTP").color(t.muted)); ui.label(RichText::new("http://127.0.0.1:3000").monospace()); ui.label("status / connect / push / result / ws"); ui.end_row();
+                    ui.label(RichText::new("WS roblox").color(t.muted)); ui.label(RichText::new("ws://127.0.0.1:17613").monospace()); ui.label(if rc > 0 { format!("{rc} connected") } else { "no extension connected".to_string() }); ui.end_row();
+                    ui.label(RichText::new("WS local").color(t.muted)); ui.label(RichText::new("ws://127.0.0.1:17615").monospace()); ui.label(if lc > 0 { format!("{lc} connected") } else { "no extension connected".to_string() }); ui.end_row();
+                });
+                ui.horizontal_wrapped(|ui| {
+                    if ui.small_button("Open status JSON").clicked() { open_external("http://127.0.0.1:3000/api/status"); }
+                    if ui.small_button("Copy endpoints").clicked() {
+                        ui.output_mut(|o| o.copied_text = "http://127.0.0.1:3000\nws://127.0.0.1:17613\nws://127.0.0.1:17615".to_string());
+                        self.toast("Endpoints copied", true);
                     }
                 });
-                ui.add_space(6.0);
-            }
+                ui.label(RichText::new("Custom MCP servers are not proxied by the native bridge; the extension receives UNSUPPORTED_BRIDGE_OPERATION for add_server/remove_server and falls back gracefully.").small().color(t.muted));
+            });
         });
     }
 
     fn page_terminal(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
         let avail = ui.available_height();
+        let studio_link = self.shared.studio_connected.load(Ordering::Relaxed);
         ui.columns(2, |cols| {
             // console
             {
@@ -1474,12 +1548,13 @@ impl App {
                     for (lvl, label) in [(0u8, "all"), (1, "info+"), (2, "warn+"), (3, "error")] {
                         if ui.selectable_label(self.log_level == lvl, label).clicked() { self.log_level = lvl; }
                     }
-                    ui.add(egui::TextEdit::singleline(&mut self.log_query).hint_text("filter…").desired_width(120.0));
+                    ui.add(egui::TextEdit::singleline(&mut self.log_query).hint_text("filter…").desired_width(110.0));
                     if ui.small_button("Clear").clicked() { self.shared.clear_logs(); }
                     if ui.small_button("Copy").clicked() {
                         let text = self.shared.logs.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned().collect::<Vec<_>>().join("\n");
                         ui.output_mut(|o| o.copied_text = text);
                     }
+                    if ui.small_button("Log file").clicked() { open_external(&log_path().to_string_lossy()); }
                 });
                 let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
                 frame.show(ui, |ui| {
@@ -1498,47 +1573,109 @@ impl App {
                     });
                 });
             }
-            // command runner
+            // runner
             {
                 let ui = &mut cols[1];
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Workspace command").strong().color(t.text));
-                    ui.label(RichText::new(format!("cwd {}", short_path(&self.shared.root(), 40))).monospace().small().color(t.muted));
+                    for (mode, label) in [(RunnerMode::Command, "Workspace command"), (RunnerMode::Luau, "Luau in Studio")] {
+                        if ui.selectable_label(self.runner_mode == mode, RichText::new(label).strong()).clicked() { self.runner_mode = mode; }
+                    }
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ui.small_button("Clear output").clicked() { self.term_output.clear(); }
+                        match self.runner_mode {
+                            RunnerMode::Command => { ui.label(RichText::new(format!("cwd {}", short_path(&self.shared.root(), 36))).monospace().small().color(t.muted)); }
+                            RunnerMode::Luau => { status_dot(ui, if studio_link { t.ok } else { t.muted }); ui.label(RichText::new(if studio_link { "Studio linked" } else { "Studio not linked" }).small().color(t.muted)); }
+                        }
+                    });
                 });
                 let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
                 frame.show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.set_min_height(avail - 50.0);
-                    let mut submit = false;
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(">").strong().color(t.accent));
-                        let resp = ui.add(egui::TextEdit::singleline(&mut self.term_cmd).hint_text("dir, git status, npm test …").font(TextStyle::Monospace).desired_width(ui.available_width() - 70.0));
-                        if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) { submit = true; resp.request_focus(); }
-                        if ui.add_enabled(self.term_run.is_none(), egui::Button::new("Run")).clicked() { submit = true; }
-                    });
-                    if submit && self.term_run.is_none() && !self.term_cmd.trim().is_empty() {
-                        let command = self.term_cmd.trim().to_string();
-                        let (tx, rx) = std::sync::mpsc::channel();
-                        if self.cmd_tx.send(UiCommand::RunCommand { command: command.clone(), reply: tx }).is_ok() {
-                            self.term_output.push((true, format!("> {command}")));
-                            self.term_history.push(command.clone());
-                            self.term_run = Some(ToolRun { receiver: rx, started: Instant::now(), name: command });
-                            self.term_cmd.clear();
-                        } else { self.toast("Bridge runtime is not reachable", false); }
+                    match self.runner_mode {
+                        RunnerMode::Command => self.command_runner(ui),
+                        RunnerMode::Luau => self.luau_runner(ui, studio_link),
                     }
-                    ui.horizontal(|ui| {
-                        if ui.small_button("Clear").clicked() { self.term_output.clear(); }
-                        if let Some(run) = &self.term_run { ui.label(RichText::new(format!("running {:.1}s", run.started.elapsed().as_secs_f32())).small().color(t.muted)); }
-                        ui.label(RichText::new("Runs through the local engine's run_command (60 s default timeout, sandboxed unless FULL PC ACCESS).").small().color(t.muted));
-                    });
                     egui::ScrollArea::vertical().id_salt("term-out").auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
+                        let mut refill: Option<String> = None;
                         for (ok, text) in &self.term_output {
-                            ui.add(egui::Label::new(RichText::new(text).monospace().small().color(if *ok { t.text } else { t.bad })).wrap());
+                            if let Some(cmd) = text.strip_prefix("> ") {
+                                let resp = ui.add(egui::Label::new(RichText::new(text).monospace().small().strong().color(t.accent)).sense(Sense::click()));
+                                if resp.on_hover_text("Click to reuse this command").clicked() { refill = Some(cmd.to_string()); }
+                            } else {
+                                ui.add(egui::Label::new(RichText::new(text).monospace().small().color(if *ok { t.text } else { t.bad })).wrap());
+                            }
                         }
+                        if let Some(cmd) = refill { self.term_cmd = cmd; self.runner_mode = RunnerMode::Command; }
                     });
                 });
             }
         });
+    }
+
+    fn command_runner(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
+        let mut submit = false;
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(">").strong().color(t.accent));
+            let resp = ui.add(egui::TextEdit::singleline(&mut self.term_cmd).hint_text("dir, git status, npm test …").font(TextStyle::Monospace).desired_width(ui.available_width() - 70.0));
+            if resp.has_focus() {
+                let (up, down) = ui.input(|i| (i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown)));
+                if up && !self.term_history.is_empty() {
+                    let idx = match self.history_cursor { Some(0) => 0, Some(i) => i - 1, None => self.term_history.len() - 1 };
+                    self.history_cursor = Some(idx);
+                    self.term_cmd = self.term_history[idx].clone();
+                } else if down {
+                    match self.history_cursor {
+                        Some(i) if i + 1 < self.term_history.len() => { self.history_cursor = Some(i + 1); self.term_cmd = self.term_history[i + 1].clone(); }
+                        Some(_) => { self.history_cursor = None; self.term_cmd.clear(); }
+                        None => {}
+                    }
+                }
+            }
+            if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) { submit = true; resp.request_focus(); }
+            if ui.add_enabled(self.term_run.is_none(), egui::Button::new("Run")).clicked() { submit = true; }
+        });
+        if submit && self.term_run.is_none() && !self.term_cmd.trim().is_empty() {
+            let command = self.term_cmd.trim().to_string();
+            let (tx, rx) = std::sync::mpsc::channel();
+            if self.cmd_tx.send(UiCommand::RunCommand { command: command.clone(), reply: tx }).is_ok() {
+                self.term_output.push((true, format!("> {command}")));
+                if self.term_history.last() != Some(&command) {
+                    self.term_history.push(command.clone());
+                    if self.term_history.len() > HISTORY_CAP { self.term_history.remove(0); }
+                }
+                self.history_cursor = None;
+                self.term_run = Some(ToolRun { receiver: rx, started: Instant::now(), name: command });
+                self.term_cmd.clear();
+            } else { self.toast("Bridge runtime is not reachable", false); }
+        }
+        ui.horizontal(|ui| {
+            if let Some(run) = &self.term_run { ui.label(RichText::new(format!("running {:.1}s", run.started.elapsed().as_secs_f32())).small().color(t.muted)); }
+            ui.label(RichText::new("Runs through the local engine's run_command — Enter to run, Up/Down for history, 60 s default timeout, sandboxed unless FULL PC ACCESS.").small().color(t.muted));
+        });
+    }
+
+    fn luau_runner(&mut self, ui: &mut egui::Ui, studio_link: bool) {
+        let t = self.theme;
+        ui.add(egui::TextEdit::multiline(&mut self.luau_code).code_editor().font(TextStyle::Monospace).desired_rows(8).desired_width(f32::INFINITY));
+        let mut run = false;
+        ui.horizontal(|ui| {
+            let running = self.luau_run.is_some();
+            if ui.add_enabled(!running && studio_link, pill_widget(t, if running { "Running in Studio…" } else { "Run in Studio" }, true)).on_hover_text("Ctrl+Enter").clicked() { run = true; }
+            if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Enter)) && !running && studio_link { run = true; }
+            if ui.button("Copy").clicked() { let c = self.luau_code.clone(); ui.output_mut(|o| o.copied_text = c); }
+            if let Some(job) = &self.luau_run { ui.label(RichText::new(format!("{:.1}s", job.started.elapsed().as_secs_f32())).small().color(t.muted)); }
+            ui.label(RichText::new("execute_luau · Edit DataModel · print() output comes back below").small().color(t.muted));
+        });
+        if run && !self.luau_code.trim().is_empty() {
+            let code = self.luau_code.clone();
+            self.luau_run = self.start_tool("roblox", "execute_luau", serde_json::json!({ "code": code, "datamodel_type": "Edit" }));
+            if self.luau_run.is_some() {
+                let first = self.luau_code.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim().to_string();
+                self.term_output.push((true, format!("[Studio] {}", truncate(&first, 100))));
+            }
+        }
     }
 
     fn page_updates(&mut self, ui: &mut egui::Ui) {
@@ -1557,7 +1694,7 @@ impl App {
             ui.add_space(8.0);
             ui.horizontal_wrapped(|ui| {
                 let checking = self.update_rx.is_some();
-                if ui.add_enabled(!checking, egui::Button::new(RichText::new(if checking { "Checking…" } else { "Check GitHub releases" }).color(t.accent_ink)).fill(t.accent).rounding(Rounding::same(999.0))).clicked() {
+                if ui.add_enabled(!checking, pill_widget(t, if checking { "Checking…" } else { "Check GitHub releases" }, true)).clicked() {
                     let (tx, rx) = std::sync::mpsc::channel();
                     if self.cmd_tx.send(UiCommand::CheckUpdates { reply: tx }).is_ok() { self.update_rx = Some(rx); }
                 }
@@ -1576,16 +1713,12 @@ impl App {
         let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
         frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Build it yourself").strong().color(t.text));
-            ui.label(RichText::new("cd ORscript/agent && cargo build --release  ->  target/release/or-core.exe").monospace().color(t.muted));
-            ui.label(RichText::new("Copy the binary over ORscript/bin/or-core.exe. The extension needs no change; it only talks to the ports.").small().color(t.muted));
+            ui.label(RichText::new("Build from source").strong().color(t.text));
+            ui.label(RichText::new("cd ORscript\\agent && cargo build --release   ->   target\\release\\or-core.exe").monospace().color(t.muted));
+            ui.label(RichText::new("Copy the binary over ORscript\\bin\\or-core.exe (or run Build-ORscript-Desktop.cmd). The extension needs no change; it only talks to the ports.").small().color(t.muted));
             ui.add_space(6.0);
-            ui.label(RichText::new("Supported browser AIs").strong().color(t.text));
-            ui.horizontal_wrapped(|ui| {
-                for ai in &self.ais {
-                    if ui.small_button(&ai.name).on_hover_text(&ai.url).clicked() { open_external(&ai.url); }
-                }
-            });
+            ui.label(RichText::new("Keyboard").strong().color(t.text));
+            ui.label(RichText::new("Ctrl+1…7 pages · Ctrl+R restart MCP helper · F5 probe Studio + refresh explorer · Ctrl+Shift+S capture Studio viewport · Ctrl+S save file · Ctrl+Enter run Luau").small().color(t.muted));
         });
     }
 
@@ -1594,7 +1727,6 @@ impl App {
         let mut save = false;
         let mut retheme = false;
         egui::ScrollArea::vertical().id_salt("settings").auto_shrink([false, false]).show(ui, |ui| {
-            // Appearance
             settings_section(ui, t, "Appearance", |ui| {
                 ui.horizontal(|ui| {
                     ui.label("Theme");
@@ -1604,7 +1736,6 @@ impl App {
                 });
                 if ui.checkbox(&mut self.settings.compact, "Compact density").changed() { retheme = true; save = true; }
             });
-            // Behaviour
             settings_section(ui, t, "Behaviour", |ui| {
                 if ui.checkbox(&mut self.settings.close_to_tray, "Keep running in the notification area when the window is closed").changed() { save = true; }
                 if ui.checkbox(&mut self.settings.start_hidden, "Start hidden in the notification area").changed() { save = true; }
@@ -1615,21 +1746,26 @@ impl App {
                         Err(e) => { self.settings.launch_at_login = !self.settings.launch_at_login; self.settings_note = format!("Autostart failed: {e}"); }
                     }
                 }
-                ui.horizontal(|ui| {
-                    ui.label("Default effort hint for the extension");
-                    for (id, label) in [("fast", "Fast"), ("balanced", "Balanced"), ("deep", "Deep")] {
-                        if ui.selectable_label(self.settings.effort == id, label).clicked() { self.settings.effort = id.into(); save = true; }
-                    }
-                });
+                #[cfg(not(windows))]
+                ui.label(RichText::new("Launch at sign-in is available on Windows.").small().color(t.muted));
             });
-            // Workspace
             settings_section(ui, t, "Workspace", |ui| {
                 ui.label(RichText::new(format!("Active root: {}", self.shared.root())).monospace().color(t.muted));
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut self.draft_workspace).hint_text("leave empty for %USERPROFILE%\\ORWorkspace").desired_width(420.0));
-                    if ui.button("Save root").clicked() { self.settings.workspace_root = self.draft_workspace.trim().to_string(); save = true; self.settings_note = "Workspace root saved — applies on next start (or pass --workspace).".into(); }
+                    ui.add(egui::TextEdit::singleline(&mut self.draft_workspace).hint_text("C:\\Users\\you\\ORWorkspace").desired_width(420.0).font(TextStyle::Monospace));
+                    let picking = self.picker_rx.is_some();
+                    if ui.add_enabled(!picking, egui::Button::new(if picking { "Choosing…" } else { "Browse…" })).clicked() {
+                        self.picker_rx = Some(pick_folder(&self.draft_workspace));
+                    }
+                    let switching = self.workspace_rx.is_some();
+                    let changed = self.draft_workspace.trim() != self.shared.root() && !self.draft_workspace.trim().is_empty();
+                    if ui.add_enabled(changed && !switching, pill_widget(t, if switching { "Switching…" } else { "Apply" }, true)).clicked() {
+                        let (tx, rx) = std::sync::mpsc::channel();
+                        if self.cmd_tx.send(UiCommand::SetWorkspace { path: self.draft_workspace.trim().to_string(), reply: tx }).is_ok() { self.workspace_rx = Some(rx); }
+                    }
                     if ui.button("Open").clicked() { open_external(&self.shared.root()); }
                 });
+                ui.label(RichText::new("Applies immediately to the AgentScript engine and the Explorer, and is remembered for the next start. --workspace and OR_WORKSPACE_ROOT still win when given.").small().color(t.muted));
                 let mut full = self.shared.full_access();
                 if ui.checkbox(&mut full, "FULL PC ACCESS (absolute paths, process_kill, cd anywhere) — applies immediately and on next start").changed() {
                     self.settings.full_access = full;
@@ -1637,25 +1773,54 @@ impl App {
                     let _ = self.cmd_tx.send(UiCommand::SetFullAccess(full));
                 }
             });
-            // Studio MCP
             settings_section(ui, t, "Roblox Studio MCP", |ui| {
-                ui.label(RichText::new("Launcher command (empty = %LOCALAPPDATA%\\Roblox\\mcp.bat). Overrides are also read from OR_MCP_COMMAND.").small().color(t.muted));
+                ui.label(RichText::new(format!("Active launcher: {}", mcp_launcher_display())).monospace().color(t.muted));
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut self.draft_mcp).hint_text("cmd /C C:\\path\\to\\mcp.bat").desired_width(420.0).font(TextStyle::Monospace));
-                    if ui.button("Save command").clicked() { self.settings.mcp_command = self.draft_mcp.trim().to_string(); save = true; self.settings_note = "MCP command saved — restart ORscript to apply.".into(); }
-                    if pill(ui, t, "Restart helper now", false).clicked() { self.send(UiCommand::RestartMcp, "Restarting Studio MCP helper"); }
+                    ui.add(egui::TextEdit::singleline(&mut self.draft_mcp).hint_text("empty = %LOCALAPPDATA%\\Roblox\\mcp.bat").desired_width(420.0).font(TextStyle::Monospace));
+                    if pill(ui, t, "Apply & restart helper", true).clicked() {
+                        self.settings.mcp_command = self.draft_mcp.trim().to_string();
+                        save = true;
+                        let cmd = self.settings.mcp_command.clone();
+                        let _ = self.cmd_tx.send(UiCommand::SetMcpCommand(cmd));
+                        self.send(UiCommand::RestartMcp, "Launcher updated — restarting Studio MCP helper");
+                    }
+                    if ui.button("Use default").clicked() { self.draft_mcp.clear(); }
                 });
+                ui.label(RichText::new("A custom launcher is any command that speaks MCP over stdio (for example a different mcp.bat or a wrapper script). OR_MCP_COMMAND in the environment still takes precedence at start.").small().color(t.muted));
             });
-            // About
-            settings_section(ui, t, "About", |ui| {
-                ui.label(RichText::new(format!("ORscript Desktop {} · settings file {}", env!("CARGO_PKG_VERSION"), Settings::path().display())).small().color(t.muted));
+            settings_section(ui, t, "Diagnostics", |ui| {
+                let s = &self.shared;
+                egui::Grid::new("diag-grid").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
+                    ui.label(RichText::new("Version").color(t.muted)); ui.label(format!("ORscript Desktop {} ({} {})", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH)); ui.end_row();
+                    ui.label(RichText::new("Uptime").color(t.muted)); ui.label(human_duration(s.boot.elapsed())); ui.end_row();
+                    ui.label(RichText::new("Settings file").color(t.muted)); ui.label(RichText::new(Settings::path().to_string_lossy().to_string()).monospace()); ui.end_row();
+                    ui.label(RichText::new("Log file").color(t.muted)); ui.label(RichText::new(log_path().to_string_lossy().to_string()).monospace()); ui.end_row();
+                    ui.label(RichText::new("Ports").color(t.muted)); ui.label("http 3000 · ws 17613 roblox · ws 17615 local"); ui.end_row();
+                });
                 ui.horizontal_wrapped(|ui| {
+                    if pill(ui, t, "Copy diagnostics", false).clicked() {
+                        let text = self.diagnostics_text();
+                        ui.output_mut(|o| o.copied_text = text);
+                        self.toast("Diagnostics copied", true);
+                    }
+                    if ui.button("Open log file").clicked() { open_external(&log_path().to_string_lossy()); }
                     if ui.button("Open settings.json").clicked() { open_external(&Settings::path().to_string_lossy()); }
-                    if ui.button("Open logs folder").clicked() { if let Some(d) = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("logs"))) { open_external(&d.to_string_lossy()); } }
+                    if ui.button("Reset settings").clicked() {
+                        let keep_ws = self.settings.workspace_root.clone();
+                        self.settings = Settings { workspace_root: keep_ws, ..Settings::default() };
+                        self.draft_mcp.clear();
+                        retheme = true; save = true;
+                        self.settings_note = "Settings reset to defaults (workspace kept).".into();
+                    }
                     if ui.button(RichText::new("Quit ORscript (stop bridge)").color(t.bad)).clicked() { self.quit_now = true; ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close); }
                 });
             });
-            if !self.settings_note.is_empty() { ui.label(RichText::new(&self.settings_note).color(t.warn)); }
+            if !self.settings_note.is_empty() {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(&self.settings_note).color(t.warn));
+                    if ui.small_button("dismiss").clicked() { self.settings_note.clear(); }
+                });
+            }
         });
         if retheme { self.theme = Theme::by_id(&self.settings.theme); self.theme.apply(ui.ctx(), self.settings.compact); }
         if save {
@@ -1673,9 +1838,10 @@ impl eframe::App for App {
                 if let Some(hwnd) = crate::agent_window() { crate::hide_agent_window(hwnd); }
                 self.shared.track("app", "started hidden in the notification area");
             }
-            let _ = self.started;
+            let _ = self.start_hidden;
         }
-        self.poll_async();
+        self.poll_async(ctx);
+        self.handle_shortcuts(ctx);
         self.handle_close(ctx);
         self.update_tray();
 
@@ -1690,10 +1856,7 @@ impl eframe::App for App {
                     Page::Home => self.page_home(ui),
                     Page::Explorer => self.page_explorer(ui),
                     Page::Tools => self.page_tools(ui),
-                    Page::Toolkit => self.page_toolkit(ui),
                     Page::Servers => self.page_servers(ui),
-                    Page::Skills => self.page_skills(ui),
-                    Page::Templates => self.page_templates(ui),
                     Page::Terminal => self.page_terminal(ui),
                     Page::Updates => self.page_updates(ui),
                     Page::Settings => self.page_settings(ui),
@@ -1715,7 +1878,9 @@ impl eframe::App for App {
                 self.toast = None;
             }
         }
-        ctx.request_repaint_after(Duration::from_millis(if self.kit_run.is_some() || self.term_run.is_some() || self.update_rx.is_some() { 120 } else { 700 }));
+        let busy = self.run_job.is_some() || self.term_run.is_some() || self.luau_run.is_some() || self.update_rx.is_some()
+            || self.snapshot_run.is_some() || self.picker_rx.is_some() || self.workspace_rx.is_some();
+        ctx.request_repaint_after(Duration::from_millis(if busy { 120 } else { 700 }));
     }
 }
 
@@ -1732,13 +1897,16 @@ fn tag(ui: &mut egui::Ui, text: &str, color: Color32) {
     frame.show(ui, |ui| { ui.label(RichText::new(text).small().color(color)); });
 }
 
-fn pill(ui: &mut egui::Ui, t: Theme, text: &str, primary: bool) -> egui::Response {
-    let button = if primary {
+fn pill_widget(t: Theme, text: &str, primary: bool) -> egui::Button<'static> {
+    if primary {
         egui::Button::new(RichText::new(text).strong().color(t.accent_ink)).fill(t.accent).stroke(Stroke::new(1.0, t.accent2)).rounding(Rounding::same(999.0))
     } else {
         egui::Button::new(RichText::new(text).color(t.text)).fill(t.panel2).stroke(Stroke::new(1.0, t.border2)).rounding(Rounding::same(999.0))
-    };
-    let resp = ui.add(button);
+    }
+}
+
+fn pill(ui: &mut egui::Ui, t: Theme, text: &str, primary: bool) -> egui::Response {
+    let resp = ui.add(pill_widget(t, text, primary));
     if resp.hovered() { ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand); }
     resp
 }
@@ -1787,8 +1955,8 @@ fn settings_section(ui: &mut egui::Ui, t: Theme, title: &str, add: impl FnOnce(&
 /// Simple vector icons for the navigation (no emoji fonts needed).
 fn nav_icon(p: &egui::Painter, r: egui::Rect, page: Page, c: Color32) {
     let s = Stroke::new(1.6, c);
-    let (l, t, w, h) = (r.left(), r.top(), r.width(), r.height());
-    let pt = |x: f32, y: f32| egui::pos2(l + x * w, t + y * h);
+    let (l, top, w, h) = (r.left(), r.top(), r.width(), r.height());
+    let pt = |x: f32, y: f32| egui::pos2(l + x * w, top + y * h);
     match page {
         Page::Home => {
             p.line_segment([pt(0.1, 0.5), pt(0.5, 0.12)], s);
@@ -1804,29 +1972,11 @@ fn nav_icon(p: &egui::Painter, r: egui::Rect, page: Page, c: Color32) {
             p.line_segment([pt(0.2, 0.8), pt(0.7, 0.3)], Stroke::new(2.4, c));
             p.circle_stroke(pt(0.72, 0.28), w * 0.2, s);
         }
-        Page::Toolkit => {
-            p.rect_stroke(egui::Rect::from_min_max(pt(0.1, 0.35), pt(0.9, 0.9)), Rounding::same(2.0), s);
-            p.line_segment([pt(0.35, 0.35), pt(0.35, 0.18)], s);
-            p.line_segment([pt(0.35, 0.18), pt(0.65, 0.18)], s);
-            p.line_segment([pt(0.65, 0.18), pt(0.65, 0.35)], s);
-            p.line_segment([pt(0.1, 0.58), pt(0.9, 0.58)], s);
-        }
         Page::Servers => {
             p.rect_stroke(egui::Rect::from_min_max(pt(0.1, 0.12), pt(0.9, 0.45)), Rounding::same(2.0), s);
             p.rect_stroke(egui::Rect::from_min_max(pt(0.1, 0.55), pt(0.9, 0.88)), Rounding::same(2.0), s);
             p.circle_filled(pt(0.25, 0.28), 1.6, c);
             p.circle_filled(pt(0.25, 0.71), 1.6, c);
-        }
-        Page::Skills => {
-            p.circle_stroke(pt(0.5, 0.5), w * 0.38, s);
-            p.line_segment([pt(0.5, 0.2), pt(0.5, 0.5)], s);
-            p.line_segment([pt(0.5, 0.5), pt(0.72, 0.65)], s);
-        }
-        Page::Templates => {
-            p.rect_stroke(egui::Rect::from_min_max(pt(0.18, 0.1), pt(0.82, 0.9)), Rounding::same(2.0), s);
-            p.line_segment([pt(0.32, 0.35), pt(0.68, 0.35)], s);
-            p.line_segment([pt(0.32, 0.52), pt(0.68, 0.52)], s);
-            p.line_segment([pt(0.32, 0.69), pt(0.56, 0.69)], s);
         }
         Page::Terminal => {
             p.rect_stroke(egui::Rect::from_min_max(pt(0.08, 0.15), pt(0.92, 0.85)), Rounding::same(2.0), s);
@@ -1855,6 +2005,10 @@ fn default_args_for(tools: &[ToolInfo], name: &str) -> String {
     let mut map = serde_json::Map::new();
     for (p, req) in &tool.params {
         if *req { map.insert(p.clone(), serde_json::Value::String(String::new())); }
+    }
+    if name == "execute_luau" {
+        map.insert("code".into(), serde_json::Value::String("print(\"hello from ORscript\")".into()));
+        map.insert("datamodel_type".into(), serde_json::Value::String("Edit".into()));
     }
     serde_json::to_string_pretty(&serde_json::Value::Object(map)).unwrap_or_else(|_| "{}".into())
 }
@@ -1895,6 +2049,62 @@ pub fn human_duration(d: Duration) -> String {
     else { format!("{}d {}h", s / 86_400, (s % 86_400) / 3600) }
 }
 
+fn log_path() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("logs").join("agent.log")))
+        .unwrap_or_else(|| PathBuf::from("logs/agent.log"))
+}
+
+fn mcp_launcher_display() -> String {
+    std::env::var("OR_MCP_COMMAND")
+        .ok()
+        .or_else(|| std::env::var("ROBLOXSCRIPT_MCP_COMMAND").ok())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "%LOCALAPPDATA%\\Roblox\\mcp.bat (Studio built-in)".to_string())
+}
+
+/// Decode a base64 PNG/JPEG payload into RGBA8.
+fn decode_image(b64: &str) -> Result<(Vec<u8>, u32, u32), String> {
+    use base64::Engine;
+    let cleaned: String = b64.trim().split(',').last().unwrap_or("").chars().filter(|c| !c.is_whitespace()).collect();
+    let bytes = base64::engine::general_purpose::STANDARD.decode(cleaned.as_bytes()).map_err(|e| format!("base64: {e}"))?;
+    let img = image::load_from_memory(&bytes).map_err(|e| format!("decode: {e}"))?.to_rgba8();
+    let (w, h) = img.dimensions();
+    Ok((img.into_raw(), w, h))
+}
+
+/// Native folder picker (Windows: Explorer dialog through PowerShell; else the
+/// typed path is returned unchanged). Runs on a helper thread; result arrives
+/// through the returned receiver.
+fn pick_folder(initial: &str) -> Receiver<Option<String>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let initial = initial.to_string();
+    std::thread::spawn(move || {
+        #[cfg(windows)]
+        {
+            let script = format!(
+                "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = 'Choose the ORscript workspace folder'; $d.ShowNewFolderButton = $true; if (Test-Path -LiteralPath '{}') {{ $d.SelectedPath = '{}' }}; if ($d.ShowDialog() -eq 'OK') {{ Write-Output $d.SelectedPath }}",
+                initial.replace('\'', "''"), initial.replace('\'', "''")
+            );
+            let out = std::process::Command::new("powershell")
+                .args(["-NoProfile", "-STA", "-Command", &script])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+            let picked = out.ok().and_then(|o| {
+                let text = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                if text.is_empty() { None } else { Some(text) }
+            });
+            let _ = tx.send(picked);
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = tx.send(if initial.trim().is_empty() { None } else { Some(initial) });
+        }
+    });
+    rx
+}
+
 /// Open a file, folder or URL with the OS default handler.
 pub fn open_external(target: &str) {
     if target.trim().is_empty() { return; }
@@ -1931,14 +2141,13 @@ fn set_launch_at_login(enable: bool) -> Result<(), String> {
         Ok(o) => {
             let msg = String::from_utf8_lossy(&o.stderr).trim().to_string();
             // Deleting a missing value is not an error for our purposes.
-            if !enable && msg.contains("unable to find") { Ok(()) } else { Err(if msg.is_empty() { "reg.exe failed".into() } else { msg }) }
+            if !enable && msg.to_lowercase().contains("unable to find") { Ok(()) } else { Err(if msg.is_empty() { "reg.exe failed".into() } else { msg }) }
         }
         Err(e) => Err(e.to_string()),
     }
 }
 
-/// Decode the bundled PNG logo into RGBA (used for the window icon, the tray
-/// icon and the in-app logo). Falls back to `None` if the PNG cannot be read.
+/// Decode the bundled PNG logo into RGBA (window icon, tray icon, in-app logo).
 fn load_logo() -> Option<(Vec<u8>, u32, u32)> {
     const PNG: &[u8] = include_bytes!("../../assets/icon.png");
     let icon = eframe::icon_data::from_png_bytes(PNG).ok()?;
@@ -1982,12 +2191,14 @@ fn build_tray(
     let open = MenuItem::new("Open ORscript", true, None);
     let folder = MenuItem::new("Open workspace folder", true, None);
     let restart = MenuItem::new("Restart Studio MCP helper", true, None);
+    let probe = MenuItem::new("Probe Studio", true, None);
     let kill = MenuItem::new("Kill Roblox Studio", true, None);
     let quit = MenuItem::new("Quit ORscript (stop bridge)", true, None);
     menu.append(&open)?;
     menu.append(&folder)?;
     menu.append(&PredefinedMenuItem::separator())?;
     menu.append(&restart)?;
+    menu.append(&probe)?;
     menu.append(&kill)?;
     menu.append(&PredefinedMenuItem::separator())?;
     menu.append(&quit)?;
@@ -2004,7 +2215,7 @@ fn build_tray(
     }
     let icon = builder.build()?;
 
-    let ids = (open.id().clone(), folder.id().clone(), restart.id().clone(), kill.id().clone(), quit.id().clone());
+    let ids = (open.id().clone(), folder.id().clone(), restart.id().clone(), probe.id().clone(), kill.id().clone(), quit.id().clone());
     let shared_menu = shared.clone();
     let tx_menu = cmd_tx.clone();
     std::thread::Builder::new().name("tray-menu".into()).spawn(move || {
@@ -2017,8 +2228,10 @@ fn build_tray(
             } else if event.id == ids.2 {
                 let _ = tx_menu.send(UiCommand::RestartMcp);
             } else if event.id == ids.3 {
-                let _ = tx_menu.send(UiCommand::KillStudio);
+                let _ = tx_menu.send(UiCommand::ProbeStudio);
             } else if event.id == ids.4 {
+                let _ = tx_menu.send(UiCommand::KillStudio);
+            } else if event.id == ids.5 {
                 shared_menu.quit_requested.store(true, Ordering::Relaxed);
                 match crate::agent_window() {
                     Some(hwnd) => crate::close_agent_window(hwnd),

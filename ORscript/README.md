@@ -27,7 +27,7 @@ Large `execute_luau` scripts are auto-chunked around 24 KB so Studio's parser ne
 
 1. Open `chrome://extensions` → Developer mode → **Load unpacked** → this folder (`manifest.json`).
 2. Start the bridge — **ORscript Desktop**, the Rust app in `agent/` (build it once with `Build-ORscript-Desktop.cmd` or `cd agent && cargo build --release`, which installs `bin/or-core.exe`). Double-click `bin/or-core.exe`:
-   - Workspace window: Home / Explorer / Tools / Toolkit / MCP Servers / Skills / Templates / Terminal / Updates / Settings, with live Bridge / Roblox Studio / Tools / Workspace status.
+   - Workspace window: Home / Explorer / Tools / Servers / Terminal / Updates / Settings — live Bridge / Roblox Studio / Tools / Workspace status, Studio viewport snapshots, a Luau runner that executes inside Studio, and a workspace folder you can switch without restarting.
    - Closing the window hides it to the notification area; the bridge keeps running until you choose *Quit* from the tray menu. `--hidden` starts in the tray, `--headless` runs without any window.
    - It starts the HTTP API on `http://127.0.0.1:3000`, the WS bridges on `17613` (RS) and `17615` (AS), and the AgentScript workspace (`OR_WORKSPACE_ROOT` / `--workspace` / Settings → Workspace / `%USERPROFILE%\ORWorkspace`).
    - See `agent/README.md` for build details and flags.

@@ -36,7 +36,8 @@ const IGNORED_DIRS: &[&str] = &[
 
 pub struct Workspace {
     /// Canonicalized root - every sandbox check compares against this.
-    canon_root: PathBuf,
+    /// Behind a lock so the desktop window can switch projects at runtime.
+    canon_root: std::sync::RwLock<PathBuf>,
     /// FULL PC ACCESS mode: when set, absolute paths anywhere on the machine
     /// are allowed (the sandbox only guards the default workspace-relative
     /// behavior). Flipped at runtime via POST /api/local-full. Shared with the
@@ -66,12 +67,31 @@ impl Workspace {
         let canon_root = std::fs::canonicalize(&root)
             .map_err(|e| anyhow::anyhow!("cannot canonicalize {}: {e}", root.display()))?;
         tracing::info!("workspace root: {}", canon_root.display());
-        Ok(Self { canon_root, full_access: Arc::new(AtomicBool::new(false)) })
+        Ok(Self { canon_root: std::sync::RwLock::new(canon_root), full_access: Arc::new(AtomicBool::new(false)) })
     }
 
-    pub fn root_display(&self) -> String { deverbatim_string(&self.canon_root) }
+    /// Current canonical root (cloned; the lock is never held across awaits).
+    pub fn root(&self) -> PathBuf { self.canon_root.read().unwrap_or_else(|e| e.into_inner()).clone() }
 
-    pub fn ready(&self) -> bool { self.canon_root.is_dir() }
+    /// Switch the workspace root at runtime (desktop window → Settings).
+    /// Creates the folder when missing; returns the display path.
+    pub fn set_root(&self, dir: &str) -> anyhow::Result<String> {
+        let dir = dir.trim();
+        if dir.is_empty() { anyhow::bail!("workspace path is empty"); }
+        let root = PathBuf::from(dir);
+        std::fs::create_dir_all(&root)
+            .map_err(|e| anyhow::anyhow!("workspace root {} unavailable: {e}", root.display()))?;
+        let canon = std::fs::canonicalize(&root)
+            .map_err(|e| anyhow::anyhow!("cannot canonicalize {}: {e}", root.display()))?;
+        *self.canon_root.write().unwrap_or_else(|e| e.into_inner()) = canon;
+        let shown = self.root_display();
+        tracing::info!("workspace root switched to {shown}");
+        Ok(shown)
+    }
+
+    pub fn root_display(&self) -> String { deverbatim_string(&self.root()) }
+
+    pub fn ready(&self) -> bool { self.root().is_dir() }
 
     pub fn full_access(&self) -> bool { self.full_access.load(Ordering::Relaxed) }
 
@@ -90,7 +110,7 @@ impl Workspace {
     fn resolve_path(&self, rel: &str, must_exist: bool) -> Result<PathBuf, String> {
         let raw = rel.trim();
         if raw.is_empty() || raw == "." || raw == "/" || raw == "\\" {
-            return Ok(self.canon_root.clone());
+            return Ok(self.root());
         }
         // FULL ACCESS: absolute paths bypass the sandbox entirely. Relative
         // paths still anchor at the workspace root (a sane default cwd).
@@ -104,7 +124,7 @@ impl Workspace {
             return Ok(p);
         }
         let raw = raw.replace('\\', "/");
-        if raw.is_empty() { return Ok(self.canon_root.clone()); }
+        if raw.is_empty() { return Ok(self.root()); }
         if raw.starts_with('/') || Path::new(&raw).is_absolute() || is_windows_absolute(&raw) {
             return Err(format!("paths must be relative to the workspace root, got '{raw}'"));
         }
@@ -123,11 +143,11 @@ impl Workspace {
                 _ => return Err(format!("path '{raw}' is outside the workspace")),
             }
         }
-        let joined = self.canon_root.join(&raw);
+        let joined = self.root().join(&raw);
         // Symlink/junction defense on the existing part of the path.
         let mut probe = joined.clone();
         let mut tail: Vec<PathBuf> = Vec::new();
-        while !probe.exists() && probe != self.canon_root {
+        while !probe.exists() && probe != self.root() {
             match (probe.file_name().map(|n| n.to_os_string()), probe.parent().map(Path::to_path_buf)) {
                 (Some(name), Some(parent)) => {
                     tail.push(PathBuf::from(name));
@@ -139,7 +159,7 @@ impl Workspace {
         if probe.exists() {
             let canon = std::fs::canonicalize(&probe)
                 .map_err(|e| format!("cannot resolve '{}': {e}", rel.trim()))?;
-            if !canon.starts_with(&self.canon_root) {
+            if !canon.starts_with(&self.root()) {
                 return Err(format!("path '{}' is outside the workspace", rel.trim()));
             }
         }
@@ -154,7 +174,7 @@ impl Workspace {
     fn display(&self, p: &Path) -> String {
         // Compare with the verbatim (\\?\) prefix stripped on BOTH sides:
         // fs::canonicalize yields verbatim paths but glob/readdir do not.
-        let base = deverbatim_string(&self.canon_root).replace('\\', "/");
+        let base = deverbatim_string(&self.root()).replace('\\', "/");
         let ps = deverbatim_string(p).replace('\\', "/");
         if ps == base { return ".".to_string(); }
         ps.strip_prefix(&format!("{base}/")).unwrap_or(&ps).to_string()
@@ -277,9 +297,9 @@ fn opt_path(args: &serde_json::Value) -> String {
 // -- tools ---------------------------------------------------------------
 
 pub async fn tool_workspace_info(ws: &Workspace, _args: &serde_json::Value) -> Result<String, String> {
-    let (file_count, dir_count, total) = dir_size_tree(&ws.canon_root, true).await;
+    let (file_count, dir_count, total) = dir_size_tree(&ws.root(), true).await;
     let mut top: Vec<String> = Vec::new();
-    let mut entries = tokio::fs::read_dir(&ws.canon_root).await.map_err(|e| e.to_string())?;
+    let mut entries = tokio::fs::read_dir(&ws.root()).await.map_err(|e| e.to_string())?;
     while let Ok(Some(e)) = entries.next_entry().await {
         let name = e.file_name().to_string_lossy().to_string();
         let slash = if e.file_type().await.map(|t| t.is_dir()).unwrap_or(false) { "/" } else { "" };
@@ -427,7 +447,7 @@ pub async fn tool_write_file(ws: &Workspace, args: &serde_json::Value) -> Result
         if !ws.full_access() {
             let canon_parent = std::fs::canonicalize(parent)
                 .map_err(|e| format!("cannot resolve parent: {e}"))?;
-            if !canon_parent.starts_with(&ws.canon_root) {
+            if !canon_parent.starts_with(&ws.root()) {
                 return Err("cannot create entries outside the workspace".into());
             }
         }
@@ -498,7 +518,7 @@ pub async fn tool_create_folder(ws: &Workspace, args: &serde_json::Value) -> Res
 pub async fn tool_delete_path(ws: &Workspace, args: &serde_json::Value) -> Result<String, String> {
     let rel = arg_str(args, "path")?;
     let p = ws.resolve_path(rel.as_str(), true)?;
-    if p == ws.canon_root { return Err("refusing to delete the workspace root itself".into()); }
+    if p == ws.root() { return Err("refusing to delete the workspace root itself".into()); }
     let display = ws.display(&p);
     if p.is_dir() {
         let (files, _, _) = dir_size_tree(&p, false).await;
@@ -514,7 +534,7 @@ pub async fn tool_move_path(ws: &Workspace, args: &serde_json::Value) -> Result<
     let src_rel = arg_str(args, "source")?;
     let dst_rel = arg_str(args, "destination")?;
     let src = ws.resolve_path(src_rel.as_str(), true)?;
-    if src == ws.canon_root { return Err("refusing to move the workspace root itself".into()); }
+    if src == ws.root() { return Err("refusing to move the workspace root itself".into()); }
     let mut dst = ws.resolve_path(dst_rel.as_str(), false)?;
     if dst.exists() && dst.is_dir() {
         dst = dst.join(src.file_name().ok_or("bad source name")?);
@@ -548,7 +568,7 @@ async fn move_any(src: &Path, dst: &Path) -> Result<(), String> {
 pub async fn tool_search_files(ws: &Workspace, args: &serde_json::Value) -> Result<String, String> {
     let pattern = arg_str(args, "pattern")?.trim().to_string();
     if pattern.is_empty() { return Err("'pattern' is required, e.g. \"**/*.py\"".into()); }
-    let globbed = format!("{}/{}", ws.canon_root.to_string_lossy().replace('\\', "/"), pattern);
+    let globbed = format!("{}/{}", ws.root().to_string_lossy().replace('\\', "/"), pattern);
     let paths = glob::glob(&globbed).map_err(|e| format!("invalid pattern '{pattern}': {e}"))?;
     let mut matches: Vec<String> = Vec::new();
     for m in paths.flatten() {
@@ -577,7 +597,7 @@ pub async fn tool_grep_files(ws: &Workspace, args: &serde_json::Value) -> Result
 
     // Candidate files: honor include-glob, skip ignored dirs + oversized files.
     let mut candidates: Vec<PathBuf> = Vec::new();
-    collect_files(&ws.canon_root, include, &mut candidates).await;
+    collect_files(&ws.root(), include, &mut candidates).await;
 
     let mut hits: Vec<String> = Vec::new();
     let mut scanned = 0usize;
@@ -639,7 +659,7 @@ pub async fn tool_run_command(ws: &Workspace, args: &serde_json::Value) -> Resul
     let timeout_secs = j_u64(args, "timeout_seconds", DEFAULT_RUN_TIMEOUT).clamp(1, MAX_RUN_TIMEOUT);
 
     let t0 = Instant::now();
-    let output = run_shell(&command, &ws.canon_root, timeout_secs).await;
+    let output = run_shell(&command, &ws.root(), timeout_secs).await;
     let elapsed = t0.elapsed().as_secs_f64();
     let proc_out = match output {
         Ok(o) => o,
@@ -962,8 +982,8 @@ mod tests {
         assert!(ws.resolve_path("C:/Windows/system32", false).is_err());
         assert!(ws.resolve_path("fine/sub/path.txt", false).is_ok());
         let inside = ws.resolve_path("sub/../ok.txt", false).unwrap();
-        assert!(inside.starts_with(&ws.canon_root));
-        let _ = std::fs::remove_dir_all(&ws.canon_root);
+        assert!(inside.starts_with(&ws.root()));
+        let _ = std::fs::remove_dir_all(&ws.root());
     }
 
     #[tokio::test]
@@ -974,9 +994,9 @@ mod tests {
         let edit = serde_json::json!({"path": "notes/a.txt", "old_string": "two", "new_string": "TWO!"});
         let msg = tool_edit_file(&ws, &edit).await.unwrap();
         assert!(msg.contains("first occurrence"), "{msg}");
-        let data = std::fs::read_to_string(ws.canon_root.join("notes/a.txt")).unwrap();
+        let data = std::fs::read_to_string(ws.root().join("notes/a.txt")).unwrap();
         assert_eq!(data, "one\r\nTWO!\r\nthree\r\n");
-        let _ = std::fs::remove_dir_all(&ws.canon_root);
+        let _ = std::fs::remove_dir_all(&ws.root());
     }
 
     #[tokio::test]
@@ -991,7 +1011,7 @@ mod tests {
         let miss = tool_edit_file(&ws, &serde_json::json!({"path": "f.txt", "old_string": "X", "new_string": "y"})).await;
         let msg = miss.unwrap_err();
         assert!(msg.contains("not found"), "{msg}");
-        let _ = std::fs::remove_dir_all(&ws.canon_root);
+        let _ = std::fs::remove_dir_all(&ws.root());
     }
 
     #[tokio::test]
@@ -1001,7 +1021,7 @@ mod tests {
         assert!(del.contains("refusing to delete"));
         let mv = tool_move_path(&ws, &serde_json::json!({"source": ".", "destination": "x"})).await.unwrap_err();
         assert!(mv.contains("refusing to move"));
-        let _ = std::fs::remove_dir_all(&ws.canon_root);
+        let _ = std::fs::remove_dir_all(&ws.root());
     }
 
     #[tokio::test]
@@ -1017,7 +1037,7 @@ mod tests {
         assert!(t.contains("main.py") && t.contains("other.js"), "{t}");
         let r = tool_read_file(&ws, &serde_json::json!({"path": "src/main.py"})).await.unwrap();
         assert!(r.contains("1 | def hello():"), "{r}");
-        let _ = std::fs::remove_dir_all(&ws.canon_root);
+        let _ = std::fs::remove_dir_all(&ws.root());
     }
 
     #[cfg(windows)]
@@ -1030,7 +1050,7 @@ mod tests {
         assert!(err.contains("exit code 7"), "{err}");
         let slow = tool_run_command(&ws, &serde_json::json!({"command": "ping -n 30 127.0.0.1 > nul", "timeout_seconds": 1})).await.unwrap();
         assert!(slow.contains("TIMED OUT"), "{slow}");
-        let _ = std::fs::remove_dir_all(&ws.canon_root);
+        let _ = std::fs::remove_dir_all(&ws.root());
     }
 
     #[tokio::test]
@@ -1047,13 +1067,13 @@ mod tests {
         // unknown tools self-correct instead of dead-ending the model
         let u = dispatch(&ws, "nope_not_real", serde_json::json!({})).await.unwrap_err();
         assert!(u.contains("Available AgentScript tools") && u.contains("list_commands"), "{u}");
-        let _ = std::fs::remove_dir_all(&ws.canon_root);
+        let _ = std::fs::remove_dir_all(&ws.root());
     }
 
     #[tokio::test]
     async fn full_access_toggles_absolute_paths_and_gates_kill() {
         let ws = temp_ws("full");
-        let abs = ws.canon_root.parent().unwrap().to_string_lossy().to_string();
+        let abs = ws.root().parent().unwrap().to_string_lossy().to_string();
         assert!(ws.resolve_path(&format!("{abs}/elsewhere.txt"), false).is_err());
         // kill is gated behind FULL mode
         assert!(tool_process_kill(&ws, &serde_json::json!({"pid": 999999})).await.is_err());
