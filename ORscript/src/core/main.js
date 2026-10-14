@@ -6198,6 +6198,46 @@
     function syncBlenderFlag() {
       try { window.__rsBlender = () => blenderConnected(); } catch {}
     }
+    function blenderToolCount() {
+      try { return (A.toolList || []).filter((t) => t && (t.server === "blender" || /^blender_|^get_scene_info$|^get_object_info$|^execute_blender_code$|^get_viewport_screenshot$/.test(String(t.name || "")))).length; } catch { return 0; }
+    }
+    // Blender MCP card (Settings → MCP servers). Two states: offline shows the
+    // three-step checklist; connected shows what the link unlocks. The status
+    // pill sits next to the name (never on the clipped right edge) and the
+    // primary button never wraps.
+    function blenderCardHtml() {
+      const on = blenderConnected();
+      const n = on ? blenderToolCount() : 0;
+      const pill = `<span class="rs-blender-pill" role="status"><i aria-hidden="true"></i>${on ? "Connected" : "Offline"}</span>`;
+      const body = on
+        ? `<div class="rs-blender-caps" aria-label="Available through Blender">
+             <span class="rs-blender-cap"><b>Viewport</b> screenshots</span>
+             <span class="rs-blender-cap"><b>Modeling</b> with bpy</span>
+             <span class="rs-blender-cap"><b>Send to Studio</b> (FBX / mesh)</span>
+             ${n ? `<span class="rs-blender-cap rs-blender-cap-n">${n} tools</span>` : ""}
+           </div>`
+        : `<ol class="rs-blender-steps" aria-label="How to connect Blender">
+             <li><b>1</b><span>In Blender press <kbd>N</kbd> and open the <em>MCP for Blender</em> tab.</span></li>
+             <li><b>2</b><span>Click <em>Start MCP Server</em> — it listens on port 9876.</span></li>
+             <li><b>3</b><span>Come back and press <em>Connect Blender</em>.</span></li>
+           </ol>`;
+      return `<div class="rs-blender-card ${on ? "on" : ""}" id="rs-blender-card" data-state="${on ? "on" : "off"}">
+              <div class="rs-blender-head">
+                <span class="rs-blender-mark" aria-hidden="true"></span>
+                <div class="rs-blender-copy">
+                  <div class="rs-blender-title"><span class="rs-blender-name">Blender MCP</span>${pill}</div>
+                  <span class="rs-blender-sub">${on ? "Addon live on 127.0.0.1:9876 — the AI can model in Blender and export to Studio." : "Talks to the blender-mcp addon on 127.0.0.1:9876. No uv/uvx needed."}</span>
+                </div>
+              </div>
+              ${body}
+              <div class="rs-blender-note" id="rs-blender-note" hidden></div>
+              <div class="rs-blender-actions">
+                <button type="button" id="rs-mcp-blender" class="rs-blender-primary">${on ? "Reconnect" : "Connect Blender"}</button>
+                ${on ? '<button type="button" class="rs-blender-off" id="rs-mcp-blender-off">Disconnect</button>' : ""}
+                <button type="button" class="rs-blender-link" id="rs-blender-site" title="Open blender.org in a new tab">blender.org</button>
+              </div>
+            </div>`;
+    }
     try { window.__rsBlender = () => blenderConnected(); } catch {}
     // The bridge (config.json + live health) is the SOURCE OF TRUTH for which
     // addon servers actually exist - chrome.storage.local is just a display-name
@@ -6400,10 +6440,7 @@
           <section class="rs-menu-sec">
             <div class="rs-sec-label"><span>MCP servers</span></div>
             <div class="rs-menu-note">Roblox Studio is primary. Blender connects to the addon running in Blender on port 9876.</div>
-            <div class="rs-blender-card ${blenderConnected() ? "on" : ""}">
-              <div class="rs-blender-top"><span class="rs-blender-mark" aria-hidden="true"></span><div class="rs-blender-copy"><span class="rs-blender-name">Blender MCP</span><span class="rs-blender-sub">${blenderConnected() ? "Live — viewport screenshots, modeling, and Studio export are available." : "In Blender: N-panel → MCP for Blender → Start MCP Server, then connect."}</span></div><span class="rs-blender-pill">${blenderConnected() ? "on" : "off"}</span></div>
-              <div class="rs-blender-actions"><button type="button" id="rs-mcp-blender">${blenderConnected() ? "Reconnect Blender" : "Connect Blender"}</button>${blenderConnected() ? '<button type="button" class="rs-blender-off" id="rs-mcp-blender-off">Disconnect</button>' : ""}<button type="button" class="rs-blender-link" id="rs-blender-site">blender.org</button></div>
-            </div>
+            ${blenderCardHtml()}
            ${mcpList}
            <div class="rs-mcp-sep"></div>
             <input id="rs-mcp-name" class="rs-mcp-field" placeholder="Name, e.g. Sketchfab" />
@@ -6576,18 +6613,37 @@
       });
 
       const blenderBtn = menuEl.querySelector("#rs-mcp-blender");
+      const blenderCard = menuEl.querySelector("#rs-blender-card");
+      const blenderNote = menuEl.querySelector("#rs-blender-note");
+      function setBlenderBusy(on, label) {
+        if (blenderCard) blenderCard.classList.toggle("busy", !!on);
+        if (!blenderBtn) return;
+        blenderBtn.disabled = !!on;
+        if (on) { blenderBtn.dataset.label = blenderBtn.textContent; blenderBtn.innerHTML = `<span class="rs-mcp-spin"></span>${label || "Connecting…"}`; }
+        else if (blenderBtn.dataset.label) blenderBtn.textContent = blenderBtn.dataset.label;
+      }
+      function showBlenderNote(text, kind) {
+        if (!blenderNote) return;
+        blenderNote.textContent = text || "";
+        blenderNote.dataset.kind = kind || "error";
+        blenderNote.hidden = !text;
+      }
       if (blenderBtn) blenderBtn.addEventListener("click", async () => {
         if (mcpBusy) return;
+        showBlenderNote("");
+        setBlenderBusy(true, "Connecting…");
         setMcpBusy(true, "Checking Blender on port 9876…");
         const r = await bg({ type: "blender_connect" });
         setMcpBusy(false);
         if (!r || !r.ok) {
-          const err = String((r && r.error) || "Couldn't reach Blender").slice(0, 180);
-          mcpStatus.textContent = err;
-          try { toast(err); playSfx("error"); } catch {}
-          setTimeout(() => { if (!mcpBusy) mcpStatus.textContent = ""; }, 8000);
+          setBlenderBusy(false);
+          const raw = String((r && r.error) || "").trim();
+          const err = /refused|unreachable|timed? ?out|not (listening|running|reach)|ECONN|closed/i.test(raw) || !raw
+            ? "Nothing is listening on port 9876. In Blender press N → MCP for Blender → Start MCP Server, then try again."
+            : raw.slice(0, 180);
+          showBlenderNote(err, "error");
+          try { toast("Couldn't reach Blender"); playSfx("error"); } catch {}
           syncBlenderFlag();
-          buildMenu();
           return;
         }
         customMcpServers = customMcpServers.filter((s) => s.id !== "blender");
@@ -6601,6 +6657,8 @@
       const blenderOff = menuEl.querySelector("#rs-mcp-blender-off");
       if (blenderOff) blenderOff.addEventListener("click", async () => {
         if (mcpBusy) return;
+        blenderOff.disabled = true;
+        if (blenderCard) blenderCard.classList.add("busy");
         setMcpBusy(true, "Disconnecting Blender…");
         await bg({ type: "blender_disconnect" });
         setMcpBusy(false);
