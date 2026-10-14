@@ -81,3 +81,28 @@ assert(vani.includes("function rememberSent(text)") && vani.includes("if (looksS
 assert(vani.includes("sysMaxChars: 14000"), "vani uses the compact system prompt");
 assert(/promptExtra: "Vani Chat rules: [^"]*ONE fenced code block/.test(vani), "vani prompt explains the json block");
 console.log("PASS  mode skills (" + built + " commands build), signature catalogue, provider fixes");
+
+// UNIVERSAL set: every mode's focus includes the navigation/inspection core.
+assert(main.includes("const UNIVERSAL_COMMANDS = ["), "universal list exists");
+const univ = eval(main.slice(main.indexOf("const UNIVERSAL_COMMANDS = ["), main.indexOf("];", main.indexOf("const UNIVERSAL_COMMANDS = [")) + 2).replace("const UNIVERSAL_COMMANDS =", ""));
+assert(univ.length >= 36, "universal set is substantial");
+const allNames = new Set(S.SKILL_COMMANDS.map((c) => c.name).concat(["list_commands", "or_screenshot", "or_status", "or_debug", "get_template", "execute_luau", "multi_edit", "get_console_output", "get_studio_state", "memory_read", "memory_add_fact"]));
+for (const n of ["get_children", "get_descendants", "inspect_instance", "get_property", "set_property", "search_game_tree", "selection_info", "script_read", "execute_luau", "or_screenshot"]) assert(univ.includes(n), "universal must include " + n);
+for (const n of univ) assert(allNames.has(n), "universal command must exist in the catalogue: " + n);
+assert(main.includes("|| isUniversalCommand(n))"), "workModeFocusNames unions the universal set into every mode");
+assert(main.includes("UNIVERSAL — ${universal.length} commands available in EVERY work mode"), "catalogue prints the universal block first");
+assert(main.includes("return intro + universalBlock + (focusBlock || \"\")"), "universal block precedes the focus block");
+assert(main.includes("const PRIORITY_COMMAND_RE = new RegExp(\"^(?:\" + [...UNIVERSAL_COMMANDS"), "priority rank derives from the universal set");
+assert(main.includes("j.error && typeof j.error === \"object\" ? (j.error.message || j.error.code"), "structured skill errors are surfaced as text, not [object Object]");
+const bridge = fs.readFileSync("src/core/studio_bridge.js", "utf8");
+assert(bridge.includes("local function resolveLoose(p)") && bridge.includes("return resolveLoose(p) end local s=sel()"), "get_children/inspect_instance resolve names loosely (slashes, bare names, selection)");
+assert(bridge.includes("function pathArg(a)"), "inspection commands accept path/target/instance/name aliases");
+for (const op of ["get_children", "inspect_instance", "get_descendants"]) {
+  for (const args of [{}, { path: "Workspace/House" }, { instance: "Baseplate" }, { target: "game.Workspace.X" }]) {
+    const r = S.buildLuau(op, args);
+    assert(r && r.code && r.code.includes("firstTarget("), op + " builds with " + JSON.stringify(args));
+  }
+}
+assert(S.buildLuau("get_children", { path: "Workspace", className: "Model", limit: 5 }).code.includes("local limit=5"), "get_children className/limit");
+assert(config.includes("UNIVERSAL COMMANDS (identical in every work mode"), "mode mandates cite the universal set");
+console.log("PASS  universal command set in every mode");

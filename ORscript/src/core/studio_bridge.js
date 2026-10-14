@@ -20,13 +20,21 @@
     "local function ok(d,t) return HttpService:JSONEncode({ok=true,data=d,text=t or ''}) end",
     "local function fail(code,message,details) if message==nil then message=code code='STUDIO_OPERATION_FAILED' end return HttpService:JSONEncode({ok=false,error={code=code,message=message,details=details}}) end",
     "local function sel() local s=game:GetService('Selection'):Get() return s end",
-    "local function firstTarget(p) if p and p~='' then return resolve(p) end local s=sel() return s[1] end",
+    "local function resolveLoose(p) if not p or p=='' then return nil end p=tostring(p):gsub('^%s+',''):gsub('%s+$',''):gsub('/','.'):gsub('^Game%.','game.'):gsub('^workspace%.','Workspace.'):gsub('^workspace$','Workspace') local inst=resolve(p) if inst then return inst end local last=p:match('([^%.]+)$') or p local lp=last:lower() local best=nil for _,root in ipairs({workspace,game:GetService('ReplicatedStorage'),game:GetService('ServerStorage'),game:GetService('ServerScriptService'),game:GetService('StarterGui'),game:GetService('StarterPlayer'),game:GetService('Lighting'),game:GetService('StarterPack'),game:GetService('SoundService')}) do if root.Name:lower()==lp then return root end for _,d in ipairs(root:GetDescendants()) do if d.Name==last then return d end if not best and d.Name:lower()==lp then best=d end end end return best end",
+    "local function firstTarget(p) if p and p~='' then return resolveLoose(p) end local s=sel() return s[1] end",
   ].join("\n");
 
   function wrap(body) {
     return { code: HEAD + "\n" + body };
   }
 
+  // Models name the target many ways; every spelling resolves to the same path.
+  function pathArg(a) {
+    for (const k of ["path", "target", "instance", "instance_path", "object", "parent", "name", "query"]) {
+      if (a && typeof a[k] === "string" && a[k].trim()) return a[k].trim();
+    }
+    return "";
+  }
   function buildBridge(op, a) {
     a = a || {};
     if (op === "search_game_tree") {
@@ -53,10 +61,10 @@
       );
     }
     if (op === "inspect_instance") {
-      const path = luaStr(a.path || a.target || "");
+      const path = luaStr(pathArg(a));
       return wrap(
         [
-          `local inst=firstTarget(${path}) if not inst then return fail("nothing to inspect") end`,
+          `local inst=firstTarget(${path}) if not inst then return fail("NOT_FOUND","nothing to inspect for path "..tostring(${path}).." (use a full path like game.Workspace.House.Door, or search_game_tree {query} first; with no path the current Selection is used)") end`,
           "local keys={'Name','ClassName','Parent','Anchored','CanCollide','CanTouch','CanQuery','CastShadow','Transparency','Reflectance','Material','BrickColor','Color','Size','CFrame','Position','Orientation','Shape','MeshId','TextureID','TextureId','SoundId','AnimationId','Image','Value','Enabled','Disabled','Source','MaxHealth','Health','WalkSpeed','JumpPower','HipHeight','Text','TextColor3','BackgroundColor3','Visible','ZIndex','LayoutOrder'}",
           "local props={}",
           "for _,k in ipairs(keys) do local okv,v=pcall(function() return inst[k] end) if okv and v~=nil then local tv=typeof(v) if tv=='Instance' then props[k]=v:GetFullName() elseif tv=='Vector3' then props[k]={v.X,v.Y,v.Z} elseif tv=='Color3' then props[k]={math.floor(v.R*255+0.5),math.floor(v.G*255+0.5),math.floor(v.B*255+0.5)} elseif tv=='CFrame' then local p=v.Position props[k]={p.X,p.Y,p.Z} elseif tv=='EnumItem' then props[k]=tostring(v) elseif tv=='string' or tv=='number' or tv=='boolean' then props[k]=v else props[k]=tostring(v) end end end",
@@ -491,17 +499,19 @@
       );
     }
     if (op === "get_children") {
-      const path = luaStr(a.path || a.target || "");
+      const path = luaStr(pathArg(a));
+      const cls = luaStr(a.className || a.class || a.class_name || "");
+      const limit = Math.max(1, Math.min(300, num(a.limit, 200)));
       return wrap(
         [
-          "local inst=firstTarget(" + path + ") if not inst then return fail('not found') end",
-          "local items={} for _,c in ipairs(inst:GetChildren()) do items[#items+1]={name=c.Name,className=c.ClassName,path=c:GetFullName()} end",
-          "return ok({count=#items,path=inst:GetFullName(),items=items}, #items..' children')",
+          "local inst=firstTarget(" + path + ") if not inst then return fail('NOT_FOUND','nothing found for path '..tostring(" + path + ")..' (use a full path like game.Workspace.House.Door, or search_game_tree {query} first; with no path the current Selection is used)') end",
+          "local cls=string.lower(" + cls + ") local limit=" + limit + " local all=inst:GetChildren() local items={} for _,c in ipairs(all) do if cls=='' or string.lower(c.ClassName)==cls or (pcall(function() return c:IsA(" + cls + ") end) and c:IsA(" + cls + ")) then items[#items+1]={name=c.Name,className=c.ClassName,path=c:GetFullName()} if #items>=limit then break end end end",
+          "return ok({count=#items,total=#all,path=inst:GetFullName(),className=inst.ClassName,items=items}, #items..' of '..#all..' children of '..inst:GetFullName())",
         ].join("\n")
       );
     }
     if (op === "get_descendants") {
-      const path = luaStr(a.path || a.target || "");
+      const path = luaStr(pathArg(a));
       const limit = Math.max(1, Math.min(80, Number(a.limit) || 40));
       return wrap(
         [
@@ -598,7 +608,7 @@
 
   const BRIDGE = [
     { name: "search_game_tree", description: "Search the DataModel by name/class. Returns paths.", params: { query: { type: "string", req: true }, className: { type: "string", req: false }, root: { type: "string", req: false }, limit: { type: "number", req: false } } },
-    { name: "inspect_instance", description: "Dump properties, children, tags, UniqueId for a path or the selection.", params: { path: { type: "string", req: false } } },
+    { name: "inspect_instance", description: "Dump properties, attributes, children, tags and UniqueId of one instance. path is a full path (game.Workspace.House.Door) or just a name (searched under the common services); omit it to inspect the current Selection.", params: { path: { type: "string", req: false } } },
     { name: "script_read", description: "Read a Script/LocalScript/ModuleScript Source.", params: { path: { type: "string", req: true } } },
     { name: "script_search", description: "Find a literal string inside script sources.", params: { pattern: { type: "string", req: true }, root: { type: "string", req: false }, limit: { type: "number", req: false } } },
     { name: "script_grep", description: "Alias of script_search.", params: { pattern: { type: "string", req: true }, root: { type: "string", req: false } } },
@@ -629,7 +639,7 @@
     { name: "skill", description: "Specialized Studio knowledge: debug, remotes, pathfinding, datastore, ui, physics, tween.", params: { name: { type: "string", req: false, desc: "debug|remotes|pathfinding|datastore|ui|physics|tween" } } },
     { name: "instance_new", description: "Instance.new(className) parented into the place.", params: { className: { type: "string", req: true }, parent: { type: "string", req: false }, name: { type: "string", req: false } } },
     { name: "get_service", description: "game:GetService(name).", params: { service: { type: "string", req: true } } },
-    { name: "get_children", description: ":GetChildren() on a path or the selection.", params: { path: { type: "string", req: false } } },
+    { name: "get_children", description: ":GetChildren() of an instance - name, class and full path of each child. path is a full path (game.Workspace.House) or just an instance name (searched under Workspace/ReplicatedStorage/ServerStorage/StarterGui...); omit it to use the current Selection. className filters (e.g. Model, BasePart).", params: { path: { type: "string", req: false }, className: { type: "string", req: false }, limit: { type: "number", req: false, desc: "default 200" } } },
     { name: "get_descendants", description: ":GetDescendants() on a path or the selection.", params: { path: { type: "string", req: false }, limit: { type: "number", req: false } } },
     { name: "find_first_child", description: ":FindFirstChild(name, recursive?).", params: { path: { type: "string", req: false }, name: { type: "string", req: true }, recursive: { type: "boolean", req: false } } },
     { name: "wait_for_child", description: ":WaitForChild(name, timeout).", params: { path: { type: "string", req: false }, name: { type: "string", req: true }, timeout: { type: "number", req: false } } },

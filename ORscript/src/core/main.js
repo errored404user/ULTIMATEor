@@ -1733,10 +1733,27 @@
   };
   const WORK_MODE_IDS = Object.keys(WORK_MODES);
   const normalizeWorkMode = (id) => (WORK_MODE_IDS.includes(id) ? id : "ultimate"); // fast/balanced/thorough/adaptive → ultimate
+  // UNIVERSAL commands: the navigation / inspection / scripting / verification
+  // core that EVERY work mode gets with full schemas, ahead of the mode's own
+  // family. A Visualizer still has to find the part, an Animator still has to
+  // read the rig, an Ultimate run still has to inspect before it writes - so
+  // these are never pushed out of the catalogue by the focus family or by a
+  // compact provider budget. (Exact catalogue names; unknown ones are skipped.)
+  const UNIVERSAL_COMMANDS = [
+    "list_commands", "get_studio_state", "selection_info", "search_game_tree", "instance_find", "instance_find_class",
+    "find_first_child", "get_children", "get_descendants", "inspect_instance", "get_property", "set_property",
+    "attribute_get", "attribute_set", "instance_new", "instance_rename", "instance_move", "instance_clone",
+    "instance_destroy", "model_report", "instance_bounding_box", "part_create", "script_list", "script_read",
+    "script_search", "script_grep", "script_create", "script_set_source", "script_replace", "script_insert",
+    "multi_edit", "execute_luau", "get_console_output", "or_screenshot", "or_status", "or_debug", "get_template",
+    "memory_read", "memory_add_fact", "workspace_stats",
+  ];
+  const UNIVERSAL_SET = new Set(UNIVERSAL_COMMANDS);
+  const isUniversalCommand = (name) => UNIVERSAL_SET.has(String(name || "").replace(/^[^.]*\./, ""));
   function workModeFocusNames(modeId, names) {
     const mode = WORK_MODES[modeId];
     if (!mode || !mode.focus) return [];
-    return [...new Set(names.filter((n) => n && mode.focus.test(String(n).replace(/^[^.]*\./, ""))))].sort();
+    return [...new Set(names.filter((n) => n && (mode.focus.test(String(n).replace(/^[^.]*\./, "")) || isUniversalCommand(n))))].sort();
   }
   const ALWAYS_BLOCKED_TOOLS = new Set([]);
   const VISION_TOOLS = new Set(["screen_capture"]);
@@ -2221,7 +2238,7 @@
   // list_commands round trip for its schema. Detail lines (descriptions, param
   // docs, tested-usage notes) are reserved for the primitives and the current
   // work mode's focus family; everything else is a signature.
-  const PRIORITY_COMMAND_RE = /^(?:get_studio_state|selection_info|inspect_instance|search_game_tree|script_read|script_search|script_grep|multi_edit|execute_luau|instance_new|get_children|find_first_child|part_create|ui_build|or_status|or_screenshot|or_debug|get_template|list_commands|model_build|script_replace|script_insert|memory_read|memory_add_fact)$/;
+  const PRIORITY_COMMAND_RE = new RegExp("^(?:" + [...UNIVERSAL_COMMANDS, "model_build", "ui_build"].join("|") + ")$");
   const nameFromLine = (line) => (String(line).match(/^\s*([A-Za-z_][\w.-]*)\s*[:({]/) || [])[1];
   function toolSignature(t) {
     const schema = (t && t.inputSchema) || {};
@@ -2345,12 +2362,25 @@
     const countLines = (x) => (x ? x.split("\n").length : 0);
     let usedChars = intro.length + (focusBlock || "").length + webBlock.length;
     let usedLines = countLines(intro) + countLines(focusBlock) + countLines(webBlock) + 8;
+    // UNIVERSAL block first, in every mode and on every budget: full schemas
+    // on roomy composers, signatures on compact ones. These are the commands
+    // the model needs before it can use ANY family (find, inspect, read, verify).
+    const universal = entries.filter((e) => rank(e) === 0);
+    let universalBlock = "";
+    if (universal.length) {
+      const body = compact ? packSignatures(universal.map((e) => e.sig), 4500, 80).text : universal.map((e) => e.detail).join("\n\n");
+      universalBlock = `UNIVERSAL — ${universal.length} commands available in EVERY work mode (navigate, inspect, read, write, verify; call directly):\n${body}\n\n`;
+      for (const e of universal) e.done = true;
+      usedChars += universalBlock.length; usedLines += countLines(universalBlock);
+    }
     const detail = [];
     if (!compact) {
-      const detailChars = Math.floor(limit * 0.42);
-      const detailLines = Math.floor(lineLimit * 0.5);
+      // The universal block is part of the schema tier's share of the budget.
+      const detailChars = Math.max(0, Math.floor(limit * 0.42) - universalBlock.length);
+      const detailLines = Math.max(0, Math.floor(lineLimit * 0.5) - countLines(universalBlock));
       let dc = 0, dl = 0;
       for (const e of entries) {
+        if (e.done) continue;
         const want = PRIORITY_COMMAND_RE.test(e.name) || e.native || focus.has(e.name);
         if (!want) continue;
         const ln = countLines(e.detail) + 1;
@@ -2374,10 +2404,10 @@
       for (const nm of leftover) { if (list.length + nm.length + 2 > nameBudget) { omitted++; continue; } list += (list ? ", " : "") + nm; }
       namesBlock = list ? `\n\nMORE COMMANDS (names only - fetch one with list_commands {"query":"name"} before use):\n${list}` : "";
     }
-    const detailBlock = detail.length ? `PRIMITIVES & ${String((focusBlock || "").match(/━━━ (\w+) WORK MODE/) ? RegExp.$1 : "FOCUS")} FAMILY (full schemas):\n\n${detail.join("\n\n")}\n\n` : "";
+    const detailBlock = detail.length ? `${String((focusBlock || "").match(/━━━ (\w+) WORK MODE/) ? RegExp.$1 : "FOCUS")} FAMILY (full schemas):\n\n${detail.join("\n\n")}\n\n` : "";
     const sigBlock = packed.text ? `SIGNATURES (callable as shown):\n${packed.text}` : "";
     const tail = omitted ? `\n[${omitted} more commands omitted - list_commands {"query":"keyword"} finds them.]` : "";
-    return intro + (focusBlock || "") + webBlock + detailBlock + sigBlock + namesBlock + tail;
+    return intro + universalBlock + (focusBlock || "") + webBlock + detailBlock + sigBlock + namesBlock + tail;
   }
   function compactToolsReminder(tools) {
     const limit = Math.max(2000, Number(P.commandListMaxChars) || 6000);
@@ -3108,7 +3138,7 @@
         ]);
         // Compact composers get the header only - the family is listed first
         // (as signatures) in the index anyway, so the name list would be paid twice.
-        if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily (all listed with their signatures below) ━━━\n${P.compactCommandList ? "" : focusNames.join(", ") + "\n"}\n`;
+        if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily (the UNIVERSAL set above plus this mode's family; all listed with their signatures below) ━━━\n${P.compactCommandList ? "" : focusNames.join(", ") + "\n"}\n`;
       }
       const compact = !!P.compactCommandList;
       const limit = compact
@@ -3200,7 +3230,7 @@
         if (/^\{/.test(body) && body.length < 20000) {
           const j = JSON.parse(body);
           if (j && j.ok === false) {
-            const why = String(j.error || "command failed").slice(0, 600);
+            const why = String(j.error && typeof j.error === "object" ? (j.error.message || j.error.code || JSON.stringify(j.error)) : (j.error || "command failed")).slice(0, 600);
             res = `ERROR in ${name}: ${why}\nThe command ran but reported this failure. Paths are case-sensitive and must be full (e.g. game.Workspace.House.Door) - locate the target first with instance_find / search_game_tree / script_list, fix the parameter the message names, then retry.`;
           }
         }

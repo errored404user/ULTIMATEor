@@ -25,7 +25,7 @@ for (const n of ["script_write", "execute_luau", "part_create", "datastore_get",
 for (const n of ["script_write", "execute_luau", "ui_build", "fx_create_emitter", "rigid_constraint_create"]) assert(!ani.test(n), "animator must not claim " + n);
 assert(main.includes("WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily"), "list_commands surfaces the focus family first");
 assert(main.includes("if (!commandQuery && WORK_MODES[focusMode] && WORK_MODES[focusMode].focus) {"), "focus block applies to every mode with a focus set (incl. ultimate)");
-assert(main.includes("return intro + (focusBlock || \"\") + webBlock + detailBlock + sigBlock + namesBlock + tail;") && main.includes("focusBlock, focusNames, compact, limit, lineLimit,"), "focus block on both compact and full catalogues (buildCatalogue)");
+assert(main.includes("return intro + universalBlock + (focusBlock || \"\") + webBlock + detailBlock + sigBlock + namesBlock + tail;") && main.includes("focusBlock, focusNames, compact, limit, lineLimit,"), "focus block on both compact and full catalogues (buildCatalogue)");
 assert(main.includes("const detail = []; // tier 1: full schemas") || main.includes("function buildCatalogue(o)"), "catalogue builder exists");
 
 // prompt layers: Ultimate is the base; specialists add a mandate + pipeline + verification
