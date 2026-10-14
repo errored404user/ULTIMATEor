@@ -1365,7 +1365,9 @@ async function robloxCsrf() {
 async function robloxAuthedFetch(url, opts) {
   opts = opts || {};
   const method = opts.method || "GET";
-  const headers = Object.assign({}, method !== "GET" ? { "Content-Type": "application/json" } : {}, opts.headers || {});
+  // FormData bodies must set their own multipart boundary - never force JSON on them.
+  const isForm = typeof FormData !== "undefined" && opts.body instanceof FormData;
+  const headers = Object.assign({}, method !== "GET" && !isForm ? { "Content-Type": "application/json" } : {}, opts.headers || {});
   const go = async (token) => {
     const h = Object.assign({}, headers);
     if (token) h["X-CSRF-TOKEN"] = token;
@@ -1465,6 +1467,95 @@ async function robloxListDevProducts(msg) {
     return { ok: false, error: String(err), status: res.status };
   }
   return { ok: true, products: res.data, text: typeof res.text === "string" ? res.text.slice(0, 4000) : JSON.stringify(res.data) };
+}
+
+// ── Game passes (browser roblox.com session, same auth as developer products) ──
+// Studio has no Luau API for creating passes and its HttpService blocks every
+// roblox.com host, so the extension does it with the user's own cookies. The
+// Open Cloud route in or-core (cloud_gamepass_create) is the alternative when an
+// API key is set; main.js picks whichever is available.
+function robloxAuthError(res) {
+  let err = (res.data && (res.data.message || res.data.error || (res.data.errors && res.data.errors[0] && res.data.errors[0].message))) || (res.text || "").slice(0, 280) || ("HTTP " + res.status);
+  if (res.status === 401 || res.status === 403) {
+    return "Not signed into Roblox in this Chrome profile (or no edit rights on this experience). Open roblox.com, log in with the account that owns the game, then retry. (" + err + ")";
+  }
+  return String(err);
+}
+// 512x512 PNG icon so a pass can be created without the user drawing one.
+async function robloxPlaceholderIcon(label) {
+  if (typeof OffscreenCanvas === "undefined") return null;
+  try {
+    const c = new OffscreenCanvas(512, 512);
+    const g = c.getContext("2d");
+    const bg = g.createLinearGradient(0, 0, 0, 512);
+    bg.addColorStop(0, "#1b1a22"); bg.addColorStop(1, "#2a2436");
+    g.fillStyle = bg; g.fillRect(0, 0, 512, 512);
+    const disc = g.createRadialGradient(256, 236, 20, 256, 256, 190);
+    disc.addColorStop(0, "#ffe9a3"); disc.addColorStop(0.6, "#f2b63a"); disc.addColorStop(1, "#b87414");
+    g.fillStyle = disc; g.beginPath(); g.arc(256, 256, 186, 0, Math.PI * 2); g.fill();
+    g.lineWidth = 14; g.strokeStyle = "#5a3a0a"; g.stroke();
+    const text = String(label || "").trim().slice(0, 2).toUpperCase() || "GP";
+    g.fillStyle = "#3a2405"; g.font = "bold 190px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(text, 256, 268);
+    return await c.convertToBlob({ type: "image/png" });
+  } catch {
+    return null;
+  }
+}
+async function robloxCreateGamePass(msg) {
+  const resolved = await robloxResolveUniverse(msg);
+  if (!resolved.ok) return resolved;
+  const universeId = resolved.universeId;
+  const name = String(msg.name || "").trim();
+  const description = String(msg.description || name).trim();
+  const price = Math.floor(Number(msg.price || msg.priceInRobux || 0)) || 0;
+  if (!name) return { ok: false, error: "name required" };
+  const form = new FormData();
+  form.append("UniverseId", String(universeId));
+  form.append("Name", name);
+  form.append("Description", description);
+  let icon = null;
+  if (msg.iconDataUrl && /^data:image\//.test(String(msg.iconDataUrl))) {
+    try { icon = await (await fetch(String(msg.iconDataUrl))).blob(); } catch {}
+  }
+  if (!icon) icon = await robloxPlaceholderIcon(name);
+  if (icon) form.append("File", icon, "icon.png");
+  const res = await robloxAuthedFetch("https://apis.roblox.com/game-passes/v1/game-passes", { method: "POST", body: form });
+  if (!res.ok) {
+    return { ok: false, error: robloxAuthError(res) + " (universe " + universeId + (resolved.name ? " / " + resolved.name : "") + ")", status: res.status, universeId: universeId, dashboard: "https://create.roblox.com/dashboard/creations/experiences/" + universeId + "/monetization/passes" };
+  }
+  const created = res.data || {};
+  const gamePassId = Number(created.gamePassId || created.id || 0) || 0;
+  const out = { ok: true, gamePassId: gamePassId, universeId: universeId, universeName: resolved.name || "", name: name, price: 0, forSale: false, created: created, text: JSON.stringify(created) };
+  if (gamePassId && price > 0) {
+    const d = await robloxUpdateGamePass({ gamePassId: gamePassId, price: price, isForSale: true });
+    if (d.ok) { out.price = price; out.forSale = true; }
+    else out.priceWarning = "created, but setting the price failed: " + d.error;
+  }
+  return out;
+}
+async function robloxUpdateGamePass(msg) {
+  const gamePassId = Number(msg.gamePassId || msg.gamepass_id || msg.id || 0) || 0;
+  if (!gamePassId) return { ok: false, error: "gamePassId required" };
+  const form = new FormData();
+  if (msg.name != null && String(msg.name).trim()) form.append("Name", String(msg.name).trim());
+  if (msg.description != null) form.append("Description", String(msg.description));
+  const price = msg.price != null ? Math.floor(Number(msg.price)) : NaN;
+  if (Number.isFinite(price) && price >= 0) form.append("Price", String(price));
+  const forSale = msg.isForSale != null ? !!msg.isForSale : (Number.isFinite(price) && price > 0 ? true : null);
+  if (forSale !== null) form.append("IsForSale", forSale ? "true" : "false");
+  const res = await robloxAuthedFetch("https://apis.roblox.com/game-passes/v1/game-passes/" + gamePassId + "/details", { method: "POST", body: form });
+  if (!res.ok) return { ok: false, error: robloxAuthError(res), status: res.status };
+  return { ok: true, gamePassId: gamePassId, details: res.data || {}, text: res.text };
+}
+async function robloxListGamePasses(msg) {
+  const resolved = await robloxResolveUniverse(msg);
+  if (!resolved.ok) return resolved;
+  const universeId = resolved.universeId;
+  const res = await robloxAuthedFetch("https://games.roblox.com/v1/games/" + universeId + "/game-passes?limit=100&sortOrder=Asc", { method: "GET" });
+  if (!res.ok) return { ok: false, error: robloxAuthError(res), status: res.status };
+  const list = (res.data && Array.isArray(res.data.data) ? res.data.data : []).map((p) => ({ id: p.id, name: p.name, price: p.price, productId: p.productId }));
+  return { ok: true, universeId: universeId, universeName: resolved.name || "", passes: list, text: JSON.stringify(list) };
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -1865,6 +1956,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       case "list_dev_products": {
         try { sendResponse(await robloxListDevProducts(msg)); }
+        catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
+        break;
+      }
+      case "create_game_pass": {
+        try { sendResponse(await robloxCreateGamePass(msg)); }
+        catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
+        break;
+      }
+      case "update_game_pass": {
+        try { sendResponse(await robloxUpdateGamePass(msg)); }
+        catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
+        break;
+      }
+      case "list_game_passes": {
+        try { sendResponse(await robloxListGamePasses(msg)); }
         catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
         break;
       }

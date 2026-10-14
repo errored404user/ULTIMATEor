@@ -67,6 +67,7 @@ fn init_file_logger(ui: Option<Arc<gui::UiShared>>) {
 }
 
 mod gui;
+mod plugin;
 mod workspace;
 
 #[cfg(windows)]
@@ -324,6 +325,8 @@ struct AppState {
     roblox_editor_connected: Arc<AtomicBool>,
     /// Desktop window state (status, tool catalog, recent activity).
     ui: Arc<gui::UiShared>,
+    /// ORscript Studio plugin hub (jobs, Open Cloud key, install path).
+    plugin: Arc<plugin::Hub>,
 }
 
 impl AppState {
@@ -339,6 +342,7 @@ impl AppState {
             roblox_proc,
             roblox_editor_connected: Arc::new(AtomicBool::new(false)),
             ui,
+            plugin: Arc::new(plugin::Hub::new()),
         }
     }
 }
@@ -848,6 +852,16 @@ async fn start() -> anyhow::Result<()> {
     shared.log("listening: http://127.0.0.1:3000 · ws 17613 (roblox) · 17615 (agentscript)");
     shared.log(&format!("settings: {}", gui::Settings::path().display()));
     let state = AppState::new(result_tx, mcp_alive, roblox_proc.clone(), workspace, shared.clone());
+    // Studio plugin: keep the local copy in sync with the one embedded in this
+    // build. Studio picks the file up on its next start (or Plugins → reload).
+    match plugin::install() {
+        Ok(Some((path, changed))) => {
+            shared.log(&format!("studio plugin: {}{}", path.display(), if changed { " (installed/updated - restart Studio once, then allow its HTTP prompt)" } else { "" }));
+            state.plugin.set_installed(Some(path.display().to_string())).await;
+        }
+        Ok(None) => shared.log("studio plugin: auto-install skipped (no local Plugins folder on this platform or OR_NO_PLUGIN_INSTALL=1) - copy plugin/ORscript.lua into Studio's Plugins folder yourself"),
+        Err(e) => shared.log(&format!("studio plugin: install failed ({e}) - copy plugin/ORscript.lua into Studio's Plugins folder yourself")),
+    }
     let (cmd_tx, cmd_rx) = tokio::sync::mpsc::unbounded_channel::<gui::UiCommand>();
     tokio::spawn(ui_command_loop(state.clone(), cmd_rx));
     let ui_for_server = shared.clone();
@@ -1114,6 +1128,11 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
         .route("/api/status", get(status_handler))
         .route("/api/local-full", post(local_full_handler))
         .route("/api/window", post(window_handler))
+        .route("/api/plugin/hello", post(plugin::hello_handler))
+        .route("/api/plugin/poll", get(plugin::poll_handler))
+        .route("/api/plugin/result", post(plugin::result_handler))
+        .route("/api/plugin/status", get(plugin::status_handler))
+        .route("/api/plugin/config", post(plugin::config_handler))
         .route("/ws", get(ws_handler))
         .with_state(state)
         .layer(cors);
@@ -1206,6 +1225,7 @@ async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {   
         "roblox_queue": state.roblox_queue.lock().await.len(),
         "roblox_proc": state.roblox_proc.load(Ordering::Relaxed),
         "mcp_busy": state.mcp_in_flight.load(Ordering::Relaxed) > 0,
+        "plugin_connected": state.plugin.connected().await,
     }))
 }
 async fn ws_handler(ws: axum::extract::ws::WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
@@ -1251,7 +1271,22 @@ async fn roblox_tools(state: &AppState) -> anyhow::Result<Vec<serde_json::Value>
     }
 }
 
+/// MCP tool list plus the ORscript Studio plugin's commands (only while the
+/// plugin is connected; Open Cloud commands only once a key is set).
+async fn roblox_tools_with_plugin(state: &AppState) -> anyhow::Result<Vec<serde_json::Value>> {
+    let mut tools = roblox_tools(state).await?;
+    tools.extend(plugin::tools(state.plugin.connected().await, state.plugin.key().await.is_some()));
+    Ok(tools)
+}
+
 async fn roblox_tool(state: &AppState, name: &str, args: serde_json::Value) -> anyhow::Result<McpToolOutput> {
+    // execute_luau fast path: the Studio plugin runs Edit-mode Luau without the
+    // stdio helper's 20 s budget and studio_id dance; MCP remains the fallback.
+    if name.rsplit('/').next().unwrap_or(name) == "execute_luau" {
+        if let Some(res) = plugin::try_execute_luau(state, &args).await {
+            return res;
+        }
+    }
     let _busy = InFlight::enter(&state.mcp_in_flight);
     let mut mcp = state.roblox_mcp.lock().await;
     match mcp.call_tool(name, args.clone()).await {
@@ -1349,7 +1384,7 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
             let tools = workspace::catalog();
             serde_json::json!({"type":"connected","id":0,"ok":ready,"mcp_alive":ready,"studio":ready,"tools":tools,"servers":[{"id":"local","name":"Local Filesystem","alive":ready,"tools":if ready { tools.len() } else { 0 }}],"workspace_root":state.workspace.root_display()})
         } else {
-            match roblox_tools(&state).await {
+            match roblox_tools_with_plugin(&state).await {
                 Ok(tools) => {
                     let studio = {
                         let mut mcp = state.roblox_mcp.lock().await;
@@ -1379,7 +1414,7 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                             let tools = workspace::catalog();
                             serde_json::json!({"type":"tools","id":id,"ok":ready,"mcp_alive":ready,"studio":ready,"tools":tools,"servers":[{"id":"local","name":"Local Filesystem","alive":ready,"tools":if ready { tools.len() } else { 0 }}]})
                         } else {
-                            match roblox_tools(&state).await {
+                            match roblox_tools_with_plugin(&state).await {
                                 Ok(tools) => {
                                     let studio = if state.mcp_in_flight.load(Ordering::Relaxed) > 1 {
                                         // Another tool is in flight (list_tools itself holds 1). Skip extra probe.
@@ -1431,7 +1466,7 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                                 mcp.reset().await;
                             }
                             set_editor(&state, false);
-                            match roblox_tools(&state).await {
+                            match roblox_tools_with_plugin(&state).await {
                                 Ok(tools) => {
                                     let studio = {
                                         let mut mcp = state.roblox_mcp.lock().await;
@@ -1465,7 +1500,7 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                                 "local" => workspace::dispatch(&state2.workspace, &name, args).await
                                     .map(|text| McpToolOutput { text, images: Vec::new() })
                                     .map_err(anyhow::Error::msg),
-                                "roblox" => roblox_tool(&state2, &name, args).await,
+                                "roblox" => if plugin::is_plugin_tool(&name) { plugin::call(&state2, &name, args).await } else { roblox_tool(&state2, &name, args).await },
                                 _ => Err(anyhow::anyhow!("unknown engine")),
                             };
                             match &outcome {

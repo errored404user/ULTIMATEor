@@ -124,6 +124,14 @@
     auto_debug: "or_debug",
     multi_agent: "or_agent",
     spawn_agent: "or_agent",
+    create_game_pass: "gamepass_create",
+    create_gamepass: "gamepass_create",
+    game_pass_create: "gamepass_create",
+    gamepass_new: "gamepass_create",
+    list_game_passes: "gamepass_list",
+    game_pass_list: "gamepass_list",
+    gamepass_wire: "gamepass_handler_create",
+    gamepass_handler: "gamepass_handler_create",
     create_developer_product: "developer_product_create",
     create_dev_product: "developer_product_create",
     devproduct_create: "developer_product_create",
@@ -158,12 +166,12 @@
     "fire_add","smoke_add","sparkles_add","point_light_add","spot_light_add",
     "atmosphere_set","bloom_set","blur_set","color_correction_set","sunrays_set","gravity_set",
     "walkspeed_set","jumppower_set","forcefield_add","explosion_at","teleport_to","leaderstats_int","remote_event_create","sound_volume","set_property","scale_model","ungroup_model",
-    "developer_product_create","developer_product_list",
+    "developer_product_create","developer_product_list","gamepass_create","gamepass_list","gamepass_update",
     "script_replace","script_insert","script_delete_lines","script_rename_symbol","script_restore",
     "model_build","model_union","model_subtract","model_optimize","model_anchor_fix","model_paint","model_hollow_box","model_wall","model_pipe","model_array_radial",
     "memory_update_section","memory_remove_fact",
   ]);
-  const PUBLISH_OPS=new Set(["developer_product_create","studio.publishPlace","studio.publishAnimation","studio.createGamePass"]);
+  const PUBLISH_OPS=new Set(["developer_product_create","gamepass_create","gamepass_update","cloud_gamepass_create","cloud_gamepass_update","cloud_product_create","studio_publish_selection","studio.publishPlace","studio.publishAnimation","studio.createGamePass"]);
   async function publishAutomationEnabled(){try{const r=await chrome.storage.local.get("rsAllowPublishAutomation");return r.rsAllowPublishAutomation===true;}catch{return false;}}
   function requestApproval(op, args, required=false) {
     return new Promise((resolve) => {
@@ -852,9 +860,9 @@
     {name:"template_test_result",description:"Submit AI static-analysis findings for a template. Must label this STATIC_ANALYSIS and never claim real execution.",inputSchema:{type:"object",required:["templateId","findings"],properties:{templateId:{type:"string"},findings:{type:"array",items:{type:"object"}},summary:{type:"string"}}},server:"orscript",executionMode:"READ",environment:"GENERAL"},
   ];
   const CREATOR_TOOLS=[
-    {name:"creator.createGamePass",description:"Begin the official Roblox game-pass creation workflow. Requires confirmation and Creator Dashboard authentication.",inputSchema:{type:"object",required:["name"],properties:{name:{type:"string"},description:{type:"string"},price:{type:"integer"},universeId:{type:"integer"}}},server:"orscript"},
+    {name:"creator.createGamePass",description:"Create a REAL game pass (same as gamepass_create: roblox.com browser session or or-core Open Cloud, then the server handler). Prefer gamepass_create.",inputSchema:{type:"object",required:["name"],properties:{name:{type:"string"},description:{type:"string"},price:{type:"integer"},universeId:{type:"integer"}}},server:"orscript"},
     {name:"creator.getGamePass",description:"Retrieve verified Roblox asset metadata for a game pass id.",inputSchema:{type:"object",required:["assetId"],properties:{assetId:{type:"integer"}}},server:"orscript"},
-    {name:"creator.updateGamePass",description:"Begin an authenticated game-pass update workflow with explicit confirmation.",inputSchema:{type:"object",required:["assetId"],properties:{assetId:{type:"integer"},name:{type:"string"},description:{type:"string"},price:{type:"integer"}}},server:"orscript"},
+    {name:"creator.updateGamePass",description:"Update a game pass (same as gamepass_update {gamepass_id, name?, description?, price?, for_sale?}).",inputSchema:{type:"object",required:["assetId"],properties:{assetId:{type:"integer"},name:{type:"string"},description:{type:"string"},price:{type:"integer"}}},server:"orscript"},
     {name:"creator.publishAnimation",description:"Prepare a Studio animation publishing workflow. Studio ownership and user confirmation are required.",inputSchema:{type:"object",properties:{path:{type:"string"},name:{type:"string"}}},server:"orscript"},
     {name:"creator.getPublishedAsset",description:"Retrieve verified Roblox metadata for a published asset id.",inputSchema:{type:"object",required:["assetId"],properties:{assetId:{type:"integer"}}},server:"orscript"},
     {name:"creator.publishPlace",description:"Prepare the supported Studio Publish to Roblox workflow. Never publishes silently.",inputSchema:{type:"object",properties:{placeId:{type:"integer"}}},server:"orscript"},
@@ -2571,6 +2579,117 @@
     return "Output of 'developer_product_list':\n" + String(r.text || JSON.stringify(r.products || r, null, 2)).slice(0, 4000);
   }
 
+  // ── Game passes ──
+  // Two real routes, tried in order: (1) the user's roblox.com browser session
+  // (background.js, like developer products), (2) Open Cloud through or-core when
+  // the ORscript Studio plugin has an API key (cloud_gamepass_* tools appear in
+  // the catalogue only then). Studio itself cannot create passes. Afterwards the
+  // Studio plugin writes the server handler (gamepass_handler_create); without
+  // the plugin the Luau skill marketplace_setup does the wiring.
+  // Commands served by the ORscript Studio plugin through or-core
+  // (agent/src/plugin.rs + plugin/ORscript.lua). They join A.toolList only while
+  // the plugin is connected; calling one earlier gets a how-to instead of
+  // "unknown command".
+  const STUDIO_PLUGIN_COMMANDS = ["studio_plugin_status", "plugin_execute_luau", "csg_union", "csg_negate", "csg_separate", "open_script", "script_live_update", "studio_import_file", "studio_publish_selection", "studio_prompt_asset_id", "studio_insert_asset", "studio_place_info", "studio_select_tool", "studio_undo", "studio_redo", "studio_notify", "screenshot_frame", "gamepass_handler_create", "developer_product_handler_create", "cloud_gamepass_create", "cloud_gamepass_update", "cloud_gamepass_list", "cloud_product_create", "cloud_product_list"];
+  const STUDIO_PLUGIN_SET = new Set(STUDIO_PLUGIN_COMMANDS);
+  const PLUGIN_HOWTO = "the ORscript Studio plugin is not connected. or-core (ORscript Desktop, cargo build in ORscript/agent) installs plugin/ORscript.lua into Studio's local Plugins folder; restart Studio once, open Plugins → ORscript and click Allow on the HTTP prompt. Until then use execute_luau / the Luau skills (model_union, marketplace_setup, ...).";
+  function pluginToolAvailable(name) {
+    try { return A.toolNames.has(name) || Array.from(A.toolNames).some((n) => bareToolName(n) === name); } catch { return false; }
+  }
+  async function bridgeTool(name, args, timeout) {
+    const r = await bg({ type: "call_tool", name: name, arguments: args || {}, timeout: timeout || 90000 });
+    if (!r || !r.ok) throw new Error(String((r && (r.error || r.text)) || "bridge call failed"));
+    return String(r.text || "");
+  }
+  async function wireGamePass(gamePassId, passName, args) {
+    const benefit = String(args.benefit || args.reward_type || "").trim().toLowerCase();
+    const reward = String(args.reward || "").trim();
+    if (pluginToolAvailable("gamepass_handler_create")) {
+      const text = await bridgeTool("gamepass_handler_create", { gamepass_id: gamePassId, name: passName, benefit: benefit || (reward ? "custom" : "custom"), amount: Number(args.amount || 0) || undefined, tool_name: args.tool_name || undefined });
+      return "Wired by the Studio plugin (gamepass_handler_create):\n" + text.slice(0, 900);
+    }
+    const wired = await runTool({ tool: "marketplace_setup", arguments: { gamepass_id: gamePassId, reward: reward || passName } });
+    return "Wired with marketplace_setup:\n" + String(wired || "").slice(0, 800);
+  }
+  async function createGamePass(args) {
+    const passName = String(args.name || args.title || "").trim();
+    const price = Math.floor(Number(args.price || args.price_in_robux || args.robux || 0)) || 0;
+    const desc = String(args.description || args.desc || passName).trim();
+    if (!passName) return "ERROR: gamepass_create needs name (the pass title players see). Optional: price (Robux), description, benefit (speed|coins|tool|custom), amount, tool_name.";
+    if (price < 0) return "ERROR: price must be Robux >= 0 (0 = not for sale yet).";
+    const ids = await studioUniverseIds();
+    let universe = Number(args.universe_id || args.universeId || args.universe || ids.gameId || 0) || 0;
+    const placeId = Number(args.place_id || args.placeId || ids.placeId || 0) || 0;
+    let r = null;
+    try {
+      r = await bg({ type: "create_game_pass", universeId: universe, placeId: placeId, gameId: universe, name: passName, description: desc, price: price, iconDataUrl: args.icon_data_url || args.iconDataUrl || "" });
+    } catch (e) {
+      r = { ok: false, error: String(e && e.message || e) };
+    }
+    let via = "your roblox.com browser session";
+    let gamePassId = r && r.ok ? Number(r.gamePassId || 0) || 0 : 0;
+    let priceNote = r && r.ok ? (r.priceWarning ? "\n" + r.priceWarning : "") : "";
+    if (!(r && r.ok) && pluginToolAvailable("cloud_gamepass_create")) {
+      try {
+        const text = await bridgeTool("cloud_gamepass_create", { name: passName, description: desc, price: price, universe_id: universe || undefined, icon_path: args.icon_path || undefined }, 120000);
+        let parsed = null; try { parsed = JSON.parse(text); } catch {}
+        gamePassId = Number((parsed && parsed.gamepass_id) || 0) || 0;
+        universe = Number((parsed && parsed.universe_id) || universe) || universe;
+        if (parsed && parsed.price_warning) priceNote = "\n" + parsed.price_warning;
+        via = "Open Cloud (or-core)";
+        r = { ok: true, text: text };
+      } catch (e) {
+        return "ERROR: could not create the game pass. Browser session: " + String(r && r.error || "failed") + " | Open Cloud: " + String(e && e.message || e) + "\nManual fallback: https://create.roblox.com/dashboard/creations/experiences/" + (universe || "<universe>") + "/monetization/passes";
+      }
+    }
+    if (!(r && r.ok)) {
+      return "ERROR: could not create the game pass — " + String((r && r.error) || "Sign into roblox.com in this Chrome profile, publish the place in Studio, then retry.") + (r && r.dashboard ? "\nManual fallback: " + r.dashboard : "") + "\nTip: paste an Open Cloud API key in Studio → Plugins → ORscript to let or-core create passes without the browser session.";
+    }
+    universe = Number((r && r.universeId) || universe) || universe;
+    let out = "Output of 'gamepass_create':\nCreated Game Pass \"" + passName + "\"" + (price > 0 ? " — " + price + " Robux" : " — not for sale yet (price 0)") + " via " + via + ".\ngamepass_id=" + (gamePassId || "(see payload)") + " universe_id=" + universe + priceNote + "\n" + String(r.text || "").slice(0, 900);
+    if (gamePassId && args.wire !== false) {
+      try { out += "\n\n" + await wireGamePass(gamePassId, passName, args); }
+      catch (e) { out += "\n(Pass created. Wire it with gamepass_handler_create {gamepass_id: " + gamePassId + "} or marketplace_setup {gamepass_id: " + gamePassId + "}; wiring failed: " + String(e && e.message || e).slice(0, 200) + ")"; }
+    } else if (gamePassId) {
+      out += "\nNext: gamepass_handler_create {gamepass_id: " + gamePassId + ", benefit: \"speed|coins|tool|custom\"} writes the server handler.";
+    }
+    out += "\nPlayers buy it with MarketplaceService:PromptGamePassPurchase(player, " + (gamePassId || "<id>") + ") from a LocalScript button.";
+    return out;
+  }
+  async function updateGamePass(args) {
+    const gamePassId = Number(args.gamepass_id || args.gamePassId || args.id || args.assetId || 0) || 0;
+    if (!gamePassId) return "ERROR: gamepass_update needs gamepass_id (use gamepass_list).";
+    const payload = { gamePassId: gamePassId };
+    if (args.name != null) payload.name = String(args.name);
+    if (args.description != null) payload.description = String(args.description);
+    if (args.price != null) payload.price = Math.floor(Number(args.price)) || 0;
+    if (args.for_sale != null || args.isForSale != null) payload.isForSale = !!(args.for_sale != null ? args.for_sale : args.isForSale);
+    let r = null;
+    try { r = await bg({ type: "update_game_pass", ...payload }); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    if (!(r && r.ok) && pluginToolAvailable("cloud_gamepass_update")) {
+      try {
+        const text = await bridgeTool("cloud_gamepass_update", { gamepass_id: gamePassId, name: payload.name, description: payload.description, price: payload.price, for_sale: payload.isForSale });
+        return "Output of 'gamepass_update' (Open Cloud):\n" + text.slice(0, 1500);
+      } catch (e) {
+        return "ERROR: gamepass_update failed. Browser session: " + String(r && r.error || "failed") + " | Open Cloud: " + String(e && e.message || e);
+      }
+    }
+    if (!(r && r.ok)) return "ERROR: gamepass_update failed — " + String((r && r.error) || "Sign into roblox.com in this Chrome profile.");
+    return "Output of 'gamepass_update':\nUpdated game pass " + gamePassId + " " + JSON.stringify(payload) + "\n" + String(r.text || "").slice(0, 1200);
+  }
+  async function listGamePasses(args) {
+    const ids = await studioUniverseIds();
+    const universe = Number(args.universe_id || args.universeId || args.universe || ids.gameId || 0) || 0;
+    let r = null;
+    try { r = await bg({ type: "list_game_passes", universeId: universe, placeId: Number(args.place_id || args.placeId || ids.placeId || 0) || 0, gameId: universe }); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    if (!(r && r.ok) && pluginToolAvailable("cloud_gamepass_list")) {
+      try { return "Output of 'gamepass_list':\n" + (await bridgeTool("cloud_gamepass_list", { universe_id: universe || undefined })).slice(0, 4000); } catch {}
+    }
+    if (!(r && r.ok)) return "ERROR: could not list game passes. " + String((r && r.error) || "Sign into roblox.com in this Chrome profile, or publish the place first.");
+    const passes = Array.isArray(r.passes) ? r.passes : [];
+    return "Output of 'gamepass_list':\nuniverse_id=" + (r.universeId || universe) + " (" + passes.length + " passes)\n" + (passes.length ? passes.map((p) => "- " + p.id + "  \"" + p.name + "\"  " + (p.price == null ? "not for sale" : p.price + " Robux")).join("\n") : "(none yet — gamepass_create {name, price})");
+  }
+
   function isAssistantPluginNoise(text) {
     return /sabuiltin_Assistant|Assistant plugin version changed from \w+ to \w+/i.test(String(text || ""));
   }
@@ -2726,6 +2845,8 @@
     if(roadmapName.startsWith("creator.")){
       if(roadmapName==="creator.getGamePass"||roadmapName==="creator.getPublishedAsset"){const id=Number(args.assetId||0);if(!Number.isInteger(id)||id<1)return `ERROR INVALID_PARAMETER: assetId must be a positive integer`;const r=await bg({type:"creator_asset_info",assetId:id});return `${r&&r.success?"Output":"ERROR"} of '${roadmapName}':\n${JSON.stringify(r,null,2)}`;}
       if(roadmapName==="creator.getPublishStatus"||roadmapName==="creator.validatePublish"){const state=await runTool({tool:"get_studio_state",arguments:{}});return `Output of '${roadmapName}':\n${JSON.stringify({success:!String(state).startsWith("ERROR"),operation:roadmapName,status:state},null,2)}`;}
+      if(roadmapName==="creator.createGamePass")return await createGamePass({...args,universe_id:args.universeId||args.universe_id});
+      if(roadmapName==="creator.updateGamePass")return await updateGamePass({...args,gamepass_id:args.assetId||args.gamepass_id});
       const confirmed=await requestApproval(roadmapName,{...args,warning:"This publishing workflow modifies Roblox cloud content and requires Roblox ownership, authentication, moderation, and final confirmation."},true);if(!confirmed)return `ERROR USER_ACTION_REQUIRED: publishing was not confirmed; no cloud operation ran.`;
       const action=roadmapName==="creator.publishPlace"?"In Roblox Studio, use File > Publish to Roblox and confirm the target place.":roadmapName==="creator.publishAnimation"?"Open the Animation Editor for the target rig, choose Publish to Roblox, review ownership, and confirm. Return the asset ID only after Studio displays it.":roadmapName==="creator.createGamePass"?`Open Creator Dashboard > Creations > Experiences > Passes, select universe ${args.universeId||"the current experience"}, and create '${String(args.name||"").slice(0,100)}'.`:"Open Creator Dashboard for this pass, review the requested changes, and confirm them.";
       return `ERROR USER_ACTION_REQUIRED: ${action}`;
@@ -2815,6 +2936,13 @@
     if (bareName === "developer_product_list" || bareName === "devproduct_list") {
       return await listDeveloperProducts(args);
     }
+    if (STUDIO_PLUGIN_SET.has(bareName) && !pluginToolAvailable(bareName)) {
+      if (/^cloud_/.test(bareName)) return "ERROR: '" + bareName + "' needs an Open Cloud API key in or-core (paste it in Studio → Plugins → ORscript → Open Cloud API key, or start or-core with OR_OPEN_CLOUD_KEY). Browser-session alternatives: gamepass_create / gamepass_list / developer_product_create.";
+      return "ERROR: '" + bareName + "' - " + PLUGIN_HOWTO;
+    }
+    if (bareName === "gamepass_create") return await createGamePass(args);
+    if (bareName === "gamepass_list") return await listGamePasses(args);
+    if (bareName === "gamepass_update") return await updateGamePass(args);
     // Virtual command: list the MCP server(s) RobloxScript is currently connected
     // to, with each one's REAL per-server health (from the bridge, never the
     // merged tool count - a dead server must not borrow another's numbers).

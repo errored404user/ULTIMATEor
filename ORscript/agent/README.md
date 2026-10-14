@@ -46,7 +46,19 @@ The first build downloads the crates (eframe, winit, tokio, axum, …) and takes
 | `or-core.exe --headless` | Bridge only, no window, no tray (servers / autostart scripts). |
 | `or-core.exe --workspace D:\Projects\MyGame` | AgentScript root for this run. |
 
-Environment overrides (same as before): `OR_WORKSPACE_ROOT`, `OR_FULL_ACCESS=1`, `OR_MCP_COMMAND`.
+Environment overrides (same as before): `OR_WORKSPACE_ROOT`, `OR_FULL_ACCESS=1`, `OR_MCP_COMMAND`, plus `OR_OPEN_CLOUD_KEY` (Open Cloud key for game passes / developer products), `OR_PLUGIN_EXEC=0` (keep `execute_luau` on the MCP helper even when the Studio plugin is connected), `OR_NO_PLUGIN_INSTALL=1` (do not copy the Studio plugin into the local Plugins folder).
+
+## Studio plugin
+
+`plugin/ORscript.lua` (embedded in the binary with `include_str!`, installed on start to `%LOCALAPPDATA%\Roblox\Plugins\ORscript.lua` on Windows / `~/Documents/Roblox/Plugins/ORscript.lua` on macOS) runs inside Roblox Studio and long-polls or-core (`POST /api/plugin/hello`, `GET /api/plugin/poll`, `POST /api/plugin/result`). Restart Studio once after the first install, open **Plugins → ORscript** and click **Allow** on the HTTP permission prompt; the panel shows the connection state, the place, the bridge URL and an **Open Cloud API key** box.
+
+What it adds (all appear in `list_commands` while connected, `studio_plugin_status` reports the state):
+
+* `execute_luau` is routed through the plugin (plugin security level, captured `print`, 60 s budget, no `studio_id`); the MCP helper remains the fallback and `screen_capture` still goes through MCP (plugins cannot read the viewport). `screenshot_frame` frames the camera first.
+* Real Studio CSG: `csg_union`, `csg_negate`, `csg_separate`.
+* Editor integration: `open_script {path, line}`, `script_live_update` (ScriptEditorService, open tabs refresh), `studio_undo` / `studio_redo`, `studio_select_tool`, `studio_notify`.
+* Studio dialogs for the user: `studio_import_file` (FBX rig / FBX animation / any file), `studio_publish_selection`, `studio_prompt_asset_id`, `studio_insert_asset {asset_id}`.
+* Monetization: `gamepass_handler_create` / `developer_product_handler_create` write the server-side handlers; with an Open Cloud key or-core also exposes `cloud_gamepass_create` / `cloud_gamepass_update` / `cloud_gamepass_list` / `cloud_product_create` / `cloud_product_list` (the extension's `gamepass_create` tries the roblox.com browser session first, then these).
 
 ## Platforms
 
@@ -77,6 +89,8 @@ agent/
   src/main.rs         bridge: HTTP/WS servers, Studio MCP client, UI command loop
   src/workspace.rs    AgentScript workspace engine (18 tools, sandbox rules)
   src/gui.rs          desktop window, theme, pages, tray icon, per-OS data dir / autostart
+  src/plugin.rs       Studio plugin hub (job queue, /api/plugin/*, Open Cloud game passes / products, installer)
+  ../plugin/ORscript.lua  the Studio plugin itself (embedded via include_str!)
 ```
 
 The Tools page lists the Studio tools reported live by the MCP helper plus the built-in workspace tools, so there is nothing to re-sync when the extension changes.

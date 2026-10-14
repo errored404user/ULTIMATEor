@@ -257,6 +257,11 @@
       const price = num(a.price || a.price_in_robux || a.robux, 10);
       return wrap(`local hs=game:GetService("HttpService") local universe=tonumber(game.GameId) or 0 if universe<1 then return fail("publish the place first (GameId is 0), or pass universe_id to developer_product_create") end local url="https://apis.roblox.com/developer-products/v1/universes/"..universe.."/developerproducts?name="..hs:UrlEncode(${nm}).."&description="..hs:UrlEncode(${desc}).."&priceInRobux="..tostring(${price}) local okreq,res=pcall(function() return hs:RequestAsync({Url=url,Method="POST",Headers={["Content-Type"]="application/json"}}) end) if not okreq then return fail("Studio HTTP could not create the product: "..tostring(res)..". Sign into roblox.com in this browser and retry — OR creates it via your Roblox session.") end return ok({status=res.StatusCode,body=tostring(res.Body):sub(1,900)},"dev product HTTP "..tostring(res.StatusCode))`);
     }
+    if (op === "gamepass_create" || op === "gamepass_update" || op === "gamepass_list") {
+      // Handled in main.js (browser session / Open Cloud via or-core). Studio
+      // itself cannot create passes: HttpService refuses every roblox.com host.
+      return wrap(`return fail("${op} runs through ORscript's browser session or or-core Open Cloud, not Studio Luau - make sure the ORscript extension is active (it intercepts this command) or create the pass at https://create.roblox.com/dashboard/creations and then call gamepass_handler_create {gamepass_id}")`);
+    }
     if (op === "developer_product_list") {
       return wrap(`local hs=game:GetService("HttpService") local universe=tonumber(game.GameId) or 0 if universe<1 then return fail("publish the place first (GameId is 0)") end local url="https://apis.roblox.com/developer-products/v1/universes/"..universe.."/developerproducts?pageNumber=1&pageSize=50" local okreq,res=pcall(function() return hs:GetAsync(url) end) if not okreq then return fail("list failed: "..tostring(res)) end return ok({body=tostring(res):sub(1,4000)},tostring(res):sub(1,4000))`);
     }
@@ -314,6 +319,9 @@
     { name: "ungroup_model", description: "Move a Model's children to its parent and destroy the Model.", params: { path: { type: "string", req: true } } },
     { name: "developer_product_create", description: "Create a real Roblox Developer Product on this published universe (name + Robux price). Browser must be signed into roblox.com. Then wires ProcessReceipt if reward is set.", params: { name: { type: "string", req: true, desc: "product name" }, price: { type: "number", req: true, desc: "price in Robux (>=1)" }, description: { type: "string", req: false }, reward: { type: "string", req: false, desc: "what ProcessReceipt grants" }, universe_id: { type: "number", req: false } } },
     { name: "developer_product_list", description: "List Developer Products on this universe.", params: { universe_id: { type: "number", req: false } } },
+    { name: "gamepass_create", description: "Create a REAL Game Pass on this published universe (name, optional Robux price, description, icon) via the roblox.com browser session or or-core Open Cloud, then write its server handler (benefit: speed|coins|tool|custom) with the Studio plugin. Returns gamepass_id.", params: { name: { type: "string", req: true, desc: "pass title" }, price: { type: "number", req: false, desc: "Robux (0 = not for sale yet)" }, description: { type: "string", req: false }, benefit: { type: "string", req: false, desc: "speed | coins | tool | custom" }, amount: { type: "number", req: false }, tool_name: { type: "string", req: false }, universe_id: { type: "number", req: false }, wire: { type: "boolean", req: false, desc: "false = do not write the handler" } } },
+    { name: "gamepass_update", description: "Change a game pass's name, description, price or for_sale flag.", params: { gamepass_id: { type: "number", req: true }, name: { type: "string", req: false }, description: { type: "string", req: false }, price: { type: "number", req: false }, for_sale: { type: "boolean", req: false } } },
+    { name: "gamepass_list", description: "List this universe's game passes (id, name, price).", params: { universe_id: { type: "number", req: false } } },
   ];
 
   const orig = RobloxScriptSkills.buildLuau;
