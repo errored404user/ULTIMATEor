@@ -59,6 +59,25 @@ const RSProvider = (() => {
     return true;
   }
 
+  const CODE_CHROME_SEL = "[class*='line-number' i], [class*='linenumber' i], [class*='lineno' i], [class*='gutter' i], [data-line-number], .react-syntax-highlighter-line-number, [class*='code-header' i], [class*='codeHeader'], [class*='code-toolbar' i], [class*='CodeToolbar'], [class*='code-lang' i], [class*='language-label' i], [aria-hidden='true'][class*='line']";
+  // Plain text of a <pre>/<code>: token spans concatenated, gutters skipped,
+  // one newline per rendered line (highlighters that wrap each line in a span
+  // or div without a text newline).
+  function codeText(node) {
+    let out = "";
+    const lineish = (el) => el.nodeType === 1 && (el.tagName === "DIV" || (el.tagName === "SPAN" && /\bline\b|^line|code-line|cm-line|token-line/i.test(String(el.className || "")) && !/number|gutter/i.test(String(el.className || ""))));
+    const walk = (n) => {
+      if (n.nodeType === 3) { out += n.nodeValue; return; }
+      if (n.nodeType !== 1) return;
+      if (n.matches && (n.matches(CODE_CHROME_SEL) || n.tagName === "BUTTON")) return;
+      if (n.tagName === "BR") { out += "\n"; return; }
+      const isLine = lineish(n);
+      for (const c of n.childNodes) walk(c);
+      if (isLine && !out.endsWith("\n")) out += "\n";
+    };
+    walk(node);
+    return out.replace(/\u00a0/g, " ");
+  }
   function textWithout(root, excludeSel) {
     if (!root) return "";
     const skip = excludeSel ? `.rs-chip, ${excludeSel}` : ".rs-chip";
@@ -70,6 +89,18 @@ const RSProvider = (() => {
       if (n.tagName === "BR") { t += "\n"; return; }
       // Copy / regenerate / model-name toolbars under a reply are not reply text.
       if (n.tagName === "BUTTON" || (n.getAttribute && n.getAttribute("role") === "toolbar")) return;
+      // Syntax-highlighter chrome inside code blocks: line-number gutters and
+      // the "json / Copy" header would be interleaved with the JSON command and
+      // break the parser ("1 { 2 \"command\": …").
+      if (n.matches && n.matches(CODE_CHROME_SEL)) return;
+      if (n.tagName === "PRE" || n.tagName === "CODE") {
+        // Code is read verbatim (no block-break insertion between token spans).
+        const code = codeText(n);
+        if (t && !t.endsWith("\n")) t += "\n";
+        t += code;
+        if (!t.endsWith("\n")) t += "\n";
+        return;
+      }
       const isBlock = /^(P|DIV|PRE|LI|UL|OL|BLOCKQUOTE|H[1-6]|ARTICLE|SECTION|TABLE|TR)$/.test(n.tagName);
       if (isBlock && t && !t.endsWith("\n")) t += "\n";
       for (const c of n.childNodes) walk(c);
@@ -101,6 +132,24 @@ const RSProvider = (() => {
     return (e.innerText || e.textContent || "").replace(/\u00a0/g, " ");
   };
 
+  // Texts this extension (or the user) sent, by their first 160 characters.
+  // The most reliable user-row signal on a layout we cannot see: a transcript
+  // row whose text starts like something we typed is the user's, whatever its
+  // CSS says. Keeps the last 40.
+  const _sentKeys = [];
+  const sentKey = (t) => String(t || "").replace(/\s+/g, " ").trim().slice(0, 160);
+  function rememberSent(text) {
+    const k = sentKey(text);
+    if (k.length < 8) return;
+    if (!_sentKeys.includes(k)) { _sentKeys.push(k); if (_sentKeys.length > 40) _sentKeys.shift(); }
+  }
+  function looksSent(item) {
+    if (!_sentKeys.length) return false;
+    const k = sentKey(item && (item.innerText || item.textContent));
+    if (k.length < 8) return false;
+    const head = k.slice(0, 60);
+    return _sentKeys.some((sk) => sk.startsWith(head) || k.startsWith(sk.slice(0, 60)));
+  }
   function roleOf(item) {
     if (!item) return "";
     const a = (item.getAttribute("data-message-role") || item.getAttribute("data-role") || item.getAttribute("data-author") || item.getAttribute("data-author-role") || "").toLowerCase();
@@ -196,6 +245,7 @@ const RSProvider = (() => {
     const r = roleOf(item);
     if (/user|human/.test(r)) return true;
     if (/assistant|agent|ai|model|system/.test(r)) return false;
+    if (looksSent(item)) return true;
     const cls = String(item && item.className || "");
     if (/\bml-auto\b|justify-end|items-end|self-end|flex-row-reverse/.test(cls)) return true;
     // A user bubble is usually a right-aligned box without markdown chrome.
@@ -457,6 +507,7 @@ const RSProvider = (() => {
     editor.focus();
     await sleep(40);
     text = truncateForSend(text);
+    rememberSent(text);
     setRichText(editor, text);
     await sleep(80);
     if (images && images.length) {
@@ -551,6 +602,7 @@ const RSProvider = (() => {
       const ed = getEditor();
       if (!ed || !ed.contains(e.target)) return;
       if (editorText().trim() === "") return;
+      rememberSent(editorText());
       if (handlers.isBlocked()) return;
       if (!handlers.isStarted()) {
         if (!chatIsEmpty()) return;
@@ -568,6 +620,7 @@ const RSProvider = (() => {
       const isSend = (S.sendAria.test(ariaOf(btn)) || btn.type === "submit") && nearComposer(btn);
       if (!isSend) return;
       if (btn.disabled) return;
+      rememberSent(editorText());
       if (handlers.isBlocked()) return;
       if (!handlers.isStarted()) {
         if (!chatIsEmpty()) return;
@@ -601,7 +654,10 @@ const RSProvider = (() => {
     // instead of the full 180k-character catalogue dump.
     compactCommandList: true,
     commandListMaxChars: 12000,
-    promptExtra: "Vani Chat: the thread is a plain markdown chat and guest sessions are not saved — never rely on an earlier page load. Keep replies short; one command per reply. If Vani reports that the free allowance is used up, stop and tell the user to log in.",
+    // Guest chat has a shared allowance and an unknown per-message cap: use the
+    // compact system prompt (same as ChatGPT) so the bootstrap always lands.
+    sysMaxChars: 14000,
+    promptExtra: "Vani Chat rules: this is a plain markdown chat with NO native tools - the ONLY way to act is to write the command as text. Every command goes in ONE fenced code block: three backticks, the word json, a newline, then exactly {\"command\":\"name\",\"params\":{...}} and a closing three backticks (execute_luau uses the ###LUA### markers inside a plain fenced block instead). Never say you cannot run code or use JSON blocks - you only have to WRITE the block; the extension on this page executes it and pastes the result back as the next user message. One command per reply, then stop and wait for the result. Guest sessions are not saved - never rely on an earlier page load. If Vani reports that the free allowance is used up, stop and tell the user to log in.",
     timings,
     thinkingSel: ".reasoning, [class*='thinking' i], [class*='reason' i], [class*='thought' i], [data-testid*='reasoning' i], details summary",
     init({ diag: d } = {}) {

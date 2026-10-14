@@ -1495,6 +1495,20 @@ const RSProvider = (() => {
       return (now - _stopSince < 300000) || (now - _streamAt < 300000);
     }
     _stopSince = 0;
+    // Fast path (1.22.0): a CLOSED command block that stopped growing 3 s ago
+    // is a finished turn - the agent writes one command per reply - so do not
+    // sit out the full 9 s quiet window that plain prose needs. Native
+    // workflow rows ("Working…") still hold the turn open.
+    const idle = Date.now() - _streamAt;
+    if (_streamMax > 1 && idle >= 3000 && idle < 9000) {
+      try {
+        const item = lastAssistant();
+        if (!activeWorkflowProgress(item) && typeof RSParse !== "undefined") {
+          const reply = streamText(item);
+          if (!RSParse.hasOpenToolBlock(reply) && RSParse.parseToolCalls(reply).length > 0) return false;
+        }
+      } catch {}
+    }
     return grewWithin(9000);
   }
   const isGenerating = genActive;

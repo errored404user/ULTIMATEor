@@ -1714,21 +1714,21 @@
       sub: "Luau systems · Modeling · Architecture — production-grade, verified",
       note: "Flagship mode: senior Luau engineer and 3D modeler in one. Full scripting, instance, physics, build and terrain arsenal, continuous autonomy, deep verification.",
       toast: "Ultimate Work Mode — senior Luau engineer + modeler, full arsenal, every build verified",
-      focus: /^(script_|model_|memory_|execute_luau|multi_edit|search_game_tree|search_files|inspect_instance|get_studio_state|get_console_output|audit_(script_errors|unanchored_parts)|instance_|part_(create|at|above)|meshpart_create|wedge_create|model_group|(scale|rotate|mirror|flatten|raise|ungroup)_model|set_primary_part|pivot_(set|to)|cframe_set|rotation_set|size_set|snap_(position|to_grid)|grid_clone|duplicate_n|weld_(assemble|constraint)|constraint_create|constraints_clear|rigid_constraint_create|hinge_create|rope_create|attachment_create|align_(position|orientation)_create|material_set|color_set|brickcolor_set|transparency_set|reflectance_set|texture_add|decal_(add|set)|mesh_set_texture|generate_(mesh|material|procedural_model)|terrain_|staircase_generate|archway_generate|roof_structure_build|fence_line_build|road_path_build|bridge_suspension_make|window_glass_install|tree_forest_scatter|dungeon_room_generate|ground_make|water_body|folder_create|attribute_(get|set)|tag_(add|remove)|remote_|bindable_|datastore_setup|ds_|leaderstats_|collision_(set|group_set)|physics_|anchored_set|get_(children|descendants|property|service|template)|set_property|property_copy|selection_(info|set)|script_analysis|or_debug|or_screenshot|start_stop_play|place_backup_save|workspace_(stats|list|export|import))/,
+      focus: /^(script_|model_|memory_|execute_luau|multi_edit|module_scaffold|remote_scaffold|datastore_profile_scaffold|tag_scaffold|project_health_report|search_game_tree|search_files|inspect_instance|get_studio_state|get_console_output|audit_(script_errors|unanchored_parts)|instance_|part_(create|at|above)|meshpart_create|wedge_create|model_group|(scale|rotate|mirror|flatten|raise|ungroup)_model|set_primary_part|pivot_(set|to)|cframe_set|rotation_set|size_set|snap_(position|to_grid)|grid_clone|duplicate_n|weld_(assemble|constraint)|constraint_create|constraints_clear|rigid_constraint_create|hinge_create|rope_create|attachment_create|align_(position|orientation)_create|material_set|color_set|brickcolor_set|transparency_set|reflectance_set|texture_add|decal_(add|set)|mesh_set_texture|generate_(mesh|material|procedural_model)|terrain_|staircase_generate|archway_generate|roof_structure_build|fence_line_build|road_path_build|bridge_suspension_make|window_glass_install|tree_forest_scatter|dungeon_room_generate|ground_make|water_body|folder_create|attribute_(get|set)|tag_(add|remove)|remote_|bindable_|datastore_setup|ds_|leaderstats_|collision_(set|group_set)|physics_|anchored_set|get_(children|descendants|property|service|template)|set_property|property_copy|selection_(info|set)|script_analysis|or_debug|or_screenshot|start_stop_play|place_backup_save|workspace_(stats|list|export|import))/,
     },
     visualizer: {
       name: "Visualizer", badge: "VISUALIZER", short: "Visualizer",
       sub: "VFX · Lighting · UI — layered, cinematic, screenshot-verified",
       note: "VFX, lighting and UI specialist on top of Ultimate: mood, layered effects, design-system UI, screenshot-verified polish.",
       toast: "Visualizer Work Mode — full VFX, lighting and UI arsenal, screenshot-verified",
-      focus: /^(fx_|vfx_|sfx_|ui_|gui_|lighting|light_|atmosphere|sky_|bloom|blur|color_correction|fog_|film_|weather_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|point_light|spot_light|surface_light|explosion|shadows|cast_shadow|set_future_lighting|snowfall|volcanic|firefly|portal_vfx|screen_shake|toast_show|notification_toast|radial_menu|level_up_ui|loading_screen|performance_monitor_gui|surface_gui|billboard_gui|starter_gui|text_label|text_button|image_label|frame_create|texture_add|mesh_set_texture|directional_audio|query_(particle|beams|trails|lights|lighting|screen_guis|frames|text_labels|buttons|image_labels|ui_)|inspect_(lighting|startergui|coregui)|or_screenshot)/,
+      focus: /^(fx_|vfx_|sfx_|ui_|gui_|lighting|light_|postfx_|atmosphere|sky_|bloom|blur|color_correction|fog_|film_|weather_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|point_light|spot_light|surface_light|explosion|shadows|cast_shadow|set_future_lighting|snowfall|volcanic|firefly|portal_vfx|screen_shake|toast_show|notification_toast|radial_menu|level_up_ui|loading_screen|performance_monitor_gui|surface_gui|billboard_gui|starter_gui|text_label|text_button|image_label|frame_create|texture_add|mesh_set_texture|directional_audio|query_(particle|beams|trails|lights|lighting|screen_guis|frames|text_labels|buttons|image_labels|ui_)|inspect_(lighting|startergui|coregui)|or_screenshot)/,
     },
     animator: {
       name: "Animator", badge: "ANIMATOR", short: "Animator",
       sub: "Rigs · Keyframes · Tweens · Camera — motion-first, preview-verified",
       note: "Animation specialist on top of Ultimate: rigs, keyframes, easing, tweens, IK and camera beats, preview-verified.",
       toast: "Animator Work Mode — full animation editor, tween and camera arsenal, preview-verified",
-      focus: /^(animation_|anim_|tween|spring_|motor6d|ik_|character_emote|facial_animation|camera_|cutscene|walkspeed|query_(animations|keyframes)|inspect_tweenservice|or_screenshot)/,
+      focus: /^(animation_|anim_|tween|spring_|motor6d|rig_|ik_|character_emote|facial_animation|camera_|cutscene|walkspeed|query_(animations|keyframes)|inspect_tweenservice|or_screenshot)/,
     },
   };
   const WORK_MODE_IDS = Object.keys(WORK_MODES);
@@ -2027,7 +2027,11 @@
     diag("tools.fetched", { ms: Date.now() - t0, n: (r && r.tools && r.tools.length) || 0, mcpAvailable:!!(r&&r.ok) });
     {
       const tools = (r&&Array.isArray(r.tools)?r.tools:[]).filter((t) => !isBlockedTool(t.name));
-      const addOffline=(rows,server)=>{for(const t of rows||[])if(t&&t.name&&!tools.some(x=>x.name===t.name))tools.push({name:t.name,description:t.description||"OrScript command",inputSchema:t.inputSchema||t.parameters||{type:"object",properties:{}},server});};
+      // Virtual packs describe params as {type, req, desc}; convert to a real
+      // JSON schema so signatures, required-param checks and the registry see
+      // the same contract the pack's own describeCommands() prints.
+      const schemaFromParams=(pm)=>{const props={},req=[];for(const [k,v] of Object.entries(pm||{})){const t=v&&typeof v==="object"?v:{type:"string"};const prop={type:String(t.type||"string").replace(/\[\]$/,"")};if(/\[\]$|^array|^list/.test(String(t.type||"")))prop.type="array";if(t.desc)prop.description=t.desc;if(Array.isArray(t.enum))prop.enum=t.enum;props[k]=prop;if(t.req)req.push(k);}return {type:"object",properties:props,required:req};};
+      const addOffline=(rows,server)=>{for(const t of rows||[])if(t&&t.name&&!tools.some(x=>x.name===t.name))tools.push({name:t.name,description:t.description||"OrScript command",inputSchema:t.inputSchema||t.parameters||(t.params?schemaFromParams(t.params):{type:"object",properties:{}}),server,virtual:true});};
       try{if(typeof RobloxScriptSkills!=="undefined")addOffline(RobloxScriptSkills.SKILL_COMMANDS,"roblox");}catch{}
       try{if(typeof RSAnim!=="undefined")addOffline(RSAnim.ANIM_COMMANDS,"roblox");}catch{}
       try{if(typeof AgentScriptSkills!=="undefined")addOffline(AgentScriptSkills.SKILL_COMMANDS,"local");}catch{}
@@ -2209,21 +2213,195 @@
   }
   // Bounded anti-drift reminder for compact providers: exact command names
   // only (work-mode focus first), capped so it always fits a Notion message.
+  // ── Command index helpers ───────────────────────────────────────────────
+  // A "signature" is the one-line callable form of a command:
+  //   name {a, b?, c?:x|y}   (? = optional, x|y = enum)
+  // Signatures are ~45 characters, so the whole 750-command catalogue fits in
+  // ~35k characters and every command can be CALLED DIRECTLY without a second
+  // list_commands round trip for its schema. Detail lines (descriptions, param
+  // docs, tested-usage notes) are reserved for the primitives and the current
+  // work mode's focus family; everything else is a signature.
+  const PRIORITY_COMMAND_RE = /^(?:get_studio_state|selection_info|inspect_instance|search_game_tree|script_read|script_search|script_grep|multi_edit|execute_luau|instance_new|get_children|find_first_child|part_create|ui_build|or_status|or_screenshot|or_debug|get_template|list_commands|model_build|script_replace|script_insert|memory_read|memory_add_fact)$/;
+  const nameFromLine = (line) => (String(line).match(/^\s*([A-Za-z_][\w.-]*)\s*[:({]/) || [])[1];
+  function toolSignature(t) {
+    const schema = (t && t.inputSchema) || {};
+    const props = schema.properties || {};
+    const req = new Set(Array.isArray(schema.required) ? schema.required : []);
+    // studio_id is injected by the bridge for every Studio tool - never shown.
+    const parts = Object.entries(props).filter(([k]) => k !== "studio_id").map(([k, v]) => {
+      v = v || {};
+      const en = Array.isArray(v.enum) && v.enum.length <= 5 ? v.enum.join("|") : null;
+      const ty = en ? ":" + en : v.type === "array" ? ":[]" : v.type === "object" ? ":{}" : "";
+      return k + (req.has(k) ? "" : "?") + ty;
+    });
+    return `${t.name} {${parts.join(", ")}}`;
+  }
+  // Signature from a virtual-tool description block ("name: desc\n    a?:type ...").
+  function sigFromLine(line) {
+    const str = String(line || "");
+    const nm = nameFromLine(str);
+    if (!nm) return null;
+    const rest = str.split("\n").slice(1).join("\n");
+    const parts = [];
+    const re = /(?:^\s+|,\s*)([A-Za-z_]\w*)(\??)\s*:/gm;
+    let m;
+    while ((m = re.exec(rest))) { if (!parts.some((x) => x.replace(/\?$/, "") === m[1])) parts.push(m[1] + m[2]); }
+    return `${nm} {${parts.join(", ")}}`;
+  }
+  // Pack signatures several per line (line count is what costs on composers
+  // that type text in; characters are nearly free). Returns the text and how
+  // many were omitted once the character or line budget ran out.
+  function packSignatures(sigs, limitChars, limitLines) {
+    const out = []; let cur = ""; let used = 0; let omitted = 0;
+    const flush = () => { if (cur) { out.push(cur); cur = ""; } };
+    for (const sg of sigs) {
+      const add = (cur ? "  ·  " : "") + sg;
+      if (used + add.length + 1 > limitChars || (out.length >= limitLines && !cur) || (out.length >= limitLines - 1 && cur.length + add.length > 170)) { omitted++; continue; }
+      if (cur && cur.length + add.length > 170) { flush(); if (out.length >= limitLines) { omitted++; continue; } cur = sg; used += sg.length + 1; continue; }
+      cur += add; used += add.length + 1;
+    }
+    flush();
+    return { text: out.join("\n"), omitted, lines: out.length, chars: used };
+  }
+  // Full detail line for a bridge tool (description + param docs + usage note).
+  function toolDetailLine(t) {
+    const props = (t.inputSchema && t.inputSchema.properties) || {};
+    const req = new Set((t.inputSchema && t.inputSchema.required) || []);
+    const compact = [];
+    const detailed = [];
+    for (const [k, v] of Object.entries(props)) {
+      if (k === "studio_id") continue; // injected by the bridge (callStudioToolWithId)
+      const items = v.items && typeof v.items === "object" ? v.items : null;
+      const itemProps = items && items.properties;
+      const mark = req.has(k) ? "" : "?";
+      if (v.type === "array" && itemProps) {
+        const itemReq = new Set(items.required || []);
+        const fields = Object.entries(itemProps).map(([ik, iv]) => {
+          const en = Array.isArray(iv.enum) && iv.enum.length <= 12 ? `(${iv.enum.join("|")})` : (iv.type || "any");
+          return `${ik}${itemReq.has(ik) ? "" : "?"}:${en}`;
+        });
+        detailed.push(`    ${k}${mark}: array [each item: {${fields.join(", ")}}]${v.description ? " - " + v.description : ""}`);
+      } else if (v.description && v.description.length > 45) {
+        detailed.push(`    ${k}${mark}: ${v.type || "any"} - ${v.description}`);
+      } else {
+        const ty = Array.isArray(v.enum) && v.enum.length <= 8 ? `(${v.enum.join("|")})` : (v.type || "any");
+        compact.push(`${k}${mark}:${ty}${v.description ? ` "${v.description}"` : ""}`);
+      }
+    }
+    const paramLines = [compact.length ? `    ${compact.join(", ")}` : "", ...detailed].filter(Boolean).join("\n");
+    const note = RS.TOOL_NOTES[bareToolName(t.name)];
+    const noteStr = note ? `\n    ⚠ ${note}` : "";
+    return `${t.name}: ${(t.description || "").split("\n")[0]}${paramLines ? "\n" + paramLines : ""}${noteStr}`;
+  }
+  // Schema text for ONE command by name (native tool or virtual skill line),
+  // used by error feedback so the model can fix a call without list_commands.
+  function schemaTextFor(name) {
+    const bare = bareToolName(name);
+    try {
+      const t = A.toolList.find((x) => x && (x.name === name || bareToolName(x.name) === bare));
+      if (t && !t.virtual) return toolDetailLine(t);
+      const pools = [];
+      try { pools.push(...RSAnim.describeCommands()); } catch {}
+      try { if (typeof RobloxScriptSkills !== "undefined") pools.push(...RobloxScriptSkills.describeCommands()); } catch {}
+      try { if (typeof AgentScriptSkills !== "undefined") pools.push(...AgentScriptSkills.describeCommands()); } catch {}
+      const line = pools.find((l) => nameFromLine(l) === bare);
+      if (line) return line;
+      if (t) return toolDetailLine(t);
+    } catch {}
+    return "";
+  }
+  function requiredParamsMissing(t, args) {
+    const schema = (t && t.inputSchema) || {};
+    const req = Array.isArray(schema.required) ? schema.required : [];
+    const a = args && typeof args === "object" ? args : {};
+    // studio_id is injected by the bridge layer (callStudioToolWithId), never by the model.
+    return req.filter((k) => k !== "studio_id" && (a[k] === undefined || a[k] === null || a[k] === ""));
+  }
+  // The command catalogue returned by a broad list_commands. One builder for
+  // every provider: detail lines for primitives + focus family (skipped on
+  // compact composers), signatures for everything else, names only when even
+  // signatures do not fit. Nothing is ever listed twice.
+  function buildCatalogue(o) {
+    const { toolName, requested, nativeTools, virtualLines, webLines, focusBlock, focusNames, compact, limit, lineLimit } = o;
+    const entries = []; const seen = new Set();
+    for (const line of virtualLines) {
+      const nm = nameFromLine(line);
+      if (!nm || seen.has(nm)) continue;
+      seen.add(nm); entries.push({ name: nm, detail: String(line), sig: sigFromLine(line) || `${nm} {}`, virtual: true });
+    }
+    for (const t of nativeTools) {
+      if (!t || !t.name || seen.has(t.name)) continue;
+      seen.add(t.name); entries.push({ name: t.name, detail: toolDetailLine(t), sig: toolSignature(t), native: !t.virtual });
+    }
+    const focus = new Set(focusNames || []);
+    const rank = (e) => (PRIORITY_COMMAND_RE.test(e.name) ? 0 : e.native ? 1 : focus.has(e.name) ? 2 : 3);
+    entries.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+    const intro = `Output of '${toolName}':\n${requested} commands - ${entries.length} total${compact ? " (compact index for this chat)" : ""}.\n`
+      + `HOW TO READ: "name {a, b?, c?:x|y}" = call name with a (required), b (optional), c (one of x|y). `
+      + `Every command shown with {…} can be called DIRECTLY - do not fetch its schema first. `
+      + `list_commands {"query":"exact_name"} returns one command's full description and usage notes: use it only when a parameter is unclear or a call errored. `
+      + `list_commands {"query":"keyword"} finds commands that are not shown here.\n\n`;
+    const webBlock = webLines && webLines.length ? `HELPERS:\n${webLines.join("\n")}\n\n` : "";
+    const countLines = (x) => (x ? x.split("\n").length : 0);
+    let usedChars = intro.length + (focusBlock || "").length + webBlock.length;
+    let usedLines = countLines(intro) + countLines(focusBlock) + countLines(webBlock) + 8;
+    const detail = [];
+    if (!compact) {
+      const detailChars = Math.floor(limit * 0.42);
+      const detailLines = Math.floor(lineLimit * 0.5);
+      let dc = 0, dl = 0;
+      for (const e of entries) {
+        const want = PRIORITY_COMMAND_RE.test(e.name) || e.native || focus.has(e.name);
+        if (!want) continue;
+        const ln = countLines(e.detail) + 1;
+        if (dc + e.detail.length + 2 > detailChars || dl + ln > detailLines) continue;
+        detail.push(e.detail); dc += e.detail.length + 2; dl += ln; e.done = true;
+      }
+      usedChars += dc; usedLines += dl;
+    }
+    const rest = entries.filter((e) => !e.done);
+    // Compact: signatures take ~60% of what is left so a name index of the
+    // remaining commands still fits; full: signatures may use everything.
+    const sigBudget = Math.max(800, Math.floor((limit - usedChars - 600) * (compact ? 0.6 : 1)));
+    const sigLines = Math.max(6, lineLimit - usedLines - 4);
+    const packed = packSignatures(rest.map((e) => e.sig), sigBudget, sigLines);
+    const shown = rest.length - packed.omitted;
+    let namesBlock = "", omitted = 0;
+    if (packed.omitted) {
+      const leftover = rest.slice(shown).map((e) => e.name);
+      const nameBudget = Math.max(300, limit - usedChars - packed.chars - 400);
+      let list = "";
+      for (const nm of leftover) { if (list.length + nm.length + 2 > nameBudget) { omitted++; continue; } list += (list ? ", " : "") + nm; }
+      namesBlock = list ? `\n\nMORE COMMANDS (names only - fetch one with list_commands {"query":"name"} before use):\n${list}` : "";
+    }
+    const detailBlock = detail.length ? `PRIMITIVES & ${String((focusBlock || "").match(/━━━ (\w+) WORK MODE/) ? RegExp.$1 : "FOCUS")} FAMILY (full schemas):\n\n${detail.join("\n\n")}\n\n` : "";
+    const sigBlock = packed.text ? `SIGNATURES (callable as shown):\n${packed.text}` : "";
+    const tail = omitted ? `\n[${omitted} more commands omitted - list_commands {"query":"keyword"} finds them.]` : "";
+    return intro + (focusBlock || "") + webBlock + detailBlock + sigBlock + namesBlock + tail;
+  }
   function compactToolsReminder(tools) {
     const limit = Math.max(2000, Number(P.commandListMaxChars) || 6000);
     let focus = [];
     try { focus = workModeFocusNames(normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()), (tools || []).map((t) => t.name)); } catch {}
-    const names = [...new Set([...focus, ...(tools || []).map((t) => t.name).filter(Boolean).sort()])];
+    const byName = new Map((tools || []).filter((t) => t && t.name).map((t) => [t.name, t]));
+    // Focus family + primitives as callable signatures (≈45 chars each) inside
+    // the first half of the budget, every other command as a bare name.
+    const sigNames = [...new Set([...focus, ...[...byName.keys()].filter((n) => PRIORITY_COMMAND_RE.test(n))])].sort();
+    const packed = packSignatures(sigNames.map((n) => toolSignature(byName.get(n))).filter(Boolean), Math.floor(limit * 0.55), 60);
+    const shownSig = new Set(sigNames.slice(0, sigNames.length - packed.omitted));
+    const names = [...byName.keys()].filter((n) => !shownSig.has(n)).sort();
     let list = "", omitted = 0;
+    const nameBudget = limit - packed.chars;
     for (const n of names) {
-      if (list.length + n.length + 2 > limit) { omitted++; continue; }
+      if (list.length + n.length + 2 > nameBudget) { omitted++; continue; }
       list += (list ? ", " : "") + n;
     }
     return "\n\n────────────────────────────────\n" +
       "(System note from OR - this is an automatic REMINDER, not a request and not a new result. " +
       "Do NOT reply to it or run any command because of it; just keep it in mind for your next command.)\n" +
-      "Exact command names: " + list + (omitted ? `\n[${omitted} more names omitted - search by keyword with list_commands.]` : "") +
-      "\nFetch any command's exact parameters with {\"command\":\"list_commands\",\"params\":{\"query\":\"exact_command_name\"}} before first use; never guess parameters.";
+      (packed.text ? "Signatures (? = optional; call directly):\n" + packed.text + "\n" : "") +
+      "Other exact command names: " + list + (omitted ? `\n[${omitted} more names omitted - search by keyword with list_commands.]` : "") +
+      "\nFor a name without a signature, fetch its parameters with {\"command\":\"list_commands\",\"params\":{\"query\":\"exact_command_name\"}} before first use; never guess parameters.";
   }
   function compressToolFeedback(text, name) {
     const s = String(text || "");
@@ -2876,41 +3054,7 @@
       if (!allScoped.length) {
         return `Output of '${name}':\nERROR: no server named "${requested}" is connected. Connected servers: ${[...known].join(", ") || curEng}. Call list_mcp_servers to check.`;
       }
-      let lines = scoped.map((t) => {
-        const props = (t.inputSchema && t.inputSchema.properties) || {};
-        const req = new Set((t.inputSchema && t.inputSchema.required) || []);
-        // Two buckets: simple scalar params get packed onto ONE compact line;
-        // params that need real explanation (array-of-object shape, or a long
-        // description) keep their own line so nothing structurally important
-        // gets flattened away (that per-item shape is what fixed "Unknown …
-        // action: nil" bugs on user_keyboard_input/user_mouse_input).
-        const compact = [];
-        const detailed = [];
-        for (const [k, v] of Object.entries(props)) {
-          const items = v.items && typeof v.items === "object" ? v.items : null;
-          const itemProps = items && items.properties;
-          const mark = req.has(k) ? "" : "?";
-          if (v.type === "array" && itemProps) {
-            const itemReq = new Set(items.required || []);
-            const fields = Object.entries(itemProps).map(([ik, iv]) => {
-              const en = Array.isArray(iv.enum) && iv.enum.length <= 12 ?  `(${iv.enum.join("|")})` : (iv.type || "any");
-              return `${ik}${itemReq.has(ik) ? "" : "?"}:${en}`;
-            });
-            detailed.push(`    ${k}${mark}: array [each item: {${fields.join(", ")}}]${v.description ?  " - " + v.description : ""}`);
-          } else if (v.description && v.description.length > 45) {
-            detailed.push(`    ${k}${mark}: ${v.type || "any"} - ${v.description}`);
-          } else {
-            const ty = Array.isArray(v.enum) && v.enum.length <= 8 ?  `(${v.enum.join("|")})` : (v.type || "any");
-            compact.push(`${k}${mark}:${ty}${v.description ?  ` "${v.description}"` : ""}`);
-          }
-        }
-        const paramLines = [compact.length ?  `    ${compact.join(", ")}` : "", ...detailed].filter(Boolean).join("\n");
-        // Tested usage note for the error-prone commands - kept full-length
-        // (these are validated fixes for real bugs, not filler).
-        const note = RS.TOOL_NOTES[bareToolName(t.name)];
-        const noteStr = note ?  `\n    ⚠ ${note}` : "";
-        return `${t.name}: ${(t.description || "").split("\n")[0]}${paramLines ?  "\n" + paramLines : ""}${noteStr}`;
-      });
+      let lines = scoped.map(toolDetailLine);
       let animLines = requested === "roblox" ? RSAnim.describeCommands() : [];
       let skillLines = (requested === "roblox" && typeof RobloxScriptSkills !== "undefined") ? RobloxScriptSkills.describeCommands() : [];
       let agentLines = (requested === "local" && typeof AgentScriptSkills !== "undefined") ? AgentScriptSkills.describeCommands() : [];
@@ -2954,72 +3098,61 @@
       // Specialist work modes surface their command family FIRST, by exact
       // name, on every broad catalogue request - so even compact providers
       // see the full VFX/UI or animation arsenal before anything else.
-      const nameFromLine = (line) => (String(line).match(/^\s*([A-Za-z_][\w.-]*)\s*[:({]/) || [])[1];
       let focusBlock = "";
       let focusMode = "ultimate";
       try { focusMode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
+      let focusNames = [];
       if (!commandQuery && WORK_MODES[focusMode] && WORK_MODES[focusMode].focus) {
-        const focusNames = workModeFocusNames(focusMode, [
+        focusNames = workModeFocusNames(focusMode, [
           ...scoped.map((t) => t.name), ...[...animLines, ...skillLines, ...agentLines, ...webLines].map(nameFromLine),
         ]);
-        if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily ━━━\n${focusNames.join(", ")}\n(Request any exact schema with list_commands {query:"exact_name"} before first use.)\n\n`;
+        // Compact composers get the header only - the family is listed first
+        // (as signatures) in the index anyway, so the name list would be paid twice.
+        if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily (all listed with their signatures below) ━━━\n${P.compactCommandList ? "" : focusNames.join(", ") + "\n"}\n`;
       }
-      if (P.compactCommandList) {
-        const virtualNames = [...animLines, ...skillLines, ...agentLines].map(nameFromLine).filter(Boolean);
-        const helperNames = [
-          "or_screenshot", "or_debug", "get_template", "or_status", "web_fetch",
-          "web_search", "capture_id", "or_agent", "developer_product_create",
-          "developer_product_list",
-        ];
-        const resultNames = [...new Set([
-          ...scoped.map((t) => t.name).filter(Boolean),
-          ...virtualNames,
-          ...(!commandQuery ? helperNames : helperNames.filter(queryMatches)),
-        ])].sort();
-        if (commandQuery && resultNames.length > 12) {
-          const limit = Math.max(1800, Number(P.commandListMaxChars) || (P.compactCommandList ? 6000 : 9000));
-          const intro = `Output of '${name}':\nQuery "${commandQuery}" matched ${resultNames.length} commands:\n`;
-          const guide = `\n\nChoose one exact name, then call `
-            + `{"command":"list_commands","params":{"query":"exact_command_name"}} `
-            + `to get its complete required parameters. Do not guess parameters.`;
-          const chosen = [];
-          let used = intro.length + guide.length;
-          for (const commandName of resultNames) {
-            const cost = commandName.length + (chosen.length ? 2 : 0);
-            if (used + cost > limit - 100) break;
-            chosen.push(commandName);
-            used += cost;
-          }
-          const omitted = resultNames.length - chosen.length;
-          const marker = omitted > 0 ? `\n[${omitted} additional matches omitted; narrow the keyword.]` : "";
-          return intro + chosen.join(", ") + marker + guide;
+      const compact = !!P.compactCommandList;
+      const limit = compact
+        ? Math.max(2500, Number(P.commandListMaxChars) || 9000)
+        : Math.max(12000, Number(P.commandListMaxChars) || 70000);
+      const lineLimit = Math.max(40, Number(P.commandListMaxLines) || (compact ? 400 : 1200));
+      if (commandQuery) {
+        const matched = scoped.length + animLines.length + skillLines.length + agentLines.length;
+        // Keyword searches with many hits come back as signatures (callable),
+        // not bare names - one round trip instead of two.
+        if (matched > (compact ? 12 : 40)) {
+          const sigs = [...new Set([
+            ...scoped.map(toolSignature),
+            ...[...animLines, ...skillLines, ...agentLines].map(sigFromLine).filter(Boolean),
+          ])].sort();
+          const intro = `Output of '${name}':\nQuery "${commandQuery}" matched ${matched} commands (signatures; ? = optional):\n`;
+          const guide = `\n\nCall one directly with the params shown, or list_commands {"query":"exact_name"} for its full description.`;
+          const packed = packSignatures(sigs, Math.max(1800, limit - intro.length - guide.length - 200), lineLimit);
+          const marker = packed.omitted > 0 ? `\n[${packed.omitted} additional matches omitted; narrow the keyword.]` : "";
+          return intro + packed.text + marker + guide + (webLines.length ? "\n\n" + webLines.join("\n") : "");
         }
-        if (!commandQuery) {
-          const limit = Math.max(2500, Number(P.commandListMaxChars) || 9000);
-          const priority = /^(?:get_studio_state|selection_info|inspect_instance|search_game_tree|script_read|script_search|script_grep|multi_edit|execute_luau|instance_new|get_children|find_first_child|part_create|ui_build|or_status|or_screenshot|or_debug|get_template)$/;
-          const allNames = [...new Set([
-            ...allScoped.map((t) => t.name).filter(Boolean), ...virtualNames, ...helperNames,
-          ])].sort((a, b) => Number(priority.test(b)) - Number(priority.test(a)) || a.localeCompare(b));
-          const intro = `Output of '${name}':\n${requested} commands (${allNames.length} total; compact browser index):\n\nCOMMAND NAMES:\n`;
-          const guide = `\n\nThe complete catalogue is searchable and was intentionally shortened so the chat can send it. `
-            + `Before using any command, fetch its exact schema with `
-            + `{"command":"list_commands","params":{"query":"exact_command_name"}}. `
-            + `That response contains all required parameters and usage notes. Never guess parameters.`;
-          const chosen = [];
-          let used = intro.length + guide.length;
-          for (const commandName of allNames) {
-            const cost = commandName.length + (chosen.length ? 2 : 0);
-            if (used + cost > limit - 100) break;
-            chosen.push(commandName);
-            used += cost;
-          }
-          const omitted = allNames.length - chosen.length;
-          const marker = omitted > 0 ? `\n[${omitted} additional names omitted; search by task keyword, then request one exact schema.]` : "";
-          return intro + focusBlock + chosen.join(", ") + marker + guide;
-        }
+        return `Output of '${name}':\n${requested} commands (${scoped.length}${virtualCount ? ` + ${virtualCount} OR virtual tools` : ""}):\n\n${lines.join("\n\n")}${animLines.length ? "\n\n" + animLines.join("\n\n") : ""}${skillLines.length ? "\n\n" + skillLines.join("\n\n") : ""}${agentLines.length ? "\n\n" + agentLines.join("\n\n") : ""}${webLines.length ? "\n\n" + webLines.join("\n") : ""}`;
       }
-
-      return `Output of '${name}':\n${focusBlock}${requested} commands (${scoped.length}${virtualCount ?  ` + ${virtualCount} OR virtual tools` : ""}):\n\n${lines.join("\n\n")}${animLines.length ?  "\n\n" + animLines.join("\n\n") : ""}${skillLines.length ?  "\n\n" + skillLines.join("\n\n") : ""}${agentLines.length ?  "\n\n" + agentLines.join("\n\n") : ""}\n\n${webLines.join("\n")}`;
+      const helperNames = [
+        "or_screenshot", "or_debug", "get_template", "or_status", "web_fetch",
+        "web_search", "capture_id", "or_agent", "developer_product_create",
+        "developer_product_list",
+      ];
+      const helperTools = helperNames
+        .filter((hn) => !allScoped.some((t) => t.name === hn))
+        .map((hn) => A.toolList.find((t) => t && t.name === hn))
+        .filter(Boolean);
+      // Header lines of the virtual packs ("— RobloxScript animation tools: …")
+      // carry the flow notes; keep them at the top of the virtual section.
+      const headers = [...animLines, ...skillLines, ...agentLines].filter((l) => !nameFromLine(l));
+      const out = buildCatalogue({
+        toolName: name, requested,
+        nativeTools: [...allScoped, ...helperTools],
+        virtualLines: [...animLines, ...skillLines, ...agentLines],
+        webLines: [...headers, ...webLines],
+        focusBlock, focusNames, compact, limit, lineLimit,
+      });
+      diag("list_commands.catalogue", { compact, limit, lineLimit, chars: out.length, lines: out.split("\n").length });
+      return out;
     }
     // ── Virtual animation tools ──────────────────────────────────────────
     // Create/edit Roblox animation KEYFRAME DATA (KeyframeSequence/Keyframe/
@@ -3135,7 +3268,17 @@
       return `ERROR calling '${name}': ${r.error || "Blender call failed"}`;
     }
     if (A.toolNames.size && !A.toolNames.has(name) && !A.toolNames.has(bareName)) {
-      return RS.FEEDBACK.unknownTool(name, [...A.toolNames]);
+      // Append the callable signatures of the suggested names so the model can
+      // fix the call in its next reply instead of running list_commands first.
+      let msg = RS.FEEDBACK.unknownTool(name, [...A.toolNames]);
+      try {
+        const m = msg.match(/Did you mean: ([^?]+)\?/);
+        if (m) {
+          const sigs = m[1].split(/,\s*/).map((nm) => A.toolList.find((t) => t && t.name === nm.trim())).filter(Boolean).map(toolSignature);
+          if (sigs.length) msg += `\nSignatures (? = optional): ${sigs.join("  ·  ")}`;
+        }
+      } catch {}
+      return msg;
     }
     // Normalize common model aliases before validation. The canonical schema is
     // parent_path, but older skill examples used parent/parentPath/host_path.
@@ -3169,6 +3312,18 @@
           if (String(last || "").startsWith("ERROR")) return last;
         }
         return last;
+      }
+    }
+    // Pre-flight against the cached schema: a call missing a required parameter
+    // is answered instantly WITH the schema, instead of a bridge round trip that
+    // comes back "x is required" and a second round trip for list_commands.
+    // Native bridge tools only - virtual packs accept aliases their schema does
+    // not list and validate themselves.
+    if (!args._orChunk) {
+      const schemaTool = A.toolList.find((t) => t && !t.virtual && (t.name === name || bareToolName(t.name) === bareName));
+      const missing = schemaTool ? requiredParamsMissing(schemaTool, args) : [];
+      if (missing.length) {
+        return `ERROR MISSING_PARAMS calling '${name}': required parameter(s) not provided: ${missing.join(", ")}.\nSchema:\n${toolDetailLine(schemaTool)}\nFix the call and retry now - no list_commands needed.`;
       }
     }
     const timeout = name === "execute_luau" ? 20000 : bareName === "script_read" ? 30000 : 120000;
@@ -3207,7 +3362,8 @@
     // Re-shape those into a real ERROR so the model corrects the call instead
     // of misreading it as tool output.
     if (r.ok && r.text && /^[\w .'"-]{0,60}\bis (required|not available|invalid)\b[\w .'"-]{0,80}$/i.test(r.text.trim())) {
-      return `ERROR calling '${name}': ${r.text.trim()}.\nA required or invalid parameter - check the command's parameters with list_commands, fix the call and retry.`;
+      const schemaText = schemaTextFor(name);
+      return `ERROR calling '${name}': ${r.text.trim()}.\nA required or invalid parameter.${schemaText ? ` Schema:\n${schemaText}\n` : " Check the command's parameters with list_commands, "}Fix the call and retry.`;
     }
     // The Roblox MCP also reports Luau PARSE/RUNTIME errors as a SUCCESS whose
     // text is the executor's own stack trace ("…ExecuteLuauTool:139: …

@@ -1349,6 +1349,10 @@ const RSProvider = (() => {
     // larger; ChatGPT does not need that cost because list_commands supplies the
     // live schemas on demand and the compact prompt preserves the command rules.
     sysMaxChars: 14000,
+    // list_commands catalogue line budget: ChatGPT's composer is typed in line
+    // chunks (SEND_MAX_LINES = 600), so the catalogue must stay under it or the
+    // model receives a head/tail-truncated index and keeps re-querying.
+    commandListMaxLines: 560,
     supportsVision: true,
     // No coverOffsetY: the cover is centred on coverTarget(), the scrolling text
     // band, whose rect centre already lines up with the composer's icons. (Sizing
