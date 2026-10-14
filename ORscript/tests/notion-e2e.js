@@ -341,6 +341,9 @@ const SHOT = !!process.env.SHOT; // SHOT=1 → screenshot / studio_id scenario (
 //   code string (what Notion's model actually writes), 3 = JSON envelope whose
 //   code is a nested ```lua fence.
 const STATE = Number(process.env.STATE || 0);
+// HELP=1 → the model answers a "how do templates work" question with orscript_help
+// (1.23.1 regression: "Internal loop error: FEATURE_HELP_TOPICS is not defined").
+const HELP = !!process.env.HELP;
 w.chrome.storage.local.set({ rsAllowPlaytest: true, rsDebugDiagnostics: !!process.env.DIAG, rsMultiAgent: CREW, ...(process.env.ASK ? { rsPermMode: "ask" } : {}) });
 
 // ── load the bundle ───────────────────────────────────────────────────────
@@ -392,6 +395,11 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     const cmd = (name, params) => "```json\n" + JSON.stringify({ command: name, params }) + "\n```";
     onUserMessage = async (text) => {
       phase++;
+      if (HELP && phase >= 3) {
+        if (phase === 3) await replyWith("Let me check how this build does it.\n" + cmd("orscript_help", { question: "how do templates work in orscript?" }));
+        else await replyWith("Templates are reusable task recipes saved in the OR menu. Done.");
+        return;
+      }
       if (SHOT && phase >= 3) {
         if (phase === 3) await replyWith("Let me look at the viewport first.\n" + cmd("or_screenshot", { target: "studio" }));
         else if (phase === 4) await replyWith("Now the raw tool.\n" + cmd("screen_capture", {}));
@@ -482,6 +490,17 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       if (process.env.ASK) ok("execute_luau asked for approval exactly once and ran after Allow", approvals.length === 1 && /execute_luau/.test(approvals[0].op) && d.getElementById("rs-approve").parentElement === d.documentElement, JSON.stringify(approvals));
       ok("no OR-internal flags leaked to the bridge", !toolCalls.some((c) => Object.keys(c.arguments || {}).some((k) => /^_or/.test(k))), JSON.stringify(toolCalls.map((c) => Object.keys(c.arguments || {}))));
       await sleep(1000);
+      ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
+      return;
+    }
+    if (HELP) {
+      await waitFor(() => userMessages.length >= 4, 40000, "orscript_help result");
+      ok("orscript_help answered without an Internal loop error", !/Internal loop error|is not defined|ERROR/.test(userMessages[3]) && /Output of 'orscript_help'/.test(userMessages[3]), userMessages[3].slice(0, 160).replace(/\n/g, " "));
+      ok("orscript_help resolved the templates topic", /"topic": "templates"/.test(userMessages[3]) && /"agentStarted": false/.test(userMessages[3]), userMessages[3].slice(0, 120).replace(/\n/g, " "));
+      ok("orscript_help executed nothing in Studio", !toolCalls.some((c) => c.name === "execute_luau" && !/GetLogHistory/.test(String(c.arguments && c.arguments.code || ""))), JSON.stringify(toolCalls.map((c) => c.name)));
+      await waitFor(() => (w.__rsDiag || []).some((e) => e.event === "loop.end"), 30000, "loop.end");
+      ok("agent loop ended after the final text reply", true);
+      await sleep(800);
       ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
       return;
     }

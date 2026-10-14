@@ -20,6 +20,8 @@ assert(main.includes('callStudioToolWithId(screenTool.name, callArgs, 90000, A.a
 assert(!/\bstudioConnected\b/.test(main), "renderBar must not read the undefined studioConnected");
 assert(main.includes('txt.textContent = currentEngine === "local" ? "AS Connected" : "RS Connected";'), "status pill uses currentEngine");
 assert(!main.includes('actionBtn.title = currentMode === "local"'), "tooltips use currentEngine");
+assert(!/^\s*try \{ createCheckpoint\(name, args\); \} catch \{\}/m.test(main) && main.includes("window.__rsBeforeTool(name, args)") && main.includes("window.__rsAfterTool(name, args, ok, res)") && main.includes("window.__rsAfterTool = (op, args, ok, res) =>"), "runTool must reach checkpoint/session/perf helpers through the ui hooks (direct calls were swallowed ReferenceErrors)");
+assert(!/ZSParse/.test(fs.readFileSync("src/providers/notion.js", "utf8")), "notion.js must use RSParse (ZSParse was a stale rename)");
 assert(!main.includes("scanProject(projectFile)") || main.includes("async function scanProject(file)"), "template editor must only call scanProject when it is defined (1.23.0 restored the Project panel)");
 assert(main.includes('typeof dispatchPublicItemTool === "function"'), "public_item tools fail softly");
 assert(main.includes("window.__rsBuildMenu = buildMenu"), "theme preview can rebuild the menu from outside build()");

@@ -1581,7 +1581,7 @@ const RSProvider = (() => {
     for (let i = users.length - 1; i >= 0; i--) {
       const text = transcriptText(users[i]).trim();
       if (!text) continue;
-      if ((typeof ZSParse !== "undefined" && ZSParse.isInjectedFeedback(text)) ||
+      if ((typeof RSParse !== "undefined" && RSParse.isInjectedFeedback(text)) ||
           text.includes(RS.SYS_MARKER) || /^\(System .* from ORscript\b/i.test(text)) continue;
       if (RS.isLongUiRequest && RS.isLongUiRequest(text)) return true;
       // A manual "continue" after a provider interruption is still the same UI

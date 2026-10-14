@@ -880,6 +880,22 @@
     {name:"template_propose_improvement",description:"Submit a structurally improved version of an existing user template for before/after review. Never overwrites the original.",inputSchema:{type:"object",required:["originalId","improved","summary"],properties:{originalId:{type:"string"},mode:{type:"string"},improved:{type:"object"},summary:{type:"array",items:{type:"string"}}}},server:"orscript",executionMode:"READ",environment:"GENERAL"},
     {name:"template_test_result",description:"Submit AI static-analysis findings for a template. Must label this STATIC_ANALYSIS and never claim real execution.",inputSchema:{type:"object",required:["templateId","findings"],properties:{templateId:{type:"string"},findings:{type:"array",items:{type:"object"}},summary:{type:"string"}}},server:"orscript",executionMode:"READ",environment:"GENERAL"},
   ];
+  // Knowledge base behind orscript_help (read-only, never starts work).
+  // Keep it factual for THIS build - runTool returns one entry verbatim, or the
+  // {id,title,summary} list when no topic matches.
+  const FEATURE_HELP_TOPICS={
+    templates:{title:"Templates",summary:"Reusable task recipes (name, instructions, steps, commands, variables) saved locally and run from the Templates library in the OR menu.",details:["Open the OR menu → Templates. New template opens the editor with Basics, Instructions, Steps, Project, Commands, Variables, Validation, AI Improvement and Versions tabs.","Templates can be imported/exported as JSON and versioned; AI Improvement asks the current provider for a structurally better draft that you approve before it is saved.","The agent can list and run them with the template_* commands (get_template, template_list, template_run_…) - nothing is mutated without your save."],howTo:["OR menu → Templates → New template","Fill Basics + Instructions, optionally attach a Roblox project in the Project tab","Save, then type the template name or pick it from the library"]},
+    roadmap:{title:"Roadmap / plan",summary:"Optional multi-phase planning: the agent writes phases and tasks, tracks progress, and reports a checklist as work completes.",details:["Toggle Plan in the OR menu. With Plan ON the agent creates a roadmap first (roadmap_create / roadmap_update), then executes phase by phase.","Progress is shown in the chat as the agent ticks tasks; you can ask for the current roadmap or tell it to re-plan.","Plan OFF = direct execution with no roadmap overhead (better for small edits)."],howTo:["OR menu → Plan ON","Describe the whole feature; the agent proposes phases","Approve or edit the plan, then let it run"]},
+    commands:{title:"Commands / tool registry",summary:"ORscript exposes 700+ Studio commands (plus workspace, template, roadmap and help tools) through list_commands, search_commands and get_command.",details:["list_commands returns the catalogue for the active work mode: a UNIVERSAL block (40 inspection/scripting/verification commands present in every mode) followed by the mode family.","search_commands {query} finds commands by name/description; get_command {name} returns the full schema; command_registry_stats summarises the registry.","Commands are executed through or-core (127.0.0.1:3000) - either the Studio MCP helper or the ORscript Studio plugin when it is connected."],howTo:["Ask: 'list commands' or 'what can you do with lights'","The agent calls list_commands / search_commands and picks the right command"]},
+    studio:{title:"Roblox Studio connection",summary:"The browser extension talks to the or-core desktop agent on 127.0.0.1:3000, which bridges to Studio through the Studio MCP helper and the optional ORscript Studio plugin.",details:["Run or-core (agent/ crate, cargo build) once; it stays in the background and auto-installs plugin/ORscript.lua into the Studio Plugins folder.","In Studio: Plugins → ORscript panel → enable; click Allow on the HTTP prompt. The plugin runs execute_luau with plugin-level APIs and adds csg_*, open_script, script_live_update, studio_undo/redo, screenshot_frame, gamepass_handler_create…","or_status / studio_plugin_status report the connection; or_screenshot captures the Studio window through the MCP screen_capture tool."],howTo:["Start or-core","Open the place in Studio and enable the ORscript plugin","Check the status pill in the OR bar is green, then chat"]},
+    workmode:{title:"Work modes",summary:"Ultimate (default: Luau engineering + modeling), Visualizer (VFX/UI/lighting) and Animator (rigs, keyframes, animation suite) change the catalogue order, mandates and skills the agent leans on.",details:["Switch in the OR menu → Work mode. Every mode keeps the same UNIVERSAL command block, then prioritises its own family.","Ultimate focuses on scripts, modules, remotes, data and building; Visualizer on particles, beams, lighting, UI; Animator on AnimLib, keyframes, tweens and rig tooling.","Speed presets (fast / balanced / thorough) only change how much verification and screenshotting the agent does."],howTo:["OR menu → Work mode → pick Ultimate / Visualizer / Animator"]},
+    projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .orscript-project-reference.json you can re-import."],howTo:["OR menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
+    themes:{title:"Themes & appearance",summary:"16 themes with CSS backgrounds, swatch previews, per-theme corner decorations, gradient pill buttons and optional sound effects - applied to the ORscript UI only, never to the host site.",details:["OR menu → Theme. Each theme ships its own background, accent tokens (--orx-*), decorations and SFX set.","Sounds and decorations can be toggled independently in Settings.","VoidScript is OrScript's partner visual identity used by the Void theme family."],howTo:["OR menu → Theme → pick a swatch"]},
+    permissions:{title:"Permissions",summary:"Sandbox (Studio + workspace only, no prompts), Ask (confirm writes, publishes and PC access with an approval card) or Full (entire PC via or-core).",details:["Sandbox is the default and never asks - ideal for Studio-only work.","Ask shows an approval card above the page for execute_luau, file writes, publishes and marketplace changes; it auto-denies after 120 s so a hidden card cannot stall the agent.","Full unlocks PC-wide file/terminal tools (OR_FULL_ACCESS in or-core). Publish/marketplace automation additionally requires the 'Allow publish automation' switch."],howTo:["OR menu → Permissions → Sandbox / Ask / Full"]},
+    providers:{title:"Chat providers",summary:"ORscript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Meta, NVIDIA, Arena, Notion, Vani, Crax, OxAlpha and MultiChat - same commands everywhere, the bar adapts to each composer.",details:["Compact composers (Notion, Vani) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the OR bar appears above the composer"]},
+    troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected or-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start or-core, then check Studio → Plugins → ORscript is enabled and the MCP helper is running (or_status shows both).","Agent waiting: look for the approval card (Ask mode) or switch Permissions to Sandbox; cards auto-deny after 120 s.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use or_debug for the Studio Output log, restart_mcp from the OR menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check or_status","Reload the chat tab","Restart or-core / Studio if the plugin shows disconnected"]},
+  };
+  try { window.__rsFeatureHelpTopics = FEATURE_HELP_TOPICS; } catch {}
   const CREATOR_TOOLS=[
     {name:"creator.createGamePass",description:"Create a REAL game pass (same as gamepass_create: roblox.com browser session or or-core Open Cloud, then the server handler). Prefer gamepass_create.",inputSchema:{type:"object",required:["name"],properties:{name:{type:"string"},description:{type:"string"},price:{type:"integer"},universeId:{type:"integer"}}},server:"orscript"},
     {name:"creator.getGamePass",description:"Retrieve verified Roblox asset metadata for a game pass id.",inputSchema:{type:"object",required:["assetId"],properties:{assetId:{type:"integer"}}},server:"orscript"},
@@ -3366,7 +3382,8 @@
       if (preferMcp && mcpHas) {
         /* fall through to Studio MCP */
       } else {
-      try { createCheckpoint(name, args); } catch {}
+      // createCheckpoint lives in the ui closure - reach it through the hook (a direct call was a silent ReferenceError).
+      try { if (typeof window.__rsBeforeTool === "function") window.__rsBeforeTool(name, args); } catch {}
       if (name === "ui_create_component") {
         try { if (window.__rsForge && window.__rsForge()) args = Object.assign({}, args, { forge: true }); } catch {}
       }
@@ -3392,11 +3409,10 @@
         }
       } catch {}
       const ok = !String(res||"").startsWith("ERROR") && !String(res||"").includes("ERROR in execute_luau");
-      try { persistSession(name, args, ok); if(ok){ bumpPerf(name); showSuggestion(name); // update perf from audit if available
-        if(name==="diagnostics_audit" && typeof res==="string"){
-          const m=res.match(/(\d+)\s+parts?/i); if(m) { perfParts=parseInt(m[1],10)||perfParts; updatePerfPill(); try{ chrome.storage.local.set({rsPerf:{parts:perfParts, scripts:perfScripts}});}catch{} }
-        }
-      } } catch {}
+      // Session persistence, perf budget pill and next-step suggestions live in
+      // the ui closure (see window.__rsAfterTool) - calling them by name from
+      // here threw a swallowed ReferenceError, so none of them ever ran.
+      try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(name, args, ok, res); } catch {}
       return res;
       }
     }
@@ -6184,6 +6200,21 @@
       try{ chrome.storage.local.set({rsPerf:{parts:perfParts, scripts:perfScripts}}); }catch{}
     }
     try{ chrome.storage.local.get("rsPerf", r=>{ if(r.rsPerf){ perfParts=r.rsPerf.parts||0; perfScripts=r.rsPerf.scripts||0; updatePerfPill(); }}); }catch{}
+    // Hooks for runTool (module scope cannot see these closure functions).
+    try {
+      window.__rsBeforeTool = (op, args) => { try { createCheckpoint(op, args); } catch {} };
+      window.__rsAfterTool = (op, args, ok, res) => {
+        try { persistSession(op, args, ok); } catch {}
+        if (!ok) return;
+        try { bumpPerf(op); } catch {}
+        try { showSuggestion(op); } catch {}
+        // update perf from audit if available
+        if (op === "diagnostics_audit" && typeof res === "string") {
+          const m = res.match(/(\d+)\s+parts?/i);
+          if (m) { perfParts = parseInt(m[1], 10) || perfParts; updatePerfPill(); try { chrome.storage.local.set({ rsPerf: { parts: perfParts, scripts: perfScripts } }); } catch {} }
+        }
+      };
+    } catch {}
     // ── Smart Next-Step Suggestions ──
     const NEXT_STEP = {
       lighting_set_preset: "Next: add terrain (terrain_fill_region) or a HUD (ui_create_component)",
