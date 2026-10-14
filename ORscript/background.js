@@ -643,7 +643,7 @@ function resolvePending(id, value) {
   if (!p && id != null) {
     for (const [candidate, entry] of pending) { if (entry.requestId === String(id)) { transportId=candidate; p=entry; break; } }
   }
-  if (!p) return; // duplicate, cancelled, timed-out, or stale reply
+  if (!p) return; // duplicate, cancelled, timed-out, or stale response
   // The transport id is allocated per send and is the authoritative correlation
   // key. Older MCP bridges return their own nested requestId (or omit it), so
   // treating that optional diagnostic field as a second correlation key caused

@@ -276,8 +276,19 @@ function background(msg) {
         // Studio Output probes (or_debug / Automatic Debugger): a clean console.
         return { ok: true, text: /MessageError/.test(msg.arguments.code) ? "[]" : JSON.stringify({ errors: [], warnings: [], info: [], errorCount: 0, warningCount: 0 }) };
       }
+      if (msg.name === "execute_luau" && STATE && !/StatePart|SimPart/.test(String(msg.arguments && msg.arguments.code || ""))) msg = { name: "get_studio_state" };
       if (msg.name === "execute_luau") return { ok: true, text: "OK: Part created (SimPart)" };
-      if (msg.name === "get_studio_state") return { ok: true, text: "{\"place\":\"Baseplate\",\"selection\":[]}" };
+      if (msg.name === "get_studio_state") {
+        if (STATE) {
+          // Shape of the real Studio MCP answer: a long multi-line dump with
+          // brackets, quotes and a "command"-looking line in it.
+          const lines = ["Place: Baseplate (id 0, universe 0)", "DataModel:", "  Workspace", "    Camera", "    Baseplate [Part] {\"size\":[512,20,512]}", "    SpawnLocation [SpawnLocation]"];
+          for (let i = 0; i < 400; i++) lines.push("    Part" + i + " [Part] Anchored=true Size=(4, 1, 2) CFrame=(" + i + ", 0.5, 0) Material=Plastic");
+          lines.push("  ReplicatedStorage", "    Remotes [Folder]", "  ServerScriptService", "    Main [Script] -- \"command\": \"noop\"", "Selection: []", "Run state: Edit");
+          return { ok: true, text: lines.join("\n") };
+        }
+        return { ok: true, text: "{\"place\":\"Baseplate\",\"selection\":[]}" };
+      }
       // Real Studio behaviour: every tool takes a studio_id; screen_capture is
       // the one that REFUSES the call without it, and list_roblox_studios is
       // how clients find it.
@@ -325,7 +336,12 @@ w.chrome = {
 };
 const CREW = !!process.env.CREW; // CREW=1 → Multi-Agent crew scenario (1.22.0)
 const SHOT = !!process.env.SHOT; // SHOT=1 → screenshot / studio_id scenario (1.22.0)
-w.chrome.storage.local.set({ rsAllowPlaytest: true, rsDebugDiagnostics: !!process.env.DIAG, rsMultiAgent: CREW });
+// STATE=1|2|3|4 → get_studio_state (big multi-line dump) then execute_luau (1.23.0):
+//   1 = valid JSON envelope with \n escapes, 2 = JSON with RAW newlines inside the
+//   code string (what Notion's model actually writes), 3 = JSON envelope whose
+//   code is a nested ```lua fence.
+const STATE = Number(process.env.STATE || 0);
+w.chrome.storage.local.set({ rsAllowPlaytest: true, rsDebugDiagnostics: !!process.env.DIAG, rsMultiAgent: CREW, ...(process.env.ASK ? { rsPermMode: "ask" } : {}) });
 
 // ── load the bundle ───────────────────────────────────────────────────────
 w.addEventListener("error", (e) => { console.error("[page error]", e.message, e.error && e.error.stack); });
@@ -382,6 +398,20 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
         else await replyWith("I can see the viewport. Done.");
         return;
       }
+      if (STATE && phase >= 3) {
+        const lua = 'local part = Instance.new("Part")\npart.Name = "StatePart"\npart.Size = Vector3.new(4, 1, 2)\npart.Anchored = true\npart.Parent = workspace\nprint("created", part:GetFullName())\nreturn part:GetFullName()';
+        if (phase === 3) await replyWith("First I'll inspect the place.\n" + cmd("get_studio_state", {}));
+        else if (phase === 4) {
+          if (STATE === 1) await replyWith("The place is a Baseplate with 400 parts. Creating the part now.\n" + cmd("execute_luau", { code: lua, datamodel_type: "Edit" }));
+          else if (STATE === 2) await replyWith("The place is a Baseplate with 400 parts. Creating the part now.\n```json\n{\"command\": \"execute_luau\", \"params\": {\"code\": \"" + lua.replace(/"/g, '\\"') + "\", \"datamodel_type\": \"Edit\"}}\n```");
+          else if (STATE === 3) await replyWith("The place is a Baseplate with 400 parts. Creating the part now.\n```json\n{\"command\": \"execute_luau\", \"params\": {\"code\": \"```lua\\n" + lua.replace(/"/g, '\\"').replace(/\n/g, "\\n") + "\\n```\"}}\n```");
+          // STATE=4: raw ###LUA### marker with a bled-in fence language tag on
+          // its own line (Notion's code-block chrome) - parser bug 2 in 1.23.1.
+          else await replyWith("The place is a Baseplate with 400 parts. Creating the part now.\n###LUA###\nlua\n" + lua + "\n###END_LUA###");
+        }
+        else await replyWith("Done — StatePart was created in Workspace.");
+        return;
+      }
       if (CREW && phase >= 3) {
         // Crew protocol: planner → (guarded mutation) → builder → build → done (refused) → done.
         if (phase === 3) await replyWith("Planning first.\n" + cmd("or_agent", { role: "planner", task: "plan the request" }));
@@ -424,6 +454,37 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     await sleep(100);
     if (userMessages.length < 3) { send.click(); }
     await waitFor(() => userMessages.length >= 3, 5000, "user request send");
+    // Ask mode: the user answers every approval prompt ~1 s after it appears.
+    const approvals = [];
+    if (process.env.ASK) {
+      setInterval(() => {
+        const root = d.getElementById("rs-approve");
+        if (!root || root.hidden) return;
+        const op = (d.getElementById("rs-approve-body") || {}).textContent || "";
+        if (approvals.length && approvals[approvals.length - 1].at > Date.now() - 900) return;
+        approvals.push({ op: op.slice(0, 40), at: Date.now() });
+        setTimeout(() => { const allow = d.getElementById("rs-approve-allow"); if (allow && !root.hidden) allow.click(); }, 1000);
+      }, 200);
+    }
+    if (STATE) {
+      await waitFor(() => userMessages.length >= 4, 40000, "get_studio_state result");
+      if (process.env.ASK) ok("read-only get_studio_state did not ask for approval", approvals.length === 0, JSON.stringify(approvals));
+      ok("get_studio_state result typed back", /Baseplate|Output of 'get_studio_state'/.test(userMessages[3]), userMessages[3].length + " chars: " + userMessages[3].slice(0, 90).replace(/\n/g, " "));
+      await waitFor(() => toolCalls.some((c) => c.name === "execute_luau" && /StatePart/.test(String(c.arguments.code || ""))), 60000, "execute_luau after get_studio_state");
+      const ex = toolCalls.find((c) => c.name === "execute_luau" && /StatePart/.test(String(c.arguments.code || "")));
+      ok("execute_luau code arrived with real newlines", /\n/.test(ex.arguments.code) && !/\\n/.test(ex.arguments.code) && !/```/.test(ex.arguments.code), JSON.stringify(ex.arguments.code).slice(0, 120));
+      ok("execute_luau code has no leftover fence tag / Copy chrome line", !/^(?:lua|luau|json|copy)\s*$/im.test(ex.arguments.code.split("\n")[0]) && /^local part/.test(ex.arguments.code), JSON.stringify(ex.arguments.code.split("\n")[0]));
+      await waitFor(() => userMessages.length >= 5, 40000, "execute_luau result");
+      ok("execute_luau result fed back", /Output of 'execute_luau'|OK/.test(userMessages[4]), userMessages[4].slice(0, 100).replace(/\n/g, " "));
+      await waitFor(() => (w.__rsDiag || []).some((e) => e.event === "loop.end"), 30000, "loop.end");
+      ok("agent loop ended after the final text reply", true);
+      ok("exactly one StatePart execute_luau ran", toolCalls.filter((c) => c.name === "execute_luau" && /StatePart/.test(String(c.arguments.code || ""))).length === 1);
+      if (process.env.ASK) ok("execute_luau asked for approval exactly once and ran after Allow", approvals.length === 1 && /execute_luau/.test(approvals[0].op) && d.getElementById("rs-approve").parentElement === d.documentElement, JSON.stringify(approvals));
+      ok("no OR-internal flags leaked to the bridge", !toolCalls.some((c) => Object.keys(c.arguments || {}).some((k) => /^_or/.test(k))), JSON.stringify(toolCalls.map((c) => Object.keys(c.arguments || {}))));
+      await sleep(1000);
+      ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
+      return;
+    }
     if (SHOT) {
       await waitFor(() => userMessages.length >= 4, 40000, "or_screenshot result");
       const caps = () => toolCalls.filter((c) => c.name === "screen_capture");

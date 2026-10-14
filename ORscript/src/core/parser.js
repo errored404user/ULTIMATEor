@@ -46,10 +46,21 @@ const RSParse = (() => {
   // this at line ~206; mirror it for the raw ###LUA### extraction. Requires
   // trailing whitespace (\s+) so it never eats a legitimate identifier like
   // `Copy(x)` that a script might genuinely start with.
+  // Also handles the Notion/Vani shape where the marker is followed by a
+  // newline and THEN the tag (`###LUA###\nlua\nprint(1)`) or by a full
+  // markdown fence (```lua … ```): the old regex was anchored at ^ with no
+  // leading-whitespace trim, so the `lua` line survived and reached Studio.
   function stripCodeChrome(code) {
-    return String(code || "")
-      .replace(/^[\u200B-\u200D\uFEFF]+/, "")
-      .replace(/^(?:json|copy|lua|luau|javascript|js|python|py|text)\s+/i, "");
+    let out = String(code || "")
+      .replace(/^[\u200B-\u200D\uFEFF\s]+/, "")
+      .replace(/^```[ \t]*[A-Za-z0-9_-]*[ \t]*\r?\n/, "")
+      .replace(/\r?\n[ \t]*```[ \t]*$/, "")
+      .replace(/^[\u200B-\u200D\uFEFF\s]+/, "");
+    // Strip up to two stacked chrome tokens (`lua` + `Copy` is common).
+    for (let i = 0; i < 2; i++) {
+      out = out.replace(/^(?:json|copy|copy code|lua|luau|javascript|js|python|py|text)[ \t]*(?:\r?\n|\s+)/i, "");
+    }
+    return out;
   }
 
   // A command is `{"command":"name", ...}` (or "tool"). The params/arguments
@@ -427,9 +438,14 @@ const RSParse = (() => {
     const code = call.arguments && call.arguments.code;
     if (typeof code !== "string") return call;
     const s = findLuaStart(code);
-    if (s.pos === -1) return call;
+    if (s.pos === -1) {
+      // No markers, but the same chrome can still be there (```lua fence or a
+      // `lua`/`Copy` line pasted into the JSON string) - normalise it too.
+      call.arguments.code = stripCodeChrome(code);
+      return call;
+    }
     const e = findLuaEnd(code, s.pos + s.len);
-    call.arguments.code = code.slice(s.pos + s.len, e === -1 ? code.length : e).trim();
+    call.arguments.code = stripCodeChrome(code.slice(s.pos + s.len, e === -1 ? code.length : e).trim());
     if (!call.arguments.datamodel_type) call.arguments.datamodel_type = s.dm;
     return call;
   }
