@@ -2424,23 +2424,68 @@
     return match ? match[1] : "";
   }
 
+  // Studio's MCP takes a `studio_id` on every tool. Most tools infer it when a
+  // single Studio is open, but screen_capture REFUSES the call without one
+  // ("ERROR INVALID_ARGUMENT: Missing required arg"). Resolve it once via
+  // list_roblox_studios and cache it briefly (ids change on every Studio
+  // restart, so never cache for long). Prefers the entry flagged active.
+  const STUDIO_ID_TTL = 20000;
+  async function resolveStudioId(force) {
+    const now = Date.now();
+    if (!force && A.studioId && now - (A.studioIdAt || 0) < STUDIO_ID_TTL) return A.studioId;
+    if (A._studioIdPending && !force) return A._studioIdPending;
+    const listTool = studioToolByBare("list_roblox_studios");
+    const name = (listTool && listTool.name) || "list_roblox_studios";
+    A._studioIdPending = (async () => {
+      try {
+        const listed = await bg({ type: "call_tool", name, arguments: {}, timeout: 12000 });
+        const id = listed && listed.ok ? studioIdFromList(listed) : "";
+        if (id) { A.studioId = id; A.studioIdAt = Date.now(); }
+        return id || "";
+      } catch { return ""; }
+      finally { A._studioIdPending = null; }
+    })();
+    return A._studioIdPending;
+  }
+  function studioIdComplaint(r) {
+    if (!r) return false;
+    const text = String((r.ok ? r.text : (r.error && (r.error.message || r.error.error || r.error))) || "");
+    return /missing required arg/i.test(text) || (/studio[_ ]?id/i.test(text) && /required|missing|not connected|unknown/i.test(text));
+  }
+  // Call a Studio tool through the bridge; when Studio answers that the
+  // studio_id is missing (or the cached one went stale), list the studios and
+  // retry ONCE with a fresh id. Used by the main tool path and or_screenshot.
+  async function callStudioToolWithId(name, args, timeout, requestId) {
+    let r = await bg({ type: "call_tool", name, arguments: args, timeout, requestId });
+    if (studioIdComplaint(r) && bareToolName(name) !== "list_roblox_studios") {
+      const id = await resolveStudioId(true);
+      if (id && id !== (args && args.studio_id)) {
+        diag("tool.studioIdRetry", { name, id });
+        r = await bg({ type: "call_tool", name, arguments: { ...(args || {}), studio_id: id }, timeout, requestId });
+      }
+    }
+    return r;
+  }
+
   async function screenCaptureArgs(source, tool) {
     const props = (tool && tool.inputSchema && tool.inputSchema.properties) || {};
+    const known = Object.keys(props).length > 0;
     const clean = {};
     // `target`/`source` belong to OR's virtual wrapper, not the strict Studio
-    // schema. Forward only parameters the live screen_capture tool advertises.
+    // schema. Forward only parameters the live screen_capture tool advertises
+    // (everything when the cached schema is empty — or-core's compact index).
     for (const [key, value] of Object.entries(source || {})) {
-      if (key !== "target" && key !== "source" && Object.prototype.hasOwnProperty.call(props, key)) clean[key] = value;
+      if (key === "target" || key === "source") continue;
+      if (!known || Object.prototype.hasOwnProperty.call(props, key)) clean[key] = value;
     }
-    if (props.studio_id && !clean.studio_id) {
-      clean.studio_id = source && (source.studio_id || source.studioId) || "";
-      if (!clean.studio_id) {
-        const listTool = studioToolByBare("list_roblox_studios");
-        if (listTool) {
-          const listed = await bg({ type: "call_tool", name: listTool.name, arguments: {}, timeout: 12000 });
-          clean.studio_id = studioIdFromList(listed);
-        }
-      }
+    // ALWAYS carry a studio_id for screen_capture — the schema refuses the call
+    // without one even when a single Studio is open (the one Studio tool that
+    // does not infer it). Previously this only ran when the cached schema
+    // advertised the parameter, so a stale/compact tool list produced
+    // "Missing required arg" on every screenshot.
+    if (!clean.studio_id) {
+      const given = source && (source.studio_id || source.studioId);
+      clean.studio_id = given || await resolveStudioId(false) || "";
       if (!clean.studio_id) delete clean.studio_id;
     }
     return clean;
@@ -2598,7 +2643,7 @@
       const captureStudio = async () => {
         if (!screenTool) return { ok: false, error: "Studio MCP does not expose screen_capture; update Studio and restart or-core" };
         const callArgs = await screenCaptureArgs(args, screenTool);
-        return bg({ type: "call_tool", name: screenTool.name, arguments: callArgs, timeout: 90000, requestId: A.activeRequestId });
+        return callStudioToolWithId(screenTool.name, callArgs, 90000, A.activeRequestId);
       };
       const result = await ORScreenshot.run(args, {
         studio: studioOn ? captureStudio : null,
@@ -3139,7 +3184,10 @@
     const stopWatch = new Promise((res) => {
       stopTimer = setInterval(() => { if (A.stop) res({ ok: false, kind: "stopped" }); }, 150);
     });
-    let r = await Promise.race([bg({ type: "call_tool", name, arguments: args, timeout, requestId:A.activeRequestId }), hardCap, stopWatch]);
+    const studioCall = activeEngine() === "local" || bareName === "list_roblox_studios"
+      ? bg({ type: "call_tool", name, arguments: args, timeout, requestId:A.activeRequestId })
+      : callStudioToolWithId(name, args, timeout, A.activeRequestId);
+    let r = await Promise.race([studioCall, hardCap, stopWatch]);
     clearInterval(stopTimer);
     r = cleanToolResult(r);
     if (r && r.kind === "stopped") return "(stopped by user)";
@@ -3213,7 +3261,15 @@
     if (r.kind === "timeout") {
       return `ERROR ${r.errorCode||"STUDIO_TIMEOUT"}: tool '${name}' timed out after ${name === "execute_luau" ? 20 : 120}s.\n${r.error}\nThe request was not silently reported as successful. Check Studio responsiveness before retrying.`;
     }
-    if (r.errorCode) return `ERROR ${r.errorCode}: ${bridgeErrorText(r.error)}`;
+    if (r.errorCode) {
+      const detail = bridgeErrorText(r.error);
+      if (studioIdComplaint(r) && bareName !== "list_roblox_studios") {
+        // Still missing after the automatic list_roblox_studios retry: there is
+        // no Studio instance to target, or the listing shape changed.
+        return `ERROR ${r.errorCode}: ${detail}\nStudio requires a studio_id for '${bareName}'. OR tried to resolve it with list_roblox_studios and found none - make sure a place is open in Roblox Studio with the MCP server enabled, then retry; or call list_roblox_studios and pass "studio_id" explicitly.`;
+      }
+      return `ERROR ${r.errorCode}: ${detail}`;
+    }
     if (name === "execute_luau") {
       const err = r.error || "";
       // "Failed to parse command code" is StudioMCP's GENERIC parse rejection: an

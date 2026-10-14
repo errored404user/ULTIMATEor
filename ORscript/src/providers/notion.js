@@ -3100,7 +3100,14 @@ const RSProvider = (() => {
     const frame = composerFrame();
     if (!frame) return false;
     const before = new Set(attachmentNodes());
-    const dt = new DataTransfer();
+    let dt;
+    try { dt = new DataTransfer(); } catch (error) {
+      // No DataTransfer in this environment: report "not attached" instead of
+      // throwing out of the agent loop (the text still goes out).
+      _lastAttachFailure = "unsupported";
+      diag("notion.attach.unsupported", { error: String(error && error.message || error) });
+      return false;
+    }
     const names = [];
     try {
       files.forEach((file) => {

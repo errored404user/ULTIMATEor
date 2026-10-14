@@ -52,7 +52,7 @@ const ORScreenshot = new Function(shotCode + "; return ORScreenshot;")();
 
   ok("native agent preserves MCP image content", agentCode.includes('"image" =>') && agentCode.includes('"images":output.images') && agentCode.includes('"mimeType": mime'));
   ok("Studio capture uses editor-specific connectivity", mainCode.includes("bridge.roblox_connected === true") && !mainCode.includes("A.bridge && (A.bridge.connected || A.bridge.ok)"));
-  ok("virtual target is not forwarded into strict Studio schema", mainCode.includes('key !== "target"') && mainCode.includes('studioToolByBare("screen_capture")'));
+  ok("virtual target is not forwarded into strict Studio schema", mainCode.includes('if (key === "target" || key === "source") continue;') && mainCode.includes('studioToolByBare("screen_capture")'));
   ok("native screen_capture also receives normalized Studio arguments", mainCode.includes('if (bareName === "screen_capture")') && mainCode.includes("args = await screenCaptureArgs(args, screenTool)"));
 
   process.exit(failures ? 1 : 0);

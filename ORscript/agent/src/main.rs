@@ -366,6 +366,12 @@ struct McpRuntime {
     next_id: u64,
     tools: Vec<serde_json::Value>,
     alive: Arc<AtomicBool>,
+    /// `studio_id` of the Studio instance this bridge targets, resolved from
+    /// `list_roblox_studios` and cached briefly. Studio's MCP takes a
+    /// `studio_id` on every tool; most tools infer it when a single Studio is
+    /// open, but `screen_capture` refuses the call without one ("Missing
+    /// required arg"), so or-core injects it the way the official clients do.
+    studio_id: Option<(String, std::time::Instant)>,
 }
 
 // MCP tools can return mixed text + image content. Keeping only `text` made
@@ -380,7 +386,7 @@ struct McpToolOutput {
 
 impl McpRuntime {
     fn new(alive: Arc<AtomicBool>) -> Self {
-        Self { child: None, stdin: None, stdout: None, next_id: 1, tools: Vec::new(), alive }
+        Self { child: None, stdin: None, stdout: None, next_id: 1, tools: Vec::new(), alive, studio_id: None }
     }
 
     fn launcher() -> anyhow::Result<(String, Vec<String>)> {
@@ -408,6 +414,7 @@ impl McpRuntime {
             }
         }
         self.child = None; self.stdin = None; self.stdout = None; self.tools.clear(); self.next_id = 1;
+        self.studio_id = None;
         self.alive.store(false, Ordering::Relaxed);
     }
 
@@ -506,8 +513,67 @@ impl McpRuntime {
         Ok(())
     }
 
+    /// Does the cached schema of `name` declare a `studio_id` parameter? An
+    /// unknown tool (schema not cached yet) counts as yes, like the official
+    /// Python client does.
+    fn tool_wants_studio_id(&self, name: &str) -> bool {
+        let bare = name.rsplit('/').next().unwrap_or(name);
+        match self.tools.iter().find(|t| t.get("name").and_then(|v| v.as_str()).map(|n| n == name || n == bare).unwrap_or(false)) {
+            Some(tool) => tool.get("inputSchema").and_then(|s| s.get("properties")).and_then(|p| p.get("studio_id")).is_some(),
+            None => true,
+        }
+    }
+
+    /// Resolve the target `studio_id` via `list_roblox_studios` (cached 20 s).
+    /// Prefers an entry flagged active, otherwise the first one listed.
+    async fn resolve_studio_id(&mut self) -> Option<String> {
+        if let Some((id, at)) = &self.studio_id {
+            if at.elapsed() < Duration::from_secs(20) { return Some(id.clone()); }
+        }
+        let output = self.call_tool_within("list_roblox_studios", serde_json::json!({}), Duration::from_secs(15)).await.ok()?;
+        let id = studio_id_from_listing(&output.text)?;
+        self.studio_id = Some((id.clone(), std::time::Instant::now()));
+        Some(id)
+    }
+
     async fn call_tool(&mut self, name: &str, args: serde_json::Value) -> anyhow::Result<McpToolOutput> {
-        self.call_tool_within(name, args, Duration::from_secs(120)).await
+        let mut args = if args.is_object() { args } else { serde_json::json!({}) };
+        let bare = name.rsplit('/').next().unwrap_or(name);
+        let had_id = args.get("studio_id").and_then(|v| v.as_str()).map(|s| !s.is_empty()).unwrap_or(false);
+        if !had_id && bare != "list_roblox_studios" && self.tool_wants_studio_id(name) {
+            if let Some(id) = self.resolve_studio_id().await { args["studio_id"] = serde_json::Value::String(id); }
+        }
+        let retryable = !had_id && bare != "list_roblox_studios";
+        match self.call_tool_within(name, args.clone(), Duration::from_secs(120)).await {
+            // Studio sometimes reports the missing argument as a SUCCESS whose
+            // text is just the complaint; treat it like the error form.
+            Ok(output) if retryable && output.images.is_empty() && missing_studio_id(&output.text) => {
+                match self.retry_with_fresh_studio_id(name, args).await {
+                    Some(result) => result,
+                    None => Ok(output),
+                }
+            }
+            Ok(output) => Ok(output),
+            Err(error) => {
+                if retryable && missing_studio_id(&format!("{error:#}")) {
+                    match self.retry_with_fresh_studio_id(name, args).await {
+                        Some(result) => result,
+                        None => Err(error.context("Studio MCP wants a studio_id but list_roblox_studios returned none — is a place open in Studio with the MCP server enabled?")),
+                    }
+                } else { Err(error) }
+            }
+        }
+    }
+
+    /// One retry with a freshly listed `studio_id` (the cached one may belong
+    /// to a Studio that was restarted — ids change on every restart).
+    /// `None` when no Studio could be listed (caller keeps its original outcome).
+    async fn retry_with_fresh_studio_id(&mut self, name: &str, mut args: serde_json::Value) -> Option<anyhow::Result<McpToolOutput>> {
+        self.studio_id = None;
+        let id = self.resolve_studio_id().await?;
+        tracing::warn!("call_tool '{name}' needs studio_id — retrying with {id}");
+        args["studio_id"] = serde_json::Value::String(id);
+        Some(self.call_tool_within(name, args, Duration::from_secs(120)).await)
     }
 
     async fn call_tool_within(&mut self, name: &str, args: serde_json::Value, deadline: Duration) -> anyhow::Result<McpToolOutput> {
@@ -543,6 +609,66 @@ impl McpRuntime {
         if is_error { anyhow::bail!("{text}"); }
         Ok(McpToolOutput { text, images })
     }
+}
+
+/// Studio's complaint when a tool that requires `studio_id` is called without it.
+fn missing_studio_id(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    lower.contains("missing required arg")
+        || ((lower.contains("studio_id") || lower.contains("studio id"))
+            && (lower.contains("required") || lower.contains("missing") || lower.contains("not connected") || lower.contains("unknown")))
+}
+
+/// Extract a `studio_id` from the `list_roblox_studios` text: a JSON array, a
+/// JSON object carrying the array under studios/instances/data/result, or a
+/// loose "studio_id: …" line. Prefers an entry flagged active.
+fn studio_id_from_listing(text: &str) -> Option<String> {
+    fn id_of(node: &serde_json::Value) -> Option<String> {
+        for key in ["studio_id", "studioId", "id"] {
+            if let Some(id) = node.get(key) {
+                if let Some(s) = id.as_str() { if !s.is_empty() { return Some(s.to_string()); } }
+                if let Some(n) = id.as_u64() { return Some(n.to_string()); }
+            }
+        }
+        None
+    }
+    fn is_active(node: &serde_json::Value) -> bool {
+        ["active", "is_active", "isActive", "focused"].iter().any(|k| node.get(k).and_then(|v| v.as_bool()).unwrap_or(false))
+    }
+    fn walk(node: &serde_json::Value, found: &mut Vec<(String, bool)>) {
+        match node {
+            serde_json::Value::Array(items) => for item in items { walk(item, found); },
+            serde_json::Value::Object(map) => {
+                if let Some(id) = id_of(node) { found.push((id, is_active(node))); }
+                for (_, child) in map { if child.is_array() || child.is_object() { walk(child, found); } }
+            }
+            _ => {}
+        }
+    }
+    let mut found = Vec::new();
+    for start in [text.find('['), text.find('{')] {
+        let Some(start) = start else { continue };
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(text[start..].trim()) { walk(&value, &mut found); }
+        if found.is_empty() {
+            // Trailing prose after the JSON: cut at the last bracket.
+            if let Some(end) = text.rfind(|c| c == ']' || c == '}') {
+                if end > start { if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text[start..=end]) { walk(&value, &mut found); } }
+            }
+        }
+        if !found.is_empty() { break; }
+    }
+    if let Some((id, _)) = found.iter().find(|(_, active)| *active).or_else(|| found.first()) { return Some(id.clone()); }
+    // Loose text: "studio_id: abc" / "Studio ID = abc" / "id": "abc"
+    let lower = text.to_lowercase();
+    for needle in ["studio_id", "studioid", "studio id", "\"id\""] {
+        if let Some(pos) = lower.find(needle) {
+            let Some(rest) = text.get(pos + needle.len()..) else { continue };
+            let rest = rest.trim_start_matches(|c: char| c == ':' || c == '=' || c == '"' || c == '\'' || c.is_whitespace());
+            let id: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':' | '.')).collect();
+            if !id.is_empty() { return Some(id); }
+        }
+    }
+    None
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

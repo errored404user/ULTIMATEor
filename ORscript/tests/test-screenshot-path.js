@@ -14,7 +14,7 @@ assert(bg.includes("let fullSyncedOnce = false;"), "refreshProcStatus must not t
 // or_screenshot: discover the Studio capture tool by family, and wait like a direct call
 assert(main.includes('const screenTool = studioToolByBare("screen_capture") || studioCaptureTool();'), "capture tool discovery");
 assert(main.includes("function studioCaptureTool()") && main.includes("A.imageTools.has(bareToolName(t.name))"), "capture tool fallback via learned image tools");
-assert(main.includes('name: screenTool.name, arguments: callArgs, timeout: 90000, requestId: A.activeRequestId'), "studio capture gets the same patience as a direct call");
+assert(main.includes('callStudioToolWithId(screenTool.name, callArgs, 90000, A.activeRequestId)'), "studio capture gets the same patience as a direct call (and the studio_id retry)");
 
 // renderBar status pill / tooltips: no undefined identifiers inside the swallowed try
 assert(!/\bstudioConnected\b/.test(main), "renderBar must not read the undefined studioConnected");

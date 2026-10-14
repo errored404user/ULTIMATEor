@@ -4,6 +4,7 @@
 //   cd ORscript && npm i --no-save jsdom && node tests/notion-e2e.js
 //   NOTION_MODE=blocks node tests/notion-e2e.js   # block-editor transcript shape
 //   CREW=1 node tests/notion-e2e.js               # Multi-Agent crew protocol (1.22.0)
+//   SHOT=1 node tests/notion-e2e.js               # screen_capture needs studio_id (1.22.0 fix)
 //   DIAG=1 ...                                    # print the [rs-diag] trace
 //
 // It builds a fake Notion /chat page (textarea composer with Notion's
@@ -95,6 +96,14 @@ d.execCommand = () => false;
 w.HTMLCanvasElement.prototype.getContext = () => null;
 if (!w.crypto) w.crypto = require("crypto").webcrypto;
 w.Audio = class { constructor() {} play() { return Promise.resolve(); } pause() {} };
+// jsdom has no DataTransfer; a minimal one lets the attachment path run
+// (Notion's file drop is validated live, not here).
+if (typeof w.DataTransfer !== "function") {
+  w.DataTransfer = class {
+    constructor() { const files = []; this.files = files; this.items = { add(f) { files.push(f); }, get length() { return files.length; } }; this.types = []; }
+    setData() {} getData() { return ""; }
+  };
+}
 w.AudioContext = undefined;
 w.fetch = async () => { throw new Error("fetch disabled in harness"); };
 w.navigator.clipboard = { writeText: async () => {}, readText: async () => "" };
@@ -169,6 +178,7 @@ function doSend() {
   const text = ta.value;
   if (!text.trim() || generating) return false;
   userMessages.push(text);
+  clearAttachmentCards();
   ta.value = "";
   ta.dispatchEvent(new w.Event("input", { bubbles: true }));
   userRow(text);
@@ -180,6 +190,25 @@ function doSend() {
   return true;
 }
 send.addEventListener("click", () => { if (send.getAttribute("aria-disabled") !== "true") doSend(); });
+// File drop onto the composer stages an attachment card (what Notion renders
+// for a dropped image); sending clears it.
+if (typeof w.DragEvent !== "function") {
+  w.DragEvent = class extends w.MouseEvent {
+    constructor(type, init) { super(type, init); this.dataTransfer = (init && init.dataTransfer) || null; }
+  };
+}
+const composerEl = d.getElementById("composer");
+composerEl.addEventListener("drop", (e) => {
+  const files = (e.dataTransfer && e.dataTransfer.files) || [];
+  for (const f of files) {
+    const card = d.createElement("div");
+    card.setAttribute("data-testid", "attachment-card");
+    card.setAttribute("data-rect", "330,655,120,20");
+    const span = d.createElement("span"); span.textContent = f.name; card.appendChild(span);
+    composerEl.appendChild(card);
+  }
+});
+const clearAttachmentCards = () => { for (const c of [...composerEl.querySelectorAll("[data-testid='attachment-card']")]) c.remove(); };
 send.addEventListener("pointerdown", () => {});
 ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSend(); } });
 
@@ -249,6 +278,16 @@ function background(msg) {
       }
       if (msg.name === "execute_luau") return { ok: true, text: "OK: Part created (SimPart)" };
       if (msg.name === "get_studio_state") return { ok: true, text: "{\"place\":\"Baseplate\",\"selection\":[]}" };
+      // Real Studio behaviour: every tool takes a studio_id; screen_capture is
+      // the one that REFUSES the call without it, and list_roblox_studios is
+      // how clients find it.
+      if (msg.name === "list_roblox_studios") return { ok: true, text: JSON.stringify({ studios: [{ id: "studio-7f3a", name: "Baseplate", place_id: 123456 }] }) };
+      if (msg.name === "screen_capture") {
+        const sid = msg.arguments && msg.arguments.studio_id;
+        if (!sid) return { ok: false, kind: "execution", errorCode: "INVALID_ARGUMENT", error: "Missing required arg: studio_id" };
+        if (sid !== "studio-7f3a") return { ok: false, kind: "execution", errorCode: "TOOL_EXECUTION_ERROR", error: "Studio instance " + sid + " is not connected" };
+        return { ok: true, text: "Captured the Studio viewport", images: [{ mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" }] };
+      }
       return { ok: true, text: "OK" };
     }
     default: return { ok: false, error: "unhandled " + (msg && msg.type) };
@@ -285,6 +324,7 @@ w.chrome = {
   i18n: { getMessage: () => "" },
 };
 const CREW = !!process.env.CREW; // CREW=1 → Multi-Agent crew scenario (1.22.0)
+const SHOT = !!process.env.SHOT; // SHOT=1 → screenshot / studio_id scenario (1.22.0)
 w.chrome.storage.local.set({ rsAllowPlaytest: true, rsDebugDiagnostics: !!process.env.DIAG, rsMultiAgent: CREW });
 
 // ── load the bundle ───────────────────────────────────────────────────────
@@ -336,6 +376,12 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     const cmd = (name, params) => "```json\n" + JSON.stringify({ command: name, params }) + "\n```";
     onUserMessage = async (text) => {
       phase++;
+      if (SHOT && phase >= 3) {
+        if (phase === 3) await replyWith("Let me look at the viewport first.\n" + cmd("or_screenshot", { target: "studio" }));
+        else if (phase === 4) await replyWith("Now the raw tool.\n" + cmd("screen_capture", {}));
+        else await replyWith("I can see the viewport. Done.");
+        return;
+      }
       if (CREW && phase >= 3) {
         // Crew protocol: planner → (guarded mutation) → builder → build → done (refused) → done.
         if (phase === 3) await replyWith("Planning first.\n" + cmd("or_agent", { role: "planner", task: "plan the request" }));
@@ -378,6 +424,19 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     await sleep(100);
     if (userMessages.length < 3) { send.click(); }
     await waitFor(() => userMessages.length >= 3, 5000, "user request send");
+    if (SHOT) {
+      await waitFor(() => userMessages.length >= 4, 40000, "or_screenshot result");
+      const caps = () => toolCalls.filter((c) => c.name === "screen_capture");
+      ok("or_screenshot resolved a studio_id through list_roblox_studios", toolCalls.some((c) => c.name === "list_roblox_studios") && caps().length >= 1 && caps()[caps().length - 1].arguments.studio_id === "studio-7f3a", JSON.stringify(caps().map((c) => c.arguments)));
+      ok("or_screenshot delivered the image instead of 'Missing required arg'", !/Missing required arg|INVALID_ARGUMENT/.test(userMessages[3]) && /captur|image|attached/i.test(userMessages[3]), userMessages[3].slice(0, 120).replace(/\n/g, " "));
+      await waitFor(() => userMessages.length >= 5, 40000, "screen_capture result");
+      ok("raw screen_capture {} also carries the studio_id", caps().length >= 2 && caps().every((c) => c.arguments.studio_id === "studio-7f3a"), JSON.stringify(caps().map((c) => c.arguments)));
+      ok("raw screen_capture result is the image, not an error", !/Missing required arg|INVALID_ARGUMENT/.test(userMessages[4]) && /image|captur/i.test(userMessages[4]), userMessages[4].slice(0, 120).replace(/\n/g, " "));
+      await waitFor(() => (w.__rsDiag || []).some((e) => e.event === "loop.end"), 30000, "loop.end");
+      await sleep(1000);
+      ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
+      return;
+    }
     if (CREW) {
       ok("bootstrap carries the crew protocol", /MULTI-AGENT/.test(userMessages[0]) && /ROLE GUARD/.test(userMessages[0]));
       await waitFor(() => userMessages.length >= 4, 30000, "planner handoff result");
