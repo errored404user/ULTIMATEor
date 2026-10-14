@@ -709,6 +709,7 @@
     { name: "Meta AI", url: "https://www.meta.ai/" },
     { name: "Crax GPT", url: "https://gpt.crax.lol/" },
     { name: "Ox Alpha", url: "https://oxalpha.com/" },
+    { name: "Vani Chat", url: "https://c.vani.ai/chat" },
     { name: "Notion AI", url: "https://www.notion.so/chat" },
     { name: "MiniMax Agent", url: "https://agent.minimax.io/" },
     { name: "Overchat", url: "https://overchat.ai/" },

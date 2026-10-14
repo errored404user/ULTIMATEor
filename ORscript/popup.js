@@ -7,7 +7,7 @@ const SUPPORTED_HOSTS = [
   "gemini.google.com", "www.kimi.com", "kimi.com",
   "build.nvidia.com/moonshotai/kimi-k3", "chat.z.ai", "chat.qwen.ai", "arena.ai",
   "www.meta.ai", "meta.ai",
-  "gpt.crax.lol", "www.notion.so", "app.notion.so", "www.notion.com", "notion.com", "oxalpha.com", "www.oxalpha.com", "oxalpha.org", "www.oxalpha.org",
+  "gpt.crax.lol", "www.notion.so", "app.notion.so", "www.notion.com", "notion.com", "oxalpha.com", "www.oxalpha.com", "oxalpha.org", "www.oxalpha.org", "c.vani.ai",
   "agent.minimax.io", "overchat.ai", "www.overchat.ai", "huggingface.co", "www.huggingface.co",
   "chat.mistral.ai", "mistral.ai", "openrouter.ai", "www.openrouter.ai", "console.groq.com",
   "dashboard.cohere.com", "api.together.ai", "fireworks.ai", "app.fireworks.ai",
@@ -191,6 +191,7 @@ if (runHint) {
       "arena.ai": "Arena",
       "meta.ai": "Meta AI",
       "gpt.crax.lol": "Crax", "www.notion.so": "Notion", "app.notion.so": "Notion", "www.notion.com": "Notion", "notion.com": "Notion",
+      "oxalpha.com": "Ox Alpha", "www.oxalpha.com": "Ox Alpha", "c.vani.ai": "Vani Chat",
     };
     el.textContent = names[host] || (SUPPORTED_HOSTS.some((h) => url.includes(h)) ? (host || "Chat") : "Idle");
   } catch {}
