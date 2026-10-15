@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ORscript",
-  "version": "1.24.0",
+  "version": "1.25.0",
   "minimum_chrome_version": "111",
   "description": "Turn ChatGPT, Claude, DeepSeek, Gemini, Kimi, NVIDIA NIM Kimi K3, GLM, Qwen, Arena, Meta AI, Crax GPT, Notion AI or Ox Alpha into a Roblox Studio / AgentScript agent. Two engines (RS/AS), work modes, image-to-model, auto-fix playtest errors, and Extra Thinking.",
   "permissions": [
@@ -147,6 +147,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -197,6 +198,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -238,6 +240,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -276,6 +279,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -317,6 +321,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -365,6 +370,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -403,6 +409,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -441,6 +448,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -480,6 +488,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -528,6 +537,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -576,6 +586,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -617,6 +628,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -655,6 +667,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -705,6 +718,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [
@@ -747,6 +761,7 @@
         "src/core/project_worker.js",
         "src/core/project_analyzer.js",
         "src/core/paint.js",
+        "src/core/public_skills.js",
         "src/core/main.js"
       ],
       "css": [

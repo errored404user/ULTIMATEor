@@ -903,6 +903,7 @@
     providers:{title:"Chat providers",summary:"ORscript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Meta, NVIDIA, Arena, Notion, Vani, Crax, OxAlpha and MultiChat - same commands everywhere, the bar adapts to each composer.",details:["Compact composers (Notion, Vani) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the OR bar appears above the composer"]},
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the ORscript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the ORscript bus (shared.ORscript.register / CoreGui.ORscriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - ORscript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends an ORscript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure or-core and the ORscript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected or-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start or-core, then check Studio → Plugins → ORscript is enabled and the MCP helper is running (or_status shows both).","Agent waiting: look for the approval card (Ask mode) or switch Permissions to Sandbox; cards auto-deny after 120 s.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use or_debug for the Studio Output log, restart_mcp from the OR menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check or_status","Reload the chat tab","Restart or-core / Studio if the plugin shows disconnected"]},
+    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes: describe one in a prompt, the AI designs it, OrScript validates and installs it locally, and it becomes a real command (or a selectable work mode). Export/import as .orskill.json or share codes.",details:["Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path' or 'a horror-ambience work mode'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the OR menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","Agent commands: public_skill_create/list/get/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Call the new command by name, or pick the new mode in OR menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
   };
   try { window.__rsFeatureHelpTopics = FEATURE_HELP_TOPICS; } catch {}
   const CREATOR_TOOLS=[
@@ -1807,7 +1808,10 @@
   function workModeFocusNames(modeId, names) {
     const mode = WORK_MODES[modeId];
     if (!mode || !mode.focus) return [];
-    return [...new Set(names.filter((n) => n && (mode.focus.test(String(n).replace(/^[^.]*\./, "")) || isUniversalCommand(n))))].sort();
+    // A custom (public) work mode adds its own focus names on top of its base.
+    let customFocus = new Set();
+    try { const pm = typeof window.__rsPublicMode === "function" ? window.__rsPublicMode() : null; if (pm && Array.isArray(pm.focus)) customFocus = new Set(pm.focus); } catch {}
+    return [...new Set(names.filter((n) => n && (mode.focus.test(String(n).replace(/^[^.]*\./, "")) || customFocus.has(String(n).replace(/^[^.]*\./, "")) || isUniversalCommand(n))))].sort();
   }
   const ALWAYS_BLOCKED_TOOLS = new Set([]);
   const VISION_TOOLS = new Set(["screen_capture"]);
@@ -2118,6 +2122,10 @@
         });
       }
       for (const virtual of [...COMMAND_DISCOVERY_TOOLS, ...STUDIO_ALIAS_TOOLS, ...CREATOR_TOOLS, ...TEMPLATE_AI_TOOLS, ...RELIABILITY_TOOLS, ...PROJECT_REFERENCE_TOOLS]) if (!tools.some((t) => t && t.name === virtual.name)) tools.push(virtual);
+      // Public Skills: user-made skills/abilities become real catalogue entries
+      // (plus the public_skill_* management tools). Rebuilt on every change by
+      // refreshPublicSkillTools below.
+      try { if (typeof PublicSkills !== "undefined") for (const virtual of [...PublicSkills.managementTools(), ...PublicSkills.toolEntries()]) if (!tools.some((t) => t && t.name === virtual.name)) tools.push(virtual); } catch (e) { diag("publicSkills.injectFailed", { error: String(e) }); }
       A.toolList = tools;
       A.toolNames = new Set(tools.map((t) => t.name));
       A.toolsAt = Date.now();
@@ -2125,6 +2133,22 @@
     syncCommandRegistry();
     return A.toolList;
   }
+
+  // Keep the live tool list in sync with the Public Skills registry without a
+  // full bridge refetch: drop stale public entries, add the current ones.
+  function refreshPublicSkillTools() {
+    if (typeof PublicSkills === "undefined") return;
+    try {
+      const list = (A.toolList || []).filter((t) => !(t && t.publicSkill));
+      for (const t of PublicSkills.toolEntries()) if (!list.some((x) => x && x.name === t.name)) list.push(t);
+      for (const t of PublicSkills.managementTools()) if (!list.some((x) => x && x.name === t.name)) list.push(t);
+      A.toolList = list;
+      A.toolNames = new Set(list.map((t) => t.name));
+      syncCommandRegistry();
+    } catch (e) { diag("publicSkills.refreshFailed", { error: String(e) }); }
+  }
+  try { window.addEventListener("or-public-skills-change", () => refreshPublicSkillTools()); } catch {}
+  try { window.__rsBuiltinToolNames = () => new Set((A.toolList || []).filter((t) => t && !t.publicSkill).map((t) => t.name)); } catch {}
 
   function luauLiteral(v) {
     if (v == null) return "nil";
@@ -2427,6 +2451,17 @@
       for (const e of universal) e.done = true;
       usedChars += universalBlock.length; usedLines += countLines(universalBlock);
     }
+    // Public Skills ride along with the universal tier: the user installed
+    // them on purpose, so they must never fall into the "names only" tail.
+    try {
+      if (typeof PublicSkills !== "undefined") {
+        const pub = PublicSkills.catalogueBlock({ compact });
+        if (pub) {
+          for (const e of entries) if (!e.done && PublicSkills.isCommand(e.name)) e.done = true;
+          universalBlock += pub; usedChars += pub.length; usedLines += countLines(pub);
+        }
+      }
+    } catch {}
     const detail = [];
     if (!compact) {
       // The universal block is part of the schema tier's share of the budget.
@@ -2869,6 +2904,105 @@
     return clean;
   }
 
+  // ── Public Skills (user-made commands) ──────────────────────────────────
+  // Legacy name kept for older catalogues/tests: public_item_* → public_skill_*.
+  function dispatchPublicItemTool(name, args) {
+    return runPublicSkillTool(String(name || "").replace(/^public_item_?/, "public_skill_"), args);
+  }
+  function publicSkillUsage(item) {
+    if (!item) return "";
+    if (item.kind === "mode") return `Activate it from the OrScript menu (Work mode → ${item.title}) or with public_skill_enable {"name":"${item.name}","activate":true}.`;
+    const ex = {};
+    for (const p of item.params || []) ex[p.name] = p.default !== undefined ? p.default : p.enum && p.enum[0] ? p.enum[0] : p.type === "number" ? 1 : p.type === "boolean" ? true : p.type === "array" ? ["a"] : p.type === "object" ? {} : p.name;
+    return `${item.name} ${JSON.stringify(ex)}`;
+  }
+  async function runPublicSkill(name, args) {
+    const PS = typeof PublicSkills !== "undefined" ? PublicSkills : null;
+    const item = PS && PS.find(name);
+    if (!item) return `ERROR in ${name}: unknown public skill`;
+    if (item.kind === "ability") {
+      const r = PS.abilityText(item.id, args);
+      if (r.err) return r.err;
+      try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(item.name, args, true, r.text); } catch {}
+      return `Output of '${item.name}':\n${r.text}`;
+    }
+    const built = PS.buildLuau(item.id, args);
+    if (built.err) return built.err;
+    try { if (typeof window.__rsBeforeTool === "function") window.__rsBeforeTool(item.name, args); } catch {}
+    let res = await runTool({ tool: "execute_luau", arguments: { code: built.code, datamodel_type: "Edit", _orInternal: true } });
+    if (typeof res === "string" && res.startsWith("Output of 'execute_luau':")) res = `Output of '${item.name}':` + res.slice("Output of 'execute_luau':".length);
+    try {
+      const body = String(res || "").replace(/^Output of '[^']*':\n?/, "").trim();
+      if (/^\{/.test(body) && body.length < 20000) {
+        const j = JSON.parse(body);
+        if (j && j.ok === false) res = `ERROR in ${item.name}: ${String(j.error && typeof j.error === "object" ? (j.error.message || j.error.code || JSON.stringify(j.error)) : (j.error || "skill failed")).slice(0, 600)}\nThis public skill ran but reported the failure above. Check the arguments (${PS.signature(item)}), the target paths, or inspect it with public_skill_get {"name":"${item.name}"}.`;
+      }
+    } catch {}
+    const ok = !String(res || "").startsWith("ERROR") && !String(res || "").includes("ERROR in execute_luau");
+    try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(item.name, args, ok, res); } catch {}
+    return res;
+  }
+  async function runPublicSkillTool(name, args) {
+    const PS = typeof PublicSkills !== "undefined" ? PublicSkills : null;
+    if (!PS) return `ERROR in ${name}: Public Skills module is not loaded; reload this page.`;
+    args = args && typeof args === "object" ? args : {};
+    const out = (obj) => `Output of '${name}':\n${JSON.stringify(obj, null, 2)}`;
+    const fail = (code, errors, extra) => `ERROR in ${name}: ${code}\n${(errors || []).map((e) => "- " + e).join("\n")}${extra ? "\n" + extra : ""}`;
+    const reserved = () => { try { return typeof window.__rsBuiltinToolNames === "function" ? window.__rsBuiltinToolNames() : new Set(); } catch { return new Set(); } };
+    const announce = (kind, item, warnings) => { try { window.dispatchEvent(new CustomEvent("or-public-skill-result", { detail: { kind, item, warnings: warnings || [] } })); } catch {} };
+    const op = name.replace(/^public_skill_/, "");
+    if (op === "create") {
+      const def = args.definition && typeof args.definition === "object" ? args.definition : args;
+      const r = PS.upsert(Object.assign({}, def, { id: undefined }), { source: "ai", reserved: reserved() });
+      if (!r.ok) return fail("VALIDATION_FAILED", r.errors, "Fix the definition and call public_skill_create again. Schema reminder:\n" + PS.DEFINITION_DOC);
+      refreshPublicSkillTools(); announce("created", r.item, r.warnings);
+      return out({ success: true, status: "INSTALLED", kind: r.item.kind, name: r.item.name, id: r.item.id, version: r.item.version, usage: publicSkillUsage(r.item), warnings: r.warnings, next: r.item.kind === "skill" ? `Run public_skill_test {"name":"${r.item.name}"} to syntax-check it in Studio.` : r.item.kind === "mode" ? "The mode now appears in the Work mode section of the OrScript menu." : "The ability is callable right away." });
+    }
+    if (op === "list") {
+      const rows = PS.list(args.kind ? { kind: args.kind } : null).map((i) => ({ kind: i.kind, name: i.name, title: i.title, enabled: i.enabled, version: i.version, author: i.author, signature: i.kind === "mode" ? `pm:${i.id}` : PS.signature(i), description: i.description }));
+      const active = PS.activeMode();
+      return out({ success: true, count: rows.length, activeMode: active ? active.name : null, items: rows, hint: rows.length ? "Call a skill/ability by its signature; modes are switched with public_skill_enable {name, activate:true}." : "Nothing installed yet - use public_skill_create or the Public tab in the OrScript panel." });
+    }
+    if (op === "get") { const item = PS.get(args.name || args.id); return item ? out({ success: true, item, signature: item.kind === "mode" ? null : PS.signature(item) }) : fail("NOT_FOUND", [`no public skill named '${args.name || args.id}'`]); }
+    if (op === "update") {
+      const r = PS.update(args.name || args.id, args.patch || args.definition || {}, { reserved: reserved() });
+      if (!r.ok) return fail("UPDATE_FAILED", r.errors);
+      refreshPublicSkillTools(); announce("updated", r.item, r.warnings);
+      return out({ success: true, status: "UPDATED", name: r.item.name, version: r.item.version, warnings: r.warnings });
+    }
+    if (op === "delete") { const r = PS.remove(args.name || args.id); if (!r.ok) return fail("NOT_FOUND", r.errors); refreshPublicSkillTools(); announce("removed", r.item); return out({ success: true, status: "DELETED", name: r.item.name }); }
+    if (op === "enable") {
+      const on = args.enabled !== false;
+      const r = PS.setEnabled(args.name || args.id, on);
+      if (!r.ok) return fail("NOT_FOUND", r.errors);
+      refreshPublicSkillTools();
+      let activated = false;
+      if (r.item.kind === "mode" && on && args.activate) { try { if (typeof window.__rsSetWorkMode === "function") { window.__rsSetWorkMode("pm:" + r.item.id); activated = true; } } catch {} }
+      announce("toggled", r.item);
+      return out({ success: true, name: r.item.name, enabled: r.item.enabled, activated });
+    }
+    if (op === "test") {
+      const item = PS.find(args.name || args.id);
+      if (!item) return fail("NOT_FOUND", [`no public skill named '${args.name || args.id}'`]);
+      if (item.kind !== "skill") return out({ success: true, status: "NOT_APPLICABLE", note: `${item.kind}s have no Luau to test; call ${item.kind === "ability" ? PS.signature(item) : "public_skill_enable"} instead.` });
+      if (args.dry_run === false) return await runPublicSkill(item.name, args.args || {});
+      const built = PS.syntaxCheckLuau(item.id, args.args || {});
+      if (built.err) return built.err;
+      let res = await runTool({ tool: "execute_luau", arguments: { code: built.code, datamodel_type: "Edit", _orInternal: true } });
+      if (typeof res === "string") res = res.replace(/^Output of 'execute_luau':/, `Output of '${name}':`);
+      return res;
+    }
+    if (op === "export") { const o = PS.exportObject(args.name || args.id); if (!o) return fail("NOT_FOUND", [`no public skill named '${args.name || args.id}'`]); return out({ success: true, fileName: PS.fileName(args.name || args.id), shareCode: PS.shareCode(args.name || args.id), json: o }); }
+    if (op === "import") {
+      const r = PS.importShared(typeof args.data === "string" ? args.data : JSON.stringify(args.data || args.definition || {}), { reserved: reserved(), replace: !!args.replace });
+      if (!r.ok) return fail("IMPORT_FAILED", r.errors);
+      refreshPublicSkillTools(); announce("imported", r.item, r.warnings);
+      return out({ success: true, status: "INSTALLED", kind: r.item.kind, name: r.item.name, usage: publicSkillUsage(r.item), warnings: r.warnings });
+    }
+    if (op === "run") { const item = PS.find(args.name || args.id); if (!item) return fail("NOT_FOUND", [`no public skill named '${args.name || args.id}'`]); return await runPublicSkill(item.name, args.args || {}); }
+    return fail("UNKNOWN_OPERATION", [`'${name}' is not a public_skill command`], "Available: public_skill_create/list/get/update/delete/enable/test/export/import.");
+  }
+
   async function runTool(call) {
     let name = call.tool;
     let args = call.arguments || {};
@@ -2876,8 +3010,10 @@
     try { name = remapToolName(name); } catch {}
     const roadmapName = bareToolName(name);
     if (roadmapName.startsWith("public_item")) return typeof dispatchPublicItemTool === "function" ? dispatchPublicItemTool(roadmapName, args) : `ERROR: '${roadmapName}' is not available in this build. Use list_commands and continue with the listed commands.`;
+    if (roadmapName.startsWith("public_skill_")) return await runPublicSkillTool(roadmapName, args);
+    if (typeof PublicSkills !== "undefined" && PublicSkills.isCommand(roadmapName)) return await runPublicSkill(roadmapName, args);
     if(roadmapName==="orscript_help"){
-      const question=String(args.question||"").toLowerCase(),aliases={templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|ultimate mode|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/,plugins:/other plugin|plugins|eclipse|moon animator|interop|full control|macro|settings\(\)/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
+      const question=String(args.question||"").toLowerCase(),aliases={templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|ultimate mode|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/,plugins:/other plugin|plugins|eclipse|moon animator|interop|full control|macro|settings\(\)/,publicskills:/public skill|own skill|own command|custom command|custom mode|own mode|make a skill|create a skill|new skill|ability|share code|orskill/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
     }
     if (["search_commands","get_command","command_registry_stats","generate_command_docs","orscript_help"].includes(roadmapName)) {
       const reg=typeof ORCommandRegistry!=="undefined"?ORCommandRegistry:null;if(!reg)return `ERROR in ${roadmapName}: command registry unavailable; reload this page.`;await hydrateCommandRegistry();
@@ -5733,6 +5869,7 @@
             renderCards(cardsPanel);
           }
         };
+        openCardsPanel = setCardsOpen; // reachable from the Public Skills modal (hoisted var)
         cardsBtn.addEventListener("click", (e)=>{
           e.stopPropagation();
           setCardsOpen(cardsPanel.hidden);
@@ -5796,6 +5933,30 @@
             return;
           }
           const ideaGenerate=e.target.closest&&e.target.closest("[data-idea-generate]");if(ideaGenerate){e.stopPropagation();const g=cardsPanel.querySelector("[data-idea-genre]")?.value||"Platformer",t=cardsPanel.querySelector("[data-idea-theme]")?.value||"Futuristic";ideaGeneratorResult=makeIdea(g,t);renderCards(cardsPanel);return;}const ideaAnother=e.target.closest&&e.target.closest("[data-idea-generate-another]");if(ideaAnother){e.stopPropagation();const g=cardsPanel.querySelector("[data-idea-genre]")?.value||"Platformer",t=cardsPanel.querySelector("[data-idea-theme]")?.value||"Futuristic";ideaGeneratorResult=makeIdea(g,t);renderCards(cardsPanel);return;}const ideaCopy=e.target.closest&&e.target.closest("[data-idea-copy]");if(ideaCopy&&ideaGeneratorResult){navigator.clipboard?.writeText(ideaGeneratorResult.prompt);toast("Prompt copied");return;}const ideaChat=e.target.closest&&e.target.closest("[data-idea-chat]");if(ideaChat&&ideaGeneratorResult){const el=document.activeElement?.matches?.("textarea,[contenteditable=true]")?document.activeElement:document.querySelector("textarea,[contenteditable=true]");if(el){if(el.isContentEditable)el.textContent=ideaGeneratorResult.prompt;else{el.value=ideaGeneratorResult.prompt;el.dispatchEvent(new Event("input",{bubbles:true}));}toast("Prompt placed in chat box");}else toast("Chat box not found");return;}const ideaRun=e.target.closest&&e.target.closest("[data-idea-run]");if(ideaRun&&ideaGeneratorResult){runLibraryCard({engine:"rs",icon:"✦",cat:"Idea",title:ideaGeneratorResult.title,desc:"Generated game idea",prompt:ideaGeneratorResult.prompt},true);return;}
+          // ── Public Skills tab ──
+          if (typeof PublicSkills !== "undefined") {
+            const pubCreate=e.target.closest&&e.target.closest("[data-public-create]");
+            if(pubCreate){e.stopPropagation();const ta=cardsPanel.querySelector("#rs-public-prompt");const text=String(ta&&ta.value||"").trim();publicKind=(cardsPanel.querySelector("#rs-public-kind")||{}).value||"auto";if(text.length<8){toast("Describe the skill, ability or mode in a sentence or two first");try{ta&&ta.focus();}catch{}return;}publicDraft="";runLibraryCard({engine:"rs",icon:"P",cat:"Public Skills",title:publicKind==="auto"?"Create a public skill":`Create public ${publicKind}`,desc:text.slice(0,90),prompt:publicGenerationPrompt(text,publicKind)},true);return;}
+            const pubManual=e.target.closest&&e.target.closest("[data-public-manual]");
+            if(pubManual){e.stopPropagation();const k=(cardsPanel.querySelector("#rs-public-kind")||{}).value;openPublicEditor(null,k==="ability"||k==="mode"?k:"skill");return;}
+            const pubImport=e.target.closest&&e.target.closest("[data-public-import]");
+            if(pubImport){e.stopPropagation();const input=document.createElement("input");input.type="file";input.accept=".json,.orskill.json";input.onchange=async()=>{const file=input.files&&input.files[0];if(!file)return;publicImportText(await file.text());};input.click();return;}
+            const pubPaste=e.target.closest&&e.target.closest("[data-public-paste]");
+            if(pubPaste){e.stopPropagation();const code=prompt("Paste an ORSKILL1: share code or the exported JSON:","");if(code)publicImportText(code);return;}
+            const pubRow=e.target.closest&&e.target.closest("[data-public-id]");
+            const pubAction=pubRow&&e.target.closest&&e.target.closest("[data-public-action]");
+            if(pubRow&&pubAction){e.stopPropagation();const item=PublicSkills.get(pubRow.dataset.publicId);if(!item)return renderCards(cardsPanel);const act=pubAction.dataset.publicAction;
+              if(act==="run")publicRun(item);
+              else if(act==="activate"){const active=PublicSkills.activeMode();setWorkMode(active&&active.id===item.id?workMode:"pm:"+item.id);}
+              else if(act==="improve")publicImprove(item);
+              else if(act==="edit")openPublicEditor(item);
+              else if(act==="toggle"){const r=PublicSkills.setEnabled(item.id,!item.enabled);toast(r.ok?`${r.item.enabled?"Enabled":"Disabled"} '${item.name}'`:"Not found");}
+              else if(act==="export")publicDownload(item.id);
+              else if(act==="share")publicCopyShare(item.id);
+              else if(act==="delete"){if(confirm(`Delete public ${item.kind} “${item.title}”? Export it first if you want to keep a copy.`)){PublicSkills.remove(item.id);}}
+              renderCards(cardsPanel);return;}
+            const pubTa=e.target.closest&&e.target.closest("#rs-public-prompt");if(pubTa){e.stopPropagation();return;}
+          }
           const add=e.target.closest&&e.target.closest("[data-template-add]");if(add){e.stopPropagation();openTemplateEditor();return;}
           const aiCreate=e.target.closest&&e.target.closest("[data-template-ai-create]");if(aiCreate){e.stopPropagation();const request=prompt("Describe the reusable template you want OrScript AI to create");if(!request)return;runLibraryCard({engine:"rs",icon:"T",cat:"Templates",title:"Create Template with AI",desc:"Draft for review",prompt:`Create a complete user-owned OrScript template draft from this request: ${request}\nAnalyze required variables, workflow ordering, existing command IDs, validation, expected result, execution level, environment and safety. Submit the complete draft through template_create_draft. Do not save or execute it.`},true);return;}
           const projectImport=e.target.closest&&e.target.closest("[data-project-import]");if(projectImport){e.stopPropagation();const input=document.createElement("input");input.type="file";input.accept=".rbxl,.rbxlx,.orscript-project-reference.json";input.onchange=async()=>{const file=input.files&&input.files[0];if(!file)return;if(/\.json$/i.test(file.name)){try{const ref=JSON.parse(await file.text());if(!ref||!ref.analysis||!ref.analysis.project)return toast("INVALID_PROJECT_REFERENCE: not an exported ORscript project reference");openTemplateEditor(null,{draft:true,projectReference:ref});}catch(err){toast(`INVALID_PROJECT_REFERENCE: ${String(err.message||err)}`);}return;}openTemplateEditor(null,{draft:true,projectFile:file});};input.click();return;}const exportAll=e.target.closest&&e.target.closest("[data-template-export-all]");if(exportAll){e.stopPropagation();const r=ORTemplateRegistry.exportAllTemplates();if(!r.success)return toast(`${r.error.code}: ${r.error.message}`);if(!r.data.templates.length)return toast("No templates to export");const blob=new Blob([JSON.stringify(r.data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=r.filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(`Exported ${r.data.templates.length} templates`);return;}const importBtn=e.target.closest&&e.target.closest("[data-template-import]");if(importBtn){e.stopPropagation();const input=document.createElement("input");input.type="file";input.accept=".json,.orscript-template.json";input.onchange=async()=>{const file=input.files&&input.files[0];if(!file)return;const r=await ORTemplateRegistry.importTemplate(await file.text());toast(r.success?"Template imported":`${r.error.code}: ${r.error.message}`);renderCards(cardsPanel);};input.click();return;}
@@ -6274,14 +6435,24 @@
         ? "\u{1F310} Background mode ON \u2014 the agent keeps working while you're on other sites"
         : "Background mode OFF \u2014 the agent pauses when this tab is hidden");
     }
+    // Custom (public) work modes are addressed as "pm:<id>"; they run on top of
+    // one of the built-in modes (their `base`), which stays the real workMode.
+    function publicMode(){ try { return typeof PublicSkills !== "undefined" ? PublicSkills.activeMode() : null; } catch { return null; } }
     function setWorkMode(id, silent){
-      workMode = normalizeWorkMode(id);
+      let custom = null;
+      if (typeof id === "string" && id.startsWith("pm:")) {
+        try { custom = typeof PublicSkills !== "undefined" ? PublicSkills.get(id.slice(3)) : null; } catch {}
+        if (!custom || custom.kind !== "mode") { toast("That custom work mode is not installed any more"); id = workMode; }
+      }
+      workMode = normalizeWorkMode(custom ? custom.base : id);
+      try { if (typeof PublicSkills !== "undefined") PublicSkills.setActiveMode(custom ? custom.id : null); } catch {}
       try { chrome.storage.local.set({rsWorkMode: workMode}); } catch {}
       try { window.__rsWorkMode = () => workMode; } catch {}
       syncWorkModeUi();
       buildMenu(); renderBar(); markModesChanged();
-      if (!silent) { try { playSfx("special"); } catch {} toast(WORK_MODES[workMode].toast); }
+      if (!silent) { try { playSfx("special"); } catch {} toast(custom ? custom.toast : WORK_MODES[workMode].toast); }
     }
+    try { window.__rsSetWorkMode = (id) => setWorkMode(id); } catch {}
     // Multi-Agent crew badge: which specialist is active + plan progress.
     function syncCrewBadge(){
       const el = root && root.querySelector("#rs-crew-badge");
@@ -6297,9 +6468,14 @@
     // Bar badge + <html data-rs-work> for CSS; every mode has a badge.
     function syncWorkModeUi(){
       const mode = WORK_MODES[workMode] || WORK_MODES.ultimate;
+      const pm = publicMode();
       try { document.documentElement.setAttribute("data-rs-work", workMode); } catch {}
+      try { document.documentElement.toggleAttribute("data-rs-public-mode", !!pm); } catch {}
       const badge = root && root.querySelector("#rs-work-badge");
-      if (badge) { badge.textContent = mode.badge; badge.dataset.work = workMode; badge.hidden = !mode.badge; badge.title = mode.name + " work mode — " + mode.sub; }
+      if (badge) {
+        badge.textContent = pm ? pm.badge : mode.badge; badge.dataset.work = workMode; badge.hidden = !(pm ? pm.badge : mode.badge);
+        badge.title = pm ? `${pm.title} — custom work mode on ${mode.name} — ${pm.sub}` : mode.name + " work mode — " + mode.sub;
+      }
     }
     function setExtraThinking(v){ extraThinking=!!v; try{chrome.storage.local.set({rsExtraThinking: extraThinking});}catch{}; try{ window.__rsExtraThinking = () => extraThinking; }catch{}; buildMenu(); updateExtraButton(); renderBar(); toast(v ? "Think ON — it will grill every solution" : "Think off"); markModesChanged(); }
     const STEERING_QUEUE_MAX = 5;
@@ -6738,11 +6914,13 @@
              <div class="rs-rbx-grid">${passes}</div>
             </section>
             <section class="rs-menu-sec">
-              <div class="rs-sec-label"><span>Work mode</span><span class="rs-sec-state">${WORK_MODES[workMode].short}</span></div>
-              <div class="rs-menu-note">${WORK_MODES[workMode].note}</div>
+              <div class="rs-sec-label"><span>Work mode</span><span class="rs-sec-state">${(() => { const pm = publicMode(); return pm ? escRs(pm.title) + " · " + WORK_MODES[workMode].short : WORK_MODES[workMode].short; })()}</span></div>
+              <div class="rs-menu-note">${(() => { const pm = publicMode(); return pm ? escRs(pm.note || pm.sub) : WORK_MODES[workMode].note; })()}</div>
               <div class="rs-work-row rs-work-ultimate rs-work-modes" role="radiogroup" aria-label="Work mode">
-                ${WORK_MODE_IDS.map((id) => `<button type="button" class="rs-work-card ${workMode===id?"on":""}" data-work="${id}" role="radio" aria-checked="${workMode===id?"true":"false"}"><span class="rs-work-name">${WORK_MODES[id].name}</span><span class="rs-work-sub">${WORK_MODES[id].sub}</span></button>`).join("")}
+                ${WORK_MODE_IDS.map((id) => `<button type="button" class="rs-work-card ${workMode===id&&!publicMode()?"on":""}" data-work="${id}" role="radio" aria-checked="${workMode===id&&!publicMode()?"true":"false"}"><span class="rs-work-name">${WORK_MODES[id].name}</span><span class="rs-work-sub">${WORK_MODES[id].sub}</span></button>`).join("")}
+                ${(() => { let customs = []; try { customs = typeof PublicSkills !== "undefined" ? PublicSkills.modes().filter((m) => m.enabled) : []; } catch {} const pm = publicMode(); return customs.map((m) => `<button type="button" class="rs-work-card rs-work-custom ${pm&&pm.id===m.id?"on":""}" data-work="pm:${m.id}" role="radio" aria-checked="${pm&&pm.id===m.id?"true":"false"}" title="Custom mode on ${escRs(WORK_MODES[m.base]?WORK_MODES[m.base].name:"Ultimate")}"><span class="rs-work-name">${escRs(m.title)} <small>public</small></span><span class="rs-work-sub">${escRs(m.sub || m.description)}</span></button>`).join(""); })()}
               </div>
+              <div class="rs-menu-note rs-work-public-note">Make your own mode, skill or ability: open the cards panel → <b>Public</b> tab and describe it — the AI builds and installs it.</div>
             </section>
             <section class="rs-menu-sec">
               <div class="rs-sec-label"><span>Access</span></div>
@@ -7264,6 +7442,71 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       return `<section class="rs-template-library" aria-label="Template library">${ideaGeneratorHtml()}<div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div><b>Your templates</b><span class="rs-template-count" data-template-count>${count}</span></div><p>Create, review, and run reusable workflows.</p></div><div class="rs-template-head-actions"><button type="button" class="rs-btn-primary rs-btn-create" data-template-add>Create template</button><button type="button" class="rs-btn-secondary rs-btn-ai" data-template-ai-create>Create with AI</button></div></header><div class="rs-template-toolbar"><label class="rs-template-search"><span class="rs-sr-only">Search templates</span><input id="rs-cards-search" type="search" placeholder="Search your templates" value="${escRs(cardsQuery)}" spellcheck="false"></label><label class="rs-template-filter"><span class="rs-sr-only">Filter templates by category</span><select id="rs-template-category"><option value="All">All categories</option>${ORTemplateRegistry.categories().map(x=>`<option ${cardsCategory===x?"selected":""}>${escRs(x)}</option>`).join("")}<option ${cardsCategory==='Archived'?"selected":""}>Archived</option></select></label><button type="button" class="rs-template-project-import" title="Analyze a .rbxl / .rbxlx locally (or load an exported reference) and review it as a Template draft" data-project-import>Roblox project</button><button type="button" class="rs-template-export-all" data-template-export-all>Export all</button><span class="rs-sr-only">Template file</span><button type="button" class="rs-template-import" data-template-import>Import template</button></div></div><div id="rs-cards-grid-wrap">${gridHtml()}</div></section>`;
     }
 
+    // ── Public Skills tab (user-made skills / abilities / work modes) ──
+    function publicCount(){ try { return typeof PublicSkills !== "undefined" ? PublicSkills.list().length : 0; } catch { return 0; } }
+    function publicExampleArgs(item){ const ex = {}; for (const p of item.params || []) ex[p.name] = p.default !== undefined ? p.default : p.enum && p.enum[0] ? p.enum[0] : p.type === "number" ? 1 : p.type === "boolean" ? true : p.type === "array" ? ["a"] : p.type === "object" ? {} : p.name; return ex; }
+    function publicReserved(){ try { return typeof window.__rsBuiltinToolNames === "function" ? window.__rsBuiltinToolNames() : new Set(); } catch { return new Set(); } }
+    function publicCommandSample(){ try { return [...publicReserved()].filter((n) => /^[a-z][a-z0-9_]+$/.test(n)).slice(0, 80); } catch { return []; } }
+    const PUBLIC_SKELETONS = {
+      skill: { kind: "skill", name: "my_skill", title: "My Skill", description: "What it does and when to use it (10-600 chars).", params: [{ name: "path", type: "string", description: "Full instance path, e.g. Workspace.Model", required: true }, { name: "count", type: "number", description: "How many", default: 3 }], luau: "-- {{path}} and {{count}} are replaced with Lua literals; also available as args.path / args.count\nlocal target = game\nfor seg in string.gmatch({{path}}, '[^.]+') do\n  target = target:FindFirstChild(seg)\n  if not target then return {ok = false, error = 'path not found: ' .. {{path}}} end\nend\nlocal made = 0\nfor i = 1, {{count}} do\n  local part = Instance.new('Part')\n  part.Name = 'MySkillPart_' .. i\n  part.Anchored = true\n  part.Position = target:IsA('BasePart') and target.Position + Vector3.new(i * 5, 0, 0) or Vector3.new(i * 5, 5, 0)\n  part.Parent = target\n  made += 1\nend\nreturn {ok = true, created = made, parent = target:GetFullName()}" },
+      ability: { kind: "ability", name: "my_ability", title: "My Ability", description: "A reusable procedure the agent follows with real commands.", params: [{ name: "target", type: "string", description: "What to work on", required: true }], instructions: "Audit {{target}} and fix what you find. Work step by step and verify each change.", steps: ["Locate {{target}} with instance_find", "Inspect it with inspect_instance / script_read", "Apply the fix with the right write command", "Verify the result and report"], commands: ["instance_find", "inspect_instance", "script_read", "script_set_source"] },
+      mode: { kind: "mode", name: "my_mode", title: "My Mode", badge: "MYMODE", base: "ultimate", sub: "One-line tagline shown on the mode card", note: "Short blurb shown in the menu", description: "When to use this mode and what it optimises for.", mandate: "You are now a specialist in ... Priorities: 1) ... 2) ... 3) ... Pipeline: plan, build, verify with screenshots/console. Quality bar: ... Never: ...", focus: ["instance_find", "part_create", "script_create"] },
+    };
+    function publicHtml(){
+      const PS = typeof PublicSkills !== "undefined" ? PublicSkills : null;
+      const items = PS ? PS.list() : [];
+      const active = PS ? PS.activeMode() : null;
+      const kindLabel = { skill: "skill", ability: "ability", mode: "work mode" };
+      const rows = items.map((i) => {
+        const isMode = i.kind === "mode";
+        const sig = isMode ? `base: ${escRs(i.base)} · badge ${escRs(i.badge)}` : escRs(PS.signature(i));
+        const isActive = !!(active && active.id === i.id);
+        return `<article class="rs-template-row rs-public-row${i.enabled ? "" : " rs-public-off"}" data-public-id="${escRs(i.id)}"><div class="rs-template-copy"><b>${escRs(i.title)} <span class="rs-public-kind rs-public-kind-${i.kind}">${kindLabel[i.kind]}</span>${isActive ? '<span class="rs-public-active">ACTIVE</span>' : ""}${i.enabled ? "" : '<span class="rs-public-disabled">disabled</span>'}</b><p>${escRs(i.description)}</p><span><code>${sig}</code> · v${i.version} · by ${escRs(i.author)} · ${i.source === "ai" ? "built by AI" : i.source === "import" ? "imported" : "hand-made"}</span></div><div class="rs-template-actions">${isMode ? `<button type="button" class="rs-template-run" data-public-action="activate">${isActive ? "Deactivate" : "Activate"}</button>` : `<button type="button" class="rs-template-run" data-public-action="run">Run…</button>`}<button type="button" class="rs-template-improve" data-public-action="improve">Improve with AI</button><details class="rs-template-more"><summary>Actions</summary><div><button type="button" data-public-action="edit">Edit JSON</button><button type="button" data-public-action="toggle">${i.enabled ? "Disable" : "Enable"}</button><button type="button" data-public-action="export">Export file</button><button type="button" data-public-action="share">Copy share code</button><button type="button" class="rs-template-delete" data-public-action="delete">Delete</button></div></details></div></article>`;
+      }).join("");
+      const empty = `<div class="rs-template-empty"><div class="rs-template-empty-mark">P</div><b>No public skills yet</b><span>Describe a skill, ability or work mode above and press Create with AI — or Import one somebody shared with you.</span></div>`;
+      return `<section class="rs-template-library rs-public" aria-label="Public skills"><div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div><b>Public Skills</b><span class="rs-template-count">${items.length}</span></div><p>Your own skills, abilities and work modes. Describe one; the AI designs it and OrScript installs it as a real command.</p></div><div class="rs-template-head-actions"><button type="button" class="rs-btn-secondary" data-public-manual>New by hand</button><button type="button" class="rs-btn-secondary" data-public-import>Import file</button><button type="button" class="rs-btn-secondary" data-public-paste>Paste share code</button></div></header><div class="rs-public-compose"><textarea id="rs-public-prompt" rows="3" spellcheck="false" placeholder="e.g. A skill that places N street lamps with warm PointLights along the selected path  ·  An ability that audits every script for deprecated APIs and fixes them  ·  A 'Horror builder' work mode focused on fog, lighting and sound">${escRs(publicDraft)}</textarea><div class="rs-public-compose-row"><select id="rs-public-kind" aria-label="Kind"><option value="auto"${publicKind === "auto" ? " selected" : ""}>Auto — AI decides</option><option value="skill"${publicKind === "skill" ? " selected" : ""}>Skill — Luau command with params</option><option value="ability"${publicKind === "ability" ? " selected" : ""}>Ability — reusable procedure</option><option value="mode"${publicKind === "mode" ? " selected" : ""}>Work mode — mandate + focus</option></select><button type="button" class="rs-btn-primary rs-btn-ai" data-public-create>Create with AI</button></div><small>Installed on this device only (chrome.storage). Share with Export / Share code; others press Import. Skills run only when called — nothing touches your place until then.</small></div></div><div class="rs-template-list rs-public-list">${rows || empty}</div></section>`;
+    }
+    var publicDraft = "", publicKind = "auto";
+    function publicGenerationPrompt(text, kind){ return PublicSkills.generationPrompt(text, kind, { commandNames: publicCommandSample() }); }
+    function publicDownload(id){ const PS = PublicSkills; const json = PS.exportJson(id); if (!json) return toast("Nothing to export"); const blob = new Blob([json], { type: "application/json" }), a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = PS.fileName(id); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); toast(`Exported ${PS.fileName(id)}`); }
+    async function publicCopyShare(id){ const code = PublicSkills.shareCode(id); if (!code) return toast("Nothing to share"); try { await navigator.clipboard.writeText(code); toast(`Share code copied (${code.length} chars) — paste it into another OrScript's Public tab`); } catch { prompt("Copy this share code:", code); } }
+    function publicImportText(text){ if (!text) return; const r = PublicSkills.importShared(text, { reserved: publicReserved() }); if (!r.ok && r.duplicate) { if (confirm(`'${r.duplicate.name}' is already installed. Replace it with the imported version?`)) { const r2 = PublicSkills.importShared(text, { reserved: publicReserved(), replace: true }); toast(r2.ok ? `Replaced ${r2.item.kind} '${r2.item.name}'` : `IMPORT_FAILED: ${r2.errors.join("; ")}`); } return; } toast(r.ok ? `Installed ${r.item.kind} '${r.item.name}'${r.warnings.length ? " (" + r.warnings.length + " warning" + (r.warnings.length === 1 ? "" : "s") + ")" : ""}` : `IMPORT_FAILED: ${r.errors.join("; ")}`); }
+    function publicRun(item){ if (item.kind === "mode") return setWorkMode("pm:" + item.id); let args = {}; if ((item.params || []).length) { const raw = prompt(`Arguments for ${PublicSkills.signature(item)} (JSON):`, JSON.stringify(publicExampleArgs(item))); if (raw == null) return; try { args = JSON.parse(raw || "{}"); } catch { return toast("Arguments must be valid JSON"); } } runLibraryCard({ engine: "rs", icon: "P", cat: "Public Skills", title: `Run ${item.name}`, desc: item.description.slice(0, 90), prompt: `Run my public ${item.kind} now: call ${item.name} ${JSON.stringify(args)} and report the result. If it reports an error, fix the arguments or improve the ${item.kind} with public_skill_update (read it first with public_skill_get {"name":"${item.name}"}).` }, true); }
+    function publicImprove(item){ const req = prompt(`What should change in '${item.title}'?`, ""); if (req == null) return; runLibraryCard({ engine: "rs", icon: "P", cat: "Public Skills", title: `Improve ${item.name}`, desc: req.slice(0, 90) || "AI review", prompt: `Improve my public ${item.kind} '${item.name}'. Request: ${req.trim() || "review it for correctness, robustness and clarity and improve it"}. First call public_skill_get {"name":"${item.name}"} to read the current definition, then submit the improved version with public_skill_update {"name":"${item.name}","patch":{...}} (keep the same name and kind; include every field you change in full)${item.kind === "skill" ? ", then run public_skill_test {\"name\":\"" + item.name + "\"} and fix any syntax error" : ""}. Finish with a one-paragraph summary of what changed.` }, true); }
+    function openPublicEditor(item, kind){
+      const PS = PublicSkills; closePublicEditor();
+      const def = item ? (() => { const d = JSON.parse(JSON.stringify(item)); delete d.createdAt; delete d.updatedAt; delete d.source; return d; })() : JSON.parse(JSON.stringify(PUBLIC_SKELETONS[kind] || PUBLIC_SKELETONS.skill));
+      const modal = document.createElement("div"); modal.className = "rs-template-modal rs-public-modal";
+      modal.innerHTML = `<div class="rs-template-editor rs-public-editor" role="dialog" aria-modal="true" aria-label="Public skill editor"><header><div><b>${item ? "Edit " + escRs(item.title) : "New public " + escRs(kind || "skill") + " (by hand)"}</b><span>${item ? escRs(item.kind) + " · v" + item.version + " · id " + escRs(item.id) : "Fill the JSON and press Install. Params become {{placeholders}} in Luau."}</span></div><div class="rs-template-head-actions"><button type="button" data-public-editor-doc>Field guide</button><button type="button" data-public-editor-close>Close</button></div></header><textarea class="rs-public-json" spellcheck="false">${escRs(JSON.stringify(def, null, 2))}</textarea><pre class="rs-public-doc" hidden>${escRs(PS.DEFINITION_DOC)}</pre><footer><span data-public-editor-status></span><button type="button" data-public-editor-validate>Validate</button><button type="button" data-apply data-public-editor-save>${item ? "Save" : "Install"}</button></footer></div>`;
+      document.body.appendChild(modal); publicEditorEl = modal;
+      const ta = modal.querySelector(".rs-public-json"), status = modal.querySelector("[data-public-editor-status]"), doc = modal.querySelector(".rs-public-doc");
+      const parse = () => { try { return { def: JSON.parse(ta.value) }; } catch (e) { return { err: "JSON: " + String(e.message || e) }; } };
+      modal.querySelector("[data-public-editor-close]").onclick = closePublicEditor;
+      modal.addEventListener("click", (e) => { if (e.target === modal) closePublicEditor(); });
+      modal.querySelector("[data-public-editor-doc]").onclick = () => { doc.hidden = !doc.hidden; };
+      modal.querySelector("[data-public-editor-validate]").onclick = () => { const p = parse(); if (p.err) { status.textContent = p.err; return; } const v = PS.validate(Object.assign({}, p.def, item ? { id: item.id } : {}), { reserved: publicReserved() }); status.textContent = v.ok ? `OK${v.warnings.length ? " — warnings: " + v.warnings.join("; ") : ""}` : v.errors.join("; "); status.style.color = v.ok ? "#9ed8b6" : ""; };
+      modal.querySelector("[data-public-editor-save]").onclick = () => { const p = parse(); if (p.err) { status.textContent = p.err; return; } const r = PS.upsert(Object.assign({}, p.def, item ? { id: item.id, kind: item.kind } : {}), { reserved: publicReserved(), source: item ? item.source : "manual" }); if (!r.ok) { status.textContent = r.errors.join("; "); status.style.color = ""; return; } toast(`${item ? "Saved" : "Installed"} ${r.item.kind} '${r.item.name}'${r.warnings.length ? " — " + r.warnings.length + " warning(s)" : ""}`); closePublicEditor(); };
+      setTimeout(() => { try { ta.focus(); } catch {} }, 0);
+    }
+    var publicEditorEl = null, openCardsPanel = null;
+    function closePublicEditor(){ try { if (publicEditorEl) publicEditorEl.remove(); } catch {} publicEditorEl = null; }
+    function showPublicInstalled(detail){
+      const item = detail && detail.item; if (!item) return;
+      closePublicEditor();
+      const warnings = Array.isArray(detail.warnings) ? detail.warnings : [];
+      const verb = detail.kind === "updated" ? "updated" : detail.kind === "imported" ? "imported" : "installed";
+      const modal = document.createElement("div"); modal.className = "rs-template-modal rs-public-modal";
+      const usage = item.kind === "mode" ? `Pick it in the OR menu → Work mode, or press Activate below.` : `Call it as <code>${escRs(PublicSkills.signature(item))}</code> — or press Try it.`;
+      modal.innerHTML = `<div class="rs-template-editor rs-public-editor rs-public-installed" role="dialog" aria-modal="true" aria-label="Public skill installed"><header><div><b>Public ${escRs(item.kind)} ${verb}: ${escRs(item.title)}</b><span>v${item.version} · by ${escRs(item.author)} · stored on this device</span></div><div class="rs-template-head-actions"><button type="button" data-public-editor-close>Close</button></div></header><div class="rs-public-installed-body"><p>${escRs(item.description)}</p><p class="rs-public-usage">${usage}</p>${(item.params || []).length ? `<p><b>Params:</b> ${item.params.map((p) => `<code>${escRs(p.name)}${p.required ? "" : "?"}</code> <small>${escRs(p.type)}${p.description ? " — " + escRs(p.description) : ""}</small>`).join("<br>")}</p>` : ""}${warnings.length ? `<p class="rs-public-warn"><b>Warnings:</b><br>${warnings.map(escRs).join("<br>")}</p>` : ""}<p class="rs-public-share">Share it: Public tab → Export file / Copy share code.</p></div><footer><span></span>${item.kind === "mode" ? `<button type="button" data-apply data-public-installed-activate>Activate mode</button>` : `<button type="button" data-apply data-public-installed-try>Try it</button>`}<button type="button" data-public-installed-open>Open Public tab</button></footer></div>`;
+      document.body.appendChild(modal); publicEditorEl = modal;
+      modal.querySelector("[data-public-editor-close]").onclick = closePublicEditor;
+      modal.addEventListener("click", (e) => { if (e.target === modal) closePublicEditor(); });
+      const tryBtn = modal.querySelector("[data-public-installed-try]"); if (tryBtn) tryBtn.onclick = () => { closePublicEditor(); publicRun(item); };
+      const actBtn = modal.querySelector("[data-public-installed-activate]"); if (actBtn) actBtn.onclick = () => { closePublicEditor(); setWorkMode("pm:" + item.id); };
+      modal.querySelector("[data-public-installed-open]").onclick = () => { closePublicEditor(); cardsTab = "public"; try { if (openCardsPanel) openCardsPanel(true); else { cardsPanel.hidden = false; renderCards(cardsPanel); } } catch {} };
+    }
+    window.addEventListener("or-public-skill-result", (e) => { try { const d = e.detail || {}; if (d.kind === "removed") { toast(`Public ${d.item && d.item.kind || "skill"} '${d.item && d.item.name}' deleted`); return; } if (d.kind === "toggled") return; showPublicInstalled(d); } catch (err) { try { diag("publicSkills.resultUi", { error: String(err) }); } catch {} } });
+    window.addEventListener("or-public-skills-change", () => { try { syncWorkModeUi(); } catch {} try { if (menuEl && !menuEl.hidden) buildMenu(); } catch {} try { if (cardsPanel && !cardsPanel.hidden && cardsTab === "public") renderCards(cardsPanel); } catch {} });
     function activityHtml() {
       if (!recentCards.length) {
         return '<div class="rs-cards-empty"><div class="rs-cards-empty-glyph">\u2726</div>No results yet<br><span>Every tool result lands here as a card.</span></div>';
@@ -7373,13 +7616,14 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const actN = recentCards.length ? ' <b>' + recentCards.length + '</b>' : '';
       const local = activeEngine() === "local";
       const mainLabel = local ? "Session" : "Library";
-      const body = cardsTab === "activity" ? activityHtml() : (local ? summaryHtml() : libraryHtml());
+      const body = cardsTab === "activity" ? activityHtml() : cardsTab === "public" ? publicHtml() : (local ? summaryHtml() : libraryHtml());
       panel.innerHTML =
         '<div class="rs-cards-top">'
         + '<div class="rs-cards-brand"><img class="rs-logo rs-cards-logo" alt="" aria-hidden="true" src="' + chrome.runtime.getURL("assets/icon128.png") + '"><span class="rs-cards-kicker" data-rs-brand-short>' + (orTheme==="void"?"VoidScript":"OrScript") /* selected-skin branding */ + '</span><span class="rs-cards-heading">Templates</span><span class="rs-cards-subheading">Reusable workflows · v' + EXT_VERSION + '</span></div>'
         + '<div class="rs-cards-tabs">'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "library" ? " on" : "") + '" data-tab="library">' + mainLabel + '</button>'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "activity" ? " on" : "") + '" data-tab="activity">Activity' + actN + '</button>'
+        + '<button type="button" class="rs-cards-tab' + (cardsTab === "public" ? " on" : "") + '" data-tab="public">Public' + (publicCount() ? ' <b>' + publicCount() + '</b>' : '') + '</button>'
         + '</div></div>'
         + '<div class="rs-cards-body">' + body + '</div>';
       // Bind tabs on every render. The panel is re-created frequently, so a
@@ -7410,6 +7654,13 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         });
         setTimeout(() => { try { search.focus(); } catch {} }, 0);
       }
+      const pubPrompt = panel.querySelector("#rs-public-prompt");
+      if (pubPrompt) {
+        pubPrompt.addEventListener("input", () => { publicDraft = pubPrompt.value; });
+        pubPrompt.addEventListener("keydown", (e) => { e.stopPropagation(); if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); const b = panel.querySelector("[data-public-create]"); if (b) b.click(); } });
+      }
+      const pubKind = panel.querySelector("#rs-public-kind");
+      if (pubKind) pubKind.addEventListener("change", () => { publicKind = pubKind.value; });
       const categorySelect=panel.querySelector("#rs-template-category");if(categorySelect)categorySelect.addEventListener("change",()=>{cardsCategory=categorySelect.value;visibleLibCache=libFiltered();const wrap=panel.querySelector("#rs-cards-grid-wrap");if(wrap)wrap.innerHTML=gridHtml();const count=panel.querySelector("[data-template-count]");if(count)count.textContent=String(visibleLibCache.length);});
     }
 

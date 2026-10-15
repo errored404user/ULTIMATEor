@@ -344,6 +344,10 @@ const STATE = Number(process.env.STATE || 0);
 // HELP=1 → the model answers a "how do templates work" question with orscript_help
 // (1.23.1 regression: "Internal loop error: FEATURE_HELP_TOPICS is not defined").
 const HELP = !!process.env.HELP;
+// PUBLIC=1 → Public Skills (1.25.0): the model installs a user-made skill with
+// public_skill_create, calls it by name (runs as execute_luau, relabelled), then
+// installs a custom work mode and activates it; the Public tab lists both.
+const PUBLIC = !!process.env.PUBLIC;
 w.chrome.storage.local.set({ rsAllowPlaytest: true, rsDebugDiagnostics: !!process.env.DIAG, rsMultiAgent: CREW, ...(process.env.ASK ? { rsPermMode: "ask" } : {}) });
 
 // ── load the bundle ───────────────────────────────────────────────────────
@@ -395,6 +399,14 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     const cmd = (name, params) => "```json\n" + JSON.stringify({ command: name, params }) + "\n```";
     onUserMessage = async (text) => {
       phase++;
+      if (PUBLIC && phase >= 3) {
+        if (phase === 3) await replyWith("I'll build that as a public skill.\n" + cmd("public_skill_create", { definition: { kind: "skill", name: "lantern_row", title: "Lantern Row", description: "Places a row of anchored lantern parts with PointLights next to a target instance.", params: [{ name: "path", type: "string", description: "Full path of the parent", required: true }, { name: "count", type: "number", description: "How many lanterns", default: 3 }], luau: "local target = game\nfor seg in string.gmatch({{path}}, '[^.]+') do target = target:FindFirstChild(seg) if not target then return {ok=false, error='missing ' .. seg} end end\nlocal made = 0\nfor i = 1, {{count}} do local p = Instance.new('Part') p.Name = 'Lantern_' .. i p.Anchored = true p.Parent = target made += 1 end\nreturn {ok=true, created=made}" } }));
+        else if (phase === 4) await replyWith("Installed. Let me try it.\n" + cmd("lantern_row", { path: "Workspace", count: 2 }));
+        else if (phase === 5) await replyWith("Now the work mode.\n" + cmd("public_skill_create", { definition: { kind: "mode", title: "Horror Builder", badge: "HORROR", base: "visualizer", description: "Builds dread: fog, flicker, low light and sound layers.", mandate: "You are a horror ambience specialist. Every scene must have Atmosphere fog, low ambient light, at least one flickering light source and a sound layer; verify with a screenshot after each pass and never leave a scene fully lit.", focus: ["execute_luau", "get_studio_state"] } }));
+        else if (phase === 6) await replyWith("Switching to it.\n" + cmd("public_skill_enable", { name: "horror_builder", activate: true }));
+        else await replyWith("Done — Lantern Row is installed and Horror Builder is active.");
+        return;
+      }
       if (HELP && phase >= 3) {
         if (phase === 3) await replyWith("Let me check how this build does it.\n" + cmd("orscript_help", { question: "how do templates work in orscript?" }));
         else await replyWith("Templates are reusable task recipes saved in the OR menu. Done.");
@@ -490,6 +502,38 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       if (process.env.ASK) ok("execute_luau asked for approval exactly once and ran after Allow", approvals.length === 1 && /execute_luau/.test(approvals[0].op) && d.getElementById("rs-approve").parentElement === d.documentElement, JSON.stringify(approvals));
       ok("no OR-internal flags leaked to the bridge", !toolCalls.some((c) => Object.keys(c.arguments || {}).some((k) => /^_or/.test(k))), JSON.stringify(toolCalls.map((c) => Object.keys(c.arguments || {}))));
       await sleep(1000);
+      ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
+      return;
+    }
+    if (PUBLIC) {
+      ok("bootstrap advertises Public Skills", /PUBLIC SKILLS preference/.test(userMessages[0]) && /public_skill_create/.test(userMessages[0]), userMessages[0].length + " chars");
+      await waitFor(() => userMessages.length >= 4, 40000, "public_skill_create result");
+      ok("public_skill_create installed the skill", /"status": "INSTALLED"/.test(userMessages[3]) && /"name": "lantern_row"/.test(userMessages[3]) && !/Internal loop error|is not defined/.test(userMessages[3]), userMessages[3].slice(0, 160).replace(/\n/g, " "));
+      ok("install modal shown to the user", !!d.querySelector(".rs-public-installed"), String(d.querySelector(".rs-public-installed") && d.querySelector(".rs-public-installed").textContent).slice(0, 80));
+      await waitFor(() => toolCalls.some((c) => c.name === "execute_luau" && /public skill 'lantern_row'/.test(String(c.arguments.code || ""))), 40000, "lantern_row execute_luau");
+      const ex = toolCalls.find((c) => c.name === "execute_luau" && /public skill 'lantern_row'/.test(String(c.arguments.code || "")));
+      ok("lantern_row ran as execute_luau with params injected as Lua literals", /local args = \{\["path"\]="Workspace",\["count"\]=2\}/.test(ex.arguments.code) && /string\.gmatch\("Workspace"/.test(ex.arguments.code) && /for i = 1, 2 do/.test(ex.arguments.code), ex.arguments.code.split("\n").slice(0, 4).join(" | ").slice(0, 200));
+      ok("no OR-internal flags leaked to the bridge", !Object.keys(ex.arguments).some((k) => /^_or/.test(k)), JSON.stringify(Object.keys(ex.arguments)));
+      await waitFor(() => userMessages.length >= 5, 40000, "lantern_row result");
+      ok("result is labelled with the public skill's name", /^Output of 'lantern_row'/.test(userMessages[4]) && !/Output of 'execute_luau'/.test(userMessages[4]), userMessages[4].slice(0, 100).replace(/\n/g, " "));
+      await waitFor(() => userMessages.length >= 6, 40000, "mode create result");
+      ok("custom work mode installed", /"status": "INSTALLED"/.test(userMessages[5]) && /"kind": "mode"/.test(userMessages[5]) && /"name": "horror_builder"/.test(userMessages[5]), userMessages[5].slice(0, 160).replace(/\n/g, " "));
+      await waitFor(() => userMessages.length >= 7, 40000, "mode enable result");
+      ok("public_skill_enable activated the mode", /"activated": true/.test(userMessages[6]), userMessages[6].slice(0, 120).replace(/\n/g, " "));
+      const badge = d.getElementById("rs-work-badge");
+      ok("bar badge shows the custom mode on its Visualizer base", !!badge && badge.textContent === "HORROR" && w.__rsWorkMode() === "visualizer" && w.__rsPublicMode() && w.__rsPublicMode().name === "horror_builder", badge && badge.textContent + " / " + w.__rsWorkMode());
+      const sysPrompt = (() => { try { return w.eval("RS").buildSystemPrompt({ siteName: "Notion" }); } catch (e) { return "ERR " + e; } })();
+      ok("system prompt now carries the custom mandate", /CUSTOM WORK MODE: HORROR BUILDER/.test(sysPrompt) && /layered on VISUALIZER/.test(sysPrompt) && /Custom work modes available: Horror Builder/.test(sysPrompt), sysPrompt.slice(0, 60));
+      // Public tab in the cards panel lists both items.
+      const cardsBtn = d.getElementById("rs-cards-btn") || [...d.querySelectorAll("#rs-bar button")].find((b) => /cards|library|templates/i.test(b.getAttribute("aria-label") || b.title || b.textContent || ""));
+      if (cardsBtn) { cardsBtn.click(); await sleep(200); const tab = d.querySelector('.rs-cards-tab[data-tab="public"]'); if (tab) { tab.click(); await sleep(200); } }
+      const rows = [...d.querySelectorAll(".rs-public-row")];
+      ok("Public tab lists the skill and the mode", rows.length === 2 && rows.some((r) => /Lantern Row/.test(r.textContent)) && rows.some((r) => /Horror Builder/.test(r.textContent) && /ACTIVE/.test(r.textContent)), rows.map((r) => r.textContent.replace(/\s+/g, " ").slice(0, 60)).join(" || ") || "cardsBtn=" + !!cardsBtn);
+      ok("Public tab has the prompt composer", !!d.getElementById("rs-public-prompt") && !!d.querySelector("[data-public-create]"));
+      ok("registry stored the items and the active mode", Array.isArray(storage.rsPublicSkills) && storage.rsPublicSkills.length === 2 && typeof storage.rsPublicMode === "string");
+      await waitFor(() => (w.__rsDiag || []).some((e) => e.event === "loop.end"), 30000, "loop.end");
+      ok("agent loop ended after the final text reply", true);
+      await sleep(800);
       ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
       return;
     }
