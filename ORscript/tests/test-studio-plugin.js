@@ -22,14 +22,14 @@ const cargo = read("agent/Cargo.toml");
 
 // ── plugin source ──
 assert(lua.startsWith("--!nocheck"), "plugin disables type checking (plugin globals)");
-assert(lua.includes('local VERSION = "1.23.0"'), "plugin version 1.23.0");
-assert(manifest.version === "1.23.2", "manifest 1.23.2");
-assert(/version = "1\.23\.0"/.test(cargo), "crate 1.23.0");
+assert(lua.includes('local VERSION = "1.24.0"'), "plugin version 1.24.0");
+assert(manifest.version === "1.24.0", "manifest 1.24.0");
+assert(/version = "1\.24\.0"/.test(cargo), "crate 1.24.0");
 assert(lua.includes("if RunService:IsRunning() then return end"), "plugin is edit-mode only");
 assert(lua.includes('"/api/plugin/hello"') && lua.includes('"/api/plugin/poll?client_id="') && lua.includes('"/api/plugin/result"'), "plugin speaks the hub protocol");
 assert(lua.includes('http://127.0.0.1:3000'), "default bridge URL is or-core");
 assert(lua.includes("ORscriptOpenCloudKey") && lua.includes("open_cloud_key"), "plugin forwards the Open Cloud key");
-const handlers = ["studio_plugin_ping", "studio_place_info", "plugin_execute_luau", "csg_union", "csg_negate", "csg_separate", "open_script", "script_live_update", "studio_import_file", "studio_publish_selection", "studio_prompt_asset_id", "studio_insert_asset", "studio_select_tool", "studio_undo", "studio_redo", "studio_notify", "screenshot_frame", "gamepass_handler_create", "developer_product_handler_create"];
+const handlers = ["studio_plugin_ping", "studio_place_info", "plugin_execute_luau", "csg_union", "csg_negate", "csg_separate", "open_script", "script_live_update", "studio_import_file", "studio_publish_selection", "studio_prompt_asset_id", "studio_insert_asset", "studio_select_tool", "studio_undo", "studio_redo", "studio_notify", "screenshot_frame", "gamepass_handler_create", "developer_product_handler_create", "studio_playtest", "studio_settings", "studio_selection", "studio_camera", "studio_script_editor", "studio_history", "studio_service_call", "studio_macro", "studio_save", "studio_output", "studio_test_run", "studio_mouse", "plugins_list", "plugin_widget", "plugin_invoke", "plugin_module_call", "plugin_source_read", "eclipse_status", "eclipse_open", "eclipse_handoff", "eclipse_import", "eclipse_play"];
 for (const h of handlers) assert(lua.includes("H." + h + " = function") || lua.includes("function H." + h), "plugin handler " + h);
 assert(lua.includes("setfenv") && lua.includes("loadstring"), "plugin_execute_luau sandboxes with loadstring + setfenv");
 assert(lua.includes("ChangeHistoryService:TryBeginRecording") || lua.includes("ChangeHistoryService:SetWaypoint"), "edits are undoable");
@@ -118,4 +118,23 @@ assert(config.includes("STUDIO PLUGIN (when studio_plugin_status reports connect
 assert(config.includes("gamepass_create {name, price, benefit}"), "mandates teach gamepass_create");
 
 console.log(`test-studio-plugin: ${pass} passed, ${fail} failed`);
+// ── 1.24.0: full Studio control, plugin interop bus, Eclipse Animator ──
+for (const h of ["studio_playtest", "studio_settings", "studio_selection", "studio_camera", "studio_script_editor", "studio_history", "studio_service_call", "studio_macro", "studio_save", "studio_output", "studio_test_run", "studio_mouse", "plugins_list", "plugin_widget", "plugin_invoke", "plugin_module_call", "plugin_source_read", "eclipse_status", "eclipse_open", "eclipse_handoff", "eclipse_import", "eclipse_play"]) {
+  assert(lua.includes('"' + h + '"'), "capability advertised " + h);
+  assert(main.includes('"' + h + '"'), "extension knows plugin command " + h);
+}
+assert(lua.includes("RunService:Run()") && lua.includes("RunService:Pause()") && lua.includes("RunService:Stop()"), "studio_playtest drives RunService");
+assert(lua.includes("settings():GetService(category)") && lua.includes("GetAvailableThemes"), "studio_settings reaches settings()");
+assert(lua.includes("ScriptEditorService:GetScriptDocuments()") && lua.includes("EditTextAsync") && lua.includes("ForceSetSelectionAsync"), "script editor documents are driven live");
+assert(lua.includes("shared.ORscript = BUS") && lua.includes('busFn.Name = "ORscriptBus"') && lua.includes("function BUS.register(spec)"), "plugin bus for other plugins");
+assert(lua.includes('"PluginGuiService"') && lua.includes('"PluginDebugService"'), "discovers widgets and debug plugins");
+assert(lua.includes("Studio does not allow a plugin to click another plugin's buttons"), "plugin_widget click is honest about the Studio limit");
+assert(lua.includes("ECLIPSE_ID = 86116556258301"), "Eclipse Animator asset id");
+assert(lua.includes("tableToKeyframeSequence") && lua.includes("KeyframeSequenceProvider:RegisterKeyframeSequence") && lua.includes("animator:StepAnimations"), "Eclipse exports convert to KeyframeSequences and preview in edit mode");
+assert(lua.includes('f.Name = "AnimSaves"') && lua.includes('"ORscriptAnimations"'), "handoff writes the standard AnimSaves import location");
+assert(lua.includes("ORscript = ORSCRIPT_ENV"), "plugin_execute_luau exposes the ORscript helper table");
+assert(/"studio_service_call", 120/.test(rs) && /"eclipse_import", 120/.test(rs) && /"plugin_invoke", 120/.test(rs), "or-core timeouts for the new commands");
+assert(config.includes("FULL STUDIO CONTROL (1.24.0") && config.includes("ECLIPSE ANIMATOR") && config.includes("eclipse_handoff {animation, rig_path: "), "prompts teach the new surface");
+assert(main.includes('eclipse_animator_open: "eclipse_open"') && main.includes('list_plugins: "plugins_list"'), "aliases");
+
 process.exit(fail ? 1 : 0);

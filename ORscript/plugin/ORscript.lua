@@ -1,5 +1,5 @@
 --!nocheck
--- ORscript Studio plugin  (ORscript 1.23.0)
+-- ORscript Studio plugin  (ORscript 1.24.0)
 -- SPDX-License-Identifier: GPL-3.0-or-later
 --
 -- A tiny worker that lives INSIDE Roblox Studio and lets ORscript (the browser
@@ -14,6 +14,17 @@
 --   * monetisation helpers: writes the game-pass / developer-product handler
 --     scripts and reports the universe id so ORscript can create the passes
 --     through your roblox.com session or an Open Cloud key
+--   * 1.24.0 FULL STUDIO CONTROL: run/pause/stop, settings(), selection,
+--     camera, script-editor documents, change history, any service method or
+--     property (studio_service_call), persistent toolbar macros, Save /
+--     Publish dialogs, TestService, Output log, viewport ray
+--   * 1.24.0 OTHER PLUGINS: discovery (widgets, saves, PluginDebugService,
+--     shared/_G APIs), the ORscript plugin bus other plugins can register on
+--     (shared.ORscript / CoreGui.ORscriptBus), invoking their Bindables /
+--     modules, reading their source, showing / hiding their panels
+--   * 1.24.0 ECLIPSE ANIMATOR bridge: detect, open on a rig, hand ORscript
+--     clips to Eclipse through <rig>.AnimSaves, import Eclipse saves / Module
+--     Exporter tables as KeyframeSequences, preview clips in edit mode
 --
 -- Install: or-core copies this file to %LOCALAPPDATA%\Roblox\Plugins\ORscript.lua
 -- (Windows) / ~/Documents/Roblox/Plugins/ORscript.lua (macOS) at startup, or
@@ -39,7 +50,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 if not plugin then return end
 if RunService:IsRunning() then return end -- edit mode only; play-test DataModels do not run the worker
 
-local VERSION = "1.23.0"
+local VERSION = "1.24.0"
 local DEFAULT_BRIDGE = "http://127.0.0.1:3000"
 local CLIENT_ID = "studio-plugin-" .. tostring(math.random(100000, 999999))
 local CAPABILITIES = {
@@ -47,7 +58,13 @@ local CAPABILITIES = {
 	"studio_import_file", "studio_publish_selection", "studio_prompt_asset_id", "studio_insert_asset",
 	"studio_place_info", "studio_select_tool", "studio_undo", "studio_redo", "studio_notify",
 	"screenshot_frame", "gamepass_handler_create", "developer_product_handler_create", "studio_plugin_ping",
+	-- 1.24.0
+	"studio_playtest", "studio_settings", "studio_selection", "studio_camera", "studio_script_editor", "studio_history",
+	"studio_service_call", "studio_macro", "studio_save", "studio_output", "studio_test_run", "studio_mouse",
+	"plugins_list", "plugin_widget", "plugin_invoke", "plugin_module_call", "plugin_source_read",
+	"eclipse_status", "eclipse_open", "eclipse_handoff", "eclipse_import", "eclipse_play",
 }
+local ORSCRIPT_ENV = {} -- helper table exposed to plugin_execute_luau as `ORscript` (filled below)
 
 local hello -- defined with the worker loop below
 local enabled = plugin:GetSetting("ORscriptEnabled")
@@ -269,6 +286,7 @@ function H.plugin_execute_luau(a)
 	local out = {}
 	local env = setmetatable({
 		plugin = plugin,
+		ORscript = ORSCRIPT_ENV,
 		print = function(...) local parts = {} for i = 1, select("#", ...) do parts[#parts + 1] = tostring(select(i, ...)) end out[#out + 1] = table.concat(parts, " ") end,
 		warn = function(...) local parts = {} for i = 1, select("#", ...) do parts[#parts + 1] = tostring(select(i, ...)) end out[#out + 1] = "[warn] " .. table.concat(parts, " ") end,
 	}, { __index = getfenv() })
@@ -561,6 +579,1433 @@ function H.developer_product_handler_create(a)
 	commit(rec)
 	return { script = s:GetFullName(), created = created, product_id = id }
 end
+
+-- ═════════════════════ 1.24.0: full Studio control ═════════════════════
+-- Everything below runs with plugin security inside Studio. Together with
+-- plugin_execute_luau (which exposes `plugin` and the `ORscript` helper table)
+-- this is the complete surface Studio offers a plugin: run/pause/stop,
+-- settings(), selection, camera, the script editor documents, change history,
+-- any service method (studio_service_call), toolbar macros, Save-to-Roblox,
+-- TestService, the Output log and a mouse/camera ray.
+local CoreGui = game:GetService("CoreGui")
+local LogService = game:GetService("LogService")
+local TestService = game:GetService("TestService")
+local UserInputService = game:GetService("UserInputService")
+local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
+local ServerStorage = game:GetService("ServerStorage")
+
+local function pathsOf(list)
+	local t = {}
+	for _, i in ipairs(list) do t[#t + 1] = i:GetFullName() end
+	return t
+end
+local function listArg(v)
+	if v == nil then return {} end
+	if type(v) == "table" then return v end
+	return { v }
+end
+-- instances named by a.paths / a.path, else the selection
+local function targets(a)
+	local list = listArg(a.paths)
+	if #list == 0 and a.path then list = { a.path } end
+	if #list == 0 then return Selection:Get() end
+	local out = {}
+	for _, p in ipairs(list) do out[#out + 1] = need(p) end
+	return out
+end
+local function numbers(v, n)
+	if typeof(v) == "Vector3" then return { v.X, v.Y, v.Z } end
+	if type(v) == "string" then
+		local t = {}
+		for num in v:gmatch("[-%d%.eE]+") do t[#t + 1] = tonumber(num) end
+		v = t
+	end
+	if type(v) ~= "table" then return nil end
+	local t = {}
+	for i = 1, (n or #v) do t[i] = tonumber(v[i]) if t[i] == nil then return nil end end
+	return t
+end
+local function toVector3(v)
+	if typeof(v) == "Vector3" then return v end
+	if type(v) == "table" and v.X ~= nil then return Vector3.new(tonumber(v.X) or 0, tonumber(v.Y) or 0, tonumber(v.Z) or 0) end
+	if type(v) == "table" and v.x ~= nil then return Vector3.new(tonumber(v.x) or 0, tonumber(v.y) or 0, tonumber(v.z) or 0) end
+	local t = numbers(v, 3)
+	return t and Vector3.new(t[1], t[2], t[3]) or nil
+end
+local function toCFrame(v)
+	if typeof(v) == "CFrame" then return v end
+	if typeof(v) == "Vector3" then return CFrame.new(v) end
+	if type(v) == "table" then
+		if v.Position ~= nil or v.position ~= nil or v.pos ~= nil then
+			local pos = toVector3(v.Position or v.position or v.pos) or Vector3.zero
+			local rot = v.Rotation or v.rotation or v.Orientation or v.orientation or v.rot
+			local r = rot and numbers(rot, 3)
+			if r then return CFrame.new(pos) * CFrame.fromOrientation(math.rad(r[1]), math.rad(r[2]), math.rad(r[3])) end
+			local look = toVector3(v.LookVector or v.lookVector or v.look)
+			if look then return CFrame.lookAt(pos, pos + look) end
+			return CFrame.new(pos)
+		end
+		if v.components then return toCFrame(v.components) end
+		local t = numbers(v)
+		if t and #t == 12 then return CFrame.new(table.unpack(t)) end
+		if t and #t == 7 then return CFrame.new(t[1], t[2], t[3], t[4], t[5], t[6], t[7]) end
+		if t and #t == 6 then return CFrame.new(t[1], t[2], t[3]) * CFrame.fromOrientation(math.rad(t[4]), math.rad(t[5]), math.rad(t[6])) end
+		if t and #t == 3 then return CFrame.new(t[1], t[2], t[3]) end
+	elseif type(v) == "string" then
+		return toCFrame(numbers(v))
+	end
+	return nil
+end
+local function enumFrom(s)
+	if typeof(s) == "EnumItem" then return s end
+	if type(s) ~= "string" then return nil end
+	local e, item = s:match("^Enum%.(%w+)%.(%w+)$")
+	if not e then return nil end
+	local okE, v = pcall(function() return Enum[e][item] end)
+	return okE and v or nil
+end
+-- JSON → Studio value: "Enum.X.Y", instance paths, {__type="Vector3"|"CFrame"|"Color3"|"UDim2"|"Vector2"|"NumberRange"|"BrickColor"}, plain values
+local function fromJson(v)
+	if type(v) == "string" then
+		local e = enumFrom(v)
+		if e then return e end
+		if v:match("^game%.") or v:match("^Workspace%.") or v:match("^workspace%.") then
+			local inst = resolve(v)
+			if inst then return inst end
+		end
+		return v
+	elseif type(v) == "table" then
+		local ty = v.__type or v.type
+		if ty == "Vector3" then return toVector3(v.value or v) end
+		if ty == "CFrame" then return toCFrame(v.value or v) end
+		if ty == "Color3" then local t = numbers(v.value or v, 3) return t and ((t[1] > 1 or t[2] > 1 or t[3] > 1) and Color3.fromRGB(t[1], t[2], t[3]) or Color3.new(t[1], t[2], t[3])) end
+		if ty == "Vector2" then local t = numbers(v.value or v, 2) return t and Vector2.new(t[1], t[2]) end
+		if ty == "UDim2" then local t = numbers(v.value or v, 4) return t and UDim2.new(t[1], t[2], t[3], t[4]) end
+		if ty == "NumberRange" then local t = numbers(v.value or v, 2) return t and NumberRange.new(t[1], t[2]) end
+		if ty == "BrickColor" then return BrickColor.new(tostring(v.value or v[1])) end
+		if ty == "Instance" then return resolve(v.value or v.path) end
+		local out = {}
+		for k, x in pairs(v) do if k ~= "__type" then out[k] = fromJson(x) end end
+		return out
+	end
+	return v
+end
+-- Studio value → JSON-safe (depth/size limited)
+local function toJson(v, depth)
+	depth = depth or 0
+	local ty = typeof(v)
+	if ty == "Instance" then return v:GetFullName() end
+	if ty == "EnumItem" then return tostring(v) end
+	if ty == "Vector3" then return { v.X, v.Y, v.Z } end
+	if ty == "Vector2" then return { v.X, v.Y } end
+	if ty == "CFrame" then return { v:GetComponents() } end
+	if ty == "Color3" then return { math.floor(v.R * 255 + 0.5), math.floor(v.G * 255 + 0.5), math.floor(v.B * 255 + 0.5) } end
+	if ty == "UDim2" then return { v.X.Scale, v.X.Offset, v.Y.Scale, v.Y.Offset } end
+	if ty == "function" or ty == "thread" or ty == "userdata" or ty == "RBXScriptSignal" or ty == "RBXScriptConnection" then return "<" .. ty .. ">" end
+	if ty == "table" then
+		if depth > 5 then return "<table>" end
+		local out, n = {}, 0
+		for k, x in pairs(v) do
+			n = n + 1
+			if n > 200 then out["__truncated"] = true break end
+			out[type(k) == "number" and k or tostring(k)] = toJson(x, depth + 1)
+		end
+		return out
+	end
+	return v
+end
+local function pluginUrl(assetId) return "https://create.roblox.com/store/asset/" .. tostring(assetId) end
+
+-- ───────────── run / pause / stop ─────────────
+function H.studio_playtest(a)
+	local action = tostring(a.action or "state"):lower()
+	local function state()
+		return { running = RunService:IsRunning(), run_mode = RunService:IsRunMode(), edit = RunService:IsEdit(), studio = RunService:IsStudio() }
+	end
+	if action == "state" then return state() end
+	if action == "run" or action == "start" then
+		if RunService:IsRunning() then return { already = true, state = state() } end
+		RunService:Run()
+		task.wait(0.5)
+		return { started = true, mode = "Run (server simulation in this DataModel; the plugin keeps working)", state = state(), hint = "studio_playtest {action:'stop'} to return to edit mode; Play Solo (F5) has no plugin API - ask the user" }
+	elseif action == "pause" then
+		RunService:Pause()
+		return { paused = true, state = state() }
+	elseif action == "stop" then
+		RunService:Stop()
+		task.wait(0.5)
+		return { stopped = true, state = state() }
+	end
+	error("action must be state|run|pause|stop")
+end
+
+-- ───────────── settings() ─────────────
+local SETTING_CATEGORIES = { "Studio", "Rendering", "Physics", "Network", "Lua", "Debug", "Diagnostics", "Game Options", "Task Scheduler" }
+function H.studio_settings(a)
+	local category = tostring(a.category or "Studio")
+	local holder
+	if category:lower() == "usergamesettings" or category:lower() == "user" then
+		holder = UserSettings():GetService("UserGameSettings")
+	else
+		local okC, c = pcall(function() return settings():GetService(category) end)
+		if not okC or not c then
+			local okI, c2 = pcall(function() return settings()[category] end)
+			if okI then c = c2 end
+		end
+		holder = c
+	end
+	if not holder then error("unknown settings category '" .. category .. "' (try " .. table.concat(SETTING_CATEGORIES, ", ") .. ", UserGameSettings)") end
+	local name = a.name and tostring(a.name) or nil
+	if not name then
+		local out = { category = category, path = holder:GetFullName(), hint = "pass name (e.g. Theme, 'Camera Speed', QualityLevel, 'Auto-Save Enabled') to read, name+value to write" }
+		if category == "Studio" then
+			pcall(function() out.theme = tostring(holder.Theme) end)
+			pcall(function() local t = {} for _, th in ipairs(holder:GetAvailableThemes()) do t[#t + 1] = th.Name end out.available_themes = t end)
+		end
+		return out
+	end
+	if a.value == nil then
+		local okR, val = pcall(function() return holder[name] end)
+		if not okR then error("cannot read " .. category .. "." .. name .. ": " .. tostring(val)) end
+		return { category = category, name = name, value = toJson(val) }
+	end
+	local value = fromJson(a.value)
+	if category == "Studio" and name == "Theme" and type(value) == "string" then
+		local wanted = value:lower()
+		for _, th in ipairs(holder:GetAvailableThemes()) do if th.Name:lower() == wanted then value = th end end
+	end
+	local okW, errW = pcall(function() holder[name] = value end)
+	if not okW then error("cannot write " .. category .. "." .. name .. ": " .. tostring(errW)) end
+	local after
+	pcall(function() after = toJson(holder[name]) end)
+	return { category = category, name = name, value = after, written = true }
+end
+
+-- ───────────── selection ─────────────
+function H.studio_selection(a)
+	local action = tostring(a.action or "get"):lower()
+	if action == "get" then
+		local out = {}
+		for _, s in ipairs(Selection:Get()) do out[#out + 1] = { path = s:GetFullName(), class = s.ClassName } end
+		return { selection = out, count = #out }
+	elseif action == "clear" then
+		Selection:Set({})
+		return { count = 0 }
+	elseif action == "set" or action == "add" or action == "remove" then
+		local items = targets(a)
+		if action == "set" then Selection:Set(items)
+		elseif action == "add" then Selection:Add(items)
+		else Selection:Remove(items) end
+		return { count = #Selection:Get(), selection = pathsOf(Selection:Get()) }
+	elseif action == "by_class" or action == "by_name" or action == "descendants" then
+		local root = a.root and need(a.root, "root") or workspace
+		local cls = a.class_name and tostring(a.class_name) or nil
+		local pat = a.name_pattern and tostring(a.name_pattern) or nil
+		local hits = {}
+		for _, d in ipairs(root:GetDescendants()) do
+			if (not cls or d:IsA(cls)) and (not pat or d.Name:lower():find(pat:lower(), 1, true)) then
+				hits[#hits + 1] = d
+				if #hits >= (tonumber(a.limit) or 500) then break end
+			end
+		end
+		Selection:Set(hits)
+		return { count = #hits, selection = pathsOf(hits) }
+	end
+	error("action must be get|set|add|remove|clear|by_class|by_name")
+end
+
+-- ───────────── camera ─────────────
+function H.studio_camera(a)
+	local cam = workspace.CurrentCamera
+	if not cam then error("no camera") end
+	local action = tostring(a.action or "get"):lower()
+	if action == "get" then
+		return { position = toJson(cam.CFrame.Position), look_vector = toJson(cam.CFrame.LookVector), cframe = toJson(cam.CFrame), fov = cam.FieldOfView, focus = toJson(cam.Focus.Position), type = tostring(cam.CameraType) }
+	elseif action == "set" then
+		local cf = a.cframe and toCFrame(a.cframe)
+		if not cf then
+			local pos = toVector3(a.position)
+			local look = toVector3(a.look_at)
+			if not pos then error("set needs cframe or position (+ optional look_at)") end
+			cf = look and CFrame.lookAt(pos, look) or CFrame.new(pos) * (cam.CFrame - cam.CFrame.Position)
+		end
+		cam.CameraType = Enum.CameraType.Scriptable
+		cam.CFrame = cf
+		if a.fov then cam.FieldOfView = math.clamp(tonumber(a.fov) or 70, 1, 120) end
+		cam.CameraType = Enum.CameraType.Fixed
+		return { position = toJson(cam.CFrame.Position), fov = cam.FieldOfView }
+	elseif action == "look_at" then
+		local target = a.path and need(a.path, "target") or Selection:Get()[1]
+		local pos = toVector3(a.position) or (target and (target:IsA("Model") and target:GetPivot().Position or target:IsA("BasePart") and target.Position))
+		if not pos then error("look_at needs path (model/part) or position") end
+		cam.CameraType = Enum.CameraType.Scriptable
+		cam.CFrame = CFrame.lookAt(cam.CFrame.Position, pos)
+		cam.CameraType = Enum.CameraType.Fixed
+		return { looking_at = toJson(pos) }
+	elseif action == "focus" or action == "orbit" then
+		return H.screenshot_frame({ path = a.path, yaw = a.yaw, pitch = a.pitch, distance = a.distance, fov = a.fov, hide_selection = a.hide_selection == true })
+	elseif action == "fov" then
+		cam.FieldOfView = math.clamp(tonumber(a.fov) or 70, 1, 120)
+		return { fov = cam.FieldOfView }
+	end
+	error("action must be get|set|look_at|focus|fov")
+end
+
+-- ───────────── script editor documents ─────────────
+local function docFor(s)
+	for _, d in ipairs(ScriptEditorService:GetScriptDocuments()) do
+		local okS, scr = pcall(function() return d:GetScript() end)
+		if okS and scr == s then return d end
+	end
+	return nil
+end
+function H.studio_script_editor(a)
+	local action = tostring(a.action or "list"):lower()
+	if action == "list" then
+		local out = {}
+		for _, d in ipairs(ScriptEditorService:GetScriptDocuments()) do
+			local entry = { command_bar = d:IsCommandBar() }
+			pcall(function() local s = d:GetScript() entry.path = s and s:GetFullName() or nil end)
+			pcall(function() entry.lines = d:GetLineCount() end)
+			pcall(function() local l, c = d:GetSelectionStart() entry.cursor = { line = l, char = c } end)
+			out[#out + 1] = entry
+		end
+		local active = StudioService.ActiveScript
+		return { documents = out, count = #out, active = active and active:GetFullName() or nil }
+	end
+	local s = need(a.path, "script")
+	if not s:IsA("LuaSourceContainer") then error("not a script: " .. s:GetFullName()) end
+	if action == "open" then
+		local okO, errO = pcall(function() return ScriptEditorService:OpenScriptDocumentAsync(s) end)
+		if not okO then plugin:OpenScript(s, tonumber(a.line) or 1) end
+		local d = docFor(s)
+		if d and a.line then pcall(function() d:ForceSetSelectionAsync(tonumber(a.line), 1) end) end
+		return { path = s:GetFullName(), open = d ~= nil, via = okO and "ScriptEditorService" or "plugin:OpenScript" }
+	elseif action == "close" then
+		local d = docFor(s)
+		if not d then return { path = s:GetFullName(), open = false } end
+		local okC, errC = pcall(function() return d:CloseAsync() end)
+		return { path = s:GetFullName(), closed = okC, error = (not okC) and tostring(errC) or nil }
+	elseif action == "text" then
+		local d = docFor(s)
+		local text = d and d:GetText() or ScriptEditorService:GetEditorSource(s)
+		local from = tonumber(a.start_line)
+		local to = tonumber(a.end_line)
+		if from or to then
+			local lines = text:split("\n")
+			local out = {}
+			for i = math.max(1, from or 1), math.min(#lines, to or #lines) do out[#out + 1] = string.format("%d| %s", i, lines[i]) end
+			return { __text = table.concat(out, "\n") }
+		end
+		return { __text = text:sub(1, tonumber(a.max_chars) or 60000) }
+	elseif action == "find" then
+		local query = tostring(a.query or "")
+		if query == "" then error("find needs query") end
+		local text = ScriptEditorService:GetEditorSource(s)
+		local hits = {}
+		for i, line in ipairs(text:split("\n")) do
+			if line:lower():find(query:lower(), 1, true) then hits[#hits + 1] = { line = i, text = line:sub(1, 200) } end
+			if #hits >= 100 then break end
+		end
+		return { path = s:GetFullName(), hits = hits, count = #hits }
+	elseif action == "cursor" or action == "goto" then
+		local d = docFor(s)
+		if not d then
+			plugin:OpenScript(s, tonumber(a.line) or 1)
+			return { path = s:GetFullName(), line = tonumber(a.line) or 1, via = "plugin:OpenScript" }
+		end
+		local okS, errS = pcall(function() return d:ForceSetSelectionAsync(tonumber(a.line) or 1, tonumber(a.char) or 1, tonumber(a.end_line), tonumber(a.end_char)) end)
+		if not okS then error("cursor failed: " .. tostring(errS)) end
+		return { path = s:GetFullName(), line = tonumber(a.line) or 1 }
+	elseif action == "insert" or action == "replace_range" then
+		local text = tostring(a.text or "")
+		local rec = record("script editor edit")
+		local d = docFor(s)
+		local okE, errE
+		if d then
+			local sl = tonumber(a.start_line) or tonumber(a.line) or (d:GetLineCount() + 1)
+			local sc = tonumber(a.start_char) or 1
+			local el = action == "insert" and sl or (tonumber(a.end_line) or sl)
+			local ec = action == "insert" and sc or (tonumber(a.end_char) or 1)
+			if action == "insert" and sl > d:GetLineCount() then
+				sl = d:GetLineCount(); el = sl
+				sc = #d:GetLine(sl) + 1; ec = sc
+				text = "\n" .. text
+			end
+			okE, errE = pcall(function() return d:EditTextAsync(text, sl, sc, el, ec) end)
+		else
+			local src = ScriptEditorService:GetEditorSource(s)
+			local lines = src:split("\n")
+			local sl = tonumber(a.start_line) or tonumber(a.line) or (#lines + 1)
+			if action == "insert" then
+				table.insert(lines, math.clamp(sl, 1, #lines + 1), text)
+			else
+				local el = tonumber(a.end_line) or sl
+				for _ = sl, el do table.remove(lines, sl) end
+				table.insert(lines, sl, text)
+			end
+			local newSrc = table.concat(lines, "\n")
+			okE, errE = pcall(function() ScriptEditorService:UpdateSourceAsync(s, function() return newSrc end) end)
+			if not okE then s.Source = newSrc okE = true end
+		end
+		commit(rec)
+		if not okE then error("edit failed: " .. tostring(errE)) end
+		return { path = s:GetFullName(), edited = true, open_in_editor = d ~= nil }
+	end
+	error("action must be list|open|close|text|find|cursor|insert|replace_range")
+end
+
+-- ───────────── change history ─────────────
+function H.studio_history(a)
+	local action = tostring(a.action or "status"):lower()
+	if action == "undo" then return H.studio_undo(a) end
+	if action == "redo" then return H.studio_redo(a) end
+	if action == "waypoint" then
+		ChangeHistoryService:SetWaypoint(tostring(a.label or "ORscript"))
+		return { waypoint = tostring(a.label or "ORscript") }
+	end
+	if action == "enable" or action == "disable" then
+		ChangeHistoryService:SetEnabled(action == "enable")
+		return { enabled = action == "enable" }
+	end
+	local out = {}
+	pcall(function() out.can_undo = ChangeHistoryService:GetCanUndo() end)
+	pcall(function() out.can_redo = ChangeHistoryService:GetCanRedo() end)
+	pcall(function() out.enabled = ChangeHistoryService:IsEnabled() end)
+	return out
+end
+
+-- ───────────── any service method / property ─────────────
+function H.studio_service_call(a)
+	local svcName = tostring(a.service or "")
+	if svcName == "" then error("service is required (e.g. StudioService, ScriptEditorService, Lighting, Terrain, PhysicsService, CollectionService, plugin, settings)") end
+	local obj
+	if svcName == "plugin" then obj = plugin
+	elseif svcName == "settings" then obj = settings()
+	elseif svcName == "game" then obj = game
+	elseif svcName:match("^game%.") or svcName:match("^Workspace") then obj = need(svcName)
+	else
+		local okS, svc = pcall(function() return game:GetService(svcName) end)
+		if not okS or not svc then obj = resolve(svcName) end
+		obj = obj or svc
+	end
+	if not obj then error("unknown service/instance '" .. svcName .. "'") end
+	local args = {}
+	for i, v in ipairs(listArg(a.args)) do args[i] = fromJson(v) end
+	if a.property then
+		local prop = tostring(a.property)
+		if a.value ~= nil then
+			local rec = record("set " .. prop)
+			local okW, errW = pcall(function() obj[prop] = fromJson(a.value) end)
+			commit(rec)
+			if not okW then error("cannot set " .. prop .. ": " .. tostring(errW)) end
+		end
+		local okR, val = pcall(function() return obj[prop] end)
+		if not okR then error("cannot read " .. prop .. ": " .. tostring(val)) end
+		return { target = svcName, property = prop, value = toJson(val) }
+	end
+	local method = tostring(a.method or "")
+	if method == "" then error("method (or property) is required") end
+	local fn = obj[method]
+	if type(fn) ~= "function" then error(svcName .. "." .. method .. " is not a method") end
+	local rec = record(svcName .. ":" .. method)
+	local results = { pcall(fn, obj, table.unpack(args)) }
+	commit(rec)
+	if not results[1] then error(svcName .. ":" .. method .. " failed: " .. tostring(results[2])) end
+	local out = {}
+	for i = 2, #results do out[#out + 1] = toJson(results[i]) end
+	return { target = svcName, method = method, results = out }
+end
+
+-- ───────────── toolbar macros (persisted) ─────────────
+local macroButtons = {}
+local function loadMacros() local m = plugin:GetSetting("ORscriptMacros") return type(m) == "table" and m or {} end
+local function installMacro(m)
+	if macroButtons[m.name] then return end
+	local okB, btn = pcall(function() return toolbar:CreateButton("ORscriptMacro_" .. m.name, m.tooltip or ("ORscript macro " .. m.name), m.icon or "rbxassetid://6031071053", m.name) end)
+	if not okB then return end
+	btn.ClickableWhenViewportHidden = true
+	btn.Click:Connect(function()
+		local okR, res = pcall(function() return H.plugin_execute_luau({ code = m.code }) end)
+		if okR then log("macro " .. m.name .. ": " .. tostring(res and res.__text or "ok")) else warn("[ORscript] macro " .. m.name .. " failed: " .. tostring(res)) end
+		btn:SetActive(false)
+	end)
+	macroButtons[m.name] = btn
+end
+function H.studio_macro(a)
+	local action = tostring(a.action or (a.code and "create" or "list")):lower()
+	local macros = loadMacros()
+	if action == "list" then
+		local out = {}
+		for _, m in ipairs(macros) do out[#out + 1] = { name = m.name, tooltip = m.tooltip, bytes = #tostring(m.code or "") } end
+		return { macros = out, count = #out }
+	end
+	local name = tostring(a.name or ""):gsub("[^%w_ %-]", "")
+	if name == "" then error("name is required") end
+	if action == "create" or action == "update" then
+		local code = tostring(a.code or "")
+		if code == "" then error("code (Luau run on click, plugin context) is required") end
+		local fn, err = loadstring(code)
+		if not fn then error("macro code has a syntax error: " .. tostring(err)) end
+		local found = false
+		for _, m in ipairs(macros) do if m.name == name then m.code = code m.tooltip = a.tooltip or m.tooltip m.icon = a.icon or m.icon found = true end end
+		if not found then macros[#macros + 1] = { name = name, code = code, tooltip = a.tooltip, icon = a.icon } end
+		plugin:SetSetting("ORscriptMacros", macros)
+		for _, m in ipairs(macros) do if m.name == name then installMacro(m) end end
+		return { name = name, created = not found, hint = "the button is in the ORscript toolbar; studio_macro {action:'run', name} runs it from here" }
+	elseif action == "run" then
+		for _, m in ipairs(macros) do if m.name == name then return H.plugin_execute_luau({ code = m.code }) end end
+		error("no macro named " .. name)
+	elseif action == "remove" then
+		local kept = {}
+		for _, m in ipairs(macros) do if m.name ~= name then kept[#kept + 1] = m end end
+		plugin:SetSetting("ORscriptMacros", kept)
+		if macroButtons[name] then pcall(function() macroButtons[name].Enabled = false end) macroButtons[name] = nil end
+		return { name = name, removed = #kept ~= #macros, hint = "toolbar buttons disappear fully after Studio reloads plugins" }
+	end
+	error("action must be create|update|run|remove|list")
+end
+for _, m in ipairs(loadMacros()) do pcall(installMacro, m) end
+
+-- ───────────── save / publish ─────────────
+function H.studio_save(a)
+	local action = tostring(a.action or "selection_to_roblox"):lower()
+	if action == "selection_to_roblox" or action == "publish_selection" then
+		return H.studio_publish_selection(a)
+	elseif action == "prompt_save_selection" or action == "save_selection_file" then
+		if a.paths then Selection:Set(targets(a)) end
+		if #Selection:Get() == 0 then error("select (or pass paths for) the instances to save") end
+		local okS = plugin:PromptSaveSelection(tostring(a.name or "ORscript selection"))
+		return { saved = okS == true, prompted = true }
+	elseif action == "place" or action == "publish_place" then
+		error("Studio exposes no plugin API to save or publish the PLACE - ask the user to press Ctrl+S / Alt+P (Team Create autosaves). Models/animations CAN be published with studio_save {action:'selection_to_roblox'}.")
+	end
+	error("action must be selection_to_roblox|prompt_save_selection")
+end
+
+-- ───────────── TestService + Output ─────────────
+local function logs(count, level)
+	local out = {}
+	local hist = LogService:GetLogHistory()
+	local want = level and tostring(level):lower() or nil
+	for i = #hist, 1, -1 do
+		local e = hist[i]
+		local kind = tostring(e.messageType):gsub("Enum%.MessageType%.Message", ""):lower()
+		if not want or want == "all" or kind:find(want, 1, true) then
+			table.insert(out, 1, { t = e.timestamp, kind = kind, text = tostring(e.message):sub(1, 500) })
+			if #out >= (count or 50) then break end
+		end
+	end
+	return out
+end
+function H.studio_output(a)
+	return { messages = logs(tonumber(a.count) or 50, a.level), hint = "level=error|warning|info|output" }
+end
+function H.studio_test_run(a)
+	local before = #LogService:GetLogHistory()
+	local okT, errT = pcall(function() TestService:Run() end)
+	task.wait(tonumber(a.wait) or 1)
+	local hist = LogService:GetLogHistory()
+	local out = {}
+	for i = before + 1, #hist do out[#out + 1] = { kind = tostring(hist[i].messageType):gsub("Enum%.MessageType%.Message", ""), text = tostring(hist[i].message):sub(1, 500) } end
+	if not okT then error("TestService:Run failed: " .. tostring(errT)) end
+	return { ran = true, messages = out, hint = "TestService:Check/Require/Error calls in scripts and TestService children run here" }
+end
+
+-- ───────────── mouse / viewport ray ─────────────
+function H.studio_mouse(a)
+	local cam = workspace.CurrentCamera
+	if not cam then error("no camera") end
+	local loc
+	pcall(function() loc = UserInputService:GetMouseLocation() end)
+	local ray
+	if a.viewport_x and a.viewport_y then
+		ray = cam:ViewportPointToRay(tonumber(a.viewport_x), tonumber(a.viewport_y))
+	elseif loc and tostring(a.action or ""):lower() ~= "center" then
+		ray = cam:ViewportPointToRay(loc.X, loc.Y)
+	else
+		ray = cam:ViewportPointToRay(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = {}
+	local hit = workspace:Raycast(ray.Origin, ray.Direction * (tonumber(a.distance) or 5000), params)
+	return {
+		mouse = loc and { loc.X, loc.Y } or nil,
+		viewport = { cam.ViewportSize.X, cam.ViewportSize.Y },
+		hit = hit and { path = hit.Instance:GetFullName(), position = toJson(hit.Position), normal = toJson(hit.Normal), material = tostring(hit.Material), distance = hit.Distance } or nil,
+	}
+end
+
+-- ═════════════════════ 1.24.0: other plugins ═════════════════════
+-- Studio keeps every plugin in its own sandbox: there is no API to call into
+-- another plugin's closures or to click its buttons. What IS reachable, and
+-- what the commands below use:
+--   * the ORscript plugin bus (shared.ORscript / _G.ORscript and the
+--     CoreGui.ORscriptBus BindableFunction) - any plugin can register
+--     commands there and ORscript invokes them (plugins_list → plugin_invoke)
+--   * other plugins' widgets in CoreGui / PluginGuiService: read their UI,
+--     show / hide them (plugin_widget)
+--   * BindableFunctions, ModuleScripts and shared/_G tables that plugins leave
+--     in the DataModel (plugin_invoke, plugin_module_call)
+--   * their source when "Plugin Debugging Enabled" is on (PluginDebugService:
+--     plugin_source_read) - so the agent can learn a plugin's real API
+--   * their footprints: save folders / exported modules (Eclipse Animator,
+--     Moon Animator, the Roblox Animation Editor, Rojo, F3X ...)
+local KNOWN_PLUGINS = {
+	{ id = "eclipse_animator", name = "Eclipse Animator", match = { "eclipse" }, asset_id = 86116556258301, kind = "animation",
+		notes = "flagship animator (riftkuro / Seventh Eclipse, released Oct 2026): IK/FK, layers, graph editor, Blender armature import, physics, Module Exporter. ORscript bridge: eclipse_status / eclipse_open / eclipse_handoff / eclipse_import / eclipse_play" },
+	{ id = "moon_animator", name = "Moon Animator 2", match = { "moon animator", "moonanimator" }, asset_id = 4725618216, kind = "animation", notes = "saves under ServerStorage.MoonAnimator2Saves (per rig); exports KeyframeSequences the animation_* commands can import" },
+	{ id = "roblox_animation_editor", name = "Roblox Animation Editor", match = { "animsaves", "animationclipeditor", "animation editor" }, kind = "animation", notes = "built in; saves KeyframeSequences under <rig>.AnimSaves" },
+	{ id = "f3x", name = "Building Tools by F3X", match = { "f3x", "building tools" }, asset_id = 142785488, kind = "building" },
+	{ id = "rojo", name = "Rojo", match = { "rojo" }, kind = "sync", notes = "file sync; ORscript edits through ScriptEditorService are picked up by Rojo two-way sync" },
+	{ id = "tag_editor", name = "Tag Editor", match = { "tag editor", "tageditor" }, kind = "tags" },
+	{ id = "archimedes", name = "Archimedes", match = { "archimedes" }, kind = "building" },
+	{ id = "gapfill", name = "GapFill", match = { "gapfill", "gap fill" }, kind = "building" },
+	{ id = "brushtool", name = "Brushtool", match = { "brushtool" }, kind = "building" },
+	{ id = "orscript", name = "ORscript", match = { "orscript" }, kind = "agent" },
+}
+local function knownFor(text)
+	local t = tostring(text or ""):lower()
+	for _, k in ipairs(KNOWN_PLUGINS) do
+		for _, m in ipairs(k.match) do if t:find(m, 1, true) then return k end end
+	end
+	return nil
+end
+
+-- plugin bus
+local BUS = { version = VERSION, plugins = {} }
+function BUS.register(spec)
+	if type(spec) ~= "table" or type(spec.name) ~= "string" then error("ORscript.register expects {name, version?, description?, commands = {name = function|BindableFunction}}") end
+	BUS.plugins[spec.name] = { name = spec.name, version = spec.version, description = spec.description, commands = spec.commands or {}, registered_at = os.time() }
+	log("plugin registered on the ORscript bus: " .. spec.name)
+	return true
+end
+function BUS.unregister(name) BUS.plugins[tostring(name)] = nil return true end
+function BUS.list()
+	local out = {}
+	for name, p in pairs(BUS.plugins) do
+		local cmds = {}
+		for c in pairs(p.commands) do cmds[#cmds + 1] = c end
+		table.sort(cmds)
+		out[#out + 1] = { name = name, version = p.version, description = p.description, commands = cmds }
+	end
+	return out
+end
+function BUS.invoke(pluginName, command, args)
+	local p = BUS.plugins[tostring(pluginName)]
+	if not p then error("no plugin named '" .. tostring(pluginName) .. "' on the ORscript bus") end
+	local fn = p.commands[tostring(command)]
+	if fn == nil then error("plugin '" .. tostring(pluginName) .. "' has no command '" .. tostring(command) .. "'") end
+	if typeof(fn) == "Instance" and fn:IsA("BindableFunction") then return fn:Invoke(args) end
+	if type(fn) ~= "function" then error("command '" .. tostring(command) .. "' is not callable") end
+	return fn(args)
+end
+function BUS.execute(code) return H.plugin_execute_luau({ code = code }) end
+function BUS.resolve(p) return resolve(p) end
+pcall(function() shared.ORscript = BUS end)
+pcall(function() _G.ORscript = BUS end)
+local busFn = CoreGui:FindFirstChild("ORscriptBus")
+if not busFn then
+	busFn = Instance.new("BindableFunction")
+	busFn.Name = "ORscriptBus"
+	busFn.Parent = CoreGui
+end
+busFn.OnInvoke = function(op, ...)
+	op = tostring(op)
+	if op == "register" then return BUS.register(...) end
+	if op == "unregister" then return BUS.unregister(...) end
+	if op == "list" then return BUS.list() end
+	if op == "invoke" then return BUS.invoke(...) end
+	if op == "execute" then local r = BUS.execute(...) return r and r.__text or r end
+	if op == "version" then return VERSION end
+	error("ORscriptBus ops: register|unregister|list|invoke|execute|version")
+end
+
+local function widgetContainers()
+	local list = {}
+	for _, svcName in ipairs({ "CoreGui", "PluginGuiService" }) do
+		local okS, svc = pcall(function() return game:GetService(svcName) end)
+		if okS and svc then
+			local okC, kids = pcall(function() return svc:GetChildren() end)
+			if okC then for _, k in ipairs(kids) do list[#list + 1] = k end end
+		end
+	end
+	return list
+end
+local function isForeignGui(i)
+	if not (i:IsA("PluginGui") or i:IsA("ScreenGui")) then return false end
+	if i:IsA("ScreenGui") and (i.Name:match("^Roblox") or i.Name:match("^Core") or i.Name == "TeleportGui" or i.Name == "PlayerList") then return false end
+	return true
+end
+local function widgetInfo(g, deep)
+	local info = { name = g.Name, class = g.ClassName, path = g:GetFullName() }
+	pcall(function() info.title = g.Title end)
+	pcall(function() info.enabled = g.Enabled end)
+	local buttons, boxes, texts, total = 0, 0, {}, 0
+	local okD = pcall(function()
+		for _, d in ipairs(g:GetDescendants()) do
+			total = total + 1
+			if d:IsA("GuiButton") then buttons = buttons + 1 end
+			if d:IsA("TextBox") then boxes = boxes + 1 end
+			if (d:IsA("TextLabel") or d:IsA("TextButton")) and #texts < (deep and 60 or 12) then
+				local t = tostring(d.Text or ""):gsub("%s+", " ")
+				if t ~= "" and #t < 80 then texts[#texts + 1] = t end
+			end
+		end
+	end)
+	info.readable = okD
+	info.descendants, info.buttons, info.textboxes, info.texts = total, buttons, boxes, texts
+	local k = knownFor((info.title or "") .. " " .. g.Name)
+	if k then info.known = k.id end
+	return info
+end
+local function findWidget(query)
+	local q = tostring(query or ""):lower()
+	if q == "" then error("name (widget name/title, e.g. 'eclipse') is required") end
+	local hits = {}
+	for _, g in ipairs(widgetContainers()) do
+		if isForeignGui(g) then
+			local title = ""
+			pcall(function() title = tostring(g.Title or "") end)
+			if g.Name:lower():find(q, 1, true) or title:lower():find(q, 1, true) then hits[#hits + 1] = g end
+		end
+	end
+	return hits
+end
+local function footprints()
+	local out = {}
+	local roots = { ServerStorage, ReplicatedStorage, workspace, game:GetService("StarterGui"), game:GetService("Lighting"), ServerScriptService }
+	for _, r in ipairs(roots) do
+		for _, d in ipairs(r:GetChildren()) do
+			local k = knownFor(d.Name)
+			if k and k.id ~= "orscript" then out[#out + 1] = { plugin = k.id, path = d:GetFullName(), class = d.ClassName, children = #d:GetChildren() } end
+		end
+	end
+	-- rig-local saves (AnimSaves, Eclipse / Moon per-rig folders)
+	for _, m in ipairs(workspace:GetChildren()) do
+		if m:IsA("Model") then
+			for _, c in ipairs(m:GetChildren()) do
+				local k = knownFor(c.Name)
+				if k and k.kind == "animation" then out[#out + 1] = { plugin = k.id, path = c:GetFullName(), class = c.ClassName, children = #c:GetChildren(), rig = m.Name } end
+			end
+		end
+	end
+	return out
+end
+local function debugPlugins()
+	local out = {}
+	pcall(function()
+		local pds = game:GetService("PluginDebugService")
+		for _, p in ipairs(pds:GetChildren()) do
+			local scripts = 0
+			for _, d in ipairs(p:GetDescendants()) do if d:IsA("LuaSourceContainer") then scripts = scripts + 1 end end
+			local k = knownFor(p.Name)
+			out[#out + 1] = { name = p.Name, class = p.ClassName, scripts = scripts, known = k and k.id or nil }
+		end
+	end)
+	return out
+end
+local function sharedTables()
+	local out = {}
+	for _, pair in ipairs({ { "shared", shared }, { "_G", _G } }) do
+		pcall(function()
+			for k, v in pairs(pair[2]) do
+				if k ~= "ORscript" then
+					local entry = { key = pair[1] .. "." .. tostring(k), type = typeof(v) }
+					if type(v) == "table" then
+						local fns = {}
+						for fk, fv in pairs(v) do if type(fv) == "function" and #fns < 30 then fns[#fns + 1] = tostring(fk) end end
+						table.sort(fns)
+						entry.functions = fns
+					end
+					out[#out + 1] = entry
+				end
+			end
+		end)
+	end
+	return out
+end
+
+function H.plugins_list(a)
+	local widgets = {}
+	for _, g in ipairs(widgetContainers()) do if isForeignGui(g) then widgets[#widgets + 1] = widgetInfo(g, false) end end
+	local fp = footprints()
+	local dbg = debugPlugins()
+	local sh = sharedTables()
+	local detected = {}
+	local function mark(id, how)
+		for _, k in ipairs(KNOWN_PLUGINS) do
+			if k.id == id then
+				detected[id] = detected[id] or { id = id, name = k.name, kind = k.kind, asset_id = k.asset_id, notes = k.notes, evidence = {} }
+				table.insert(detected[id].evidence, how)
+			end
+		end
+	end
+	for _, w in ipairs(widgets) do if w.known then mark(w.known, "widget " .. (w.title or w.name)) end end
+	for _, f in ipairs(fp) do mark(f.plugin, "instance " .. f.path) end
+	for _, d in ipairs(dbg) do if d.known then mark(d.known, "PluginDebugService " .. d.name) end end
+	for _, s in ipairs(sh) do local k = knownFor(s.key) if k then mark(k.id, "global " .. s.key) end end
+	local list = {}
+	for _, d in pairs(detected) do list[#list + 1] = d end
+	table.sort(list, function(x, y) return x.name < y.name end)
+	return {
+		detected = list,
+		bus = BUS.list(),
+		widgets = widgets,
+		footprints = fp,
+		debug_plugins = dbg,
+		shared_globals = sh,
+		how_to_use = {
+			"plugin_widget {name, action:'show'|'hide'|'tree'} - open/inspect another plugin's panel",
+			"plugin_invoke {plugin, command, args} - call a command a plugin registered on the ORscript bus (shared.ORscript.register) or any BindableFunction / shared table function by path",
+			"plugin_module_call {path, method, args} - require a ModuleScript a plugin exposes and call it",
+			"plugin_source_read {plugin, script} - read a plugin's source when Plugin Debugging is enabled (File → Studio Settings → Plugin Debugging Enabled)",
+			"Studio does not let a plugin click another plugin's buttons; when a plugin has no bus/module/Bindable API, drive it through its saves/exports (see eclipse_* for Eclipse Animator) or ask the user to press the button",
+		},
+	}
+end
+
+local function guiTree(root, depth, maxDepth, out, budget)
+	if depth > maxDepth or #out >= budget then return end
+	for _, c in ipairs(root:GetChildren()) do
+		if c:IsA("GuiObject") then
+			local entry = { path = c:GetFullName(), class = c.ClassName, name = c.Name, visible = c.Visible }
+			pcall(function() if c:IsA("TextLabel") or c:IsA("TextButton") or c:IsA("TextBox") then entry.text = tostring(c.Text):sub(1, 120) end end)
+			pcall(function() if c:IsA("ImageButton") or c:IsA("ImageLabel") then entry.image = c.Image end end)
+			out[#out + 1] = entry
+			if #out >= budget then return end
+		end
+		guiTree(c, depth + 1, maxDepth, out, budget)
+	end
+end
+function H.plugin_widget(a)
+	local hits = findWidget(a.name or a.widget or a.plugin)
+	if #hits == 0 then
+		local names = {}
+		for _, g in ipairs(widgetContainers()) do if isForeignGui(g) then local t = "" pcall(function() t = g.Title end) names[#names + 1] = g.Name .. (t ~= "" and (" (" .. t .. ")") or "") end end
+		error("no plugin widget matches '" .. tostring(a.name or a.widget or a.plugin) .. "'. Widgets: " .. table.concat(names, ", "))
+	end
+	local g = hits[1]
+	local action = tostring(a.action or "info"):lower()
+	if action == "show" or action == "hide" or action == "toggle" then
+		local want = action == "show" or (action == "toggle" and not g.Enabled)
+		local okE, errE = pcall(function() g.Enabled = want end)
+		if not okE then error("cannot change " .. g.Name .. ".Enabled: " .. tostring(errE)) end
+		return { widget = g.Name, enabled = g.Enabled, matched = #hits }
+	elseif action == "tree" or action == "find" then
+		local out = {}
+		local okT = pcall(function() guiTree(g, 1, tonumber(a.depth) or 6, out, tonumber(a.limit) or 400) end)
+		if action == "find" then
+			local q = tostring(a.text or ""):lower()
+			local f = {}
+			for _, e in ipairs(out) do if (e.text or ""):lower():find(q, 1, true) or e.name:lower():find(q, 1, true) then f[#f + 1] = e end end
+			out = f
+		end
+		return { widget = g.Name, readable = okT, nodes = out, count = #out }
+	elseif action == "click" then
+		local q = tostring(a.text or a.button or ""):lower()
+		local out = {}
+		pcall(function() guiTree(g, 1, 8, out, 600) end)
+		local found
+		for _, e in ipairs(out) do if (e.class == "TextButton" or e.class == "ImageButton") and ((e.text or ""):lower():find(q, 1, true) or e.name:lower():find(q, 1, true)) then found = e break end end
+		-- Studio gives plugins no way to synthesize input inside another plugin's
+		-- widget (VirtualInputManager is Roblox-script security and targets the
+		-- 3D viewport). Report the exact button so the user can press it.
+		return { clicked = false, widget = g.Name, button = found, reason = "Studio does not allow a plugin to click another plugin's buttons", hint = found and ("ask the user to press '" .. (found.text or found.name) .. "' in " .. (g.Title or g.Name)) or "no matching button; use plugin_widget {action:'tree'}" }
+	end
+	return { widget = widgetInfo(g, true), matched = #hits }
+end
+
+local function callTarget(target, command, args)
+	target = tostring(target or "")
+	-- 1) bus plugin
+	if BUS.plugins[target] then return "bus", BUS.invoke(target, command, args) end
+	-- 2) shared/_G table
+	local tbl
+	if target:match("^shared%.") then pcall(function() tbl = shared[target:sub(8)] end)
+	elseif target:match("^_G%.") then pcall(function() tbl = _G[target:sub(4)] end)
+	else pcall(function() tbl = shared[target] end) if tbl == nil then pcall(function() tbl = _G[target] end) end end
+	if type(tbl) == "table" then
+		local fn = tbl[command]
+		if type(fn) ~= "function" then error("'" .. target .. "' has no function '" .. tostring(command) .. "'") end
+		local list = listArg(args)
+		local conv = {}
+		for i, v in ipairs(list) do conv[i] = fromJson(v) end
+		if #conv == 0 and type(args) == "table" then conv = { fromJson(args) } end
+		return "global", { fn(table.unpack(conv)) }
+	elseif type(tbl) == "function" then
+		return "global", { tbl(fromJson(args)) }
+	end
+	-- 3) BindableFunction / ModuleScript in the DataModel or CoreGui
+	local inst = resolve(target) or CoreGui:FindFirstChild(target, true)
+	if inst and inst:IsA("BindableFunction") then return "bindable", { inst:Invoke(command, fromJson(args)) } end
+	if inst and inst:IsA("ModuleScript") then
+		local m = require(inst)
+		if type(m) == "function" then return "module", { m(fromJson(args)) } end
+		if type(m) ~= "table" or type(m[command]) ~= "function" then error("module " .. inst:GetFullName() .. " has no function '" .. tostring(command) .. "'") end
+		local list = listArg(args)
+		local conv = {}
+		for i, v in ipairs(list) do conv[i] = fromJson(v) end
+		if #conv == 0 and type(args) == "table" then conv = { fromJson(args) } end
+		local okM, r1, r2, r3 = pcall(m[command], table.unpack(conv))
+		if not okM then
+			-- method-style call (self first)
+			local okS, s1, s2, s3 = pcall(m[command], m, table.unpack(conv))
+			if not okS then error("call failed: " .. tostring(r1) .. " / with self: " .. tostring(s1)) end
+			return "module", { s1, s2, s3 }
+		end
+		return "module", { r1, r2, r3 }
+	end
+	error("no bus plugin, shared/_G table, BindableFunction or ModuleScript named '" .. target .. "'. plugins_list shows what is reachable.")
+end
+function H.plugin_invoke(a)
+	local target = a.plugin or a.target or a.path
+	if not target then error("plugin (bus name, shared.X / _G.X, or a BindableFunction / ModuleScript path) is required") end
+	local how, res = callTarget(target, tostring(a.command or a.method or ""), a.args)
+	return { target = tostring(target), via = how, result = toJson(res) }
+end
+function H.plugin_module_call(a)
+	local inst = need(a.path, "module")
+	if not inst:IsA("ModuleScript") then error("not a ModuleScript: " .. inst:GetFullName()) end
+	local okR, m = pcall(require, inst)
+	if not okR then error("require failed: " .. tostring(m)) end
+	if not a.method then
+		local info = { path = inst:GetFullName(), type = typeof(m) }
+		if type(m) == "table" then
+			local keys = {}
+			for k, v in pairs(m) do keys[#keys + 1] = tostring(k) .. ":" .. typeof(v) if #keys >= 80 then break end end
+			table.sort(keys)
+			info.keys = keys
+		end
+		return info
+	end
+	local how, res = callTarget(inst:GetFullName(), tostring(a.method), a.args)
+	return { path = inst:GetFullName(), via = how, result = toJson(res) }
+end
+function H.plugin_source_read(a)
+	local okP, pds = pcall(function() return game:GetService("PluginDebugService") end)
+	if not okP or not pds then error("PluginDebugService unavailable") end
+	local q = tostring(a.plugin or ""):lower()
+	local hit
+	for _, p in ipairs(pds:GetChildren()) do
+		if q == "" or p.Name:lower():find(q, 1, true) then hit = p break end
+	end
+	if not hit then
+		local names = {}
+		for _, p in ipairs(pds:GetChildren()) do names[#names + 1] = p.Name end
+		error("no plugin matches '" .. q .. "' in PluginDebugService (" .. (#names == 0 and "empty - enable File → Studio Settings → Debugger → 'Plugin Debugging Enabled' and reload plugins" or table.concat(names, ", ")) .. ")")
+	end
+	local scripts = {}
+	for _, d in ipairs(hit:GetDescendants()) do if d:IsA("LuaSourceContainer") then scripts[#scripts + 1] = d end end
+	if not a.script then
+		local out = {}
+		for _, s in ipairs(scripts) do out[#out + 1] = { path = s:GetFullName(), class = s.ClassName, bytes = #s.Source } end
+		return { plugin = hit.Name, scripts = out, count = #out }
+	end
+	local wanted = tostring(a.script):lower()
+	for _, s in ipairs(scripts) do
+		if s.Name:lower() == wanted or s:GetFullName():lower():find(wanted, 1, true) then
+			local src = s.Source
+			local offset = tonumber(a.offset) or 1
+			local max = tonumber(a.max_chars) or 40000
+			return { __text = ("-- %s (%d bytes, from %d)\n%s"):format(s:GetFullName(), #src, offset, src:sub(offset, offset + max - 1)) }
+		end
+	end
+	error("no script '" .. tostring(a.script) .. "' in plugin " .. hit.Name)
+end
+
+-- ═════════════════════ Eclipse Animator bridge ═════════════════════
+-- Eclipse Animator (create.roblox.com/store/asset/86116556258301) is a normal
+-- Studio plugin working on Motor6D / Bone rigs. The lingua franca between it,
+-- the Roblox Animation Editor, Moon Animator and ORscript's animation_*
+-- commands is the KeyframeSequence. These commands keep both directions
+-- honest: ORscript → Eclipse through <rig>.AnimSaves (the standard import
+-- location) and Eclipse → ORscript by converting its exports (KeyframeSequence
+-- saves or Module Exporter tables) into KeyframeSequences in
+-- ServerStorage.RobloxScript.AnimLib, which animation_import / animation_open
+-- then edit and preview.
+local ECLIPSE_ID = 86116556258301
+local function eclipseWidgets()
+	local okW, hits = pcall(findWidget, "eclipse")
+	return okW and hits or {}
+end
+local function eclipseInstances()
+	local out = {}
+	local roots = { ServerStorage, ReplicatedStorage, workspace, game:GetService("StarterGui"), game:GetService("StarterPlayer") }
+	for _, r in ipairs(roots) do
+		for _, d in ipairs(r:GetDescendants()) do
+			if d.Name:lower():find("eclipse", 1, true) and (d:IsA("Folder") or d:IsA("Configuration") or d:IsA("ModuleScript") or d:IsA("KeyframeSequence") or d:IsA("Model") or d:IsA("StringValue")) then
+				local info = { path = d:GetFullName(), class = d.ClassName, children = #d:GetChildren() }
+				if d:IsA("Folder") or d:IsA("Configuration") then
+					local ks, mods = 0, 0
+					for _, x in ipairs(d:GetDescendants()) do if x:IsA("KeyframeSequence") then ks = ks + 1 elseif x:IsA("ModuleScript") then mods = mods + 1 end end
+					info.keyframe_sequences, info.modules = ks, mods
+				end
+				out[#out + 1] = info
+				if #out >= 60 then return out end
+			end
+		end
+	end
+	return out
+end
+local function rigOf(a)
+	local rig = a.rig_path and need(a.rig_path, "rig") or a.rig and need(a.rig, "rig") or nil
+	if not rig then
+		for _, s in ipairs(Selection:Get()) do if s:IsA("Model") then rig = s break end end
+	end
+	if not rig then
+		for _, m in ipairs(workspace:GetChildren()) do
+			if m:IsA("Model") and (m:FindFirstChildOfClass("Humanoid") or m:FindFirstChildOfClass("AnimationController")) then rig = m break end
+		end
+	end
+	if not rig then error("no rig: pass rig_path or select a rig Model (Humanoid / AnimationController)") end
+	return rig
+end
+local function rigRootPart(rig)
+	return rig.PrimaryPart or rig:FindFirstChild("HumanoidRootPart") or rig:FindFirstChild("Torso") or rig:FindFirstChildWhichIsA("BasePart", true)
+end
+-- joint map: name (part name, Motor6D name, bone name, lowercase) → { part|bone, parentName }
+local function rigJoints(rig)
+	local root = rigRootPart(rig)
+	local byName, order = {}, {}
+	local function add(name, part, parent)
+		if name == nil or name == "" then return end
+		local lower = tostring(name):lower()
+		if not byName[lower] then byName[lower] = { part = part, parent = parent } end
+	end
+	if root then add(root.Name, root, nil) order[#order + 1] = root.Name end
+	for _, d in ipairs(rig:GetDescendants()) do
+		if d:IsA("Motor6D") and d.Part0 and d.Part1 then
+			add(d.Part1.Name, d.Part1, d.Part0.Name)
+			add(d.Name, d.Part1, d.Part0.Name)
+			order[#order + 1] = d.Part1.Name
+		elseif d:IsA("Bone") then
+			local parent = d.Parent
+			add(d.Name, d, parent and parent.Name or nil)
+			order[#order + 1] = d.Name
+		end
+	end
+	return byName, order, root
+end
+-- place a Pose for every rig joint (identity unless cfByName has a value), nested by hierarchy
+local function posesFor(kf, rig, cfByName, easing)
+	local byName, order, root = rigJoints(rig)
+	-- keys may be part names, Motor6D names or bone names → canonical part name
+	local canon, unknown = {}, {}
+	for key, cf in pairs(cfByName) do
+		local j = byName[tostring(key):lower()]
+		if j then canon[j.part.Name:lower()] = cf else unknown[#unknown + 1] = tostring(key) end
+	end
+	cfByName = canon
+	local poses = {}
+	local function poseFor(name)
+		local key = tostring(name):lower()
+		if poses[key] then return poses[key] end
+		local j = byName[key]
+		if not j then return nil end
+		local p = Instance.new("Pose")
+		p.Name = j.part.Name
+		p.Weight = 1
+		local cf = cfByName[key]
+		if cf then p.CFrame = cf end
+		if easing then
+			if easing.style then pcall(function() p.EasingStyle = easing.style end) end
+			if easing.direction then pcall(function() p.EasingDirection = easing.direction end) end
+		end
+		poses[key] = p
+		if j.parent then
+			local parentPose = poseFor(j.parent)
+			if parentPose then parentPose:AddSubPose(p) else kf:AddPose(p) end
+		else
+			kf:AddPose(p)
+		end
+		return p
+	end
+	for _, n in ipairs(order) do poseFor(n) end
+	return unknown
+end
+local function easingFrom(v)
+	if v == nil then return nil end
+	local out = {}
+	local styleName, dirName
+	if type(v) == "string" then styleName = v
+	elseif type(v) == "table" then styleName = v.Style or v.style or v.EasingStyle or v[1] dirName = v.Direction or v.direction or v.EasingDirection or v[2] end
+	if typeof(styleName) == "EnumItem" then out.style = styleName
+	elseif type(styleName) == "string" then
+		local s = styleName:lower()
+		if s:find("bezier") or s:find("cubic") or s:find("smooth") or s:find("sine") or s:find("quad") or s:find("quart") or s:find("quint") or s:find("expo") or s:find("circ") then out.style = Enum.PoseEasingStyle.Cubic
+		elseif s:find("bounce") then out.style = Enum.PoseEasingStyle.Bounce
+		elseif s:find("elastic") then out.style = Enum.PoseEasingStyle.Elastic
+		elseif s:find("constant") or s:find("step") or s:find("hold") then out.style = Enum.PoseEasingStyle.Constant
+		elseif s:find("linear") then out.style = Enum.PoseEasingStyle.Linear end
+	end
+	if typeof(dirName) == "EnumItem" then out.direction = dirName
+	elseif type(dirName) == "string" then
+		local d = dirName:lower()
+		if d == "inout" or d:find("in_out") or d:find("in%-out") then out.direction = Enum.PoseEasingDirection.InOut
+		elseif d:find("out") then out.direction = Enum.PoseEasingDirection.Out
+		elseif d:find("in") then out.direction = Enum.PoseEasingDirection.In end
+	end
+	return (out.style or out.direction) and out or nil
+end
+local function firstKey(t, names)
+	for _, n in ipairs(names) do if t[n] ~= nil then return t[n], n end end
+	return nil
+end
+local function summarize(t)
+	local keys = {}
+	if type(t) ~= "table" then return typeof(t) end
+	local n = 0
+	for k, v in pairs(t) do
+		n = n + 1
+		if n <= 25 then
+			local desc = typeof(v)
+			if type(v) == "table" then
+				local sub, c = {}, 0
+				for sk, sv in pairs(v) do c = c + 1 if c <= 8 then sub[#sub + 1] = tostring(sk) .. ":" .. typeof(sv) end end
+				desc = "table{" .. table.concat(sub, ",") .. (c > 8 and ",…" or "") .. "}"
+			end
+			keys[#keys + 1] = tostring(k) .. "=" .. desc
+		end
+	end
+	return table.concat(keys, "; ") .. (n > 25 and (" … (" .. n .. " keys)") or "")
+end
+-- Generic keyframe table → KeyframeSequence. Understands the shapes animation
+-- exporters commonly write (per-keyframe poses, or per-joint tracks), CFrames as
+-- CFrame values, 12/7/6/3-number tables or {Position, Rotation} tables, times in
+-- seconds or frames (fps from the table or `fps`).
+local function tableToKeyframeSequence(data, rig, name, fpsOverride)
+	if type(data) ~= "table" then error("exported module returned " .. typeof(data) .. ", expected a table") end
+	local meta = {}
+	local fps = tonumber(fpsOverride) or tonumber((firstKey(data, { "FPS", "fps", "FrameRate", "frameRate", "Framerate", "framerate" })))
+	local looped = firstKey(data, { "Looped", "looped", "Loop", "loop" })
+	local priority = firstKey(data, { "Priority", "priority" })
+	local kfList = firstKey(data, { "Keyframes", "keyframes", "Frames", "frames", "KeyFrames", "Poses", "poses", "Data", "data" })
+	local tracks = firstKey(data, { "Tracks", "tracks", "Joints", "joints", "Bones", "bones", "Channels", "channels" })
+	local frames = {} -- time → { cf = { [jointLower] = CFrame }, easing = … , name = … }
+	local cfCount = 0
+	local function frameAt(t)
+		t = tonumber(t) or 0
+		local key = math.floor(t * 10000 + 0.5) / 10000
+		frames[key] = frames[key] or { cf = {}, easing = {} }
+		return frames[key]
+	end
+	local function timeOf(entry, index)
+		local t, k = firstKey(entry, { "Time", "time", "t", "T", "Seconds", "seconds" })
+		if t ~= nil then return tonumber(t) or 0 end
+		local f = firstKey(entry, { "Frame", "frame", "F", "Index", "index" })
+		if f ~= nil then meta.frame_based = true return (tonumber(f) or 0) / (fps or 60) end
+		return index
+	end
+	local function addPoseMap(frame, map, easing)
+		if type(map) ~= "table" then return end
+		for joint, v in pairs(map) do
+			local cf
+			if type(v) == "table" and v.CFrame ~= nil then cf = toCFrame(v.CFrame)
+			elseif type(v) == "table" and (v.cframe ~= nil or v.Value ~= nil or v.value ~= nil or v.Transform ~= nil) then cf = toCFrame(v.cframe or v.Value or v.value or v.Transform)
+			else cf = toCFrame(v) end
+			if cf then
+				cfCount = cfCount + 1
+				frame.cf[tostring(joint):lower()] = cf
+				local e = type(v) == "table" and easingFrom(v.Easing or v.easing or v.EasingStyle) or easing
+				if e then frame.easing[tostring(joint):lower()] = e end
+			end
+		end
+	end
+	if type(kfList) == "table" and #kfList > 0 and type(kfList[1]) == "table" then
+		-- array of keyframes
+		for i, entry in ipairs(kfList) do
+			local t = timeOf(entry, (i - 1) / (fps or 30))
+			local fr = frameAt(t)
+			fr.name = firstKey(entry, { "Name", "name" })
+			local easing = easingFrom(firstKey(entry, { "Easing", "easing", "EasingStyle", "Ease", "ease" }))
+			local map = firstKey(entry, { "Poses", "poses", "Joints", "joints", "Bones", "bones", "CFrames", "cframes", "Values", "values", "Transforms", "transforms", "Data", "data" })
+			if map == nil then
+				map = {}
+				for k, v in pairs(entry) do if type(k) == "string" and (typeof(v) == "CFrame" or type(v) == "table") and not ({ Time = 1, time = 1, Frame = 1, frame = 1, Easing = 1, easing = 1, Name = 1, name = 1, Markers = 1, markers = 1 })[k] then map[k] = v end end
+			end
+			addPoseMap(fr, map, easing)
+		end
+		meta.shape = "keyframes"
+	elseif type(kfList) == "table" and next(kfList) ~= nil and type(next(kfList)) ~= "number" then
+		-- map time → poses
+		for t, map in pairs(kfList) do
+			local tt = tonumber(t) or tonumber(tostring(t):match("[%d%.]+")) or 0
+			if meta.frame_based == nil and tt == math.floor(tt) and tt > 10 then meta.frame_based = true end
+			addPoseMap(frameAt(meta.frame_based and tt / (fps or 60) or tt), map)
+		end
+		meta.shape = "time_map"
+	elseif type(tracks) == "table" then
+		for joint, track in pairs(tracks) do
+			local keys = type(track) == "table" and (firstKey(track, { "Keyframes", "keyframes", "Keys", "keys", "Frames", "frames" }) or track) or {}
+			if type(keys) == "table" then
+				for i, k in ipairs(keys) do
+					local t = type(k) == "table" and timeOf(k, (i - 1) / (fps or 30)) or 0
+					local v = type(k) == "table" and (k.CFrame or k.cframe or k.Value or k.value or k.Transform or k) or k
+					local cf = toCFrame(v)
+					if cf then
+						cfCount = cfCount + 1
+						local fr = frameAt(t)
+						fr.cf[tostring(joint):lower()] = cf
+						local e = type(k) == "table" and easingFrom(k.Easing or k.easing or k.EasingStyle) or nil
+						if e then fr.easing[tostring(joint):lower()] = e end
+					end
+				end
+			end
+		end
+		meta.shape = "tracks"
+	else
+		error("unrecognised animation table - top level: " .. summarize(data) .. ". Convert it with execute_luau into {Keyframes = {{Time=, Poses={[joint]=CFrame}}, …}} and call eclipse_import again, or point path at a KeyframeSequence.")
+	end
+	local times = {}
+	for t in pairs(frames) do times[#times + 1] = t end
+	table.sort(times)
+	if #times == 0 or cfCount == 0 then error("the export contained no keyframes with CFrames (shape " .. tostring(meta.shape) .. ") - joint values must be CFrames, 12/7/6/3-number tables or {Position, Rotation}") end
+	local ks = Instance.new("KeyframeSequence")
+	ks.Name = name
+	if looped ~= nil then ks.Loop = looped == true end
+	if priority ~= nil then local e = enumFrom("Enum.AnimationPriority." .. tostring(priority)) or (typeof(priority) == "EnumItem" and priority) if e then ks.Priority = e end end
+	local unknownAll, posed = {}, 0
+	local jointMap = rigJoints(rig)
+	for _, t in ipairs(times) do
+		local fr = frames[t]
+		local kf = Instance.new("Keyframe")
+		kf.Time = t
+		if fr.name then kf.Name = tostring(fr.name) end
+		-- apply per-joint easing after building (posesFor sets a shared easing only)
+		local unknown = posesFor(kf, rig, fr.cf, nil)
+		for joint, e in pairs(fr.easing) do
+			local j = jointMap[joint]
+			local p = j and kf:FindFirstChild(j.part.Name, true) or nil
+			if p and p:IsA("Pose") then
+				if e.style then pcall(function() p.EasingStyle = e.style end) end
+				if e.direction then pcall(function() p.EasingDirection = e.direction end) end
+			end
+		end
+		for _, u in ipairs(unknown) do unknownAll[u] = true end
+		posed = posed + 1
+		kf.Parent = ks
+	end
+	local unknownList = {}
+	for u in pairs(unknownAll) do unknownList[#unknownList + 1] = u end
+	table.sort(unknownList)
+	return ks, { keyframes = posed, length = times[#times], fps = fps, frame_based = meta.frame_based == true, shape = meta.shape, unknown_joints = unknownList }
+end
+local function animLibFolder()
+	local rsroot = ServerStorage:FindFirstChild("RobloxScript") or ServerStorage:FindFirstChild("AnimScript")
+	if not rsroot then rsroot = Instance.new("Folder") rsroot.Name = "RobloxScript" rsroot.Parent = ServerStorage end
+	local lib = rsroot:FindFirstChild("AnimLib")
+	if not lib then lib = Instance.new("Folder") lib.Name = "AnimLib" lib.Parent = rsroot end
+	return lib
+end
+local function animSaves(rig)
+	local f = rig:FindFirstChild("AnimSaves")
+	if not f then f = Instance.new("Folder") f.Name = "AnimSaves" f.Parent = rig end
+	return f
+end
+local function findKeyframeSequence(inst)
+	if inst:IsA("KeyframeSequence") then return inst end
+	for _, d in ipairs(inst:GetDescendants()) do if d:IsA("KeyframeSequence") then return d end end
+	return nil
+end
+
+function H.eclipse_status(a)
+	local widgets = {}
+	for _, g in ipairs(eclipseWidgets()) do widgets[#widgets + 1] = widgetInfo(g, false) end
+	local inst = eclipseInstances()
+	local onBus = BUS.plugins["Eclipse Animator"] or BUS.plugins["EclipseAnimator"] or BUS.plugins["eclipse"]
+	local globals = {}
+	for _, s in ipairs(sharedTables()) do if s.key:lower():find("eclipse", 1, true) then globals[#globals + 1] = s end end
+	local installed = #widgets > 0 or onBus ~= nil or #globals > 0
+	local version
+	for _, w in ipairs(widgets) do local v = tostring(w.title or ""):match("v?(%d+%.%d+[%.%d]*)") if v then version = v end end
+	return {
+		installed = installed,
+		evidence = { widgets = #widgets, instances = #inst, bus = onBus ~= nil, globals = #globals },
+		version = version,
+		widgets = widgets,
+		instances = inst,
+		globals = globals,
+		asset_id = ECLIPSE_ID,
+		store_url = pluginUrl(ECLIPSE_ID),
+		workflow = {
+			"ORscript → Eclipse: eclipse_handoff {animation|path, rig_path} copies the KeyframeSequence into <rig>.AnimSaves and opens Eclipse on the rig; import it from Eclipse's library/import menu",
+			"Eclipse → ORscript: export from Eclipse (Save / Module Exporter / publish) then eclipse_import {path} converts it into ServerStorage.RobloxScript.AnimLib for animation_open / animation_preview / animation_retime …",
+			"eclipse_play {path, rig_path} previews any KeyframeSequence on the rig in edit mode (Animator:StepAnimations)",
+			installed and "Eclipse Animator is installed in this Studio" or ("Eclipse Animator not detected - the user can get it at " .. pluginUrl(ECLIPSE_ID) .. " (Creator Store plugin by riftkuro); ORscript's animation_* commands work without it"),
+		},
+	}
+end
+function H.eclipse_open(a)
+	local rig = nil
+	pcall(function() rig = rigOf(a) end)
+	if rig then Selection:Set({ rig }) end
+	local widgets = eclipseWidgets()
+	local shown = {}
+	for _, g in ipairs(widgets) do
+		local okE = pcall(function() g.Enabled = true end)
+		if okE then shown[#shown + 1] = g.Name end
+	end
+	if #widgets == 0 then
+		return { opened = false, rig = rig and rig:GetFullName() or nil, reason = "no Eclipse Animator widget found - if it is installed, ask the user to click Eclipse Animator in the Plugins tab (widgets exist only after the first open); otherwise install from " .. pluginUrl(ECLIPSE_ID) }
+	end
+	return { opened = true, widgets = shown, rig = rig and rig:GetFullName() or nil, hint = "the rig is selected; in Eclipse create/open the animation for it. Use eclipse_handoff first if ORscript already built the clip." }
+end
+function H.eclipse_handoff(a)
+	local rig = rigOf(a)
+	local src
+	if a.path then src = need(a.path, "animation") end
+	if not src and a.animation then
+		local lib = animLibFolder()
+		src = lib:FindFirstChild(tostring(a.animation))
+		if not src then error("no AnimLib animation named '" .. tostring(a.animation) .. "' (animation_list shows them)") end
+	end
+	if not src then
+		local lib = animLibFolder()
+		local active = lib:FindFirstChild("Active")
+		src = active and active:IsA("StringValue") and lib:FindFirstChild(active.Value) or nil
+		if not src then error("pass animation (AnimLib name) or path (KeyframeSequence)") end
+	end
+	local ks = findKeyframeSequence(src)
+	if not ks then error(src:GetFullName() .. " contains no KeyframeSequence") end
+	local rec = record("eclipse handoff")
+	local copy = ks:Clone()
+	copy.Name = tostring(a.name or ks.Name)
+	for _, c in ipairs(copy:GetChildren()) do if not c:IsA("Keyframe") then c:Destroy() end end
+	local saves = animSaves(rig)
+	local old = saves:FindFirstChild(copy.Name)
+	if old then old:Destroy() end
+	copy.Parent = saves
+	local export = ServerStorage:FindFirstChild("ORscriptAnimations")
+	if not export then export = Instance.new("Folder") export.Name = "ORscriptAnimations" export.Parent = ServerStorage end
+	local copy2 = copy:Clone()
+	local old2 = export:FindFirstChild(copy2.Name)
+	if old2 then old2:Destroy() end
+	copy2.Parent = export
+	commit(rec)
+	local opened = H.eclipse_open({ rig_path = rig:GetFullName() })
+	local n = 0
+	for _, c in ipairs(copy:GetChildren()) do if c:IsA("Keyframe") then n = n + 1 end end
+	return { animsaves = copy:GetFullName(), export = copy2:GetFullName(), keyframes = n, rig = rig:GetFullName(), eclipse = opened, hint = "in Eclipse Animator import the clip from the rig's AnimSaves (Import / Library → from place). Publish from Eclipse or with studio_save {action:'selection_to_roblox'} on the KeyframeSequence." }
+end
+function H.eclipse_import(a)
+	local rig = rigOf(a)
+	local src = need(a.path, "export")
+	local lib = animLibFolder()
+	local name = tostring(a.name or src.Name):gsub("[^%w_%- ]", "")
+	if name == "" then name = "EclipseImport" end
+	if not src:IsA("ModuleScript") and not src:IsA("Animation") and not findKeyframeSequence(src) then
+		for _, d in ipairs(src:GetDescendants()) do if d:IsA("ModuleScript") then src = d break end end
+	end
+	local rec = record("eclipse import")
+	local ks, info
+	local okC, errC = pcall(function()
+		if src:IsA("ModuleScript") then
+			local okR, data = pcall(require, src)
+			if not okR then error("require failed: " .. tostring(data)) end
+			if type(data) == "function" then data = data(rig) end
+			ks, info = tableToKeyframeSequence(data, rig, name, a.fps)
+			info.source = "module"
+		elseif src:IsA("Animation") then
+			local id = tonumber(tostring(src.AnimationId):match("%d+"))
+			if not id then error("Animation has no AnimationId") end
+			local got = KeyframeSequenceProvider:GetKeyframeSequenceAsync("rbxassetid://" .. id)
+			ks = got:Clone()
+			ks.Name = name
+			info = { source = "asset " .. id }
+		else
+			local found = findKeyframeSequence(src)
+			if not found then error(src:GetFullName() .. " is a " .. src.ClassName .. " without a KeyframeSequence or exported ModuleScript inside") end
+			ks = found:Clone()
+			ks.Name = name
+			info = { source = "keyframesequence " .. found:GetFullName() }
+		end
+	end)
+	if not okC then commit(rec) error(tostring(errC)) end
+	local old = lib:FindFirstChild(name)
+	if old and a.overwrite ~= true then commit(rec) error("AnimLib already has '" .. name .. "' - pass overwrite=true or another name") end
+	if old then old:Destroy() end
+	ks.Parent = lib
+	ks:SetAttribute("RS_RigPath", rig:GetFullName())
+	ks:SetAttribute("Source", "EclipseAnimator")
+	local active = lib:FindFirstChild("Active")
+	if active and active:IsA("StringValue") then active.Value = name end
+	local saves = animSaves(rig)
+	local old2 = saves:FindFirstChild(name)
+	if old2 then old2:Destroy() end
+	local copy = ks:Clone()
+	copy.Parent = saves
+	commit(rec)
+	local n, length = 0, 0
+	for _, c in ipairs(ks:GetChildren()) do if c:IsA("Keyframe") then n = n + 1 if c.Time > length then length = c.Time end end end
+	info = info or {}
+	info.animlib = ks:GetFullName()
+	info.animsaves = copy:GetFullName()
+	info.keyframes = n
+	info.length = length
+	info.rig = rig:GetFullName()
+	info.hint = "now animation_open {name:'" .. name .. "'} / animation_preview; animation_retime if fps was guessed (frame_based=true)"
+	return info
+end
+local previewState = nil
+function H.eclipse_play(a)
+	local rig = rigOf(a)
+	local action = tostring(a.action or "play"):lower()
+	if action == "stop" then
+		if previewState then previewState.stop = true previewState = nil end
+		return { stopped = true }
+	end
+	local src = a.path and need(a.path, "animation") or nil
+	if not src and a.animation then src = animLibFolder():FindFirstChild(tostring(a.animation)) end
+	if not src then error("pass path (KeyframeSequence / Animation) or animation (AnimLib name)") end
+	local animId
+	local ks = findKeyframeSequence(src)
+	if ks then
+		local okR, id = pcall(function() return KeyframeSequenceProvider:RegisterKeyframeSequence(ks) end)
+		if not okR then error("RegisterKeyframeSequence failed: " .. tostring(id)) end
+		animId = id
+	elseif src:IsA("Animation") then animId = src.AnimationId
+	else error(src:GetFullName() .. " is neither a KeyframeSequence nor an Animation") end
+	local animator = rig:FindFirstChildWhichIsA("Animator", true)
+	if not animator then
+		local host = rig:FindFirstChildOfClass("Humanoid") or rig:FindFirstChildOfClass("AnimationController")
+		if not host then error("rig has no Humanoid / AnimationController") end
+		animator = Instance.new("Animator")
+		animator.Parent = host
+	end
+	local anim = Instance.new("Animation")
+	anim.AnimationId = animId
+	local track = animator:LoadAnimation(anim)
+	track.Looped = a.loop == true
+	if previewState then previewState.stop = true end
+	local st = { stop = false }
+	previewState = st
+	local speed = tonumber(a.speed) or 1
+	local duration = tonumber(a.duration) or (track.Length > 0 and (a.loop == true and 6 or track.Length / math.max(speed, 0.01)) or 3)
+	track:Play(0.1, 1, speed)
+	task.spawn(function()
+		local t0 = os.clock()
+		local last = t0
+		while not st.stop and os.clock() - t0 < duration + 0.3 do
+			local now = os.clock()
+			pcall(function() animator:StepAnimations(now - last) end)
+			last = now
+			task.wait()
+		end
+		pcall(function() track:Stop(0) end)
+		pcall(function() animator:StepAnimations(0) end)
+		anim:Destroy()
+	end)
+	return { playing = true, animation_id = animId, length = track.Length, duration = duration, rig = rig:GetFullName(), hint = "or_screenshot during playback or eclipse_play {action:'stop'}; the rig returns to rest when the preview ends" }
+end
+
+-- expose helpers to plugin_execute_luau code as the `ORscript` global
+for k, v in pairs({
+	resolve = resolve, need = need, toJson = toJson, fromJson = fromJson, toCFrame = toCFrame, toVector3 = toVector3,
+	bus = BUS, plugins = function() return H.plugins_list({}) end, widgets = findWidget, log = log,
+	record = record, commit = commit, handlers = H, version = VERSION,
+}) do ORSCRIPT_ENV[k] = v end
 
 -- ───────────────────────── worker loop ─────────────────────────
 local function request(method, path, body)

@@ -302,6 +302,31 @@ const STUDIO_COMMANDS: &[(&str, u64)] = &[
     ("screenshot_frame", 20),
     ("gamepass_handler_create", 30),
     ("developer_product_handler_create", 30),
+    // 1.24.0 — full Studio control
+    ("studio_playtest", 30),
+    ("studio_settings", 20),
+    ("studio_selection", 30),
+    ("studio_camera", 20),
+    ("studio_script_editor", 30),
+    ("studio_history", 20),
+    ("studio_service_call", 120),
+    ("studio_macro", 60),
+    ("studio_save", 600),
+    ("studio_output", 20),
+    ("studio_test_run", 60),
+    ("studio_mouse", 20),
+    // 1.24.0 — other plugins
+    ("plugins_list", 30),
+    ("plugin_widget", 30),
+    ("plugin_invoke", 120),
+    ("plugin_module_call", 120),
+    ("plugin_source_read", 30),
+    // 1.24.0 — Eclipse Animator bridge
+    ("eclipse_status", 30),
+    ("eclipse_open", 30),
+    ("eclipse_handoff", 60),
+    ("eclipse_import", 120),
+    ("eclipse_play", 30),
 ];
 const CLOUD_COMMANDS: &[&str] = &["cloud_gamepass_create", "cloud_gamepass_update", "cloud_gamepass_list", "cloud_product_create", "cloud_product_list"];
 
@@ -337,6 +362,31 @@ pub fn tools(connected: bool, key_set: bool) -> Vec<Value> {
             tool("screenshot_frame", "Frame the Studio camera on a model/part (orbit yaw/pitch in degrees, distance as a multiple of its size, optional fov) and clear the selection outline, so the next or_screenshot {target:'studio'} is a deliberate hero shot.", json!({"path": {"type": "string"}, "yaw": {"type": "number"}, "pitch": {"type": "number"}, "distance": {"type": "number"}, "fov": {"type": "number"}, "hide_selection": {"type": "boolean"}}), &[]),
             tool("gamepass_handler_create", "Write the production server handler for a game pass id: UserOwnsGamePassAsync on join + PromptGamePassPurchaseFinished, with a benefit stub (speed | coins | tool | custom) and a ReplicatedStorage.Monetization marker. Use after gamepass_create.", json!({"gamepass_id": {"type": "number"}, "name": {"type": "string"}, "benefit": {"type": "string", "enum": ["speed", "coins", "tool", "custom"]}, "amount": {"type": "number"}, "tool_name": {"type": "string"}}), &["gamepass_id"]),
             tool("developer_product_handler_create", "Write an idempotent ProcessReceipt handler (DataStore receipt log) for a developer product id.", json!({"product_id": {"type": "number"}, "name": {"type": "string"}}), &["product_id"]),
+            // ── 1.24.0 full Studio control ──
+            tool("studio_playtest", "Control the Studio simulation: action=run (F8 Run in this DataModel; the plugin keeps working), pause, stop, state. Play Solo (F5) has no plugin API.", json!({"action": {"type": "string", "enum": ["state", "run", "pause", "stop"]}}), &["action"]),
+            tool("studio_settings", "Read or write Studio settings(): category (Studio | Rendering | Physics | Network | Lua | Debug | UserGameSettings), name (e.g. Theme, QualityLevel, 'Auto-Save Enabled'); omit value to read. category=Studio with no name lists the available themes.", json!({"category": {"type": "string"}, "name": {"type": "string"}, "value": {}}), &[]),
+            tool("studio_selection", "Drive the Studio selection: get | set | add | remove | clear (paths), or by_class / by_name under root (class_name, name_pattern, limit).", json!({"action": {"type": "string"}, "paths": {"type": "array", "items": {"type": "string"}}, "root": {"type": "string"}, "class_name": {"type": "string"}, "name_pattern": {"type": "string"}, "limit": {"type": "number"}}), &["action"]),
+            tool("studio_camera", "Studio camera: get | set {position, look_at | cframe, fov} | look_at {path | position} | focus {path, yaw, pitch, distance} | fov {fov}.", json!({"action": {"type": "string"}, "position": {"type": "array", "items": {"type": "number"}}, "look_at": {"type": "array", "items": {"type": "number"}}, "cframe": {"type": "array", "items": {"type": "number"}}, "path": {"type": "string"}, "fov": {"type": "number"}, "yaw": {"type": "number"}, "pitch": {"type": "number"}, "distance": {"type": "number"}}), &["action"]),
+            tool("studio_script_editor", "The script editor itself (ScriptEditorService documents): list open tabs | open {path, line} | close | text {start_line, end_line} | find {query} | cursor {line, char} | insert {line, text} | replace_range {start_line, start_char, end_line, end_char, text} - edits land in the open tab live and are undoable.", json!({"action": {"type": "string"}, "path": {"type": "string"}, "line": {"type": "number"}, "char": {"type": "number"}, "text": {"type": "string"}, "query": {"type": "string"}, "start_line": {"type": "number"}, "start_char": {"type": "number"}, "end_line": {"type": "number"}, "end_char": {"type": "number"}, "max_chars": {"type": "number"}}), &["action"]),
+            tool("studio_history", "ChangeHistoryService: status (can_undo / can_redo) | waypoint {label} | undo | redo {steps} | enable | disable.", json!({"action": {"type": "string"}, "label": {"type": "string"}, "steps": {"type": "number"}}), &["action"]),
+            tool("studio_service_call", "Call ANY method or read/write ANY property of a service, instance, `plugin` or `settings` with plugin security - the escape hatch for every Studio API that has no dedicated command. args are JSON (strings 'Enum.X.Y' and instance paths are resolved; {__type:'Vector3'|'CFrame'|'Color3'|'UDim2', value:[…]} builds datatypes). Example: {service:'StudioService', method:'PromptImportFile'} or {service:'Lighting', property:'ClockTime', value:14}.", json!({"service": {"type": "string"}, "method": {"type": "string"}, "args": {"type": "array"}, "property": {"type": "string"}, "value": {}}), &["service"]),
+            tool("studio_macro", "Persistent ORscript toolbar buttons that run Luau in plugin context: create {name, code, tooltip} | run {name} | remove {name} | list. Give the user one-click tools (align, rename, export …) that survive Studio restarts.", json!({"action": {"type": "string"}, "name": {"type": "string"}, "code": {"type": "string"}, "tooltip": {"type": "string"}, "icon": {"type": "string"}}), &[]),
+            tool("studio_save", "Save / publish dialogs: selection_to_roblox (publish the selection as a model/animation asset) | prompt_save_selection {name} (save selection to an .rbxm file). The place itself cannot be saved by a plugin - tell the user Ctrl+S.", json!({"action": {"type": "string"}, "paths": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}}), &["action"]),
+            tool("studio_output", "Last N Output window messages from inside Studio (level=error|warning|info|output) - instant, no MCP round trip.", json!({"count": {"type": "number"}, "level": {"type": "string"}}), &[]),
+            tool("studio_test_run", "Run TestService (TestService:Run) and return the messages it produced.", json!({"wait": {"type": "number"}}), &[]),
+            tool("studio_mouse", "Viewport ray under the user's mouse (or the viewport centre / given viewport_x, viewport_y): hit instance, position, normal, material - 'what is the user pointing at'.", json!({"action": {"type": "string"}, "viewport_x": {"type": "number"}, "viewport_y": {"type": "number"}, "distance": {"type": "number"}}), &[]),
+            // ── 1.24.0 other plugins ──
+            tool("plugins_list", "Discover other Studio plugins and how ORscript can use them: known plugins detected (Eclipse Animator, Moon Animator, Roblox Animation Editor, F3X, Rojo, Tag Editor …) with evidence, commands registered on the ORscript bus (shared.ORscript.register), every plugin widget (name/title/enabled/buttons), save folders / exported modules, PluginDebugService entries and shared/_G APIs.", json!({}), &[]),
+            tool("plugin_widget", "Another plugin's panel: info | show | hide | toggle | tree {depth, limit} (read its UI: labels, buttons, textboxes) | find {text} | click {text} (reports the button - Studio does not let plugins press another plugin's buttons, the user must).", json!({"name": {"type": "string"}, "action": {"type": "string"}, "text": {"type": "string"}, "depth": {"type": "number"}, "limit": {"type": "number"}}), &["name"]),
+            tool("plugin_invoke", "Use another plugin's API: plugin = a name registered on the ORscript bus, a shared.X / _G.X table, or the path of a BindableFunction / ModuleScript it exposes; command = the function; args = JSON array or object.", json!({"plugin": {"type": "string"}, "command": {"type": "string"}, "args": {}}), &["plugin", "command"]),
+            tool("plugin_module_call", "require a ModuleScript (e.g. one a plugin installed or exported) and list its keys, or call method with args.", json!({"path": {"type": "string"}, "method": {"type": "string"}, "args": {}}), &["path"]),
+            tool("plugin_source_read", "Read another plugin's scripts through PluginDebugService (needs Studio Settings → Plugin Debugging Enabled): omit script to list them, pass script to read it (offset, max_chars). Learn a plugin's real API before plugin_invoke.", json!({"plugin": {"type": "string"}, "script": {"type": "string"}, "offset": {"type": "number"}, "max_chars": {"type": "number"}}), &[]),
+            // ── 1.24.0 Eclipse Animator ──
+            tool("eclipse_status", "Is Eclipse Animator (riftkuro's animation plugin, Creator Store 86116556258301) installed in this Studio? Returns widgets, version, its saves / exported modules in the place, bus registration and the ORscript ⇄ Eclipse workflow.", json!({}), &[]),
+            tool("eclipse_open", "Select the rig and open the Eclipse Animator panel so the user can animate it there.", json!({"rig_path": {"type": "string"}}), &[]),
+            tool("eclipse_handoff", "ORscript → Eclipse: copy an AnimLib animation (animation name) or any KeyframeSequence (path) into <rig>.AnimSaves + ServerStorage.ORscriptAnimations, select the rig and open Eclipse - import it from Eclipse's library/import menu.", json!({"animation": {"type": "string"}, "path": {"type": "string"}, "rig_path": {"type": "string"}, "name": {"type": "string"}}), &[]),
+            tool("eclipse_import", "Eclipse → ORscript: convert an Eclipse save / export (KeyframeSequence, folder, Module Exporter ModuleScript, or Animation asset) into a KeyframeSequence in ServerStorage.RobloxScript.AnimLib (+ <rig>.AnimSaves) so animation_open / animation_preview / animation_retime / animation_mirror work on it. fps overrides frame-based tables; overwrite replaces an existing name.", json!({"path": {"type": "string"}, "rig_path": {"type": "string"}, "name": {"type": "string"}, "fps": {"type": "number"}, "overwrite": {"type": "boolean"}}), &["path"]),
+            tool("eclipse_play", "Preview a KeyframeSequence / Animation (path) or AnimLib clip (animation) on the rig in edit mode (Animator:StepAnimations): loop, speed, duration; action=stop ends it. Pair with or_screenshot.", json!({"path": {"type": "string"}, "animation": {"type": "string"}, "rig_path": {"type": "string"}, "loop": {"type": "boolean"}, "speed": {"type": "number"}, "duration": {"type": "number"}, "action": {"type": "string"}}), &[]),
         ]);
     }
     if key_set {
