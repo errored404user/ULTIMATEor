@@ -74,5 +74,46 @@ for (const s of siteList) {
 for (const c of manifest.content_scripts.filter((c) => c.world === "MAIN")) {
   for (const m of c.matches) if (!bundles.some((b) => b.matches.includes(m))) { console.log(`FAIL MAIN-world tap ${c.js.join(",")} on ${m} without an isolated bundle`); failures++; }
 }
+// ── Extension-hosted chat pages (API-only providers such as CodeCraft) ──────
+// These load the bundle through <script> tags instead of a content_scripts
+// entry, so the same ordering / contract / plumbing rules are checked here.
+const PAGES = [{ html: "codecraft.html", provider: "src/providers/codecraft.js", id: "codecraft", name: "CodeCraft API", apiHost: "codecraftapi.com" }];
+const refBundle = bundles.find((b) => b.js.some((j) => /vani\.js/.test(j))) || bundles[0];
+let pageRows = 0;
+for (const pg of PAGES) {
+  const problems = [];
+  if (!fs.existsSync(path.join(root, pg.html))) { console.log(`FAIL page ${pg.html} missing`); failures++; continue; }
+  const html = read(pg.html);
+  const js = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]);
+  const cssLinks = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)">/g)].map((m) => m[1]);
+  if (/<script>|\son[a-z]+="/.test(html)) problems.push("inline script / handler (blocked by the extension CSP)");
+  if (js[0] !== "src/core/config.js") problems.push("config.js must load first");
+  if (!js.includes(pg.provider)) problems.push("page does not load " + pg.provider);
+  if (js.indexOf(pg.provider) > js.indexOf("src/core/main.js")) problems.push("provider must load before the core");
+  for (const f of [...js, ...cssLinks]) if (!fs.existsSync(path.join(root, f))) problems.push("missing file " + f);
+  if (!cssLinks.includes("overlay.css")) problems.push("overlay.css not linked");
+  // Same module set as a hosted bundle (only the provider differs).
+  const expect = refBundle.js.map((j) => (/src\/providers\//.test(j) ? pg.provider : j));
+  if (JSON.stringify(expect) !== JSON.stringify(js)) problems.push("script list differs from the reference bundle: " + JSON.stringify(js.filter((j) => !expect.includes(j)).concat(expect.filter((j) => !js.includes(j)))));
+  const win = mockWindow(pg.apiHost, "/");
+  let P = null;
+  try { vm.runInContext(read(pg.provider) + "\n;window.__P = typeof RSProvider !== 'undefined' ? RSProvider : window.RSProvider;", vm.createContext(win)); P = win.__P; }
+  catch (e) { problems.push("load error: " + e.message); }
+  if (P) {
+    for (const m of REQUIRED) if (typeof P[m] !== "function") problems.push("missing core-required P." + m + "()");
+    for (const m of ["typeAndSend", "getEditor", "installSendHooks", "timings"]) if (!(m in P)) problems.push("missing P." + m);
+    if (P.id !== pg.id || P.displayName !== pg.name) problems.push("id/displayName mismatch");
+    if (!css.includes("rs-prov-" + pg.id)) problems.push("no overlay skin .rs-prov-" + pg.id);
+  }
+  if (!manifest.host_permissions.some((p) => matchesHost(p, pg.apiHost))) problems.push("API host not in host_permissions");
+  if (!bg.includes(pg.html)) problems.push("background.js does not broadcast status to the page");
+  if (!popup.includes(pg.html) || !popup.includes(pg.name)) problems.push("popup.js cannot open / name the page");
+  if (!read("popup.html").includes(pg.id)) problems.push("popup.html has no launcher for the page");
+  if (!main.includes(`{ name: "${pg.name}"`) || !main.includes(pg.html)) problems.push("AI switcher has no entry for the page");
+  if (!main.includes("rs-open-extension-page") || !bg.includes("rs-open-extension-page")) problems.push("switcher cannot open an extension page via the background worker");
+  console.log(`${problems.length ? "FAIL" : "ok  "} ${(pg.html + " (extension page)").padEnd(34)} ${path.basename(pg.provider).padEnd(14)} id=${String(P && P.id).padEnd(10)} images=${P && P.attachImages ? "yes" : "NO "} ${problems.join("; ")}`);
+  if (problems.length) failures++;
+  pageRows++;
+}
 if (failures) { console.log(`\n${failures} provider wiring problem(s)`); process.exit(1); }
-console.log(`PASS  ${rows.length} AI chat hosts across ${bundles.length} bundles are fully wired (core contract: ${REQUIRED.length} required methods)`);
+console.log(`PASS  ${rows.length} AI chat hosts across ${bundles.length} bundles + ${pageRows} extension chat page(s) are fully wired (core contract: ${REQUIRED.length} required methods)`);

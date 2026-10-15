@@ -732,6 +732,7 @@
     } catch {}
   }
 
+  const CODECRAFT_PAGE_URL = (() => { try { return chrome.runtime.getURL("codecraft.html"); } catch { return "codecraft.html"; } })();
   const AI_SITES = [
     { name: "DeepSeek", url: "https://chat.deepseek.com/" },
     { name: "ChatGPT", url: "https://chatgpt.com/" },
@@ -747,6 +748,10 @@
     { name: "Crax GPT", url: "https://gpt.crax.lol/" },
     { name: "Ox Alpha", url: "https://oxalpha.com/" },
     { name: "Vani Chat", url: "https://c.vani.ai/chat" },
+    // CodeCraft is an OpenAI-compatible API with no web chat: ORscript hosts
+    // the chat itself (codecraft.html, bring-your-own cc_ key). The page URL
+    // is extension-local, so it opens through the background worker.
+    { name: "CodeCraft API", url: CODECRAFT_PAGE_URL, host: "codecraftapi.com · in ORscript", extensionPage: "codecraft.html" },
     { name: "Notion AI", url: "https://www.notion.so/chat" },
     { name: "MiniMax Agent", url: "https://agent.minimax.io/" },
     { name: "Overchat", url: "https://overchat.ai/" },
@@ -6961,7 +6966,7 @@
       let sites = "";
       for (const s of AI_SITES) {
         const current = s.name.toLowerCase() === here;
-        const label = `<span class="rs-site-name"><span>${s.name}</span><span class="rs-site-host">${hostOf(s.url)}</span></span>`;
+        const label = `<span class="rs-site-name"><span>${s.name}</span><span class="rs-site-host">${s.host || hostOf(s.url)}</span></span>`;
         sites += current
           ? `<div class="rs-site-opt rs-site-here">${label}<span class="rs-site-badge">active</span></div>`
           : `<button class="rs-site-opt" data-u="${s.url}">${label}<span class="rs-site-go">&rarr;</span></button>`;
@@ -7110,7 +7115,12 @@
           <div class="rs-menu-foot">OR v${EXT_VERSION} • ${currentEngine==="local"?"AS":currentEngine==="anim"?"AN":"RS"} • ${esc(P.displayName)}</div>`;
       const open = (url) => {
         try {
-          if (url) window.open(url, "_blank", "noopener");
+          if (url && /^chrome-extension:\/\//.test(url)) {
+            // Extension pages (CodeCraft chat) are not web-accessible: the
+            // background worker opens them in a new tab.
+            const page = url.replace(/^chrome-extension:\/\/[^/]+\//, "");
+            bg({ type: "rs-open-extension-page", page }).catch(() => {});
+          } else if (url) window.open(url, "_blank", "noopener");
         } catch {} menuEl.hidden = true;
       };
       const closeBtn = menuEl.querySelector("#rs-menu-close");

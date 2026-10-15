@@ -329,6 +329,7 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-crax {
 #rs-bar.rs-bar-inline.rs-prov-qwen,
 #rs-bar.rs-bar-inline.rs-prov-oxalpha,
 #rs-bar.rs-bar-inline.rs-prov-vani,
+#rs-bar.rs-bar-inline.rs-prov-codecraft,
 #rs-bar.rs-bar-inline.rs-prov-minimax,
 #rs-bar.rs-bar-inline.rs-prov-overchat,
 #rs-bar.rs-bar-inline.rs-prov-huggingchat,
@@ -372,6 +373,7 @@ html.rs-light #rs-bar.rs-bar-inline.rs-prov-meta,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-qwen,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-oxalpha,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-vani,
+html.rs-light #rs-bar.rs-bar-inline.rs-prov-codecraft,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-minimax,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-overchat,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-huggingchat,
@@ -7432,3 +7434,18 @@ html[data-rs-public-mode] #rs-work-badge{border-style:dashed}
 .rs-public-share-actions button{border:1px solid rgba(255,255,255,.1);background:#222730;color:#c9ced6;border-radius:5px;padding:5px 8px;font-size:9px;cursor:pointer}
 .rs-public-share-actions button:first-child{background:var(--rsa,#24afe2);border-color:transparent;color:#071017;font-weight:750}
 .rs-public-share-actions button:disabled{opacity:.4;cursor:not-allowed}
+
+/* CodeCraft API — ORscript-hosted chat page (codecraft.html). The bar sits
+   in-flow at the top of the composer card; match the page's gold accent. */
+#rs-bar.rs-bar-inline.rs-prov-codecraft {
+  border-bottom: 0;
+  border-radius: 14px;
+  padding: 10px 14px 12px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(245, 197, 66, 0.14);
+}
+html.rs-light #rs-bar.rs-bar-inline.rs-prov-codecraft {
+  background: rgba(0, 0, 0, 0.025);
+  box-shadow: inset 0 0 0 1px rgba(245, 197, 66, 0.3);
+}

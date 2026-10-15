@@ -13,6 +13,10 @@ const SUPPORTED_HOSTS = [
   "dashboard.cohere.com", "api.together.ai", "fireworks.ai", "app.fireworks.ai",
 ];
 const DEFAULT_AI_URL = "https://chat.deepseek.com/";
+// CodeCraft API (codecraftapi.com) is API-only; ORscript hosts its chat page.
+const CODECRAFT_PAGE_URL = (() => { try { return chrome.runtime.getURL("codecraft.html"); } catch { return ""; } })();
+const isCodeCraftTab = (url) => !!(url && CODECRAFT_PAGE_URL && url.startsWith(CODECRAFT_PAGE_URL));
+const isSupportedTab = (url) => !!url && (SUPPORTED_HOSTS.some((h) => url.includes(h)) || isCodeCraftTab(url));
 const ENGINE_KEY = "rs-engine"; // "roblox" | "local"
 const ENGINES = ["roblox", "local"];
 const WORK_MODES = ["ultimate", "visualizer", "animator"];
@@ -193,7 +197,7 @@ if (runHint) {
       "gpt.crax.lol": "Crax", "www.notion.so": "Notion", "app.notion.so": "Notion", "www.notion.com": "Notion", "notion.com": "Notion",
       "oxalpha.com": "Ox Alpha", "www.oxalpha.com": "Ox Alpha", "c.vani.ai": "Vani Chat",
     };
-    el.textContent = names[host] || (SUPPORTED_HOSTS.some((h) => url.includes(h)) ? (host || "Chat") : "Idle");
+    el.textContent = isCodeCraftTab(url) ? "CodeCraft API" : (names[host] || (SUPPORTED_HOSTS.some((h) => url.includes(h)) ? (host || "Chat") : "Idle"));
   } catch {}
 })();
 
@@ -248,6 +252,13 @@ document.getElementById("restart").addEventListener("click", (e) => {
 document.getElementById("discord")?.addEventListener("click", () => {
   chrome.tabs.create({ url: DISCORD_URL });
 });
+document.getElementById("codecraft")?.addEventListener("click", () => {
+  // Reuse an open CodeCraft chat tab (same conversation) instead of stacking copies.
+  chrome.tabs.query({ url: CODECRAFT_PAGE_URL + "*" }, (tabs) => {
+    if (tabs && tabs.length) chrome.tabs.update(tabs[0].id, { active: true });
+    else chrome.tabs.create({ url: CODECRAFT_PAGE_URL });
+  });
+});
 document.getElementById("blender")?.addEventListener("click", () => {
   document.getElementById("settings")?.click();
 });
@@ -256,8 +267,8 @@ document.getElementById("settings").addEventListener("click", () => {
   // panel on an already-open supported AI tab first, so opening it doesn't
   // require a conversation to already be started there.
   chrome.tabs.query({}, (tabs) => {
-    const active = tabs.find((t) => t.active && t.url && SUPPORTED_HOSTS.some((h) => t.url.includes(h)));
-    const anySupported = active || tabs.find((t) => t.url && SUPPORTED_HOSTS.some((h) => t.url.includes(h)));
+    const active = tabs.find((t) => t.active && isSupportedTab(t.url));
+    const anySupported = active || tabs.find((t) => isSupportedTab(t.url));
     if (anySupported) {
       // .catch: the tab's content script may not be injected yet (fresh load /
       // post-reload) — MV3 sendMessage rejects as an unhandled promise then.

@@ -66,6 +66,10 @@ chrome.storage?.onChanged.addListener((changes, area) => {
 // to every tab matching these. Add the new provider's URL pattern here (and in
 // manifest.json content_scripts + host_permissions) when integrating another AI.
 const PROVIDER_URLS = ["https://chat.deepseek.com/*", "https://deepseek.com/*", "https://chatgpt.com/*", "https://chat.openai.com/*", "https://claude.ai/*", "https://www.claude.ai/*", "https://claude.com/*", "https://www.claude.com/*", "https://gemini.google.com/*", "https://www.kimi.com/*", "https://kimi.com/*", "https://kimi.ai/*", "https://www.kimi.ai/*", "https://build.nvidia.com/moonshotai/kimi-k3/*", "https://chat.z.ai/*", "https://chat.qwen.ai/*", "https://arena.ai/*", "https://www.meta.ai/*", "https://meta.ai/*", "https://gpt.crax.lol/*", "https://oxalpha.com/*", "https://www.oxalpha.com/*", "https://oxalpha.org/*", "https://www.oxalpha.org/*", "https://c.vani.ai/*", "https://agent.minimax.io/*", "https://overchat.ai/*", "https://*.overchat.ai/*", "https://huggingface.co/chat/*", "https://chat.mistral.ai/*", "https://mistral.ai/*", "https://openrouter.ai/*", "https://www.openrouter.ai/*", "https://console.groq.com/*", "https://dashboard.cohere.com/*", "https://api.together.ai/*", "https://fireworks.ai/*", "https://app.fireworks.ai/*", "https://www.notion.so/*", "https://app.notion.so/*", "https://www.notion.com/*", "https://notion.com/*", "https://*.notion.com/*"];
+// CodeCraft API has no web chat: ORscript hosts one at codecraft.html (an
+// extension page), which runs the same bundle and needs the same broadcasts.
+const CODECRAFT_PAGE = "codecraft.html";
+try { PROVIDER_URLS.push(chrome.runtime.getURL(CODECRAFT_PAGE) + "*"); } catch {}
 
 const RECONNECT_MIN = 500;
 const RECONNECT_MAX = 5000;
@@ -1573,6 +1577,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case "rs-get-engine":
         sendResponse({ engine });
         break;
+      case "rs-open-extension-page": {
+        // Only pages we ship may be opened this way (the AI switcher on a web
+        // page cannot open chrome-extension:// URLs itself).
+        const page = String(msg.page || "");
+        if (page !== CODECRAFT_PAGE) { sendResponse({ ok: false, error: "unknown extension page" }); break; }
+        const url = chrome.runtime.getURL(page);
+        try {
+          const tabs = await chrome.tabs.query({ url: url + "*" });
+          if (tabs.length) { await chrome.tabs.update(tabs[0].id, { active: true }); try { await chrome.windows.update(tabs[0].windowId, { focused: true }); } catch {} }
+          else await chrome.tabs.create({ url });
+          sendResponse({ ok: true });
+        } catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
+        break;
+      }
       case "rs-set-engine":
         engine = normalizeEngine(msg.engine);
         try { await chrome.storage.local.set({ [ENGINE_KEY]: engine }); } catch {}
