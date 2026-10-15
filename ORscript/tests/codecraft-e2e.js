@@ -1,4 +1,4 @@
-// End-to-end simulation of the CodeCraft API provider (1.26.0): the real
+// End-to-end simulation of the CodeCraft API provider (1.26.0+): the real
 // codecraft.html page with the WHOLE bundle, a fake codecraftapi.com (models +
 // SSE chat completions), the ORscript bar, Start, bootstrap → list_commands →
 // ready → ###LUA### → done. Optional (needs jsdom):

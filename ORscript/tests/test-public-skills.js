@@ -60,7 +60,69 @@ ok("modes are not commands", !PS.isCommand("horror_builder") && PS.isCommand("la
 // catalogue / tool entries
 const entries = PS.toolEntries();
 ok("toolEntries exposes enabled skills+abilities (not modes) with schemas", entries.length === 2 && entries.every((t) => t.publicSkill && t.virtual && t.inputSchema.type === "object") && entries.find((t) => t.name === "lantern_row").inputSchema.required.join() === "path" && entries.find((t) => t.name === "lantern_row").server === "roblox" && entries.find((t) => t.name === "script_audit").server === "orscript");
-ok("nine public_skill_* management tools", PS.managementTools().length === 9 && PS.managementTools().every((t) => /^public_skill_/.test(t.name) && t.server === "orscript"));
+ok("ten public_skill_* management tools (incl. public_skill_from_prompt)", PS.managementTools().length === 10 && PS.managementTools().every((t) => /^public_skill_/.test(t.name) && t.server === "orscript") && PS.managementTools().some((t) => t.name === "public_skill_from_prompt" && t.executionMode === "WRITE"));
+
+// ── plain-text (.txt) format ───────────────────────────────────────────────
+const TXT_SKILL = `# Lantern Line
+kind: skill
+description: Places N lanterns with warm PointLights along the selected path.
+params: count:number=4 "how many", color:string="warm" "light colour"
+tags: lighting, props
+
+--- luau ---
+local n = {{count}}
+for i = 1, n do
+  local p = Instance.new('Part')
+  p.Name = 'Lantern_' .. i
+  p.Parent = workspace
+end
+print('placed', n, {{color}})
+`;
+{
+  const t = PS.parseText(TXT_SKILL);
+  ok("parseText reads a .txt skill (title, kind, params, luau section)", t.ok && t.def.kind === "skill" && t.def.title === "Lantern Line" && t.def.name === "lantern_line" && t.def.params.length === 2 && t.def.params[0].name === "count" && t.def.params[0].type === "number" && t.def.params[0].default === 4 && t.def.params[0].description === "how many" && t.def.params[1].default === "warm" && /local n = \{\{count\}\}/.test(t.def.luau) && t.def.tags === "lighting, props", JSON.stringify(t).slice(0, 300));
+  const v = PS.validate(t.def);
+  ok("parsed .txt skill validates", v.ok, (v.errors || []).join("; "));
+  const r = PS.importShared(TXT_SKILL, { reserved: new Set() });
+  ok("importShared accepts .txt skills", r.ok && r.item && r.item.name === "lantern_line" && r.item.params.length === 2, JSON.stringify(r.errors));
+  const out = PS.exportText("lantern_line");
+  ok("exportText writes the same format back", /^# Lantern Line\nkind: skill\nname: lantern_line\n/.test(out) && out.includes("--- luau ---") && out.includes("params: count:number=4 \"how many\", color:string=\"warm\" \"light colour\""), out);
+  const back = PS.parseText(out);
+  ok("exportText → parseText round-trips", back.ok && back.def.name === "lantern_line" && back.def.params.length === 2 && back.def.params[0].default === 4 && back.def.luau.trim() === r.item.luau.trim());
+  ok("textFileName uses name.kind.orskill.txt", PS.textFileName("lantern_line") === "lantern_line.skill.orskill.txt");
+  PS.remove("lantern_line");
+}
+{
+  const t = PS.parseText("# Night Market\nkind: mode\nbase: visualizer\nbadge: MARKET\ndescription: Atmospheric night market scenes with lanterns and fog.\nfocus: set_lighting, create_part\n\n--- mandate ---\n" + "Build moody night markets. ".repeat(6));
+  ok("parseText reads a mode (base/badge/focus/mandate)", t.ok && t.def.kind === "mode" && t.def.base === "visualizer" && t.def.badge === "MARKET" && t.def.mandate.length >= 80 && PS.validate(t.def).ok, JSON.stringify(t).slice(0, 200));
+  const a = PS.parseText("# Tidy Up\nkind: ability\ndescription: Cleans the workspace before publishing a place.\n--- steps ---\n1. Delete stray parts\n2. Group props\n3. Verify with count\n");
+  ok("parseText reads an ability with steps (instructions derived)", a.ok && a.def.kind === "ability" && a.def.steps.length === 3 && a.def.steps[1] === "Group props" && PS.validate(a.def).ok, JSON.stringify(a).slice(0, 200));
+  const p = PS.parseText("You are a senior Roblox lighting artist. Always set up atmosphere first.\nNever leave default lighting. Verify with a screenshot.");
+  ok("parseText flags free prose as a prompt", !p.ok && p.prompt === true && typeof p.text === "string");
+  const s = PS.importShared("Please make every build you do clean and verified, always.", { reserved: new Set() });
+  ok("importShared reports prompt:true for prose instead of 'unrecognised'", !s.ok && s.prompt === true && /prompt, not a skill file/.test(s.errors[0]));
+}
+
+// ── prompt → skill ─────────────────────────────────────────────────────────
+{
+  const PROMPT = "# Boss Arena Builder\nYou build circular boss arenas in Roblox Studio.\n\n1. Create a 120-stud circular floor with a neon ring.\n2. Add four pillars and a raised throne platform.\n3. Place spawn locations at the four compass points.\n4. Verify the part count and report it.\nAlways use create_part for geometry and set_lighting for mood.";
+  ok("looksLikeFullPrompt: long/multi-line yes, short description no", PS.looksLikeFullPrompt(PROMPT) && !PS.looksLikeFullPrompt("a skill that adds lanterns"));
+  const f = PS.fromPrompt(PROMPT, { reserved: new Set(["create_part", "set_lighting", "execute_luau"]) });
+  ok("fromPrompt (no AI) -> ability with title, steps and referenced commands", f.ok && f.def.kind === "ability" && f.def.title === "Boss Arena Builder" && f.def.name === "boss_arena_builder" && f.def.steps.length === 4 && f.def.instructions === PROMPT && f.def.commands.includes("create_part") && f.def.commands.includes("set_lighting") && PS.validate(f.def).ok, JSON.stringify(f).slice(0, 300));
+  const m = PS.fromPrompt("You are a senior horror-map specialist. " + "Prioritise dread, fog and flickering lights over detail. ".repeat(8) + "Never add bright colours.", { kind: "mode" });
+  ok("fromPrompt kind=mode -> mandate verbatim, base from hints", m.ok && m.def.kind === "mode" && m.def.base === "visualizer" && m.def.mandate.startsWith("You are a senior horror-map specialist.") && m.def.badge.length <= 12 && PS.validate(m.def).ok, JSON.stringify(m).slice(0, 300));
+  const sk = PS.fromPrompt("Spawn ring\n```lua\nlocal n = {{count}}\nfor i = 1, n do local p = Instance.new('Part') p.Parent = workspace end\n```", { kind: "skill" });
+  ok("fromPrompt kind=skill with fenced Luau -> skill with {{count}} param", sk.ok && sk.def.kind === "skill" && sk.def.params.length === 1 && sk.def.params[0].name === "count" && /Instance\.new/.test(sk.def.luau) && PS.validate(sk.def).ok, JSON.stringify(sk).slice(0, 300));
+  const fb = PS.fromPrompt("Make the arena bigger and add torches around the edge, then verify.", { kind: "skill" });
+  ok("fromPrompt kind=skill without Luau falls back to ability with a warning", fb.ok && fb.def.kind === "ability" && fb.warnings.length === 1);
+  ok("fromPrompt rejects tiny text", !PS.fromPrompt("hi there").ok);
+  const inst = PS.installFromPrompt(PROMPT, { reserved: new Set() });
+  ok("installFromPrompt installs and is callable as a command", inst.ok && inst.item.kind === "ability" && PS.isCommand("boss_arena_builder") && String(PS.abilityText("boss_arena_builder", {}).text || "").includes("Create a 120-stud circular floor"), JSON.stringify(inst.errors));
+  const cp = PS.conversionPrompt(PROMPT, "auto", { commandNames: ["create_part", "set_lighting"] });
+  ok("conversionPrompt: faithful conversion, verbatim prompt, create call, definition doc, existing names", /CONVERT it; do not redesign it/.test(cp) && cp.includes("<<<PROMPT\n" + PROMPT + "\nPROMPT>>>") && cp.includes("public_skill_create") && cp.includes("DEFINITION OBJECT (JSON)") && cp.includes("boss_arena_builder (ability)") && /KIND: choose from the prompt itself/.test(cp));
+  ok("conversionPrompt honours an explicit kind", /KIND: mode \(the user chose this explicitly\)/.test(PS.conversionPrompt(PROMPT, "mode")));
+  PS.remove("boss_arena_builder");
+}
 const block = PS.catalogueBlock({ compact: true });
 ok("catalogueBlock lists signatures under a PUBLIC SKILLS header", /^PUBLIC SKILLS - 2 user-made commands/.test(block) && /lantern_row \{path, count\?, lit\?\}/.test(block) && /script_audit \{scope\?\}/.test(block) && block.endsWith("\n\n"));
 ok("catalogueBlock is empty with nothing installed", (() => { const saved = PS.list(); PS.replaceAll([]); const e = PS.catalogueBlock(); PS.replaceAll(saved); PS.setActiveMode("horror_builder"); return e === ""; })());
@@ -125,6 +187,11 @@ ok("orscript_help knows the publicskills topic", /publicskills:\{title:"Public S
 ok("config.js appends the custom mode mandate and a PUBLIC SKILLS block (tight + full)", config.includes("PublicSkills.modePrompt(pm)") && config.includes("━━━ PUBLIC SKILLS (ALL PROVIDERS) ━━━") && config.includes("━━━ PUBLIC SKILLS ━━━") && config.includes("Custom work modes available:") && !config.includes("PUBLIC ITEMS (ALL PROVIDERS)"));
 ok("Notion preferences bootstrap mentions public skills", config.includes("PUBLIC SKILLS preference:") && config.includes("${crewPref}${publicPref}"));
 ok("overlay.css styles the Public tab, kind pills and custom mode cards", css.includes(".rs-public-compose") && css.includes(".rs-public-kind-mode") && css.includes(".rs-work-card.rs-work-custom") && css.includes(".rs-public-editor"));
+ok("1.27.0 Public tab: 3 ways in, prompt → skill (AI + Save as-is), Load .txt, drop zone, Export .txt", main.includes("rs-public-ways") && main.includes("[data-public-save-text]") && main.includes("[data-public-load-text]") && main.includes('data-public-drop') && main.includes('data-public-action="export-text"') && /function publicSaveAsIs\(text\)/.test(main) && /function publicLoadText\(text, fileName\)/.test(main) && /function publicDownloadText\(id\)/.test(main) && main.includes('pubSection.addEventListener("drop"') && /function publicReadFile\(file\)/.test(main));
+ok("Create button auto-routes: full prompt → conversionPrompt, description → generationPrompt (pin kept)", /if \(how === "convert"\) return PublicSkills\.conversionPrompt\(text, kind, \{ commandNames: publicCommandSample\(\) \}\);/.test(main) && main.includes('var publicHow = "auto";') && main.includes("Turn prompt into a skill (AI)"));
+ok("import: prose files load into the composer instead of failing", main.includes("if (!r.ok && r.prompt) {") && main.includes('input.accept = ".json,.orskill.json,.orskills.json,.txt,.md,text/plain,application/json"'));
+ok("runTool handles public_skill_from_prompt", main.includes('if (op === "from_prompt") {') && main.includes("PS.installFromPrompt(text, { kind: args.kind, title: args.title, name: args.name, description: args.description, reserved: reserved(), source: \"ai\" })") && main.includes("Available: public_skill_create/from_prompt/list/get/update/delete/enable/test/export/import."));
+ok("help topic + config prompt blocks explain prompt → skill and .txt", /Prompt → skill: paste a whole prompt/.test(main) && /Plain-text format \(\.txt\)/.test(main) && config.includes("PROMPT → SKILL: when the user pastes a full prompt") && config.includes("public_skill_from_prompt {prompt}") && css.includes(".rs-public-ways") && css.includes(".rs-public-hint-convert") && css.includes(".rs-public-dragover"));
 ok("popup work-mode literal untouched", read("popup.js").includes('const WORK_MODES = ["ultimate", "visualizer", "animator"]'));
 
 console.log(`\n${pass} passed, ${fail} failed`);

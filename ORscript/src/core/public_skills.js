@@ -428,8 +428,9 @@
     { name: "public_skill_enable", description: "Enable or disable a Public Skill without deleting it; for kind=mode, enabled=true with activate=true switches the agent into that mode.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string" }, enabled: { type: "boolean", default: true }, activate: { type: "boolean" } } } },
     { name: "public_skill_test", description: "Syntax-check a public skill's Luau in Studio (dry_run=true, default) or actually run it with args (dry_run=false).", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string" }, args: { type: "object" }, dry_run: { type: "boolean", default: true } } } },
     { name: "public_skill_export", description: "Export a Public Skill (or name='all' for a pack of everything installed) as shareable JSON plus an ORSKILL1: share code the user can give to others.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string", description: "name, id, or 'all'" } } } },
-    { name: "public_skill_import", description: "Import Public Skills from exported JSON (single .orskill.json, a pack .orskills.json) or an ORSKILL1: share code.", inputSchema: { type: "object", required: ["data"], properties: { data: { type: "string", description: "JSON text or ORSKILL1: share code" }, replace: { type: "boolean", description: "Replace items with the same name" } } } },
-  ].map((t) => Object.assign(t, { server: "orscript", executionMode: /create|update|delete|import|enable|test/.test(t.name) ? "WRITE" : "READ", environment: "GENERAL", category: "Public Skills" }));
+    { name: "public_skill_import", description: "Import Public Skills from exported JSON (single .orskill.json, a pack .orskills.json), a plain-text .txt skill (# Title / kind: / --- luau --- sections) or an ORSKILL1: share code.", inputSchema: { type: "object", required: ["data"], properties: { data: { type: "string", description: "JSON text, .txt skill text or ORSKILL1: share code" }, replace: { type: "boolean", description: "Replace items with the same name" } } } },
+    { name: "public_skill_from_prompt", description: "Turn a full prompt the user wrote into an installed Public Skill WITHOUT redesigning it: the prompt is kept verbatim as an ability's instructions (default), a mode's mandate (kind=mode) or, when it contains Luau, a skill. Instant; refine later with public_skill_update.", inputSchema: { type: "object", required: ["prompt"], properties: { prompt: { type: "string", description: "The full prompt text" }, kind: { type: "string", enum: ["skill", "ability", "mode"] }, title: { type: "string" }, name: { type: "string", description: "snake_case command name" }, description: { type: "string" } } } },
+  ].map((t) => Object.assign(t, { server: "orscript", executionMode: /create|update|delete|import|enable|test|from_prompt/.test(t.name) ? "WRITE" : "READ", environment: "GENERAL", category: "Public Skills" }));
 
   // ── Sharing ─────────────────────────────────────────────────────────────
   function exportObject(ref) {
@@ -457,7 +458,12 @@
     let s = String(text || "").trim();
     if (!s) return { ok: false, errors: ["nothing to import"] };
     if (/^ORSKILL1:/i.test(s)) { s = b64decode(s.slice(9).replace(/\s+/g, "")); if (!s) return { ok: false, errors: ["share code is corrupted"] }; }
-    let j; try { j = JSON.parse(s); } catch { return { ok: false, errors: ["not valid JSON or share code"] }; }
+    let j; try { j = JSON.parse(s); } catch {
+      // Not JSON: a plain-text skill file (.txt) or a bare prompt.
+      const t = parseText(s);
+      if (t.ok) return { ok: true, def: t.def, text: true };
+      return { ok: false, prompt: !!t.prompt, text: s, errors: t.prompt ? ["this is a prompt, not a skill file - use 'Make it a skill' (AI) or 'Save as-is' to convert it"] : ["not valid JSON, share code or .txt skill"] };
+    }
     if (j && j.format === PACK_FORMAT && Array.isArray(j.items)) return { ok: true, pack: true, defs: j.items.filter((d) => d && typeof d === "object") };
     if (j && Array.isArray(j.items) && j.items.every((d) => d && (d.kind || d.luau || d.mandate))) return { ok: true, pack: true, defs: j.items };
     if (Array.isArray(j) && j.every((d) => d && (d.kind || d.luau || d.mandate))) return { ok: true, pack: true, defs: j };
@@ -467,7 +473,7 @@
   }
   function importShared(text, opts) {
     const p = parseShared(text);
-    if (!p.ok) return { ok: false, errors: p.errors, warnings: [], item: null };
+    if (!p.ok) return { ok: false, errors: p.errors, warnings: [], item: null, prompt: !!p.prompt, text: p.prompt ? p.text : undefined };
     if (p.pack) return importPack(p.defs, opts);
     return importOne(p.def, opts);
   }
@@ -492,6 +498,208 @@
     return upsert(def, Object.assign({ source: "import" }, opts || {}));
   }
 
+  // ── Plain-text format (.txt) ─────────────────────────────────────────────
+  // A skill written by hand in any text editor. Header lines `key: value`,
+  // then sections opened by `--- name ---` (luau | instructions | steps |
+  // mandate | description). Everything a JSON definition can say, in a form
+  // people actually type:
+  //
+  //   # Lantern Row
+  //   kind: skill
+  //   description: Places N lanterns with warm PointLights along the selected path.
+  //   params: count:number=4 "how many", color:string="warm" "light colour"
+  //   tags: lighting, props
+  //   --- luau ---
+  //   local n = {{count}}
+  //   ...
+  const SECTION_RE = /^\s*(?:-{3,}|={3,}|#{2,3})\s*([a-zA-Z][a-zA-Z _-]{1,30}?)\s*(?:-{3,}|={3,})?\s*$/;
+  const HEADER_KEYS = { kind: "kind", type: "kind", name: "name", command: "name", title: "title", description: "description", desc: "description", summary: "description", tags: "tags", tag: "tags", params: "params", param: "params", parameters: "params", args: "params", base: "base", badge: "badge", focus: "focus", commands: "commands", uses: "commands", author: "author", by: "author", usage: "usage", example: "usage", sub: "sub", subtitle: "sub", note: "note", toast: "toast", version: "version", executionmode: "executionMode", mode: "executionMode" };
+  const SECTION_KEYS = { luau: "luau", lua: "luau", code: "luau", script: "luau", program: "luau", instructions: "instructions", instruction: "instructions", procedure: "instructions", prompt: "instructions", steps: "steps", step: "steps", workflow: "steps", mandate: "mandate", "system prompt": "mandate", systemprompt: "mandate", rules: "mandate", description: "description", about: "description", notes: "note" };
+  // `count:number=4 "how many"` | `name (string, required): what it is` | `color string`
+  function parseParamSpec(spec) {
+    const out = [];
+    const parts = String(spec || "").split(/\r?\n|;|,(?![^"]*"(?:[^"]*"[^"]*")*[^"]*$)/).map((s) => s.trim()).filter(Boolean);
+    for (const raw of parts) {
+      let s = raw.replace(/^[-*\d.)\s]+/, "");
+      let description = "";
+      const q = s.match(/"([^"]*)"\s*$/); if (q) { description = q[1]; s = s.slice(0, q.index).trim(); }
+      const colonDesc = s.match(/^([^:]+:[^:=\s]+(?:\s*=\s*[^:]+)?)\s*:\s*(.+)$/); if (!description && colonDesc && !/^[a-z_][a-z0-9_]*\s*:\s*[a-z]+$/i.test(s)) { s = colonDesc[1].trim(); description = colonDesc[2].trim(); }
+      let def;
+      const eq = s.match(/^(.*?)\s*=\s*(.+)$/); if (eq) { s = eq[1].trim(); def = eq[2].trim(); }
+      let required;
+      if (/\boptional\b/i.test(s)) { required = false; s = s.replace(/[,(]?\s*optional\s*\)?/i, "").trim(); }
+      if (/\brequired\b/i.test(s)) { required = true; s = s.replace(/[,(]?\s*required\s*\)?/i, "").trim(); }
+      const m = s.match(/^([a-zA-Z_][a-zA-Z0-9_ ]*?)\s*(?:[:(\s]\s*([a-zA-Z\[\]]+)\s*\)?)?$/);
+      if (!m) continue;
+      const p = { name: snake(m[1]), type: (m[2] || "string").toLowerCase(), description };
+      if (def !== undefined) { try { p.default = JSON.parse(def); } catch { p.default = def.replace(/^['"]|['"]$/g, ""); } }
+      if (required !== undefined) p.required = required;
+      out.push(p);
+    }
+    return out;
+  }
+  // parseText(text) -> {ok:true, def} when the text has skill structure, or
+  // {ok:false, prompt:true, text} when it is free prose (a prompt to convert).
+  function parseText(text) {
+    const src = String(text || "").replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+    if (!src.trim()) return { ok: false, errors: ["empty text"] };
+    const lines = src.split("\n");
+    const def = {}; const sections = {}; let cur = null; let title = null; let structure = 0;
+    const headerBuf = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const sec = line.match(SECTION_RE);
+      if (sec && SECTION_KEYS[sec[1].trim().toLowerCase()]) { cur = SECTION_KEYS[sec[1].trim().toLowerCase()]; sections[cur] = sections[cur] || []; structure++; continue; }
+      if (cur) { sections[cur].push(line); continue; }
+      if (title === null && /^#\s+\S/.test(line)) { title = line.replace(/^#\s+/, "").trim(); structure++; continue; }
+      const kv = line.match(/^\s*([A-Za-z][A-Za-z _]{1,20})\s*[:=]\s*(.*)$/);
+      if (kv && HEADER_KEYS[kv[1].trim().toLowerCase().replace(/\s+/g, "")]) {
+        const key = HEADER_KEYS[kv[1].trim().toLowerCase().replace(/\s+/g, "")];
+        if (key === "kind" || key === "name" || key === "params" || key === "base" || key === "badge" || key === "focus") structure++;
+        def[key] = def[key] ? def[key] + "\n" + kv[2] : kv[2];
+        continue;
+      }
+      if (line.trim()) headerBuf.push(line);
+    }
+    // Code fence without a section marker: ```lua … ``` counts as the luau section.
+    if (!sections.luau) { const fence = src.match(/```(?:lua|luau)\n([\s\S]*?)```/i); if (fence && fence[1].trim().length >= 20) { sections.luau = fence[1].split("\n"); structure++; } }
+    if (!structure && !def.kind && !def.luau) return { ok: false, prompt: true, text: src, errors: ["no skill structure found (no kind:/--- luau ---/--- instructions ---/--- mandate --- markers) - this reads as a prompt"] };
+    if (title && !def.title) def.title = title;
+    for (const [k, v] of Object.entries(sections)) {
+      const body = v.join("\n").replace(/^\n+|\n+$/g, "");
+      if (k === "steps") def.steps = body.split("\n").map((s) => s.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean);
+      else if (k === "luau") def.luau = body.replace(/^```[a-z]*\n?/i, "").replace(/\n?```\s*$/, "");
+      else if (k === "description") def.description = (def.description ? def.description + " " : "") + body.replace(/\s+/g, " ").trim();
+      else def[k] = body;
+    }
+    if (!def.description && headerBuf.length) def.description = headerBuf.join(" ").replace(/\s+/g, " ").trim().slice(0, 600);
+    if (def.params) def.params = parseParamSpec(def.params);
+    if (def.version) def.version = parseInt(def.version, 10) || 1;
+    if (!def.kind) def.kind = inferKind(def) || (def.luau ? "skill" : def.mandate ? "mode" : "ability");
+    def.kind = String(def.kind).trim().toLowerCase().replace(/^work ?mode$/, "mode").replace(/^command$/, "skill");
+    if (!def.name && def.title) def.name = snake(def.title);
+    if (def.kind === "ability" && !def.instructions && def.description && !def.steps) { def.instructions = def.description; }
+    return { ok: true, def, text: true };
+  }
+  // exportText(ref) -> the same format, for people who prefer .txt to JSON.
+  function exportText(ref) {
+    const i = find(ref);
+    if (!i) return null;
+    const L = [];
+    L.push(`# ${i.title}`);
+    L.push(`kind: ${i.kind}`);
+    L.push(`name: ${i.name}`);
+    L.push(`description: ${i.description.replace(/\s+/g, " ")}`);
+    if (i.tags && i.tags.length) L.push(`tags: ${i.tags.join(", ")}`);
+    if (i.author) L.push(`author: ${i.author}`);
+    L.push(`version: ${i.version}`);
+    if (i.usage) L.push(`usage: ${i.usage}`);
+    if (i.params && i.params.length) L.push(`params: ${i.params.map((p) => `${p.name}:${p.type}${p.default !== undefined ? "=" + JSON.stringify(p.default) : ""}${p.required === false && p.default === undefined ? " optional" : ""}${p.description ? ` "${p.description.replace(/"/g, "'")}"` : ""}`).join(", ")}`);
+    if (i.kind === "skill") { L.push("", "--- luau ---", i.luau, ""); }
+    if (i.kind === "ability") {
+      if (i.commands && i.commands.length) L.push(`commands: ${i.commands.join(", ")}`);
+      L.push("", "--- instructions ---", i.instructions || "", "");
+      if (i.steps && i.steps.length) L.push("--- steps ---", ...i.steps.map((s, n) => `${n + 1}. ${s}`), "");
+    }
+    if (i.kind === "mode") {
+      L.push(`base: ${i.base}`, `badge: ${i.badge}`);
+      if (i.sub) L.push(`sub: ${i.sub}`);
+      if (i.focus && i.focus.length) L.push(`focus: ${i.focus.join(", ")}`);
+      L.push("", "--- mandate ---", i.mandate, "");
+    }
+    return L.join("\n");
+  }
+  const textFileName = (ref) => { const i = find(ref); return i ? `${i.name || "mode"}.${i.kind}.orskill.txt` : "public-skill.orskill.txt"; };
+
+  // ── Prompt → skill ───────────────────────────────────────────────────────
+  // A "full prompt" is a long piece of instructions the user already wrote
+  // (for any AI). Two paths turn it into an installed item:
+  //   fromPrompt(text, opts)       - instant, no AI: ability (or mode / skill
+  //                                  when the text makes that possible), the
+  //                                  prompt kept verbatim as its instructions.
+  //   conversionPrompt(text, kind) - the AI does a faithful conversion with
+  //                                  public_skill_create (params, Luau, steps).
+  const looksLikeFullPrompt = (t) => { const s = String(t || "").trim(); return s.length >= 280 || s.split(/\n/).filter((l) => l.trim()).length >= 4; };
+  const LUA_HINT_RE = /\b(local\s+\w+\s*=|game:GetService\(|Instance\.new\(|workspace[.:]|function\s*\(|\bend\b\s*$)/m;
+  function firstHeading(text) {
+    const lines = String(text || "").split("\n").map((l) => l.trim()).filter(Boolean);
+    const h = lines.find((l) => /^#{1,3}\s+\S/.test(l)); if (h) return h.replace(/^#+\s+/, "").slice(0, 80);
+    const t = lines.find((l) => /^(title|name|skill|mode|ability)\s*[:\-]\s*\S/i.test(l)); if (t) return t.replace(/^[^:\-]+[:\-]\s*/, "").slice(0, 80);
+    const first = lines[0] || "";
+    if (first.length <= 70 && !/[.!?:;,]$/.test(first) && first.split(/\s+/).length <= 10) return first;
+    return "";
+  }
+  function fromPrompt(text, opts) {
+    opts = opts || {};
+    const src = String(text || "").replace(/\r\n?/g, "\n").trim();
+    const warnings = [];
+    if (src.length < 20) return { ok: false, errors: ["the prompt is too short to become a skill (at least 20 characters)"], warnings, def: null };
+    let kind = KINDS.includes(opts.kind) ? opts.kind : "";
+    const title = str(opts.title || firstHeading(src) || ("Prompt " + new Date().toISOString().slice(0, 10)), 80).trim();
+    const name = snake(opts.name || title) || ("prompt_skill_" + Date.now().toString(36).slice(-4));
+    const body = src.replace(/^#{1,3}\s+[^\n]*\n+/, "");
+    const firstPara = body.split(/\n\s*\n/)[0].replace(/\s+/g, " ").trim();
+    let description = str(opts.description || firstPara, 300).trim();
+    if (description.length < 10) description = `Converted from a prompt: ${body.replace(/\s+/g, " ").slice(0, 200)}`;
+    const reserved = opts.reserved instanceof Set ? opts.reserved : new Set(Array.isArray(opts.reserved) ? opts.reserved : []);
+    // Command names the prompt mentions (snake_case words); filtered to real ones when the catalogue is known.
+    const snakeTokens = [...new Set(src.toLowerCase().match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g) || [])];
+    const known = snakeTokens.filter((t) => reserved.has(t));
+    const tokens = known.length ? known : snakeTokens.slice(0, 12);
+    const lua = (() => { const f = src.match(/```(?:lua|luau)?\n([\s\S]*?)```/i); if (f && LUA_HINT_RE.test(f[1])) return f[1].trim(); return LUA_HINT_RE.test(src) && (src.match(/\bend\b/g) || []).length >= 1 ? src : ""; })();
+    if (!kind) kind = lua && !/^(you are|always|never)/i.test(src) ? "skill" : (/\b(you are|act as|your role|always|never|priorit)/i.test(src) && src.length >= 400 ? "mode" : "ability");
+    if (kind === "skill" && !lua) { warnings.push("no Luau found in the prompt - saved as an ability (procedure); ask the AI to turn it into a skill if it should run as one program"); kind = "ability"; }
+    if (kind === "mode" && src.length < 80) { warnings.push("too short for a work-mode mandate - saved as an ability"); kind = "ability"; }
+    const def = { kind, name, title, description, tags: ["from-prompt"], author: opts.author || "you", source: "manual" };
+    if (kind === "skill") {
+      const used = []; let m; PLACEHOLDER_RE.lastIndex = 0; while ((m = PLACEHOLDER_RE.exec(lua))) if (!used.includes(m[1])) used.push(m[1]);
+      def.params = used.map((u) => ({ name: u, type: "string", description: `value for {{${u}}}` }));
+      def.luau = lua.slice(0, LIMITS.luau);
+      def.usage = `${name} ${JSON.stringify(Object.fromEntries(used.map((u) => [u, "..."])))}`;
+    } else if (kind === "ability") {
+      def.instructions = src.length > LIMITS.instructions ? src.slice(0, LIMITS.instructions - 60) + "\n[... prompt truncated to fit the ability limit]" : src;
+      if (src.length > LIMITS.instructions) warnings.push(`prompt truncated to ${LIMITS.instructions} characters`);
+      def.steps = (src.match(/^\s*(?:\d+[.)]|[-*•])\s+.+$/gm) || []).map((s) => s.replace(/^\s*(?:\d+[.)]|[-*•])\s+/, "").trim()).filter((s) => s.length >= 4).slice(0, LIMITS.steps);
+      def.commands = tokens.slice(0, LIMITS.commands);
+      def.usage = `${name} {}`;
+    } else {
+      def.mandate = src.slice(0, LIMITS.mandate);
+      if (src.length > LIMITS.mandate) warnings.push(`prompt truncated to ${LIMITS.mandate} characters`);
+      def.base = /\b(vfx|particle|lighting|light|ui|gui|atmosphere|fog)\b/i.test(src) ? "visualizer" : /\b(anim|animation|keyframe|rig|tween)\b/i.test(src) ? "animator" : "ultimate";
+      def.badge = title.replace(/[^A-Za-z0-9 ]/g, "").trim().split(/\s+/).slice(0, 2).join(" ").toUpperCase().slice(0, 12) || "PROMPT";
+      def.focus = tokens.slice(0, LIMITS.focus);
+      def.sub = description.slice(0, 120);
+    }
+    return { ok: true, errors: [], warnings, def };
+  }
+  // Install straight away (no AI). Returns the upsert result (+ warnings).
+  function installFromPrompt(text, opts) {
+    const r = fromPrompt(text, opts);
+    if (!r.ok) return { ok: false, errors: r.errors, warnings: r.warnings, item: null };
+    const u = upsert(r.def, { source: (opts && opts.source) || "manual", reserved: opts && opts.reserved });
+    return Object.assign(u, { warnings: [...r.warnings, ...u.warnings], converted: r.def.kind });
+  }
+  function conversionPrompt(text, kindHint, ctx) {
+    ctx = ctx || {};
+    const kind = KINDS.includes(kindHint) ? kindHint : "auto";
+    const prompt = String(text || "").trim();
+    const existing = items.length ? `Already installed (do not reuse these names): ${items.map((i) => `${i.name} (${i.kind})`).join(", ")}.` : "";
+    const names = Array.isArray(ctx.commandNames) && ctx.commandNames.length ? `Built-in command names you may reference in commands[]/focus[] (sample): ${ctx.commandNames.slice(0, 60).join(", ")}${ctx.commandNames.length > 60 ? " ..." : ""}.` : "";
+    const kindLine = kind === "auto"
+      ? "KIND: choose from the prompt itself - a behavioural/system prompt ('you are…', rules, priorities) becomes a MODE (mandate = the prompt, cleaned but complete); a step-by-step procedure becomes an ABILITY (instructions = the prompt, steps[] = its steps); a concrete, repeatable build with obvious variables becomes a SKILL (parameterised Luau that does exactly what the prompt describes)."
+      : `KIND: ${kind} (the user chose this explicitly).`;
+    return [
+      "PROMPT → PUBLIC SKILL - the user wrote a full prompt and wants it installed as a reusable OrScript item. CONVERT it; do not redesign it.",
+      "RULES: keep every instruction, rule and constraint from the prompt (rephrase only for clarity, never drop or soften); do not add behaviour the prompt does not ask for; pick a short title and a snake_case name from the prompt's subject; write a 1-2 sentence description of when to use it; for skills, turn the variable parts into params[] with sensible defaults and write complete Luau; for abilities keep the prompt as instructions and list 3-15 steps[] in its order; for modes keep the prompt as the mandate and pick base/badge/focus[].",
+      kindLine,
+      "PROCESS: (1) submit ONE public_skill_create {\"definition\": {...}}; (2) if VALIDATION_FAILED, fix and resubmit; (3) for skills run public_skill_test {\"name\"} once; (4) reply with one short paragraph: what was installed, how to call it, and what you changed from the prompt (ideally nothing).",
+      "THE PROMPT (verbatim, between the markers):\n<<<PROMPT\n" + prompt + "\nPROMPT>>>",
+      DEFINITION_DOC,
+      existing,
+      names,
+    ].filter(Boolean).join("\n\n");
+  }
+
   function onChange(fn) { if (typeof fn === "function") listeners.add(fn); return () => listeners.delete(fn); }
   function replaceAll(arr) { items = []; for (const d of arr || []) { const v = validate(d, { allowDuplicateId: true }); if (v.ok) items.push(v.item); } persist(); emit("reset", null); }
 
@@ -504,6 +712,8 @@
     managementTools: () => clone(MANAGEMENT_TOOLS), generationPrompt,
     exportObject, exportJson, fileName, shareCode, parseShared, importShared, importPack, luauLiteral, snake,
     exportPackObject, exportPackJson, packFileName, packShareCode, PACK_FORMAT,
+    parseText, exportText, textFileName, parseParamSpec,
+    looksLikeFullPrompt, fromPrompt, installFromPrompt, conversionPrompt,
   };
   root.PublicSkills = api;
   try { root.__rsPublicMode = () => api.activeMode(); } catch {}
