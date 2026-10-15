@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ORscript",
-  "version": "1.27.0",
+  "version": "1.28.0",
   "minimum_chrome_version": "111",
   "description": "Turn ChatGPT, Claude, DeepSeek, Gemini, Kimi, NVIDIA NIM Kimi K3, GLM, Qwen, Arena, Meta AI, Crax GPT, Notion AI or Ox Alpha into a Roblox Studio / AgentScript agent. Two engines (RS/AS), work modes, image-to-model, auto-fix playtest errors, and Extra Thinking.",
   "permissions": [
@@ -40,6 +40,7 @@
     "https://oxalpha.org/*",
     "https://www.oxalpha.org/*",
     "https://c.vani.ai/*",
+    "https://app.clickup.com/*",
     "https://codecraftapi.com/*",
     "http://127.0.0.1/*",
     "http://localhost/*",
@@ -673,6 +674,46 @@
         "src/core/agent_crew.js",
         "src/core/command_registry.js",
         "src/providers/vani.js",
+        "src/core/templates.js",
+        "src/core/screenshot.js",
+        "src/core/ui_collision_manager.js",
+        "src/core/template_registry.js",
+        "src/core/project_worker.js",
+        "src/core/project_analyzer.js",
+        "src/core/paint.js",
+        "src/core/public_skills.js",
+        "src/core/tasklist.js",
+        "src/core/main.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://app.clickup.com/*"
+      ],
+      "js": [
+        "src/core/config.js",
+        "src/core/parser.js",
+        "src/core/animlib.js",
+        "src/core/skills/studio_skills.js",
+        "src/core/skills/studio_daily.js",
+        "src/core/skills/studio_gui.js",
+        "src/core/skills/studio_plus.js",
+        "src/core/skills/studio_extra40.js",
+        "src/core/skills/studio_200.js",
+        "src/core/skills/studio_100.js",
+        "src/core/skills/studio_extra100.js",
+        "src/core/skills/studio_ultimate.js",
+        "src/core/skills/studio_modes.js",
+        "src/core/studio_bridge.js",
+        "src/core/skills/creative_pro.js",
+        "src/core/skills/agent_skills.js",
+        "src/core/agent_crew.js",
+        "src/core/command_registry.js",
+        "src/providers/clickup.js",
         "src/core/templates.js",
         "src/core/screenshot.js",
         "src/core/ui_collision_manager.js",
