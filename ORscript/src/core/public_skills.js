@@ -17,6 +17,7 @@
   const KEY = "rsPublicSkills";
   const MODE_KEY = "rsPublicMode";
   const FORMAT = "orscript-public-skill";
+  const PACK_FORMAT = "orscript-public-skill-pack";
   const FORMAT_VERSION = 1;
   const KINDS = ["skill", "ability", "mode"];
   const BASES = ["ultimate", "visualizer", "animator"];
@@ -426,8 +427,8 @@
     { name: "public_skill_delete", description: "Uninstall a Public Skill by name or id.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string" } } } },
     { name: "public_skill_enable", description: "Enable or disable a Public Skill without deleting it; for kind=mode, enabled=true with activate=true switches the agent into that mode.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string" }, enabled: { type: "boolean", default: true }, activate: { type: "boolean" } } } },
     { name: "public_skill_test", description: "Syntax-check a public skill's Luau in Studio (dry_run=true, default) or actually run it with args (dry_run=false).", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string" }, args: { type: "object" }, dry_run: { type: "boolean", default: true } } } },
-    { name: "public_skill_export", description: "Export a Public Skill as shareable JSON plus a share code the user can paste to others.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string" } } } },
-    { name: "public_skill_import", description: "Import a Public Skill from exported JSON text or a share code.", inputSchema: { type: "object", required: ["data"], properties: { data: { type: "string", description: "JSON text or ORSKILL1: share code" } } } },
+    { name: "public_skill_export", description: "Export a Public Skill (or name='all' for a pack of everything installed) as shareable JSON plus an ORSKILL1: share code the user can give to others.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string", description: "name, id, or 'all'" } } } },
+    { name: "public_skill_import", description: "Import Public Skills from exported JSON (single .orskill.json, a pack .orskills.json) or an ORSKILL1: share code.", inputSchema: { type: "object", required: ["data"], properties: { data: { type: "string", description: "JSON text or ORSKILL1: share code" }, replace: { type: "boolean", description: "Replace items with the same name" } } } },
   ].map((t) => Object.assign(t, { server: "orscript", executionMode: /create|update|delete|import|enable|test/.test(t.name) ? "WRITE" : "READ", environment: "GENERAL", category: "Public Skills" }));
 
   // ── Sharing ─────────────────────────────────────────────────────────────
@@ -439,6 +440,15 @@
     return { format: FORMAT, formatVersion: FORMAT_VERSION, exportedAt: new Date().toISOString(), app: "OrScript", item: out };
   }
   const exportJson = (ref) => { const o = exportObject(ref); return o ? JSON.stringify(o, null, 2) : null; };
+  // Pack = several items in one file (Export all / a curated bundle).
+  function exportPackObject(refs) {
+    const picked = refs && refs.length ? refs.map((r) => find(r)).filter(Boolean) : items.slice();
+    if (!picked.length) return null;
+    return { format: PACK_FORMAT, formatVersion: FORMAT_VERSION, exportedAt: new Date().toISOString(), app: "OrScript", count: picked.length, items: picked.map((i) => exportObject(i.id).item) };
+  }
+  const exportPackJson = (refs) => { const o = exportPackObject(refs); return o ? JSON.stringify(o, null, 2) : null; };
+  const packFileName = () => `orscript-public-skills-${new Date().toISOString().slice(0, 10)}.orskills.json`;
+  const packShareCode = (refs) => { const o = exportPackObject(refs); return o ? "ORSKILL1:" + b64encode(JSON.stringify(o)) : null; };
   const fileName = (ref) => { const i = find(ref); return i ? `${i.name || "mode"}.${i.kind}.orskill.json` : "public-skill.orskill.json"; };
   function b64encode(s) { try { return typeof btoa === "function" ? btoa(unescape(encodeURIComponent(s))) : Buffer.from(s, "utf8").toString("base64"); } catch { return ""; } }
   function b64decode(s) { try { return typeof atob === "function" ? decodeURIComponent(escape(atob(s))) : Buffer.from(s, "base64").toString("utf8"); } catch { return ""; } }
@@ -448,14 +458,33 @@
     if (!s) return { ok: false, errors: ["nothing to import"] };
     if (/^ORSKILL1:/i.test(s)) { s = b64decode(s.slice(9).replace(/\s+/g, "")); if (!s) return { ok: false, errors: ["share code is corrupted"] }; }
     let j; try { j = JSON.parse(s); } catch { return { ok: false, errors: ["not valid JSON or share code"] }; }
+    if (j && j.format === PACK_FORMAT && Array.isArray(j.items)) return { ok: true, pack: true, defs: j.items.filter((d) => d && typeof d === "object") };
+    if (j && Array.isArray(j.items) && j.items.every((d) => d && (d.kind || d.luau || d.mandate))) return { ok: true, pack: true, defs: j.items };
+    if (Array.isArray(j) && j.every((d) => d && (d.kind || d.luau || d.mandate))) return { ok: true, pack: true, defs: j };
     const def = j && j.format === FORMAT && j.item ? j.item : j && (j.kind || j.luau || j.mandate || j.instructions) ? j : null;
-    if (!def) return { ok: false, errors: ["unrecognised file - expected an OrScript public skill export"] };
+    if (!def) return { ok: false, errors: ["unrecognised file - expected an OrScript public skill export (.orskill.json / .orskills.json) or an ORSKILL1: share code"] };
     return { ok: true, def };
   }
   function importShared(text, opts) {
     const p = parseShared(text);
     if (!p.ok) return { ok: false, errors: p.errors, warnings: [], item: null };
-    const def = Object.assign({}, p.def);
+    if (p.pack) return importPack(p.defs, opts);
+    return importOne(p.def, opts);
+  }
+  // Pack import: installs every item it can; duplicates are skipped unless
+  // opts.replace. Returns {ok, installed[], skipped[], errors[]}.
+  function importPack(defs, opts) {
+    const installed = [], skipped = [], errors = [], warnings = [];
+    for (const d of defs || []) {
+      const r = importOne(d, opts);
+      if (r.ok) { installed.push(r.item); warnings.push(...r.warnings.map((w) => `${r.item.name}: ${w}`)); }
+      else if (r.duplicate) skipped.push(r.duplicate.name);
+      else errors.push(`${(d && (d.name || d.title)) || "item"}: ${r.errors.join("; ")}`);
+    }
+    return { ok: installed.length > 0 || (!errors.length && !!skipped.length), pack: true, installed, skipped, errors, warnings, item: installed[0] || null, count: installed.length };
+  }
+  function importOne(src, opts) {
+    const def = Object.assign({}, src);
     delete def.id; delete def.createdAt; delete def.updatedAt;
     const dup = items.find((i) => i.kind === def.kind && i.name === snake(def.name || def.title));
     if (dup && !(opts && opts.replace)) return { ok: false, errors: [`a ${dup.kind} named '${dup.name}' is already installed - delete it first or import with replace`], warnings: [], item: null, duplicate: clone(dup) };
@@ -473,7 +502,8 @@
     modes, activeMode, setActiveMode, modePrompt,
     buildLuau, syntaxCheckLuau, abilityText, resolveArgs, signature, schema, toolEntries, catalogueBlock,
     managementTools: () => clone(MANAGEMENT_TOOLS), generationPrompt,
-    exportObject, exportJson, fileName, shareCode, parseShared, importShared, luauLiteral, snake,
+    exportObject, exportJson, fileName, shareCode, parseShared, importShared, importPack, luauLiteral, snake,
+    exportPackObject, exportPackJson, packFileName, packShareCode, PACK_FORMAT,
   };
   root.PublicSkills = api;
   try { root.__rsPublicMode = () => api.activeMode(); } catch {}

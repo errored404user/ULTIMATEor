@@ -348,6 +348,11 @@ const HELP = !!process.env.HELP;
 // public_skill_create, calls it by name (runs as execute_luau, relabelled), then
 // installs a custom work mode and activates it; the Public tab lists both.
 const PUBLIC = !!process.env.PUBLIC;
+// TASKS=1 → Task list (1.25.0): enabled in Settings with two tasks; the model
+// calls task_next, builds, marks it done with task_update; pill + state line +
+// Tasks tab follow.
+const TASKS = !!process.env.TASKS;
+if (TASKS) w.chrome.storage.local.set({ rsTaskList: { enabled: true, tasks: [{ id: "t_a1", text: "Create a part named SimPart", status: "todo" }, { id: "t_b2", text: "Add a PointLight to it", status: "todo" }] } });
 w.chrome.storage.local.set({ rsAllowPlaytest: true, rsDebugDiagnostics: !!process.env.DIAG, rsMultiAgent: CREW, ...(process.env.ASK ? { rsPermMode: "ask" } : {}) });
 
 // ── load the bundle ───────────────────────────────────────────────────────
@@ -399,6 +404,13 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     const cmd = (name, params) => "```json\n" + JSON.stringify({ command: name, params }) + "\n```";
     onUserMessage = async (text) => {
       phase++;
+      if (TASKS && phase >= 3) {
+        if (phase === 3) await replyWith("Let me take the next task.\n" + cmd("task_next", {}));
+        else if (phase === 4) await replyWith("Creating the part now.\n###LUA###\nlocal p = Instance.new(\"Part\")\np.Name = \"SimPart\"\np.Parent = workspace\nprint(\"OK\")\n###END_LUA###");
+        else if (phase === 5) await replyWith("Verified. Marking it done.\n" + cmd("task_update", { id: "#1", status: "done", notes: "SimPart created in Workspace" }));
+        else await replyWith("Task 1 is done; task 2 is next whenever you want.");
+        return;
+      }
       if (PUBLIC && phase >= 3) {
         if (phase === 3) await replyWith("I'll build that as a public skill.\n" + cmd("public_skill_create", { definition: { kind: "skill", name: "lantern_row", title: "Lantern Row", description: "Places a row of anchored lantern parts with PointLights next to a target instance.", params: [{ name: "path", type: "string", description: "Full path of the parent", required: true }, { name: "count", type: "number", description: "How many lanterns", default: 3 }], luau: "local target = game\nfor seg in string.gmatch({{path}}, '[^.]+') do target = target:FindFirstChild(seg) if not target then return {ok=false, error='missing ' .. seg} end end\nlocal made = 0\nfor i = 1, {{count}} do local p = Instance.new('Part') p.Name = 'Lantern_' .. i p.Anchored = true p.Parent = target made += 1 end\nreturn {ok=true, created=made}" } }));
         else if (phase === 4) await replyWith("Installed. Let me try it.\n" + cmd("lantern_row", { path: "Workspace", count: 2 }));
@@ -502,6 +514,36 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       if (process.env.ASK) ok("execute_luau asked for approval exactly once and ran after Allow", approvals.length === 1 && /execute_luau/.test(approvals[0].op) && d.getElementById("rs-approve").parentElement === d.documentElement, JSON.stringify(approvals));
       ok("no OR-internal flags leaked to the bridge", !toolCalls.some((c) => Object.keys(c.arguments || {}).some((k) => /^_or/.test(k))), JSON.stringify(toolCalls.map((c) => Object.keys(c.arguments || {}))));
       await sleep(1000);
+      ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
+      return;
+    }
+    if (TASKS) {
+      ok("bootstrap carries the task list preference with the open tasks", /TASK LIST preference/.test(userMessages[0]) && /1\. Create a part named SimPart/.test(userMessages[0]), userMessages[0].length + " chars");
+      ok("catalogue lists task_* commands while enabled", /task_next/.test(userMessages[1]) && /task_update/.test(userMessages[1]));
+      const pill = d.getElementById("rs-task-pill");
+      ok("bar shows the Tasks 0/2 pill", !!pill && !pill.hidden && pill.textContent === "Tasks 0/2", pill && pill.textContent);
+      await waitFor(() => userMessages.length >= 4, 40000, "task_next result");
+      ok("task_next returned task #1 and marked it doing", /"n": 1/.test(userMessages[3]) && /"status": "doing"/.test(userMessages[3]) && /Create a part named SimPart/.test(userMessages[3]), userMessages[3].slice(0, 160).replace(/\n/g, " "));
+      ok("state line carries TASKS 0/2 and the next task", /TASKS 0\/2 next #1 "Create a part named SimPart"/.test(userMessages[3]), (userMessages[3].match(/\[SYSTEM_STATE:[^\]]*\]/) || [""])[0].slice(0, 200));
+      await waitFor(() => toolCalls.some((c) => c.name === "execute_luau" && /SimPart/.test(String(c.arguments.code || ""))), 40000, "execute_luau");
+      await waitFor(() => userMessages.length >= 6, 40000, "task_update result");
+      ok("task_update marked #1 done and points at #2", /"status": "done"/.test(userMessages[5]) && /"next": "#2 Add a PointLight to it"/.test(userMessages[5]), userMessages[5].slice(0, 200).replace(/\n/g, " "));
+      ok("pill updated to Tasks 1/2", pill.textContent === "Tasks 1/2" && pill.dataset.done === "open", pill.textContent);
+      ok("storage persisted the task state", storage.rsTaskList && storage.rsTaskList.enabled === true && storage.rsTaskList.tasks[0].status === "done" && storage.rsTaskList.tasks[0].notes === "SimPart created in Workspace");
+      // Tasks tab in the cards panel
+      pill.click(); await sleep(250);
+      const rows = [...d.querySelectorAll(".rs-task-row")];
+      ok("Tasks tab lists both tasks with #1 done", rows.length === 2 && rows[0].classList.contains("rs-task-done") && /Add a PointLight/.test(rows[1].textContent), rows.map((r) => r.className).join(" | "));
+      ok("Tasks tab has add input, Run next and Run all", !!d.getElementById("rs-task-input") && !!d.querySelector("[data-task-run-next]") && !!d.querySelector("[data-task-run-all]"));
+      // Settings toggle: disable → tab + pill + tools gone, tasks kept.
+      const menuBtn = d.getElementById("rs-settings-btn"); if (menuBtn) { menuBtn.click(); await sleep(250); }
+      const tgl = d.querySelector('.rs-tgl-row[data-mode="tasklist"]');
+      ok("Settings has the Task list toggle, currently on", !!tgl && tgl.getAttribute("aria-checked") === "true", tgl && tgl.getAttribute("aria-checked"));
+      if (tgl) { tgl.click(); await sleep(250); }
+      ok("disabling hides the pill and keeps the tasks", pill.hidden && storage.rsTaskList.enabled === false && storage.rsTaskList.tasks.length === 2);
+      ok("task_* commands refuse while disabled", /disabled/.test(w.eval("ORTaskList").run("task_list", {})));
+      await waitFor(() => (w.__rsDiag || []).some((e) => e.event === "loop.end"), 30000, "loop.end");
+      await sleep(800);
       ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
       return;
     }

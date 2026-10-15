@@ -148,6 +148,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -199,6 +200,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -241,6 +243,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -280,6 +283,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -322,6 +326,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -371,6 +376,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -410,6 +416,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -449,6 +456,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -489,6 +497,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -538,6 +547,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -587,6 +597,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -629,6 +640,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -668,6 +680,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -719,6 +732,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [
@@ -762,6 +776,7 @@
         "src/core/project_analyzer.js",
         "src/core/paint.js",
         "src/core/public_skills.js",
+        "src/core/tasklist.js",
         "src/core/main.js"
       ],
       "css": [

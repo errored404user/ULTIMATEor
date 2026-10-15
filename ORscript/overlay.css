@@ -7391,3 +7391,44 @@ html.rs-paint-open #rs-root { visibility: hidden !important; }
 .rs-work-card.rs-work-custom .rs-work-name small{font-size:8px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#ffd37a;margin-left:4px}
 .rs-work-public-note{margin-top:6px;font-size:8.5px}
 html[data-rs-public-mode] #rs-work-badge{border-style:dashed}
+
+/* ── Task list (Settings → Task list) ─────────────────────────────────── */
+#rs-task-pill{display:inline-flex;align-items:center;flex:none;margin-left:4px;padding:2px 8px;border-radius:999px;font:800 8.5px/1.4 ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;letter-spacing:.12em;text-transform:uppercase;color:#fff;background:linear-gradient(135deg,rgba(120,120,140,.9),rgba(70,70,90,.9));border:1px solid rgba(255,255,255,.22);box-shadow:0 0 0 1px rgba(0,0,0,.25) inset,0 0 14px -4px var(--orx-glow,rgba(255,255,255,.35));cursor:pointer;white-space:nowrap;user-select:none}
+#rs-task-pill[hidden]{display:none!important}
+#rs-task-pill[data-done="doing"]{background:linear-gradient(135deg,#f59e0b,#b45309)}
+#rs-task-pill[data-done="all"]{background:linear-gradient(135deg,#22c55e,#15803d)}
+#rs-task-pill:hover{filter:brightness(1.12)}
+.rs-task-progress{height:4px;margin:6px 12px 2px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
+.rs-task-progress span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--rsa,#24afe2),#22c55e);transition:width .25s ease}
+.rs-task-add{display:flex;gap:6px;margin:8px 12px 4px}
+.rs-task-add input{flex:1;min-width:0;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.28);color:#e7eaef;border-radius:6px;padding:7px 9px;font:10.5px/1.4 inherit;outline:none}
+.rs-task-add input:focus{border-color:var(--rsa,#24afe2)}
+.rs-task-tools{display:flex;flex-wrap:wrap;gap:5px;margin:4px 12px 2px}
+.rs-task-tools button{border:1px solid rgba(255,255,255,.1);background:#222730;color:#c9ced6;border-radius:5px;padding:4px 7px;font-size:9px;cursor:pointer}
+.rs-task-tools button:disabled{opacity:.4;cursor:not-allowed}
+.rs-task-list{list-style:none;margin:0;padding:7px 10px 14px;display:flex;flex-direction:column;gap:5px}
+.rs-task-row{display:flex;align-items:flex-start;gap:9px;padding:8px 9px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);border-radius:7px}
+.rs-task-check{flex:none;width:18px;height:18px;margin-top:1px;border-radius:5px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.25);color:#fff;font:700 11px/1 inherit;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.rs-task-done .rs-task-check{background:#22c55e;border-color:#22c55e;color:#06250f}
+.rs-task-doing .rs-task-check{border-color:#f59e0b;color:#f59e0b}
+.rs-task-skipped .rs-task-check{border-color:rgba(255,255,255,.18);color:#8a93a0}
+.rs-task-copy{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 7px;font-size:10.5px;color:#edf0f3}
+.rs-task-n{font:700 9px/1 ui-monospace,SFMono-Regular,Consolas,monospace;color:#6f7885}
+.rs-task-text{outline:none;border-bottom:1px dashed transparent;min-width:40px}
+.rs-task-text:focus{border-bottom-color:var(--rsa,#24afe2)}
+.rs-task-done .rs-task-text{text-decoration:line-through;color:#8a93a0}
+.rs-task-skipped .rs-task-text{color:#8a93a0;font-style:italic}
+.rs-task-doing{border-color:rgba(245,158,11,.45);background:rgba(245,158,11,.06)}
+.rs-task-notes,.rs-task-by{flex-basis:100%;font-size:8.5px;color:#8a93a0}
+.rs-task-by{color:#8fd3ff}
+.rs-task-actions{display:flex;flex:none;gap:3px}
+.rs-task-actions button{border:1px solid rgba(255,255,255,.1);background:#222730;color:#c9ced6;border-radius:4px;padding:3px 6px;font-size:9px;cursor:pointer;min-width:22px}
+.rs-task-actions button:first-child{color:var(--rsa,#24afe2)}
+.rs-tasks .rs-template-head p code{font:9px ui-monospace,SFMono-Regular,Consolas,monospace;color:#8fd3ff}
+.rs-public-sharebox{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:6px 10px 0;padding:8px 10px;border:1px dashed rgba(255,255,255,.14);border-radius:8px;background:rgba(255,255,255,.02)}
+.rs-public-sharebox>b{font-size:10px;color:#ffd37a;letter-spacing:.04em;text-transform:uppercase}
+.rs-public-sharebox>span{flex:1 1 200px;font-size:9px;color:#7d8694;line-height:1.4}
+.rs-public-share-actions{display:flex;flex-wrap:wrap;gap:5px;flex-basis:100%}
+.rs-public-share-actions button{border:1px solid rgba(255,255,255,.1);background:#222730;color:#c9ced6;border-radius:5px;padding:5px 8px;font-size:9px;cursor:pointer}
+.rs-public-share-actions button:first-child{background:var(--rsa,#24afe2);border-color:transparent;color:#071017;font-weight:750}
+.rs-public-share-actions button:disabled{opacity:.4;cursor:not-allowed}

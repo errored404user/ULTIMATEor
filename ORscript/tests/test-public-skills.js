@@ -76,6 +76,17 @@ ok("import of a duplicate is refused unless replace", !PS.importShared(code).ok 
 ok("import after delete reinstalls from the share code with source=import", (PS.remove("lantern_row"), (() => { const i = PS.importShared(code); return i.ok && i.item.source === "import" && i.item.name === "lantern_row"; })()));
 ok("garbage import is rejected cleanly", !PS.importShared("ORSKILL1:!!!").ok && !PS.importShared("{not json").ok && !PS.importShared(JSON.stringify({ hello: 1 })).ok);
 
+// pack sharing (Export all / Import)
+const pack = JSON.parse(PS.exportPackJson());
+ok("exportPackJson bundles every installed item", pack.format === "orscript-public-skill-pack" && pack.count === PS.list().length && pack.items.every((i) => i.kind && i.name));
+ok("pack file name and share code", /^orscript-public-skills-\d{4}-\d{2}-\d{2}\.orskills\.json$/.test(PS.packFileName()) && /^ORSKILL1:/.test(PS.packShareCode()));
+const packCode = PS.packShareCode();
+let imp = PS.importShared(packCode);
+ok("importing a pack over existing items reports them as skipped", imp.pack && imp.installed.length === 0 && imp.skipped.length === pack.count, JSON.stringify(imp).slice(0, 160));
+ok("pack import with replace reinstalls everything", PS.importShared(packCode, { replace: true }).installed.length === pack.count && PS.list().length === pack.count);
+ok("pack import into an empty registry installs all and keeps the active-mode item", (() => { const saved = PS.list(); PS.replaceAll([]); const r = PS.importShared(JSON.stringify(pack)); const okk = r.ok && r.installed.length === pack.count && PS.list().length === pack.count; PS.replaceAll(saved); PS.setActiveMode("horror_builder"); return okk; })());
+ok("a bare array of definitions imports as a pack too", (() => { const saved = PS.list(); PS.replaceAll([]); const r = PS.importShared(JSON.stringify(pack.items)); const okk = r.pack && r.installed.length === pack.count; PS.replaceAll(saved); PS.setActiveMode("horror_builder"); return okk; })());
+
 // update + generation prompt
 r = PS.update("lantern_row", { description: "Places N anchored lanterns next to a target instance, now with light." }, { reserved });
 ok("update merges a patch and bumps the version", r.ok && r.item.version === 2 && /with light/.test(r.item.description));
@@ -103,6 +114,8 @@ ok("buildCatalogue appends the PUBLIC SKILLS block to the universal tier (pinned
 ok("work mode: pm:<id> ids layer a custom mode on its base; hook for the agent", /if \(typeof id === "string" && id\.startsWith\("pm:"\)\)/.test(main) && main.includes("workMode = normalizeWorkMode(custom ? custom.base : id);") && main.includes("window.__rsSetWorkMode = (id) => setWorkMode(id);"));
 ok("badge shows the custom mode; menu lists custom modes after the built-ins", main.includes("badge.textContent = pm ? pm.badge : mode.badge;") && main.includes('data-work="pm:${m.id}"') && main.includes("rs-work-card rs-work-custom"));
 ok("workModeFocusNames unions the custom focus list", /customFocus\.has\(String\(n\)\.replace/.test(main) && main.includes("|| isUniversalCommand(n))"));
+ok("Public tab has a Share box: import file/code, paste code, export all, share-all code", main.includes("rs-public-sharebox") && main.includes("[data-public-export-all]") && main.includes("[data-public-share-all]") && main.includes("PublicSkills.exportPackJson()") && main.includes("PublicSkills.packShareCode()") && /if \(r\.pack\) \{ let msg/.test(main));
+ok("public_skill_export accepts name='all' and public_skill_import handles packs", main.includes("if (/^(all|\\*|everything)$/i.test(ref))") && main.includes("if (r.pack) { for (const it of r.installed) announce("));
 ok("cards panel has a Public tab with composer, import and per-item actions", main.includes('data-tab="public">Public') && /function publicHtml\(\)/.test(main) && main.includes('id="rs-public-prompt"') && main.includes("[data-public-create]") && main.includes("[data-public-import]") && main.includes("[data-public-paste]") && ["run", "activate", "improve", "edit", "toggle", "export", "share", "delete"].every((a) => main.includes(`act==="${a}"`)));
 ok("Create with AI sends the generation prompt through runLibraryCard", /prompt:publicGenerationPrompt\(text,publicKind\)\},true\)/.test(main));
 ok("install results open a review modal (or-public-skill-result)", main.includes('new CustomEvent("or-public-skill-result"') && /window\.addEventListener\("or-public-skill-result"/.test(main) && /function showPublicInstalled\(detail\)/.test(main));

@@ -903,6 +903,7 @@
     providers:{title:"Chat providers",summary:"ORscript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Meta, NVIDIA, Arena, Notion, Vani, Crax, OxAlpha and MultiChat - same commands everywhere, the bar adapts to each composer.",details:["Compact composers (Notion, Vani) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the OR bar appears above the composer"]},
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the ORscript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the ORscript bus (shared.ORscript.register / CoreGui.ORscriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - ORscript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends an ORscript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure or-core and the ORscript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected or-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start or-core, then check Studio → Plugins → ORscript is enabled and the MCP helper is running (or_status shows both).","Agent waiting: look for the approval card (Ask mode) or switch Permissions to Sandbox; cards auto-deny after 120 s.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use or_debug for the Studio Output log, restart_mcp from the OR menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check or_status","Reload the chat tab","Restart or-core / Studio if the plugin shows disconnected"]},
+    tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the OR menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["OR menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
     publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes: describe one in a prompt, the AI designs it, OrScript validates and installs it locally, and it becomes a real command (or a selectable work mode). Export/import as .orskill.json or share codes.",details:["Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path' or 'a horror-ambience work mode'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the OR menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","Agent commands: public_skill_create/list/get/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Call the new command by name, or pick the new mode in OR menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
   };
   try { window.__rsFeatureHelpTopics = FEATURE_HELP_TOPICS; } catch {}
@@ -1861,6 +1862,7 @@
       } else {
         env = studioLinked ? " | STUDIO LINKED" : " | STUDIO UNLINKED";
       }
+      try { if (typeof ORTaskList !== "undefined") env += ORTaskList.stateTag(); } catch {}
       return `[SYSTEM_STATE: ENGINE=${eng} | WORK=${wm} | EXTRA=${extra} | PLAN=${plan} | DEBUG=${dbg} | MULTI=${multi} | THINK=${lvl} | PERM=${perm}${env} | BRIDGE ${connected ? "UP" : "DOWN"} | BLENDER ${blender ? "ON" : "OFF"} | TOOLS ${n}]\nMODE LOCK: stay on ${eng}. Obey WORK/EXTRA/PLAN/THINK/DEBUG/MULTI this turn. ONE command per reply.\n${(RS.FEEDBACK && RS.FEEDBACK.creationFocus) || ""}`;
     } catch { return ""; }
   }
@@ -2126,6 +2128,8 @@
       // (plus the public_skill_* management tools). Rebuilt on every change by
       // refreshPublicSkillTools below.
       try { if (typeof PublicSkills !== "undefined") for (const virtual of [...PublicSkills.managementTools(), ...PublicSkills.toolEntries()]) if (!tools.some((t) => t && t.name === virtual.name)) tools.push(virtual); } catch (e) { diag("publicSkills.injectFailed", { error: String(e) }); }
+      // Task list (Settings → Task list): task_* commands exist only while enabled.
+      try { if (typeof ORTaskList !== "undefined") for (const virtual of ORTaskList.toolEntries()) if (!tools.some((t) => t && t.name === virtual.name)) tools.push(virtual); } catch (e) { diag("taskList.injectFailed", { error: String(e) }); }
       A.toolList = tools;
       A.toolNames = new Set(tools.map((t) => t.name));
       A.toolsAt = Date.now();
@@ -2137,17 +2141,21 @@
   // Keep the live tool list in sync with the Public Skills registry without a
   // full bridge refetch: drop stale public entries, add the current ones.
   function refreshPublicSkillTools() {
-    if (typeof PublicSkills === "undefined") return;
+    if (typeof PublicSkills === "undefined" && typeof ORTaskList === "undefined") return;
     try {
-      const list = (A.toolList || []).filter((t) => !(t && t.publicSkill));
-      for (const t of PublicSkills.toolEntries()) if (!list.some((x) => x && x.name === t.name)) list.push(t);
-      for (const t of PublicSkills.managementTools()) if (!list.some((x) => x && x.name === t.name)) list.push(t);
+      const list = (A.toolList || []).filter((t) => !(t && (t.publicSkill || t.taskList)));
+      if (typeof PublicSkills !== "undefined") {
+        for (const t of PublicSkills.toolEntries()) if (!list.some((x) => x && x.name === t.name)) list.push(t);
+        for (const t of PublicSkills.managementTools()) if (!list.some((x) => x && x.name === t.name)) list.push(t);
+      }
+      if (typeof ORTaskList !== "undefined") for (const t of ORTaskList.toolEntries()) if (!list.some((x) => x && x.name === t.name)) list.push(t);
       A.toolList = list;
       A.toolNames = new Set(list.map((t) => t.name));
       syncCommandRegistry();
     } catch (e) { diag("publicSkills.refreshFailed", { error: String(e) }); }
   }
   try { window.addEventListener("or-public-skills-change", () => refreshPublicSkillTools()); } catch {}
+  try { window.addEventListener("or-tasklist-change", (e) => { const why = e && e.detail && e.detail.reason; if (why === "enabled" || why === "loaded") refreshPublicSkillTools(); }); } catch {}
   try { window.__rsBuiltinToolNames = () => new Set((A.toolList || []).filter((t) => t && !t.publicSkill).map((t) => t.name)); } catch {}
 
   function luauLiteral(v) {
@@ -2460,6 +2468,12 @@
           for (const e of entries) if (!e.done && PublicSkills.isCommand(e.name)) e.done = true;
           universalBlock += pub; usedChars += pub.length; usedLines += countLines(pub);
         }
+      }
+      if (typeof ORTaskList !== "undefined" && ORTaskList.isEnabled()) {
+        const p = ORTaskList.progress();
+        const tl = `TASK LIST (user enabled it in Settings; ${p.done}/${p.total} done): task_next {} → next open task (marks it doing) · task_update {id|"#n", status: doing|done|skipped, notes?} · task_add {text} · task_list {}. Mark "done" only after verifying.\n\n`;
+        for (const e of entries) if (!e.done && /^task_(list|next|add|update)$/.test(e.name)) e.done = true;
+        universalBlock += tl; usedChars += tl.length; usedLines += countLines(tl);
       }
     } catch {}
     const detail = [];
@@ -2992,11 +3006,18 @@
       if (typeof res === "string") res = res.replace(/^Output of 'execute_luau':/, `Output of '${name}':`);
       return res;
     }
-    if (op === "export") { const o = PS.exportObject(args.name || args.id); if (!o) return fail("NOT_FOUND", [`no public skill named '${args.name || args.id}'`]); return out({ success: true, fileName: PS.fileName(args.name || args.id), shareCode: PS.shareCode(args.name || args.id), json: o }); }
+    if (op === "export") {
+      const ref = String(args.name || args.id || "");
+      if (/^(all|\*|everything)$/i.test(ref)) { const o = PS.exportPackObject(); if (!o) return fail("NOTHING_TO_EXPORT", ["no public skills installed"]); return out({ success: true, pack: true, count: o.count, fileName: PS.packFileName(), shareCode: PS.packShareCode(), json: o, howToShare: "Give the file or the share code to another OrScript user; they use Public tab → Import / Paste share code (or public_skill_import)." }); }
+      const o = PS.exportObject(ref); if (!o) return fail("NOT_FOUND", [`no public skill named '${ref}'`]);
+      return out({ success: true, fileName: PS.fileName(ref), shareCode: PS.shareCode(ref), json: o, howToShare: "Give the file or the share code to another OrScript user; they use Public tab → Import / Paste share code (or public_skill_import)." });
+    }
     if (op === "import") {
       const r = PS.importShared(typeof args.data === "string" ? args.data : JSON.stringify(args.data || args.definition || {}), { reserved: reserved(), replace: !!args.replace });
-      if (!r.ok) return fail("IMPORT_FAILED", r.errors);
-      refreshPublicSkillTools(); announce("imported", r.item, r.warnings);
+      if (!r.ok) return fail("IMPORT_FAILED", r.errors && r.errors.length ? r.errors : [r.duplicate ? `'${r.duplicate.name}' is already installed - pass replace:true to overwrite` : "nothing imported"]);
+      refreshPublicSkillTools();
+      if (r.pack) { for (const it of r.installed) announce("imported", it, []); return out({ success: true, status: "INSTALLED", pack: true, installed: r.installed.map((i) => ({ kind: i.kind, name: i.name, usage: publicSkillUsage(i) })), skipped: r.skipped, errors: r.errors, warnings: r.warnings }); }
+      announce("imported", r.item, r.warnings);
       return out({ success: true, status: "INSTALLED", kind: r.item.kind, name: r.item.name, usage: publicSkillUsage(r.item), warnings: r.warnings });
     }
     if (op === "run") { const item = PS.find(args.name || args.id); if (!item) return fail("NOT_FOUND", [`no public skill named '${args.name || args.id}'`]); return await runPublicSkill(item.name, args.args || {}); }
@@ -3011,9 +3032,14 @@
     const roadmapName = bareToolName(name);
     if (roadmapName.startsWith("public_item")) return typeof dispatchPublicItemTool === "function" ? dispatchPublicItemTool(roadmapName, args) : `ERROR: '${roadmapName}' is not available in this build. Use list_commands and continue with the listed commands.`;
     if (roadmapName.startsWith("public_skill_")) return await runPublicSkillTool(roadmapName, args);
+    if (/^task_(list|next|add|update)$/.test(roadmapName) && typeof ORTaskList !== "undefined") {
+      const r = ORTaskList.run(roadmapName, args);
+      try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(roadmapName, args, !String(r).startsWith("ERROR"), r); } catch {}
+      return r;
+    }
     if (typeof PublicSkills !== "undefined" && PublicSkills.isCommand(roadmapName)) return await runPublicSkill(roadmapName, args);
     if(roadmapName==="orscript_help"){
-      const question=String(args.question||"").toLowerCase(),aliases={templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|ultimate mode|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/,plugins:/other plugin|plugins|eclipse|moon animator|interop|full control|macro|settings\(\)/,publicskills:/public skill|own skill|own command|custom command|custom mode|own mode|make a skill|create a skill|new skill|ability|share code|orskill/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
+      const question=String(args.question||"").toLowerCase(),aliases={tasklist:/task list|tasklist|checklist|to-do|todo list|my tasks|next task/,templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|ultimate mode|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/,plugins:/other plugin|plugins|eclipse|moon animator|interop|full control|macro|settings\(\)/,publicskills:/public skill|own skill|own command|custom command|custom mode|own mode|make a skill|create a skill|new skill|ability|share code|orskill/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
     }
     if (["search_commands","get_command","command_registry_stats","generate_command_docs","orscript_help"].includes(roadmapName)) {
       const reg=typeof ORCommandRegistry!=="undefined"?ORCommandRegistry:null;if(!reg)return `ERROR in ${roadmapName}: command registry unavailable; reload this page.`;await hydrateCommandRegistry();
@@ -5732,6 +5758,7 @@
           <span id="rs-brand" data-rs-brand>OrScript</span>
           <span id="rs-work-badge" hidden></span>
           <span id="rs-crew-badge" hidden></span>
+          <button type="button" id="rs-task-pill" hidden title="Task list"></button>
           <div id="rs-engine" data-engine="roblox">
             <span id="rs-engine-thumb"></span>
             <button data-mode="roblox" class="rs-mode-btn on" title="RobloxScript">RS</button>
@@ -5870,6 +5897,9 @@
           }
         };
         openCardsPanel = setCardsOpen; // reachable from the Public Skills modal (hoisted var)
+        const taskPill = root.querySelector("#rs-task-pill");
+        if (taskPill) taskPill.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); const wasTasks = !cardsPanel.hidden && cardsTab === "tasks"; cardsTab = "tasks"; setCardsOpen(!wasTasks); });
+        try { syncTaskPill(); } catch {}
         cardsBtn.addEventListener("click", (e)=>{
           e.stopPropagation();
           setCardsOpen(cardsPanel.hidden);
@@ -5895,7 +5925,7 @@
           const tab=e.target.closest&&e.target.closest(".rs-cards-tab");
           if(!tab||!cardsPanel.contains(tab)) return;
           e.preventDefault(); e.stopPropagation();
-          cardsTab=tab.dataset.tab==="public"?"public":tab.dataset.tab==="activity"?"activity":"library";
+          cardsTab=tab.dataset.tab==="public"?"public":tab.dataset.tab==="tasks"?"tasks":tab.dataset.tab==="activity"?"activity":"library";
           cardsPanel._orUiGuard=Date.now()+350;
           renderCards(cardsPanel);
         }, true);
@@ -5908,7 +5938,7 @@
             // see a detached target, fail contains(), and slam the panel shut.
             e.stopPropagation();
             const t = tab.dataset.tab;
-            cardsTab = t === "activity" || t === "public" ? t : "library";
+            cardsTab = t === "activity" || t === "public" || t === "tasks" ? t : "library";
             renderCards(cardsPanel);
             return;
           }
@@ -5933,14 +5963,48 @@
             return;
           }
           const ideaGenerate=e.target.closest&&e.target.closest("[data-idea-generate]");if(ideaGenerate){e.stopPropagation();const g=cardsPanel.querySelector("[data-idea-genre]")?.value||"Platformer",t=cardsPanel.querySelector("[data-idea-theme]")?.value||"Futuristic";ideaGeneratorResult=makeIdea(g,t);renderCards(cardsPanel);return;}const ideaAnother=e.target.closest&&e.target.closest("[data-idea-generate-another]");if(ideaAnother){e.stopPropagation();const g=cardsPanel.querySelector("[data-idea-genre]")?.value||"Platformer",t=cardsPanel.querySelector("[data-idea-theme]")?.value||"Futuristic";ideaGeneratorResult=makeIdea(g,t);renderCards(cardsPanel);return;}const ideaCopy=e.target.closest&&e.target.closest("[data-idea-copy]");if(ideaCopy&&ideaGeneratorResult){navigator.clipboard?.writeText(ideaGeneratorResult.prompt);toast("Prompt copied");return;}const ideaChat=e.target.closest&&e.target.closest("[data-idea-chat]");if(ideaChat&&ideaGeneratorResult){const el=document.activeElement?.matches?.("textarea,[contenteditable=true]")?document.activeElement:document.querySelector("textarea,[contenteditable=true]");if(el){if(el.isContentEditable)el.textContent=ideaGeneratorResult.prompt;else{el.value=ideaGeneratorResult.prompt;el.dispatchEvent(new Event("input",{bubbles:true}));}toast("Prompt placed in chat box");}else toast("Chat box not found");return;}const ideaRun=e.target.closest&&e.target.closest("[data-idea-run]");if(ideaRun&&ideaGeneratorResult){runLibraryCard({engine:"rs",icon:"✦",cat:"Idea",title:ideaGeneratorResult.title,desc:"Generated game idea",prompt:ideaGeneratorResult.prompt},true);return;}
+          // ── Tasks tab ──
+          if (typeof ORTaskList !== "undefined" && cardsTab === "tasks") {
+            const TL = ORTaskList;
+            const runAll=e.target.closest&&e.target.closest("[data-task-run-all]");
+            if(runAll){e.stopPropagation();const open=TL.list().filter((t)=>t.status==="todo"||t.status==="doing");if(!open.length)return toast("No open tasks");runLibraryCard({engine:"rs",icon:"✓",cat:"Task list",title:"Run the task list",desc:`${open.length} open task${open.length===1?"":"s"}`,prompt:`Work through my OrScript task list now, in order, one task at a time: call task_next, do that task with real commands, verify it, mark it done with task_update (or skipped with a reason), then call task_next again until it returns no task. Report briefly after each task. Open tasks:\n${open.map((t,i)=>`${i+1}. ${t.text}`).join("\n")}`},true);return;}
+            const runNext=e.target.closest&&e.target.closest("[data-task-run-next]");
+            if(runNext){e.stopPropagation();const n=TL.next();if(!n)return toast("No open tasks");const idx=TL.list().findIndex((t)=>t.id===n.id)+1;runLibraryCard({engine:"rs",icon:"✓",cat:"Task list",title:`Task #${idx}`,desc:n.text.slice(0,90),prompt:taskRunPrompt(n,idx)},true);return;}
+            const aiPlan=e.target.closest&&e.target.closest("[data-task-ai-plan]");
+            if(aiPlan){e.stopPropagation();const goal=prompt("What should the task list achieve? (the AI will propose the steps)","");if(goal==null||!goal.trim())return;runLibraryCard({engine:"rs",icon:"✓",cat:"Task list",title:"Plan tasks",desc:goal.slice(0,90),prompt:`Break this goal into a concrete, ordered task list for my OrScript project and add every task with task_add (one call, one task per line, 4-12 tasks, each a verifiable step). Goal: ${goal.trim()}. Inspect the place/workspace first if that changes the plan. After adding them, call task_list and summarise in two sentences. Do not start executing the tasks.`},true);return;}
+            const clearDone=e.target.closest&&e.target.closest("[data-task-clear-done]");
+            if(clearDone){e.stopPropagation();const n=TL.clearDone();toast(n?`Removed ${n} finished task${n===1?"":"s"}`:"Nothing to clear");renderCards(cardsPanel);return;}
+            const exp=e.target.closest&&e.target.closest("[data-task-export]");
+            if(exp){e.stopPropagation();const blob=new Blob([TL.exportJson()],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="orscript-tasks.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast("Task list exported");return;}
+            const imp=e.target.closest&&e.target.closest("[data-task-import]");
+            if(imp){e.stopPropagation();const input=document.createElement("input");input.type="file";input.accept=".json,.txt,.md";input.onchange=async()=>{const file=input.files&&input.files[0];if(!file)return;const r=TL.importText(await file.text());toast(r.ok?`Imported ${r.added} task${r.added===1?"":"s"}`:`IMPORT_FAILED: ${r.error}`);renderCards(cardsPanel);};input.click();return;}
+            const dis=e.target.closest&&e.target.closest("[data-task-disable]");
+            if(dis){e.stopPropagation();setTaskList(false);return;}
+            const row=e.target.closest&&e.target.closest("[data-task-id]");
+            const act=row&&e.target.closest&&e.target.closest("[data-task-action]");
+            if(row&&act){e.stopPropagation();const id=row.dataset.taskId;const t=TL.find(id);if(!t)return renderCards(cardsPanel);const a=act.dataset.taskAction;const idx=TL.list().findIndex((x)=>x.id===id)+1;
+              if(a==="toggle")TL.update(id,{status:t.status==="done"?"todo":"done"});
+              else if(a==="doing")TL.update(id,{status:t.status==="doing"?"todo":"doing"});
+              else if(a==="skip")TL.update(id,{status:t.status==="skipped"?"todo":"skipped"});
+              else if(a==="up")TL.move(id,-1);
+              else if(a==="down")TL.move(id,1);
+              else if(a==="delete")TL.remove(id);
+              else if(a==="run"){runLibraryCard({engine:"rs",icon:"✓",cat:"Task list",title:`Task #${idx}`,desc:t.text.slice(0,90),prompt:taskRunPrompt(t,idx)},true);return;}
+              renderCards(cardsPanel);return;}
+            if(e.target.closest&&(e.target.closest("#rs-task-input")||e.target.closest("[data-task-edit]"))){e.stopPropagation();return;}
+          }
           // ── Public Skills tab ──
           if (typeof PublicSkills !== "undefined") {
             const pubCreate=e.target.closest&&e.target.closest("[data-public-create]");
             if(pubCreate){e.stopPropagation();const ta=cardsPanel.querySelector("#rs-public-prompt");const text=String(ta&&ta.value||"").trim();publicKind=(cardsPanel.querySelector("#rs-public-kind")||{}).value||"auto";if(text.length<8){toast("Describe the skill, ability or mode in a sentence or two first");try{ta&&ta.focus();}catch{}return;}publicDraft="";runLibraryCard({engine:"rs",icon:"P",cat:"Public Skills",title:publicKind==="auto"?"Create a public skill":`Create public ${publicKind}`,desc:text.slice(0,90),prompt:publicGenerationPrompt(text,publicKind)},true);return;}
             const pubManual=e.target.closest&&e.target.closest("[data-public-manual]");
             if(pubManual){e.stopPropagation();const k=(cardsPanel.querySelector("#rs-public-kind")||{}).value;openPublicEditor(null,k==="ability"||k==="mode"?k:"skill");return;}
+            const pubExportAll=e.target.closest&&e.target.closest("[data-public-export-all]");
+            if(pubExportAll){e.stopPropagation();const json=PublicSkills.exportPackJson();if(!json)return toast("Nothing to export");const blob=new Blob([json],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=PublicSkills.packFileName();a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(`Exported ${PublicSkills.list().length} item(s) to ${PublicSkills.packFileName()}`);return;}
+            const pubShareAll=e.target.closest&&e.target.closest("[data-public-share-all]");
+            if(pubShareAll){e.stopPropagation();const code=PublicSkills.packShareCode();if(!code)return toast("Nothing to share");(async()=>{try{await navigator.clipboard.writeText(code);toast(`Share code for ${PublicSkills.list().length} item(s) copied (${code.length} chars)`);}catch{prompt("Copy this share code:",code);}})();return;}
             const pubImport=e.target.closest&&e.target.closest("[data-public-import]");
-            if(pubImport){e.stopPropagation();const input=document.createElement("input");input.type="file";input.accept=".json,.orskill.json";input.onchange=async()=>{const file=input.files&&input.files[0];if(!file)return;publicImportText(await file.text());};input.click();return;}
+            if(pubImport){e.stopPropagation();const input=document.createElement("input");input.type="file";input.accept=".json,.orskill.json,.orskills.json,.txt";input.onchange=async()=>{const file=input.files&&input.files[0];if(!file)return;publicImportText(await file.text());};input.click();return;}
             const pubPaste=e.target.closest&&e.target.closest("[data-public-paste]");
             if(pubPaste){e.stopPropagation();const code=prompt("Paste an ORSKILL1: share code or the exported JSON:","");if(code)publicImportText(code);return;}
             const pubRow=e.target.closest&&e.target.closest("[data-public-id]");
@@ -6560,6 +6624,27 @@
     }
     function setPlanMode(v){ planMode=!!v; try{chrome.storage.local.set({rsPlanMode: planMode});}catch{}; try{ window.__rsPlanMode = () => planMode; }catch{}; buildMenu(); renderBar(); toast(v ? "Plan mode on — the AI writes a plan, then production code" : "Plan mode off"); markModesChanged(); }
     function setAutoDebug(v){ autoDebugEnabled=!!v; try{chrome.storage.local.set({rsAutoDebug: autoDebugEnabled});}catch{}; try{ window.__rsAutoDebug = () => autoDebugEnabled; }catch{}; buildMenu(); toast(v ? "Automatic Debugger on — new Studio errors are sent to the AI" : "Automatic Debugger off"); markModesChanged(); }
+    // Task list (Settings → Task list). State lives in ORTaskList; this only
+    // flips it, refreshes the surfaces and tells the AI on the next turn.
+    function taskListOn(){ try { return typeof ORTaskList !== "undefined" && ORTaskList.isEnabled(); } catch { return false; } }
+    function taskListSummary(){ try { const p = ORTaskList.progress(); return p.total ? `${p.done}/${p.total} done${p.open ? ", " + p.open + " open" : ""}` : "no tasks yet"; } catch { return ""; } }
+    function setTaskList(v){
+      if (typeof ORTaskList === "undefined") return toast("Task list module missing - reload the page");
+      ORTaskList.setEnabled(!!v);
+      if (!v && cardsTab === "tasks") cardsTab = "library";
+      buildMenu(); syncTaskPill(); markModesChanged();
+      toast(v ? "Task list enabled - Tasks tab is in the cards panel; the AI now has task_list / task_next / task_add / task_update" : "Task list disabled - tasks are kept, the AI no longer sees them");
+      if (v) { try { cardsTab = "tasks"; if (openCardsPanel) openCardsPanel(true); } catch {} }
+    }
+    function syncTaskPill(){
+      const el = root && root.querySelector("#rs-task-pill");
+      if (!el) return;
+      let p = null; try { p = taskListOn() ? ORTaskList.progress() : null; } catch {}
+      const show = !!(p && p.total);
+      el.hidden = !show;
+      if (show) { el.textContent = `Tasks ${p.done}/${p.total}`; el.dataset.done = p.done === p.total ? "all" : p.doing ? "doing" : "open"; el.title = `${p.done} of ${p.total} tasks done${p.open ? ` - ${p.open} open` : ""} - click to open the Tasks tab`; }
+    }
+    window.addEventListener("or-tasklist-change", () => { try { syncTaskPill(); } catch {} try { if (menuEl && !menuEl.hidden) buildMenu(); } catch {} try { if (cardsPanel && !cardsPanel.hidden && (cardsTab === "tasks" || !taskListOn())) renderCards(cardsPanel); } catch {} });
     function setMultiAgent(v){ multiAgent=!!v; try{chrome.storage.local.set({rsMultiAgent: multiAgent});}catch{}; try{ window.__rsMultiAgent = () => multiAgent; }catch{}; buildMenu(); try { if (typeof ORAgentCrew !== "undefined" && ORAgentCrew) ORAgentCrew.reset(); } catch {} try { syncCrewBadge(); } catch {} toast(v ? "Multi-Agent on — planner, builder, scripter, reviewer, tester, debugger" : "Multi-Agent off"); markModesChanged(); }
     // Toggling a mode mid-session must reach the AI on the NEXT turn, not ~12
     // results later: force the full system prompt (which now carries the
@@ -6969,6 +7054,10 @@
               <span class="rs-tgl-info"><span class="rs-tgl-name">Multi-Agent</span><span class="rs-tgl-sub">Crew with a shared board: planner → builder / scripter → reviewer → tester → debugger. Read-only roles cannot edit; "done" needs a verified playtest.</span></span>
               <span class="rs-tgl ${multiAgent ? "on" : ""}"></span>
             </div>
+            <div class="rs-tgl-row" data-mode="tasklist" role="switch" aria-checked="${taskListOn()}" tabindex="0">
+              <span class="rs-tgl-info"><span class="rs-tgl-name">Task list</span><span class="rs-tgl-sub">${taskListOn() ? `Enabled — ${taskListSummary()}. The AI sees the list, gets task_list / task_next / task_add / task_update, and a progress pill shows on the bar.` : "Disabled — a checklist you (or the AI) keep for this project. Enable to show the Tasks tab in the cards panel and give the AI the task_* commands."}</span></span>
+              <span class="rs-tgl ${taskListOn() ? "on" : ""}"></span>
+            </div>
             <div class="rs-tgl-row" data-mode="sounds" role="switch" aria-checked="${soundOn}" tabindex="0">
               <span class="rs-tgl-info"><span class="rs-tgl-name">Sound effects</span><span class="rs-tgl-sub">Chime when the agent starts, finishes, or errors.</span></span>
               <span class="rs-tgl ${soundOn ? "on" : ""}"></span>
@@ -7087,6 +7176,7 @@
           else if(m==="plan") setPlanMode(!planMode);
           else if(m==="autodebug") setAutoDebug(!autoDebugEnabled);
           else if(m==="multiagent") setMultiAgent(!multiAgent);
+          else if(m==="tasklist") setTaskList(!taskListOn());
           else if(m==="sounds") { setSounds(!soundOn); try { buildMenu(); toast(soundOn ? "Sound effects on" : "Sound effects off"); if (soundOn) playSfx("ok"); } catch {} }
         };
         btn.addEventListener("click", flip);
@@ -7464,13 +7554,15 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         return `<article class="rs-template-row rs-public-row${i.enabled ? "" : " rs-public-off"}" data-public-id="${escRs(i.id)}"><div class="rs-template-copy"><b>${escRs(i.title)} <span class="rs-public-kind rs-public-kind-${i.kind}">${kindLabel[i.kind]}</span>${isActive ? '<span class="rs-public-active">ACTIVE</span>' : ""}${i.enabled ? "" : '<span class="rs-public-disabled">disabled</span>'}</b><p>${escRs(i.description)}</p><span><code>${sig}</code> · v${i.version} · by ${escRs(i.author)} · ${i.source === "ai" ? "built by AI" : i.source === "import" ? "imported" : "hand-made"}</span></div><div class="rs-template-actions">${isMode ? `<button type="button" class="rs-template-run" data-public-action="activate">${isActive ? "Deactivate" : "Activate"}</button>` : `<button type="button" class="rs-template-run" data-public-action="run">Run…</button>`}<button type="button" class="rs-template-improve" data-public-action="improve">Improve with AI</button><details class="rs-template-more"><summary>Actions</summary><div><button type="button" data-public-action="edit">Edit JSON</button><button type="button" data-public-action="toggle">${i.enabled ? "Disable" : "Enable"}</button><button type="button" data-public-action="export">Export file</button><button type="button" data-public-action="share">Copy share code</button><button type="button" class="rs-template-delete" data-public-action="delete">Delete</button></div></details></div></article>`;
       }).join("");
       const empty = `<div class="rs-template-empty"><div class="rs-template-empty-mark">P</div><b>No public skills yet</b><span>Describe a skill, ability or work mode above and press Create with AI — or Import one somebody shared with you.</span></div>`;
-      return `<section class="rs-template-library rs-public" aria-label="Public skills"><div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div><b>Public Skills</b><span class="rs-template-count">${items.length}</span></div><p>Your own skills, abilities and work modes. Describe one; the AI designs it and OrScript installs it as a real command.</p></div><div class="rs-template-head-actions"><button type="button" class="rs-btn-secondary" data-public-manual>New by hand</button><button type="button" class="rs-btn-secondary" data-public-import>Import file</button><button type="button" class="rs-btn-secondary" data-public-paste>Paste share code</button></div></header><div class="rs-public-compose"><textarea id="rs-public-prompt" rows="3" spellcheck="false" placeholder="e.g. A skill that places N street lamps with warm PointLights along the selected path  ·  An ability that audits every script for deprecated APIs and fixes them  ·  A 'Horror builder' work mode focused on fog, lighting and sound">${escRs(publicDraft)}</textarea><div class="rs-public-compose-row"><select id="rs-public-kind" aria-label="Kind"><option value="auto"${publicKind === "auto" ? " selected" : ""}>Auto — AI decides</option><option value="skill"${publicKind === "skill" ? " selected" : ""}>Skill — Luau command with params</option><option value="ability"${publicKind === "ability" ? " selected" : ""}>Ability — reusable procedure</option><option value="mode"${publicKind === "mode" ? " selected" : ""}>Work mode — mandate + focus</option></select><button type="button" class="rs-btn-primary rs-btn-ai" data-public-create>Create with AI</button></div><small>Installed on this device only (chrome.storage). Share with Export / Share code; others press Import. Skills run only when called — nothing touches your place until then.</small></div></div><div class="rs-template-list rs-public-list">${rows || empty}</div></section>`;
+      return `<section class="rs-template-library rs-public" aria-label="Public skills"><div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div><b>Public Skills</b><span class="rs-template-count">${items.length}</span></div><p>Your own skills, abilities and work modes. Describe one; the AI designs it and OrScript installs it as a real command.</p></div><div class="rs-template-head-actions"><button type="button" class="rs-btn-secondary" data-public-manual>New by hand</button></div></header><div class="rs-public-sharebox"><b>Share</b><span>Give friends a file or a code; they press Import. Nothing is uploaded — files and codes are the only channel.</span><div class="rs-public-share-actions"><button type="button" data-public-import>Import file / code…</button><button type="button" data-public-paste>Paste share code</button><button type="button" data-public-export-all ${items.length ? "" : "disabled"}>Export all (${items.length})</button><button type="button" data-public-share-all ${items.length ? "" : "disabled"}>Copy share code for all</button></div></div><div class="rs-public-compose"><textarea id="rs-public-prompt" rows="3" spellcheck="false" placeholder="e.g. A skill that places N street lamps with warm PointLights along the selected path  ·  An ability that audits every script for deprecated APIs and fixes them  ·  A 'Horror builder' work mode focused on fog, lighting and sound">${escRs(publicDraft)}</textarea><div class="rs-public-compose-row"><select id="rs-public-kind" aria-label="Kind"><option value="auto"${publicKind === "auto" ? " selected" : ""}>Auto — AI decides</option><option value="skill"${publicKind === "skill" ? " selected" : ""}>Skill — Luau command with params</option><option value="ability"${publicKind === "ability" ? " selected" : ""}>Ability — reusable procedure</option><option value="mode"${publicKind === "mode" ? " selected" : ""}>Work mode — mandate + focus</option></select><button type="button" class="rs-btn-primary rs-btn-ai" data-public-create>Create with AI</button></div><small>Installed on this device only (chrome.storage). Share with Export / Share code; others press Import. Skills run only when called — nothing touches your place until then.</small></div></div><div class="rs-template-list rs-public-list">${rows || empty}</div></section>`;
     }
     var publicDraft = "", publicKind = "auto";
     function publicGenerationPrompt(text, kind){ return PublicSkills.generationPrompt(text, kind, { commandNames: publicCommandSample() }); }
     function publicDownload(id){ const PS = PublicSkills; const json = PS.exportJson(id); if (!json) return toast("Nothing to export"); const blob = new Blob([json], { type: "application/json" }), a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = PS.fileName(id); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); toast(`Exported ${PS.fileName(id)}`); }
     async function publicCopyShare(id){ const code = PublicSkills.shareCode(id); if (!code) return toast("Nothing to share"); try { await navigator.clipboard.writeText(code); toast(`Share code copied (${code.length} chars) — paste it into another OrScript's Public tab`); } catch { prompt("Copy this share code:", code); } }
-    function publicImportText(text){ if (!text) return; const r = PublicSkills.importShared(text, { reserved: publicReserved() }); if (!r.ok && r.duplicate) { if (confirm(`'${r.duplicate.name}' is already installed. Replace it with the imported version?`)) { const r2 = PublicSkills.importShared(text, { reserved: publicReserved(), replace: true }); toast(r2.ok ? `Replaced ${r2.item.kind} '${r2.item.name}'` : `IMPORT_FAILED: ${r2.errors.join("; ")}`); } return; } toast(r.ok ? `Installed ${r.item.kind} '${r.item.name}'${r.warnings.length ? " (" + r.warnings.length + " warning" + (r.warnings.length === 1 ? "" : "s") + ")" : ""}` : `IMPORT_FAILED: ${r.errors.join("; ")}`); }
+    function publicImportText(text){ if (!text) return; const r = PublicSkills.importShared(text, { reserved: publicReserved() });
+      if (r.pack) { let msg = r.installed.length ? `Installed ${r.installed.length} item${r.installed.length === 1 ? "" : "s"}: ${r.installed.map((i) => i.name).join(", ")}` : "Nothing new installed"; if (r.skipped.length) msg += ` · already had: ${r.skipped.join(", ")}`; if (r.errors.length) msg += ` · failed: ${r.errors.length}`; toast(msg); if (r.skipped.length && confirm(`${r.skipped.length} item(s) already exist (${r.skipped.join(", ")}). Replace them with the imported versions?`)) { const r2 = PublicSkills.importShared(text, { reserved: publicReserved(), replace: true }); toast(r2.ok ? `Replaced/installed ${r2.installed.length} item(s)` : "Replace failed"); } return; }
+      if (!r.ok && r.duplicate) { if (confirm(`'${r.duplicate.name}' is already installed. Replace it with the imported version?`)) { const r2 = PublicSkills.importShared(text, { reserved: publicReserved(), replace: true }); toast(r2.ok ? `Replaced ${r2.item.kind} '${r2.item.name}'` : `IMPORT_FAILED: ${r2.errors.join("; ")}`); } return; } toast(r.ok ? `Installed ${r.item.kind} '${r.item.name}'${r.warnings.length ? " (" + r.warnings.length + " warning" + (r.warnings.length === 1 ? "" : "s") + ")" : ""}` : `IMPORT_FAILED: ${r.errors.join("; ")}`); }
     function publicRun(item){ if (item.kind === "mode") return setWorkMode("pm:" + item.id); let args = {}; if ((item.params || []).length) { const raw = prompt(`Arguments for ${PublicSkills.signature(item)} (JSON):`, JSON.stringify(publicExampleArgs(item))); if (raw == null) return; try { args = JSON.parse(raw || "{}"); } catch { return toast("Arguments must be valid JSON"); } } runLibraryCard({ engine: "rs", icon: "P", cat: "Public Skills", title: `Run ${item.name}`, desc: item.description.slice(0, 90), prompt: `Run my public ${item.kind} now: call ${item.name} ${JSON.stringify(args)} and report the result. If it reports an error, fix the arguments or improve the ${item.kind} with public_skill_update (read it first with public_skill_get {"name":"${item.name}"}).` }, true); }
     function publicImprove(item){ const req = prompt(`What should change in '${item.title}'?`, ""); if (req == null) return; runLibraryCard({ engine: "rs", icon: "P", cat: "Public Skills", title: `Improve ${item.name}`, desc: req.slice(0, 90) || "AI review", prompt: `Improve my public ${item.kind} '${item.name}'. Request: ${req.trim() || "review it for correctness, robustness and clarity and improve it"}. First call public_skill_get {"name":"${item.name}"} to read the current definition, then submit the improved version with public_skill_update {"name":"${item.name}","patch":{...}} (keep the same name and kind; include every field you change in full)${item.kind === "skill" ? ", then run public_skill_test {\"name\":\"" + item.name + "\"} and fix any syntax error" : ""}. Finish with a one-paragraph summary of what changed.` }, true); }
     function openPublicEditor(item, kind){
@@ -7507,6 +7599,15 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     }
     window.addEventListener("or-public-skill-result", (e) => { try { const d = e.detail || {}; if (d.kind === "removed") { toast(`Public ${d.item && d.item.kind || "skill"} '${d.item && d.item.name}' deleted`); return; } if (d.kind === "toggled") return; showPublicInstalled(d); } catch (err) { try { diag("publicSkills.resultUi", { error: String(err) }); } catch {} } });
     window.addEventListener("or-public-skills-change", () => { try { syncWorkModeUi(); } catch {} try { if (menuEl && !menuEl.hidden) buildMenu(); } catch {} try { if (cardsPanel && !cardsPanel.hidden && cardsTab === "public") renderCards(cardsPanel); } catch {} });
+    // ── Tasks tab (Settings → Task list) ──
+    const TASK_MARK = { todo: "", doing: "▶", done: "✓", skipped: "–" };
+    function tasksHtml(){
+      const TL = ORTaskList; const tasks = TL.list(); const p = TL.progress();
+      const rows = tasks.map((t, i) => `<li class="rs-task-row rs-task-${t.status}" data-task-id="${escRs(t.id)}"><button type="button" class="rs-task-check" data-task-action="toggle" title="${t.status === "done" ? "Mark open" : "Mark done"}" aria-label="${t.status === "done" ? "Mark open" : "Mark done"}">${TASK_MARK[t.status]}</button><div class="rs-task-copy"><span class="rs-task-n">#${i + 1}</span><span class="rs-task-text" contenteditable="true" spellcheck="false" data-task-edit>${escRs(t.text)}</span>${t.notes ? `<small class="rs-task-notes">${escRs(t.notes)}</small>` : ""}${t.by === "ai" ? '<small class="rs-task-by">added by AI</small>' : ""}</div><div class="rs-task-actions"><button type="button" data-task-action="run" title="Ask the AI to do this task">Run</button><button type="button" data-task-action="doing" title="Mark in progress">▶</button><button type="button" data-task-action="skip" title="Skip">Skip</button><button type="button" data-task-action="up" title="Move up">↑</button><button type="button" data-task-action="down" title="Move down">↓</button><button type="button" class="rs-template-delete" data-task-action="delete" title="Delete">×</button></div></li>`).join("");
+      const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
+      return `<section class="rs-template-library rs-tasks" aria-label="Task list"><div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div><b>Task list</b><span class="rs-template-count">${p.done}/${p.total}</span></div><p>Your checklist for this project. The AI sees it, works it with <code>task_next</code> and ticks items with <code>task_update</code> after verifying.</p></div><div class="rs-template-head-actions"><button type="button" class="rs-btn-primary" data-task-run-all ${p.open ? "" : "disabled"}>Run all with AI</button><button type="button" class="rs-btn-secondary" data-task-run-next ${p.open ? "" : "disabled"}>Run next</button></div></header><div class="rs-task-progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div><form class="rs-task-add" data-task-add-form><input id="rs-task-input" type="text" autocomplete="off" spellcheck="false" placeholder="Add a task and press Enter (paste several lines to add many)"><button type="button" class="rs-btn-secondary" data-task-ai-plan title="Let the AI break the project into tasks">Plan with AI</button></form><div class="rs-task-tools"><button type="button" data-task-clear-done ${p.done + p.skipped ? "" : "disabled"}>Clear done</button><button type="button" data-task-export ${p.total ? "" : "disabled"}>Export</button><button type="button" data-task-import>Import</button><button type="button" data-task-disable title="Same as Settings → Task list">Disable task list</button></div></div>${tasks.length ? `<ol class="rs-task-list">${rows}</ol>` : `<div class="rs-template-empty"><div class="rs-template-empty-mark">✓</div><b>No tasks yet</b><span>Type a task above, paste a list, or press Plan with AI to let the agent propose the steps for your project.</span></div>`}</section>`;
+    }
+    function taskRunPrompt(t, idx){ return `Work on task #${idx} from my OrScript task list now: "${t.text}"${t.notes ? ` (notes: ${t.notes})` : ""}. First call task_update {"id":"${t.id}","status":"doing"}, then do the work with real commands and verify it, then call task_update {"id":"${t.id}","status":"done","notes":"<one line of what you did>"}. If it cannot be done, mark it "skipped" with the reason. Do not start other tasks.`; }
     function activityHtml() {
       if (!recentCards.length) {
         return '<div class="rs-cards-empty"><div class="rs-cards-empty-glyph">\u2726</div>No results yet<br><span>Every tool result lands here as a card.</span></div>';
@@ -7616,7 +7717,8 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const actN = recentCards.length ? ' <b>' + recentCards.length + '</b>' : '';
       const local = activeEngine() === "local";
       const mainLabel = local ? "Session" : "Library";
-      const body = cardsTab === "activity" ? activityHtml() : cardsTab === "public" ? publicHtml() : (local ? summaryHtml() : libraryHtml());
+      if (cardsTab === "tasks" && !taskListOn()) cardsTab = "library";
+      const body = cardsTab === "activity" ? activityHtml() : cardsTab === "public" ? publicHtml() : cardsTab === "tasks" ? tasksHtml() : (local ? summaryHtml() : libraryHtml());
       panel.innerHTML =
         '<div class="rs-cards-top">'
         + '<div class="rs-cards-brand"><img class="rs-logo rs-cards-logo" alt="" aria-hidden="true" src="' + chrome.runtime.getURL("assets/icon128.png") + '"><span class="rs-cards-kicker" data-rs-brand-short>' + (orTheme==="void"?"VoidScript":"OrScript") /* selected-skin branding */ + '</span><span class="rs-cards-heading">Templates</span><span class="rs-cards-subheading">Reusable workflows · v' + EXT_VERSION + '</span></div>'
@@ -7624,6 +7726,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "library" ? " on" : "") + '" data-tab="library">' + mainLabel + '</button>'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "activity" ? " on" : "") + '" data-tab="activity">Activity' + actN + '</button>'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "public" ? " on" : "") + '" data-tab="public">Public' + (publicCount() ? ' <b>' + publicCount() + '</b>' : '') + '</button>'
+        + (taskListOn() ? '<button type="button" class="rs-cards-tab' + (cardsTab === "tasks" ? " on" : "") + '" data-tab="tasks">Tasks' + (() => { try { const p = ORTaskList.progress(); return p.total ? ' <b>' + p.done + '/' + p.total + '</b>' : ''; } catch { return ''; } })() + '</button>' : '')
         + '</div></div>'
         + '<div class="rs-cards-body">' + body + '</div>';
       // Bind tabs on every render. The panel is re-created frequently, so a
@@ -7631,7 +7734,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       panel.querySelectorAll(".rs-cards-tab").forEach((tab) => {
         const openTab = (event) => {
           event.preventDefault(); event.stopImmediatePropagation();
-          cardsTab = tab.dataset.tab === "public" ? "public" : tab.dataset.tab === "activity" ? "activity" : "library";
+          cardsTab = tab.dataset.tab === "public" ? "public" : tab.dataset.tab === "tasks" ? "tasks" : tab.dataset.tab === "activity" ? "activity" : "library";
           renderCards(panel);
         };
         // Use one activation path only. A pointerup handler plus onclick caused a
@@ -7661,6 +7764,17 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       }
       const pubKind = panel.querySelector("#rs-public-kind");
       if (pubKind) pubKind.addEventListener("change", () => { publicKind = pubKind.value; });
+      const taskInput = panel.querySelector("#rs-task-input");
+      if (taskInput) {
+        taskInput.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); const v = taskInput.value.trim(); if (!v) return; const added = ORTaskList.add(v, { by: "user" }); taskInput.value = ""; if (added.length) { renderCards(panel); const again = panel.querySelector("#rs-task-input"); if (again) setTimeout(() => { try { again.focus(); } catch {} }, 0); } } });
+        taskInput.addEventListener("paste", (e) => { const text = e.clipboardData && e.clipboardData.getData("text"); if (text && /\n/.test(text.trim())) { e.preventDefault(); const added = ORTaskList.add(text, { by: "user" }); toast(`Added ${added.length} task${added.length === 1 ? "" : "s"}`); renderCards(panel); } });
+        const form = panel.querySelector("[data-task-add-form]"); if (form) form.addEventListener("submit", (e) => e.preventDefault());
+        setTimeout(() => { try { if (!ORTaskList.list().length) taskInput.focus(); } catch {} }, 0);
+      }
+      panel.querySelectorAll("[data-task-edit]").forEach((el) => {
+        el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); el.blur(); } if (e.key === "Escape") { e.preventDefault(); renderCards(panel); } });
+        el.addEventListener("blur", () => { const row = el.closest("[data-task-id]"); const t = row && ORTaskList.find(row.dataset.taskId); const v = el.textContent.trim(); if (t && v && v !== t.text) ORTaskList.update(t.id, { text: v }); else if (t && !v) renderCards(panel); });
+      });
       const categorySelect=panel.querySelector("#rs-template-category");if(categorySelect)categorySelect.addEventListener("change",()=>{cardsCategory=categorySelect.value;visibleLibCache=libFiltered();const wrap=panel.querySelector("#rs-cards-grid-wrap");if(wrap)wrap.innerHTML=gridHtml();const count=panel.querySelector("[data-template-count]");if(count)count.textContent=String(visibleLibCache.length);});
     }
 
