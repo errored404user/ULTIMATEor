@@ -31,6 +31,7 @@ const RSProvider = (() => {
   // Total characters of history sent per request (1M-context models cope with
   // far more, but every token is billed against the user's plan).
   const HISTORY_CHAR_BUDGET = 480000;
+  const IMAGE_TURNS = 2;
   const SEND_MAX = 200000;
 
   const timings = {
@@ -104,8 +105,17 @@ const RSProvider = (() => {
   function persist() {
     try {
       if (!window.sessionStorage) return;
-      const slim = sess.messages.map((m) => ({ role: m.role, content: m.content, thinking: m.thinking || "", images: (m.images || []).slice(0, 4), error: m.error || "" }));
-      sessionStorage.setItem(sessKey(), JSON.stringify(slim));
+      // Pixels are not persisted (sessionStorage is ~5 MB; one screenshot can be
+      // a third of that) - a reload keeps the text and notes the attachment.
+      const slim = sess.messages.map((m) => ({ role: m.role, content: m.content, thinking: m.thinking || "", imageCount: (m.images || []).length, error: m.error || "" }));
+      let json = JSON.stringify(slim);
+      try { sessionStorage.setItem(sessKey(), json); }
+      catch {
+        // Quota: drop the oldest half of the transcript (keep the bootstrap).
+        const half = slim.length > 2 ? [slim[0], ...slim.slice(Math.ceil(slim.length / 2))] : slim;
+        json = JSON.stringify(half);
+        try { sessionStorage.setItem(sessKey(), json); } catch {}
+      }
     } catch {}
   }
   function setHash() { try { if (location.hash !== "#c=" + sess.id) history.replaceState(null, "", "#c=" + sess.id); } catch {} }
@@ -180,6 +190,12 @@ const RSProvider = (() => {
     who.className = "cc-who";
     who.textContent = msg.role === "user" ? "You" : (msg.model || settings.model || "CodeCraft");
     art.appendChild(who);
+    if (msg.imageCount && !(msg.images && msg.images.length)) {
+      const note = document.createElement("div");
+      note.className = "cc-imgs-note";
+      note.textContent = `${msg.imageCount} image(s) attached (not kept across reload)`;
+      art.appendChild(note);
+    }
     if (msg.images && msg.images.length) {
       const strip = document.createElement("div");
       strip.className = "cc-imgs";
@@ -245,6 +261,7 @@ const RSProvider = (() => {
       scrollToEnd();
     }
     if (ui.empty) ui.empty.hidden = true;
+    if (ui.app) ui.app.classList.add("cc-has-msgs");
     persist();
     return msg;
   }
@@ -258,6 +275,7 @@ const RSProvider = (() => {
     sess.messages = [];
     if (ui.log) ui.log.innerHTML = "";
     if (ui.empty) ui.empty.hidden = false;
+    if (ui.app) ui.app.classList.remove("cc-has-msgs");
   }
   function startSession(id) {
     sess.id = id || newId();
@@ -319,8 +337,14 @@ const RSProvider = (() => {
     // Skip the in-flight placeholder and failed/empty assistant rows.
     const cur = _stream && _stream.msg;
     const msgs = sess.messages.filter((m) => m !== cur && !(m.role === "assistant" && !m.content));
+    // Only the newest IMAGE_TURNS user messages keep their pixels: every request
+    // re-sends the whole history, so older screenshots would be re-billed as
+    // vision tokens on each turn and push the body past request-size limits.
+    const withImages = msgs.filter((m) => m.role === "user" && m.images && m.images.length);
+    const liveImages = new Set(withImages.slice(-IMAGE_TURNS));
     const toApi = (m) => {
       if (m.role === "user" && m.images && m.images.length) {
+        if (!liveImages.has(m)) return { role: "user", content: m.content + `\n[${m.images.length} image(s) were attached here earlier; omitted from this request]` };
         return { role: "user", content: [{ type: "text", text: m.content }, ...m.images.map((im) => ({ type: "image_url", image_url: { url: `data:${im.mimeType || "image/jpeg"};base64,${im.data}` } }))] };
       }
       return { role: m.role, content: m.content };
@@ -345,8 +369,11 @@ const RSProvider = (() => {
     const merged = [];
     for (const m of out) {
       const prev = merged[merged.length - 1];
-      if (prev && prev.role === m.role && typeof prev.content === "string" && typeof m.content === "string") prev.content += "\n\n" + m.content;
-      else merged.push(m);
+      if (!prev || prev.role !== m.role) { merged.push(m); continue; }
+      if (typeof prev.content === "string" && typeof m.content === "string") { prev.content += "\n\n" + m.content; continue; }
+      // At least one side carries image parts: merge as content parts.
+      const parts = (c) => (typeof c === "string" ? [{ type: "text", text: c }] : c.slice());
+      prev.content = parts(prev.content).concat(parts(m.content));
     }
     return merged;
   }
@@ -370,11 +397,11 @@ const RSProvider = (() => {
 
   async function submit(text, images, opts = {}) {
     text = truncateForSend(String(text || ""));
+    if (!hasKey()) { status("Paste your CodeCraft API key first (cc_…)", "warn"); try { ui.key && ui.key.focus(); } catch {} return false; }
     const imgs = (images && images.length ? images : _pendingImages).slice(0, 8);
+    if (!text.trim() && !imgs.length) return false;
     _pendingImages = [];
     renderAttachments();
-    if (!text.trim() && !imgs.length) return false;
-    if (!hasKey()) { status("Paste your CodeCraft API key first (cc_…)", "warn"); try { ui.key && ui.key.focus(); } catch {} return false; }
     if (_stream) stopGeneration();
     _lastError = "";
     pushMessage({ role: "user", content: text, images: imgs });
@@ -423,10 +450,13 @@ const RSProvider = (() => {
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = "", paintQueued = false;
+    // setTimeout, not requestAnimationFrame: rAF is frozen in background tabs,
+    // and the core's "work in background tabs" mode reads the transcript DOM
+    // while this tab is hidden - the stream must keep landing in the DOM.
     const queuePaint = () => {
       if (paintQueued) return;
       paintQueued = true;
-      requestAnimationFrame(() => { paintQueued = false; if (msg.done) return; paintBody(msg, false); scrollToEnd(); });
+      setTimeout(() => { paintQueued = false; if (msg.done) return; paintBody(msg, false); scrollToEnd(); }, 40);
     };
     const handle = (data) => {
       if (data === "[DONE]") return true;
@@ -491,6 +521,14 @@ const RSProvider = (() => {
       const secs = ((Date.now() - st.startedAt) / 1000).toFixed(1);
       status(`${settings.model} · ${secs}s${u.total_tokens ? ` · ${u.total_tokens} tokens` : ""}${st.finish && st.finish !== "stop" ? ` · finish=${st.finish}` : ""}`, "ok");
       if (st.finish === "length") msg.truncated = true;
+      if (!msg.content && !msg.thinking && msg.el && !msg.el.querySelector(".cc-error")) {
+        // Nothing came back (filtered / empty choice): say so instead of
+        // leaving a blank bubble the user cannot interpret.
+        const note = document.createElement("div");
+        note.className = "cc-error";
+        note.textContent = `The model returned an empty reply${st.finish ? " (finish_reason=" + st.finish + ")" : ""}. Try again or pick another model.`;
+        msg.el.appendChild(note);
+      }
     }
     paintBody(msg, true);
     scrollToEnd();
@@ -698,7 +736,8 @@ const RSProvider = (() => {
   async function typeAndSend(text, images) {
     if (!isHostPage()) throw new Error("CodeCraft chat page not ready");
     if (!hasKey()) throw new Error("CodeCraft API key missing — paste your cc_ key at the top of the page");
-    if (ui.input) { ui.input.value = ""; autoGrow(); }
+    // The composer is NOT used for agent sends: whatever the user is drafting
+    // stays put (the core accepts "our text is not in the composer" as landed).
     const ok = await submit(text, images, { fromAgent: true });
     if (!ok) throw new Error("CodeCraft send refused");
     await sleep(60);

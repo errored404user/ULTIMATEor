@@ -297,6 +297,17 @@ const assistantRows = () => [...d.querySelectorAll("#cc-log article.cc-msg[data-
     d.getElementById("cc-new").click();
     await sleep(100);
     ok("New chat resets the transcript and the conversation id", userRows().length === 0 && P.chatIsEmpty() && P.conversationKey() !== prevKey && !d.getElementById("cc-empty").hidden);
+    // Stop mid-stream: the row keeps what arrived, no error, flags clear.
+    modelReply = async () => ({ text: ("streaming paragraph number N. ").repeat(80) });
+    await P.codecraft.submit("tell me a long story", null, {});
+    await waitFor(() => (P.readAssistant().reply || "").length > 40, 3000, "partial stream");
+    ok("stream is flagged as generating while tokens arrive", P.isGenerating() && P.isHardGenerating() && !d.getElementById("cc-stop").hidden);
+    d.getElementById("cc-stop").click();
+    await sleep(120);
+    const stopped = P.readAssistant();
+    ok("Stop keeps the partial reply, clears the flags and shows no error", !P.isHardGenerating() && stopped.reply.length > 40 && stopped.reply.length < 2400 && !assistantRows()[assistantRows().length - 1].querySelector(".cc-error") && /Stopped/.test(d.getElementById("cc-status").textContent), stopped.reply.length + " chars; status=" + d.getElementById("cc-status").textContent);
+    await sleep(400);
+    ok("no late repaint after Stop (markdown final, no cursor)", !assistantRows()[assistantRows().length - 1].querySelector(".cc-body").classList.contains("cc-streaming"));
     ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
   } catch (e) {
     console.error("SCENARIO FAILED:", e && e.stack || e);

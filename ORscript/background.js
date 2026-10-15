@@ -69,7 +69,14 @@ const PROVIDER_URLS = ["https://chat.deepseek.com/*", "https://deepseek.com/*", 
 // CodeCraft API has no web chat: ORscript hosts one at codecraft.html (an
 // extension page), which runs the same bundle and needs the same broadcasts.
 const CODECRAFT_PAGE = "codecraft.html";
-try { PROVIDER_URLS.push(chrome.runtime.getURL(CODECRAFT_PAGE) + "*"); } catch {}
+// Queried separately from the web patterns: if an extension-URL pattern were
+// ever rejected by tabs.query it must not take the whole broadcast down.
+async function providerTabs() {
+  let tabs = [];
+  try { tabs = await chrome.tabs.query({ url: PROVIDER_URLS }); } catch {}
+  try { tabs = tabs.concat(await chrome.tabs.query({ url: chrome.runtime.getURL(CODECRAFT_PAGE) + "*" })); } catch {}
+  return tabs;
+}
 
 const RECONNECT_MIN = 500;
 const RECONNECT_MAX = 5000;
@@ -727,7 +734,7 @@ async function refreshProcStatus() {
 
 function broadcastStatus() {
   chrome.runtime.sendMessage(statusObj()).catch(() => {});
-  chrome.tabs.query({ url: PROVIDER_URLS }, (tabs) => {
+  providerTabs().then((tabs) => {
     for (const t of tabs) chrome.tabs.sendMessage(t.id, statusObj()).catch(() => {});
   });
 }
@@ -1613,7 +1620,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           // (tab not refreshed after reload) reject with "Receiving end does not
           // exist"; that's expected and harmless here, so swallow it.
           try {
-            const tabs = await chrome.tabs.query({ url: PROVIDER_URLS });
+            const tabs = await providerTabs();
             for (const t of tabs) chrome.tabs.sendMessage(t.id, { type: "rs-engine", engine }).catch(() => {});
           } catch {}
         sendResponse({ engine });

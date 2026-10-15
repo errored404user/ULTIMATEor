@@ -53,15 +53,29 @@ for (let i = 0; i < 30; i++) {
 sess.messages.push({ id: "img", role: "user", content: "look", images: [{ mimeType: "image/png", data: "AAAA" }] });
 sess.messages.push({ id: "empty", role: "assistant", content: "" });
 let api = CC.apiMessages();
+ok("message budget constants are sane", CC.session === sess && typeof CC.apiMessages === "function");
 ok("history budget keeps the bootstrap first and the newest turns", api[0].role === "user" && /^BOOTSTRAP/.test(api[0].content) && api.length < 62 && /older messages omitted/.test(api[0].content + api[1].content), api.length + " msgs");
-ok("the most recent messages survive the trim", api.some((m) => typeof m.content === "string" && /^result 29/.test(m.content)));
+ok("the most recent messages survive the trim", api.some((m) => Array.isArray(m.content) ? /^result 29/.test(m.content[0].text) : /^result 29/.test(m.content)));
 ok("total request stays within the character budget", api.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length), 0) < 500000);
 const last = api[api.length - 1];
-ok("empty assistant placeholder is skipped; image message becomes OpenAI content parts", last.role === "user" && Array.isArray(last.content) && last.content[0].type === "text" && last.content[1].type === "image_url" && /^data:image\/png;base64,AAAA$/.test(last.content[1].image_url.url));
+ok("empty assistant placeholder is skipped; image message becomes OpenAI content parts (merged with the preceding user text)", last.role === "user" && Array.isArray(last.content) && last.content[0].type === "text" && /^result 29/.test(last.content[0].text) && last.content[1].text === "look" && last.content[2].type === "image_url" && /^data:image\/png;base64,AAAA$/.test(last.content[2].image_url.url), JSON.stringify(last).slice(0, 200));
 sess.messages.length = 0;
 sess.messages.push({ id: "1", role: "user", content: "a" }, { id: "2", role: "user", content: "b" }, { id: "3", role: "assistant", content: "c" }, { id: "4", role: "assistant", content: "d" }, { id: "5", role: "user", content: "e" });
 api = CC.apiMessages();
 ok("consecutive same-role rows are merged (strict OpenAI alternation)", api.map((m) => m.role).join(",") === "user,assistant,user" && api[0].content === "a\n\nb" && api[1].content === "c\n\nd", JSON.stringify(api));
+// Image window: only the newest two image-bearing user turns keep pixels.
+sess.messages.length = 0;
+const IMG = [{ mimeType: "image/png", data: "QUJD" }];
+sess.messages.push({ id: "b", role: "user", content: "boot" }, { id: "r0", role: "assistant", content: "ok" });
+for (let i = 0; i < 4; i++) sess.messages.push({ id: "s" + i, role: "user", content: "shot " + i, images: IMG }, { id: "x" + i, role: "assistant", content: "seen " + i });
+api = CC.apiMessages();
+const imgTurns = api.filter((m) => Array.isArray(m.content));
+ok("older screenshots are not re-sent (only the newest 2 image turns carry image_url parts)", imgTurns.length === 2 && imgTurns.every((m) => /shot [23]/.test(m.content[0].text)), JSON.stringify(api.map((m) => (Array.isArray(m.content) ? "IMG:" + m.content[0].text : m.content))));
+ok("dropped images leave a text note", api.some((m) => typeof m.content === "string" && /shot 0\n\[1 image\(s\) were attached here earlier/.test(m.content)));
+sess.messages.length = 0;
+sess.messages.push({ id: "1", role: "user", content: "see", images: IMG }, { id: "2", role: "user", content: "and this" });
+api = CC.apiMessages();
+ok("a text row merges into a preceding image row as content parts", api.length === 1 && Array.isArray(api[0].content) && api[0].content.length === 3 && api[0].content[2].text === "and this", JSON.stringify(api));
 sess.messages.length = 0;
 
 // ── key handling / settings ─────────────────────────────────────────────────
@@ -73,6 +87,8 @@ sess.messages.length = 0;
   ok("hasKey rejects junk", CC.hasKey() === false);
   ok("scanError explains the missing key", /cc_/.test(P.scanError() || ""));
   ok("isTooLongMsg / isBusyMsg classify API errors", P.isTooLongMsg("This model's maximum context length is 128000 tokens") && P.isBusyMsg("HTTP 429 rate limit exceeded") && !P.isBusyMsg("401 invalid api key"));
+  ok("typeAndSend leaves the composer alone (user drafts survive agent sends)", !/ui\.input\.value = ""; autoGrow\(\); \}\n    const ok = await submit/.test(read("src/providers/codecraft.js")) && /composer is NOT used for agent sends/.test(read("src/providers/codecraft.js")));
+  ok("transcript persistence never stores pixels", /imageCount: \(m\.images \|\| \[\]\)\.length/.test(read("src/providers/codecraft.js")) && !/images: \(m\.images \|\| \[\]\)\.slice/.test(read("src/providers/codecraft.js")));
   ok("typeAndSend refuses without the page (never a silent drop)", await P.typeAndSend("hi").then(() => false, (e) => /not ready|key/i.test(e.message)));
 
   // ── wiring ────────────────────────────────────────────────────────────────
@@ -82,7 +98,7 @@ sess.messages.length = 0;
   ok("page has the controls the provider binds", ["cc-app", "cc-log", "cc-form", "cc-input", "cc-send", "cc-stop", "cc-model", "cc-key", "cc-key-save", "cc-status", "cc-new", "cc-empty", "cc-composer", "cc-attach", "cc-attachments", "cc-file"].every((id) => html.includes(`id="${id}"`)));
   ok("page stylesheet exists and follows the light flag", fs.existsSync(path.join(root, "ui/codecraft.css")) && /html\.rs-light/.test(read("ui/codecraft.css")));
   ok("AI switcher lists CodeCraft and opens extension pages through the background", /\{ name: "CodeCraft API", url: CODECRAFT_PAGE_URL/.test(main) && /chrome\.runtime\.getURL\("codecraft\.html"\)/.test(main) && /rs-open-extension-page/.test(main) && /s\.host \|\| hostOf\(s\.url\)/.test(main));
-  ok("background broadcasts to the page and serves rs-open-extension-page (allow-listed)", /PROVIDER_URLS\.push\(chrome\.runtime\.getURL\(CODECRAFT_PAGE\)/.test(bg) && /case "rs-open-extension-page"/.test(bg) && /page !== CODECRAFT_PAGE/.test(bg));
+  ok("background broadcasts to the page and serves rs-open-extension-page (allow-listed)", /async function providerTabs\(\)/.test(bg) && /chrome\.runtime\.getURL\(CODECRAFT_PAGE\) \+ "\*"/.test(bg) && !/chrome\.tabs\.query\(\{ url: PROVIDER_URLS \}, \(tabs\)/.test(bg) && /case "rs-open-extension-page"/.test(bg) && /page !== CODECRAFT_PAGE/.test(bg));
   ok("popup names the page, treats it as a supported tab and has a launcher", /isCodeCraftTab/.test(popup) && /"CodeCraft API"/.test(popup) && /getElementById\("codecraft"\)/.test(popup) && /id="codecraft"/.test(popupHtml));
   ok("overlay skin for the inline bar", /#rs-bar\.rs-bar-inline\.rs-prov-codecraft \{/.test(css) && /html\.rs-light #rs-bar\.rs-bar-inline\.rs-prov-codecraft/.test(css));
   ok("the key is only ever sent to codecraftapi.com", (() => { const src = read("src/providers/codecraft.js"); const fetches = [...src.matchAll(/fetch\(([^,)]+)/g)].map((m) => m[1]); return fetches.length >= 2 && fetches.every((f) => /API_BASE/.test(f)); })());

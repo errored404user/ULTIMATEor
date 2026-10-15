@@ -10,6 +10,8 @@ const providerFiles = [
   ['src/providers/multichat.js','agent.minimax.io'],
   ['src/providers/multichat.js','overchat.ai'],
   ['src/providers/multichat.js','huggingface.co'],
+  // Extension-hosted chat page (no content_scripts entry: loaded by codecraft.html).
+  ['src/providers/codecraft.js', 'codecraftapi.com', 'codecraft.html'],
 ];
 
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
@@ -86,6 +88,7 @@ const results = {};
 for (const providerEntry of providerFiles) {
   const file = Array.isArray(providerEntry) ? providerEntry[0] : providerEntry;
   const testHost = Array.isArray(providerEntry) ? providerEntry[1] : null;
+  const hostPage = Array.isArray(providerEntry) ? providerEntry[2] : null;
   const name = testHost ? testHost.replace(/[^a-z0-9]+/gi, "-") : path.basename(file, ".js");
   const pPath = path.join(__dirname, '..', file);
   const issues = [];
@@ -148,7 +151,11 @@ for (const providerEntry of providerFiles) {
       break;
     }
   }
-  if (!manifestMatches) {
+  if (hostPage) {
+    const html = fs.existsSync(path.join(__dirname, '..', hostPage)) ? fs.readFileSync(path.join(__dirname, '..', hostPage), 'utf8') : '';
+    if (!html.includes(`<script src="${file}"></script>`)) issues.push(`Provider script ${file} not loaded by ${hostPage}`);
+    if (manifestMatches) issues.push(`Extension-page provider ${file} must not also be a content script`);
+  } else if (!manifestMatches) {
     issues.push(`Provider script ${file} not registered in manifest.json content_scripts`);
   }
 
