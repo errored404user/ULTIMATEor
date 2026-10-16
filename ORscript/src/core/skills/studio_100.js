@@ -433,9 +433,30 @@
     { name: "server_auto_restart", description: "Setup automated server uptime warnings and soft-reloading.", params: {"uptime_hours": {"type": "number", "req": false, "desc": "max uptime hours"}} },
   ];
 
+  // These builders rely on the studio_200 prelude (resolve/ok/fail/partOf/hrpOf/firstPlayer/findPlayer).
+  const FALLBACK_HEAD = [
+    "local HttpService=game:GetService('HttpService')",
+    "local Players=game:GetService('Players')",
+    "local ServerScriptService=game:GetService('ServerScriptService')",
+    "local ReplicatedStorage=game:GetService('ReplicatedStorage')",
+    "local function resolve(p) if not p or p=='' then return nil end if p=='workspace' then return workspace end if p:sub(1,5)=='game.' then p=p:sub(6) end local x=game for s in string.gmatch(p,'[^.]+') do local okc,v=pcall(function() return x:FindFirstChild(s) or (x==game and game:GetService(s)) end) if not okc or not v then return nil end x=v end return x end",
+    "local function ok(d,t) return HttpService:JSONEncode({ok=true,data=d,text=t}) end",
+    "local function fail(m) return HttpService:JSONEncode({ok=false,error=m}) end",
+    "local function firstPlayer() local ps=Players:GetPlayers() return ps[1] or nil end",
+    "local function findPlayer(n) if not n or n=='' then return firstPlayer() end for _,pl in ipairs(Players:GetPlayers()) do if pl.Name:lower()==tostring(n):lower() or pl.DisplayName:lower()==tostring(n):lower() then return pl end end return nil end",
+    "local function charOf(pl) return pl and pl.Character or nil end",
+    "local function hrpOf(pl) local c=charOf(pl) if not c then return nil end return c:FindFirstChild('HumanoidRootPart') or c:FindFirstChild('Head') end",
+    "local function partOf(i) if not i then return nil end if type(i)=='string' then i=resolve(i) end if not i then return nil end if i:IsA('BasePart') then return i end if i:IsA('Model') or i:IsA('Folder') or i:IsA('Tool') or i:IsA('Accessory') then return i.PrimaryPart or i:FindFirstChildOfClass('BasePart') or i:FindFirstChild('Handle') or i:FindFirstChild('HumanoidRootPart') end return nil end",
+  ].join("\n");
+  function head() { return (typeof RobloxScriptSkills.X200_HEAD === "string" && RobloxScriptSkills.X200_HEAD) || FALLBACK_HEAD; }
+
   function buildX100(op, args) {
     if (typeof B[op] === "function") {
-      return { code: B[op](args || {}) };
+      try {
+        return { code: head() + "\n" + B[op](args || {}) };
+      } catch (e) {
+        return { err: "ERROR building command " + op + ": " + e };
+      }
     }
     return null;
   }

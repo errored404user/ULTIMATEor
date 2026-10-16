@@ -29,9 +29,25 @@
   }
 
   // Models name the target many ways; every spelling resolves to the same path.
+  // Accept the path under any of the usual keys, and tolerate what rich-text
+  // chats do to it: wrapping backticks / quotes, typographic quotes, trailing
+  // punctuation, non-breaking spaces, a "game:GetService('X')" spelling and
+  // Windows-style backslashes (1.33 - "Notion cannot get_children path").
+  function cleanPath(v) {
+    let p = String(v == null ? "" : v).replace(/[\u00A0\u2000-\u200A\u202F\u3000]/g, " ").replace(/[\u200B-\u200D\u2060\uFEFF]/g, "").trim();
+    for (let i = 0; i < 2; i++) {
+      p = p.replace(/^[`'"\u2018\u2019\u201C\u201D]+|[`'"\u2018\u2019\u201C\u201D]+$/g, "").trim();
+      p = p.replace(/[.,;:!?]+$/, "").trim();
+    }
+    p = p.replace(/\\/g, ".").replace(/\s*[>\u2192]\s*/g, ".");
+    p = p.replace(/^game\s*:\s*GetService\s*\(\s*["']([A-Za-z]+)["']\s*\)/, "$1");
+    p = p.replace(/\.{2,}/g, ".").replace(/^\./, "").replace(/\.$/, "");
+    return p;
+  }
   function pathArg(a) {
     for (const k of ["path", "target", "instance", "instance_path", "object", "parent", "name", "query"]) {
-      if (a && typeof a[k] === "string" && a[k].trim()) return a[k].trim();
+      if (a && typeof a[k] === "string" && cleanPath(a[k])) return cleanPath(a[k]);
+      if (a && a[k] && typeof a[k] === "object" && typeof a[k].path === "string" && cleanPath(a[k].path)) return cleanPath(a[k].path);
     }
     return "";
   }

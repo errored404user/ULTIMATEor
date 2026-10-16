@@ -2119,7 +2119,7 @@
       // JSON schema so signatures, required-param checks and the registry see
       // the same contract the pack's own describeCommands() prints.
       const schemaFromParams=(pm)=>{const props={},req=[];for(const [k,v] of Object.entries(pm||{})){const t=v&&typeof v==="object"?v:{type:"string"};const prop={type:String(t.type||"string").replace(/\[\]$/,"")};if(/\[\]$|^array|^list/.test(String(t.type||"")))prop.type="array";if(t.desc)prop.description=t.desc;if(Array.isArray(t.enum))prop.enum=t.enum;props[k]=prop;if(t.req)req.push(k);}return {type:"object",properties:props,required:req};};
-      const addOffline=(rows,server)=>{for(const t of rows||[])if(t&&t.name&&!tools.some(x=>x.name===t.name))tools.push({name:t.name,description:t.description||"OrScript command",inputSchema:t.inputSchema||t.parameters||(t.params?schemaFromParams(t.params):{type:"object",properties:{}}),server,virtual:true});};
+      const addOffline=(rows,server)=>{for(const t of rows||[])if(t&&t.name&&!tools.some(x=>x.name===t.name))tools.push({name:t.name,description:t.description||"OrScript command",inputSchema:t.inputSchema||t.parameters||(t.params?schemaFromParams(t.params):{type:"object",properties:{}}),server,virtual:true,hidden:!!t.hidden});};
       try{if(typeof RobloxScriptSkills!=="undefined")addOffline(RobloxScriptSkills.SKILL_COMMANDS,"roblox");}catch{}
       try{if(typeof RSAnim!=="undefined")addOffline(RSAnim.ANIM_COMMANDS,"roblox");}catch{}
       try{if(typeof AgentScriptSkills!=="undefined")addOffline(AgentScriptSkills.SKILL_COMMANDS,"local");}catch{}
@@ -3537,8 +3537,10 @@
       const known = new Set(A.toolList.map((t) => t.server).filter(Boolean));
       // Tools from a bridge that doesn't tag "server" yet have no .server field;
       // treat them as the current engine's server rather than hard-coding roblox.
-      const allScoped = A.toolList.filter((t) => (t.server || curEng) === requested);
       const commandQuery = String(args.query || args.search || "").trim().toLowerCase();
+      // Hidden entries (legacy aliases, duplicate setters) stay callable but are
+      // only listed when asked for by exact name.
+      const allScoped = A.toolList.filter((t) => (t.server || curEng) === requested && (!t.hidden || String(t.name || "").toLowerCase() === commandQuery));
       const queryTerms = commandQuery.split(/\s+/).filter(Boolean);
       const queryMatches = (value) => !queryTerms.length
         || queryTerms.every((term) => String(value || "").toLowerCase().includes(term));
@@ -3554,7 +3556,8 @@
       }
       let lines = scoped.map(toolDetailLine);
       let animLines = requested === "roblox" ? RSAnim.describeCommands() : [];
-      let skillLines = (requested === "roblox" && typeof RobloxScriptSkills !== "undefined") ? RobloxScriptSkills.describeCommands() : [];
+      let skillLines = (requested === "roblox" && typeof RobloxScriptSkills !== "undefined") ? RobloxScriptSkills.describeCommands({ includeHidden: !!commandQuery }) : [];
+      const hiddenSkillNames = (requested === "roblox" && typeof RobloxScriptSkills !== "undefined" && RobloxScriptSkills.hiddenCommandNames) ? RobloxScriptSkills.hiddenCommandNames() : new Set();
       let agentLines = (requested === "local" && typeof AgentScriptSkills !== "undefined") ? AgentScriptSkills.describeCommands() : [];
       let webLines = [`— Screenshot: or_screenshot {target?: auto|studio|game|viewport|blender|tab} — PHOTO of the real Studio/game viewport when MCP is on. Use target:studio or game for gameplay; target:tab is only for this browser chat. A failed Studio capture returns an error and NEVER substitutes the browser. NOT capture_id (IDs only).`, `— Debugger: or_debug {} — classified Output errors + NEXT fix. Automatic Debugger appends new errors after edits.`, `— Templates: get_template {name} searches the place then Creator Store and CLONES a match.`, `— OR Status: or_status {} — live engine, work mode, extra thinking, bridge, blender. Call this if you are unsure which mode you are in.`, `— Web Tools (bridge-level, no Studio needed): web_fetch {url?, query?, max_chars?} — fetch a URL, OR pass query to search the web then fetch the top result; web_search {query, limit?} — DuckDuckGo titles+URLs`, `— IDs (not a photo): capture_id {path?} — UniqueId + MeshId/Image/SoundId/AnimationId from the Studio selection. For a PHOTO use or_screenshot.`, `— Screenshot: or_screenshot {target?: auto|studio|game|viewport|tab|blender} — capture Studio/game through MCP and attach it to the next message. Use tab only for the browser. Aliases: screenshot, take_screenshot, send_screenshot.`, `— Debugger: or_debug {} — Studio LogService errors/warnings. Automatic Debugger (Settings) appends new errors after mutating commands.`, `— Multi-Agent: or_agent {role: planner|builder|scripter|reviewer|tester|debugger|done, task?, goal?, plan?:[...], step?, step_done?, findings?:[...], fixed?:[...], summary?} — hand off to a specialist on a shared board (plan, findings, verification). Read-only roles are guarded; done is refused until the tester verified. Enable Multi-Agent in Settings.`, `— Developer Products: developer_product_create {name, price, description?, reward?} — create a real Roblox Developer Product on this published universe (sign into roblox.com in Chrome). developer_product_list {} lists them. Aliases: create_developer_product, create_dev_product.`];
       if (commandQuery) {
@@ -3578,7 +3581,7 @@
           webLines = webLines.filter(queryMatches);
         } else {
           animLines = animLines.filter(queryMatches);
-          skillLines = skillLines.filter(queryMatches);
+          skillLines = skillLines.filter((l) => queryMatches(l) && !hiddenSkillNames.has(nameFromLine(l)));
           agentLines = agentLines.filter(queryMatches);
           webLines = webLines.filter(queryMatches);
         }

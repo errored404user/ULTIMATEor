@@ -228,7 +228,7 @@ const RS = (() => {
   const REMINDER_MAX_CHARS = 14000;
   function compactTools(tools, maxChars) {
     const limit = Math.max(2000, Number(maxChars) || REMINDER_MAX_CHARS);
-    const sigs = (tools || []).map((t) => {
+    const sigs = (tools || []).filter((t) => t && !t.hidden).map((t) => {
       const name = t.name || "?";
       const schema = t.inputSchema || {};
       const props = schema.properties || {};

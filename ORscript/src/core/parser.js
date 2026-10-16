@@ -71,9 +71,29 @@ const RSParse = (() => {
   // contains - so paramless calls are detected without false-positiving on text.
   const CMD_KEY_RE = /"(?:command|tool)"\s*:\s*"/;
 
+  // 1.33: typographic normalisation. Rich-text hosts (Notion, Google-Docs-style
+  // composers, some mobile keyboards) render the model's straight quotes as
+  // curly ones ("path" -> “path”), pad JSON with non-breaking / zero-width
+  // spaces and turn `-` into en-dashes inside code the model wrote as plain
+  // text. JSON.parse then fails on a command that is visibly correct, and the
+  // user sees "cannot get_children path". Fold the double quotes, the exotic
+  // spaces and the invisible characters back to ASCII before any shape test or
+  // parse. Apostrophes are left alone on purpose: a curly apostrophe inside a
+  // Lua string literal ('don’t') is content, not syntax.
+  const TYPO_DQUOTE_RE = /[\u201C\u201D\u201E\u201F\u2033\u2036\u00AB\u00BB\u301D\u301E\uFF02]/g;
+  const TYPO_SPACE_RE = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
+  const TYPO_INVISIBLE_RE = /[\u200B-\u200D\u2060\uFEFF]/g;
+  const TYPO_ANY_RE = /[\u201C\u201D\u201E\u201F\u2033\u2036\u00AB\u00BB\u301D\u301E\uFF02\u00A0\u2000-\u200A\u202F\u205F\u3000\u200B-\u200D\u2060\uFEFF]/;
+  function normalizeTypography(text) {
+    const t = String(text == null ? "" : text);
+    if (!TYPO_ANY_RE.test(t)) return t;
+    return t.replace(TYPO_DQUOTE_RE, '"').replace(TYPO_SPACE_RE, " ").replace(TYPO_INVISIBLE_RE, "");
+  }
+
   const NATIVE_TOOL_RE = /<tool_call\b|<(?:(?:[｜|]{1,2}DSML[｜|]{1,2})?invoke)\b|<｜tool call begin｜>/i;
 
   function hasToolSignature(r) {
+    r = normalizeTypography(r);
     return (
       r.includes(START_M) ||
       r.includes("MCP_TOOL") ||
@@ -87,6 +107,7 @@ const RSParse = (() => {
   // (a ###LUA### / ###MCP_TOOL### opener with no matching end marker). Used by the
   // response watcher to avoid finalizing a command that is still being streamed.
   function hasOpenToolBlock(r) {
+    r = normalizeTypography(r);
     if (!r) return false;
     const { pos: ls, len } = findLuaStart(r);
     if (ls !== -1 && findLuaEnd(r, ls + len) === -1) return true;
@@ -266,6 +287,7 @@ const RSParse = (() => {
   }
 
   function parseAlternateToolCalls(text) {
+    text = normalizeTypography(text);
     const out = [];
     const seen = new Set();
     const add = (call) => {
@@ -372,6 +394,7 @@ const RSParse = (() => {
   }
 
   function parseToolCalls(r) {
+    r = normalizeTypography(r);
     // Lowercase for case-insensitive end-marker search. Models write
     // ###end_mcp_tool### (underscore) or ###end-mcp_tool### (dash).
     const rLow = r.toLowerCase();
@@ -467,6 +490,7 @@ const RSParse = (() => {
   // parse_error branch), never on a still-streaming reply.
   const MAX_SALVAGE_CLOSERS = 2;
   function salvageCutOff(text) {
+    text = normalizeTypography(text);
     for (const key of ['"command"', '"tool"']) {
       const k = text.indexOf(key);
       if (k === -1) continue;
@@ -503,6 +527,7 @@ const RSParse = (() => {
   }
 
   function toolNameFromText(txt) {
+    txt = normalizeTypography(txt);
     // Match the name even BEFORE its closing quote (`[^"]*`), so the chip shows
     // the real command name AS IT IS TYPED instead of a generic "command"
     // placeholder until the JSON closes. A still-empty value falls through.
@@ -533,6 +558,7 @@ const RSParse = (() => {
 
   // The assistant emitted a RobloxScript command (JSON or a ###LUA### block).
   function hasCommandShape(txt) {
+    txt = normalizeTypography(txt);
     return txt.includes(START_M) ||
            LUA_START_RE.test(txt) ||
            CMD_KEY_RE.test(txt) ||
@@ -543,6 +569,6 @@ const RSParse = (() => {
     START_M, END_M, LUA_START_RE, LUA_END_RE, CMD_KEY_RE, NATIVE_TOOL_RE,
     findLuaStart, findLuaEnd, matchBrace, extractJson, normalizeCall,
     hasToolSignature, hasOpenToolBlock, parseToolCalls, parseAlternateToolCalls, salvageCutOff, toolNameFromText,
-    isInjectedFeedback, hasCommandShape,
+    isInjectedFeedback, hasCommandShape, normalizeTypography,
   };
 })();

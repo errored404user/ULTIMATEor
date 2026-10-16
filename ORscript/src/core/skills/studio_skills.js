@@ -3210,13 +3210,16 @@ function buildLuau(op, args) {
   }
 }
 
-function describeCommands() {
+function describeCommands(opts) {
+  const includeHidden = !!(opts && opts.includeHidden);
   const lines = [];
   lines.push(
     "— RobloxScript Studio Skills: high-level tools for Lighting & Atmosphere, UI & HUD generation, " +
     "Particles & FX, Audio routing, Terrain sculpting, Camera controllers, and Place Diagnostics. —"
   );
   for (const c of SKILL_COMMANDS) {
+    // hidden = legacy alias / duplicate setter: still callable, never advertised.
+    if (c.hidden && !includeHidden) continue;
     const compact = [];
     const detailed = [];
     for (const [k, v] of Object.entries(c.params)) {
@@ -3233,7 +3236,14 @@ function describeCommands() {
   return lines;
 }
 
+function hiddenCommandNames() {
+  const out = new Set();
+  for (const c of SKILL_COMMANDS) if (c && c.hidden) out.add(c.name);
+  return out;
+}
+
 const RobloxScriptSkills = {
+  hiddenCommandNames,
   SKILLS_LIB_LUA,
   SKILL_COMMANDS,
   SKILL_OPS: SKILL_COMMANDS.map((c) => c.name),

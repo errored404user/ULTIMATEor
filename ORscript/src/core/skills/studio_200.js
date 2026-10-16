@@ -52,10 +52,11 @@
     "local TweenService=game:GetService('TweenService')",
     "local CollectionService=game:GetService('CollectionService')",
     "local PathfindingService=game:GetService('PathfindingService')",
-    "local NavigationService=game:GetService('NavigationService')",
+    "local function optService(n) local okS,s=pcall(function() return game:GetService(n) end) if okS then return s end return nil end",
+    "local NavigationService=optService('NavigationService')",
     "local DataStoreService=game:GetService('DataStoreService')",
-    "local OrderedDataStoreService=game:GetService('OrderedDataStoreService')",
-    "local SessionLockStoreService=game:GetService('SessionLockStoreService')",
+    "local OrderedDataStoreService=DataStoreService",
+    "local SessionLockStoreService=optService('SessionLockStoreService') or setmetatable({},{__index=function() return function() error('SessionLockStoreService is not available in this Studio build') end end})",
     "local MarketplaceService=game:GetService('MarketplaceService')",
     "local UserInputService=game:GetService('UserInputService')",
     "local ContextActionService=game:GetService('ContextActionService')",
@@ -543,7 +544,7 @@
     var inner;
     if (behavior === "count") inner = "local counter=0\nrem.OnServerEvent:Connect(function(pl,arg1) counter+=1 print('[OR] " + name + " fired ' + counter + ' times from ' + pl.Name) end)";
     else if (behavior === "print") inner = "rem.OnServerEvent:Connect(function(pl,arg1) print('[OR] " + name + " from ' .. pl.Name .. ': ' .. tostring(arg1)) end)";
-    else inner = "rem.OnServerEvent:Connect(function(pl,arg1) local echo=ReplicatedStorage:FindFirstChild('" + name + "_Echo') if echo then echo:FireClient(pl,'echo: ' + tostring(arg1)) end end)";
+    else inner = "rem.OnServerEvent:Connect(function(pl,arg1) local echo=ReplicatedStorage:FindFirstChild('" + name + "_Echo') if echo then echo:FireClient(pl,'echo: ' .. tostring(arg1)) end end)";
     var src = "local ReplicatedStorage=game:GetService('ReplicatedStorage')\nlocal rem=ReplicatedStorage:FindFirstChild('" + name + "',true)\nif not rem then warn('OR handler: remote not found') return end\n" + inner + "\n";
     return "local old=ServerScriptService:FindFirstChild('OR_Handler_" + name + "') if old then old:Destroy() end\n" +
       "local s=mkScript('Script','OR_Handler_" + name + "',ServerScriptService,[==[" + "\n" + src + "\n]==])\n" +
@@ -599,25 +600,25 @@
   B.leaderstats_set = function (a) {
     return "local pl=findPlayer(" + q(a.player || "") + ") if not pl then return fail('player not found') end\n" +
       "local ls=pl:FindFirstChild('leaderstats') if not ls then return fail('no leaderstats folder') end\n" +
-      "local stat=ls:FindFirstChild(" + q(a.stat || "Score") + ") if not stat then return fail('no stat named ' + '" + (a.stat || "Score") + "') end\n" +
+      "local stat=ls:FindFirstChild(" + q(a.stat || "Score") + ") if not stat then return fail('no stat named ' .. '" + (a.stat || "Score") + "') end\n" +
       "stat.Value=" + nn(a.value, 0) + "\n" +
       "return ok({value=stat.Value},'leaderstat set')";
   };
   B.premium_check = function (a) {
     return "local pl=findPlayer(" + q(a.player || "") + ") if not pl then return fail('player not found') end\n" +
       "local okc,isPremium=pcall(function() return MarketplaceService:UserHasLicenseForGame(pl.UserId,game.PlaceId,Enum.ProductType.Premium) end)\n" +
-      "if not okc then return fail('premium check unavailable: ' + tostring(isPremium)) end\n" +
-      "return ok({premium=isPremium},'premium check for ' + pl.Name)";
+      "if not okc then return fail('premium check unavailable: ' .. tostring(isPremium)) end\n" +
+      "return ok({premium=isPremium},'premium check for ' .. pl.Name)";
   };
   B.gamepass_check = function (a) {
     return "local pl=findPlayer(" + q(a.player || "") + ") if not pl then return fail('player not found') end\n" +
       "local okc,owns=pcall(function() return MarketplaceService:UserOwnsGamePassAsync(pl.UserId," + nn(a.passid, 0) + ") end)\n" +
-      "if not okc then return fail('gamepass check unavailable (place must be published): ' + tostring(owns)) end\n" +
+      "if not okc then return fail('gamepass check unavailable (place must be published): ' .. tostring(owns)) end\n" +
       "return ok({owns=owns},'gamepass ' .. '" + nn(a.passid, 0) + "' .. ' check')";
   };
   B.gamepass_list = function (a) {
     return "local okc,list=pcall(function() return MarketplaceService:GetGamePassesForCurrentUniverse() end)\n" +
-      "if not okc then return fail('universe not published: ' + tostring(list)) end\n" +
+      "if not okc then return fail('universe not published: ' .. tostring(list)) end\n" +
       "local out={} for _,p in ipairs(list) do out[#out+1]={id=p.Id,name=p.Name} end\n" +
       "return ok({count=#out,passes=out},'game passes for this universe')";
   };
@@ -625,29 +626,29 @@
   // ── E. DataStores (15) ────────────────────────────────────────────────
   B.ds_get = function (a) {
     return "local okc,val=pcall(function() return DataStoreService:GetDataStore('" + (a.store || "PlayerData") + "'):GetAsync(" + q(a.key || "") + ") end)\n" +
-      "if not okc then return fail('datastore error: ' + tostring(val)) end\n" +
+      "if not okc then return fail('datastore error: ' .. tostring(val)) end\n" +
       "return ok({key=" + q(a.key || "") + ",value=val},'datastore get')";
   };
   B.ds_set = function (a) {
     return "local okc,err=pcall(function() DataStoreService:GetDataStore('" + (a.store || "PlayerData") + "'):SetAsync(" + q(a.key || "") + "," + q(a.value || "") + ") end)\n" +
-      "if not okc then return fail('datastore error: ' + tostring(err)) end\n" +
+      "if not okc then return fail('datastore error: ' .. tostring(err)) end\n" +
       "return ok({key=" + q(a.key || "") + "},'datastore set')";
   };
   B.ds_update = function (a) {
     return "local okc,err=pcall(function() DataStoreService:GetDataStore('" + (a.store || "PlayerData") + "'):UpdateAsync(" + q(a.key || "") + ",function(cur) return (tonumber(cur) or 0) + " + nn(a.delta, 1) + " end) end)\n" +
-      "if not okc then return fail('datastore error: ' + tostring(err)) end\n" +
+      "if not okc then return fail('datastore error: ' .. tostring(err)) end\n" +
       "return ok({key=" + q(a.key || "") + ",delta=" + nn(a.delta, 1) + "},'datastore updated')";
   };
   B.ds_remove = function (a) {
     return "local okc,err=pcall(function() DataStoreService:GetDataStore('" + (a.store || "PlayerData") + "'):RemoveAsync(" + q(a.key || "") + ") end)\n" +
-      "if not okc then return fail('datastore error: ' + tostring(err)) end\n" +
+      "if not okc then return fail('datastore error: ' .. tostring(err)) end\n" +
       "return ok({key=" + q(a.key || "") + "},'datastore key removed')";
   };
   B.ds_get_many = function (a) {
     return "local keys=" + strArr(a.keys, []) + "\n" +
       "if #keys==0 then return fail('pass keys: [ ... ]') end\n" +
       "local okc,vals=pcall(function() return DataStoreService:GetDataStore('" + (a.store || "PlayerData") + "'):GetAsync(keys) end)\n" +
-      "if not okc then return fail('datastore error: ' + tostring(vals)) end\n" +
+      "if not okc then return fail('datastore error: ' .. tostring(vals)) end\n" +
       "return ok({values=vals},'datastore get many')";
   };
   B.ds_set_many = function (a) {
@@ -659,44 +660,44 @@
     return "local vals={" + (pairs || "") + "}\n" +
       "if next(vals)==nil then return fail('pass pairs: array of key/value pairs') end\n" +
       "local okc,err=pcall(function() DataStoreService:GetDataStore('" + (a.store || "PlayerData") + "'):SetAsync(vals) end)\n" +
-      "if not okc then return fail('datastore error: ' + tostring(err)) end\n" +
+      "if not okc then return fail('datastore error: ' .. tostring(err)) end\n" +
       "return ok({count=" + (a.pairs || a.values || []).length + "},'datastore set many')";
   };
   B.ds_incr = function (a) {
     return "local okc,newVal=pcall(function() return DataStoreService:GetDataStore('" + (a.store || "PlayerData") + "'):IncrementAsync(" + q(a.key || "") + "," + nn(a.delta, 1) + ") end)\n" +
-      "if not okc then return fail('datastore error: ' + tostring(newVal)) end\n" +
+      "if not okc then return fail('datastore error: ' .. tostring(newVal)) end\n" +
       "return ok({key=" + q(a.key || "") + ",value=newVal},'incremented')";
   };
   B.ds_sorted = function (a) {
     return "local okc,page=pcall(function() local it=OrderedDataStoreService:GetOrderedDataStore('" + (a.store || "Leaderboard") + "'):GetSortedAsync(" + bb(a.ascending, false) + "," + nn(a.limit, 10) + ") return it:GetCurrentPage() end)\n" +
-      "if not okc then return fail('ordered datastore error: ' + tostring(page)) end\n" +
+      "if not okc then return fail('ordered datastore error: ' .. tostring(page)) end\n" +
       "local out={} for k,v in pairs(page) do out[#out+1]={key=k,value=v} end\n" +
       "table.sort(out,function(x,y) return x.value>y.value end)\n" +
-      "return ok({entries=out},'sorted top ' + '" + nn(a.limit, 10) + "')";
+      "return ok({entries=out},'sorted top ' .. '" + nn(a.limit, 10) + "')";
   };
   B.ds_ping = function (a) {
     return "local okc,val=pcall(function() return DataStoreService:GetDataStore('" + (a.store || "PlayerData") + "'):GetAsync('__or_ping__') end)\n" +
-      "if not okc then return fail('datastore UNAVAILABLE: ' + tostring(val) + ' (publish the place / enable Studio access to API services)') end\n" +
+      "if not okc then return fail('datastore UNAVAILABLE: ' .. tostring(val) + ' (publish the place / enable Studio access to API services)') end\n" +
       "return ok({available=true},'datastore reachable')";
   };
   B.session_lock_acquire = function (a) {
     return "local okc,lock=pcall(function() return SessionLockStoreService:GetSessionLockStore('" + (a.store || "Locks") + "'):AcquireLock(" + q(a.key || "") + "," + nn(a.ttl, 15) + ") end)\n" +
-      "if not okc then return fail('lock busy or error: ' + tostring(lock)) end\n" +
+      "if not okc then return fail('lock busy or error: ' .. tostring(lock)) end\n" +
       "return ok({locked=true,key=" + q(a.key || "") + "},'session lock acquired')";
   };
   B.session_lock_release = function (a) {
     return "local okc,err=pcall(function() return SessionLockStoreService:GetSessionLockStore('" + (a.store || "Locks") + "'):ReleaseLock(" + q(a.key || "") + ") end)\n" +
-      "if not okc then return fail('release error: ' + tostring(err)) end\n" +
+      "if not okc then return fail('release error: ' .. tostring(err)) end\n" +
       "return ok({key=" + q(a.key || "") + "},'session lock released')";
   };
   B.ordered_set = function (a) {
     return "local okc,err=pcall(function() OrderedDataStoreService:GetOrderedDataStore('" + (a.store || "Leaderboard") + "'):SetAsync(" + q(a.key || "") + "," + nn(a.score, 0) + ") end)\n" +
-      "if not okc then return fail('ordered datastore error: ' + tostring(err)) end\n" +
+      "if not okc then return fail('ordered datastore error: ' .. tostring(err)) end\n" +
       "return ok({key=" + q(a.key || "") + ",score=" + nn(a.score, 0) + "},'score saved')";
   };
   B.ordered_get = function (a) {
     return "local okc,score=pcall(function() return OrderedDataStoreService:GetOrderedDataStore('" + (a.store || "Leaderboard") + "'):GetAsync(" + q(a.key || "") + ") end)\n" +
-      "if not okc then return fail('ordered datastore error: ' + tostring(score)) end\n" +
+      "if not okc then return fail('ordered datastore error: ' .. tostring(score)) end\n" +
       "return ok({key=" + q(a.key || "") + ",score=score},'score loaded')";
   };
   B.profile_setup = function (a) {
@@ -709,7 +710,7 @@
   };
   B.ds_json_put = function (a) {
     return "local okc,err=pcall(function() DataStoreService:GetDataStore('" + (a.store || "PlayerData") + "'):SetAsync(" + q(a.key || "") + "," + q(a.json || "{}") + ") end)\n" +
-      "if not okc then return fail('datastore error: ' + tostring(err)) end\n" +
+      "if not okc then return fail('datastore error: ' .. tostring(err)) end\n" +
       "return ok({key=" + q(a.key || "") + "},'json string saved')";
   };
 
@@ -956,10 +957,12 @@
     var key = String(a.key || "E").toUpperCase();
     var action = String(a.action || "ORAction").replace(/[^A-Za-z0-9_]/g, "");
     var keycode = { E: "Enum.KeyCode.E", Q: "Enum.KeyCode.Q", R: "Enum.KeyCode.R", F: "Enum.KeyCode.F", C: "Enum.KeyCode.C", V: "Enum.KeyCode.V", B: "Enum.KeyCode.B", G: "Enum.KeyCode.G", H: "Enum.KeyCode.H", X: "Enum.KeyCode.X", Z: "Enum.KeyCode.Z", SPACE: "Enum.KeyCode.Space", LEFTSHIFT: "Enum.KeyCode.LeftShift" }[key] || "Enum.KeyCode." + key;
-    return "local old=ServerScriptService:FindFirstChild('OR_Bind_" + action + "') if old then old:Destroy() end\n" +
-      "local src='local Players=game:GetService(\\'Players\\')\\nlocal CAS=game:GetService(\\'ContextActionService\\')\\nlocal Remotes=game:GetService(\\'ReplicatedStorage\\')\\nCAS:BindAction('" + action + "',function() local rem=Remotes:FindFirstChild('" + action + "_Fired',true) if rem then rem:FireServer() end print(\\'[OR] " + action + " triggered\\') end,false," + keycode + ")\\n'\n" +
-      "local s=mkScript('Script','OR_Bind_" + action + "',ServerScriptService,src)\n" +
-      "return ok({script=s:GetFullName(),key='" + key + "'},'key " + key + " bound to " + action + "')";
+    return "local sps=StarterPlayer:FindFirstChild('StarterPlayerScripts') if not sps then sps=Instance.new('Folder') sps.Name='StarterPlayerScripts' sps.Parent=StarterPlayer end\n" +
+      "local old=sps:FindFirstChild('OR_Bind_" + action + "') if old then old:Destroy() end\n" +
+      "local rem=ReplicatedStorage:FindFirstChild('" + action + "_Fired') if not rem then rem=Instance.new('RemoteEvent') rem.Name='" + action + "_Fired' rem.Parent=ReplicatedStorage end\n" +
+      "local src=[==[local CAS=game:GetService('ContextActionService')\nlocal Remotes=game:GetService('ReplicatedStorage')\nlocal rem=Remotes:WaitForChild('" + action + "_Fired')\nCAS:BindAction('" + action + "',function(_,state) if state==Enum.UserInputState.Begin then rem:FireServer() print('[OR] " + action + " triggered') end end,false," + keycode + ")\n]==]\n" +
+      "local s=mkScript('LocalScript','OR_Bind_" + action + "',sps,src)\n" +
+      "return ok({script=s:GetFullName(),remote=rem:GetFullName(),key='" + key + "'},'key " + key + " bound to " + action + " (LocalScript in StarterPlayerScripts fires ReplicatedStorage." + action + "_Fired)')";
   };
   B.input_unbind = function (a) {
     var action = String(a.action || "").replace(/[^A-Za-z0-9_]/g, "");
@@ -982,7 +985,7 @@
   };
   B.gamepad_rumble = function (a) {
     return "local okc,err=pcall(function() UserInputService:VibrateRumble(Enum.UserInputType.Gamepad1," + nn(a.left, 0.8) + "," + nn(a.right, 0.8) + "," + nn(a.duration, 0.5) + ") end)\n" +
-      "if not okc then return fail('rumble unavailable in Studio: ' + tostring(err)) end\n" +
+      "if not okc then return fail('rumble unavailable in Studio: ' .. tostring(err)) end\n" +
       "return ok({left=" + nn(a.left, 0.8) + ",right=" + nn(a.right, 0.8) + "},'rumble fired')";
   };
   B.haptics = function (a) {
@@ -990,7 +993,7 @@
     return "local pl=findPlayer(" + q(a.player || "") + ") if not pl then return fail('player not found') end\n" +
       "local c=charOf(pl) if not c then return fail('no character') end\n" +
       "local okc,err=pcall(function() pl:FireHapticFeedback(Enum.HapticFeedback." + kind + ",40," + nn(a.duration, 0.4) + ") end)\n" +
-      "if not okc then return fail('haptics unavailable in Studio: ' + tostring(err)) end\n" +
+      "if not okc then return fail('haptics unavailable in Studio: ' .. tostring(err)) end\n" +
       "return ok({type='" + kind + "'},'haptic feedback fired')";
   };
   B.camera_type = function (a) {
@@ -1069,24 +1072,30 @@
       "return ok({ambient=true},'ambient set')";
   };
   B.exposure_set = function (a) {
-    return "local film=Lighting:FindFirstChildOfClass('Film') or Instance.new('Film') film.Parent=Lighting\n" +
-      "film.ExposureCompensation=" + nn(a.value, 0) + "\n" +
-      "return ok({exposure=" + nn(a.value, 0) + "},'exposure set')";
+    return "Lighting.ExposureCompensation=" + nn(a.value, 0) + "\n" +
+      "return ok({exposure=Lighting.ExposureCompensation},'Lighting.ExposureCompensation set')";
   };
   B.film_grain = function (a) {
-    return "local film=Lighting:FindFirstChildOfClass('Film') or Instance.new('Film') film.Parent=Lighting\n" +
-      "film.GrainIntensity=" + nn(a.intensity, 0.2) + "\n" +
-      "return ok({grain=" + nn(a.intensity, 0.2) + "},'film grain set')";
+    // Roblox has no film-grain post effect: emulate with a full-screen noise
+    // overlay (ImageLabel, ImageTransparency = 1 - intensity) in StarterGui.
+    return "local gui=StarterGui:FindFirstChild('OR_FilmGrain') if not gui then gui=Instance.new('ScreenGui') gui.Name='OR_FilmGrain' gui.IgnoreGuiInset=true gui.ResetOnSpawn=false gui.DisplayOrder=50 gui.Parent=StarterGui end\n" +
+      "local img=gui:FindFirstChild('Grain') if not img then img=Instance.new('ImageLabel') img.Name='Grain' img.BackgroundTransparency=1 img.Size=UDim2.fromScale(1,1) img.ScaleType=Enum.ScaleType.Tile img.TileSize=UDim2.fromOffset(256,256) img.Image='rbxassetid://9743936908' img.Parent=gui end\n" +
+      "img.ImageTransparency=math.clamp(1-" + nn(a.intensity, 0.2) + ",0,1) img.Visible=" + nn(a.intensity, 0.2) + ">0\n" +
+      "return ok({path=img:GetFullName(),intensity=" + nn(a.intensity, 0.2) + "},'film grain overlay set (Roblox has no native grain; this is a tiled noise ImageLabel)')";
   };
   B.film_contrast = function (a) {
-    return "local film=Lighting:FindFirstChildOfClass('Film') or Instance.new('Film') film.Parent=Lighting\n" +
-      "film.Contrast=" + nn(a.value, 0.1) + "\n" +
-      "return ok({contrast=" + nn(a.value, 0.1) + "},'film contrast set')";
+    return "local cc=Lighting:FindFirstChild('OR_FilmContrast') if not cc then cc=Instance.new('ColorCorrectionEffect') cc.Name='OR_FilmContrast' cc.Parent=Lighting end\n" +
+      "cc.Contrast=" + nn(a.value, 0.1) + " cc.Enabled=true\n" +
+      "return ok({path=cc:GetFullName(),contrast=cc.Contrast},'contrast set via ColorCorrectionEffect')";
   };
   B.film_motion_blur = function (a) {
-    return "local film=Lighting:FindFirstChildOfClass('Film') or Instance.new('Film') film.Parent=Lighting\n" +
-      "film.MotionBlurIntensity=" + nn(a.intensity, 0.5) + "\n" +
-      "return ok({motionBlur=" + nn(a.intensity, 0.5) + "},'motion blur set')";
+    // No native motion blur either: a BlurEffect whose Size follows camera
+    // speed (LocalScript) is the standard emulation.
+    return "local sps=StarterPlayer:FindFirstChild('StarterPlayerScripts') if not sps then sps=Instance.new('Folder') sps.Name='StarterPlayerScripts' sps.Parent=StarterPlayer end\n" +
+      "local old=sps:FindFirstChild('OR_MotionBlur') if old then old:Destroy() end\n" +
+      "local src=[==[local RunService=game:GetService('RunService')\nlocal Lighting=game:GetService('Lighting')\nlocal INTENSITY=" + nn(a.intensity, 0.5) + "\nlocal blur=Lighting:FindFirstChild('OR_MotionBlur') or Instance.new('BlurEffect') blur.Name='OR_MotionBlur' blur.Size=0 blur.Parent=Lighting\nlocal cam=workspace.CurrentCamera local last=cam.CFrame\nRunService.RenderStepped:Connect(function(dt)\n local now=cam.CFrame local lin=(now.Position-last.Position).Magnitude/math.max(dt,1/240)\n local _,ang=(last:Inverse()*now):ToAxisAngle()\n local speed=lin/40+math.abs(ang)/dt/6\n blur.Size=math.clamp(speed*24*INTENSITY,0,24)\n last=now\nend)\n]==]\n" +
+      "local s=mkScript('LocalScript','OR_MotionBlur',sps,src)\n" +
+      "return ok({script=s:GetFullName(),intensity=" + nn(a.intensity, 0.5) + "},'motion blur emulation installed (BlurEffect driven by camera speed; Roblox has no native motion blur)')";
   };
   B.light_flicker = function (a) {
     return "local p=partOf(resolve(" + q(a.path || "") + "))\n" +
@@ -1366,7 +1375,7 @@
   };
   B.place_rename = function (a) {
     return "local okc,err=pcall(function() game.Name=" + q(a.name || "") + " end)\n" +
-      "if not okc then return fail('cannot rename in this context: ' + tostring(err)) end\n" +
+      "if not okc then return fail('cannot rename in this context: ' .. tostring(err)) end\n" +
       "return ok({name=game.Name},'place renamed (save to persist)')";
   };
   B.workspace_clear = function (a) {
@@ -1385,7 +1394,7 @@
   B.workspace_import = function (a) {
     return "local v=ReplicatedStorage:FindFirstChild('OR_Export') if not v then return fail('no export found (run workspace_export first)') end\n" +
       "local okc,data=pcall(function() return HttpService:JSONDecode(v.Value) end)\n" +
-      "if not okc then return fail('export corrupt: ' + tostring(data)) end\n" +
+      "if not okc then return fail('export corrupt: ' .. tostring(data)) end\n" +
       "local function build(d,parent) local i=Instance.new(d.class or 'Folder') i.Name=d.name or d.class or 'Item' i.Parent=parent if d.pos and i:IsA('BasePart') then i.Position=Vector3.new(d.pos[1],d.pos[2],d.pos[3]) end if d.size and i:IsA('BasePart') then i.Size=Vector3.new(d.size[1],d.size[2],d.size[3]) end if d.children then for _,c in ipairs(d.children) do build(c,i) end end return i end\n" +
       "local count=0 local function countTree(d) count+=1 if d.children then for _,c in ipairs(d.children) do countTree(c) end end end countTree(data)\n" +
       "local m=Instance.new('Model') m.Name='OR_Restore' m.Parent=Workspace build(data,m)\n" +
@@ -1425,11 +1434,14 @@
     var url = q(a.url || a.endpoint || "");
     var method = q(String(a.method || "GET").toUpperCase());
     var body = q(typeof a.body === "object" ? JSON.stringify(a.body) : String(a.body || ""));
+    var headers = (a.headers && typeof a.headers === "object" && !Array.isArray(a.headers)) ? a.headers : {};
+    var headersJson = q(JSON.stringify(Object.assign({ "Content-Type": "application/json" }, headers)));
     return "local hs=game:GetService('HttpService')\n" +
       "local url=" + url + " local method=" + method + " local body=" + body + "\n" +
       "if url=='' then return fail('url required') end\n" +
-      "local okreq,res=pcall(function() return hs:RequestAsync({Url=url,Method=method,Headers={['Content-Type']='application/json'},Body=body~='' and body or nil}) end)\n" +
-      "if not okreq then return fail('Web API request failed: ' + tostring(res)) end\n" +
+      "local headers=hs:JSONDecode(" + headersJson + ")\n" +
+      "local okreq,res=pcall(function() return hs:RequestAsync({Url=url,Method=method,Headers=headers,Body=body~='' and body or nil}) end)\n" +
+      "if not okreq then return fail('Web API request failed: ' .. tostring(res)) end\n" +
       "local dec; pcall(function() dec=hs:JSONDecode(res.Body) end)\n" +
       "return ok({status=res.StatusCode,data=dec,body=res.Body:sub(1,4000)},'Web API ' .. method .. ' ' .. tostring(res.StatusCode))";
   };
@@ -1444,7 +1456,7 @@
     return "local src=" + q(a.source || a.path ? (a.source != null ? a.source : "") : "") + "\n" +
       "if src=='' then local p=resolve(" + q(a.path || "") + ") if not p or not p:IsA('LuaSourceContainer') then return fail('pass source: or path: of an existing script') end src=p.Source end\n" +
       "local okc,err=pcall(function() local f=loadstring(src) return f end)\n" +
-      "if not okc then return fail('COMPILE ERROR: ' + tostring(err)) end\n" +
+      "if not okc then return fail('COMPILE ERROR: ' .. tostring(err)) end\n" +
       "return ok({chars=#src},'source compiles clean')";
   };
   B.log_tag = function (a) {
@@ -1685,6 +1697,9 @@
       return { err: "ERROR building command " + op + ": " + e };
     }
   }
+
+  // Shared Lua prelude (resolve/ok/fail/partOf/hrpOf/firstPlayer/...) for later packs.
+  RobloxScriptSkills.X200_HEAD = HEAD;
 
   const origBuild = RobloxScriptSkills.buildLuau;
   RobloxScriptSkills.buildLuau = function (op, args) {

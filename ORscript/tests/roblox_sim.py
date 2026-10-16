@@ -502,6 +502,9 @@ local UIS = service("UserInputService") UIS.TouchEnabled = false UIS.KeyboardEna
 local GuiService = service("GuiService")
 local Players = service("Players")
 service("ChangeHistoryService")
+-- Services the x200/x100 preludes fetch up front; plain Service instances so a
+-- program that merely names them does not abort before its own logic runs.
+service("PathfindingService") service("PhysicsService") service("BadgeService") service("TeleportService") service("MessagingService") service("MemoryStoreService") service("TextChatService") service("ProximityPromptService") service("ContextActionService") service("LogService") service("Stats") service("VirtualInputManager") service("InsertService") service("AssetService") service("MaterialService") service("LocalizationService") service("PolicyService") service("SocialService") service("VoiceChatService") service("AvatarEditorService")
 M.isEdit = true
 M.fired = {}
 

@@ -249,7 +249,7 @@
       const path = luaStr(a.path || "");
       const parent = luaStr(a.parent || a.dest || "");
       return wrap(
-        `local inst=resolve(${path}) if not inst then return fail("not found") end local par=resolve(${parent}) if not par then return fail("parent not found") end inst.Parent=par return ok({path=inst:GetFullName()},"reparented to "..par:GetFullName())`
+        `local inst=resolve(${path}) if not inst then return fail("not found") end local par=resolve(${parent}) if not par then return fail("parent not found") end if par==inst or par:IsDescendantOf(inst) then return fail("cannot parent an instance to itself or to its own descendant") end inst.Parent=par return ok({path=inst:GetFullName()},"reparented to "..par:GetFullName())`
       );
     }
     if (op === "selection_set") {
@@ -429,7 +429,7 @@
           " return d",
           "end",
           "local items={}",
-          "local p=tostring(a.path or a.target or '')",
+          "local p=" + luaStr(a.path || a.target || "") + "",
           "if p~='' then local inst=resolve(p) if not inst then return fail('not found: '..p) end items[1]=grab(inst)",
           "else local sel=game:GetService('Selection'):Get() for _,inst in ipairs(sel) do items[#items+1]=grab(inst) end end",
           "local place={gameId=tonumber(game.GameId) or 0,placeId=tonumber(game.PlaceId) or 0,jobId=tostring(game.JobId or ''),name=tostring(game.Name or '')}",
