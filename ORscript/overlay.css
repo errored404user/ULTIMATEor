@@ -7636,3 +7636,250 @@ html[data-rs-theme] .rs-cards-tab:focus-visible {
 #rs-bar .rs-work-starter:hover { background: var(--orx-grad); box-shadow: var(--orx-glow); transform: translateY(-1px); }
 #rs-bar .rs-work-starter:focus-visible { outline: 2px solid var(--orx-on, #fff); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { #rs-bar .rs-work-starter { transition: none; } #rs-bar .rs-work-starter:hover { transform: none; } }
+
+/* ── 11. 1.34.1 — Cards panel: ONE design for Library, Activity, Public, Tasks ──
+   1.33 enlarged the Library tab (84px rows, 14.5px titles, pill buttons) but the
+   other tabs kept their old small, square, grey-and-blue widgets, so switching
+   tabs looked like switching apps. Every tab now renders inside the same
+   .rs-template-library shell (header → controls → rows) and this section maps
+   the Activity cards, the Public composer / share box / badges, the Tasks rows
+   and the Idea Generator onto the Library row model and the theme pill system
+   (section 4 tokens: --orx-grad / --orx-ghost* / --orx-a / --orx-glow).
+   ─────────────────────────────────────────────────────────────────────────── */
+#rs-cards-panel {
+  --cp-row: #12161c; --cp-row-hi: #151a21; --cp-well: #090c10;
+  --cp-line: rgba(255,255,255,.08); --cp-line-hi: rgba(255,255,255,.15);
+  --cp-fg: #eef1f4; --cp-fg-2: #8c95a1; --cp-fg-3: #626c79;
+  --cp-r: 14px; --cp-r-ctl: 999px; --cp-x: 18px;
+  --cp-ok: #4ade80; --cp-err: #f87171; --cp-run: #fbbf24;
+}
+html.rs-light #rs-cards-panel {
+  --cp-row: #ffffff; --cp-row-hi: #f3f5f8; --cp-well: #f6f7f9;
+  --cp-line: rgba(15,23,42,.1); --cp-line-hi: rgba(15,23,42,.2);
+  --cp-fg: #18202d; --cp-fg-2: #55606f; --cp-fg-3: #7a8494;
+  --cp-ok: #16a34a; --cp-err: #dc2626; --cp-run: #d97706;
+}
+/* the header never shrinks back when a non-Library tab is open */
+#rs-cards-panel .rs-cards-top { padding: 14px var(--cp-x) 10px !important; }
+#rs-cards-panel .rs-cards-heading { font-size: 18px !important; }
+#rs-cards-panel .rs-cards-subheading { font-size: 12px !important; margin-top: 3px !important; }
+#rs-cards-panel .rs-cards-tabs { height: 40px !important; margin-top: 12px !important; padding: 4px !important; gap: 4px !important; border-radius: 999px !important; }
+#rs-cards-panel .rs-cards-tab { min-height: 32px !important; font-size: 12.5px !important; padding: 0 16px !important; border-radius: 999px !important; }
+#rs-cards-panel .rs-cards-tab b { font-size: 11px !important; margin-left: 4px; opacity: .85; }
+#rs-cards-panel .rs-cards-body { padding: 0 !important; }
+#rs-cards-panel .rs-template-library { min-height: 100%; }
+
+/* one header for every tab (Library / Activity / Public / Tasks) */
+#rs-cards-panel .rs-template-head { padding: 16px var(--cp-x) 12px !important; column-gap: 22px !important; }
+#rs-cards-panel .rs-template-head-copy > div { display: flex !important; align-items: center !important; flex-wrap: wrap; gap: 8px !important; }
+#rs-cards-panel .rs-template-head-copy b { font-size: 16px !important; color: var(--cp-fg) !important; }
+#rs-cards-panel .rs-template-head-copy p { font-size: 12px !important; margin-top: 4px !important; color: var(--cp-fg-2) !important; line-height: 1.45; }
+#rs-cards-panel .rs-template-head-copy p code { font: 11.5px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--orx-a, #59b8dd) 12%, transparent); color: var(--orx-ghost-fg, var(--cp-fg)); }
+#rs-cards-panel .rs-template-count,
+#rs-cards-panel .rs-template-head .rs-cards-count {
+  display: inline-flex !important; align-items: center; gap: 3px; margin: 0 !important;
+  height: 22px; padding: 0 9px !important; border-radius: 999px !important;
+  font-size: 11px !important; font-weight: 750 !important; letter-spacing: .02em;
+  background: color-mix(in srgb, var(--orx-a, #59b8dd) 12%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--orx-a, #59b8dd) 32%, transparent) !important;
+  color: var(--orx-ghost-fg, #cfe6f2) !important;
+}
+#rs-cards-panel .rs-template-head .rs-cards-count { background: color-mix(in srgb, var(--cp-ok) 12%, transparent) !important; border-color: color-mix(in srgb, var(--cp-ok) 35%, transparent) !important; color: var(--cp-ok) !important; }
+#rs-cards-panel .rs-template-head .rs-cards-count.err { background: color-mix(in srgb, var(--cp-err) 12%, transparent) !important; border-color: color-mix(in srgb, var(--cp-err) 35%, transparent) !important; color: var(--cp-err) !important; }
+#rs-cards-panel .rs-template-head .rs-cards-count i { font-style: normal; opacity: .75; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; }
+#rs-cards-panel .rs-template-head-actions { display: flex !important; gap: 10px !important; grid-template-columns: none !important; flex-wrap: wrap; justify-content: flex-end; }
+
+/* every control is a 36–40px pill: inputs/selects = wells, buttons = theme pills */
+#rs-cards-panel .rs-template-library button:not(.rs-cards-tab):not(.rs-task-check):not(.rs-public-hint button):not(.rs-template-more > div button) {
+  font-family: inherit; cursor: pointer; white-space: nowrap;
+  min-height: 36px !important; padding: 0 15px !important; border-radius: var(--cp-r-ctl) !important;
+  font-size: 12px !important; font-weight: 700 !important; line-height: 1 !important;
+  transition: transform .14s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease, color .18s ease, filter .18s ease;
+}
+#rs-cards-panel .rs-template-library .rs-template-head-actions button { min-height: 38px !important; min-width: 120px !important; padding: 0 18px !important; font-size: 12.5px !important; }
+#rs-cards-panel .rs-template-library button[disabled] { opacity: .5 !important; cursor: not-allowed !important; transform: none !important; }
+#rs-cards-panel .rs-template-library input[type="text"], #rs-cards-panel .rs-template-library input:not([type]),
+#rs-cards-panel .rs-template-library select, #rs-cards-panel .rs-template-library textarea {
+  box-sizing: border-box; font-family: inherit; font-size: 12.5px !important; color: var(--cp-fg) !important;
+  background: var(--cp-well) !important; border: 1px solid var(--cp-line-hi) !important; outline: none !important;
+}
+#rs-cards-panel .rs-template-library input[type="text"], #rs-cards-panel .rs-template-library input:not([type]), #rs-cards-panel .rs-template-library select { height: 40px !important; min-height: 40px; padding: 0 16px !important; border-radius: var(--cp-r-ctl) !important; }
+#rs-cards-panel .rs-template-library select { padding-right: 32px !important; }
+#rs-cards-panel .rs-template-library textarea { padding: 12px 14px !important; border-radius: var(--cp-r) !important; line-height: 1.5 !important; min-height: 92px !important; }
+#rs-cards-panel .rs-template-library input:focus, #rs-cards-panel .rs-template-library select:focus, #rs-cards-panel .rs-template-library textarea:focus {
+  border-color: color-mix(in srgb, var(--orx-a, #59b8dd) 62%, transparent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--orx-a, #59b8dd) 16%, transparent) !important;
+}
+#rs-cards-panel .rs-template-library ::placeholder { color: var(--cp-fg-3); }
+
+/* ghost pill = default button; primary gradient pill = the one main action per block */
+html[data-rs-theme] #rs-cards-panel .rs-template-library button:not(.rs-cards-tab):not(.rs-task-check):not(.rs-public-hint button):not(.rs-template-more > div button):not(.rs-btn-primary):not(.rs-template-run):not([data-idea-generate]):not([data-idea-run]):not([data-public-create]):not([data-public-import]):not([data-task-run-all]):not(#rs-full-toggle) {
+  background: linear-gradient(180deg, var(--orx-ghost-hi), var(--orx-ghost)) !important;
+  color: var(--orx-ghost-fg) !important;
+  border: 1px solid var(--orx-ghost-line) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 2px 8px rgba(0,0,0,.18) !important;
+}
+html[data-rs-theme] #rs-cards-panel .rs-template-library button:not(.rs-cards-tab):not(.rs-task-check):not(.rs-public-hint button):not(.rs-template-more > div button):not(.rs-btn-primary):not(.rs-template-run):not([data-idea-generate]):not([data-idea-run]):not([data-public-create]):not([data-public-import]):not([data-task-run-all]):not(#rs-full-toggle):not([disabled]):hover {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--orx-a) 30%, transparent), var(--orx-ghost-hi)) !important;
+  border-color: color-mix(in srgb, var(--orx-a) 55%, transparent) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.1) inset, 0 6px 16px var(--orx-glow), 0 2px 8px rgba(0,0,0,.2) !important;
+  color: #fff !important; transform: translateY(-1px);
+}
+html[data-rs-theme] #rs-cards-panel .rs-template-library .rs-btn-primary,
+html[data-rs-theme] #rs-cards-panel .rs-template-library .rs-template-run,
+html[data-rs-theme] #rs-cards-panel .rs-template-library button[data-idea-generate],
+html[data-rs-theme] #rs-cards-panel .rs-template-library button[data-idea-run],
+html[data-rs-theme] #rs-cards-panel .rs-template-library button[data-public-create],
+html[data-rs-theme] #rs-cards-panel .rs-template-library button[data-public-import],
+html[data-rs-theme] #rs-cards-panel .rs-template-library button[data-task-run-all] {
+  background: var(--orx-grad) !important; color: var(--orx-on) !important;
+  border: 1px solid color-mix(in srgb, var(--orx-a) 60%, transparent) !important;
+  font-weight: 750 !important; filter: none !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.22) inset, 0 -1px 0 rgba(0,0,0,.18) inset, 0 6px 18px var(--orx-glow), 0 2px 8px rgba(0,0,0,.22) !important;
+}
+html[data-rs-theme] #rs-cards-panel .rs-template-library .rs-btn-primary:not([disabled]):hover,
+html[data-rs-theme] #rs-cards-panel .rs-template-library .rs-template-run:not([disabled]):hover,
+html[data-rs-theme] #rs-cards-panel .rs-template-library button[data-idea-generate]:hover,
+html[data-rs-theme] #rs-cards-panel .rs-template-library button[data-idea-run]:hover,
+html[data-rs-theme] #rs-cards-panel .rs-template-library button[data-public-create]:not([disabled]):hover,
+html[data-rs-theme] #rs-cards-panel .rs-template-library button[data-public-import]:hover,
+html[data-rs-theme] #rs-cards-panel .rs-template-library button[data-task-run-all]:not([disabled]):hover {
+  filter: brightness(1.07) saturate(1.05) !important; transform: translateY(-1px);
+  box-shadow: 0 1px 0 rgba(255,255,255,.26) inset, 0 -1px 0 rgba(0,0,0,.18) inset, 0 10px 26px var(--orx-glow), 0 0 0 3px color-mix(in srgb, var(--orx-a) 18%, transparent), 0 3px 10px rgba(0,0,0,.24) !important;
+}
+html[data-rs-theme] #rs-cards-panel .rs-template-library .rs-template-delete,
+html[data-rs-theme] #rs-cards-panel .rs-template-library .rs-template-delete:hover { color: var(--cp-err) !important; border-color: color-mix(in srgb, var(--cp-err) 40%, transparent) !important; }
+#rs-cards-panel .rs-template-library button:not(.rs-cards-tab):focus-visible { outline: 2px solid color-mix(in srgb, var(--orx-a, #59b8dd) 70%, #fff) !important; outline-offset: 2px !important; }
+
+/* one row model: 84px, 14px radius, accent bar, 14.5px title / 12.5px copy / 11px meta */
+#rs-cards-panel .rs-template-list { gap: 10px !important; padding: 12px var(--cp-x) 22px !important; }
+#rs-cards-panel .rs-template-row { min-height: 84px !important; padding: 16px 18px 16px 20px !important; gap: 18px !important; border-radius: var(--cp-r) !important; background: var(--cp-row) !important; border: 1px solid var(--cp-line) !important; }
+#rs-cards-panel .rs-template-row:hover { background: var(--cp-row-hi) !important; border-color: var(--cp-line-hi) !important; }
+#rs-cards-panel .rs-template-copy > b { font-size: 14.5px !important; color: var(--cp-fg) !important; display: flex !important; align-items: center; flex-wrap: wrap; gap: 6px 8px; white-space: normal !important; }
+#rs-cards-panel .rs-template-copy > p { font-size: 12.5px !important; color: var(--cp-fg-2) !important; line-height: 1.45 !important; margin: 5px 0 6px !important; }
+#rs-cards-panel .rs-template-copy > span { font-size: 11px !important; color: var(--cp-fg-3) !important; }
+#rs-cards-panel .rs-template-copy > span code { font: 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--cp-fg-2); }
+#rs-cards-panel .rs-template-empty { min-height: 300px !important; margin: 16px var(--cp-x) 22px !important; border-radius: var(--cp-r) !important; gap: 10px !important; background: color-mix(in srgb, var(--cp-row) 70%, transparent) !important; border: 1px dashed var(--cp-line-hi) !important; }
+#rs-cards-panel .rs-template-empty-mark { width: 46px !important; height: 46px !important; font-size: 17px !important; border-radius: 12px !important; color: var(--orx-a, #59b8dd) !important; background: color-mix(in srgb, var(--orx-a, #59b8dd) 10%, transparent) !important; border: 1px solid color-mix(in srgb, var(--orx-a, #59b8dd) 35%, transparent) !important; }
+#rs-cards-panel .rs-template-empty b { font-size: 15.5px !important; color: var(--cp-fg) !important; }
+#rs-cards-panel .rs-template-empty span { font-size: 12px !important; max-width: 420px; color: var(--cp-fg-2) !important; }
+
+/* ACTIVITY — tool cards on the row model */
+#rs-cards-panel .rs-activity-row { align-items: center !important; margin: 0 !important; display: flex !important; }
+#rs-cards-panel .rs-activity-row .rs-card-icon {
+  flex: none; width: 44px !important; height: 44px !important; display: grid !important; place-items: center;
+  border-radius: 12px !important; font-size: 17px !important; box-shadow: none !important;
+  color: var(--orx-a, #59b8dd) !important;
+  background: color-mix(in srgb, var(--orx-a, #59b8dd) 10%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--orx-a, #59b8dd) 30%, transparent) !important;
+}
+#rs-cards-panel .rs-activity-row .rs-card-body { flex: 1 1 auto; min-width: 0; }
+#rs-cards-panel .rs-activity-row .rs-card-title { font: 750 14px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important; letter-spacing: 0 !important; color: var(--cp-fg) !important; }
+#rs-cards-panel .rs-activity-row .rs-card-detail { white-space: normal !important; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 12.5px !important; color: var(--cp-fg-2) !important; margin: 5px 0 6px !important; }
+#rs-cards-panel .rs-activity-row .rs-card-meta { display: flex !important; flex-direction: row !important; align-items: center !important; gap: 12px !important; font-size: 11px !important; color: var(--cp-fg-3) !important; }
+#rs-cards-panel .rs-activity-row .rs-card-status { display: inline-flex; align-items: center; gap: 6px; padding: 0 !important; border: 0 !important; background: transparent !important; font-size: 11px !important; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+#rs-cards-panel .rs-activity-row .rs-card-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+#rs-cards-panel .rs-activity-row .rs-card-time { font-size: 11px !important; color: var(--cp-fg-3) !important; }
+#rs-cards-panel .rs-activity-row.rs-card-done .rs-card-status { color: var(--cp-ok) !important; }
+#rs-cards-panel .rs-activity-row.rs-card-err  .rs-card-status { color: var(--cp-err) !important; }
+#rs-cards-panel .rs-activity-row.rs-card-run  .rs-card-status { color: var(--cp-run) !important; }
+#rs-cards-panel .rs-activity-row.rs-card-run  .rs-card-dot { animation: rs-card-pulse 1.1s ease-in-out infinite; }
+#rs-cards-panel .rs-activity-row.rs-card-done::before { background: var(--cp-ok) !important; }
+#rs-cards-panel .rs-activity-row.rs-card-err::before  { background: var(--cp-err) !important; }
+#rs-cards-panel .rs-activity-row.rs-card-run::before  { background: var(--cp-run) !important; }
+#rs-cards-panel .rs-activity-row.rs-card-err .rs-card-icon { color: var(--cp-err) !important; background: color-mix(in srgb, var(--cp-err) 10%, transparent) !important; border-color: color-mix(in srgb, var(--cp-err) 35%, transparent) !important; }
+
+/* PUBLIC — ways / share box / composer / badges on the same tokens */
+#rs-cards-panel .rs-public-ways { gap: 10px !important; margin: 12px var(--cp-x) 0 !important; }
+#rs-cards-panel .rs-public-ways li { padding: 12px 14px 12px 40px !important; border-radius: var(--cp-r) !important; background: var(--cp-row) !important; border: 1px solid var(--cp-line) !important; }
+#rs-cards-panel .rs-public-ways li::before { left: 13px !important; top: 13px !important; width: 18px !important; height: 18px !important; font-size: 10.5px !important; background: var(--orx-grad, var(--rsa, #59b8dd)) !important; color: var(--orx-on, #061018) !important; border-radius: 999px !important; }
+#rs-cards-panel .rs-public-ways b { font-size: 13px !important; color: var(--cp-fg) !important; margin-bottom: 2px; }
+#rs-cards-panel .rs-public-ways span { font-size: 11.5px !important; color: var(--cp-fg-2) !important; line-height: 1.4 !important; }
+#rs-cards-panel .rs-public-sharebox { margin: 12px var(--cp-x) 0 !important; padding: 14px 16px !important; gap: 8px 12px !important; border-radius: var(--cp-r) !important; border: 1px dashed var(--cp-line-hi) !important; background: color-mix(in srgb, var(--cp-row) 70%, transparent) !important; }
+#rs-cards-panel .rs-public-sharebox > b { font-size: 12px !important; color: var(--orx-ghost-fg, #ffd37a) !important; }
+#rs-cards-panel .rs-public-sharebox > span { font-size: 12px !important; color: var(--cp-fg-2) !important; line-height: 1.45 !important; }
+#rs-cards-panel .rs-public-share-actions { gap: 8px !important; margin-top: 2px; }
+#rs-cards-panel .rs-public-compose { margin: 12px var(--cp-x) 4px !important; padding: 16px !important; gap: 10px !important; border-radius: var(--cp-r) !important; background: var(--cp-row) !important; border: 1px solid var(--cp-line) !important; }
+#rs-cards-panel .rs-public-compose-row { gap: 10px !important; flex-wrap: wrap; }
+#rs-cards-panel .rs-public-compose-row select { flex: 1 1 240px !important; }
+#rs-cards-panel .rs-public-compose small { font-size: 11.5px !important; color: var(--cp-fg-3) !important; line-height: 1.5 !important; }
+#rs-cards-panel .rs-public-drop-note { font-size: 11.5px; color: var(--cp-fg-3); }
+#rs-cards-panel .rs-public-examples { gap: 8px !important; font-size: 12px !important; color: var(--cp-fg-2) !important; }
+#rs-cards-panel .rs-public-hint { font-size: 12px !important; padding: 8px 12px !important; border-radius: 10px !important; line-height: 1.45 !important; gap: 4px 8px !important; }
+#rs-cards-panel .rs-public-hint button { min-height: 0 !important; padding: 0 !important; font-size: 12px !important; color: var(--orx-ghost-fg, var(--rsa, #59b8dd)) !important; background: transparent !important; border: 0 !important; box-shadow: none !important; text-decoration: underline; border-radius: 0 !important; }
+#rs-cards-panel .rs-template-library button.rs-public-kind,
+#rs-cards-panel .rs-public-kind, #rs-cards-panel .rs-public-active, #rs-cards-panel .rs-public-disabled {
+  display: inline-flex !important; align-items: center; margin: 0 !important; min-height: 22px !important; height: 22px; padding: 0 9px !important;
+  border-radius: 999px !important; font-size: 10.5px !important; font-weight: 750 !important; letter-spacing: .06em; text-transform: uppercase; line-height: 1 !important;
+  background: rgba(255,255,255,.04) !important; border: 1px solid var(--cp-line-hi) !important; box-shadow: none !important; color: var(--cp-fg-2) !important;
+}
+#rs-cards-panel .rs-public-kind-skill   { color: #8fd3ff !important; border-color: rgba(143,211,255,.45) !important; background: rgba(143,211,255,.08) !important; }
+#rs-cards-panel .rs-public-kind-ability { color: #c9b3ff !important; border-color: rgba(201,179,255,.45) !important; background: rgba(201,179,255,.08) !important; }
+#rs-cards-panel .rs-public-kind-mode    { color: #ffd37a !important; border-color: rgba(255,211,122,.5) !important; background: rgba(255,211,122,.08) !important; }
+#rs-cards-panel .rs-public-active { color: var(--cp-ok) !important; border-color: color-mix(in srgb, var(--cp-ok) 45%, transparent) !important; background: color-mix(in srgb, var(--cp-ok) 10%, transparent) !important; }
+#rs-cards-panel .rs-public-disabled { opacity: .7; }
+#rs-cards-panel .rs-template-library button.rs-public-kind { cursor: pointer; }
+#rs-cards-panel .rs-template-library button.rs-public-kind:hover { filter: brightness(1.15); transform: translateY(-1px); }
+#rs-cards-panel .rs-public-off { opacity: .6; }
+
+/* TASKS — checklist rows on the row model */
+#rs-cards-panel .rs-task-progress { height: 6px !important; margin: 0 var(--cp-x) !important; background: var(--cp-line) !important; }
+#rs-cards-panel .rs-task-progress span { background: var(--orx-grad, linear-gradient(90deg, var(--rsa, #24afe2), #22c55e)) !important; }
+#rs-cards-panel .rs-task-add { margin: 14px var(--cp-x) 0 !important; gap: 10px !important; flex-wrap: wrap; }
+#rs-cards-panel .rs-task-add input { flex: 1 1 260px !important; }
+#rs-cards-panel .rs-task-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px var(--cp-x) 4px; }
+#rs-cards-panel .rs-task-list { list-style: none; margin: 0; padding: 12px var(--cp-x) 22px; display: flex; flex-direction: column; gap: 10px; }
+#rs-cards-panel .rs-task-row { align-items: center !important; gap: 16px !important; min-height: 68px; padding: 14px 16px 14px 18px !important; border-radius: var(--cp-r) !important; background: var(--cp-row) !important; border: 1px solid var(--cp-line) !important; transition: background .18s ease, border-color .18s ease; }
+#rs-cards-panel .rs-task-row:hover { background: var(--cp-row-hi) !important; border-color: var(--cp-line-hi) !important; }
+#rs-cards-panel .rs-task-check { width: 26px !important; height: 26px !important; margin: 0 !important; border-radius: 8px !important; font-size: 13px !important; display: grid; place-items: center; cursor: pointer; border: 1px solid var(--cp-line-hi) !important; background: var(--cp-well) !important; color: var(--cp-fg-2); transition: background .15s ease, border-color .15s ease, transform .12s ease; }
+#rs-cards-panel .rs-task-check:hover { transform: scale(1.06); border-color: var(--orx-a, #59b8dd) !important; }
+#rs-cards-panel .rs-task-done .rs-task-check { background: var(--cp-ok) !important; border-color: var(--cp-ok) !important; color: #06250f !important; }
+#rs-cards-panel .rs-task-doing .rs-task-check { border-color: var(--cp-run) !important; color: var(--cp-run) !important; }
+#rs-cards-panel .rs-task-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+#rs-cards-panel .rs-task-n { font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--cp-fg-3); }
+#rs-cards-panel .rs-task-text { font-size: 14px !important; font-weight: 650; color: var(--cp-fg); line-height: 1.35; flex: 1 1 200px; padding: 2px 0; }
+#rs-cards-panel .rs-task-done .rs-task-text { color: var(--cp-fg-3) !important; }
+#rs-cards-panel .rs-task-notes, #rs-cards-panel .rs-task-by { flex-basis: 100%; font-size: 11.5px !important; color: var(--cp-fg-2); line-height: 1.4; }
+#rs-cards-panel .rs-task-by { color: var(--orx-ghost-fg, var(--cp-fg-3)); font-size: 11px !important; letter-spacing: .04em; text-transform: uppercase; }
+#rs-cards-panel .rs-task-actions { gap: 6px !important; flex-wrap: wrap; justify-content: flex-end; }
+#rs-cards-panel .rs-task-actions button { min-height: 32px !important; padding: 0 12px !important; font-size: 11.5px !important; }
+#rs-cards-panel .rs-task-actions button[data-task-action="run"] { padding: 0 14px !important; }
+#rs-cards-panel .rs-task-actions button[data-task-action="up"], #rs-cards-panel .rs-task-actions button[data-task-action="down"],
+#rs-cards-panel .rs-task-actions button[data-task-action="doing"], #rs-cards-panel .rs-task-actions button[data-task-action="delete"] { min-width: 32px; padding: 0 10px !important; }
+
+/* SESSION (local engine) — danger zone + feed inherit the panel chrome */
+#rs-cards-panel .rs-session .rs-cards-head { padding: 16px var(--cp-x) 12px !important; }
+#rs-cards-panel .rs-session .rs-cards-title { font-size: 16px !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--cp-fg) !important; }
+#rs-cards-panel .rs-session .rs-danger-zone, #rs-cards-panel .rs-session .rs-sum-stats { margin: 0 var(--cp-x) 12px; }
+#rs-cards-panel .rs-session .rs-sum-feed { padding: 0 var(--cp-x) 22px; }
+#rs-cards-panel .rs-session .rs-cards-empty { margin: 12px var(--cp-x) 22px; padding: 36px 16px !important; border-radius: var(--cp-r); border: 1px dashed var(--cp-line-hi); font-size: 14px; color: var(--cp-fg); }
+#rs-cards-panel .rs-session .rs-cards-empty span { font-size: 12px; color: var(--cp-fg-2); }
+
+/* IDEA GENERATOR — same card + pill language as the rows under it */
+#rs-cards-panel .rs-idea-generator { margin: 12px var(--cp-x) 4px !important; padding: 16px !important; border-radius: var(--cp-r) !important; background: var(--cp-row) !important; border: 1px solid var(--cp-line) !important; }
+#rs-cards-panel .rs-idea-controls { gap: 10px !important; align-items: end !important; }
+#rs-cards-panel .rs-idea-generator label { gap: 6px !important; font-size: 11px !important; font-weight: 750 !important; letter-spacing: .06em; text-transform: uppercase; color: var(--cp-fg-2) !important; }
+#rs-cards-panel .rs-idea-generator select { height: 40px !important; padding: 0 32px 0 14px !important; border-radius: 999px !important; }
+#rs-cards-panel .rs-idea-generator button { min-height: 40px !important; }
+#rs-cards-panel .rs-idea-empty { margin-top: 12px !important; font-size: 12px !important; color: var(--cp-fg-3) !important; }
+#rs-cards-panel .rs-idea-result { margin-top: 14px !important; padding: 16px !important; border-radius: 12px !important; background: var(--cp-well) !important; border: 1px solid var(--cp-line) !important; }
+#rs-cards-panel .rs-idea-result h3 { font-size: 15px !important; margin: 0 0 10px !important; color: var(--cp-fg) !important; }
+#rs-cards-panel .rs-idea-result pre { font-size: 12px !important; line-height: 1.55 !important; color: var(--cp-fg-2) !important; max-height: 220px; }
+#rs-cards-panel .rs-idea-result > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+#rs-cards-panel .rs-idea-result button + button { margin-left: 0 !important; }
+
+/* light themes keep the same geometry, just the light tokens above */
+html.rs-light #rs-cards-panel .rs-template-head-copy b, html.rs-light #rs-cards-panel .rs-template-copy > b { color: var(--cp-fg) !important; }
+html.rs-light #rs-cards-panel .rs-public-kind-skill { color: #0369a1 !important; } html.rs-light #rs-cards-panel .rs-public-kind-ability { color: #6d28d9 !important; } html.rs-light #rs-cards-panel .rs-public-kind-mode { color: #b45309 !important; }
+
+@media (max-width: 720px) {
+  #rs-cards-panel { --cp-x: 12px; }
+  #rs-cards-panel .rs-activity-row, #rs-cards-panel .rs-task-row { flex-wrap: wrap; }
+  #rs-cards-panel .rs-task-actions { width: 100%; justify-content: flex-start; }
+  #rs-cards-panel .rs-idea-controls { grid-template-columns: 1fr !important; }
+  #rs-cards-panel .rs-template-library .rs-template-head-actions button { min-width: 0 !important; flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #rs-cards-panel .rs-template-library button, #rs-cards-panel .rs-task-check { transition: none !important; transform: none !important; }
+  #rs-cards-panel .rs-activity-row.rs-card-run .rs-card-dot { animation: none; }
+}

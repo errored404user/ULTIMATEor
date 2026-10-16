@@ -7727,6 +7727,7 @@
       }
       if (cardsTab === "activity" || (activeEngine() === "local" && cardsPanel && !cardsPanel.hidden)) renderCards(cardsPanel);
     }
+    try { window.__rsTrackCard = trackCard; } catch {} // tests / other IIFEs can feed the Activity tab
 
     let templateEditorEl=null,templateEditorId=null,templateProjectRef=null,templateProjectFile=null,templateChromeHidden=false;
     const templateTypes=["prompt","command","workflow","roblox","blender","ui","project","ai-agent"],templateEnvs=["ROBLOX_STUDIO","BLENDER","WEB","GENERAL"];
@@ -7996,31 +7997,36 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     }
     function taskRunPrompt(t, idx){ return `Work on task #${idx} from my OrScript task list now: "${t.text}"${t.notes ? ` (notes: ${t.notes})` : ""}. First call task_update {"id":"${t.id}","status":"doing"}, then do the work with real commands and verify it, then call task_update {"id":"${t.id}","status":"done","notes":"<one line of what you did>"}. If it cannot be done, mark it "skipped" with the reason. Do not start other tasks.`; }
     function activityHtml() {
-      if (!recentCards.length) {
-        return '<div class="rs-cards-empty"><div class="rs-cards-empty-glyph">\u2726</div>No results yet<br><span>Every tool result lands here as a card.</span></div>';
-      }
+      // 1.34.1 — the Activity tab shares the Library shell (.rs-template-library
+      // header + .rs-template-row rows) so every cards-panel tab has one look.
       const shown = recentCards.slice(0, 12);
       const doneN = shown.filter((c) => c.status === "ok").length;
       const errN = shown.filter((c) => c.status === "err").length;
       const head =
-        '<div class="rs-cards-head"><span class="rs-cards-title">Activity</span>'
+        '<div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div><b>Activity</b><span class="rs-template-count">' + recentCards.length + '</span>'
         + (doneN ? '<span class="rs-cards-count">' + doneN + '<i>ok</i></span>' : "")
         + (errN ? '<span class="rs-cards-count err">' + errN + '<i>err</i></span>' : "")
-        + '<button id="rs-cards-clear" type="button">Clear</button></div>';
-      return head + shown.map((c, i) => {
+        + '</div><p>Every command the AI ran this session, newest first, with its result.</p></div>'
+        + '<div class="rs-template-head-actions"><button id="rs-cards-clear" type="button" class="rs-btn-secondary"' + (recentCards.length ? "" : " disabled") + '>Clear</button></div></header></div>';
+      if (!recentCards.length) {
+        return '<section class="rs-template-library rs-activity" aria-label="Activity">' + head
+          + '<div class="rs-template-empty rs-cards-empty"><div class="rs-template-empty-mark">\u2726</div><b>No results yet</b><span>Every tool result lands here as a card — what ran, what it did and whether it worked.</span></div></section>';
+      }
+      const rows = shown.map((c, i) => {
         const icon = { edit: "\u270E", read: "\u2139", screen: "\u25A3", generate: "\u2726", roblox: "\u25A6", tool: "\u2699" }[c.category] || "\u2699";
         const cls = c.status === "ok" ? "done" : c.status === "err" ? "err" : "run";
         const ago = Math.max(0, Math.round((Date.now() - c.at) / 1000));
         const agoStr = ago < 60 ? ago + "s" : ago < 3600 ? Math.round(ago / 60) + "m" : Math.round(ago / 3600) + "h";
-        return '<div class="rs-card rs-card-' + cls + '" data-idx="' + i + '" style="animation-delay:' + Math.min(i * 45, 400) + 'ms">'
+        return '<article class="rs-template-row rs-activity-row rs-card rs-card-' + cls + '" data-idx="' + i + '" style="animation-delay:' + Math.min(i * 45, 400) + 'ms">'
           + '<div class="rs-card-icon">' + icon + '</div>'
-          + '<div class="rs-card-body"><div class="rs-card-title">' + escRs(c.tool) + '</div>'
-          + '<div class="rs-card-detail">' + escRs(c.detail) + '</div></div>'
-          + '<div class="rs-card-meta"><span class="rs-card-status"><span class="rs-card-dot"></span>'
+          + '<div class="rs-template-copy rs-card-body"><b class="rs-card-title">' + escRs(c.tool) + '</b>'
+          + '<p class="rs-card-detail">' + escRs(c.detail || "") + '</p>'
+          + '<span class="rs-card-meta"><span class="rs-card-status"><span class="rs-card-dot"></span>'
           + (c.status === "ok" ? "Done" : c.status === "err" ? "Failed" : "Running")
-          + '</span><span class="rs-card-time">' + agoStr + ' ago</span></div>'
-          + '</div>';
+          + '</span><span class="rs-card-time">' + agoStr + ' ago</span></span></div>'
+          + '</article>';
       }).join("");
+      return '<section class="rs-template-library rs-activity" aria-label="Activity">' + head + '<div class="rs-template-list rs-activity-list">' + rows + '</div></section>';
     }
 
     function roadmapProgress() {
@@ -8066,8 +8072,8 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         + '</div>'
         + '</div>';
       if (!acts.length) {
-        return head + danger
-          + '<div class="rs-cards-empty"><div class="rs-cards-empty-glyph">\u25A6</div>No actions yet<br><span>File edits, terminal runs and searches land here as they happen.</span></div>';
+        return '<section class="rs-template-library rs-session" aria-label="Session">' + head + danger
+          + '<div class="rs-cards-empty"><div class="rs-cards-empty-glyph">\u25A6</div>No actions yet<br><span>File edits, terminal runs and searches land here as they happen.</span></div></section>';
       }
       const is = (c, re) => re.test(c.tool);
       const edits = acts.filter((c) => is(c, /^(write_file|edit_file|create_folder|delete_path|move_path)$/)).length;
@@ -8096,7 +8102,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
           + '</span><span class="rs-card-time">' + agoStr + ' ago</span></div>'
           + '</div>';
       }).join("");
-      return head + danger + stats + '<div class="rs-cards-grid rs-sum-feed">' + rows + '</div>';
+      return '<section class="rs-template-library rs-session" aria-label="Session">' + head + danger + stats + '<div class="rs-cards-grid rs-sum-feed">' + rows + '</div></section>';
     }
 
     function renderCards(panel) {
@@ -8106,9 +8112,16 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const mainLabel = local ? "Session" : "Library";
       if (cardsTab === "tasks" && !taskListOn()) cardsTab = "library";
       const body = cardsTab === "activity" ? activityHtml() : cardsTab === "public" ? publicHtml() : cardsTab === "tasks" ? tasksHtml() : (local ? summaryHtml() : libraryHtml());
+      // 1.34.1 — the panel heading names the open tab instead of always saying
+      // "Templates"; data-cards-tab lets overlay.css style per tab.
+      const tabHead = cardsTab === "activity" ? ["Activity", "What the AI ran this session"]
+        : cardsTab === "public" ? ["Public Skills", "Your own commands, procedures and modes"]
+        : cardsTab === "tasks" ? ["Tasks", "Your checklist for this project"]
+        : local ? ["Session", "What the agent did this session"] : ["Templates", "Reusable workflows"];
+      panel.dataset.cardsTab = cardsTab;
       panel.innerHTML =
         '<div class="rs-cards-top">'
-        + '<div class="rs-cards-brand"><img class="rs-logo rs-cards-logo" alt="" aria-hidden="true" src="' + chrome.runtime.getURL("assets/icon128.png") + '"><span class="rs-cards-kicker" data-rs-brand-short>' + (orTheme==="void"?"VoidScript":"OrScript") /* selected-skin branding */ + '</span><span class="rs-cards-heading">Templates</span><span class="rs-cards-subheading">Reusable workflows · v' + EXT_VERSION + '</span></div>'
+        + '<div class="rs-cards-brand"><img class="rs-logo rs-cards-logo" alt="" aria-hidden="true" src="' + chrome.runtime.getURL("assets/icon128.png") + '"><span class="rs-cards-kicker" data-rs-brand-short>' + (orTheme==="void"?"VoidScript":"OrScript") /* selected-skin branding */ + '</span><span class="rs-cards-heading">' + tabHead[0] + '</span><span class="rs-cards-subheading">' + tabHead[1] + ' · v' + EXT_VERSION + '</span></div>'
         + '<div class="rs-cards-tabs">'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "library" ? " on" : "") + '" data-tab="library">' + mainLabel + '</button>'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "activity" ? " on" : "") + '" data-tab="activity">Activity' + actN + '</button>'
