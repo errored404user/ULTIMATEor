@@ -33,6 +33,7 @@ local CLASSES = {
   UICorner={"UIComponent"}, UIStroke={"UIComponent"}, UIPadding={"UIComponent"}, UIListLayout={"UIGridStyleLayout"}, UIGridLayout={"UIGridStyleLayout"},
   UIAspectRatioConstraint={"UIConstraint"}, UISizeConstraint={"UIConstraint"}, UITextSizeConstraint={"UIConstraint"}, UIScale={"UIComponent"}, UIGradient={"UIComponent"},
   Service={"Instance"},
+  SpawnLocation={"BasePart"}, Seat={"BasePart"}, StarterPlayerScripts={"Instance"}, StarterCharacterScripts={"Instance"}, Backpack={"Instance"}, StarterGear={"Instance"}, BillboardGui={"LayerCollector"}, Animation={"Instance"}, Team={"Instance"}, BoolValue={"ValueBase"}, ObjectValue={"ValueBase"}, Constraint={"Instance"}, AlignPosition={"Constraint"}, AlignOrientation={"Constraint"}, BodyVelocity={"Instance"}, Configuration={"Instance"}, Tags={"Instance"},
 }
 local function isa(cls, want)
   local c = cls
@@ -49,6 +50,7 @@ local Color3 = {}
 Color3.__index = Color3
 function Color3.new(r,g,b) return setmetatable({R=r or 0,G=g or 0,B=b or 0}, Color3) end
 function Color3.fromRGB(r,g,b) return Color3.new((r or 0)/255,(g or 0)/255,(b or 0)/255) end
+function Color3.fromHSV(h,s,v) local i=math.floor(h*6)%6 local f=h*6-math.floor(h*6) local p,q,t2=v*(1-s),v*(1-f*s),v*(1-(1-f)*s) local r,g,b if i==0 then r,g,b=v,t2,p elseif i==1 then r,g,b=q,v,p elseif i==2 then r,g,b=p,v,t2 elseif i==3 then r,g,b=p,q,v elseif i==4 then r,g,b=t2,p,v else r,g,b=v,p,q end return Color3.new(r,g,b) end
 function Color3:Lerp(o,t) return Color3.new(self.R+(o.R-self.R)*t, self.G+(o.G-self.G)*t, self.B+(o.B-self.B)*t) end
 Color3.__eq = function(a,b) return math.abs(a.R-b.R)<1e-6 and math.abs(a.G-b.G)<1e-6 and math.abs(a.B-b.B)<1e-6 end
 Color3.__tostring = function(c) return string.format("Color3(%.2f,%.2f,%.2f)", c.R, c.G, c.B) end
@@ -176,7 +178,7 @@ M.firedSignals = 0
 -- instances
 local Instance = {}
 local Inst = {}
-local EVENTS = {Activated=1,MouseEnter=1,MouseLeave=1,MouseButton1Down=1,MouseButton1Up=1,MouseButton1Click=1,SelectionGained=1,SelectionLost=1,DescendantAdded=1,ChildAdded=1,ChildRemoved=1,Changed=1,CharacterAdded=1,HealthChanged=1,PlayerRemoving=1,PlayerAdded=1,Loaded=1,InputBegan=1,InputEnded=1,LastInputTypeChanged=1,Completed=1,OnClientEvent=1,OnServerEvent=1,Event=1,Focused=1,FocusLost=1,AncestryChanged=1,Destroying=1}
+local EVENTS = {Activated=1,MouseEnter=1,MouseLeave=1,MouseButton1Down=1,MouseButton1Up=1,MouseButton1Click=1,SelectionGained=1,SelectionLost=1,DescendantAdded=1,ChildAdded=1,ChildRemoved=1,Changed=1,CharacterAdded=1,HealthChanged=1,PlayerRemoving=1,PlayerAdded=1,Loaded=1,InputBegan=1,InputEnded=1,LastInputTypeChanged=1,Completed=1,OnClientEvent=1,OnServerEvent=1,Event=1,Focused=1,FocusLost=1,AncestryChanged=1,Destroying=1,Died=1,Touched=1,TouchEnded=1,Heartbeat=1,Stepped=1,RenderStepped=1,Chatted=1,StateChanged=1,Equipped=1,Unequipped=1,Running=1,Jumping=1,AttributeChanged=1,PromptGamePassPurchaseFinished=1,PromptProductPurchaseFinished=1,PromptPurchaseFinished=1,PlayerMembershipChanged=1,ProcessReceipt=0}
 local DEFAULTS = {Size=function() return UDim2.new(0,100,0,100) end, Position=function() return UDim2.new() end, AnchorPoint=function() return Vector2.new() end,
   BackgroundColor3=function() return Color3.new(1,1,1) end, BackgroundTransparency=0, BorderSizePixel=1, TextColor3=function() return Color3.new(0,0,0) end, TextTransparency=0, TextStrokeTransparency=1, TextSize=14, Text="", TextScaled=false, TextWrapped=false, RichText=false,
   Visible=true, ZIndex=1, Image="", ImageTransparency=0, ImageColor3=function() return Color3.new(1,1,1) end, Font=function() return Enum.Font.Legacy end, Enabled=true, Active=false, AutoButtonColor=true, ClipsDescendants=false,
@@ -357,7 +359,8 @@ function methods:IsEdit() return M.isEdit end
 function methods:IsRunning() return not M.isEdit end
 function methods:IsStudio() return true end
 function methods:GetGuiInset() return Vector2.new(0,36), Vector2.new(0,0) end
-function methods:GetPlayers() return {} end
+function methods:GetPlayers() local out={} for i,p in ipairs(M.players or {}) do out[i]=p end return out end
+M.players = {}
 function methods:TryBeginRecording() return "rec" end
 function methods:FinishRecording() end
 function methods:RemoveDefaultLoadingScreen() end
@@ -369,6 +372,45 @@ function methods:FireAllClients(...) M.fired[#M.fired+1]={self.__props.Name, "al
 function methods:Fire(...) M.fired[#M.fired+1]={self.__props.Name, ...} if self.Event then self.Event:Fire(...) end end
 function methods:InvokeServer(...) if self.OnServerInvoke then return self.OnServerInvoke(M.fakePlayer, ...) end return nil end
 function methods:FindFirstChildOfClassOrNil() return nil end
+function methods:FindFirstAncestorOfClass(cls) local p=self.__props.Parent while p do if p.__class==cls then return p end p=p.__props.Parent end return nil end
+function methods:FindFirstAncestor(name) local p=self.__props.Parent while p do if p.__props.Name==name then return p end p=p.__props.Parent end return nil end
+function methods:IsAncestorOf(d) return d:IsDescendantOf(self) end
+function methods:IsServer() return true end
+function methods:IsClient() return M.isEdit end
+function methods:GetPlayerFromCharacter(model) if M.fakePlayer and model==M.fakePlayer.Character then return M.fakePlayer end for _,p in ipairs(M.players or {}) do if p.Character==model then return p end end return nil end
+function methods:GetPlayerByUserId(uid) if M.fakePlayer and M.fakePlayer.UserId==uid then return M.fakePlayer end for _,p in ipairs(M.players or {}) do if p.UserId==uid then return p end end return nil end
+function methods:GetNameFromUserIdAsync(uid) return "User"..tostring(uid) end
+function methods:BindToClose(fn) M.closeHandlers[#M.closeHandlers+1]=fn end
+M.closeHandlers = {}
+function methods:TakeDamage(n) self.Health = math.max(0, (self.Health or 100) - n) if self.Health <= 0 and self.__signals.Died then self.__signals.Died:Fire() end end
+function methods:LoadCharacter() M.loads = (M.loads or 0) + 1 end
+function methods:Kick(reason) M.kicked[#M.kicked+1] = {self.__props.Name, reason} end
+M.kicked = {}
+function methods:GetRankInGroup() return 0 end
+function methods:IsInGroup() return false end
+function methods:AddItem(inst, t) M.debris[#M.debris+1] = {inst, t} end
+M.debris = {}
+function methods:GetPartBoundsInBox(cf, size, params) local out={} local half=size*0.5 for _,p in ipairs(M.services.Workspace:GetDescendants()) do if isa(p.__class,"BasePart") then local rel=cf:Inverse()*p.CFrame.Position if math.abs(rel.X)<=half.X and math.abs(rel.Y)<=half.Y and math.abs(rel.Z)<=half.Z then local skip=false if params and params.FilterDescendantsInstances then for _,f in ipairs(params.FilterDescendantsInstances) do if p==f or p:IsDescendantOf(f) then skip=true end end end if not skip then out[#out+1]=p end end end end return out end
+function methods:GetPartsInPart() return {} end
+function methods:UserOwnsGamePassAsync() return false end
+function methods:PromptGamePassPurchase() M.prompts[#M.prompts+1]="gamepass" end
+function methods:PromptProductPurchase() M.prompts[#M.prompts+1]="product" end
+M.prompts = {}
+function methods:SetCore(name, data) M.cores[#M.cores+1] = {name, data} end
+M.cores = {}
+function methods:GenerateGUID() M.guid = (M.guid or 0) + 1 return "guid-"..M.guid end
+function methods:BindAction() end
+function methods:UnbindAction() end
+function methods:SetTitle() end
+function methods:SetPosition() end
+function methods:LoadAnimation() return {Play=function() end, Stop=function() end} end
+function methods:GetOrderedDataStore(name)
+  M.ordered[name] = M.ordered[name] or {}
+  local data = M.ordered[name]
+  return {SetAsync=function(_, key, v) data[key] = v end, GetAsync=function(_, key) return data[key] end, UpdateAsync=function(_, key, fn) data[key] = fn(data[key]) return data[key] end,
+    GetSortedAsync=function(_, asc, n) local rows={} for k,v in pairs(data) do rows[#rows+1]={key=k,value=v} end table.sort(rows, function(a,b) if asc then return a.value<b.value end return a.value>b.value end) local page={} for i=1,math.min(n or 10,#rows) do page[i]=rows[i] end return {GetCurrentPage=function() return page end, IsFinished=true, AdvanceToNextPageAsync=function() end} end}
+end
+M.ordered = {}
 function methods:GetDataStore(name)
   M.datastores[name] = M.datastores[name] or {}
   local data = M.datastores[name]
@@ -444,6 +486,7 @@ Inst.__eq = function(a,b) return rawequal(a,b) end
 -- data model
 local game = new("Service", "game") game.__class = "DataModel" CLASSES.DataModel = {"Instance"}
 M.game = game
+game.CreatorType = Enum.CreatorType.User game.CreatorId = 1 game.PlaceId = 12345 game.JobId = "job" game.PrivateServerId = ""
 M.services = {}
 local function service(name, class) local s = new(class or "Service", name) s.Parent = game M.services[name] = s return s end
 local workspace = service("Workspace")
@@ -515,20 +558,23 @@ _G.typeof = function(v) if type(v)=="table" and rawget(v,"__class") then return 
 _G.require = runModule
 _G.loadstring = function(src) return load(src, "=loadstring", "t", setmetatable({}, {__index=_G})) end
 _G.getfenv = function() return _G end
-_G.setfenv = function(f, env) return f end
+_G.setfenv = function(f, env) local i=1 while true do local name=debug.getupvalue(f,i) if not name then break end if name=="_ENV" then debug.setupvalue(f,i,env) break end i=i+1 end return f end
 -- task.spawn/defer run the function as a coroutine: the first task.wait() inside it yields and the
 -- thread is parked forever (background loops such as tip rotation or polling feeds). On the main
 -- thread task.wait() returns immediately, with a budget so an accidental busy loop is reported.
 local function runThread(f, ...)
-  local co = coroutine.create(f)
+  local co = type(f) == "thread" and f or coroutine.create(f)
   local okR, err = coroutine.resume(co, ...)
   if not okR then error(err, 0) end
 end
-_G.task = {spawn=runThread, defer=runThread, delay=function(t,f,...) M.delayed[#M.delayed+1]={f=f,args={...}} end,
+_G.task = {spawn=function(f, ...) runThread(f, ...) return f end, defer=runThread, cancel=function() end, delay=function(t,f,...) M.delayed[#M.delayed+1]={f=f,args={...}} end,
   wait=function(t) if coroutine.isyieldable() then coroutine.yield() return t or 0 end M.waits=M.waits+1 if M.waits>200 then error("simulated wait budget exceeded (infinite loop?)") end return t or 0 end}
 M.delayed = {}
 M.waits = 0
 _G.tick = os.clock
+_G.Random = {new = function(seed) local st = seed or os.time() local function nxt() st = (st * 1103515245 + 12345) % 2147483648 return st / 2147483648 end return {NextNumber=function(_, a, b) local r = nxt() if a == nil then return r end return a + (b - a) * r end, NextInteger=function(_, a, b) return a + math.floor(nxt() * (b - a + 1)) end} end}
+_G.OverlapParams = {new = function() return {FilterDescendantsInstances = {}, FilterType = nil, MaxParts = 0} end}
+_G.RaycastParams = {new = function() return {FilterDescendantsInstances = {}} end}
 _G.utf8 = utf8
 string.split = function(s, sep) local out={} for piece in (s..sep):gmatch("(.-)"..sep:gsub("%p","%%%0")) do out[#out+1]=piece end return out end
 math.clamp = function(v,a,b) return math.max(a, math.min(b, v)) end
