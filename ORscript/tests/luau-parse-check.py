@@ -30,6 +30,7 @@ function sample(p){const t=String(p.type||"").toLowerCase();if(/\[\]|array|list/
 const out=[];
 for(const c of RobloxScriptSkills.SKILL_COMMANDS){const args={};for(const [k,v] of Object.entries(c.params||{}))args[k]=sample(v||{});for(const [label,a] of [["sample",args],["empty",{}]]){let r;try{r=RobloxScriptSkills.buildLuau(c.name,a);}catch(e){r={err:String(e)};}if(r&&r.code)out.push({name:c.name+" ("+label+")",code:r.code});}}
 for(const [k,src] of Object.entries(RobloxScriptSkills.DESIGN_LUA||{}))out.push({name:"DESIGN_LUA."+k,code:src});
+for(const n of (RobloxScriptSkills.GFX_COMMANDS||[])){const a={path:"Workspace.Rig",source:"Workspace.Sword",kind:"sparkles",pose:"hero",face:"happy",preset:"hero_low",style:"neon",title:"T",badge:"B",subtitle:"S",attach:"Workspace.Rig",target:"Workspace.Rig",logo_image:"rbxassetid://1",float:true,glow:true,reset:true,clear:false,name:"N"};const r=RobloxScriptSkills.buildLuau(n,a);if(r&&r.code)out.push({name:"gfx "+n,code:r.code});}
 for(const kind of (RobloxScriptSkills.DESIGN_SCREENS||[])){const r=RobloxScriptSkills.buildLuau("ui_screen_generate",{kind,title:"T",items:["A",{item:"B",price:5}],buttons:["Play"],tabs:["X","Y"],rewards:[1,2,3],quests:[{title:"Q",progress:0.5}],choices:["a","b"],stats:["Coins"]});if(r&&r.code)out.push({name:"ui_screen_generate "+kind,code:r.code});}
 process.stdout.write(JSON.stringify(out));
 """

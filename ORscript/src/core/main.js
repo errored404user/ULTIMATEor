@@ -900,6 +900,7 @@
   // {id,title,summary} list when no topic matches.
   const FEATURE_HELP_TOPICS={
     design:{title:"Design pack (GUI generation)",summary:"Generate real, responsive Roblox GUI - ScreenGui trees with LocalScripts, remotes and server stubs - from design tokens and screen templates instead of static mock-ups.",details:["design_tokens_set {preset, primary, secondary, surface, text, font, radius} writes ReplicatedStorage.OR_Design (Tokens, UIKit, Responsive ModuleScripts). Presets: midnight, clean_light, candy, neon, royal_gold, forest, horror, ocean, sakura, retro. Re-run it to restyle every generated screen at once; design_tokens_get reads the current set.","ui_screen_generate {kind} builds complete screens: main_menu, hud, shop, inventory, settings, leaderboard, daily_rewards, quest_log, loading, dialog, notification_stack - each with an OR_Controller LocalScript (actions, open keys, gamepad B, typewriter), data feeds (leaderstats pills, health, leaderboard rows, toasts) and, where needed, remotes plus server scripts (shop purchase validation, DataStore-backed daily rewards).","ui_from_spec {name, spec} turns a JSON tree (Window, Panel, Row, Column, Grid, ScrollList, Tabs, Button, Label, ItemCard, Slot, CurrencyPill, ProgressBar, Toggle, Input...) sized in pixels on a 1280x720 canvas into scale-based UI with aspect/size constraints and TextScaled text. ui_component_place adds one component to an existing GUI; ui_export_spec converts any GUI back into a spec.","Retrofit tools: ui_apply_tokens (restyle legacy UI), ui_make_responsive (offset roots -> scale + constraints + OR_Responsive script), ui_gamepad_focus (NextSelection links + selection cursor), ui_states_wire (hover/press states + OR_Controller).","ui_audit {path} scores 0-100 and lists issues (contrast, tiny text, small touch targets, offset-only roots, overlap, static canvases, global ZIndex, missing runtime). ui_preview {path, device} stages a window for or_screenshot; call it again with restore:true before shipping.","Everything lives in Studio as normal instances - no account, no web app, no image-only mock-ups. The Visualizer work mode focuses these commands; Ultimate uses them whenever a request involves a menu, HUD, shop or any other screen."]},
+    gfx:{title:"Thumbnail & Icon Studio (gfx pack)",summary:"Stage, light, pose and photograph real game thumbnails (1920x1080) and icons (512x512) inside Roblox Studio - the finished PNG is cropped, downloaded and attached to the chat - instead of a static AI image you cannot edit.",details:["gfx_stage_create {style, kind} builds a cyclorama stage far above the map (floor, cove, backdrop, Key/Fill/Rim SpotLights) and applies the style lighting + post stack: cinematic, cartoony, horror, neon, clean or chroma (green screen). Lighting and the camera are snapshotted so gfx_teardown leaves no trace.","gfx_subject_add {source, pose, face, slot} puts a character on stage: 'dummy' (R15), 'r6', 'player:USERID' / 'user:Name' (the real avatar) or any model path. Poses: hero, point, jump, wave, scared, victory, run, think, sit, dab, fight, crossed_arms. Faces on dynamic heads: happy, shocked, angry, scared, smirk, determined, laughing, wink (face_id for classic decal heads). gfx_pose re-poses; gfx_prop_add floats a glowing sword / pet / chest beside the subject.","gfx_camera {preset} frames the shot: hero_low, three_quarter, front, closeup, top_down, dutch, wide, icon (+ fov / pitch / yaw / roll / distance_scale). gfx_overlay {title, subtitle, badge, logo_image} adds a huge outlined gradient title in the style font with 16:9 / 1:1 masks, safe-area and thirds guides. gfx_fx adds sparkles / embers / smoke / confetti / snow / magic / rays; gfx_lighting fine-tunes bloom, saturation, DOF, fog, time and the rig lights.","gfx_capture photographs the viewport through the Studio MCP, hides the guides, crops to the aspect box and returns the PNG (thumbnail 1920x1080, icon 512x512 or custom) - downloaded by the browser and attached to the chat so the model can judge and iterate. gfx_brief writes an art-director brief, an image-generation prompt and a CTR checklist for chats that can paint.","Workflow: gfx_brief -> gfx_stage_create -> gfx_subject_add (+ gfx_prop_add) -> gfx_overlay -> gfx_fx -> gfx_camera -> gfx_capture (judge, iterate) -> gfx_teardown. Maximise the 3D viewport first: the capture is only as sharp as the viewport."]},
     templates:{title:"Templates",summary:"Reusable task recipes (name, instructions, steps, commands, variables) saved locally and run from the Templates library in the OR menu.",details:["Open the OR menu → Templates. New template opens the editor with Basics, Instructions, Steps, Project, Commands, Variables, Validation, AI Improvement and Versions tabs.","Templates can be imported/exported as JSON and versioned; AI Improvement asks the current provider for a structurally better draft that you approve before it is saved.","The agent can list and run them with the template_* commands (get_template, template_list, template_run_…) - nothing is mutated without your save."],howTo:["OR menu → Templates → New template","Fill Basics + Instructions, optionally attach a Roblox project in the Project tab","Save, then type the template name or pick it from the library"]},
     roadmap:{title:"Roadmap / plan",summary:"Optional multi-phase planning: the agent writes phases and tasks, tracks progress, and reports a checklist as work completes.",details:["Toggle Plan in the OR menu. With Plan ON the agent creates a roadmap first (roadmap_create / roadmap_update), then executes phase by phase.","Progress is shown in the chat as the agent ticks tasks; you can ask for the current roadmap or tell it to re-plan.","Plan OFF = direct execution with no roadmap overhead (better for small edits)."],howTo:["OR menu → Plan ON","Describe the whole feature; the agent proposes phases","Approve or edit the plan, then let it run"]},
     commands:{title:"Commands / tool registry",summary:"ORscript exposes 700+ Studio commands (plus workspace, template, roadmap and help tools) through list_commands, search_commands and get_command.",details:["list_commands returns the catalogue for the active work mode: a UNIVERSAL block (40 inspection/scripting/verification commands present in every mode) followed by the mode family.","search_commands {query} finds commands by name/description; get_command {name} returns the full schema; command_registry_stats summarises the registry.","Commands are executed through or-core (127.0.0.1:3000) - either the Studio MCP helper or the ORscript Studio plugin when it is connected."],howTo:["Ask: 'list commands' or 'what can you do with lights'","The agent calls list_commands / search_commands and picks the right command"]},
@@ -1785,7 +1786,7 @@
       sub: "VFX · Lighting · UI — layered, cinematic, screenshot-verified",
       note: "VFX, lighting and UI specialist on top of Ultimate: mood, layered effects, design-system UI, screenshot-verified polish.",
       toast: "Visualizer Work Mode — full VFX, lighting and UI arsenal, screenshot-verified",
-      focus: /^(fx_|design_|vfx_|sfx_|ui_|gui_|lighting|light_|postfx_|atmosphere|sky_|bloom|blur|color_correction|fog_|film_|weather_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|point_light|spot_light|surface_light|explosion|shadows|cast_shadow|set_future_lighting|snowfall|volcanic|firefly|portal_vfx|screen_shake|toast_show|notification_toast|radial_menu|level_up_ui|loading_screen|performance_monitor_gui|surface_gui|billboard_gui|starter_gui|text_label|text_button|image_label|frame_create|texture_add|mesh_set_texture|directional_audio|query_(particle|beams|trails|lights|lighting|screen_guis|frames|text_labels|buttons|image_labels|ui_)|inspect_(lighting|startergui|coregui)|or_screenshot)/,
+      focus: /^(fx_|design_|gfx_|vfx_|sfx_|ui_|gui_|lighting|light_|postfx_|atmosphere|sky_|bloom|blur|color_correction|fog_|film_|weather_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|point_light|spot_light|surface_light|explosion|shadows|cast_shadow|set_future_lighting|snowfall|volcanic|firefly|portal_vfx|screen_shake|toast_show|notification_toast|radial_menu|level_up_ui|loading_screen|performance_monitor_gui|surface_gui|billboard_gui|starter_gui|text_label|text_button|image_label|frame_create|texture_add|mesh_set_texture|directional_audio|query_(particle|beams|trails|lights|lighting|screen_guis|frames|text_labels|buttons|image_labels|ui_)|inspect_(lighting|startergui|coregui)|or_screenshot)/,
     },
     animator: {
       name: "Animator", badge: "ANIMATOR", short: "Animator",
@@ -2254,6 +2255,86 @@
       "local how = usedEditable and \"EditableMesh\" or \"bounding-box Parts (EditableMesh unavailable)\"",
       "return string.format(\"imported %d mesh(es) into Workspace.OR_Imported via %s\", built, how)",
     ].join("\n");
+  }
+
+  // ── Thumbnail & Icon Studio: gfx_capture composite ──
+  // The Luau half (skills/studio_gfx.js) hides the guides, clears the selection and
+  // returns the aspect box as viewport FRACTIONS; this half photographs the Studio
+  // viewport through the MCP (screen_capture), crops to the box, resizes to the
+  // requested output (1920x1080 / 512x512 / custom), downloads the PNG and attaches
+  // it to the chat so the model can judge the shot like an art director.
+  async function cropGfxImage(img, d) {
+    const bytes = Uint8Array.from(atob(String(img.data || "")), (c) => c.charCodeAt(0));
+    const bmp = await createImageBitmap(new Blob([bytes], { type: img.mimeType || "image/png" }));
+    const box = d.box && typeof d.box === "object" ? d.box : { x: 0, y: 0, w: 1, h: 1 };
+    const clamp01 = (v, dflt) => (isFinite(Number(v)) ? Math.max(0, Math.min(1, Number(v))) : dflt);
+    const bx = clamp01(box.x, 0), by = clamp01(box.y, 0), bw = clamp01(box.w, 1), bh = clamp01(box.h, 1);
+    const sx = Math.round(bx * bmp.width), sy = Math.round(by * bmp.height);
+    const sw = Math.max(1, Math.min(bmp.width - sx, Math.round(bw * bmp.width)));
+    const sh = Math.max(1, Math.min(bmp.height - sy, Math.round(bh * bmp.height)));
+    const ow = Math.max(16, Math.min(4096, Math.round(Number(d.out && d.out.w) || 1920)));
+    const oh = Math.max(16, Math.min(4096, Math.round(Number(d.out && d.out.h) || 1080)));
+    const canvas = document.createElement("canvas");
+    canvas.width = ow; canvas.height = oh;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    try { ctx.imageSmoothingQuality = "high"; } catch {}
+    ctx.drawImage(bmp, sx, sy, sw, sh, 0, 0, ow, oh);
+    try { bmp.close(); } catch {}
+    const dataUrl = canvas.toDataURL("image/png");
+    return { mimeType: "image/png", data: dataUrl.slice(dataUrl.indexOf(",") + 1), width: ow, height: oh, srcW: bmp.width, srcH: bmp.height, crop: { x: sx, y: sy, w: sw, h: sh } };
+  }
+  function downloadDataImage(img, file) {
+    try {
+      const a = document.createElement("a");
+      a.href = `data:${img.mimeType || "image/png"};base64,${img.data}`;
+      a.download = file;
+      a.style.display = "none";
+      (document.body || document.documentElement).appendChild(a);
+      a.click();
+      setTimeout(() => { try { a.remove(); } catch {} }, 1000);
+      return true;
+    } catch { return false; }
+  }
+  async function runGfxCapture(args) {
+    args = args || {};
+    if (typeof RobloxScriptSkills === "undefined" || !RobloxScriptSkills.GFX_COMMANDS) return "ERROR: gfx pack missing - reload the extension.";
+    const built = RobloxScriptSkills.buildLuau("gfx_capture", args);
+    if (!built || built.err) return (built && built.err) || "ERROR building gfx_capture";
+    const prep = await runTool({ tool: "execute_luau", arguments: { code: built.code, datamodel_type: "Edit", _orInternal: true } });
+    const body = String(prep || "").replace(/^Output of '[^']*':\n?/, "").trim();
+    if (/^ERROR/i.test(body)) return `ERROR in gfx_capture: ${body.slice(0, 600)}`;
+    let j = null;
+    try { j = JSON.parse(body); } catch {}
+    if (!j || j.ok === false) return `ERROR in gfx_capture: ${(j && j.error) ? String(j.error).slice(0, 600) : body.slice(0, 400)}`;
+    const d = j.data || {};
+    const settle = Math.max(0, Math.min(5000, Number(d.settle_ms) || 0));
+    if (settle) await new Promise((r) => setTimeout(r, settle));
+    A.pendingImages = null;
+    const shotText = await runTool({ tool: "or_screenshot", arguments: { target: "studio", _orInternal: true } });
+    const imgs = Array.isArray(A.pendingImages) ? A.pendingImages.filter((i) => i && i.data) : [];
+    if (!imgs.length) return `ERROR in gfx_capture: the Studio viewport could not be photographed (${String(shotText || "").replace(/\s+/g, " ").slice(0, 300)}). Studio must be connected through or-core with the MCP screen_capture tool; or_screenshot {target:"studio"} is the quickest check.`;
+    let out = null;
+    let cropErr = "";
+    if (args.raw !== true) {
+      try { out = await cropGfxImage(imgs[0], d); } catch (e) { cropErr = String((e && e.message) || e); }
+    }
+    const file = String(d.file || "OR_GFX.png");
+    const img = out || Object.assign({}, imgs[0]);
+    const downloaded = downloadDataImage(img, file);
+    A.pendingImages = [img];
+    try { ui.showImages([img], "gfx_capture"); } catch {}
+    const info = {
+      ok: true, file, downloaded,
+      width: out ? out.width : null, height: out ? out.height : null,
+      kind: d.kind || null, aspect: d.aspect || null,
+      cropped_from: out ? { viewport: { w: out.srcW, h: out.srcH }, box_px: out.crop } : null,
+      raw: !out, crop_error: cropErr || undefined,
+      warnings: Array.isArray(d.warnings) ? d.warnings : [],
+      note: (out ? `The finished ${out.width}x${out.height} PNG is attached to THIS message and downloaded as ${file}.` : `The uncropped viewport capture is attached${cropErr ? " (crop failed: " + cropErr + ")" : ""}.`)
+        + " Judge it like an art director: is the face readable, is the title legible at 10% size, does the subject separate from the backdrop? Iterate with gfx_camera / gfx_pose / gfx_overlay / gfx_lighting / gfx_fx, then gfx_capture again. gfx_teardown when done.",
+    };
+    return `Output of 'gfx_capture':\n${JSON.stringify(info, null, 2)}`;
   }
 
   async function runAssetBridgeImport(args) {
@@ -3054,7 +3135,7 @@
     }
     if (typeof PublicSkills !== "undefined" && PublicSkills.isCommand(roadmapName)) return await runPublicSkill(roadmapName, args);
     if(roadmapName==="orscript_help"){
-      const question=String(args.question||"").toLowerCase(),aliases={tasklist:/task list|tasklist|checklist|to-do|todo list|my tasks|next task/,templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|ultimate mode|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/,plugins:/other plugin|plugins|eclipse|moon animator|interop|full control|macro|settings\(\)/,publicskills:/public skill|own skill|own command|custom command|custom mode|own mode|make a skill|create a skill|new skill|ability|share code|orskill/,design:/design token|design pack|ui kit|uikit|screengui|gui gen|generate (a |the )?(gui|ui|menu|hud|shop|inventory)|main menu|hud|shop ui|inventory ui|settings screen|leaderboard ui|daily reward|quest log|loading screen|dialog box|responsive|ui audit|ui_from_spec|ui_screen_generate/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
+      const question=String(args.question||"").toLowerCase(),aliases={tasklist:/task list|tasklist|checklist|to-do|todo list|my tasks|next task/,templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|ultimate mode|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/,plugins:/other plugin|plugins|eclipse|moon animator|interop|full control|macro|settings\(\)/,publicskills:/public skill|own skill|own command|custom command|custom mode|own mode|make a skill|create a skill|new skill|ability|share code|orskill/,design:/design token|design pack|ui kit|uikit|screengui|gui gen|generate (a |the )?(gui|ui|menu|hud|shop|inventory)|main menu|hud|shop ui|inventory ui|settings screen|leaderboard ui|daily reward|quest log|loading screen|dialog box|responsive|ui audit|ui_from_spec|ui_screen_generate/,gfx:/thumbnail|game icon|gfx|render (a |the )?(thumbnail|icon)|cover art|key art|promo (image|art)|gfx_/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
     }
     if (["search_commands","get_command","command_registry_stats","generate_command_docs","orscript_help"].includes(roadmapName)) {
       const reg=typeof ORCommandRegistry!=="undefined"?ORCommandRegistry:null;if(!reg)return `ERROR in ${roadmapName}: command registry unavailable; reload this page.`;await hydrateCommandRegistry();
@@ -3561,6 +3642,13 @@
     // ── Blender FBX → Studio (real import, not the watch-folder stub) ──
     if (name === "asset_bridge_import" || bareName === "asset_bridge_import") {
       return await runAssetBridgeImport(args);
+    }
+    // ── Thumbnail & Icon Studio: photograph + crop (needs the browser canvas, so it is not pure Luau) ──
+    if (name === "gfx_capture" || bareName === "gfx_capture") {
+      try { if (typeof window.__rsBeforeTool === "function") window.__rsBeforeTool(name, args); } catch {}
+      const res = await runGfxCapture(args);
+      try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(name, args, !String(res || "").startsWith("ERROR"), res); } catch {}
+      return res;
     }
     // ── Virtual Studio Skills (Lighting, UI, FX, Audio, Terrain, Camera, Diagnostics) ──
     if (typeof AgentScriptSkills !== "undefined" && AgentScriptSkills.SKILL_OPS.includes(name)) {
