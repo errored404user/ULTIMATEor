@@ -1788,14 +1788,14 @@
       sub: "VFX · Lighting · UI — layered, cinematic, screenshot-verified",
       note: "VFX, lighting and UI specialist on top of Ultimate: mood, layered effects, design-system UI, screenshot-verified polish.",
       toast: "Visualizer Work Mode — full VFX, lighting and UI arsenal, screenshot-verified",
-      focus: /^(fx_|design_|gfx_|vfx_|sfx_|ui_|gui_|lighting|light_|postfx_|atmosphere|sky_|bloom|blur|color_correction|fog_|film_|weather_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|point_light|spot_light|surface_light|explosion|shadows|cast_shadow|set_future_lighting|snowfall|volcanic|firefly|portal_vfx|screen_shake|toast_show|notification_toast|radial_menu|level_up_ui|loading_screen|performance_monitor_gui|surface_gui|billboard_gui|starter_gui|text_label|text_button|image_label|frame_create|texture_add|mesh_set_texture|directional_audio|query_(particle|beams|trails|lights|lighting|screen_guis|frames|text_labels|buttons|image_labels|ui_)|inspect_(lighting|startergui|coregui)|or_screenshot)/,
+      focus: /^(fx_|design_|gfx_|vfx_|sfx_|ui_|gui_|lighting|light_|postfx_|atmosphere|sky_|bloom|blur|color_correction|fog_|film_|weather_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|point_light|spot_light|surface_light|explosion|shadows|cast_shadow|set_future_lighting|snowfall|volcanic|firefly|portal_vfx|screen_shake|toast_show|notification_toast|radial_menu|level_up_ui|loading_screen|performance_monitor_gui|surface_gui|billboard_gui|starter_gui|text_label|text_button|image_label|frame_create|texture_add|mesh_set_texture|directional_audio|or_screenshot)/,
     },
     animator: {
       name: "Animator", badge: "ANIMATOR", short: "Animator",
       sub: "Rigs · Keyframes · Tweens · Camera — motion-first, preview-verified",
       note: "Animation specialist on top of Ultimate: rigs, keyframes, easing, tweens, IK and camera beats, preview-verified.",
       toast: "Animator Work Mode — full animation editor, tween and camera arsenal, preview-verified",
-      focus: /^(animation_|anim_|tween|spring_|motor6d|rig_|ik_|character_emote|facial_animation|camera_|cutscene|walkspeed|query_(animations|keyframes)|inspect_tweenservice|or_screenshot)/,
+      focus: /^(animation_|anim_|tween|spring_|motor6d|rig_|ik_|character_emote|facial_animation|camera_|cutscene|walkspeed|or_screenshot)/,
     },
   };
   const WORK_MODE_IDS = Object.keys(WORK_MODES);
@@ -1813,7 +1813,7 @@
     "instance_destroy", "model_report", "instance_bounding_box", "part_create", "script_list", "script_read",
     "script_search", "script_grep", "script_create", "script_set_source", "script_replace", "script_insert",
     "multi_edit", "execute_luau", "get_console_output", "or_screenshot", "or_status", "or_debug", "get_template",
-    "memory_read", "memory_add_fact", "workspace_stats",
+    "memory_read", "memory_add_fact", "workspace_stats", "inspect_service", "query_instances",
   ];
   const UNIVERSAL_SET = new Set(UNIVERSAL_COMMANDS);
   const isUniversalCommand = (name) => UNIVERSAL_SET.has(String(name || "").replace(/^[^.]*\./, ""));
@@ -2516,7 +2516,7 @@
   // compact composers), signatures for everything else, names only when even
   // signatures do not fit. Nothing is ever listed twice.
   function buildCatalogue(o) {
-    const { toolName, requested, nativeTools, virtualLines, webLines, focusBlock, focusNames, compact, limit, lineLimit } = o;
+    const { toolName, requested, nativeTools, virtualLines, webLines, focusBlock, focusNames, compact, limit, lineLimit, heading } = o;
     const entries = []; const seen = new Set();
     for (const line of virtualLines) {
       const nm = nameFromLine(line);
@@ -2530,7 +2530,7 @@
     const focus = new Set(focusNames || []);
     const rank = (e) => (PRIORITY_COMMAND_RE.test(e.name) ? 0 : e.native ? 1 : focus.has(e.name) ? 2 : 3);
     entries.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-    const intro = `Output of '${toolName}':\n${requested} commands - ${entries.length} total${compact ? " (compact index for this chat)" : ""}.\n`
+    const intro = `${heading || `Output of '${toolName}':`}\n${requested} commands - ${entries.length} total${compact ? " (compact index for this chat)" : ""}.\n`
       + `HOW TO READ: "name {a, b?, c?:x|y}" = call name with a (required), b (optional), c (one of x|y). `
       + `Every command shown with {…} can be called DIRECTLY - do not fetch its schema first. `
       + `list_commands {"query":"exact_name"} returns one command's full description and usage notes: use it only when a parameter is unclear or a call errored. `
@@ -3614,8 +3614,8 @@
       const compact = !!P.compactCommandList;
       const limit = compact
         ? Math.max(2500, Number(P.commandListMaxChars) || 9000)
-        : Math.max(12000, Number(P.commandListMaxChars) || 70000);
-      const lineLimit = Math.max(40, Number(P.commandListMaxLines) || (compact ? 400 : 1200));
+        : Math.max(12000, Number(P.commandListMaxChars) || 32000);
+      const lineLimit = Math.max(40, Number(P.commandListMaxLines) || (compact ? 400 : 700));
       if (commandQuery) {
         const matched = scoped.length + animLines.length + skillLines.length + agentLines.length;
         // Keyword searches with many hits come back as signatures (callable),
@@ -4088,7 +4088,7 @@
     // command reminder every 20 tool turns only increases context and makes the
     // next answer slower. Keep the full reminder for normal providers, but make
     // the compact path substantially lighter while preserving recovery guidance.
-    const REMIND_TOOLS_EVERY = P.compactCommandList ? 50 : 20;
+    const REMIND_TOOLS_EVERY = P.compactCommandList ? 50 : 25;
     ui.showStop(true);
     ui.steeringProgress("waiting", "Waiting for the model's next action", 0);
     P.setInputLock(true); // prevent user from typing while the agent is active
@@ -4685,9 +4685,53 @@
   // The full system prompt for the CURRENT provider and user settings. One
   // definition, used both by the bootstrap and by the periodic re-injection, so
   // the two can never drift apart.
-    function systemPrompt() {
+    // ── Embedded command catalogue (1.33) ──
+    // Every session used to start with the model calling list_commands and OR
+    // pasting a 40-70k character catalogue back into the chat - slow on every
+    // provider page and the single biggest token cost of a session. Roomy
+    // providers now get a COMPACT signature index (same builder as
+    // list_commands, universal + work-mode families first, ~16k chars) inside
+    // the system prompt itself, so turn zero is just "ready". Providers with a
+    // tight composer (compactCommandList) keep the forced bootstrap catalogue.
+    const EMBED_CATALOGUE_DEFAULT_CHARS = 20000;
+    function embeddedCatalogue(engine) {
+      try {
+        if (P.compactCommandList || P.embedCatalogue === false) return "";
+        const budget = Math.max(0, Number(P.embedCatalogueChars) || EMBED_CATALOGUE_DEFAULT_CHARS);
+        if (!budget || !A.toolList || !A.toolList.length) return "";
+        const requested = engine === "local" ? "local" : "roblox";
+        const allScoped = A.toolList.filter((t) => t && (t.server || requested) === requested && !t.hidden);
+        if (!allScoped.length) return "";
+        const animLines = requested === "roblox" && typeof RSAnim !== "undefined" ? RSAnim.describeCommands() : [];
+        const skillLines = requested === "roblox" && typeof RobloxScriptSkills !== "undefined" ? RobloxScriptSkills.describeCommands() : [];
+        const agentLines = requested === "local" && typeof AgentScriptSkills !== "undefined" ? AgentScriptSkills.describeCommands() : [];
+        const helperNames = ["or_screenshot", "or_debug", "get_template", "or_status", "web_fetch", "web_search", "capture_id", "or_agent"];
+        const helperTools = helperNames.filter((hn) => !allScoped.some((t) => t.name === hn)).map((hn) => A.toolList.find((t) => t && t.name === hn)).filter(Boolean);
+        let focusMode = "ultimate";
+        try { focusMode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
+        let focusNames = [], focusBlock = "";
+        if (WORK_MODES[focusMode] && WORK_MODES[focusMode].focus) {
+          focusNames = workModeFocusNames(focusMode, [...allScoped.map((t) => t.name), ...[...animLines, ...skillLines, ...agentLines].map(nameFromLine)]);
+          if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily (the UNIVERSAL set above plus this mode's family; all listed with their signatures below) ━━━\n\n`;
+        }
+        const headers = [...animLines, ...skillLines, ...agentLines].filter((l) => !nameFromLine(l));
+        const text = buildCatalogue({
+          toolName: "list_commands", requested,
+          heading: "━━━ COMMAND CATALOGUE (embedded; this IS the list_commands result - do NOT call list_commands {} to fetch it again) ━━━",
+          nativeTools: [...allScoped, ...helperTools],
+          virtualLines: [...animLines, ...skillLines, ...agentLines],
+          webLines: headers,
+          focusBlock, focusNames, compact: true, limit: budget, lineLimit: Math.max(120, Number(P.embedCatalogueLines) || 420),
+        });
+        diag("sys.embeddedCatalogue", { chars: text.length, lines: text.split("\n").length, budget, engine: requested });
+        return text;
+      } catch (e) { diag("sys.embeddedCatalogueFailed", { error: String(e && e.message || e) }); return ""; }
+    }
+    function systemPrompt(opts) {
+      opts = opts || {};
       let engine = "roblox";
       try { if (typeof window.__rsEngine === "function") engine = window.__rsEngine(); } catch {}
+      const catalogue = opts.embedCatalogue === false ? "" : embeddedCatalogue(engine);
       const text = RS.buildSystemPrompt({
         siteName: P.displayName,
         customPrompt: ui.getCustomPrompt(),
@@ -4697,10 +4741,12 @@
         engine,
         fullAccess: !!(typeof window.__rsFullAccess === "function" && window.__rsFullAccess()),
         maxChars: P.sysMaxChars || 0,
+        catalogue,
       });
+      A.sysEmbeddedCatalogue = !!catalogue && text.includes("COMMAND CATALOGUE (embedded");
       // Context-meter cache: the bar shows an approximate token cost next to
       // Start so users understand why big prompts can degrade weaker chats.
-      try { A.sysInfo = { len: text.length, tokens: Math.round(text.length / 4), engine }; } catch {}
+      try { A.sysInfo = { len: text.length, tokens: Math.round(text.length / 4), engine, catalogue: catalogue.length }; } catch {}
       return text;
     }
 
@@ -4841,7 +4887,7 @@
   // is always worth more than a reminder.
   function withSysResend(text) {
     if (!sysResendDue()) return text;
-    const prompt = systemPrompt();
+    const prompt = systemPrompt({ embedCatalogue: false });
     const rider =
       "\n\n────────────────────────────────\n" +
       RS.RESEND_MARKER + "\n" +
@@ -10367,7 +10413,7 @@ if ((document.hidden && !bgMode) || A.userStopped) return;
     A.forceSysResend = false;
     diag("sys.resend", { via: "ownTurn", ...spent });
     try {
-      const base = await submitAndGetBase(systemPrompt());
+      const base = await submitAndGetBase(systemPrompt({ embedCatalogue: false }));
       await waitForResponse(base);
     } catch (e) {
       diag("sys.resendFailed", { err: String(e && e.message || e) });

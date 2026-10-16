@@ -63,7 +63,7 @@ assert(main.includes('.filter(([k]) => k !== "studio_id")'), "studio_id never sh
 assert(main.includes("ERROR MISSING_PARAMS calling '"), "missing-param preflight tells the model the schema");
 assert(main.includes("diag(\"list_commands.catalogue\""), "catalogue diagnostics");
 const config = fs.readFileSync("src/core/config.js", "utf8");
-assert(config.includes("const REMINDER_MAX_CHARS = 14000;"), "reminder is bounded");
+assert(config.includes("const REMINDER_MAX_CHARS = 9000;"), "reminder is bounded");
 assert(config.includes("(signatures: name {a, b?}"), "reminder header explains signatures");
 assert(config.includes("module_scaffold (typed module / class / service skeletons)"), "ultimate prompt cites the scaffolds");
 assert(config.includes("postfx_cinematic (filmic / noir / dreamy / vivid / horror)"), "visualizer prompt cites post-FX presets");

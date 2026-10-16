@@ -41,7 +41,7 @@
     }
     p = p.replace(/\\/g, ".").replace(/\s*[>\u2192]\s*/g, ".");
     p = p.replace(/^game\s*:\s*GetService\s*\(\s*["']([A-Za-z]+)["']\s*\)/, "$1");
-    p = p.replace(/\.{2,}/g, ".").replace(/^\./, "").replace(/\.$/, "");
+    p = p.replace(/\s*\.\s*/g, ".").replace(/\.{2,}/g, ".").replace(/^\./, "").replace(/\.$/, "");
     return p;
   }
   function pathArg(a) {
