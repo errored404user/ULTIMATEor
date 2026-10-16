@@ -29,6 +29,8 @@ for(const f of bundle.js.filter(f=>/src\/core\/(skills\/|studio_bridge\.js)/.tes
 function sample(p){const t=String(p.type||"").toLowerCase();if(/\[\]|array|list/.test(t))return /number|num/.test(t)?[1,2,3]:["a","b"];if(/number|int|float/.test(t))return 1;if(/bool/.test(t))return true;if(/object|dict|map|json/.test(t))return {a:1};return (p.enum&&p.enum[0])||(p.desc&&/path/i.test(p.desc)?"Workspace.Part":"Test");}
 const out=[];
 for(const c of RobloxScriptSkills.SKILL_COMMANDS){const args={};for(const [k,v] of Object.entries(c.params||{}))args[k]=sample(v||{});for(const [label,a] of [["sample",args],["empty",{}]]){let r;try{r=RobloxScriptSkills.buildLuau(c.name,a);}catch(e){r={err:String(e)};}if(r&&r.code)out.push({name:c.name+" ("+label+")",code:r.code});}}
+for(const [k,src] of Object.entries(RobloxScriptSkills.DESIGN_LUA||{}))out.push({name:"DESIGN_LUA."+k,code:src});
+for(const kind of (RobloxScriptSkills.DESIGN_SCREENS||[])){const r=RobloxScriptSkills.buildLuau("ui_screen_generate",{kind,title:"T",items:["A",{item:"B",price:5}],buttons:["Play"],tabs:["X","Y"],rewards:[1,2,3],quests:[{title:"Q",progress:0.5}],choices:["a","b"],stats:["Coins"]});if(r&&r.code)out.push({name:"ui_screen_generate "+kind,code:r.code});}
 process.stdout.write(JSON.stringify(out));
 """
 progs = json.loads(subprocess.check_output(["node", "-e", DUMP], text=True))
