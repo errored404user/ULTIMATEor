@@ -907,7 +907,7 @@
     roadmap:{title:"Roadmap / plan",summary:"Optional multi-phase planning: the agent writes phases and tasks, tracks progress, and reports a checklist as work completes.",details:["Toggle Plan in the OR menu. With Plan ON the agent creates a roadmap first (roadmap_create / roadmap_update), then executes phase by phase.","Progress is shown in the chat as the agent ticks tasks; you can ask for the current roadmap or tell it to re-plan.","Plan OFF = direct execution with no roadmap overhead (better for small edits)."],howTo:["OR menu → Plan ON","Describe the whole feature; the agent proposes phases","Approve or edit the plan, then let it run"]},
     commands:{title:"Commands / tool registry",summary:"ORscript exposes 630+ advertised Studio commands (plus hidden legacy aliases, workspace, template, roadmap and help tools) through an embedded catalogue in the system prompt, list_commands, search_commands and get_command.",details:["Since 1.33 roomy providers receive a compact command catalogue inside the system prompt (universal block + the active work mode's family as signatures, the rest as names), so the agent no longer starts every session with list_commands; tight-composer providers (Notion, ClickUp, Vani, CodeCraft, NVIDIA) still get the catalogue as the first tool result.","list_commands returns the catalogue for the active work mode: a UNIVERSAL block (42 inspection/scripting/verification commands present in every mode, including inspect_service and query_instances) followed by the mode family.","search_commands {query} finds commands by name/description; get_command {name} returns the full schema; command_registry_stats summarises the registry.","Commands are executed through or-core (127.0.0.1:3000) - either the Studio MCP helper or the ORscript Studio plugin when it is connected."],howTo:["Ask: 'list commands' or 'what can you do with lights'","The agent calls list_commands / search_commands and picks the right command"]},
     studio:{title:"Roblox Studio connection",summary:"The browser extension talks to the or-core desktop agent on 127.0.0.1:3000, which bridges to Studio through the Studio MCP helper and the optional ORscript Studio plugin.",details:["Run or-core (agent/ crate, cargo build) once; it stays in the background and auto-installs plugin/ORscript.lua into the Studio Plugins folder.","In Studio: Plugins → ORscript panel → enable; click Allow on the HTTP prompt. The plugin runs execute_luau with plugin-level APIs and adds csg_*, open_script, script_live_update, studio_undo/redo, screenshot_frame, gamepass_handler_create…","or_status / studio_plugin_status report the connection; or_screenshot captures the Studio window through the MCP screen_capture tool."],howTo:["Start or-core","Open the place in Studio and enable the ORscript plugin","Check the status pill in the OR bar is green, then chat"]},
-    workmode:{title:"Work modes",summary:"Ultimate (default: Luau engineering + modeling), Visualizer (VFX/UI/lighting) and Animator (rigs, keyframes, animation suite) change the catalogue order, mandates and skills the agent leans on.",details:["Switch in the OR menu → Work mode. Every mode keeps the same UNIVERSAL command block, then prioritises its own family.","Ultimate focuses on scripts, modules, remotes, data and building; Visualizer on particles, beams, lighting, UI; Animator on AnimLib, keyframes, tweens and rig tooling.","Speed presets (fast / balanced / thorough) only change how much verification and screenshotting the agent does."],howTo:["OR menu → Work mode → pick Ultimate / Visualizer / Animator"]},
+    workmode:{title:"Work modes",summary:"Ultimate (default: Luau engineering + modeling), Visualizer (VFX/UI/lighting) and Animator (rigs, keyframes, animation suite) change the catalogue order, mandates and skills the agent leans on.",details:["Switch in the OR menu → Work mode. Every mode keeps the same UNIVERSAL command block, then prioritises its own family.","Since 1.34 each mode is a distinct profile on a shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence): Ultimate = Luau engineering + modeling mandates, blueprints, project index; Visualizer = read the scene → mood → layered VFX → UI as a system → prove it with pixels; Animator = read the rig → block keys → polish curves → runtime motion → camera beats → preview.","Switching mid-session sends the AI a short MODE SWITCH note (the new profile + that mode's focus commands) instead of the whole system prompt; the periodic reminder carries a one-line mode checklist.","Each mode card has Quick starts: one-click prompts (index this place, shop + currency, cinematic mood, hero spell VFX, sword swing, cutscene camera …) pasted into the composer for you to edit and send."],howTo:["OR menu → Work mode → pick Ultimate / Visualizer / Animator","Click a Quick start pill under the mode cards, adjust the text, press Enter"]},
     projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .orscript-project-reference.json you can re-import."],howTo:["OR menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
     themes:{title:"Themes & appearance",summary:"16 themes with CSS backgrounds, swatch previews, per-theme corner decorations, gradient pill buttons and optional sound effects - applied to the ORscript UI only, never to the host site.",details:["OR menu → Theme. Each theme ships its own background, accent tokens (--orx-*), decorations and SFX set.","Sounds and decorations can be toggled independently in Settings.","VoidScript is OrScript's partner visual identity used by the Void theme family."],howTo:["OR menu → Theme → pick a swatch"]},
     permissions:{title:"Permissions",summary:"Sandbox (Studio + workspace only, no prompts), Ask (confirm writes, publishes and PC access with an approval card) or Full (entire PC via or-core).",details:["Sandbox is the default and never asks - ideal for Studio-only work.","Ask shows an approval card above the page for execute_luau, file writes, publishes and marketplace changes; it auto-denies after 120 s so a hidden card cannot stall the agent.","Full unlocks PC-wide file/terminal tools (OR_FULL_ACCESS in or-core). Publish/marketplace automation additionally requires the 'Allow publish automation' switch."],howTo:["OR menu → Permissions → Sandbox / Ask / Full"]},
@@ -1781,6 +1781,12 @@
       sub: "Luau systems · Modeling · Architecture — production-grade, verified",
       note: "Flagship mode: senior Luau engineer and 3D modeler in one. Full scripting, instance, physics, build and terrain arsenal, continuous autonomy, deep verification.",
       toast: "Ultimate Work Mode — senior Luau engineer + modeler, full arsenal, every build verified",
+      starters: [
+        { label: "Index this place", prompt: "Build the project index for this place and give me the PROJECT MAP: folder layout, conventions, hubs, remotes and every mismatch. Then tell me the three riskiest problems you see and fix the first one." },
+        { label: "Shop + currency", prompt: "Install a complete coins currency and shop system in this place (blueprints: currency + shop), with session-locked DataStore saving, leaderstats, a shop UI from the design pack and server-validated purchases. Verify it in Play and show me the console." },
+        { label: "Build a house", prompt: "Build a two-storey medieval tavern at real scale in Workspace: blockout, walls with door and window openings, staircase, roof, interior props, a deliberate material palette (no default grey), everything grouped in a named Model hierarchy. Screenshot it from two angles and polish." },
+        { label: "Fix my errors", prompt: "Start a playtest, read the console, and fix every error and warning you find at the cause (not the symptom). Re-run until the console is clean and report what you changed with full script paths." },
+      ],
       focus: /^(script_|model_|memory_|blueprint_|project_index_|execute_luau|multi_edit|module_scaffold|remote_scaffold|datastore_profile_scaffold|tag_scaffold|project_health_report|search_game_tree|search_files|inspect_instance|get_studio_state|get_console_output|audit_(script_errors|unanchored_parts)|instance_|part_(create|at|above)|meshpart_create|wedge_create|model_group|(scale|rotate|mirror|flatten|raise|ungroup)_model|set_primary_part|pivot_(set|to)|cframe_set|rotation_set|size_set|snap_(position|to_grid)|grid_clone|duplicate_n|weld_(assemble|constraint)|constraint_create|constraints_clear|rigid_constraint_create|hinge_create|rope_create|attachment_create|align_(position|orientation)_create|material_set|color_set|brickcolor_set|transparency_set|reflectance_set|texture_add|decal_(add|set)|mesh_set_texture|generate_(mesh|material|procedural_model)|terrain_|staircase_generate|archway_generate|roof_structure_build|fence_line_build|road_path_build|bridge_suspension_make|window_glass_install|tree_forest_scatter|dungeon_room_generate|ground_make|water_body|folder_create|attribute_(get|set)|tag_(add|remove)|remote_|bindable_|datastore_setup|ds_|leaderstats_|collision_(set|group_set)|physics_|anchored_set|get_(children|descendants|property|service|template)|set_property|property_copy|selection_(info|set)|script_analysis|or_debug|or_screenshot|start_stop_play|place_backup_save|workspace_(stats|list|export|import))/,
     },
     visualizer: {
@@ -1788,6 +1794,12 @@
       sub: "VFX · Lighting · UI — layered, cinematic, screenshot-verified",
       note: "VFX, lighting and UI specialist on top of Ultimate: mood, layered effects, design-system UI, screenshot-verified polish.",
       toast: "Visualizer Work Mode — full VFX, lighting and UI arsenal, screenshot-verified",
+      starters: [
+        { label: "Cinematic mood", prompt: "Take a screenshot, then set a complete cinematic mood for this scene: lighting preset, atmosphere, sky, bloom, color correction and a post-FX stack. Screenshot again, judge it as an art director and run one polish pass." },
+        { label: "Hero spell VFX", prompt: "Create a layered fire-magic cast effect on the selected part: core emitter, glow, sparks, a magic circle, a point light with flicker and a sound layer, with proper Size/Transparency curves. Trigger it on touch and screenshot it mid-burst." },
+        { label: "Game HUD", prompt: "Set design tokens (neon preset, my primary colour is #7C5CFF) and generate a responsive HUD with health bar, coins and a quest tracker, plus a main menu and a shop screen. Run ui_audit and the responsive check, then screenshot each screen." },
+        { label: "Thumbnail", prompt: "Make a 1920x1080 cartoony thumbnail for my game: my avatar in a hero pose with a shocked face, a floating glowing sword prop, the title in three words, a NEW badge, then capture it." },
+      ],
       focus: /^(fx_|design_|gfx_|vfx_|sfx_|ui_|gui_|lighting|light_|postfx_|atmosphere|sky_|bloom|blur|color_correction|fog_|film_|weather_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|point_light|spot_light|surface_light|explosion|shadows|cast_shadow|set_future_lighting|snowfall|volcanic|firefly|portal_vfx|screen_shake|toast_show|notification_toast|radial_menu|level_up_ui|loading_screen|performance_monitor_gui|surface_gui|billboard_gui|starter_gui|text_label|text_button|image_label|frame_create|texture_add|mesh_set_texture|directional_audio|or_screenshot)/,
     },
     animator: {
@@ -1795,6 +1807,12 @@
       sub: "Rigs · Keyframes · Tweens · Camera — motion-first, preview-verified",
       note: "Animation specialist on top of Ultimate: rigs, keyframes, easing, tweens, IK and camera beats, preview-verified.",
       toast: "Animator Work Mode — full animation editor, tween and camera arsenal, preview-verified",
+      starters: [
+        { label: "Sword swing", prompt: "Select the rig in my selection, read its joints, and create a 1.2 s sword swing with anticipation, a fast action beat, follow-through and a settle. Ease every key, add a hit marker, give it a camera FOV punch, preview it and screenshot the key poses." },
+        { label: "Walk + idle loop", prompt: "Create a looping walk cycle (contact, down, passing, up) and a breathing idle with moving holds for the selected rig, with correct priorities. Preview both, fix foot sliding and loop seams, then export them to a folder ready for LoadAnimation." },
+        { label: "Door + chest tweens", prompt: "Animate the selected door opening with a spring-like overshoot and the chest lid with anticipation, using tween sequences with deliberate easing, plus a small camera shake on impact. Preview them in Play." },
+        { label: "Cutscene camera", prompt: "Build a 6 s intro cutscene camera track around the selected model: slow dolly in, a low hero angle, an eased orbit, FOV change on the reveal, then a reset to the player. Preview it and tell me the beats with timings." },
+      ],
       focus: /^(animation_|anim_|tween|spring_|motor6d|rig_|ik_|character_emote|facial_animation|camera_|cutscene|walkspeed|or_screenshot)/,
     },
   };
@@ -4089,6 +4107,9 @@
     // next answer slower. Keep the full reminder for normal providers, but make
     // the compact path substantially lighter while preserving recovery guidance.
     const REMIND_TOOLS_EVERY = P.compactCommandList ? 50 : 25;
+    // 1.34: how many commands one reply may carry (run in order, one combined
+    // result). Providers can lower it (P.maxBatchCommands); 1 disables batching.
+    const MAX_BATCH_COMMANDS = Math.max(1, Math.min(8, Number(P.maxBatchCommands) || 6));
     ui.showStop(true);
     ui.steeringProgress("waiting", "Waiting for the model's next action", 0);
     P.setInputLock(true); // prevent user from typing while the agent is active
@@ -4298,7 +4319,10 @@
 
         if (res.kind === "tool") {
           parseRetries = 0;
-          const calls = res.calls;
+          // 1.34: identical repeats in one reply (a model "showing" the command
+          // and then "running" it) execute once - never twice.
+          const calls = (() => { const seen = new Set(); return (res.calls || []).filter((c) => { const k = `${c && c.tool}\n${JSON.stringify((c && c.arguments) || {})}`; if (seen.has(k)) return false; seen.add(k); return true; }); })();
+          if (calls.length !== (res.calls || []).length) diag("tool.dedupe", { from: res.calls.length, to: calls.length });
           // Steering that arrived while the model was generating wins BEFORE a
           // proposed command runs. This is the safe boundary Steering promises:
           // no concurrent provider send and no half-cancelled Studio mutation.
@@ -4316,19 +4340,36 @@
             base = await submitAndGetBase(note);
             continue;
           }
-          if (calls.length > 1) {
-            ui.steeringProgress("correcting", "Model proposed multiple commands — requesting one safe step", toolTurns);
-            base = await submitAndGetBase(RS.FEEDBACK.multiTool(calls.map((c) => c.tool || "?")));
+          // 1.34: a reply may carry up to MAX_BATCH_COMMANDS independent commands.
+          // They run here in order and the model gets ONE combined result, so a
+          // "build 5 parts" step costs one model turn instead of five (each turn
+          // is 10-60 s of generation + a composer round trip - the dominant cost
+          // of a session). The batch stops at the first failed step: the rest is
+          // reported as NOT RUN so the model fixes the error and resends only
+          // what is missing. Beyond the cap we still ask for a smaller reply.
+          if (calls.length > MAX_BATCH_COMMANDS) {
+            ui.steeringProgress("correcting", `Model proposed ${calls.length} commands — asking for at most ${MAX_BATCH_COMMANDS}`, toolTurns);
+            base = await submitAndGetBase(RS.FEEDBACK.multiTool(calls.map((c) => c.tool || "?"), MAX_BATCH_COMMANDS));
             continue;
           }
-          const call = calls[0];
+          const batchN = calls.length;
+          const batchParts = [];
+          let batchImages = [];
+          let batchSteer = null;
+          let batchStopped = false;
+          let batchAbort = false;
+          let call = calls[0];
+          let category = RS.toolCategory(call.tool);
+          let feedback = "";
+          for (let bi = 0; bi < batchN; bi++) {
+          call = calls[bi];
           // A tool ALREADY seen to return an image this session gets the "screen"
           // chip optimistically at run time (parity with the known screen_capture),
           // even though its name alone wouldn't reveal it. First-ever call of an
           // unknown image tool stays generic here and upgrades at result time below.
           const learnedImg = A.imageTools.has(bareToolName(call.tool));
-          const category = learnedImg ?  "screen" : RS.toolCategory(call.tool);
-          diag("tool.runCat", { name: call.tool, learnedImg, category });
+          category = learnedImg ?  "screen" : RS.toolCategory(call.tool);
+          diag("tool.runCat", { name: call.tool, learnedImg, category, batch: batchN > 1 ? `${bi + 1}/${batchN}` : undefined });
 
           // Park BEFORE painting the chip / stamping the clock / marking the turn
           // dispatched. runTool() gates on visibility too (it is the choke point
@@ -4344,13 +4385,18 @@
           // foreground and about to really dispatch.
           if (document.hidden && !A.stop) {
             diag("tool.parkBeforeDispatch", { name: call.tool });
-            if (!(await waitVisible()) || A.stop) break;
+            if (!(await waitVisible()) || A.stop) { batchAbort = true; break; }
           }
           // A steer may have been queued while the tab was parked. Re-check at
           // the final dispatch boundary; after this point there is no await until
           // runTool owns the operation atomically.
           const steerAtDispatch = ui.takeSteeringSteering();
           if (steerAtDispatch) {
+            if (bi > 0) {
+              // Mid-batch steer: the steps already run keep their real results;
+              // the remaining ones are skipped and the update rides on the batch.
+              batchSteer = steerAtDispatch; batchStopped = true; break;
+            }
             decorate.toolBox(res.item, call.tool, "idle", "revised by you", true,
               callBody(call), category);
             ui.steeringProgress( "Pending command skipped — applying your update", toolTurns);
@@ -4358,12 +4404,12 @@
             const state = asStateTag();
             if (state) note += "\n" + state;
             base = await submitAndGetBase(note);
-            continue;
+            batchStopped = true; batchParts.length = 0; break;
           }
           toolTurns++;
-          ui.steeringProgress("running", call.tool, toolTurns);
+          ui.steeringProgress("running", batchN > 1 ? `${call.tool} (step ${bi + 1}/${batchN})` : call.tool, toolTurns);
           // Loading chip with the real args (loop owns this item from here).
-          decorate.toolBox(res.item, call.tool, "run", argSummary(call), true, callBody(call), category);
+          decorate.toolBox(res.item, call.tool, "run", (batchN > 1 ? `step ${bi + 1}/${batchN} · ` : "") + argSummary(call), true, callBody(call), category);
           A.toolSettle = null; // a fresh call: no settled outcome yet
           A.toolRunning = true;
           A.toolStart = Date.now();
@@ -4377,7 +4423,7 @@
           diag("tool.start", { name: call.tool,requestId:A.activeRequestId });
           try { ui.trackCard(call.tool, "run", "executing\u2026", category); } catch {}
           try { emitAgentRoadmapEvent("agent.tool_started", call.tool, argSummary(call)); } catch {}
-          let feedback = await runTool(call);
+          feedback = await runTool(call);
           // Loop guard: the same command with the same parameters failing over
           // and over is the classic agent death spiral. Tag the result so the
           // model is told to change approach instead of resending it.
@@ -4402,8 +4448,11 @@
           } catch {}
           // Persistent environment header (see asStateTag) — appended, never
           // prefixed, so feedbackIsError()'s startsWith("ERROR") stays intact.
-          { const _tag = asStateTag(); if (_tag && !feedback.includes("[SYSTEM_STATE:")) feedback += "\n" + _tag; }
-          try { feedback = await attachAutoDebug(call.tool, feedback); } catch {}
+          // In a batch it is appended once, on the combined result.
+          if (batchN === 1) { const _tag = asStateTag(); if (_tag && !feedback.includes("[SYSTEM_STATE:")) feedback += "\n" + _tag; }
+          // Auto-debug is one more Studio round trip: once per batch (after the
+          // last step), not once per step.
+          if (bi === batchN - 1) { try { feedback = await attachAutoDebug(call.tool, feedback); } catch {} }
           try { feedback = compressToolFeedback(feedback, call.tool); } catch {}
           try {
             const failed = feedback.startsWith("ERROR");
@@ -4420,8 +4469,38 @@
             // stopped call still going green a moment later).
             if (res.item) { res.item.dataset.zStopped = "1"; rememberHalted(res.item); }
             decorate.toolBox(res.item, call.tool, "err", "stopped", true, "", category);
+            batchStopped = true; batchParts.length = 0;
             break;
           }
+          // Images from every step travel together on the combined result.
+          if (A.pendingImages && A.pendingImages.length) { batchImages = batchImages.concat(A.pendingImages); rememberImageTool(call.tool); }
+          A.pendingImages = null;
+          const stepErr = feedbackIsError(feedback);
+          batchParts.push({ call, feedback, isErr: stepErr, category });
+          if (batchN > 1) {
+            decorate.toolBox(res.item, call.tool, stepErr ? "err" : "run", `step ${bi + 1}/${batchN} ${stepErr ? "failed" : "ok"}`, true, stripOutputPrefix(feedback), category);
+            if (stepErr) break;
+            const steerMid = ui.peekSteeringSteering ? ui.peekSteeringSteering() : null;
+            if (steerMid) break; // taken at the top of the next iteration
+          }
+          } // end batch loop
+          if (A.stop || batchAbort) break;              // halted / never became visible: end the loop (as before)
+          if (batchStopped && !batchParts.length) continue; // first step skipped for a steer: note already sent
+          if (batchN > 1) {
+            const ran = batchParts.length;
+            const failedAt = batchParts.findIndex((p) => p.isErr);
+            const okCount = batchParts.filter((p) => !p.isErr).length;
+            const notRun = calls.slice(ran).map((c) => c.tool || "?");
+            const head = (failedAt >= 0 ? "ERROR: " : "") + `Output of 'batch':\n${ran} of ${batchN} commands ran (${okCount} ok${failedAt >= 0 ? `, step ${failedAt + 1} failed` : ""}).`
+              + (notRun.length ? ` NOT RUN: ${notRun.join(", ")} - ${failedAt >= 0 ? `fix step ${failedAt + 1} and resend only the remaining commands` : "resend them after applying the update below"}.` : "");
+            const body = batchParts.map((p, i) => `[${i + 1}/${batchN}] ${p.call.tool}${p.isErr ? " - FAILED" : ""}\n${String(p.feedback || "").replace(/^Output of '[^']*':\s*/, "")}`).join("\n\n");
+            feedback = head + "\n\n" + body;
+            { const _tag = asStateTag(); if (_tag && !feedback.includes("[SYSTEM_STATE:")) feedback += "\n" + _tag; }
+            try { feedback = compressToolFeedback(feedback, "batch"); } catch {}
+            category = batchImages.length ? "screen" : (batchParts.some((p) => p.category === "screen") ? "screen" : category);
+            diag("tool.batch", { n: batchN, ran, okCount, failedAt, images: batchImages.length });
+          }
+          A.pendingImages = batchImages.length ? batchImages : null;
           const isErr = feedbackIsError(feedback);
           const outBody = stripOutputPrefix(feedback);
           // Trace the chip's DERIVED phase vs summary. Blender (and any MCP whose
@@ -4442,16 +4521,20 @@
           const hasImages = !!(A.pendingImages && A.pendingImages.length);
           if (hasImages) rememberImageTool(call.tool);
           const resultCat = hasImages ?  "screen" : category;
-          decorate.toolBox(res.item, call.tool, isErr ?  "err" : "done", outSummary(feedback),
+          const chipName = batchN > 1 ? `${batchParts.length}/${batchN} commands` : call.tool;
+          const chipDetail = batchN > 1
+            ? `${batchParts.filter((p) => !p.isErr).length} ok${isErr ? `, ${batchParts.filter((p) => p.isErr).length} failed` : ""} · ${batchParts.map((p) => p.call.tool).join(", ")}`.slice(0, 160)
+            : outSummary(feedback);
+          decorate.toolBox(res.item, chipName, isErr ?  "err" : "done", chipDetail,
             true, outBody, resultCat);
-          try { ui.trackCard(call.tool, isErr ?  "err" : "ok", outSummary(feedback), resultCat); } catch {}
+          try { ui.trackCard(chipName, isErr ?  "err" : "ok", chipDetail, resultCat); } catch {}
           // Snapshot the settled outcome. If the site swaps this turn's DOM node
           // while we wait for the model's next turn (wiping the chip AND the
           // zloop ownership dataset), the sweep re-owns the fresh node with this
           // outcome instead of letting branch-3 classification re-spin a "run"
           // chip on an already-executed call.
           A.toolSettle = {
-            phase: isErr ?  "err" : "done", detail: outSummary(feedback),
+            phase: isErr ?  "err" : "done", detail: chipDetail,
             body: outBody, category: resultCat, count: P.assistantCount(),
             // Node IDENTITY of the settled turn (virtualization-proof), when the
             // provider exposes it. The count guard alone misfires on Qwen: the
@@ -4484,19 +4567,21 @@
               // full one-line-per-command reminder either: with ~750 commands it
               // is ~75k characters, far above what their composer delivers. Give
               // them the same bounded name index list_commands gave them.
-              toSend += (P.compactCommandList ? compactToolsReminder(roblox) : RS.toolsReminder(roblox)) + "\n" + RS.memoryNudge() + projectMapReminder();
+              let modeCheck = "";
+              try { modeCheck = RS.workModeChecklist(normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode())); } catch {}
+              toSend += (P.compactCommandList ? compactToolsReminder(roblox) : RS.toolsReminder(roblox)) + (modeCheck ? "\n" + modeCheck : "") + "\n" + RS.memoryNudge() + projectMapReminder();
               diag("tools.reminder", { after: REMIND_TOOLS_EVERY, projectMap: !!(window.__rsProjectMap && window.__rsProjectMap.text) });
             }
           }
           // If steering arrived while runTool was already in flight, that command
           // is allowed to finish atomically. Carry the update on its real result
           // so the model applies it before selecting another command.
-          const steerAfter = ui.takeSteeringSteering();
+          const steerAfter = batchSteer || ui.takeSteeringSteering();
           if (steerAfter) {
             toSend += "\n\n" + RS.FEEDBACK.steeringSteer(steerAfter, false);
             ui.steeringProgress( "Current step finished — applying your update next", toolTurns);
           } else {
-            ui.steeringProgress("sending", `${call.tool} finished — sending its result`, toolTurns);
+            ui.steeringProgress("sending", `${chipName} finished — sending ${batchN > 1 ? "the combined result" : "its result"}`, toolTurns);
           }
           // This result becomes a turn, so it counts toward the re-statement
           // budget - context volume is what makes the site summarise, and the
@@ -4885,8 +4970,47 @@
   // truncated to make room: the passenger is dropped and the flag stays raised,
   // so it rides the next result instead. A tool result the model is waiting on
   // is always worth more than a reminder.
+  // 1.34: the focus family of the active work mode as packed signatures - the
+  // part of the embedded catalogue that changes when the user switches modes.
+  function workModeFocusSignatures(limitChars) {
+    try {
+      let mode = "ultimate";
+      try { mode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
+      const tools = (A.toolList || []).filter((t) => t && (t.server || "roblox") === "roblox" && !t.hidden);
+      const animLines = typeof RSAnim !== "undefined" ? RSAnim.describeCommands() : [];
+      const skillLines = typeof RobloxScriptSkills !== "undefined" ? RobloxScriptSkills.describeCommands() : [];
+      const names = workModeFocusNames(mode, [...tools.map((t) => t.name), ...[...animLines, ...skillLines].map(nameFromLine)]);
+      if (!names.length) return "";
+      const want = new Set(names);
+      const sigs = [];
+      const seen = new Set();
+      for (const line of [...animLines, ...skillLines]) { const nm = nameFromLine(line); if (nm && want.has(nm) && !seen.has(nm)) { seen.add(nm); sigs.push(sigFromLine(line) || `${nm} {}`); } }
+      for (const t of tools) if (want.has(t.name) && !seen.has(t.name)) { seen.add(t.name); sigs.push(toolSignature(t)); }
+      const packed = packSignatures(sigs, Math.max(1200, limitChars || 6000), 160);
+      return `${WORK_MODES[mode].badge} FOCUS FAMILY (${sigs.length} commands; callable as shown${packed.omitted ? `, ${packed.omitted} more via list_commands {"query":"keyword"}` : ""}):\n${packed.text}`;
+    } catch { return ""; }
+  }
   function withSysResend(text) {
     if (!sysResendDue()) return text;
+    const periodicDue = (() => { try { const { users, results } = sinceLastSys(); return !!RESEND_SYS_EVERY && (users >= RESEND_SYS_EVERY || results >= RESEND_SYS_EVERY_RESULTS); } catch { return false; } })();
+    if (A.workModeSwitchPending && !periodicDue) {
+      // Work-mode switch only: a ~6-10k rider (new profile + its focus
+      // signatures) instead of the full 30k+ prompt; the periodic restate
+      // keeps its own schedule.
+      let mode = "ultimate";
+      try { mode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
+      const tight = !!(P.sysMaxChars && P.sysMaxChars < 16000) || !!P.compactCommandList;
+      const rider = "\n\n────────────────────────────────\n" + RS.RESEND_MARKER + "\n"
+        + RS.workModeSwitchNote(mode, { tight })
+        + "\n\n" + workModeFocusSignatures(tight ? 2500 : 6000);
+      const cap = P.sendCharBudget || Infinity;
+      if (text.length + rider.length > cap) { diag("sys.modeSwitchDeferred", { result: text.length, rider: rider.length, cap }); return text; }
+      A.workModeSwitchPending = false;
+      A.forceSysResend = false;
+      A.sysResendAt = Date.now();
+      diag("sys.modeSwitch", { mode, chars: rider.length, tight });
+      return text + rider;
+    }
     const prompt = systemPrompt({ embedCatalogue: false });
     const rider =
       "\n\n────────────────────────────────\n" +
@@ -4909,6 +5033,7 @@
     resetSysCount();
     A.sysResendAt = Date.now();
     A.forceSysResend = false;   // mode-change restate delivered
+    A.workModeSwitchPending = false; // the full prompt carries the new mode too
     diag("sys.resend", { via: "toolResult", chars: rider.length, ...spent });
     return text + rider;
   }
@@ -6708,7 +6833,12 @@
       try { chrome.storage.local.set({rsWorkMode: workMode}); } catch {}
       try { window.__rsWorkMode = () => workMode; } catch {}
       syncWorkModeUi();
-      buildMenu(); renderBar(); markModesChanged();
+      buildMenu(); renderBar();
+      // 1.34: a work-mode switch rides on the next tool result as a short
+      // MODE SWITCH note (profile + this mode's focus signatures) instead of
+      // re-sending the whole system prompt (see withSysResend).
+      try { if (A.started || A.running) { A.workModeSwitchPending = true; A.forceSysResend = true; } } catch {}
+      try { updateExtraButton(); } catch {}
       if (!silent) { try { playSfx("special"); } catch {} toast(custom ? custom.toast : WORK_MODES[workMode].toast); }
     }
     try { window.__rsSetWorkMode = (id) => setWorkMode(id); } catch {}
@@ -6811,6 +6941,11 @@
       const text = queued.map((item, i) => queued.length > 1 ? `${i + 1}. ${item.text}` : item.text).join("\n");
       diag("steering.applied", { count: queued.length, len: text.length });
       return text;
+    }
+    // Non-consuming look: a batch stops before its next step when a steer is
+    // waiting, and the top of the loop then takes it with the usual bookkeeping.
+    function peekSteeringSteering() {
+      return steeringMode && A.steeringQueue.length ? A.steeringQueue[0].text : "";
     }
     function clearSteeringSteering() {
       if (A.steeringQueue.length) diag("steering.cleared", { count: A.steeringQueue.length });
@@ -7200,6 +7335,7 @@
                 ${WORK_MODE_IDS.map((id) => `<button type="button" class="rs-work-card ${workMode===id&&!publicMode()?"on":""}" data-work="${id}" role="radio" aria-checked="${workMode===id&&!publicMode()?"true":"false"}"><span class="rs-work-name">${WORK_MODES[id].name}</span><span class="rs-work-sub">${WORK_MODES[id].sub}</span></button>`).join("")}
                 ${(() => { let customs = []; try { customs = typeof PublicSkills !== "undefined" ? PublicSkills.modes().filter((m) => m.enabled) : []; } catch {} const pm = publicMode(); return customs.map((m) => `<button type="button" class="rs-work-card rs-work-custom ${pm&&pm.id===m.id?"on":""}" data-work="pm:${m.id}" role="radio" aria-checked="${pm&&pm.id===m.id?"true":"false"}" title="Custom mode on ${escRs(WORK_MODES[m.base]?WORK_MODES[m.base].name:"Ultimate")}"><span class="rs-work-name">${escRs(m.title)} <small>public</small></span><span class="rs-work-sub">${escRs(m.sub || m.description)}</span></button>`).join(""); })()}
               </div>
+              ${(() => { const st = (WORK_MODES[workMode] && WORK_MODES[workMode].starters) || []; return st.length ? `<div class="rs-work-starters" aria-label="${WORK_MODES[workMode].name} quick starts"><span class="rs-work-starters-label">Quick starts</span>${st.map((q, i) => `<button type="button" class="rs-work-starter" data-work-starter="${i}" title="${escRs(q.prompt)}">${escRs(q.label)}</button>`).join("")}</div>` : ""; })()}
               <div class="rs-menu-note rs-work-public-note">Make your own mode, skill or ability: open the cards panel → <b>Public</b> tab and describe it — the AI builds and installs it.</div>
             </section>
             <section class="rs-menu-sec">
@@ -7531,6 +7667,16 @@
       });
 
       // ── Work mode cards ──
+      menuEl.querySelectorAll("[data-work-starter]").forEach(btn=>{
+        btn.addEventListener("click", () => {
+          const st = (WORK_MODES[workMode] && WORK_MODES[workMode].starters) || [];
+          const q = st[+btn.dataset.workStarter];
+          if (!q) return;
+          const ok = pasteLibraryCard({ title: q.label, prompt: q.prompt }, { silent: true });
+          toast(ok ? `${q.label} — edit the prompt if you like, then press Enter` : "Open a chat first — the message box isn't on this page");
+          if (ok) { try { setMenuOpen(false); } catch {} }
+        });
+      });
       menuEl.querySelectorAll("[data-work]").forEach(btn=>{
         btn.addEventListener("click", () => setWorkMode(btn.dataset.work));
       });
@@ -9655,7 +9801,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     }
 
     build();
-    return { setStatus, staleExtensionAlert, setStarted, setStarting, showStop, markStopping, inputCover, toast, banner, showImages, nudgeStart, updateStartGate, refreshSetup, getCustomPrompt, getCustomMemory, getCustomMcpServers, trackCard, hideCardEmbed, steeringProgress, takeSteeringSteering, clearSteeringSteering, syncSteeringUi, openMenu: (toSupport) => openMenuFn && openMenuFn(toSupport) };
+    return { setStatus, staleExtensionAlert, setStarted, setStarting, showStop, markStopping, inputCover, toast, banner, showImages, nudgeStart, updateStartGate, refreshSetup, getCustomPrompt, getCustomMemory, getCustomMcpServers, trackCard, hideCardEmbed, steeringProgress, takeSteeringSteering, peekSteeringSteering, clearSteeringSteering, syncSteeringUi, openMenu: (toSupport) => openMenuFn && openMenuFn(toSupport) };
   })();
 
   // ── Live token + timer, shown ONLY on a tool call's chip detail. The

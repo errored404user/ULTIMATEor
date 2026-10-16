@@ -120,12 +120,18 @@ const RSParse = (() => {
     // is still being streamed (a big multi_edit can take many seconds). Treat it as
     // open so the watcher keeps waiting instead of finalizing - and failing to parse -
     // half a command, which would drop the tool and end the turn as plain text.
+    // 1.34: a reply may carry several commands - judge the LAST envelope (the
+    // one that can still be streaming); every earlier one precedes it.
     for (const key of ['"command"', '"tool"']) {
-      const k = r.indexOf(key);
+      const k = r.lastIndexOf(key);
       if (k === -1) continue;
       const open = r.lastIndexOf("{", k);
       if (open !== -1 && matchBrace(r, open) === -1) return true;
     }
+    // Likewise the LAST ###LUA### block: a closed first block must not hide a
+    // second one that is still being written.
+    const lastLua = (() => { let p = -1, from = 0; while (true) { const m = findLuaStart(r, from); if (m.pos === -1) return p; p = m.pos; from = m.pos + m.len; } })();
+    if (lastLua !== -1) { const m = findLuaStart(r, lastLua); if (findLuaEnd(r, lastLua + m.len) === -1) return true; }
     return false;
   }
 
@@ -429,24 +435,53 @@ const RSParse = (() => {
       }
       from = em + END_M.length;
     }
-    // Prefer a JSON command envelope when one is present: a model may wrap
-    // execute_luau as {"command":"execute_luau","params":{"code":"###LUA###…"}},
-    // and the bare-marker fallback below would slice the still-ESCAPED JSON
-    // source (literal \n, \") instead of the decoded code. extractToolAnywhere
-    // JSON-decodes it; cleanLuaCall (applied at the end) then strips the markers.
+    // No ###MCP_TOOL### envelope: walk the reply and collect EVERY command in
+    // document order - JSON envelopes ({"command":…}) and bare ###LUA### blocks
+    // alike. Before 1.34 this returned only the FIRST one, so a reply carrying
+    // two commands silently dropped the second while the model believed both
+    // had run. A JSON envelope that wraps execute_luau with the markers INSIDE
+    // its code string is taken as JSON (extractJsonAt JSON-decodes it; the
+    // ###LUA### markers inside the string are skipped, cleanLuaCall strips them).
     if (out.length === 0) {
-      const f = extractToolAnywhere(r);
-      if (f) out.push(f);
-    }
-    // Bare ###LUA### … ###END_LUA### block with no JSON envelope at all.
-    if (out.length === 0) {
-      const { pos: ls, len: luaLen, dm } = findLuaStart(r);
-      const le = findLuaEnd(r, ls === -1 ? 0 : ls + luaLen);
-      if (ls !== -1 && le !== -1 && le > ls) {
-        out.push({ tool: "execute_luau", arguments: { code: stripCodeChrome(r.slice(ls + luaLen, le).trim()), datamodel_type: dm } });
+      let pos = 0;
+      while (pos < r.length) {
+        const j = nextJsonCall(r, pos);
+        const { pos: ls, len: luaLen, dm } = findLuaStart(r, pos);
+        const le = ls === -1 ? -1 : findLuaEnd(r, ls + luaLen);
+        const luaOk = ls !== -1 && le !== -1 && le > ls;
+        if (!j && !luaOk) break;
+        if (j && (!luaOk || j.start < ls)) {
+          out.push(j.call);
+          pos = j.end + 1;
+        } else {
+          out.push({ tool: "execute_luau", arguments: { code: stripCodeChrome(r.slice(ls + luaLen, le).trim()), datamodel_type: dm } });
+          pos = le + 1;
+        }
       }
     }
     return out.map(cleanLuaCall);
+  }
+
+  // First parseable {"command"/"tool": …} envelope at or after `from`, with its
+  // span, so parseToolCalls can continue scanning behind it.
+  function nextJsonCall(text, from) {
+    let best = null;
+    for (const key of ['"command"', '"tool"']) {
+      let pos = from;
+      while (true) {
+        const s = text.indexOf(key, pos);
+        if (s === -1) break;
+        const start = text.lastIndexOf("{", s);
+        if (start === -1 || start < from) { pos = s + 1; continue; }
+        const end = matchBrace(text, start); // string-aware brace matching
+        if (end === -1) { pos = s + 1; continue; }
+        let call = null;
+        try { call = normalizeCall(parseLoose(text.slice(start, end + 1))); } catch {}
+        if (call) { if (!best || start < best.start) best = { call, start, end }; break; }
+        pos = s + 1;
+      }
+    }
+    return best;
   }
 
   // Some models (seen live on GLM) wrap execute_luau in the JSON envelope AND

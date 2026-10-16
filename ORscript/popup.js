@@ -27,9 +27,9 @@ const WORK_PRESETS = {
   animator:   { thinking: "max",  extra: false },
 };
 const WORK_HELP = {
-  ultimate:   "Flagship mode: senior Luau engineer and 3D modeler in one. Reads the project first, architects server-authoritative systems with typed modules, remotes and DataStores, blocks out and details models to scale, and verifies with playtests, console reads and screenshots.",
-  visualizer: "VFX, lighting and UI specialist. Sets the mood with lighting and post-FX, layers particles, beams, trails and lights, builds UI from a design system, then screenshots and polishes until it looks shipped.",
-  animator:   "Animation specialist. Drives the animation editor (rigs, poses, keyframes, easing, markers), tweens, springs, IK and camera beats, and previews every clip before calling it done.",
+  ultimate:   "Flagship mode: senior Luau engineer and 3D modeler in one. First move: blueprints / project index. Architects server-authoritative systems with typed modules, validated remotes and session-locked DataStores, blocks out and details models to scale, batches independent commands, and verifies with read-backs, playtests, console reads and screenshots.",
+  visualizer: "VFX, lighting and UI specialist. First move: screenshot + lighting read. Sets the mood (lighting, atmosphere, post-FX stack), layers every hero effect (core, glow, sparks, light, sound with real curves), builds UI from design tokens, then screenshots after every milestone and runs a polish pass until it looks shipped.",
+  animator:   "Animation specialist. First move: read the rig. Blocks key poses with anticipation and follow-through, polishes easing and holds, adds markers, IK and runtime tweens, gives every hero animation a camera beat, and previews every clip before calling it done.",
 };
 
 const PERM_MODES = ["sandbox", "ask", "full"];

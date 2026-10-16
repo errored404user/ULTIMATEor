@@ -7614,3 +7614,25 @@ html[data-rs-theme] .rs-cards-tab:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .rs-template-actions > button, .rs-template-more > summary, .rs-template-library .rs-btn-primary, .rs-template-library .rs-btn-secondary { transition: none !important; transform: none !important; }
 }
+
+/* ── 10. 1.34.0 — Work modes: quick-start pills under the mode cards ── */
+#rs-bar .rs-work-starters {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin: 8px 0 2px; padding: 8px 10px;
+  border: 1px solid var(--orx-ghost-border, rgba(255,255,255,.12));
+  border-radius: 14px; background: var(--orx-ghost, rgba(255,255,255,.04));
+}
+#rs-bar .rs-work-starters-label {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  opacity: .72; margin-right: 4px;
+}
+#rs-bar .rs-work-starter {
+  appearance: none; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
+  line-height: 1; padding: 8px 12px; border-radius: 999px;
+  color: var(--orx-on, #fff); background: var(--orx-ghost, rgba(255,255,255,.06));
+  border: 1px solid var(--orx-ghost-border, rgba(255,255,255,.14));
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+}
+#rs-bar .rs-work-starter:hover { background: var(--orx-grad); box-shadow: var(--orx-glow); transform: translateY(-1px); }
+#rs-bar .rs-work-starter:focus-visible { outline: 2px solid var(--orx-on, #fff); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { #rs-bar .rs-work-starter { transition: none; } #rs-bar .rs-work-starter:hover { transform: none; } }

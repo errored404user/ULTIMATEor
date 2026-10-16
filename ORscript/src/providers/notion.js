@@ -1496,7 +1496,7 @@ const RSProvider = (() => {
     }
     _stopSince = 0;
     // Fast path (1.22.0): a CLOSED command block that stopped growing 3 s ago
-    // is a finished turn - the agent writes one command per reply - so do not
+    // is a finished turn - every command block of the reply is closed - so do not
     // sit out the full 9 s quiet window that plain prose needs. Native
     // workflow rows ("Working…") still hold the turn open.
     const idle = Date.now() - _streamAt;
@@ -3519,10 +3519,12 @@ const RSProvider = (() => {
       "planning, no commands, no prolonged deliberation. SPEED IS REQUIRED " +
       "for Roblox work too: never restart broad planning or use prolonged/deep " +
       "deliberation between tool results. Think only enough to choose the next " +
-      "safe action, then immediately output exactly one ORscript command. After " +
-      "each result, issue the next command without re-summarizing or re-analyzing " +
-      "the whole task. Continue one command per reply until done, then report in " +
-      "one short sentence.",
+      "safe action, then immediately output the ORscript command(s) - up to 6 " +
+      "independent commands per reply, each in its own fenced code block, one " +
+      "combined result comes back; a single command when the next depends on " +
+      "its result. After each result, issue the next command(s) without " +
+      "re-summarizing or re-analyzing the whole task. Continue until done, then " +
+      "report in one short sentence.",
     init({ diag: d, needsComposer: nc, isStopped: stopped, isSessionActive: active, requestStart: rs } = {}) {
       if (d) diag = d;
       if (nc) needsComposer = nc;
