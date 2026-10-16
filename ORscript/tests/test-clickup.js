@@ -137,6 +137,32 @@ if (!JSDOM) {
     ok(/open Brain's chat first/.test(P.modeWarning()), "modeWarning asks to open Brain");
     ok(P.allItems().length === 0, "no transcript rows without Brain");
     ok(/Brain chat box disappeared/.test(P.scanError() || ""), "scanError reports the closed panel");
+    // Second layout: full Brain page, ProseMirror composer inside a <form>,
+    // cu-brain-chat-turn custom-element rows, avatar / icon role hints, and an
+    // "ai-enabled" app shell that must NOT become the transcript root.
+    const html2 = `<!doctype html><html><body><cu-app class="cu-app ai-enabled">
+      <nav class="cu-sidebar"><a>Home</a></nav>
+      <main class="cu-main"><cu-brain-view class="brain-view">
+        <div class="brain-view__scroll" style="overflow-y:auto">
+          <cu-brain-chat-turn><cu-user-avatar></cu-user-avatar><div class="turn-body"><p>Start the Roblox agent please now</p></div></cu-brain-chat-turn>
+          <cu-brain-chat-turn><cu-ai-icon></cu-ai-icon><div class="turn-body"><p>Sure. Loading.</p><pre><code>{"command":"list_commands"}</code></pre></div></cu-brain-chat-turn>
+        </div>
+        <form class="brain-view__input"><div class="ProseMirror" contenteditable="true"><p class="is-empty" data-placeholder="Ask Brain anything"><br></p></div><button type="submit" data-test="brain-chat-input__send">Send</button></form>
+      </cu-brain-view></main></cu-app></body></html>`;
+    const dom2 = new JSDOM(html2, { url: "https://app.clickup.com/123/ai", pretendToBeVisual: true, runScripts: "outside-only" });
+    const w2 = dom2.window;
+    Object.defineProperty(w2, "innerWidth", { value: 1280, configurable: true });
+    Object.defineProperty(w2, "innerHeight", { value: 800, configurable: true });
+    w2.Element.prototype.getBoundingClientRect = function () { const t = this.tagName; const h = t === "CU-APP" ? 800 : t === "CU-BRAIN-VIEW" ? 760 : this.className === "brain-view__scroll" ? 640 : 40; const wd = t === "CU-APP" ? 1280 : t === "NAV" ? 220 : t === "CU-BRAIN-VIEW" ? 1000 : 800; return { x: 240, y: 0, width: wd, height: h, left: 240, top: 0, right: 240 + wd, bottom: h }; };
+    Object.defineProperty(w2.HTMLElement.prototype, "innerText", { get() { return this.textContent; }, set(v) { this.textContent = v; }, configurable: true });
+    vm.runInContext(src + "\n;window.__P = RSProvider;", dom2.getInternalVMContext());
+    const P2 = w2.__P;
+    ok(P2.getEditor() && P2.getEditor().classList.contains("ProseMirror"), "layout 2: ProseMirror composer (placeholder on the inner <p>) is found");
+    ok(P2._aiRoot() && P2._aiRoot().tagName === "CU-BRAIN-VIEW", "layout 2: the Brain view is the root, not the ai-enabled full-window app shell");
+    const it2 = P2.allItems();
+    ok(it2.length === 2 && it2.every((i) => i.tagName === "CU-BRAIN-CHAT-TURN"), "layout 2: cu-brain-chat-turn custom elements are the rows (form is not chrome)");
+    ok(P2.isUserItem(it2[0]) && P2.isAssistantItem(it2[1]) && !P2.isUserItem(it2[1]), "layout 2: avatar → user, Brain icon → assistant");
+    ok(P2.readAssistant().reply.includes('{"command":"list_commands"}'), "layout 2: reply read with the code block");
     console.log(`PASS  test-clickup: ${n} checks (incl. jsdom behaviour)`);
   })().catch((e) => { console.error(e); process.exit(1); });
 }

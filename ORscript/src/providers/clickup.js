@@ -184,12 +184,24 @@ const RSProvider = (() => {
   function aiRoot() {
     const ed = getEditor();
     if (!ed) return null;
-    let n = ed.parentElement, depth = 0, best = null;
+    let n = ed.parentElement, depth = 0, best = null, shell = null;
     while (n && n !== document.body && depth < 18) {
-      if (isAiMarked(n)) { try { const r = n.getBoundingClientRect(); if (r.height >= 200 && r.width >= 240) best = n; } catch {} }
+      if (isAiMarked(n)) {
+        try {
+          const r = n.getBoundingClientRect();
+          if (r.height >= 200 && r.width >= 240) {
+            // An "ai"-flagged app shell covering the whole window would drag
+            // the entire workspace into the transcript - only use it when no
+            // smaller Brain container exists.
+            if (r.width * r.height >= innerWidth * innerHeight * 0.92) { if (!shell) shell = n; }
+            else best = n;
+          }
+        } catch {}
+      }
       n = n.parentElement; depth++;
     }
     if (best) return best;
+    if (shell) return shell;
     const dlg = ed.closest("[role='dialog'], [aria-modal='true'], cu-modal, [class*='modal' i], [class*='drawer' i], [class*='side-panel' i], [class*='sidepanel' i], aside");
     if (dlg && visible(dlg)) return dlg;
     // Full-page Brain: the tallest ancestor that is still narrower than the
@@ -228,6 +240,12 @@ const RSProvider = (() => {
     if (/(^|[^a-z])(assistant|bot|model|response|answer|incoming|reply|received)([^a-z]|$)/.test(d)) return "assistant";
     const inner = item.querySelector("[data-message-role],[data-role],[data-author-role]");
     if (inner) return (inner.getAttribute("data-message-role") || inner.getAttribute("data-role") || inner.getAttribute("data-author-role") || "").toLowerCase();
+    // Avatar / icon hints: ClickUp shows the member's avatar on their turns and
+    // the Brain logo on the AI's.
+    try {
+      if (item.querySelector("cu-ai-icon, cu-brain-icon, [class*='ai-icon' i], [class*='brain-icon' i], [class*='ai-avatar' i], [class*='brain-avatar' i], [class*='ai-logo' i]")) return "assistant";
+      if (item.querySelector("cu-user-avatar, cu-avatar, cu-user-badge, [class*='user-avatar' i], [class*='member-avatar' i], img[class*='avatar' i]")) return "user";
+    } catch {}
     return "";
   }
 
@@ -254,7 +272,7 @@ const RSProvider = (() => {
     const t = (el.innerText || "").trim();
     if (!t) return true;
     if (RE.chrome.test(t)) return true;
-    if (el.closest("nav, header, footer, form, [role='navigation'], [role='menu'], #rs-root")) return true;
+    if (el.closest("nav, header, footer, [role='navigation'], [role='menu'], #rs-root")) return true;
     const ed = getEditor();
     if (ed && (el.contains(ed) || ed.contains(el))) return true;
     const frame = composerFrame();
@@ -283,16 +301,19 @@ const RSProvider = (() => {
     const sels = [
       "[data-message-role], [data-author-role], [data-role='user'], [data-role='assistant']",
       "[data-test*='message' i], [data-testid*='message' i], [data-test*='chat-item' i]",
-      "cu-ai-chat-message, cu-ai-message, [class*='ai-chat' i][class*='message' i], [class*='brain' i][class*='message' i]",
+      "__tags__",
+      "cu-ai-chat-message, cu-ai-message, cu-brain-chat-message, cu-brain-message, cu-ai-chat-item, [class*='ai-chat' i][class*='message' i], [class*='brain' i][class*='message' i], [class*='ai-message' i]",
       "[class*='chat-message' i], [class*='ChatMessage'], [class*='message-item' i], [class*='message-row' i], [class*='message__' i], [class*='message_' i]",
       "[class*='message' i]",
       "article",
     ];
     const seen = new Set();
     let out = [];
+    const TAG_ROW_RE = /^CU-(AI|BRAIN)[A-Z-]*(MESSAGE|ITEM|TURN|ENTRY|BUBBLE|RESPONSE|ANSWER|QUESTION)$/;
+    const tagRows = () => { try { return [...root.querySelectorAll("*")].filter((e) => TAG_ROW_RE.test(e.tagName)); } catch { return []; } };
     for (const s of sels) {
       let nodes = [];
-      try { nodes = [...root.querySelectorAll(s)]; } catch { continue; }
+      try { nodes = s === "__tags__" ? tagRows() : [...root.querySelectorAll(s)]; } catch { continue; }
       for (const el of nodes) {
         if (seen.has(el) || !visible(el) || looksLikeChrome(el)) continue;
         if (isContainer(el)) continue;
