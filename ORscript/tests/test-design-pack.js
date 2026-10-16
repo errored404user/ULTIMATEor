@@ -114,7 +114,7 @@ ok("feature help has a 'design' topic", /design:\s*\{/.test(mainSrc) || /"design
 ok("visualizer mandate teaches the DESIGN workflow (tokens -> screen -> audit)", configSrc.includes("DESIGN MANDATE") && configSrc.includes("design_tokens_set") && configSrc.includes("ui_screen_generate") && configSrc.includes("ui_audit") && configSrc.includes("ui_from_spec"));
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README documents the design pack", readme.includes("ui_screen_generate") && readme.includes("design_tokens_set") && readme.includes("1.29.0"));
-ok("manifest version is 1.31.0", manifest.version === "1.31.0", manifest.version);
+ok("manifest version is 1.32.0", manifest.version === "1.32.0", manifest.version);
 
 // ── ChatGPT catalogue line budget ────────────────────────────────────────────
 const CATALOG_MAX = 560;
