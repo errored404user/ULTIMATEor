@@ -7471,3 +7471,146 @@ html.rs-light #rs-bar.rs-bar-inline.rs-prov-codecraft {
   background: rgba(0, 0, 0, 0.025);
   box-shadow: inset 0 0 0 1px rgba(245, 197, 66, 0.3);
 }
+
+/* ── 9. 1.33.0 — Templates tray: bigger, legible, pill buttons ───────────────
+   The library used to open in a 360px-tall strip with 9.5px copy. It now takes
+   most of the room above the bar (still clamped to --rs-room-above so a centred
+   composer keeps it above the bar), stretches wider than the bar on large
+   screens, and scales the type and controls up. Buttons follow the theme pill
+   system from section 4 (gradient primary with glow, ghost secondary).
+   ─────────────────────────────────────────────────────────────────────────── */
+#rs-bar.rs-cards-open #rs-cards-panel,
+#rs-bar.rs-bar-inline.rs-cards-open #rs-cards-panel {
+  max-height: min(82vh, 780px, var(--rs-room-above, 780px)) !important;
+  min-height: min(460px, 72vh, var(--rs-room-above, 460px)) !important;
+  width: min(max(100%, 860px), calc(100vw - 24px)) !important;
+  left: 50% !important;
+  right: auto !important;
+  translate: -50% 0;
+  border-radius: 18px !important;
+}
+#rs-bar.rs-tray-below.rs-cards-open #rs-cards-panel,
+#rs-bar.rs-tray-below.rs-bar-inline.rs-cards-open #rs-cards-panel {
+  min-height: 0 !important;
+  max-height: min(60vh, 560px) !important;
+}
+#rs-bar.rs-menu-contained #rs-menu.rs-menu-top,
+#rs-bar.rs-bar-inline.rs-menu-contained #rs-menu.rs-menu-top {
+  height: min(380px, 56vh, var(--rs-room-above, 380px)) !important;
+}
+@media (max-width: 900px) {
+  #rs-bar.rs-cards-open #rs-cards-panel,
+  #rs-bar.rs-bar-inline.rs-cards-open #rs-cards-panel { width: 100% !important; left: 0 !important; translate: none; }
+}
+
+/* header + tabs */
+#rs-cards-panel:has(.rs-template-library) .rs-cards-top { padding: 14px 18px 10px !important; }
+#rs-cards-panel:has(.rs-template-library) .rs-cards-heading { font-size: 18px !important; }
+#rs-cards-panel:has(.rs-template-library) .rs-cards-subheading { font-size: 12px !important; margin-top: 3px !important; }
+#rs-cards-panel:has(.rs-template-library) .rs-cards-tabs { height: 40px !important; margin-top: 12px !important; padding: 4px !important; gap: 4px !important; border-radius: 999px !important; }
+#rs-cards-panel:has(.rs-template-library) .rs-cards-tab { min-height: 32px !important; font-size: 12.5px !important; padding: 0 16px !important; border-radius: 999px !important; }
+
+/* library controls */
+.rs-template-controls .rs-template-head { padding: 16px 18px 10px !important; column-gap: 22px !important; }
+.rs-template-controls .rs-template-head-copy b { font-size: 16px !important; }
+.rs-template-controls .rs-template-head-copy p { font-size: 12px !important; margin-top: 4px !important; }
+.rs-template-count { font-size: 11px !important; padding: 2px 9px !important; border-radius: 999px !important; }
+.rs-template-controls .rs-template-head-actions { gap: 10px !important; grid-template-columns: repeat(2, minmax(140px, auto)) !important; }
+.rs-template-controls .rs-template-head-actions .rs-btn-create,
+.rs-template-controls .rs-template-head-actions .rs-btn-ai { height: 38px !important; min-width: 140px !important; font-size: 12.5px !important; padding: 0 18px !important; }
+.rs-template-controls .rs-template-toolbar { padding: 0 18px 14px !important; gap: 10px !important; grid-template-columns: minmax(220px, 1fr) 160px 128px 118px !important; }
+.rs-template-controls #rs-cards-search, .rs-template-controls select,
+.rs-template-controls .rs-template-import, .rs-template-project-import, .rs-template-export-all { height: 40px !important; font-size: 12.5px !important; border-radius: 999px !important; }
+.rs-template-controls #rs-cards-search { padding: 0 16px !important; }
+.rs-template-controls select { padding: 0 12px !important; }
+.rs-template-project-import, .rs-template-export-all, .rs-template-controls .rs-template-import { width: auto !important; min-width: 0 !important; padding: 0 14px !important; }
+
+/* rows */
+.rs-template-list { gap: 10px !important; padding: 12px 18px 22px !important; }
+.rs-template-row { min-height: 84px !important; padding: 16px 18px 16px 20px !important; gap: 18px !important; border-radius: 14px !important; }
+.rs-template-row::before { top: 16px !important; bottom: 16px !important; width: 3px !important; border-radius: 3px; }
+.rs-template-copy > b { font-size: 14.5px !important; letter-spacing: -0.01em; }
+.rs-template-copy > p { font-size: 12.5px !important; line-height: 1.45 !important; margin: 5px 0 6px !important; white-space: normal !important; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.rs-template-copy > span { font-size: 11px !important; line-height: 1.4 !important; }
+.rs-template-actions { gap: 8px !important; }
+.rs-template-actions > button, .rs-template-more > summary {
+  min-height: 36px !important; line-height: 34px !important; padding: 0 15px !important;
+  font-size: 12px !important; border-radius: 999px !important;
+  transition: transform .14s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease, color .18s ease !important;
+}
+.rs-template-actions > button:hover, .rs-template-more > summary:hover { transform: translateY(-1px) !important; }
+.rs-template-actions > button:active { transform: translateY(0) scale(.98) !important; }
+.rs-template-more > div { min-width: 150px !important; padding: 6px !important; border-radius: 12px !important; }
+.rs-template-more > div button { min-height: 32px !important; font-size: 12px !important; border-radius: 8px !important; }
+.rs-template-empty { min-height: 300px !important; margin: 16px 18px 22px !important; border-radius: 14px !important; gap: 10px !important; }
+.rs-template-empty-mark { width: 46px; height: 46px; font-size: 17px; border-radius: 12px; }
+.rs-template-empty b { font-size: 15.5px !important; }
+.rs-template-empty span { font-size: 12px !important; max-width: 420px; }
+.rs-template-empty > div { display: flex; gap: 10px; margin-top: 8px; }
+.rs-template-empty .rs-btn-create, .rs-template-empty .rs-btn-ai { height: 38px !important; font-size: 12.5px !important; padding: 0 18px !important; }
+.rs-idea-generator { padding: 16px 18px !important; margin: 12px 18px 16px !important; border-radius: 14px !important; }
+.rs-idea-generator b, .rs-idea-generator strong { font-size: 13.5px !important; }
+.rs-idea-generator p, .rs-idea-generator span, .rs-idea-generator label { font-size: 12px !important; }
+.rs-idea-generator button, .rs-idea-generator input, .rs-idea-generator select { min-height: 36px !important; font-size: 12px !important; border-radius: 999px !important; }
+
+/* pill buttons: primary = gradient + glow, secondary = ghost (theme tokens from section 4) */
+html[data-rs-theme] .rs-template-library .rs-btn-primary,
+html[data-rs-theme] .rs-template-actions .rs-template-run,
+html[data-rs-theme] .rs-idea-generator button[data-idea-generate],
+html[data-rs-theme] .rs-idea-generator button.rs-btn-primary {
+  background: var(--orx-grad) !important;
+  color: var(--orx-on) !important;
+  border: 1px solid color-mix(in srgb, var(--orx-a) 60%, transparent) !important;
+  border-radius: 999px !important;
+  font-weight: 750 !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.22) inset, 0 -1px 0 rgba(0,0,0,.18) inset, 0 6px 18px var(--orx-glow), 0 2px 8px rgba(0,0,0,.22) !important;
+  filter: none !important;
+}
+html[data-rs-theme] .rs-template-library .rs-btn-primary:hover,
+html[data-rs-theme] .rs-template-actions .rs-template-run:hover,
+html[data-rs-theme] .rs-idea-generator button[data-idea-generate]:hover,
+html[data-rs-theme] .rs-idea-generator button.rs-btn-primary:hover {
+  filter: brightness(1.07) saturate(1.05) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.26) inset, 0 -1px 0 rgba(0,0,0,.18) inset, 0 10px 26px var(--orx-glow), 0 0 0 3px color-mix(in srgb, var(--orx-a) 18%, transparent), 0 3px 10px rgba(0,0,0,.24) !important;
+}
+html[data-rs-theme] .rs-template-library .rs-btn-secondary,
+html[data-rs-theme] .rs-template-actions > button:not(.rs-template-run),
+html[data-rs-theme] .rs-template-more > summary,
+html[data-rs-theme] .rs-template-project-import,
+html[data-rs-theme] .rs-template-export-all,
+html[data-rs-theme] .rs-template-controls .rs-template-import {
+  background: linear-gradient(180deg, var(--orx-ghost-hi), var(--orx-ghost)) !important;
+  color: var(--orx-ghost-fg) !important;
+  border: 1px solid var(--orx-ghost-line) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 2px 8px rgba(0,0,0,.18) !important;
+}
+html[data-rs-theme] .rs-template-library .rs-btn-secondary:hover,
+html[data-rs-theme] .rs-template-actions > button:not(.rs-template-run):hover,
+html[data-rs-theme] .rs-template-more > summary:hover,
+html[data-rs-theme] .rs-template-project-import:hover,
+html[data-rs-theme] .rs-template-export-all:hover,
+html[data-rs-theme] .rs-template-controls .rs-template-import:hover {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--orx-a) 30%, transparent), var(--orx-ghost-hi)) !important;
+  border-color: color-mix(in srgb, var(--orx-a) 55%, transparent) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.1) inset, 0 6px 16px var(--orx-glow), 0 2px 8px rgba(0,0,0,.2) !important;
+  color: #fff !important;
+}
+html[data-rs-theme] .rs-template-actions > button:focus-visible,
+html[data-rs-theme] .rs-template-library .rs-btn-primary:focus-visible,
+html[data-rs-theme] .rs-template-library .rs-btn-secondary:focus-visible,
+html[data-rs-theme] .rs-cards-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--orx-a) 70%, #fff) !important;
+  outline-offset: 2px !important;
+}
+.rs-template-actions > button[disabled], .rs-template-library .rs-btn-primary[disabled], .rs-template-library .rs-btn-secondary[disabled] { opacity: .55 !important; cursor: not-allowed !important; transform: none !important; box-shadow: none !important; }
+@media (max-width: 720px) {
+  .rs-template-controls .rs-template-toolbar { grid-template-columns: 1fr 1fr !important; }
+  .rs-template-controls .rs-template-search { grid-column: 1 / -1 !important; }
+  .rs-template-row { flex-direction: column !important; align-items: stretch !important; }
+  .rs-template-actions { justify-content: flex-start !important; flex-wrap: wrap !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rs-template-actions > button, .rs-template-more > summary, .rs-template-library .rs-btn-primary, .rs-template-library .rs-btn-secondary { transition: none !important; transform: none !important; }
+}
