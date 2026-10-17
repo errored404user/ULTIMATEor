@@ -71,6 +71,7 @@ fn init_file_logger(ui: Option<Arc<gui::UiShared>>) {
     }
 }
 
+mod chat;
 mod gui;
 mod plugin;
 mod workspace;
@@ -923,7 +924,7 @@ async fn ui_command_loop(state: AppState, mut rx: tokio::sync::mpsc::UnboundedRe
                         "local" => workspace::dispatch(&state2.workspace, &name, args).await
                             .map(|text| McpToolOutput { text, images: Vec::new() })
                             .map_err(anyhow::Error::msg),
-                        _ => roblox_tool(&state2, &name, args).await,
+                        _ => if plugin::is_plugin_tool(&name) { plugin::call(&state2, &name, args).await } else { roblox_tool(&state2, &name, args).await },
                     };
                     let elapsed_ms = started.elapsed().as_millis();
                     let out = match outcome {
@@ -955,6 +956,18 @@ async fn ui_command_loop(state: AppState, mut rx: tokio::sync::mpsc::UnboundedRe
                         Err(e) => { state2.ui.track("error", format!("run_command failed: {}", gui_truncate(&e, 140))); gui::ToolReply { ok: false, text: e, images: Vec::new(), elapsed_ms } }
                     };
                     let _ = reply.send(out);
+                });
+            }
+            gui::UiCommand::ChatTurn { request, events, cancel } => {
+                let state2 = state.clone();
+                tokio::spawn(async move {
+                    chat::run_turn(state2, request, events, cancel).await;
+                });
+            }
+            gui::UiCommand::ChatModels { base_url, api_key, reply } => {
+                tokio::spawn(async move {
+                    let result = chat::list_models(&base_url, &api_key).await;
+                    let _ = reply.send(result);
                 });
             }
             gui::UiCommand::SetWorkspace { path, reply } => {

@@ -3,9 +3,20 @@
 Native desktop app + bridge for the ORscript browser extension. One binary does both jobs:
 
 * **Bridge** — HTTP `127.0.0.1:3000`, WebSocket `17613` (Roblox Studio) and `17615` (AgentScript workspace), Roblox Studio MCP helper (Windows `%LOCALAPPDATA%\Roblox\mcp.bat`, macOS `RobloxStudio.app/Contents/MacOS/StudioMCP`), 18 workspace tools. Protocol-identical to or-core 1.18, so the extension needs no change.
-* **Desktop window** — pure Rust (eframe/egui), 6 pages: **Home** (setup checklist that tells you the next step, status cards, live Studio viewport snapshot, quick access, recent activity), **Explorer** (workspace browser + editor), **Tools** (Studio + workspace tool catalog with a Run panel), **Servers** (Studio MCP, local bridge, channels), **Terminal** (workspace shell *and* a Luau runner that executes code inside Roblox Studio), **Settings** (workspace folder picker applied live, MCP launcher override, diagnostics, about). Closing the window hides it to the notification area; the bridge keeps running. Left-click the tray icon (or launch `or-core` again) to reopen the window; right-click → **Quit**, or the **Quit** pill in the title bar, stops the bridge. Since 1.22.0 the tray icon is created on the event-loop thread and serviced by a dedicated worker, so it keeps working while the window is hidden; a hidden window does no layout work. Runs on **Windows and macOS** (see *Platforms*).
+* **Desktop window** — pure Rust (eframe/egui), 6 pages: **Home** (setup checklist that tells you the next step, status cards, live Studio viewport snapshot, quick access, recent activity), **Explorer** (workspace browser + editor), **Tools** (Studio + workspace tool catalog with a Run panel), **Servers** (Studio MCP, local bridge, channels), **Terminal** (workspace shell *and* a Luau runner that executes code inside Roblox Studio), **Settings** (workspace folder picker applied live, MCP launcher override, AI chat keys, diagnostics, about), plus the **AI Chat** side panel (1.37.0) on every page. Closing the window hides it to the notification area; the bridge keeps running. Left-click the tray icon (or launch `or-core` again) to reopen the window; right-click → **Quit**, or the **Quit** pill in the title bar, stops the bridge. Since 1.22.0 the tray icon is created on the event-loop thread and serviced by a dedicated worker, so it keeps working while the window is hidden; a hidden window does no layout work. Runs on **Windows and macOS** (see *Platforms*).
 
-Keyboard: `Esc` close panel / clear search · `Ctrl+1…6` pages · `Ctrl+R` restart Studio MCP · `F5` probe Studio + refresh tools · `Ctrl+Shift+S` Studio snapshot · `Ctrl+S` save file · `Ctrl+Enter` run Luau.
+Keyboard: `Esc` close panel / clear search · `Ctrl+1…6` pages · `Ctrl+J` AI chat panel · `Ctrl+R` restart Studio MCP · `F5` probe Studio + refresh tools · `Ctrl+Shift+S` Studio snapshot · `Ctrl+S` save file · `Ctrl+Enter` run Luau.
+
+## AI chat panel (1.37.0)
+
+The **AI Chat** pill in the title bar (or `Ctrl+J`) opens a resizable chat panel on the right of every page. It is a bring-your-own-key client for any OpenAI-compatible API, and the model you pick gets the bridge's toolkit as function tools — so it can build, inspect and fix things in Roblox Studio from the desktop app, without the browser extension.
+
+* **Providers (Setup):** CodeCraft API (`https://codecraftapi.com/v1`), OpenAI, OpenRouter, Groq, DeepSeek, Google Gemini (OpenAI layer), xAI Grok, Mistral, Together AI, a local **Ollama** / **LM Studio** (no key) or a **custom** base URL. Paste the key once, press **Refresh** to load `GET /models` (or type a model id), **Done**. Keys and the chosen model are stored per provider in `settings.json` on this PC only and are sent to that provider's host only.
+* **Tools:** every turn the engine collects the live tool list — Studio MCP (`execute_luau`, `screen_capture`, `get_studio_state`…), the ORscript Studio plugin commands while the plugin is connected, and the workspace file/terminal tools — and sends it as OpenAI `tools`. Tool calls run through the exact same code paths the extension uses; results (and `ERROR:` messages) go back to the model until it answers in text or the **max steps** budget (default 16, 1–64) is spent. Screenshots returned by tools are shown in the transcript, land on the Home snapshot card and — when *Forward screenshots* is on — are sent to the model as `image_url` parts so vision models can judge the viewport. Models/providers that reject `tools` (HTTP 4xx mentioning tools) are retried once without them.
+* **System prompt:** built live from bridge state — Studio linked or not, plugin connected or not, workspace root, date — plus your *standing instructions* from Setup. It tells the model how `execute_luau` behaves (print = result, Edit DataModel, ChangeHistory waypoints) and to verify before reporting.
+* **Transcript:** user bubbles (↩ *edit* copies the text back), streamed assistant replies with fenced code rendered as copyable blocks, collapsible **tool cards** (name, state, elapsed, arguments, result, images), notes for errors/stops, token totals from the provider's `usage`. **Stop** cancels after the current step (the history stays valid — every pending tool call gets a cancelled result), **New** clears the conversation, **Export** writes `orscript-chat-<timestamp>.md` into the workspace. `Enter` sends, `Shift+Enter` inserts a new line, **Capture** asks the model to screenshot Studio and describe it.
+* Settings → *AI chat (side panel)* can open the panel/setup and **forget all API keys**. The engine lives in `src/chat.rs`; the UI in `gui.rs` (`chat_*`), wired through `UiCommand::ChatTurn` / `UiCommand::ChatModels`.
+
 
 ## Build
 
@@ -75,7 +86,7 @@ If no tray icon could be created, *Close* quits instead of hiding (the app never
 
 ## Files written
 
-* `settings.json` — theme, close-to-tray, start hidden, launch at sign-in, workspace root, MCP launcher override, FULL PC ACCESS.
+* `settings.json` — theme, close-to-tray, start hidden, launch at sign-in, workspace root, MCP launcher override, FULL PC ACCESS, and since 1.37.0 the AI chat setup (provider, **API keys in plain text**, model per provider, tools / screenshot forwarding / max steps / temperature / standing instructions, panel open + width).
 * `logs/agent.log` — append-only bridge log (also shown in the Terminal page).
 
 Location per OS: see the *Data dir* row above (Windows keeps them next to `or-core.exe`, portable).
@@ -90,6 +101,7 @@ agent/
   src/workspace.rs    AgentScript workspace engine (18 tools, sandbox rules)
   src/gui.rs          desktop window, theme, pages, tray icon, per-OS data dir / autostart
   src/plugin.rs       Studio plugin hub (job queue, /api/plugin/*, Open Cloud game passes / products, installer)
+  src/chat.rs         AI chat engine: OpenAI-compatible streaming client, tool catalogue → function tools, agent loop (1.37.0)
   ../plugin/ORscript.lua  the Studio plugin itself (embedded via include_str!)
 ```
 

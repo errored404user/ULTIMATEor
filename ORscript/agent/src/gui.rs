@@ -8,7 +8,7 @@
 //! until "Quit" is chosen from the tray menu or Settings.
 
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -293,6 +293,10 @@ pub enum UiCommand {
     SetMcpCommand(String),
     RunTool { engine: String, name: String, args: serde_json::Value, reply: Sender<ToolReply> },
     RunCommand { command: String, reply: Sender<ToolReply> },
+    /// One AI chat turn (side panel). Events stream back until `Finished`.
+    ChatTurn { request: crate::chat::TurnRequest, events: Sender<crate::chat::ChatEvent>, cancel: Arc<AtomicBool> },
+    /// `GET {base_url}/models` for the chat model picker.
+    ChatModels { base_url: String, api_key: String, reply: Sender<Result<Vec<String>, String>> },
 }
 
 // ───────────────────────────── settings ─────────────────────────────
@@ -313,6 +317,26 @@ pub struct Settings {
     pub window_height: f32,
     /// Show the setup checklist on Home even when everything is green.
     pub show_checklist: bool,
+    // ── AI chat side panel (1.37) ──
+    /// Provider preset id (see `chat::PROVIDERS`).
+    pub chat_provider: String,
+    /// Base URL for the `custom` preset.
+    pub chat_custom_url: String,
+    /// API keys per provider id. Stored in settings.json on this PC only.
+    pub chat_keys: HashMap<String, String>,
+    /// Last chosen model per provider id.
+    pub chat_models: HashMap<String, String>,
+    /// Give the model the bridge's tools (Studio + plugin + workspace).
+    pub chat_tools: bool,
+    /// Forward screenshots returned by tools to the model (vision models).
+    pub chat_send_images: bool,
+    /// Max model round-trips per user message.
+    pub chat_max_steps: u32,
+    pub chat_temperature: f32,
+    /// Extra standing instructions appended to the system prompt.
+    pub chat_instructions: String,
+    pub chat_panel_open: bool,
+    pub chat_panel_width: f32,
 }
 
 impl Default for Settings {
@@ -329,6 +353,17 @@ impl Default for Settings {
             window_width: 0.0,
             window_height: 0.0,
             show_checklist: true,
+            chat_provider: "codecraft".into(),
+            chat_custom_url: String::new(),
+            chat_keys: HashMap::new(),
+            chat_models: HashMap::new(),
+            chat_tools: true,
+            chat_send_images: true,
+            chat_max_steps: 16,
+            chat_temperature: 0.3,
+            chat_instructions: String::new(),
+            chat_panel_open: false,
+            chat_panel_width: 400.0,
         }
     }
 }
@@ -554,6 +589,35 @@ struct ToolRun { receiver: Receiver<ToolReply>, started: Instant, name: String }
 
 struct Snapshot { texture: egui::TextureHandle, size: [usize; 2], taken_at: String, source: String }
 
+// ── AI chat side panel state ──
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ChatRole { User, Assistant, Note }
+
+struct ChatToolCard {
+    id: String,
+    name: String,
+    args: String,
+    result: String,
+    ok: Option<bool>,
+    elapsed_ms: u128,
+    images: Vec<(egui::TextureHandle, [usize; 2])>,
+    open: bool,
+}
+
+struct ChatMsg {
+    role: ChatRole,
+    text: String,
+    tools: Vec<ChatToolCard>,
+    at: String,
+}
+
+struct ChatTurn {
+    receiver: Receiver<crate::chat::ChatEvent>,
+    cancel: Arc<AtomicBool>,
+    started: Instant,
+}
+
 pub struct App {
     shared: Arc<UiShared>,
     cmd_tx: UnboundedSender<UiCommand>,
@@ -613,6 +677,21 @@ pub struct App {
     native_hwnd: Option<isize>,
     /// Window size changed since the last settings save.
     size_dirty: bool,
+    // AI chat side panel
+    chat_items: Vec<ChatMsg>,
+    /// OpenAI-format history (without the system prompt) sent with every turn.
+    chat_history: Vec<serde_json::Value>,
+    chat_input: String,
+    chat_turn: Option<ChatTurn>,
+    chat_status: String,
+    chat_model_list: Vec<String>,
+    chat_models_rx: Option<Receiver<Result<Vec<String>, String>>>,
+    chat_models_note: String,
+    chat_setup_open: bool,
+    chat_key_visible: bool,
+    chat_tokens: (u64, u64),
+    chat_last_turn_ms: u128,
+    chat_pending_focus: bool,
 }
 
 /// See `App::native_hwnd`.
@@ -696,7 +775,23 @@ impl App {
             tray,
             native_hwnd: None,
             size_dirty: false,
+            chat_items: Vec::new(),
+            chat_history: Vec::new(),
+            chat_input: String::new(),
+            chat_turn: None,
+            chat_status: String::new(),
+            chat_model_list: Vec::new(),
+            chat_models_rx: None,
+            chat_models_note: String::new(),
+            chat_setup_open: false,
+            chat_key_visible: false,
+            chat_tokens: (0, 0),
+            chat_last_turn_ms: 0,
+            chat_pending_focus: false,
         };
+        // Open the chat panel straight into setup when nothing is configured yet.
+        app.chat_setup_open = !app.chat_ready();
+        if let Some(m) = app.settings.chat_models.get(&app.settings.chat_provider) { if !m.is_empty() { app.chat_model_list = vec![m.clone()]; } }
         app.refresh_explorer();
         app
     }
@@ -828,6 +923,7 @@ impl App {
     }
 
     fn poll_async(&mut self, ctx: &egui::Context) {
+        self.chat_poll(ctx);
         // Event toasts: surface bridge / Studio / error events the runtime
         // recorded since the last frame, so the user does not have to watch
         // the activity feed to know the extension connected or a helper died.
@@ -942,12 +1038,14 @@ impl App {
         let mut refresh = false;
         let mut capture = false;
         let mut escape = false;
+        let mut chat = false;
         ctx.input(|i| {
             if i.modifiers.command {
                 for page in Page::ALL {
                     if i.key_pressed(page.shortcut_key()) { nav = Some(page); }
                 }
                 if i.key_pressed(egui::Key::R) { restart = true; }
+                if i.key_pressed(egui::Key::J) { chat = true; }
                 if i.modifiers.shift && i.key_pressed(egui::Key::S) { capture = true; }
             }
             if i.key_pressed(egui::Key::F5) { refresh = true; }
@@ -963,6 +1061,7 @@ impl App {
             self.toast = None;
         }
         if let Some(page) = nav { self.page = page; }
+        if chat { self.toggle_chat(); }
         if restart { self.send(UiCommand::RestartMcp, "Restarting Studio MCP helper"); }
         if capture { self.capture_studio(); }
         if refresh {
@@ -1067,6 +1166,12 @@ impl App {
                         }
                         ui.add_space(6.0);
                         ui.label(RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).small().color(t.muted));
+                        ui.add_space(8.0);
+                        let chat_open = self.settings.chat_panel_open;
+                        if pill(ui, t, "AI Chat", chat_open).on_hover_text("Chat with a model that drives Studio through the bridge (Ctrl+J)").clicked() {
+                            self.toggle_chat();
+                        }
+                        if self.chat_turn.is_some() { status_dot(ui, t.warn); }
                     });
                 });
             });
@@ -2056,6 +2161,20 @@ impl App {
                 });
                 ui.label(RichText::new("A custom launcher is any command that speaks MCP over stdio (for example a different mcp.bat or a wrapper script). OR_MCP_COMMAND in the environment still takes precedence at start.").small().color(t.muted));
             });
+            settings_section(ui, t, "AI chat (side panel)", |ui| {
+                ui.label(RichText::new("Bring your own API key: CodeCraft, OpenAI, OpenRouter, Groq, DeepSeek, Gemini, xAI, Mistral, Together, a local Ollama / LM Studio or any OpenAI-compatible endpoint. The model you pick receives the bridge's Studio, plugin and workspace tools and works in Studio for you.").small().color(t.muted));
+                ui.horizontal(|ui| {
+                    if pill(ui, t, if self.settings.chat_panel_open { "Hide chat panel" } else { "Open chat panel" }, true).clicked() { self.toggle_chat(); }
+                    if ui.button("Open chat setup").clicked() { self.settings.chat_panel_open = true; self.chat_setup_open = true; save = true; }
+                    let n = self.settings.chat_keys.values().filter(|k| !k.trim().is_empty()).count();
+                    if ui.add_enabled(n > 0, egui::Button::new(format!("Forget all API keys ({n})"))).clicked() {
+                        self.settings.chat_keys.clear();
+                        save = true;
+                        self.settings_note = "API keys removed from settings.json".into();
+                    }
+                });
+                ui.label(RichText::new(format!("Keys and the chosen model are stored in plain text in {} — only on this PC. Ctrl+J toggles the panel.", Settings::path().display())).small().color(t.muted));
+            });
             settings_section(ui, t, "About", |ui| {
             ui.horizontal(|ui| {
                 self.logo_mark(ui, 40.0);
@@ -2149,6 +2268,7 @@ impl eframe::App for App {
 
         self.titlebar(ctx);
         self.sidebar(ctx);
+        self.chat_panel(ctx);
         let t = self.theme;
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(t.bg).inner_margin(Margin::symmetric(22.0, 18.0)))
@@ -2180,8 +2300,580 @@ impl eframe::App for App {
             }
         }
         let busy = self.run_job.is_some() || self.term_run.is_some() || self.luau_run.is_some()
-            || self.snapshot_run.is_some() || self.picker_rx.is_some() || self.workspace_rx.is_some();
+            || self.snapshot_run.is_some() || self.picker_rx.is_some() || self.workspace_rx.is_some()
+            || self.chat_turn.is_some() || self.chat_models_rx.is_some();
         ctx.request_repaint_after(Duration::from_millis(if busy { 120 } else { 700 }));
+    }
+}
+
+// ───────────────────────────── AI chat side panel ─────────────────────────────
+
+impl App {
+    fn chat_provider(&self) -> &'static crate::chat::Provider { crate::chat::provider(&self.settings.chat_provider) }
+
+    fn chat_base_url(&self) -> String {
+        let p = self.chat_provider();
+        if p.id == "custom" { crate::chat::normalize_base(&self.settings.chat_custom_url) } else { p.base_url.to_string() }
+    }
+
+    fn chat_key(&self) -> String {
+        self.settings.chat_keys.get(&self.settings.chat_provider).cloned().unwrap_or_default().trim().to_string()
+    }
+
+    fn chat_model(&self) -> String {
+        self.settings.chat_models.get(&self.settings.chat_provider).cloned().unwrap_or_default().trim().to_string()
+    }
+
+    fn set_chat_model(&mut self, model: &str) {
+        let pid = self.settings.chat_provider.clone();
+        self.settings.chat_models.insert(pid, model.trim().to_string());
+    }
+
+    /// Base URL + key (when the preset needs one) + model are all set.
+    fn chat_ready(&self) -> bool {
+        let p = self.chat_provider();
+        !self.chat_base_url().is_empty() && (!p.needs_key || !self.chat_key().is_empty()) && !self.chat_model().is_empty()
+    }
+
+    fn toggle_chat(&mut self) {
+        self.settings.chat_panel_open = !self.settings.chat_panel_open;
+        if self.settings.chat_panel_open { self.chat_pending_focus = true; }
+        let _ = self.settings.save();
+    }
+
+    fn chat_refresh_models(&mut self) {
+        if self.chat_models_rx.is_some() { return; }
+        let base = self.chat_base_url();
+        if base.is_empty() { self.chat_models_note = "Enter a base URL first".into(); return; }
+        let (tx, rx) = std::sync::mpsc::channel();
+        if self.cmd_tx.send(UiCommand::ChatModels { base_url: base, api_key: self.chat_key(), reply: tx }).is_ok() {
+            self.chat_models_rx = Some(rx);
+            self.chat_models_note = "Loading models…".into();
+        } else {
+            self.toast("Bridge runtime is not reachable", false);
+        }
+    }
+
+    fn chat_push(&mut self, role: ChatRole, text: impl Into<String>) {
+        self.chat_items.push(ChatMsg { role, text: text.into(), tools: Vec::new(), at: chrono::Local::now().format("%H:%M").to_string() });
+    }
+
+    fn chat_send(&mut self) {
+        if self.chat_turn.is_some() { return; }
+        let text = self.chat_input.trim().to_string();
+        if text.is_empty() { return; }
+        if !self.chat_ready() {
+            self.chat_setup_open = true;
+            self.toast("Finish the chat setup first (provider, API key, model)", false);
+            return;
+        }
+        self.chat_input.clear();
+        self.chat_push(ChatRole::User, text.clone());
+        self.chat_history.push(serde_json::json!({"role": "user", "content": text}));
+        let request = crate::chat::TurnRequest {
+            base_url: self.chat_base_url(),
+            api_key: self.chat_key(),
+            model: self.chat_model(),
+            messages: self.chat_history.clone(),
+            tools: self.settings.chat_tools,
+            max_steps: self.settings.chat_max_steps.max(1) as usize,
+            temperature: self.settings.chat_temperature,
+            send_images: self.settings.chat_send_images,
+            instructions: self.settings.chat_instructions.clone(),
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+        if self.cmd_tx.send(UiCommand::ChatTurn { request, events: tx, cancel: cancel.clone() }).is_ok() {
+            self.chat_turn = Some(ChatTurn { receiver: rx, cancel, started: Instant::now() });
+            self.chat_status = "starting…".into();
+        } else {
+            self.toast("Bridge runtime is not reachable", false);
+        }
+        self.chat_pending_focus = true;
+    }
+
+    fn chat_stop(&mut self) {
+        if let Some(turn) = &self.chat_turn {
+            turn.cancel.store(true, Ordering::Relaxed);
+            self.chat_status = "stopping after the current step…".into();
+        }
+    }
+
+    fn chat_new(&mut self) {
+        if let Some(turn) = &self.chat_turn { turn.cancel.store(true, Ordering::Relaxed); }
+        self.chat_turn = None;
+        self.chat_items.clear();
+        self.chat_history.clear();
+        self.chat_tokens = (0, 0);
+        self.chat_status.clear();
+        self.chat_pending_focus = true;
+    }
+
+    fn chat_export(&mut self) {
+        if self.chat_items.is_empty() { self.toast("Nothing to export yet", false); return; }
+        let mut md = format!("# ORscript chat — {} · {}\n\n", self.chat_provider().name, self.chat_model());
+        for m in &self.chat_items {
+            match m.role {
+                ChatRole::User => md.push_str(&format!("## You ({})\n\n{}\n\n", m.at, m.text)),
+                ChatRole::Assistant => {
+                    md.push_str(&format!("## Assistant ({})\n\n", m.at));
+                    for c in &m.tools {
+                        md.push_str(&format!("<details><summary>tool {} · {} · {} ms</summary>\n\n```json\n{}\n```\n\n```\n{}\n```\n</details>\n\n",
+                            c.name, match c.ok { Some(true) => "ok", Some(false) => "error", None => "pending" }, c.elapsed_ms, c.args, truncate(&c.result, 6000)));
+                    }
+                    md.push_str(&m.text);
+                    md.push_str("\n\n");
+                }
+                ChatRole::Note => md.push_str(&format!("> {}\n\n", m.text)),
+            }
+        }
+        let name = format!("orscript-chat-{}.md", chrono::Local::now().format("%Y%m%d-%H%M%S"));
+        let path = self.workspace_root().join(&name);
+        match std::fs::write(&path, md) {
+            Ok(()) => { let p = path.to_string_lossy().to_string(); self.toast(format!("Saved {}", short_path(&p, 60)), true); }
+            Err(e) => self.toast(format!("Export failed: {e}"), false),
+        }
+    }
+
+    fn chat_last_assistant(&mut self) -> &mut ChatMsg {
+        let needs_new = !matches!(self.chat_items.last(), Some(m) if m.role == ChatRole::Assistant);
+        if needs_new { self.chat_push(ChatRole::Assistant, ""); }
+        self.chat_items.last_mut().expect("assistant message")
+    }
+
+    /// Drain chat events / model list replies (called from `poll_async`).
+    fn chat_poll(&mut self, ctx: &egui::Context) {
+        // Model list
+        let models = self.chat_models_rx.as_ref().map(|rx| rx.try_recv());
+        if let Some(result) = models {
+            match result {
+                Ok(Ok(list)) => {
+                    self.chat_models_note = format!("{} models", list.len());
+                    let current = self.chat_model();
+                    if current.is_empty() || !list.iter().any(|m| *m == current) {
+                        if let Some(first) = pick_default_model(&list) { self.set_chat_model(&first); }
+                    }
+                    self.chat_model_list = list;
+                    self.chat_models_rx = None;
+                    let _ = self.settings.save();
+                }
+                Ok(Err(e)) => { self.chat_models_note = e; self.chat_models_rx = None; }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(_) => { self.chat_models_note = "runtime dropped the request".into(); self.chat_models_rx = None; }
+            }
+        }
+        // Turn events — drain everything that arrived since the last frame.
+        let mut finished = false;
+        loop {
+            let Some(turn) = &self.chat_turn else { break };
+            let event = match turn.receiver.try_recv() {
+                Ok(ev) => ev,
+                Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                Err(_) => {
+                    self.chat_push(ChatRole::Note, "The runtime dropped this turn.");
+                    finished = true;
+                    break;
+                }
+            };
+            use crate::chat::ChatEvent as E;
+            match event {
+                E::Status(s) => self.chat_status = s,
+                E::AssistantStart => {
+                    let fresh = !matches!(self.chat_items.last(), Some(m) if m.role == ChatRole::Assistant && m.text.is_empty() && m.tools.is_empty());
+                    if fresh { self.chat_push(ChatRole::Assistant, ""); }
+                }
+                E::Delta(text) => { self.chat_last_assistant().text.push_str(&text); }
+                E::ToolStart { id, name, args } => {
+                    let args = match args { serde_json::Value::String(s) => s, other => serde_json::to_string_pretty(&other).unwrap_or_default() };
+                    self.chat_last_assistant().tools.push(ChatToolCard { id, name, args, result: String::new(), ok: None, elapsed_ms: 0, images: Vec::new(), open: false });
+                }
+                E::ToolDone { id, name, ok, text, images, elapsed_ms } => {
+                    let mut textures = Vec::new();
+                    for (n, (_mime, data)) in images.iter().enumerate().take(2) {
+                        if let Ok((rgba, w, h)) = decode_image(data) {
+                            let image = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+                            let tex = ctx.load_texture(format!("chat-img-{id}-{n}"), image, egui::TextureOptions::LINEAR);
+                            textures.push((tex, [w as usize, h as usize]));
+                        }
+                    }
+                    if ok && !images.is_empty() { self.store_snapshot(ctx, &images, &name); }
+                    let msg = self.chat_last_assistant();
+                    let pos = msg.tools.iter().rposition(|c| c.id == id);
+                    match pos {
+                        Some(i) => {
+                            let card = &mut msg.tools[i];
+                            card.ok = Some(ok);
+                            card.result = text;
+                            card.elapsed_ms = elapsed_ms;
+                            card.images = textures;
+                            card.open = !ok;
+                        }
+                        None => msg.tools.push(ChatToolCard { id, name, args: String::new(), result: text, ok: Some(ok), elapsed_ms, images: textures, open: !ok }),
+                    }
+                }
+                E::Finished { appended, prompt_tokens, completion_tokens, steps, error } => {
+                    self.chat_history.extend(appended);
+                    self.chat_tokens.0 += prompt_tokens;
+                    self.chat_tokens.1 += completion_tokens;
+                    if let Some(turn) = &self.chat_turn { self.chat_last_turn_ms = turn.started.elapsed().as_millis(); }
+                    // Drop a trailing empty assistant bubble (e.g. error before any text).
+                    if matches!(self.chat_items.last(), Some(m) if m.role == ChatRole::Assistant && m.text.trim().is_empty() && m.tools.is_empty()) { self.chat_items.pop(); }
+                    match error {
+                        Some(e) if e == "stopped" => { self.chat_push(ChatRole::Note, "Stopped."); self.chat_status = "stopped".into(); }
+                        Some(e) => { self.chat_push(ChatRole::Note, e.clone()); self.chat_status = format!("error · {}", truncate(&e, 80)); }
+                        None => { self.chat_status = format!("done · {steps} step(s) · {:.1} s", self.chat_last_turn_ms as f64 / 1000.0); }
+                    }
+                    finished = true;
+                    break;
+                }
+            }
+        }
+        if finished { self.chat_turn = None; self.chat_pending_focus = true; }
+    }
+
+    fn chat_panel(&mut self, ctx: &egui::Context) {
+        if !self.settings.chat_panel_open { return; }
+        let t = self.theme;
+        let width = self.settings.chat_panel_width.clamp(320.0, 760.0);
+        let inner = egui::SidePanel::right("chat-panel")
+            .default_width(width)
+            .width_range(320.0..=760.0)
+            .resizable(true)
+            .frame(egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)))
+            .show(ctx, |ui| {
+                egui::TopBottomPanel::top("chat-head")
+                    .frame(egui::Frame::none().fill(t.bg2).inner_margin(Margin::symmetric(12.0, 10.0)))
+                    .show_inside(ui, |ui| self.chat_header(ui));
+                egui::TopBottomPanel::bottom("chat-composer")
+                    .frame(egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).inner_margin(Margin::symmetric(12.0, 10.0)))
+                    .show_inside(ui, |ui| self.chat_composer(ui, ctx));
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::none().fill(t.bg).inner_margin(Margin::symmetric(12.0, 8.0)))
+                    .show_inside(ui, |ui| {
+                        if self.chat_setup_open { self.chat_setup(ui); }
+                        self.chat_transcript(ui);
+                    });
+            });
+        let w = inner.response.rect.width();
+        if w >= 320.0 && (w - self.settings.chat_panel_width).abs() > 1.0 {
+            self.settings.chat_panel_width = w;
+            self.size_dirty = true;
+        }
+    }
+
+    fn chat_header(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
+        let busy = self.chat_turn.is_some();
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("AI Chat").size(16.0).strong().color(t.text));
+            let model = self.chat_model();
+            let sub = if model.is_empty() { format!("{} · no model", self.chat_provider().name) } else { format!("{} · {}", self.chat_provider().name, model) };
+            ui.label(RichText::new(truncate(&sub, 44)).small().color(t.muted)).on_hover_text(sub);
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if window_button(ui, WinGlyph::Close, t.text, t).on_hover_text("Hide the chat panel (Ctrl+J)").clicked() { self.toggle_chat(); }
+                if pill(ui, t, "Setup", self.chat_setup_open).on_hover_text("Provider, API key, model, tools").clicked() {
+                    self.chat_setup_open = !self.chat_setup_open;
+                    if !self.chat_setup_open { let _ = self.settings.save(); }
+                }
+                if pill(ui, t, "New", false).on_hover_text("Start a fresh conversation").clicked() { self.chat_new(); }
+                if ui.add_enabled(!self.chat_items.is_empty(), egui::Button::new(RichText::new("Export").small())).on_hover_text("Save the transcript as Markdown in the workspace").clicked() { self.chat_export(); }
+            });
+        });
+        ui.horizontal(|ui| {
+            let (dot, text) = if busy { (t.warn, if self.chat_status.is_empty() { "working…".to_string() } else { self.chat_status.clone() }) }
+                else if !self.chat_ready() { (t.muted, "not configured — open Setup".to_string()) }
+                else if self.chat_status.is_empty() { (t.ok, if self.settings.chat_tools { "ready · tools on".to_string() } else { "ready · tools off".to_string() }) }
+                else { (t.ok, self.chat_status.clone()) };
+            status_dot(ui, dot);
+            ui.label(RichText::new(truncate(&text, 70)).small().color(t.muted));
+            if self.chat_tokens.0 + self.chat_tokens.1 > 0 {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.label(RichText::new(format!("{} in · {} out", self.chat_tokens.0, self.chat_tokens.1)).small().color(t.muted)).on_hover_text("Tokens used in this conversation (as reported by the provider)");
+                });
+            }
+        });
+    }
+
+    fn chat_setup(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
+        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border2)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
+        frame.show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new("PROVIDER").small().strong().color(t.muted));
+            let current = self.settings.chat_provider.clone();
+            let mut switched: Option<&'static str> = None;
+            egui::ComboBox::from_id_salt("chat-provider")
+                .width(ui.available_width() - 8.0)
+                .selected_text(self.chat_provider().name)
+                .show_ui(ui, |ui| {
+                    for p in crate::chat::PROVIDERS {
+                        if ui.selectable_label(current == p.id, p.name).clicked() && current != p.id { switched = Some(p.id); }
+                    }
+                });
+            if let Some(id) = switched {
+                self.settings.chat_provider = id.to_string();
+                self.chat_model_list = self.settings.chat_models.get(id).filter(|m| !m.is_empty()).map(|m| vec![m.clone()]).unwrap_or_default();
+                self.chat_models_note.clear();
+                self.chat_models_rx = None;
+            }
+            let p = self.chat_provider();
+            ui.add_space(6.0);
+            ui.label(RichText::new("BASE URL").small().strong().color(t.muted));
+            if p.id == "custom" {
+                ui.add(egui::TextEdit::singleline(&mut self.settings.chat_custom_url).hint_text("https://host/v1").desired_width(f32::INFINITY).font(TextStyle::Monospace));
+            } else {
+                ui.label(RichText::new(p.base_url).monospace().small().color(t.muted));
+            }
+            ui.add_space(6.0);
+            ui.label(RichText::new(if p.needs_key { "API KEY" } else { "API KEY (optional)" }).small().strong().color(t.muted));
+            let visible = self.chat_key_visible;
+            ui.horizontal(|ui| {
+                let key = self.settings.chat_keys.entry(p.id.to_string()).or_default();
+                ui.add(egui::TextEdit::singleline(key).password(!visible).hint_text("paste your key").desired_width(ui.available_width() - 60.0).font(TextStyle::Monospace));
+                if ui.selectable_label(visible, "show").clicked() { self.chat_key_visible = !visible; }
+            });
+            ui.label(RichText::new(p.key_hint).small().color(t.muted));
+            ui.add_space(6.0);
+            ui.label(RichText::new("MODEL").small().strong().color(t.muted));
+            ui.horizontal(|ui| {
+                let current_model = self.chat_model();
+                let mut picked: Option<String> = None;
+                let list = self.chat_model_list.clone();
+                egui::ComboBox::from_id_salt("chat-model")
+                    .width(ui.available_width() - 90.0)
+                    .selected_text(if current_model.is_empty() { "choose a model…".to_string() } else { truncate(&current_model, 40) })
+                    .show_ui(ui, |ui| {
+                        if list.is_empty() { ui.label(RichText::new("press Refresh to load the model list").small().color(t.muted)); }
+                        for m in &list {
+                            if ui.selectable_label(*m == current_model, m).clicked() { picked = Some(m.clone()); }
+                        }
+                    });
+                if let Some(m) = picked { self.set_chat_model(&m); let _ = self.settings.save(); }
+                let loading = self.chat_models_rx.is_some();
+                if ui.add_enabled(!loading, pill_widget(t, if loading { "…" } else { "Refresh" }, false)).on_hover_text("GET /models with this key").clicked() { self.chat_refresh_models(); }
+            });
+            ui.horizontal(|ui| {
+                let mut manual = self.chat_model();
+                ui.label(RichText::new("or type an id").small().color(t.muted));
+                if ui.add(egui::TextEdit::singleline(&mut manual).desired_width(f32::INFINITY).font(TextStyle::Monospace).hint_text("gpt-4.1-mini, claude-sonnet-4, llama-3.3-70b…")).changed() {
+                    self.set_chat_model(&manual);
+                }
+            });
+            if !self.chat_models_note.is_empty() { ui.label(RichText::new(&self.chat_models_note).small().color(if self.chat_models_note.ends_with("models") { t.ok } else { t.warn })); }
+            ui.add_space(6.0);
+            ui.label(RichText::new("AGENT").small().strong().color(t.muted));
+            ui.checkbox(&mut self.settings.chat_tools, "Give the model the Studio + workspace tools (function calling)");
+            ui.checkbox(&mut self.settings.chat_send_images, "Forward screenshots from tools to the model (vision models)");
+            ui.horizontal(|ui| {
+                ui.label("Max steps per message");
+                ui.add(egui::DragValue::new(&mut self.settings.chat_max_steps).range(1..=64));
+                ui.add_space(12.0);
+                ui.label("Temperature");
+                ui.add(egui::Slider::new(&mut self.settings.chat_temperature, 0.0..=1.5).fixed_decimals(1));
+            });
+            ui.label(RichText::new("Standing instructions (appended to the system prompt)").small().color(t.muted));
+            ui.add(egui::TextEdit::multiline(&mut self.settings.chat_instructions).desired_rows(2).desired_width(f32::INFINITY).hint_text("e.g. Always use typed Luau and put server code in ServerScriptService."));
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if pill(ui, t, "Done", true).clicked() {
+                    let _ = self.settings.save();
+                    if self.chat_ready() { self.chat_setup_open = false; self.chat_pending_focus = true; self.toast("Chat settings saved", true); }
+                    else { self.toast("Still missing: a model (press Refresh) or the API key", false); }
+                }
+                ui.label(RichText::new(format!("Keys are stored only in {}", short_path(&Settings::path().to_string_lossy(), 46))).small().color(t.muted));
+            });
+        });
+        ui.add_space(8.0);
+    }
+
+    fn chat_transcript(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
+        let busy = self.chat_turn.is_some();
+        if self.chat_items.is_empty() {
+            ui.add_space(12.0);
+            ui.label(RichText::new("Talk to your Studio.").size(18.0).strong().color(t.text));
+            ui.label(RichText::new("The model you pick gets execute_luau, screen_capture, the plugin commands and the workspace files as tools — it builds, inspects and fixes things in Studio for you, step by step.").color(t.muted));
+            ui.add_space(10.0);
+            let suggestions = [
+                "What is open in Studio right now? List Workspace and ServerScriptService.",
+                "Build a spawn lobby: baseplate, 4 coloured pads, a welcome billboard, and a leaderstats script with Coins.",
+                "Take a screenshot of the viewport and critique the lighting, then fix it.",
+                "Write a typed DataStore module with session locking and autosave, save it to ServerScriptService.",
+            ];
+            for s in suggestions {
+                if ui.add(egui::Button::new(RichText::new(s).small().color(t.text)).fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(10.0)).wrap()).clicked() {
+                    self.chat_input = s.to_string();
+                    self.chat_pending_focus = true;
+                }
+            }
+            return;
+        }
+        egui::ScrollArea::vertical().id_salt("chat-scroll").auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            let avail = ui.available_width();
+            let last = self.chat_items.len().saturating_sub(1);
+            let mut fill_input: Option<String> = None;
+            for (idx, msg) in self.chat_items.iter_mut().enumerate() {
+                match msg.role {
+                    ChatRole::User => {
+                        ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                            egui::Frame::none().fill(t.accent.linear_multiply(0.16)).stroke(Stroke::new(1.0, t.accent.linear_multiply(0.45))).rounding(Rounding::same(12.0)).inner_margin(Margin::symmetric(12.0, 8.0)).show(ui, |ui| {
+                                ui.set_max_width(avail * 0.86);
+                                ui.add(egui::Label::new(RichText::new(&msg.text).color(t.text)).wrap());
+                            });
+                        });
+                        ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                            ui.label(RichText::new(&msg.at).small().color(t.muted));
+                            if ui.add(egui::Button::new(RichText::new("edit").small()).frame(false)).on_hover_text("Copy this message back into the composer").clicked() { fill_input = Some(msg.text.clone()); }
+                        });
+                    }
+                    ChatRole::Assistant => {
+                        egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::symmetric(12.0, 10.0)).show(ui, |ui| {
+                            ui.set_width(avail - 4.0);
+                            for card in msg.tools.iter_mut() { chat_tool_card(ui, t, card); }
+                            if !msg.text.is_empty() {
+                                chat_rich_text(ui, t, &msg.text);
+                            } else if idx == last && busy {
+                                ui.label(RichText::new(if msg.tools.is_empty() { "thinking…" } else { "working…" }).italics().color(t.muted));
+                            }
+                            if idx == last && busy && !msg.text.is_empty() {
+                                ui.label(RichText::new("…").color(t.accent));
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(&msg.at).small().color(t.muted));
+                            if !msg.text.is_empty() && ui.add(egui::Button::new(RichText::new("copy").small()).frame(false)).clicked() {
+                                let text = msg.text.clone();
+                                ui.output_mut(|o| o.copied_text = text);
+                            }
+                        });
+                    }
+                    ChatRole::Note => {
+                        ui.vertical_centered(|ui| {
+                            ui.add(egui::Label::new(RichText::new(&msg.text).small().italics().color(t.warn)).wrap());
+                        });
+                    }
+                }
+                ui.add_space(8.0);
+            }
+            if let Some(text) = fill_input { self.chat_input = text; self.chat_pending_focus = true; }
+        });
+    }
+
+    fn chat_composer(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let t = self.theme;
+        let busy = self.chat_turn.is_some();
+        let id = egui::Id::new("chat-composer-edit");
+        let focused = ctx.memory(|m| m.has_focus(id));
+        let mut send = false;
+        if focused && !busy {
+            let plain = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
+            let ctrl = ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
+            if plain || ctrl { send = true; }
+        }
+        let edit = egui::TextEdit::multiline(&mut self.chat_input)
+            .id(id)
+            .desired_rows(3)
+            .desired_width(f32::INFINITY)
+            .hint_text(if busy { "the model is working — Stop to interrupt" } else { "Ask for anything in Studio… (Enter sends, Shift+Enter = new line)" });
+        let resp = ui.add(edit);
+        if self.chat_pending_focus && !busy { resp.request_focus(); self.chat_pending_focus = false; }
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let studio = self.shared.studio_connected.load(Ordering::Relaxed);
+            status_dot(ui, if studio { t.ok } else { t.muted });
+            ui.label(RichText::new(if studio { "Studio linked" } else { "Studio offline" }).small().color(t.muted));
+            if !self.settings.chat_tools { ui.label(RichText::new("· tools off").small().color(t.warn)); }
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if busy {
+                    if pill(ui, t, "Stop", false).clicked() { self.chat_stop(); }
+                    ui.label(RichText::new(format!("{:.0} s", self.chat_turn.as_ref().map(|c| c.started.elapsed().as_secs_f32()).unwrap_or(0.0))).small().color(t.muted));
+                } else {
+                    let can = !self.chat_input.trim().is_empty();
+                    if ui.add_enabled(can, pill_widget(t, "Send", true)).clicked() { send = true; }
+                    if ui.add(egui::Button::new(RichText::new("Capture").small())).on_hover_text("Ask the model to screenshot Studio and describe what it sees").clicked() {
+                        self.chat_input = "Take a screenshot of the Studio viewport and tell me what you see.".into();
+                        send = true;
+                    }
+                }
+            });
+        });
+        if send { self.chat_send(); }
+    }
+}
+
+fn pick_default_model(list: &[String]) -> Option<String> {
+    let prefs = ["gpt-4.1", "gpt-4o", "claude-sonnet", "claude-3-5-sonnet", "gemini-2.5-pro", "gemini-2.5-flash", "deepseek-chat", "grok-4", "grok-3", "llama-3.3-70b", "qwen2.5", "mistral-large"];
+    for p in prefs {
+        if let Some(m) = list.iter().find(|m| m.to_lowercase().contains(p)) { return Some(m.clone()); }
+    }
+    list.first().cloned()
+}
+
+fn chat_tool_card(ui: &mut egui::Ui, t: Theme, card: &mut ChatToolCard) {
+    let (dot, state) = match card.ok { None => (t.warn, "running"), Some(true) => (t.ok, "ok"), Some(false) => (t.bad, "error") };
+    egui::Frame::none().fill(t.panel2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(8.0)).inner_margin(Margin::symmetric(8.0, 6.0)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(|ui| {
+            status_dot(ui, dot);
+            ui.label(RichText::new(&card.name).monospace().small().strong().color(t.text));
+            let meta = if card.ok.is_none() { state.to_string() } else { format!("{state} · {} ms", card.elapsed_ms) };
+            ui.label(RichText::new(meta).small().color(t.muted));
+            if !card.images.is_empty() { ui.label(RichText::new(format!("{} image(s)", card.images.len())).small().color(t.info)); }
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if ui.add(egui::Button::new(RichText::new(if card.open { "hide" } else { "details" }).small()).frame(false)).clicked() { card.open = !card.open; }
+            });
+        });
+        if card.open {
+            if !card.args.trim().is_empty() {
+                ui.label(RichText::new("arguments").small().color(t.muted));
+                ui.add(egui::Label::new(RichText::new(truncate(&card.args, 2000)).monospace().small().color(t.text)).wrap());
+            }
+            if !card.result.trim().is_empty() {
+                ui.label(RichText::new("result").small().color(t.muted));
+                egui::ScrollArea::vertical().id_salt(("chat-tool-result", &card.id)).max_height(220.0).auto_shrink([false, true]).show(ui, |ui| {
+                    ui.add(egui::Label::new(RichText::new(truncate(&card.result, 8000)).monospace().small().color(if card.ok == Some(false) { t.bad } else { t.text })).wrap());
+                });
+                ui.horizontal(|ui| {
+                    if ui.add(egui::Button::new(RichText::new("copy result").small())).clicked() { let r = card.result.clone(); ui.output_mut(|o| o.copied_text = r); }
+                });
+            }
+            for (tex, size) in &card.images {
+                let w = ui.available_width().min(560.0);
+                let h = if size[0] > 0 { w * size[1] as f32 / size[0] as f32 } else { w * 0.56 };
+                ui.add(egui::Image::from_texture(egui::load::SizedTexture::new(tex.id(), Vec2::new(w, h))).rounding(Rounding::same(6.0)));
+            }
+        }
+    });
+    ui.add_space(4.0);
+}
+
+/// Minimal Markdown: ``` fenced blocks become monospace cards with a copy
+/// button, everything else is wrapped text.
+fn chat_rich_text(ui: &mut egui::Ui, t: Theme, text: &str) {
+    for (i, seg) in text.split("```").enumerate() {
+        if i % 2 == 1 {
+            let (lang, body) = match seg.split_once('\n') {
+                Some((first, rest)) if first.trim().len() <= 16 && !first.trim().contains(' ') => (first.trim().to_string(), rest.to_string()),
+                _ => (String::new(), seg.to_string()),
+            };
+            let body = body.trim_end_matches('\n').to_string();
+            egui::Frame::none().fill(t.bg).stroke(Stroke::new(1.0, t.border2)).rounding(Rounding::same(8.0)).inner_margin(Margin::symmetric(10.0, 8.0)).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(if lang.is_empty() { "code" } else { lang.as_str() }).small().color(t.muted));
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ui.add(egui::Button::new(RichText::new("copy").small()).frame(false)).clicked() { let b = body.clone(); ui.output_mut(|o| o.copied_text = b); }
+                    });
+                });
+                ui.add(egui::Label::new(RichText::new(&body).monospace().small().color(t.text)).wrap());
+            });
+            ui.add_space(4.0);
+        } else {
+            let plain = seg.trim_matches('\n');
+            if plain.is_empty() { continue; }
+            ui.add(egui::Label::new(RichText::new(plain).color(t.text)).wrap());
+        }
     }
 }
 
