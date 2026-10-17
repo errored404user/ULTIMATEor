@@ -115,14 +115,14 @@ ok("non-blueprint ops fall through to the previous builders (gfx + design + base
 // ── prompt / help / mode wiring ───────────────────────────────────────────────
 const mainSrc = fs.readFileSync("src/core/main.js", "utf8");
 const configSrc = fs.readFileSync("src/core/config.js", "utf8");
-ok("ultimate work mode focuses blueprint_* commands", /focus:\s*\/\^\(script_\|model_\|memory_\|blueprint_\|/.test(mainSrc));
+ok("creation work mode focuses blueprint_* commands", /focus:\s*\/\^\(script_\|model_\|memory_\|blueprint_\|/.test(mainSrc));
 ok("feature help has a 'blueprints' topic with the catalogue + workflow + alias triggers", /blueprints:\{title:"System Blueprints/.test(mainSrc) && mainSrc.includes("blueprint_install {name:\\\"pets\\\"}") && /blueprints:\/blueprint\|complete system/.test(mainSrc));
 ok("mandates teach the blueprint workflow (install -> configure -> extend -> UI -> verify) in both budgets", configSrc.includes("SYSTEM BLUEPRINTS (1.31 BUILD pack") && configSrc.includes("SYSTEMS: a complete game system") && ["blueprint_list", "blueprint_install", "blueprint_configure", "blueprint_verify", "blueprint_status", "blueprint_remove"].every((k) => configSrc.includes(k)));
 ok("luau-parse-check covers the blueprint programs and the library sources", (() => { const t = fs.readFileSync("tests/luau-parse-check.py", "utf8"); return t.includes("BLUEPRINT_COMMANDS") && t.includes("__ORBlueprintLib") && t.includes("blueprint lib"); })());
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README documents the blueprints pack", readme.includes("blueprint_install") && readme.includes("1.31.0") && readme.includes("blueprints-sim.py"));
-ok("manifest version is 1.38.0", manifest.version === "1.38.0", manifest.version);
-ok("plugin / crate pinned at 1.38.0", /1\.38\.0/.test(fs.readFileSync("plugin/ORscript.lua", "utf8")) && /^version = "1\.38\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
+ok("manifest version is 1.39.0", manifest.version === "1.39.0", manifest.version);
+ok("plugin / crate pinned at 1.39.0", /1\.39\.0/.test(fs.readFileSync("plugin/ORscript.lua", "utf8")) && /^version = "1\.39\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
 
 // ── simulator ─────────────────────────────────────────────────────────────────
 const sim = fs.readFileSync("tests/roblox_sim.py", "utf8");

@@ -1,4 +1,5 @@
-// 1.38.0 — Modes & commands overhaul.
+// 1.38.0 — Modes & commands overhaul. (1.39.0: the three modes merged into
+//  one "creation" mode - the per-mode checks below now run against it.)
 //
 //  COMMANDS: the signature tier of the catalogue is grouped into FAMILIES with
 //  the active work mode's families first; 34 "studio.x {}" alias rows and the
@@ -29,7 +30,7 @@ const cut = (a, b) => { const i = main.indexOf(a), j = main.indexOf(b, i); if (i
 const block = cut("  const UNIVERSAL_COMMANDS = [", "  const UNIVERSAL_SET")
   + cut("  const PRIORITY_COMMAND_RE", "  // ── Project Index map cache (1.32) ──")
   + "\n" + cut("  const WORK_MODES = {", "  const WORK_MODE_IDS");
-const ctx = { window: null, console, RS: { TOOL_NOTES: {} }, bareToolName: (n) => String(n).split("/").pop(), RobloxScriptSkills, RSAnim, PublicSkills: undefined, ORTaskList: undefined, WORK_MODE_IDS: ["ultimate", "visualizer", "animator"] };
+const ctx = { window: null, console, RS: { TOOL_NOTES: {} }, bareToolName: (n) => String(n).split("/").pop(), RobloxScriptSkills, RSAnim, PublicSkills: undefined, ORTaskList: undefined, WORK_MODE_IDS: ["creation"] };
 ctx.window = ctx; vm.createContext(ctx);
 vm.runInContext(block + "\nthis.buildCatalogue=buildCatalogue;this.sigFromLine=sigFromLine;this.commandFamily=commandFamily;this.groupByFamily=groupByFamily;this.packSignatures=packSignatures;this.toolSignature=toolSignature;this.COMMAND_FAMILIES=COMMAND_FAMILIES;this.FAMILY_ORDER=FAMILY_ORDER;", ctx);
 const skillLines = RobloxScriptSkills.describeCommands(), animLines = RSAnim.describeCommands();
@@ -43,11 +44,11 @@ const packed = ctx.packSignatures(["a {}", "bb {x}", "ccc {y, z?}", "dddd {}"], 
 ok("packSignatures is strict: shown is a prefix, omitted = the tail", packed.shown === 2 && packed.omitted === 2 && packed.text === "a {}  ·  bb {x}", JSON.stringify(packed));
 
 // B. families
-ok("COMMAND_FAMILIES exists with an OTHER catch-all and a per-mode FAMILY_ORDER", Array.isArray(ctx.COMMAND_FAMILIES) && ctx.COMMAND_FAMILIES[ctx.COMMAND_FAMILIES.length - 1].id === "other" && ["ultimate", "visualizer", "animator"].every((m) => Array.isArray(ctx.FAMILY_ORDER[m]) && ctx.FAMILY_ORDER[m].length === ctx.COMMAND_FAMILIES.length));
-ok("every family id appears exactly once in every mode order", ["ultimate", "visualizer", "animator"].every((m) => new Set(ctx.FAMILY_ORDER[m]).size === ctx.COMMAND_FAMILIES.length && ctx.COMMAND_FAMILIES.every((f) => ctx.FAMILY_ORDER[m].includes(f.id))));
+ok("COMMAND_FAMILIES exists with an OTHER catch-all and a per-mode FAMILY_ORDER", Array.isArray(ctx.COMMAND_FAMILIES) && ctx.COMMAND_FAMILIES[ctx.COMMAND_FAMILIES.length - 1].id === "other" && ["creation"].every((m) => Array.isArray(ctx.FAMILY_ORDER[m]) && ctx.FAMILY_ORDER[m].length === ctx.COMMAND_FAMILIES.length));
+ok("every family id appears exactly once in every mode order", ["creation"].every((m) => new Set(ctx.FAMILY_ORDER[m]).size === ctx.COMMAND_FAMILIES.length && ctx.COMMAND_FAMILIES.every((f) => ctx.FAMILY_ORDER[m].includes(f.id))));
 const famOf = (n) => ctx.commandFamily(n);
 ok("families classify representative commands", famOf("script_read") === "script" && famOf("blueprint_install") === "blueprint" && famOf("ds_set") === "data" && famOf("remote_event_create") === "data" && famOf("part_create") === "build" && famOf("model_wall") === "build" && famOf("hinge_create") === "physics" && famOf("terrain_height") === "terrain" && famOf("lighting_set_preset") === "lighting" && famOf("fx_magic_circle") === "vfx" && famOf("ui_screen_generate") === "ui" && famOf("gfx_capture") === "gfx" && famOf("sound_play") === "audio" && famOf("animation_add_keyframe") === "animation" && famOf("tween_sequence") === "motion" && famOf("camera_shake_preset") === "motion" && famOf("start_stop_play") === "play" && famOf("studio_playtest") === "play" && famOf("memory_search") === "studio" && famOf("web_fetch") === "web");
-ok("mode orders put the mode's own families first", ctx.FAMILY_ORDER.ultimate[0] === "script" && ctx.FAMILY_ORDER.visualizer.slice(0, 3).join() === "lighting,vfx,ui" && ctx.FAMILY_ORDER.animator.slice(0, 2).join() === "animation,motion");
+ok("creation order: scripting first, then blueprints / data / build / physics, then lighting / vfx / ui, then animation / motion", ctx.FAMILY_ORDER.creation.slice(0, 10).join() === "script,blueprint,data,build,physics,lighting,vfx,ui,animation,motion");
 {
   const allNames = [...skillLines, ...animLines].map((l) => (l.match(/^([a-z][\w]*):/) || [])[1]).filter(Boolean);
   const other = allNames.filter((n) => famOf(n) === "other");
@@ -63,15 +64,15 @@ const native = [
 ];
 const helpers = ["— Screenshot: or_screenshot {target?} — PHOTO", "— Debugger: or_debug {}", "— Screenshot: or_screenshot {target?} — capture", "— Debugger: or_debug {} — LogService"];
 const cats = {};
-for (const mode of ["ultimate", "visualizer", "animator"]) {
+for (const mode of ["creation"]) {
   ctx.window.__rsWorkMode = () => mode;
   cats[mode] = ctx.buildCatalogue({ toolName: "list_commands", requested: "roblox", heading: "━━━ COMMAND CATALOGUE (embedded) ━━━", nativeTools: native, virtualLines: [...animLines, ...skillLines], webLines: helpers, focusBlock: `━━━ ${mode.toUpperCase()} WORK MODE FOCUS — x ━━━\n\n`, focusNames: [], compact: true, limit: 20000, lineLimit: 420, modeId: mode });
 }
 const famsWithSigs = (t) => [...t.matchAll(/^── (.+?) \(\d+\) ──$/gm)].map((m) => m[1]);
-ok("ultimate catalogue: scripting / blueprints / data / build families carry signatures first", famsWithSigs(cats.ultimate).slice(0, 4).join("|") === "SCRIPTING|SYSTEM BLUEPRINTS|DATA, REMOTES, NETWORK & MONETIZATION|MODELING & BUILD", famsWithSigs(cats.ultimate).join("|"));
-ok("visualizer catalogue: lighting / VFX / UI families carry signatures first", famsWithSigs(cats.visualizer).slice(0, 3).join("|") === "LIGHTING & ATMOSPHERE|VFX & PARTICLES|UI & HUD", famsWithSigs(cats.visualizer).join("|"));
-ok("animator catalogue: animation / tweens-camera families carry signatures first", famsWithSigs(cats.animator).slice(0, 2).join("|") === "ANIMATION|TWEENS, SPRINGS & CAMERA", famsWithSigs(cats.animator).join("|"));
-ok("the heading names the mode", cats.visualizer.includes("SIGNATURES BY FAMILY (callable as shown; VISUALIZER families first):"));
+ok("creation catalogue: scripting / blueprints / data / build families carry signatures first", famsWithSigs(cats.creation).slice(0, 4).join("|") === "SCRIPTING|SYSTEM BLUEPRINTS|DATA, REMOTES, NETWORK & MONETIZATION|MODELING & BUILD", famsWithSigs(cats.creation).join("|"));
+ok("creation catalogue: lighting / VFX / UI families follow physics", famsWithSigs(cats.creation).slice(5, 8).join("|") === "LIGHTING & ATMOSPHERE|VFX & PARTICLES|UI & HUD", famsWithSigs(cats.creation).join("|"));
+ok("creation catalogue: animation / tweens-camera families follow UI", famsWithSigs(cats.creation).slice(8, 10).join("|") === "ANIMATION|TWEENS, SPRINGS & CAMERA", famsWithSigs(cats.creation).join("|"));
+ok("the heading names the mode", cats.creation.includes("SIGNATURES BY FAMILY (callable as shown; CREATION families first):"));
 for (const mode of Object.keys(cats)) {
   const t = cats[mode];
   ok(`${mode}: within budget (${t.length} chars, ${t.split("\n").length} lines)`, t.length <= 20000 && t.split("\n").length <= 420);
@@ -82,7 +83,7 @@ for (const mode of Object.keys(cats)) {
   ok(`${mode}: names-only rows are grouped by family`, /NAMES ONLY[^\n]*\n[A-Z][A-Z ,&]+: [a-z_]+/.test(t));
   ok(`${mode}: no alias rows / raw screen_capture`, !/studio\.\w+ \{\}/.test(t) && !/\bscreen_capture \{/.test(t));
 }
-ok("helper lines deduplicated by label", (cats.ultimate.match(/— Screenshot:/g) || []).length === 1 && (cats.ultimate.match(/— Debugger:/g) || []).length === 1);
+ok("helper lines deduplicated by label", (cats.creation.match(/— Screenshot:/g) || []).length === 1 && (cats.creation.match(/— Debugger:/g) || []).length === 1);
 
 // D. source wiring for the above
 ok("alias tools hidden", main.includes('server:"roblox",aliasTarget:target,hidden:true}'));
@@ -94,33 +95,33 @@ ok("slow skill programs get a 90 s budget via _orTimeout (stripped from the wire
 // E. playbooks
 vm.runInThisContext(config + ";globalThis.__RS=RS;", { filename: "config.js" });
 const RS = globalThis.__RS;
-ok("WORK_MODE_PLAYBOOKS exported with four recipes per mode", RS.WORK_MODE_PLAYBOOKS && ["ultimate", "visualizer", "animator"].every((m) => (RS.WORK_MODE_PLAYBOOKS[m].match(/^- [A-Z]/gm) || []).length === 4) && typeof RS.workModePlaybook === "function");
-ok("playbooks name the four jobs per mode", /NEW SYSTEM|BUG FIX|EXISTING PLACE|BUILD/.test(RS.WORK_MODE_PLAYBOOKS.ultimate) && /MOOD PASS|HERO VFX|UI SCREEN|THUMBNAIL/.test(RS.WORK_MODE_PLAYBOOKS.visualizer) && /COMBAT CLIP|LOCOMOTION LOOP|PROP \/ UI MOTION|CUTSCENE/.test(RS.WORK_MODE_PLAYBOOKS.animator));
-ok("full profiles end with the playbook, tight ones do not", ["ultimate", "visualizer", "animator"].every((m) => RS.workModePrompt(m).includes("PLAYBOOKS (") && !RS.workModePrompt(m, { tight: true }).includes("PLAYBOOKS (")));
-ok("switch note carries the playbook", RS.workModeSwitchNote("visualizer").includes("MOOD PASS:") && !RS.workModeSwitchNote("visualizer", { tight: true }).includes("MOOD PASS:"));
-ok("every playbook step ends in verification", /start_stop_play \+ get_console_output → report\./.test(RS.WORK_MODE_PLAYBOOKS.ultimate) && /gfx_teardown\./.test(RS.WORK_MODE_PLAYBOOKS.visualizer) && /animation_preview → fix → animation_preview\./.test(RS.WORK_MODE_PLAYBOOKS.animator));
+ok("WORK_MODE_PLAYBOOKS exported with the twelve merged recipes (4 + 4 + 4)", RS.WORK_MODE_PLAYBOOKS && (RS.WORK_MODE_PLAYBOOKS.creation.match(/^- [A-Z]/gm) || []).length === 12 && typeof RS.workModePlaybook === "function" && RS.workModePlaybook("visualizer") === RS.WORK_MODE_PLAYBOOKS.creation);
+ok("playbooks name the twelve jobs", ["NEW SYSTEM", "BUG FIX", "EXISTING PLACE", "BUILD", "MOOD PASS", "HERO VFX", "UI SCREEN", "THUMBNAIL", "COMBAT CLIP", "LOCOMOTION LOOP", "PROP / UI MOTION", "CUTSCENE"].every((k) => RS.WORK_MODE_PLAYBOOKS.creation.includes("- " + k)));
+ok("full profiles end with the playbook, tight ones do not", ["creation", "ultimate", "visualizer", "animator"].every((m) => RS.workModePrompt(m).includes("PLAYBOOKS (") && !RS.workModePrompt(m, { tight: true }).includes("PLAYBOOKS (")));
+ok("switch note carries the playbook", RS.workModeSwitchNote("creation").includes("MOOD PASS:") && !RS.workModeSwitchNote("creation", { tight: true }).includes("MOOD PASS:"));
+ok("every playbook step ends in verification", /start_stop_play \+ get_console_output → report\./.test(RS.WORK_MODE_PLAYBOOKS.creation) && /gfx_teardown\./.test(RS.WORK_MODE_PLAYBOOKS.creation) && /animation_preview → fix → animation_preview\./.test(RS.WORK_MODE_PLAYBOOKS.creation));
 
 // F. mode evidence gate
 const gateBlock = cut("  const MODE_GATES = {", "  // 1.38.0: skill programs that legitimately run long");
-const gctx = { window: { __rsWorkMode: () => "ultimate" }, normalizeWorkMode: (id) => (["ultimate", "visualizer", "animator"].includes(id) ? id : "ultimate"), bareToolName: (n) => String(n).split("/").pop() };
+const gctx = { window: { __rsWorkMode: () => "ultimate" }, normalizeWorkMode: (id) => (id === "creation" ? id : "creation"), bareToolName: (n) => String(n).split("/").pop(), WORK_MODES: { creation: { badge: "CREATION" } } };
 vm.createContext(gctx); vm.runInContext(gateBlock + "\nthis.modeGateNudge=modeGateNudge;this.MODE_GATES=MODE_GATES;", gctx);
-ok("gate: ultimate fires on scripts written without read-back / check / console", /ULTIMATE GATE/.test(gctx.modeGateNudge(new Set(["get_studio_state", "script_create", "multi_edit"]))));
-ok("gate: ultimate silent when verified", gctx.modeGateNudge(new Set(["script_create", "script_read", "script_check"])) === "" && gctx.modeGateNudge(new Set(["script_set_source", "start_stop_play"])) === "");
-ok("gate: ultimate silent on a pure inspection run or a plain execute_luau", gctx.modeGateNudge(new Set(["get_studio_state", "search_game_tree", "execute_luau"])) === "");
+ok("gate: creation fires on scripts written without read-back / check / console (legacy id still routes)", /CREATION GATE[\s\S]*- SCRIPTS:/.test(gctx.modeGateNudge(new Set(["get_studio_state", "script_create", "multi_edit"]))));
+ok("gate: scripts gate silent when verified", gctx.modeGateNudge(new Set(["script_create", "script_read", "script_check"])) === "" && gctx.modeGateNudge(new Set(["script_set_source", "start_stop_play"])) === "");
+ok("gate: silent on a pure inspection run or a plain execute_luau", gctx.modeGateNudge(new Set(["get_studio_state", "search_game_tree", "execute_luau"])) === "");
 gctx.window.__rsWorkMode = () => "visualizer";
-ok("gate: visualizer fires on a changed look without a screenshot", /VISUALIZER GATE/.test(gctx.modeGateNudge(new Set(["lighting_set_preset", "fx_create_vfx"]))) && gctx.modeGateNudge(new Set(["lighting_set_preset", "or_screenshot"])) === "" && gctx.modeGateNudge(new Set(["gfx_stage_create", "gfx_capture"])) === "");
-ok("gate: visualizer ignores read-only ui_list_tree / ui_audit", gctx.modeGateNudge(new Set(["ui_list_tree", "ui_audit"])) === "");
+ok("gate: look gate fires on a changed look without a screenshot", /CREATION GATE[\s\S]*- LOOK:/.test(gctx.modeGateNudge(new Set(["lighting_set_preset", "fx_create_vfx"]))) && gctx.modeGateNudge(new Set(["lighting_set_preset", "or_screenshot"])) === "" && gctx.modeGateNudge(new Set(["gfx_stage_create", "gfx_capture"])) === "");
+ok("gate: look gate ignores read-only ui_list_tree / ui_audit", gctx.modeGateNudge(new Set(["ui_list_tree", "ui_audit"])) === "");
 gctx.window.__rsWorkMode = () => "animator";
-ok("gate: animator fires on motion without preview", /ANIMATOR GATE/.test(gctx.modeGateNudge(new Set(["animation_create", "animation_add_keyframe"]))) && gctx.modeGateNudge(new Set(["animation_create", "animation_preview"])) === "" && gctx.modeGateNudge(new Set(["tween_sequence", "start_stop_play"])) === "");
-ok("gate texts are system notes that forbid acknowledging", Object.values(gctx.MODE_GATES).every((g) => /System note from OR, not the user/.test(g.nudge) && /Do not acknowledge this note/.test(g.nudge)));
+ok("gate: motion gate fires on motion without preview", /CREATION GATE[\s\S]*- MOTION:/.test(gctx.modeGateNudge(new Set(["animation_create", "animation_add_keyframe"]))) && gctx.modeGateNudge(new Set(["animation_create", "animation_preview"])) === "" && gctx.modeGateNudge(new Set(["tween_sequence", "start_stop_play"])) === "");
+ok("gate texts are ONE system note that forbids acknowledging; several failing gates merge", (() => { const n = gctx.modeGateNudge(new Set(["script_create", "lighting_set_preset", "animation_create"])); return /System note from OR, not the user/.test(n) && /Do not acknowledge this note/.test(n) && n.includes("- SCRIPTS:") && n.includes("- LOOK:") && n.includes("- MOTION:") && (n.match(/━━━ CREATION GATE/g) || []).length === 1; })());
 ok("loop wiring: run tool set, one gate per run, before 'complete'", main.includes("let modeGateSent = false; // 1.38.0: one evidence gate per run") && main.includes("A.runTools = new Set();") && main.includes("try { A.runTools.add(bareToolName(call.tool)); } catch {}") && main.includes("if (!modeGateSent && !A.stop && toolTurns >= 2) {") && main.includes("const nudge = modeGateNudge(A.runTools);") && main.includes('diag("loop.modeGate"') && main.indexOf("const nudge = modeGateNudge(A.runTools);") < main.indexOf('ui.steeringProgress("complete", toolTurns ?'));
 ok("gate runs after the commandless-retry rescue (never instead of it)", main.indexOf('diag("loop.capabilityRefuse"') < main.indexOf("const nudge = modeGateNudge(A.runTools);"));
 
 // G. mode notes + bookkeeping
-ok("mode notes describe catalogue order, playbooks and the gate", /Catalogue: scripting, blueprints, data, build and physics families first\. Playbooks: new system, bug fix, existing place, build\. Gate: changed scripts must be read back and checked before 'done'\./.test(main) && /Catalogue: lighting, VFX, UI, thumbnail and audio families first\./.test(main) && /Catalogue: animation, tweens\/camera and playtest families first\./.test(main));
+ok("mode note describes catalogue order, playbooks and the gates", /Catalogue: scripting, blueprints, data, build and physics families first, then lighting, VFX, UI, animation and motion\. Playbooks: new system, bug fix, existing place, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene\. Gate: changed scripts must be read back and checked, a changed look screenshotted and new motion previewed before 'done'\./.test(main));
 const mf = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
-ok("manifest 1.38.0", mf.version === "1.38.0", mf.version);
-ok("plugin + crate pinned at 1.38.0", fs.readFileSync("plugin/ORscript.lua", "utf8").includes('local VERSION = "1.38.0"') && /^version = "1\.38\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "or-agent"\nversion = "1\.38\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
+ok("manifest 1.39.0", mf.version === "1.39.0", mf.version);
+ok("plugin + crate pinned at 1.39.0", fs.readFileSync("plugin/ORscript.lua", "utf8").includes('local VERSION = "1.39.0"') && /^version = "1\.39\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "or-agent"\nversion = "1\.39\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
 ok("README changelog 1.38.0", readme.includes("**1.38.0 — Modes & commands overhaul:") && readme.includes("test-v138.js"));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall 1.38.0 checks passed");

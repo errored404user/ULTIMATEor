@@ -86,7 +86,7 @@ ok("non-project ops fall through to the previous builders (blueprints + gfx + de
 // ── prompt / help / mode / reminder wiring ────────────────────────────────────
 const mainSrc = fs.readFileSync("src/core/main.js", "utf8");
 const configSrc = fs.readFileSync("src/core/config.js", "utf8");
-ok("ultimate work mode focuses project_index_* commands", /focus:\s*\/\^\(script_\|model_\|memory_\|blueprint_\|project_index_\|/.test(mainSrc));
+ok("creation work mode focuses project_index_* commands", /focus:\s*\/\^\(script_\|model_\|memory_\|blueprint_\|project_index_\|/.test(mainSrc));
 ok("feature help has a 'projectindex' topic (before 'projects' in the alias order) with the workflow", /projectindex:\{title:"Project Index/.test(mainSrc) && mainSrc.includes("project_index_search {query, kind}") && /projectindex:\/project index\|project map\|codebase\|architecture/.test(mainSrc) && mainSrc.indexOf("projectindex:/project index") < mainSrc.indexOf("projects:/project|rbxl"));
 ok("__rsAfterTool caches the PROJECT MAP from project_index_build / project_index_summary results", mainSrc.includes('(op === "project_index_build" || op === "project_index_summary") && typeof res === "string"') && mainSrc.includes("cacheProjectMap(res)") && mainSrc.includes("function cacheProjectMap(resText)") && mainSrc.includes("window.__rsProjectMap = entry") && mainSrc.includes("chrome.storage.local.set({ rsProjectMap: entry })"));
 ok("cache is bounded (PROJECT_MAP_MAX 1500), restored from storage, and ignores failed results", mainSrc.includes("const PROJECT_MAP_MAX = 1500;") && mainSrc.includes('chrome.storage.local.get("rsProjectMap"') && mainSrc.includes("j && j.ok !== false && j.data") && mainSrc.includes("d.map_text.slice(0, PROJECT_MAP_MAX)"));
@@ -96,8 +96,8 @@ ok("mandates teach 'read before you write' in both budgets", configSrc.includes(
 ok("luau-parse-check covers the project programs", fs.readFileSync("tests/luau-parse-check.py", "utf8").includes("PROJECT_COMMANDS"));
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README documents the project index pack", readme.includes("project_index_build") && readme.includes("1.32.0") && readme.includes("project-index-sim.py"));
-ok("manifest version is 1.38.0", manifest.version === "1.38.0", manifest.version);
-ok("plugin / crate pinned at 1.38.0", /1\.38\.0/.test(fs.readFileSync("plugin/ORscript.lua", "utf8")) && /^version = "1\.38\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
+ok("manifest version is 1.39.0", manifest.version === "1.39.0", manifest.version);
+ok("plugin / crate pinned at 1.39.0", /1\.39\.0/.test(fs.readFileSync("plugin/ORscript.lua", "utf8")) && /^version = "1\.39\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
 
 // ── simulator ─────────────────────────────────────────────────────────────────
 ok("project-index-sim.py exists and covers build / search / graph / stale / changes", (() => { const t = fs.readFileSync("tests/project-index-sim.py", "utf8"); return t.includes("from roblox_sim import make_runtime") && ["project_index_build", "project_index_search", "project_index_graph", "project_index_changes", "stale", "GhostRemote", "cycle"].every((k) => t.includes(k)); })());

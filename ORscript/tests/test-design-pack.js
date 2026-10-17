@@ -109,12 +109,12 @@ ok("each DESIGN_LUA source has no dangling JS interpolation", Object.values(LUA)
 // ── prompt / help / UI wiring ────────────────────────────────────────────────
 const mainSrc = fs.readFileSync("src/core/main.js", "utf8");
 const configSrc = fs.readFileSync("src/core/config.js", "utf8");
-ok("visualizer work mode focuses design_* and ui_* commands", /focus:\s*\/[^\n]*design_/.test(mainSrc));
+ok("creation work mode focuses design_* and ui_* commands", /focus:\s*\/[^\n]*design_/.test(mainSrc));
 ok("feature help has a 'design' topic", /design:\s*\{/.test(mainSrc) || /"design":\s*\{/.test(mainSrc) || /id:\s*"design"/.test(mainSrc));
-ok("visualizer mandate teaches the DESIGN workflow (tokens -> screen -> audit)", configSrc.includes("DESIGN MANDATE") && configSrc.includes("design_tokens_set") && configSrc.includes("ui_screen_generate") && configSrc.includes("ui_audit") && configSrc.includes("ui_from_spec"));
+ok("creation mandate teaches the DESIGN workflow (tokens -> screen -> audit)", configSrc.includes("DESIGN MANDATE") && configSrc.includes("design_tokens_set") && configSrc.includes("ui_screen_generate") && configSrc.includes("ui_audit") && configSrc.includes("ui_from_spec"));
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README documents the design pack", readme.includes("ui_screen_generate") && readme.includes("design_tokens_set") && readme.includes("1.29.0"));
-ok("manifest version is 1.38.0", manifest.version === "1.38.0", manifest.version);
+ok("manifest version is 1.39.0", manifest.version === "1.39.0", manifest.version);
 
 // ── ChatGPT catalogue line budget ────────────────────────────────────────────
 const CATALOG_MAX = 560;

@@ -18,11 +18,9 @@ const S = RobloxScriptSkills;
 assert(Array.isArray(S.MODE_COMMANDS) && S.MODE_COMMANDS.length >= 27, "mode pack registers 27 commands");
 
 const main = fs.readFileSync("src/core/main.js", "utf8");
-const modes = {
-  ultimate: eval(main.match(/focus: (\/\^\(script_[^\n]*\/),\n/)[1]),
-  visualizer: eval(main.match(/focus: (\/\^\(fx_[^\n]*\/),\n/)[1]),
-  animator: eval(main.match(/focus: (\/\^\(animation_[^\n]*\/),\n/)[1]),
-};
+// 1.39.0: one Creation mode whose focus regex is the union of the three former families.
+const creation = eval(main.match(/focus: (\/\^\(script_[^\n]*\/),\n/)[1]);
+const modes = { ultimate: creation, visualizer: creation, animator: creation };
 const expect = {
   ultimate: ["script_diff", "script_format", "script_deprecations_fix", "module_scaffold", "remote_scaffold", "datastore_profile_scaffold", "tag_scaffold", "project_health_report"],
   visualizer: ["lighting_time_lapse", "lighting_snapshot", "lighting_restore", "fx_dissolve", "fx_shockwave", "fx_light_rig", "postfx_cinematic", "ui_progress_bar", "ui_tooltip", "ui_responsive_check"],
@@ -65,9 +63,9 @@ assert(main.includes("diag(\"list_commands.catalogue\""), "catalogue diagnostics
 const config = fs.readFileSync("src/core/config.js", "utf8");
 assert(config.includes("const REMINDER_MAX_CHARS = 9000;"), "reminder is bounded");
 assert(config.includes("(signatures: name {a, b?}"), "reminder header explains signatures");
-assert(config.includes("module_scaffold (typed module / class / service skeletons)"), "ultimate prompt cites the scaffolds");
-assert(config.includes("postfx_cinematic (filmic / noir / dreamy / vivid / horror)"), "visualizer prompt cites post-FX presets");
-assert(config.includes("rig_joints_inspect lists the joint names before you pose"), "animator prompt cites rig tools");
+assert(config.includes("module_scaffold (typed module / class / service skeletons)"), "creation prompt cites the scaffolds");
+assert(config.includes("postfx_cinematic (filmic / noir / dreamy / vivid / horror)"), "creation prompt cites post-FX presets");
+assert(config.includes("rig_joints_inspect lists the joint names before you pose"), "creation prompt cites rig tools");
 
 // Providers.
 const chatgpt = fs.readFileSync("src/providers/chatgpt.js", "utf8");

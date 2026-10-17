@@ -162,9 +162,8 @@
     .work-name{font-size:12.5px; font-weight:800; letter-spacing:-.1px}
     .work-sub{font-size:10px; color:var(--text-faint); line-height:1.35; font-weight:600}
     .work-card.on .work-sub{color:#5c4e3d}
-    #work-visualizer.on{background:linear-gradient(135deg,#7c3aed,#06b6d4); color:#fff}
-    #work-animator.on{background:linear-gradient(135deg,#f97316,#ec4899); color:#fff}
-    #work-visualizer.on .work-sub, #work-animator.on .work-sub{color:rgba(255,255,255,.82)}
+    #work-creation.on{background:linear-gradient(135deg,#f3dfa4 0%,#d6ae4f 45%,#b8862b 100%); color:#1a1408}
+    #work-creation.on .work-sub{color:rgba(26,20,8,.72)}
 
     #theme-row{grid-template-columns:1fr 1fr; gap:9px}
     #theme-row .work-card{padding:0 0 10px; overflow:hidden}
@@ -344,20 +343,12 @@ html[data-theme="void"] #theme-void .theme-art{background-image:url(ui/swatch-vo
     <div class="card" id="settings-card">
       <div class="sec-label">Session</div>
       <div class="work">
-        <button type="button" class="work-card" data-work="ultimate" id="work-ultimate">
-          <span class="work-name">Ultimate</span>
-          <span class="work-sub">Luau systems · Modeling · Architecture, verified</span>
-        </button>
-        <button type="button" class="work-card" data-work="visualizer" id="work-visualizer">
-          <span class="work-name">Visualizer</span>
-          <span class="work-sub">VFX · Lighting · UI, screenshot-verified</span>
-        </button>
-        <button type="button" class="work-card" data-work="animator" id="work-animator">
-          <span class="work-name">Animator</span>
-          <span class="work-sub">Rigs · Keyframes · Tweens · Camera, previewed</span>
+        <button type="button" class="work-card" data-work="creation" id="work-creation">
+          <span class="work-name">Creation</span>
+          <span class="work-sub">Luau systems · Modeling · VFX &amp; Lighting · UI · Animation &amp; Camera — everything, verified</span>
         </button>
       </div>
-      <div class="row work-help" id="work-help">Flagship mode: senior Luau engineer and 3D modeler in one. Reads the project first, architects server-authoritative systems with typed modules, remotes and DataStores, blocks out and details models to scale, and verifies with playtests, console reads and screenshots.</div>
+      <div class="row work-help" id="work-help">One creator mode: senior Luau engineer, 3D modeler, VFX / lighting / UI artist and animator at once. Reads the project first, architects server-authoritative systems, builds to scale, sets the mood and layers VFX, generates design-system UI, animates with anticipation and camera beats, and verifies with playtests, console reads, screenshots and previews.</div>
       <div class="sec-label">Visual skin</div>
       <div class="work" id="theme-row">
         <button type="button" class="work-card" data-theme="night" id="theme-night">

@@ -563,7 +563,7 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       await waitFor(() => userMessages.length >= 7, 40000, "mode enable result");
       ok("public_skill_enable activated the mode", /"activated": true/.test(userMessages[6]), userMessages[6].slice(0, 120).replace(/\n/g, " "));
       const badge = d.getElementById("rs-work-badge");
-      ok("bar badge shows the custom mode on its Visualizer base", !!badge && badge.textContent === "HORROR" && w.__rsWorkMode() === "visualizer" && w.__rsPublicMode() && w.__rsPublicMode().name === "horror_builder", badge && badge.textContent + " / " + w.__rsWorkMode());
+      ok("bar badge shows the custom mode on its Creation base (legacy visualizer base migrated)", !!badge && badge.textContent === "HORROR" && w.__rsWorkMode() === "creation" && w.__rsPublicMode() && w.__rsPublicMode().name === "horror_builder", badge && badge.textContent + " / " + w.__rsWorkMode());
       const sysPrompt = (() => { try { return w.eval("RS").buildSystemPrompt({ siteName: "Notion" }); } catch (e) { return "ERR " + e; } })();
       ok("system prompt now carries the custom mandate", /CUSTOM WORK MODE: HORROR BUILDER/.test(sysPrompt) && /layered on VISUALIZER/.test(sysPrompt) && /Custom work modes available: Horror Builder/.test(sysPrompt), sysPrompt.slice(0, 60));
       // Public tab in the cards panel lists both items.

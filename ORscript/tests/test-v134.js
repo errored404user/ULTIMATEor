@@ -55,11 +55,11 @@ ok("AgentScript prompt teaches batching", config.includes("Up to 6 INDEPENDENT c
 ok("no 'ONE command per reply' rule left", !/ONE command (block )?per reply/.test(config));
 
 // ── prompt diet ───────────────────────────────────────────────────────────────
-for (const wm of ["ultimate", "visualizer", "animator"]) {
+for (const wm of ["creation"]) {
   window.__rsWorkMode = () => wm;
   const cat = "━━━ COMMAND CATALOGUE (embedded; this IS the list_commands result) ━━━\nx {}";
   const live = RS.buildSystemPrompt({ siteName: "Gemini", providerId: "gemini", engine: "roblox", catalogue: cat });
-  ok(wm + ": live full prompt (without the catalogue) is under 30k", live.length - cat.length < 30000, String(live.length - cat.length));
+  ok(wm + ": live full prompt (without the catalogue) is under 38k", live.length - cat.length < 38000, String(live.length - cat.length)); // 1.39.0: one merged profile (~17k with playbooks) instead of ~10k
   ok(wm + ": skills list collapses to a pointer when the catalogue is embedded", live.includes("STUDIO SKILLS & VIRTUAL TOOLS: besides the core MCP tools") && !live.includes("ANIMATION TOOLS: the animation_* tools"));
   const noCat = RS.buildSystemPrompt({ siteName: "Gemini", providerId: "gemini", engine: "roblox" });
   ok(wm + ": without a catalogue the full skills list is kept", noCat.includes("STUDIO SKILLS & VIRTUAL TOOLS: In addition to core MCP tools") && noCat.includes("ANIMATION TOOLS: the animation_* tools"));
@@ -70,13 +70,13 @@ for (const wm of ["ultimate", "visualizer", "animator"]) {
 // mode switch rider replaces the whole-prompt restate on a mode change only
 ok("mode switch pending flag set by setWorkMode while a session runs", main.includes("try { if (A.started || A.running) { A.workModeSwitchPending = true; A.forceSysResend = true; } } catch {}"));
 ok("withSysResend sends the short rider unless the periodic restate is due", main.includes("if (A.workModeSwitchPending && !periodicDue) {") && main.includes('diag("sys.modeSwitch"') && main.includes("A.workModeSwitchPending = false; // the full prompt carries the new mode too"));
-const note = RS.workModeSwitchNote("animator");
-ok("switch note is the animator profile (~4-6k), not the loop", note.length > 3000 && note.length < 7000 && note.includes("━━━ ANIMATOR WORK MODE") && !note.includes("━━━ OPERATING LOOP"), String(note.length));
-ok("reminder checklist is short and per mode", ["ultimate", "visualizer", "animator"].every((m) => RS.workModeChecklist(m).length > 120 && RS.workModeChecklist(m).length < 400));
+const note = RS.workModeSwitchNote("animator"); // legacy id → creation (1.39.0)
+ok("switch note is the creation profile (+ playbooks), not the loop", note.length > 10000 && note.length < 16000 && note.includes("━━━ CREATION WORK MODE") && !note.includes("━━━ OPERATING LOOP"), String(note.length));
+ok("reminder checklist is short (one merged line)", ["creation", "ultimate", "visualizer", "animator"].every((m) => RS.workModeChecklist(m).length > 120 && RS.workModeChecklist(m).length < 600));
 
 // ── help / popup copy ─────────────────────────────────────────────────────────
-ok("help topic explains the 1.34 modes + quick starts", main.includes("Since 1.34 each mode is a distinct profile on a shared OPERATING LOOP") && main.includes("Each mode card has Quick starts"));
-ok("popup describes the first move of every mode", /ultimate:\s+"Flagship mode[^"]*First move: blueprints \/ project index/.test(fs.readFileSync("popup.js", "utf8")));
+ok("help topic explains the merged mode + quick starts", main.includes("Creation runs on the shared OPERATING LOOP") && main.includes("The mode card has Quick starts"));
+ok("popup describes the first move of the mode", /creation:\s+"One creator mode[^"]*First move: blueprints \/ project index/.test(fs.readFileSync("popup.js", "utf8")));
 
 if (process.exitCode) { console.error(`test-v134: ${passed} passed, some FAILED`); process.exit(1); }
 console.log(`PASS  1.34.0: batched commands (parser ${calls.length} calls, loop, feedback, prompts), work modes 2.0 (loop + profiles, switch rider, checklist, quick starts), prompt diet — ${passed} checks`);

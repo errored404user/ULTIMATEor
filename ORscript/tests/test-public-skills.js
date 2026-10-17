@@ -49,11 +49,11 @@ ok("ability call returns instructions with defaults filled in", ab.text && /ABIL
 
 // mode
 r = PS.upsert({ kind: "mode", title: "Horror Builder", badge: "horror!!", base: "visualizer", description: "Dread: fog, flicker, low light, sound.", mandate: "You are a horror ambience specialist. Every scene needs Atmosphere fog, low ambient light, a flickering light and a sound layer; verify with a screenshot after each pass.", focus: ["execute_luau", "fx_fog"] }, { reserved });
-ok("mode installs: snake name from title, badge sanitised, base kept", r.ok && r.item.name === "horror_builder" && r.item.badge === "HORROR" && r.item.base === "visualizer", JSON.stringify(r.errors));
+ok("mode installs: snake name from title, badge sanitised, legacy base migrates to creation (1.39.0)", r.ok && r.item.name === "horror_builder" && r.item.badge === "HORROR" && r.item.base === "creation", JSON.stringify(r.errors));
 ok("mode with a short mandate is rejected", !PS.validate({ kind: "mode", title: "Tiny", mandate: "too short" }).ok);
 ok("activeMode is null until set; setActiveMode persists rsPublicMode", PS.activeMode() === null && PS.setActiveMode("horror_builder").name === "horror_builder" && store.rsPublicMode === r.item.id && window.__rsPublicMode().title === "Horror Builder");
 const mp = PS.modePrompt();
-ok("modePrompt layers the mandate on the base mode and lists focus commands", /CUSTOM WORK MODE: HORROR BUILDER/.test(mp) && /layered on VISUALIZER/.test(mp) && /FOCUS COMMANDS[^\n]*execute_luau, fx_fog/.test(mp), mp.slice(0, 120));
+ok("modePrompt layers the mandate on the base mode and lists focus commands", /CUSTOM WORK MODE: HORROR BUILDER/.test(mp) && /layered on CREATION/.test(mp) && /FOCUS COMMANDS[^\n]*execute_luau, fx_fog/.test(mp), mp.slice(0, 120));
 ok("disabling the active mode deactivates it", (PS.setEnabled("horror_builder", false), PS.activeMode() === null) && (PS.setEnabled("horror_builder", true), true));
 ok("modes are not commands", !PS.isCommand("horror_builder") && PS.isCommand("lantern_row") && PS.isCommand("script_audit"));
 
@@ -94,7 +94,7 @@ print('placed', n, {{color}})
 }
 {
   const t = PS.parseText("# Night Market\nkind: mode\nbase: visualizer\nbadge: MARKET\ndescription: Atmospheric night market scenes with lanterns and fog.\nfocus: set_lighting, create_part\n\n--- mandate ---\n" + "Build moody night markets. ".repeat(6));
-  ok("parseText reads a mode (base/badge/focus/mandate)", t.ok && t.def.kind === "mode" && t.def.base === "visualizer" && t.def.badge === "MARKET" && t.def.mandate.length >= 80 && PS.validate(t.def).ok, JSON.stringify(t).slice(0, 200));
+  ok("parseText reads a mode (base/badge/focus/mandate; legacy base kept in the def, normalised on validate)", t.ok && t.def.kind === "mode" && t.def.base === "visualizer" && PS.validate(t.def).item.base === "creation" && t.def.badge === "MARKET" && t.def.mandate.length >= 80 && PS.validate(t.def).ok, JSON.stringify(t).slice(0, 200));
   const a = PS.parseText("# Tidy Up\nkind: ability\ndescription: Cleans the workspace before publishing a place.\n--- steps ---\n1. Delete stray parts\n2. Group props\n3. Verify with count\n");
   ok("parseText reads an ability with steps (instructions derived)", a.ok && a.def.kind === "ability" && a.def.steps.length === 3 && a.def.steps[1] === "Group props" && PS.validate(a.def).ok, JSON.stringify(a).slice(0, 200));
   const p = PS.parseText("You are a senior Roblox lighting artist. Always set up atmosphere first.\nNever leave default lighting. Verify with a screenshot.");
@@ -110,7 +110,7 @@ print('placed', n, {{color}})
   const f = PS.fromPrompt(PROMPT, { reserved: new Set(["create_part", "set_lighting", "execute_luau"]) });
   ok("fromPrompt (no AI) -> ability with title, steps and referenced commands", f.ok && f.def.kind === "ability" && f.def.title === "Boss Arena Builder" && f.def.name === "boss_arena_builder" && f.def.steps.length === 4 && f.def.instructions === PROMPT && f.def.commands.includes("create_part") && f.def.commands.includes("set_lighting") && PS.validate(f.def).ok, JSON.stringify(f).slice(0, 300));
   const m = PS.fromPrompt("You are a senior horror-map specialist. " + "Prioritise dread, fog and flickering lights over detail. ".repeat(8) + "Never add bright colours.", { kind: "mode" });
-  ok("fromPrompt kind=mode -> mandate verbatim, base from hints", m.ok && m.def.kind === "mode" && m.def.base === "visualizer" && m.def.mandate.startsWith("You are a senior horror-map specialist.") && m.def.badge.length <= 12 && PS.validate(m.def).ok, JSON.stringify(m).slice(0, 300));
+  ok("fromPrompt kind=mode -> mandate verbatim, base is creation", m.ok && m.def.kind === "mode" && m.def.base === "creation" && m.def.mandate.startsWith("You are a senior horror-map specialist.") && m.def.badge.length <= 12 && PS.validate(m.def).ok, JSON.stringify(m).slice(0, 300));
   const sk = PS.fromPrompt("Spawn ring\n```lua\nlocal n = {{count}}\nfor i = 1, n do local p = Instance.new('Part') p.Parent = workspace end\n```", { kind: "skill" });
   ok("fromPrompt kind=skill with fenced Luau -> skill with {{count}} param", sk.ok && sk.def.kind === "skill" && sk.def.params.length === 1 && sk.def.params[0].name === "count" && /Instance\.new/.test(sk.def.luau) && PS.validate(sk.def).ok, JSON.stringify(sk).slice(0, 300));
   const fb = PS.fromPrompt("Make the arena bigger and add torches around the edge, then verify.", { kind: "skill" });
@@ -192,6 +192,7 @@ ok("Create button auto-routes: full prompt → conversionPrompt, description →
 ok("import: prose files load into the composer instead of failing", main.includes("if (!r.ok && r.prompt) {") && main.includes('input.accept = ".json,.orskill.json,.orskills.json,.txt,.md,text/plain,application/json"'));
 ok("runTool handles public_skill_from_prompt", main.includes('if (op === "from_prompt") {') && main.includes("PS.installFromPrompt(text, { kind: args.kind, title: args.title, name: args.name, description: args.description, reserved: reserved(), source: \"ai\" })") && main.includes("Available: public_skill_create/from_prompt/list/get/update/delete/enable/test/export/import."));
 ok("help topic + config prompt blocks explain prompt → skill and .txt", /Prompt → skill: paste a whole prompt/.test(main) && /Plain-text format \(\.txt\)/.test(main) && config.includes("PROMPT → SKILL: when the user pastes a full prompt") && config.includes("public_skill_from_prompt {prompt}") && css.includes(".rs-public-ways") && css.includes(".rs-public-hint-convert") && css.includes(".rs-public-dragover"));
-ok("popup work-mode literal untouched", read("popup.js").includes('const WORK_MODES = ["ultimate", "visualizer", "animator"]'));
+ok("popup work-mode literal untouched", read("popup.js").includes('const WORK_MODES = ["creation"]'));
+ok("BASES = [creation] with legacy mapping exported", Array.isArray(PS.BASES) && PS.BASES.length === 1 && PS.BASES[0] === "creation" && PS.normalizeBase("animator") === "creation" && PS.normalizeBase("ULTIMATE") === "creation" && PS.normalizeBase("creation") === "creation" && PS.normalizeBase("") === "creation");
 
 console.log(`\n${pass} passed, ${fail} failed`);

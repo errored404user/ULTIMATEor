@@ -907,7 +907,7 @@
   // Keep it factual for THIS build - runTool returns one entry verbatim, or the
   // {id,title,summary} list when no topic matches.
   const FEATURE_HELP_TOPICS={
-    design:{title:"Design pack (GUI generation)",summary:"Generate real, responsive Roblox GUI - ScreenGui trees with LocalScripts, remotes and server stubs - from design tokens and screen templates instead of static mock-ups.",details:["design_tokens_set {preset, primary, secondary, surface, text, font, radius} writes ReplicatedStorage.OR_Design (Tokens, UIKit, Responsive ModuleScripts). Presets: midnight, clean_light, candy, neon, royal_gold, forest, horror, ocean, sakura, retro. Re-run it to restyle every generated screen at once; design_tokens_get reads the current set.","ui_screen_generate {kind} builds complete screens: main_menu, hud, shop, inventory, settings, leaderboard, daily_rewards, quest_log, loading, dialog, notification_stack - each with an OR_Controller LocalScript (actions, open keys, gamepad B, typewriter), data feeds (leaderstats pills, health, leaderboard rows, toasts) and, where needed, remotes plus server scripts (shop purchase validation, DataStore-backed daily rewards).","ui_from_spec {name, spec} turns a JSON tree (Window, Panel, Row, Column, Grid, ScrollList, Tabs, Button, Label, ItemCard, Slot, CurrencyPill, ProgressBar, Toggle, Input...) sized in pixels on a 1280x720 canvas into scale-based UI with aspect/size constraints and TextScaled text. ui_component_place adds one component to an existing GUI; ui_export_spec converts any GUI back into a spec.","Retrofit tools: ui_apply_tokens (restyle legacy UI), ui_make_responsive (offset roots -> scale + constraints + OR_Responsive script), ui_gamepad_focus (NextSelection links + selection cursor), ui_states_wire (hover/press states + OR_Controller).","ui_audit {path} scores 0-100 and lists issues (contrast, tiny text, small touch targets, offset-only roots, overlap, static canvases, global ZIndex, missing runtime). ui_preview {path, device} stages a window for or_screenshot; call it again with restore:true before shipping.","Everything lives in Studio as normal instances - no account, no web app, no image-only mock-ups. The Visualizer work mode focuses these commands; Ultimate uses them whenever a request involves a menu, HUD, shop or any other screen."]},
+    design:{title:"Design pack (GUI generation)",summary:"Generate real, responsive Roblox GUI - ScreenGui trees with LocalScripts, remotes and server stubs - from design tokens and screen templates instead of static mock-ups.",details:["design_tokens_set {preset, primary, secondary, surface, text, font, radius} writes ReplicatedStorage.OR_Design (Tokens, UIKit, Responsive ModuleScripts). Presets: midnight, clean_light, candy, neon, royal_gold, forest, horror, ocean, sakura, retro. Re-run it to restyle every generated screen at once; design_tokens_get reads the current set.","ui_screen_generate {kind} builds complete screens: main_menu, hud, shop, inventory, settings, leaderboard, daily_rewards, quest_log, loading, dialog, notification_stack - each with an OR_Controller LocalScript (actions, open keys, gamepad B, typewriter), data feeds (leaderstats pills, health, leaderboard rows, toasts) and, where needed, remotes plus server scripts (shop purchase validation, DataStore-backed daily rewards).","ui_from_spec {name, spec} turns a JSON tree (Window, Panel, Row, Column, Grid, ScrollList, Tabs, Button, Label, ItemCard, Slot, CurrencyPill, ProgressBar, Toggle, Input...) sized in pixels on a 1280x720 canvas into scale-based UI with aspect/size constraints and TextScaled text. ui_component_place adds one component to an existing GUI; ui_export_spec converts any GUI back into a spec.","Retrofit tools: ui_apply_tokens (restyle legacy UI), ui_make_responsive (offset roots -> scale + constraints + OR_Responsive script), ui_gamepad_focus (NextSelection links + selection cursor), ui_states_wire (hover/press states + OR_Controller).","ui_audit {path} scores 0-100 and lists issues (contrast, tiny text, small touch targets, offset-only roots, overlap, static canvases, global ZIndex, missing runtime). ui_preview {path, device} stages a window for or_screenshot; call it again with restore:true before shipping.","Everything lives in Studio as normal instances - no account, no web app, no image-only mock-ups. The Creation work mode focuses these commands and uses them whenever a request involves a menu, HUD, shop or any other screen."]},
     gfx:{title:"Thumbnail & Icon Studio (gfx pack)",summary:"Stage, light, pose and photograph real game thumbnails (1920x1080) and icons (512x512) inside Roblox Studio - the finished PNG is cropped, downloaded and attached to the chat - instead of a static AI image you cannot edit.",details:["gfx_stage_create {style, kind} builds a cyclorama stage far above the map (floor, cove, backdrop, Key/Fill/Rim SpotLights) and applies the style lighting + post stack: cinematic, cartoony, horror, neon, clean or chroma (green screen). Lighting and the camera are snapshotted so gfx_teardown leaves no trace.","gfx_subject_add {source, pose, face, slot} puts a character on stage: 'dummy' (R15), 'r6', 'player:USERID' / 'user:Name' (the real avatar) or any model path. Poses: hero, point, jump, wave, scared, victory, run, think, sit, dab, fight, crossed_arms. Faces on dynamic heads: happy, shocked, angry, scared, smirk, determined, laughing, wink (face_id for classic decal heads). gfx_pose re-poses; gfx_prop_add floats a glowing sword / pet / chest beside the subject.","gfx_camera {preset} frames the shot: hero_low, three_quarter, front, closeup, top_down, dutch, wide, icon (+ fov / pitch / yaw / roll / distance_scale). gfx_overlay {title, subtitle, badge, logo_image} adds a huge outlined gradient title in the style font with 16:9 / 1:1 masks, safe-area and thirds guides. gfx_fx adds sparkles / embers / smoke / confetti / snow / magic / rays; gfx_lighting fine-tunes bloom, saturation, DOF, fog, time and the rig lights.","gfx_capture photographs the viewport through the Studio MCP, hides the guides, crops to the aspect box and returns the PNG (thumbnail 1920x1080, icon 512x512 or custom) - downloaded by the browser and attached to the chat so the model can judge and iterate. gfx_brief writes an art-director brief, an image-generation prompt and a CTR checklist for chats that can paint.","Workflow: gfx_brief -> gfx_stage_create -> gfx_subject_add (+ gfx_prop_add) -> gfx_overlay -> gfx_fx -> gfx_camera -> gfx_capture (judge, iterate) -> gfx_teardown. Maximise the 3D viewport first: the capture is only as sharp as the viewport."]},
     blueprints:{title:"System Blueprints (built-in skills)",summary:"Twelve production-grade game systems that install into the place as real code - shared Core (Signal bus, remotes, DataStore profiles with session locks, receipts, leaderstats, notifications) + a Config ModuleScript, a server Service and a client script per system - then verify themselves in edit mode. Lemonade-style 'complete systems', but built in, inspectable and yours.",details:["blueprint_list shows the catalogue: currency (wallet + data profiles), shop (items, game passes, dev-product packs), pets (eggs, rarity, luck, following pets), combat (weapons, hitboxes, damage pipeline, statuses), rounds (intermission / round / results loop with maps), checkpoints (obby stages + skip product), quests (Bus-driven daily objectives), tycoon (plots, buttons, droppers, collector), leaderboards (OrderedDataStore boards), admin (ranks + chat commands), anticheat (speed / fly / teleport rules), sprint (stamina).","blueprint_install {name:\"pets\"} installs dependencies first (pets -> currency), writes ReplicatedStorage.OR_Systems.<System>.{Config,Remotes}, ServerScriptService.OR_Systems.<System>.Service and StarterPlayerScripts.OR_Systems.<System>Client, generates weapon Tools / a demo course / plots / boards / an arena when the place has none, then runs blueprint_verify. name:\"all\" installs everything; config:{...} seeds the Config.","blueprint_configure {name, config} deep-merges into the Config module (readable Lua table, OR_ConfigJSON attribute) and re-verifies; blueprint_verify compiles Config + Service against Core in edit mode and runs each Service's SelfTest (shop validation, pet odds, cooldowns, round state machine, quest progress, tycoon gates, anticheat rules...); blueprint_status reports versions, remotes and missing dependencies; blueprint_remove uninstalls without touching player data.","Systems talk through Core.Bus topics (Combat.Kill -> Currency reward + Quests + Leaderboards; Checkpoints.Reached -> reward; Round.Won -> reward + quest) so any subset works together. Extend them with script_read / multi_edit on the Service, or build UI on their remotes with ui_screen_generate.","Workflow for a 'make me a pet simulator' request: blueprint_install {name:[\"currency\",\"pets\",\"shop\",\"quests\",\"leaderboards\"]} -> blueprint_configure the eggs / prices -> ui_screen_generate {kind:\"shop\"} wired to the Hatch / Purchase remotes -> start_stop_play + get_console_output -> blueprint_status."]},
     projectindex:{title:"Project Index (codebase awareness)",summary:"ORscript keeps a map of the whole place inside the place (ServerStorage.OR_ProjectIndex): every script hashed and outlined (functions + lines, requires resolved to modules, remotes fired / handled, services, DataStores, tags, TODOs, --!strict), the require graph with hubs / orphans / cycles, remote producers vs consumers with mismatch detection, the folder layout, the coding conventions in use and the installed blueprints. The compact PROJECT MAP is re-injected into the chat so the model works from a map instead of re-reading every script - Lemonade-style codebase awareness without a hosted account.",details:["project_index_build scans the place (or a scope), writes the index and returns added / modified / removed vs the previous index plus the PROJECT MAP text. Run it first on an unknown place and again after big changes; dry_run:true only computes.","project_index_summary is the cheap read: counts, layout per service, the style guide to match (indent, PascalCase / camelCase, strict ratio, task.wait vs wait, game:GetService), hubs, orphans, cycles, remotes with producer -> consumer, mismatches, DataStores, tags, TODO files, largest scripts, installed blueprints, and whether the index is stale.","project_index_search {query, kind} finds functions / exports / require targets / remote names / services / DataStore names / tags / paths / TODOs with script path + line, so you script_read a range instead of a whole file. project_index_script {path} gives one script's outline, requires + required_by, remote partners (who handles what it fires) and stale:true when the source changed since the index.","project_index_graph {kind:\"requires\"} returns the dependency graph (edges, hubs, orphans, cycles, unresolved requires; root + depth for a neighbourhood); {kind:\"remotes\"} the remote matrix with mismatches (fired but never handled, handled but never fired, referenced without an instance, unused instance) and handlers on the wrong side.","project_index_changes rehashes without writing: added / modified / removed scripts, and per modified script the line delta, new / removed functions and whether requires or remotes changed - use it to summarise your own edits or before trusting an old map.","Read before you write: on an existing place start with project_index_build (or project_index_summary when an index exists and is current), match the conventions it reports, wire new scripts into existing hubs and remotes instead of duplicating them, then rebuild the index at the end so the next session starts from an accurate map."]},
@@ -915,7 +915,7 @@
     roadmap:{title:"Roadmap / plan",summary:"Optional multi-phase planning: the agent writes phases and tasks, tracks progress, and reports a checklist as work completes.",details:["Toggle Plan in the OR menu. With Plan ON the agent creates a roadmap first (roadmap_create / roadmap_update), then executes phase by phase.","Progress is shown in the chat as the agent ticks tasks; you can ask for the current roadmap or tell it to re-plan.","Plan OFF = direct execution with no roadmap overhead (better for small edits)."],howTo:["OR menu → Plan ON","Describe the whole feature; the agent proposes phases","Approve or edit the plan, then let it run"]},
     commands:{title:"Commands / tool registry",summary:"ORscript exposes 630+ advertised Studio commands (plus hidden legacy aliases, workspace, template, roadmap and help tools) through an embedded catalogue in the system prompt (and a broad list_commands on tight providers). Since 1.37.1 the agent never searches commands: the catalogue is final and lookups are answered with the closest signatures plus an instruction to act.",details:["Since 1.33 roomy providers receive a compact command catalogue inside the system prompt (universal block + the active work mode's family as signatures, the rest as names), so the agent no longer starts every session with list_commands; tight-composer providers (Notion, ClickUp, Vani, CodeCraft, NVIDIA) still get the catalogue as the first tool result.","list_commands returns the catalogue for the active work mode: a UNIVERSAL block (42 inspection/scripting/verification commands present in every mode, including inspect_service and query_instances) followed by the mode family.","No command searching (1.37.1): search_commands / get_command / command_registry_stats / generate_command_docs are no longer advertised and list_commands {query} no longer opens a search - the agent gets at most five closest signatures and must act (or use execute_luau). A wrong parameter returns the exact schema in the error, so no lookup is ever needed.","Commands are executed through or-core (127.0.0.1:3000) - either the Studio MCP helper or the ORscript Studio plugin when it is connected."],howTo:["Ask: 'what can you do with lights'","The agent answers from the catalogue in its instructions and runs the command directly - it does not search"]},
     studio:{title:"Roblox Studio connection",summary:"The browser extension talks to the or-core desktop agent on 127.0.0.1:3000, which bridges to Studio through the Studio MCP helper and the optional ORscript Studio plugin.",details:["Run or-core (agent/ crate, cargo build) once; it stays in the background and auto-installs plugin/ORscript.lua into the Studio Plugins folder.","In Studio: Plugins → ORscript panel → enable; click Allow on the HTTP prompt. The plugin runs execute_luau with plugin-level APIs and adds csg_*, open_script, script_live_update, studio_undo/redo, screenshot_frame, gamepass_handler_create…","or_status / studio_plugin_status report the connection; or_screenshot captures the Studio window through the MCP screen_capture tool."],howTo:["Start or-core","Open the place in Studio and enable the ORscript plugin","Check the status pill in the OR bar is green, then chat"]},
-    workmode:{title:"Work modes",summary:"Ultimate (default: Luau engineering + modeling), Visualizer (VFX/UI/lighting) and Animator (rigs, keyframes, animation suite) change the catalogue order, mandates and skills the agent leans on.",details:["Switch in the OR menu → Work mode. Every mode keeps the same UNIVERSAL command block, then prioritises its own family.","Since 1.34 each mode is a distinct profile on a shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence): Ultimate = Luau engineering + modeling mandates, blueprints, project index; Visualizer = read the scene → mood → layered VFX → UI as a system → prove it with pixels; Animator = read the rig → block keys → polish curves → runtime motion → camera beats → preview.","Switching mid-session sends the AI a short MODE SWITCH note (the new profile + that mode's focus commands) instead of the whole system prompt; the periodic reminder carries a one-line mode checklist.","Each mode card has Quick starts: one-click prompts (index this place, shop + currency, cinematic mood, hero spell VFX, sword swing, cutscene camera …) pasted into the composer for you to edit and send."],howTo:["OR menu → Work mode → pick Ultimate / Visualizer / Animator","Click a Quick start pill under the mode cards, adjust the text, press Enter"]},
+    workmode:{title:"Work mode: Creation",summary:"Since 1.39.0 there is ONE built-in work mode, Creation: the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. Custom Public-Skill modes layer their own mandate on top of it.",details:["Creation runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → or_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Creation automatically; custom modes created on an old base keep working on Creation.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send."],howTo:["OR menu → Work mode → Creation (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
     projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .orscript-project-reference.json you can re-import."],howTo:["OR menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
     themes:{title:"Themes & appearance",summary:"16 themes with CSS backgrounds, swatch previews, per-theme corner decorations, gradient pill buttons and optional sound effects - applied to the ORscript UI only, never to the host site.",details:["OR menu → Theme. Each theme ships its own background, accent tokens (--orx-*), decorations and SFX set.","Sounds and decorations can be toggled independently in Settings.","VoidScript is OrScript's partner visual identity used by the Void theme family."],howTo:["OR menu → Theme → pick a swatch"]},
     permissions:{title:"Permissions",summary:"Sandbox (Studio + workspace only, no prompts), Ask (confirm writes, publishes and PC access with an approval card) or Full (entire PC via or-core).",details:["Sandbox is the default and never asks - ideal for Studio-only work.","Ask shows an approval card above the page for execute_luau, file writes, publishes and marketplace changes; it auto-denies after 120 s so a hidden card cannot stall the agent.","Full unlocks PC-wide file/terminal tools (OR_FULL_ACCESS in or-core). Publish/marketplace automation additionally requires the 'Allow publish automation' switch."],howTo:["OR menu → Permissions → Sandbox / Ask / Full"]},
@@ -1793,64 +1793,41 @@
   // any tool result carrying images is caught generically at the point results
   // are handled (see the `r.images.length` branch) and turned into a plain
   // error on non-vision providers, so nothing needs to be predicted here.
-  // ── Work modes ────────────────────────────────────────────────────────
-  // ultimate   = the flagship default: senior Luau engineer + 3D modeler.
-  //              Pushes the whole script_*/execute_luau/instance_*/part_*/
-  //              model_*/physics_*/terrain_*/build families, deep verification.
-  // visualizer = VFX / lighting / UI specialist: pushes the whole fx_*, vfx_*,
-  //              lighting_*, ui_* families and screenshot-verifies every pass.
-  // animator   = animation specialist: animation_* editor pipeline, tweens,
-  //              springs, IK, camera work, preview-verified.
-  // `focus` picks the commands each specialist mode surfaces first in
-  // list_commands; config.js layers the matching prompt on top of the
-  // Ultimate workflow (which is also the base for the two specialists).
+  // ── Work mode ─────────────────────────────────────────────────────────
+  // 1.39.0: CREATION - the former Ultimate (senior Luau engineer + 3D
+  // modeler), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes,
+  // tweens, camera) modes merged into ONE creator profile. It pushes every
+  // family (script_*/execute_luau/instance_*/part_*/model_*/physics_*/terrain_*,
+  // fx_*/vfx_*/lighting_*/ui_*/gfx_*, animation_*/tween_*/camera_*) with deep
+  // verification: console reads, screenshots and animation previews.
+  // Legacy ids (ultimate / visualizer / animator / adaptive) normalise to it;
+  // custom public modes layer their mandate on top of it. `focus` picks the
+  // commands surfaced first in list_commands; config.js carries the prompt.
   const WORK_MODES = {
-    ultimate: {
-      name: "Ultimate", badge: "ULTIMATE", short: "Ultimate",
-      sub: "Luau systems · Modeling · Architecture — production-grade, verified",
-      note: "Flagship mode: senior Luau engineer and 3D modeler in one. Full scripting, instance, physics, build and terrain arsenal, continuous autonomy, deep verification. Catalogue: scripting, blueprints, data, build and physics families first. Playbooks: new system, bug fix, existing place, build. Gate: changed scripts must be read back and checked before 'done'.",
-      toast: "Ultimate Work Mode — senior Luau engineer + modeler, full arsenal, every build verified",
+    creation: {
+      name: "Creation", badge: "CREATION", short: "Creation",
+      sub: "Luau systems · Modeling · VFX & Lighting · UI · Animation & Camera — everything, verified",
+      note: "One creator mode: senior Luau engineer, 3D modeler, VFX / lighting / UI artist and animator at once. Blueprints and project index for systems, blockout-to-polish modeling, mood → layered VFX → design-system UI, key poses → curves → camera beats. Catalogue: scripting, blueprints, data, build and physics families first, then lighting, VFX, UI, animation and motion. Playbooks: new system, bug fix, existing place, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene. Gate: changed scripts must be read back and checked, a changed look screenshotted and new motion previewed before 'done'.",
+      toast: "Creation Work Mode — engineer, modeler, VFX / UI artist and animator in one, every pass verified",
       starters: [
         { label: "Index this place", prompt: "Build the project index for this place and give me the PROJECT MAP: folder layout, conventions, hubs, remotes and every mismatch. Then tell me the three riskiest problems you see and fix the first one." },
         { label: "Shop + currency", prompt: "Install a complete coins currency and shop system in this place (blueprints: currency + shop), with session-locked DataStore saving, leaderstats, a shop UI from the design pack and server-validated purchases. Verify it in Play and show me the console." },
         { label: "Build a house", prompt: "Build a two-storey medieval tavern at real scale in Workspace: blockout, walls with door and window openings, staircase, roof, interior props, a deliberate material palette (no default grey), everything grouped in a named Model hierarchy. Screenshot it from two angles and polish." },
         { label: "Fix my errors", prompt: "Start a playtest, read the console, and fix every error and warning you find at the cause (not the symptom). Re-run until the console is clean and report what you changed with full script paths." },
-      ],
-      focus: /^(script_|model_|memory_|blueprint_|project_index_|execute_luau|multi_edit|module_scaffold|remote_scaffold|datastore_profile_scaffold|tag_scaffold|project_health_report|search_game_tree|search_files|inspect_instance|get_studio_state|get_console_output|audit_(script_errors|unanchored_parts)|instance_|part_(create|at|above)|meshpart_create|wedge_create|model_group|(scale|rotate|mirror|flatten|raise|ungroup)_model|set_primary_part|pivot_(set|to)|cframe_set|rotation_set|size_set|snap_(position|to_grid)|grid_clone|duplicate_n|weld_(assemble|constraint)|constraint_create|constraints_clear|rigid_constraint_create|hinge_create|rope_create|attachment_create|align_(position|orientation)_create|material_set|color_set|brickcolor_set|transparency_set|reflectance_set|texture_add|decal_(add|set)|mesh_set_texture|generate_(mesh|material|procedural_model)|terrain_|staircase_generate|archway_generate|roof_structure_build|fence_line_build|road_path_build|bridge_suspension_make|window_glass_install|tree_forest_scatter|dungeon_room_generate|ground_make|water_body|folder_create|attribute_(get|set)|tag_(add|remove)|remote_|bindable_|datastore_setup|ds_|leaderstats_|collision_(set|group_set)|physics_|anchored_set|get_(children|descendants|property|service|template)|set_property|property_copy|selection_(info|set)|script_analysis|or_debug|or_screenshot|start_stop_play|place_backup_save|workspace_(stats|list|export|import))/,
-    },
-    visualizer: {
-      name: "Visualizer", badge: "VISUALIZER", short: "Visualizer",
-      sub: "VFX · Lighting · UI — layered, cinematic, screenshot-verified",
-      note: "VFX, lighting and UI specialist on top of Ultimate: mood, layered effects, design-system UI, screenshot-verified polish. Catalogue: lighting, VFX, UI, thumbnail and audio families first. Playbooks: mood pass, hero VFX, UI screen, thumbnail. Gate: a changed look must be screenshotted before 'done'.",
-      toast: "Visualizer Work Mode — full VFX, lighting and UI arsenal, screenshot-verified",
-      starters: [
         { label: "Cinematic mood", prompt: "Take a screenshot, then set a complete cinematic mood for this scene: lighting preset, atmosphere, sky, bloom, color correction and a post-FX stack. Screenshot again, judge it as an art director and run one polish pass." },
         { label: "Hero spell VFX", prompt: "Create a layered fire-magic cast effect on the selected part: core emitter, glow, sparks, a magic circle, a point light with flicker and a sound layer, with proper Size/Transparency curves. Trigger it on touch and screenshot it mid-burst." },
         { label: "Game HUD", prompt: "Set design tokens (neon preset, my primary colour is #7C5CFF) and generate a responsive HUD with health bar, coins and a quest tracker, plus a main menu and a shop screen. Run ui_audit and the responsive check, then screenshot each screen." },
-        { label: "Thumbnail", prompt: "Make a 1920x1080 cartoony thumbnail for my game: my avatar in a hero pose with a shocked face, a floating glowing sword prop, the title in three words, a NEW badge, then capture it." },
-      ],
-      focus: /^(fx_|design_|gfx_|vfx_|sfx_|ui_|gui_|lighting|light_|postfx_|atmosphere|sky_|bloom|blur|color_correction|fog_|film_|weather_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|point_light|spot_light|surface_light|explosion|shadows|cast_shadow|set_future_lighting|snowfall|volcanic|firefly|portal_vfx|screen_shake|toast_show|notification_toast|radial_menu|level_up_ui|loading_screen|performance_monitor_gui|surface_gui|billboard_gui|starter_gui|text_label|text_button|image_label|frame_create|texture_add|mesh_set_texture|directional_audio|or_screenshot)/,
-    },
-    animator: {
-      name: "Animator", badge: "ANIMATOR", short: "Animator",
-      sub: "Rigs · Keyframes · Tweens · Camera — motion-first, preview-verified",
-      note: "Animation specialist on top of Ultimate: rigs, keyframes, easing, tweens, IK and camera beats, preview-verified. Catalogue: animation, tweens/camera and playtest families first. Playbooks: combat clip, locomotion loop, prop motion, cutscene. Gate: new motion must be previewed before 'done'.",
-      toast: "Animator Work Mode — full animation editor, tween and camera arsenal, preview-verified",
-      starters: [
         { label: "Sword swing", prompt: "Select the rig in my selection, read its joints, and create a 1.2 s sword swing with anticipation, a fast action beat, follow-through and a settle. Ease every key, add a hit marker, give it a camera FOV punch, preview it and screenshot the key poses." },
-        { label: "Walk + idle loop", prompt: "Create a looping walk cycle (contact, down, passing, up) and a breathing idle with moving holds for the selected rig, with correct priorities. Preview both, fix foot sliding and loop seams, then export them to a folder ready for LoadAnimation." },
-        { label: "Door + chest tweens", prompt: "Animate the selected door opening with a spring-like overshoot and the chest lid with anticipation, using tween sequences with deliberate easing, plus a small camera shake on impact. Preview them in Play." },
-        { label: "Cutscene camera", prompt: "Build a 6 s intro cutscene camera track around the selected model: slow dolly in, a low hero angle, an eased orbit, FOV change on the reveal, then a reset to the player. Preview it and tell me the beats with timings." },
       ],
-      focus: /^(animation_|anim_|tween|spring_|motor6d|rig_|ik_|character_emote|facial_animation|camera_|cutscene|walkspeed|or_screenshot)/,
+      focus: /^(script_|model_|memory_|blueprint_|project_index_|execute_luau|multi_edit|module_scaffold|remote_scaffold|datastore_profile_scaffold|tag_scaffold|project_health_report|search_game_tree|search_files|inspect_instance|get_studio_state|get_console_output|audit_(script_errors|unanchored_parts)|instance_|part_(create|at|above)|meshpart_create|wedge_create|model_group|(scale|rotate|mirror|flatten|raise|ungroup)_model|set_primary_part|pivot_(set|to)|cframe_set|rotation_set|size_set|snap_(position|to_grid)|grid_clone|duplicate_n|weld_(assemble|constraint)|constraint_create|constraints_clear|rigid_constraint_create|hinge_create|rope_create|attachment_create|align_(position|orientation)_create|material_set|color_set|brickcolor_set|transparency_set|reflectance_set|texture_add|decal_(add|set)|mesh_set_texture|generate_(mesh|material|procedural_model)|terrain_|staircase_generate|archway_generate|roof_structure_build|fence_line_build|road_path_build|bridge_suspension_make|window_glass_install|tree_forest_scatter|dungeon_room_generate|ground_make|water_body|folder_create|attribute_(get|set)|tag_(add|remove)|remote_|bindable_|datastore_setup|ds_|leaderstats_|collision_(set|group_set)|physics_|anchored_set|get_(children|descendants|property|service|template)|set_property|property_copy|selection_(info|set)|script_analysis|or_debug|or_screenshot|start_stop_play|place_backup_save|workspace_(stats|list|export|import)|fx_|design_|gfx_|vfx_|sfx_|ui_|gui_|lighting|light_|postfx_|atmosphere|sky_|bloom|blur|color_correction|fog_|film_|weather_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|point_light|spot_light|surface_light|explosion|shadows|cast_shadow|set_future_lighting|snowfall|volcanic|firefly|portal_vfx|screen_shake|toast_show|notification_toast|radial_menu|level_up_ui|loading_screen|performance_monitor_gui|surface_gui|billboard_gui|starter_gui|text_label|text_button|image_label|frame_create|directional_audio|animation_|anim_|tween|spring_|motor6d|rig_|ik_|character_emote|facial_animation|camera_|cutscene|walkspeed)/,
     },
   };
   const WORK_MODE_IDS = Object.keys(WORK_MODES);
-  const normalizeWorkMode = (id) => (WORK_MODE_IDS.includes(id) ? id : "ultimate"); // fast/balanced/thorough/adaptive → ultimate
+  const normalizeWorkMode = (id) => (WORK_MODE_IDS.includes(id) ? id : "creation"); // ultimate/visualizer/animator (and older fast/balanced/thorough/adaptive) → creation
   // UNIVERSAL commands: the navigation / inspection / scripting / verification
   // core that EVERY work mode gets with full schemas, ahead of the mode's own
-  // family. A Visualizer still has to find the part, an Animator still has to
-  // read the rig, an Ultimate run still has to inspect before it writes - so
+  // family. A VFX pass still has to find the part, an animation pass still has
+  // to read the rig, a script pass still has to inspect before it writes - so
   // these are never pushed out of the catalogue by the focus family or by a
   // compact provider budget. (Exact catalogue names; unknown ones are skipped.)
   const UNIVERSAL_COMMANDS = [
@@ -1879,32 +1856,37 @@
   // code-level teeth behind "VERIFY DEEPLY" / "PROVE IT WITH PIXELS" /
   // "PREVIEW OR IT DID NOT HAPPEN".
   const MODE_GATES = {
-    ultimate: {
-      did: /^(script_create|script_set_source|multi_edit|script_replace|script_insert|script_append|script_module|script_new|module_scaffold|blueprint_install|blueprint_configure|remote_scaffold|datastore_profile_scaffold|script_delete_lines|script_rename_symbol|script_deprecations_fix)$/,
-      proof: /^(script_read|script_check|script_analysis|script_lint|get_console_output|start_stop_play|or_debug|blueprint_verify|audit_script_errors|script_diff|project_index_changes|studio_playtest)$/,
-      nudge: "━━━ ULTIMATE GATE (System note from OR, not the user) ━━━\nYou wrote or changed scripts in this run but never verified them. Before the final answer: script_read the changed script(s) back, run script_check (or script_lint), then start_stop_play + get_console_output until the console is clean - fix anything it shows. Then give the final report with evidence. Do not acknowledge this note; just do it.",
-    },
-    visualizer: {
-      did: /^(fx_|vfx_|lighting|atmosphere|sky|clouds|bloom|blur|color_correction|postfx|sunrays|fog|ui_(?!list_tree|audit|inspect)|gui_(?!hide|show)|design_tokens_set|design_kit_install|beam|trail|point_light|spot_light|surface_light|fire_add|smoke_add|sparkles|highlight|portal_|gfx_(stage|subject|prop|overlay|fx|camera|lighting|pose))/,
-      proof: /^(or_screenshot|gfx_capture|screen_capture|screenshot_frame|lighting_time_lapse)$/,
-      nudge: "━━━ VISUALIZER GATE (System note from OR, not the user) ━━━\nYou changed the look of the place in this run but never looked at it. Take or_screenshot {target:\"studio\"} now, judge it as an art director (contrast, hierarchy, colour harmony, readability), do one polish pass that fixes what the screenshot shows, screenshot again, then finish with the VISUAL SPEC. Do not acknowledge this note; just do it.",
-    },
-    animator: {
-      did: /^(animation_(create|set_pose|add_keyframe|update_keyframe|motion_preset|stagger_parts|set_easing|mirror|retime|reverse|import|move_keyframe|clone_keyframe)|tween_(create|sequence)|spring_create|cutscene_camera_track|ik_control_setup)$/,
-      proof: /^(animation_preview|animation_test|animation_simulate|camera_orbit_preview|or_screenshot|start_stop_play|studio_playtest)$/,
-      nudge: "━━━ ANIMATOR GATE (System note from OR, not the user) ━━━\nMotion was created in this run but never previewed. Run animation_preview now (animation_test for an exported clip, start_stop_play for tweens / camera work), judge timing, arcs, weight and loop seams, fix what you see, preview again, then finish with the MOTION SPEC. Do not acknowledge this note; just do it.",
-    },
+    // 1.39.0: CREATION carries all three gates; each one fires only when its
+    // own family mutated without proof, and the failing ones are merged into
+    // a single nudge.
+    creation: [
+      { id: "scripts",
+        did: /^(script_create|script_set_source|multi_edit|script_replace|script_insert|script_append|script_module|script_new|module_scaffold|blueprint_install|blueprint_configure|remote_scaffold|datastore_profile_scaffold|script_delete_lines|script_rename_symbol|script_deprecations_fix)$/,
+        proof: /^(script_read|script_check|script_analysis|script_lint|get_console_output|start_stop_play|or_debug|blueprint_verify|audit_script_errors|script_diff|project_index_changes|studio_playtest)$/,
+        nudge: "SCRIPTS: you wrote or changed scripts in this run but never verified them - script_read the changed script(s) back, run script_check (or script_lint), then start_stop_play + get_console_output (or or_debug) and fix anything it reports." },
+      { id: "look",
+        did: /^(fx_|vfx_|lighting|atmosphere|sky|clouds|bloom|blur|color_correction|postfx|sunrays|fog|ui_(?!list_tree|audit|inspect)|gui_(?!hide|show)|design_tokens_set|design_kit_install|beam|trail|point_light|spot_light|surface_light|fire_add|smoke_add|sparkles|highlight|portal_|gfx_(stage|subject|prop|overlay|fx|camera|lighting|pose))/,
+        proof: /^(or_screenshot|gfx_capture|screen_capture|screenshot_frame|lighting_time_lapse)$/,
+        nudge: "LOOK: you changed the look of the place in this run but never looked at it - take or_screenshot {target:\"studio\"} now, judge it as an art director (contrast, hierarchy, colour harmony, readability) and run one polish pass on what it shows." },
+      { id: "motion",
+        did: /^(animation_(create|set_pose|add_keyframe|update_keyframe|motion_preset|stagger_parts|set_easing|mirror|retime|reverse|import|move_keyframe|clone_keyframe)|tween_(create|sequence)|spring_create|cutscene_camera_track|ik_control_setup)$/,
+        proof: /^(animation_preview|animation_test|animation_simulate|camera_orbit_preview|or_screenshot|start_stop_play|studio_playtest)$/,
+        nudge: "MOTION: motion was created in this run but never previewed - run animation_preview now (animation_test for an exported clip, start_stop_play for tweens / camera work), judge timing, arcs, weight and loop seams, fix and preview again." },
+    ],
   };
   // Returns the gate nudge for the active mode when this run mutated without
   // proving, else "". `runTools` = bare names of every command executed this run.
   function modeGateNudge(runTools) {
     try {
       const mode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode());
-      const g = MODE_GATES[mode];
-      if (!g || !runTools || !runTools.size) return "";
-      let did = false, proof = false;
-      for (const n of runTools) { const b = bareToolName(n); if (g.did.test(b)) did = true; if (g.proof.test(b)) proof = true; }
-      return did && !proof ? g.nudge : "";
+      const gates = MODE_GATES[mode];
+      if (!gates || !runTools || !runTools.size) return "";
+      const bare = [...runTools].map(bareToolName);
+      const failing = gates.filter((g) => bare.some((b) => g.did.test(b)) && !bare.some((b) => g.proof.test(b)));
+      if (!failing.length) return "";
+      return "━━━ " + (WORK_MODES[mode] || WORK_MODES.creation).badge + " GATE (System note from OR, not the user) ━━━\n"
+        + failing.map((g) => "- " + g.nudge).join("\n")
+        + "\nDo not acknowledge this note; do it, then give the final report with that evidence.";
     } catch { return ""; }
   }
   // 1.38.0: skill programs that legitimately run long (whole-place scans, system
@@ -1933,14 +1915,14 @@
       const n = A.toolList.length || 0;
       const bridge = A.bridge || {};
       const connected = bridge.connected === true;
-      let extra = "OFF", plan = "OFF", lvl = "default", wm = "ultimate", perm = "sandbox", dbg = "ON", multi = "OFF";
+      let extra = "OFF", plan = "OFF", lvl = "default", wm = "creation", perm = "sandbox", dbg = "ON", multi = "OFF";
       try { if (window.__rsExtraThinking && window.__rsExtraThinking()) extra = "ON"; } catch {}
       try { if (window.__rsPlanMode && window.__rsPlanMode()) plan = "ON"; } catch {}
       try { if (window.__rsAutoDebug && window.__rsAutoDebug() === false) dbg = "OFF"; } catch {}
       try { if (window.__rsMultiAgent && window.__rsMultiAgent()) multi = "ON"; } catch {}
       try { if (multi === "ON" && typeof ORAgentCrew !== "undefined" && ORAgentCrew) multi = ORAgentCrew.stateTag(); } catch {}
       try { lvl = (window.__rsThinkingLevel && window.__rsThinkingLevel()) || "default"; } catch {}
-      try { wm = (window.__rsWorkMode && window.__rsWorkMode()) || "ultimate"; } catch {}
+      try { wm = (window.__rsWorkMode && window.__rsWorkMode()) || "creation"; } catch {}
       try { perm = (window.__rsPermMode && window.__rsPermMode()) || "sandbox"; } catch {}
       const blender = !!bridge.blender;
       // Browser↔or-core connectivity is not Studio connectivity. or-core can be
@@ -2602,9 +2584,9 @@
   // ── 1.38.0: command FAMILIES ─────────────────────────────────────────────
   // The signature tier of the catalogue used to be one alphabetical block of
   // ~600 commands; the work mode only changed a header. Families give the model
-  // a table of contents, and each mode puts ITS families first - so a
-  // Visualizer sees lighting / VFX / UI signatures before data stores, and an
-  // Animator sees animation / tweens / camera first. Order = catalogue order.
+  // a table of contents, and the mode puts its families in a fixed order
+  // (1.39.0 Creation: scripting, blueprints, data, build, physics, lighting,
+  // VFX, UI, animation, motion, ...). Order = catalogue order.
   const COMMAND_FAMILIES = [
     { id: "script", label: "SCRIPTING", re: /^(script_|multi_edit|module_scaffold|execute_luau|project_health_report|project_index_|tag_scaffold|tag_add|tag_remove|get_service|wait_for_child|log_tag|gc_run)/ },
     { id: "blueprint", label: "SYSTEM BLUEPRINTS", re: /^blueprint_/ },
@@ -2626,12 +2608,10 @@
     { id: "other", label: "OTHER", re: /./ },
   ];
   const FAMILY_ORDER = {
-    ultimate: ["script", "blueprint", "data", "build", "physics", "terrain", "gameplay", "play", "studio", "ui", "lighting", "vfx", "audio", "animation", "motion", "gfx", "web", "other"],
-    visualizer: ["lighting", "vfx", "ui", "gfx", "audio", "motion", "build", "play", "script", "gameplay", "data", "blueprint", "physics", "terrain", "animation", "studio", "web", "other"],
-    animator: ["animation", "motion", "play", "audio", "vfx", "build", "physics", "script", "ui", "lighting", "gameplay", "data", "blueprint", "terrain", "studio", "gfx", "web", "other"],
+    creation: ["script", "blueprint", "data", "build", "physics", "lighting", "vfx", "ui", "animation", "motion", "gameplay", "terrain", "gfx", "audio", "play", "studio", "web", "other"],
   };
   const commandFamily = (name) => { const b = String(name || "").replace(/^[^.]*\./, ""); for (const f of COMMAND_FAMILIES) if (f.re.test(b)) return f.id; return "other"; };
-  function familyOrderFor(modeId) { return FAMILY_ORDER[modeId] || FAMILY_ORDER.ultimate; }
+  function familyOrderFor(modeId) { return FAMILY_ORDER[modeId] || FAMILY_ORDER.creation; }
   // Group catalogue entries by family in the mode's order. A custom (public)
   // work mode's focus names get a family of their own at the very top.
   function groupByFamily(entries, modeId, focusSet) {
@@ -2709,7 +2689,7 @@
     // 1.38.0: helper lines are deduplicated by their label ("— Screenshot:" came
     // from two packs and was printed twice).
     const webLines = (() => { const seen = new Set(); return (o.webLines || []).filter((l) => { const k = String(l || "").match(/^—\s*([^:—]{2,40}):/); const key = k ? k[1].trim().toLowerCase() : String(l); if (seen.has(key)) return false; seen.add(key); return true; }); })();
-    let modeId = o.modeId || "ultimate";
+    let modeId = o.modeId || "creation";
     if (!o.modeId) { const m = String(focusBlock || "").match(/━━━ (\w+) WORK MODE/); if (m) modeId = m[1].toLowerCase(); }
     const entries = []; const seen = new Set();
     for (const line of virtualLines) {
@@ -2782,19 +2762,38 @@
     // remaining commands still fits; full: signatures may use everything.
     let sigBudget = Math.max(800, Math.floor((limit - usedChars - 600) * (compact ? 0.6 : 1)));
     let sigLines = Math.max(6, lineLimit - usedLines - 4);
-    // 1.38.0: signatures grouped by FAMILY, this mode's families first. The
-    // budget is spent in that order, so the mode's own families always get
-    // full signatures; what does not fit is listed per family as names.
+    // 1.38.0: signatures grouped by FAMILY, this mode's families first.
+    // 1.39.0 (one Creation mode, every family matters): the budget is spent in
+    // TWO passes - a fair share per family first, so lighting / VFX / UI /
+    // animation keep real signatures instead of falling into NAMES ONLY behind
+    // ~200 scripting / build rows - then the remainder in family order. Within
+    // a family `shown` stays a strict prefix (names-only tail never repeats).
     const groups = groupByFamily(rest, modeId, focus);
     const sigParts = []; const nameGroups = []; let packedChars = 0;
+    const shownBy = new Map(), textBy = new Map();
+    const fairChars = Math.max(420, Math.floor(sigBudget / Math.max(1, groups.length)));
+    const fairLines = Math.max(3, Math.floor(sigLines / Math.max(1, groups.length)));
+    for (const pass of [0, 1]) {
+      for (const g of groups) {
+        const done = shownBy.get(g.id) || 0;
+        const remaining = g.entries.slice(done);
+        if (!remaining.length) continue;
+        const header = done ? "" : `── ${g.label} (${g.entries.length}) ──`;
+        const charCap = pass === 0 ? Math.min(fairChars, sigBudget) : sigBudget;
+        const lineCap = pass === 0 ? Math.min(fairLines, sigLines) : sigLines;
+        if (charCap - header.length < 120 || lineCap < 2) continue;
+        const packed = packSignatures(remaining.map((e) => e.sig), charCap - header.length - 1, lineCap - 1);
+        if (!packed.shown) continue;
+        textBy.set(g.id, (textBy.get(g.id) || header) + "\n" + packed.text);
+        shownBy.set(g.id, done + packed.shown);
+        const cost = packed.chars + header.length + 2;
+        sigBudget -= cost; sigLines -= packed.lines + (header ? 1 : 0); packedChars += cost;
+      }
+    }
     for (const g of groups) {
-      const header = `── ${g.label} (${g.entries.length}) ──`;
-      if (sigBudget - header.length < 120 || sigLines < 2) { nameGroups.push(g); continue; }
-      const packed = packSignatures(g.entries.map((e) => e.sig), sigBudget - header.length - 1, sigLines - 1);
-      if (!packed.shown) { nameGroups.push(g); continue; }
-      sigParts.push(header + "\n" + packed.text);
-      sigBudget -= packed.chars + header.length + 2; sigLines -= packed.lines + 1; packedChars += packed.chars + header.length + 2;
-      if (packed.shown < g.entries.length) nameGroups.push({ id: g.id, label: g.label, entries: g.entries.slice(packed.shown) });
+      const done = shownBy.get(g.id) || 0;
+      if (done) sigParts.push(textBy.get(g.id));
+      if (done < g.entries.length) nameGroups.push(done ? { id: g.id, label: g.label, entries: g.entries.slice(done) } : g);
     }
     let namesBlock = "", omitted = 0;
     if (nameGroups.length) {
@@ -2808,7 +2807,7 @@
       namesBlock = rows.length ? `\n\nNAMES ONLY (call them directly; a wrong parameter returns the exact schema, never look them up):\n${rows.join("\n")}` : "";
     }
     const detailBlock = detail.length ? `${String((focusBlock || "").match(/━━━ (\w+) WORK MODE/) ? RegExp.$1 : "FOCUS")} FAMILY (full schemas):\n\n${detail.join("\n\n")}\n\n` : "";
-    const sigBlock = sigParts.length ? `SIGNATURES BY FAMILY (callable as shown; ${(WORK_MODES[modeId] || WORK_MODES.ultimate).badge} families first):\n${sigParts.join("\n")}` : "";
+    const sigBlock = sigParts.length ? `SIGNATURES BY FAMILY (callable as shown; ${(WORK_MODES[modeId] || WORK_MODES.creation).badge} families first):\n${sigParts.join("\n")}` : "";
     const tail = omitted ? `\n[${omitted} more specialised commands exist; do not search for them - execute_luau {code} covers anything not listed.]` : "";
     return intro + universalBlock + (focusBlock || "") + webBlock + detailBlock + sigBlock + namesBlock + tail;
   }
@@ -3669,13 +3668,13 @@
       return "Output of 'or_agent':\nROLE=" + role + "\n" + brief + "\nTASK: " + (task || "(continue the user's request)") + "\nReply as this agent only. ONE command.";
     }
     if (name === "or_status" || name === "status") {
-      let extra = false, plan = false, lvl = "default", wm = "ultimate", perm = "sandbox", autoDbg = true, multi = false;
+      let extra = false, plan = false, lvl = "default", wm = "creation", perm = "sandbox", autoDbg = true, multi = false;
       try { extra = !!(window.__rsExtraThinking && window.__rsExtraThinking()); } catch {}
       try { plan = !!(window.__rsPlanMode && window.__rsPlanMode()); } catch {}
       try { autoDbg = !(window.__rsAutoDebug) || window.__rsAutoDebug() !== false; } catch {}
       try { multi = !!(window.__rsMultiAgent && window.__rsMultiAgent()); } catch {}
       try { lvl = (window.__rsThinkingLevel && window.__rsThinkingLevel()) || "default"; } catch {}
-      try { wm = (window.__rsWorkMode && window.__rsWorkMode()) || "ultimate"; } catch {}
+      try { wm = (window.__rsWorkMode && window.__rsWorkMode()) || "creation"; } catch {}
       try { perm = (window.__rsPermMode && window.__rsPermMode()) || "sandbox"; } catch {}
       const bridge = A.bridge || {};
       const info = {
@@ -3823,7 +3822,7 @@
       // name, on every broad catalogue request - so even compact providers
       // see the full VFX/UI or animation arsenal before anything else.
       let focusBlock = "";
-      let focusMode = "ultimate";
+      let focusMode = "creation";
       try { focusMode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
       let focusNames = [];
       if (!commandQuery && WORK_MODES[focusMode] && WORK_MODES[focusMode].focus) {
@@ -3832,7 +3831,7 @@
         ]);
         // Compact composers get the header only - the family is listed first
         // (as signatures) in the index anyway, so the name list would be paid twice.
-        if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily (the UNIVERSAL set above plus this mode's families, which come FIRST in SIGNATURES BY FAMILY below) ━━━\n${P.compactCommandList ? "" : focusNames.join(", ") + "\n"}\n`;
+        if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily (the UNIVERSAL set above plus this mode's families, which come FIRST in SIGNATURES BY FAMILY below) ━━━\n${P.compactCommandList || focusNames.length > 240 ? "" : focusNames.join(", ") + "\n"}\n`; // 1.39.0: Creation focus ≈ 425 names - the families below list them
       }
       const compact = !!P.compactCommandList;
       const limit = compact
@@ -5072,7 +5071,7 @@
         const agentLines = requested === "local" && typeof AgentScriptSkills !== "undefined" ? AgentScriptSkills.describeCommands() : [];
         const helperNames = ["or_screenshot", "or_debug", "get_template", "or_status", "web_fetch", "web_search", "capture_id", "or_agent"];
         const helperTools = helperNames.filter((hn) => !allScoped.some((t) => t.name === hn)).map((hn) => A.toolList.find((t) => t && t.name === hn)).filter(Boolean);
-        let focusMode = "ultimate";
+        let focusMode = "creation";
         try { focusMode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
         let focusNames = [], focusBlock = "";
         if (WORK_MODES[focusMode] && WORK_MODES[focusMode].focus) {
@@ -5254,7 +5253,7 @@
   // part of the embedded catalogue that changes when the user switches modes.
   function workModeFocusSignatures(limitChars) {
     try {
-      let mode = "ultimate";
+      let mode = "creation";
       try { mode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
       const tools = (A.toolList || []).filter((t) => t && (t.server || "roblox") === "roblox" && !t.hidden);
       const animLines = typeof RSAnim !== "undefined" ? RSAnim.describeCommands() : [];
@@ -5277,7 +5276,7 @@
       // Work-mode switch only: a ~6-10k rider (new profile + its focus
       // signatures) instead of the full 30k+ prompt; the periodic restate
       // keeps its own schedule.
-      let mode = "ultimate";
+      let mode = "creation";
       try { mode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
       const tight = !!(P.sysMaxChars && P.sysMaxChars < 16000) || !!P.compactCommandList;
       const rider = "\n\n────────────────────────────────\n" + RS.RESEND_MARKER + "\n"
@@ -5488,7 +5487,7 @@
       captureStudio: paintCaptureStudio,
       engine: () => activeEngine(),
       canAttachImages: () => typeof P.attachImages === "function" || /\bimages\b/.test(String(P.typeAndSend)),
-      workMode: () => { try { return window.__rsWorkMode ? window.__rsWorkMode() : "ultimate"; } catch { return "ultimate"; } },
+      workMode: () => { try { return window.__rsWorkMode ? window.__rsWorkMode() : "creation"; } catch { return "creation"; } },
       toast: (m) => ui.toast(m),
       diag,
     });
@@ -6857,7 +6856,7 @@
     // reload - they used to silently reset to these defaults on every page
     // refresh because only the setters ever touched chrome.storage.
     let autoFixEnabled = true, extraThinking = false, planMode = false, steeringMode = false, forgeMode = false, autoFixStopPlay = true, autoDebugEnabled = true, multiAgent = false;
-    let workMode = "ultimate";
+    let workMode = "creation";
     try { window.__rsWorkMode = () => workMode; } catch {}
     try { window.__rsWorkModes = () => WORK_MODES; } catch {}
     try { window.__rsPlanMode = () => planMode; } catch {}
@@ -6899,10 +6898,11 @@
         }
         if (typeof r.rsAutoFixStopPlay === "boolean") autoFixStopPlay = r.rsAutoFixStopPlay;
         // v1.17 migrated the former speed presets to the adaptive workflow;
-        // 1.19.8 added the Visualizer and Animator specialists; 1.21 replaces
-        // Adaptive with Ultimate (legacy adaptive values migrate here).
+        // 1.19.8 added the Visualizer and Animator specialists; 1.21 replaced
+        // Adaptive with Ultimate; 1.39.0 merges all three into Creation
+        // (every legacy stored id migrates here).
         workMode = normalizeWorkMode(r.rsWorkMode);
-        try { window.__rsWorkMode = () => workMode; if (r.rsWorkMode !== workMode) chrome.storage.local.set({rsWorkMode:"ultimate"}); } catch {}
+        try { window.__rsWorkMode = () => workMode; if (r.rsWorkMode !== workMode) chrome.storage.local.set({rsWorkMode:"creation"}); } catch {}
         try { syncWorkModeUi(); } catch {}
         if (!menuEl.hidden) buildMenu();
       });
@@ -7611,9 +7611,9 @@
             <section class="rs-menu-sec">
               <div class="rs-sec-label"><span>Work mode</span><span class="rs-sec-state">${(() => { const pm = publicMode(); return pm ? escRs(pm.title) + " · " + WORK_MODES[workMode].short : WORK_MODES[workMode].short; })()}</span></div>
               <div class="rs-menu-note">${(() => { const pm = publicMode(); return pm ? escRs(pm.note || pm.sub) : WORK_MODES[workMode].note; })()}</div>
-              <div class="rs-work-row rs-work-ultimate rs-work-modes" role="radiogroup" aria-label="Work mode">
+              <div class="rs-work-row rs-work-creation rs-work-modes" role="radiogroup" aria-label="Work mode">
                 ${WORK_MODE_IDS.map((id) => `<button type="button" class="rs-work-card ${workMode===id&&!publicMode()?"on":""}" data-work="${id}" role="radio" aria-checked="${workMode===id&&!publicMode()?"true":"false"}"><span class="rs-work-name">${WORK_MODES[id].name}</span><span class="rs-work-sub">${WORK_MODES[id].sub}</span></button>`).join("")}
-                ${(() => { let customs = []; try { customs = typeof PublicSkills !== "undefined" ? PublicSkills.modes().filter((m) => m.enabled) : []; } catch {} const pm = publicMode(); return customs.map((m) => `<button type="button" class="rs-work-card rs-work-custom ${pm&&pm.id===m.id?"on":""}" data-work="pm:${m.id}" role="radio" aria-checked="${pm&&pm.id===m.id?"true":"false"}" title="Custom mode on ${escRs(WORK_MODES[m.base]?WORK_MODES[m.base].name:"Ultimate")}"><span class="rs-work-name">${escRs(m.title)} <small>public</small></span><span class="rs-work-sub">${escRs(m.sub || m.description)}</span></button>`).join(""); })()}
+                ${(() => { let customs = []; try { customs = typeof PublicSkills !== "undefined" ? PublicSkills.modes().filter((m) => m.enabled) : []; } catch {} const pm = publicMode(); return customs.map((m) => `<button type="button" class="rs-work-card rs-work-custom ${pm&&pm.id===m.id?"on":""}" data-work="pm:${m.id}" role="radio" aria-checked="${pm&&pm.id===m.id?"true":"false"}" title="Custom mode on ${escRs(WORK_MODES[normalizeWorkMode(m.base)].name)}"><span class="rs-work-name">${escRs(m.title)} <small>public</small></span><span class="rs-work-sub">${escRs(m.sub || m.description)}</span></button>`).join(""); })()}
               </div>
               ${(() => { const st = (WORK_MODES[workMode] && WORK_MODES[workMode].starters) || []; return st.length ? `<div class="rs-work-starters" aria-label="${WORK_MODES[workMode].name} quick starts"><span class="rs-work-starters-label">Quick starts</span>${st.map((q, i) => `<button type="button" class="rs-work-starter" data-work-starter="${i}" title="${escRs(q.prompt)}">${escRs(q.label)}</button>`).join("")}</div>` : ""; })()}
               <div class="rs-menu-note rs-work-public-note">Make your own mode, skill or ability: open the cards panel → <b>Public</b> tab and describe it — the AI builds and installs it.</div>
@@ -8178,7 +8178,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     const PUBLIC_SKELETONS = {
       skill: { kind: "skill", name: "my_skill", title: "My Skill", description: "What it does and when to use it (10-600 chars).", params: [{ name: "path", type: "string", description: "Full instance path, e.g. Workspace.Model", required: true }, { name: "count", type: "number", description: "How many", default: 3 }], luau: "-- {{path}} and {{count}} are replaced with Lua literals; also available as args.path / args.count\nlocal target = game\nfor seg in string.gmatch({{path}}, '[^.]+') do\n  target = target:FindFirstChild(seg)\n  if not target then return {ok = false, error = 'path not found: ' .. {{path}}} end\nend\nlocal made = 0\nfor i = 1, {{count}} do\n  local part = Instance.new('Part')\n  part.Name = 'MySkillPart_' .. i\n  part.Anchored = true\n  part.Position = target:IsA('BasePart') and target.Position + Vector3.new(i * 5, 0, 0) or Vector3.new(i * 5, 5, 0)\n  part.Parent = target\n  made += 1\nend\nreturn {ok = true, created = made, parent = target:GetFullName()}" },
       ability: { kind: "ability", name: "my_ability", title: "My Ability", description: "A reusable procedure the agent follows with real commands.", params: [{ name: "target", type: "string", description: "What to work on", required: true }], instructions: "Audit {{target}} and fix what you find. Work step by step and verify each change.", steps: ["Locate {{target}} with instance_find", "Inspect it with inspect_instance / script_read", "Apply the fix with the right write command", "Verify the result and report"], commands: ["instance_find", "inspect_instance", "script_read", "script_set_source"] },
-      mode: { kind: "mode", name: "my_mode", title: "My Mode", badge: "MYMODE", base: "ultimate", sub: "One-line tagline shown on the mode card", note: "Short blurb shown in the menu", description: "When to use this mode and what it optimises for.", mandate: "You are now a specialist in ... Priorities: 1) ... 2) ... 3) ... Pipeline: plan, build, verify with screenshots/console. Quality bar: ... Never: ...", focus: ["instance_find", "part_create", "script_create"] },
+      mode: { kind: "mode", name: "my_mode", title: "My Mode", badge: "MYMODE", base: "creation", sub: "One-line tagline shown on the mode card", note: "Short blurb shown in the menu", description: "When to use this mode and what it optimises for.", mandate: "You are now a specialist in ... Priorities: 1) ... 2) ... 3) ... Pipeline: plan, build, verify with screenshots/console. Quality bar: ... Never: ...", focus: ["instance_find", "part_create", "script_create"] },
     };
     function publicHtml(){
       const PS = typeof PublicSkills !== "undefined" ? PublicSkills : null;

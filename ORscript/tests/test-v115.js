@@ -90,9 +90,9 @@ ok("applyOrSkin syncs settings theme cards", mainSrc.includes(".rs-theme-card") 
 
 ok("mode lock SYSTEM_STATE", mainSrc.includes("MODE LOCK:") && mainSrc.includes("ENGINE=${eng}") && mainSrc.includes('name === "or_status"'));
 ok("think button on bar", mainSrc.includes('id="rs-extra"') && mainSrc.includes("Think ON") && mainSrc.includes("grill every") && !mainSrc.includes("<span>Image to model</span>") && !mainSrc.includes("<span>Thinking</span>"));
-ok("ultimate work mode replaces presets", mainSrc.includes('let workMode = "ultimate"') && !mainSrc.includes('data-work="fast"'));
+ok("creation work mode replaces presets", mainSrc.includes('let workMode = "creation"') && !mainSrc.includes('data-work="fast"'));
 ok("engine switch ignores echo", mainSrc.includes("lastManualEngineAt < 5000") && mainSrc.includes("restart the agent so it uses this engine"));
-ok("ultimate approval planning replaces plan toggle", !mainSrc.includes('data-mode="plan"') && cfgSrc.includes("ULTIMATE WORK MODE") && cfgSrc.includes("Approve this plan to begin"));
+ok("ultimate approval planning replaces plan toggle", !mainSrc.includes('data-mode="plan"') && cfgSrc.includes("CREATION WORK MODE") && cfgSrc.includes("Approve this plan to begin"));
 ok("old cards RNG removed for user templates", !mainSrc.includes('id="rs-cards-rng"') && !mainSrc.includes("function runRngTopic") && !cssSrc.includes("#rs-cards-rng"));
 ok("script_read_analysis alias", mainSrc.includes('script_read_analysis: "script_analysis"') && mainSrc.includes("remapToolName") && skillSrc.includes("alias: script_read_analysis") && skillSrc.includes("SKIP[cn]"));
 ok("analysis no loadstring / no task.wait false positive", skillSrc.includes("luauUnbalanced") && skillSrc.includes("bareCall") && skillSrc.includes(":WaitForChild%s*(%b())") && !skillSrc.includes('src:find("[^%w_]wait%s*%(")'));

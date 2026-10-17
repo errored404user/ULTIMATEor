@@ -94,8 +94,8 @@ ok("embedded + compact first-action texts forbid searching but keep their pinned
 ok("help topic 'commands' describes the no-search policy", main.includes("No command searching (1.37.1)") && !main.includes("The agent calls list_commands / search_commands and picks the right command"));
 
 // ── D. FIRST MOVE softened ──
-ok("ultimate FIRST MOVE (full) is conditional and keeps the /FIRST MOVE:/ pin", config.includes("FIRST MOVE: pick ONE that matches the request (never run openers blindly, never before Studio is connected)") && config.includes("a simple request → just do it. If an opener errors, state it in one line and continue without it - do not retry it and do not search for another command."));
-ok("ultimate FIRST MOVE (tight) is conditional", config.includes("FIRST MOVE: pick the one that matches (never blindly, never while Studio is offline)"));
+ok("creation FIRST MOVE (full) is conditional and keeps the /FIRST MOVE:/ pin", config.includes("FIRST MOVE: pick ONE that matches the request (never run openers blindly, never before Studio is connected)") && config.includes("a simple request → just do it. If an opener errors, state it in one line and continue without it - do not retry it and do not search for another command."));
+ok("creation FIRST MOVE (tight) is conditional", config.includes("FIRST MOVE: pick the one that matches (never blindly, never while Studio is offline)"));
 ok("operating loop: project index only when scripts must be understood", config.includes("In an existing place whose scripts you must understand, start with project_index_build") && config.includes("project_index_build only in an existing place with scripts to understand - if it errors, continue without it"));
 ok("PROJECT INDEX mandate keeps its pinned prefix and adds the skip rule", config.includes("PROJECT INDEX (1.32 BUILD pack - read before you write): on an existing place with scripts you must understand, project_index_build first") && config.includes("PROJECT: on an existing place run project_index_build first (project_index_summary when an index exists; skip it for trivial requests, and if it errors continue without it)"));
 
@@ -131,8 +131,8 @@ ok("offline feedback for project_index_* / blueprint_* gains the no-retry / no-s
 
 // ── G. release bookkeeping ──
 const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
-ok("manifest 1.38.0", manifest.version === "1.38.0", manifest.version);
-ok("plugin + crate pinned at 1.38.0", fs.readFileSync("plugin/ORscript.lua", "utf8").includes('local VERSION = "1.38.0"') && /^version = "1\.38\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "or-agent"\nversion = "1\.38\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
+ok("manifest 1.39.0", manifest.version === "1.39.0", manifest.version);
+ok("plugin + crate pinned at 1.39.0", fs.readFileSync("plugin/ORscript.lua", "utf8").includes('local VERSION = "1.39.0"') && /^version = "1\.39\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "or-agent"\nversion = "1\.39\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
 ok("README changelog 1.37.1", readme.includes("**1.37.1 — no command searching; project_index_build / blueprint_list hardened.**") && readme.includes("test-v1371.js"));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall 1.37.1 checks passed");

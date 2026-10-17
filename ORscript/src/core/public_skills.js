@@ -2,7 +2,7 @@
 //
 // User-made commands. Anyone can describe a Skill (a parameterised Luau program
 // that runs in Studio), an Ability (a reusable procedure the agent follows) or a
-// Work Mode (a mandate + focus list layered on Ultimate / Visualizer / Animator)
+// Work Mode (a mandate + focus list layered on the built-in Creation mode)
 // in plain words; the AI designs it and submits it with public_skill_create, and
 // OrScript validates, installs and exposes it like any built-in command.
 //
@@ -20,7 +20,12 @@
   const PACK_FORMAT = "orscript-public-skill-pack";
   const FORMAT_VERSION = 1;
   const KINDS = ["skill", "ability", "mode"];
-  const BASES = ["ultimate", "visualizer", "animator"];
+  // 1.39.0: ONE built-in base, Creation (Ultimate + Visualizer + Animator
+  // merged). Packs written for the old bases still import: LEGACY_BASES maps
+  // them onto Creation (validate() runs on load, so stored items migrate too).
+  const BASES = ["creation"];
+  const LEGACY_BASES = { ultimate: "creation", visualizer: "creation", animator: "creation", adaptive: "creation" };
+  const normalizeBase = (b) => { const k = String(b || "").toLowerCase(); return BASES.includes(k) ? k : (LEGACY_BASES[k] || "creation"); };
   const PARAM_TYPES = ["string", "number", "boolean", "array", "object"];
   const NAME_RE = /^[a-z][a-z0-9_]{2,40}$/;
   const PARAM_RE = /^[a-z][a-z0-9_]{0,40}$/;
@@ -185,7 +190,7 @@
       if (reserved.size) { const unknown = item.commands.filter((c) => !reserved.has(c)); if (unknown.length) warnings.push(`commands not found in this build: ${unknown.join(", ")}`); }
       item.executionMode = "READ";
     } else if (kind === "mode") {
-      item.base = BASES.includes(String(def.base || def.baseMode || "").toLowerCase()) ? String(def.base || def.baseMode).toLowerCase() : "ultimate";
+      item.base = normalizeBase(def.base || def.baseMode);
       item.badge = str(def.badge || title, 12).toUpperCase().replace(/[^A-Z0-9 +\-]/g, "").trim() || "CUSTOM";
       item.sub = str(def.sub || def.subtitle || def.tagline, 120).trim() || description.slice(0, 120);
       item.note = str(def.note, 320).trim() || description.slice(0, 320);
@@ -397,7 +402,7 @@
     "DEFINITION OBJECT (JSON) - common fields: kind ('skill'|'ability'|'mode'), name (snake_case, unique, 3-41 chars; modes may use a title instead), title, description (10-600 chars: what it does, when to use it), version (int), author, tags[], usage (one example call).",
     "SKILL fields: params[{name, type: string|number|boolean|array|object, description, required, default?, enum?}], luau (the program; max 24000 chars). Every param is available in Luau BOTH as the Lua literal {{param}} and as args.param. The program runs in Studio through execute_luau in the Edit DataModel (plugin-level API, no `plugin` global, no yields over 5 s). Resolve instance paths first (walk game by name, fail with a clear error), wrap risky work in pcall, keep work idempotent, name created instances, record ChangeHistoryService waypoints for big edits, and RETURN A TABLE such as {ok=true, created=3, path='Workspace.X'} (it is JSON-encoded for the agent). Use `return {ok=false, error='...'}` for failures.",
     "ABILITY fields: params[] (optional), instructions (imperative procedure; may use {{param}}), steps[] (3-15 concrete steps), commands[] (real command names from list_commands). Calling an ability returns these instructions to the agent, which then performs them with real commands.",
-    "MODE fields: title, badge (<=12 chars, uppercase), base ('ultimate'|'visualizer'|'animator'), sub (one line), note (menu blurb), mandate (80-9000 chars: priorities, quality bar, pipeline, verification rules - written like a senior specialist's standing orders), focus[] (10-40 real command names the mode leans on), toast.",
+    "MODE fields: title, badge (<=12 chars, uppercase), base ('creation' - the only built-in mode; legacy 'ultimate'|'visualizer'|'animator' map to it), sub (one line), note (menu blurb), mandate (80-9000 chars: priorities, quality bar, pipeline, verification rules - written like a senior specialist's standing orders), focus[] (10-40 real command names the mode leans on), toast.",
   ].join("\n");
 
   function generationPrompt(request, kindHint, ctx) {
@@ -665,7 +670,7 @@
     } else {
       def.mandate = src.slice(0, LIMITS.mandate);
       if (src.length > LIMITS.mandate) warnings.push(`prompt truncated to ${LIMITS.mandate} characters`);
-      def.base = /\b(vfx|particle|lighting|light|ui|gui|atmosphere|fog)\b/i.test(src) ? "visualizer" : /\b(anim|animation|keyframe|rig|tween)\b/i.test(src) ? "animator" : "ultimate";
+      def.base = "creation";
       def.badge = title.replace(/[^A-Za-z0-9 ]/g, "").trim().split(/\s+/).slice(0, 2).join(" ").toUpperCase().slice(0, 12) || "PROMPT";
       def.focus = tokens.slice(0, LIMITS.focus);
       def.sub = description.slice(0, 120);
@@ -704,7 +709,7 @@
   function replaceAll(arr) { items = []; for (const d of arr || []) { const v = validate(d, { allowDuplicateId: true }); if (v.ok) items.push(v.item); } persist(); emit("reset", null); }
 
   const api = {
-    KINDS, BASES, PARAM_TYPES, NAME_RE, FORMAT, LIMITS, DEFINITION_DOC,
+    KINDS, BASES, LEGACY_BASES, normalizeBase, PARAM_TYPES, NAME_RE, FORMAT, LIMITS, DEFINITION_DOC,
     load, isLoaded: () => loaded, onChange,
     validate, list, get, has, find, isCommand, upsert, update, remove, setEnabled, replaceAll,
     modes, activeMode, setActiveMode, modePrompt,

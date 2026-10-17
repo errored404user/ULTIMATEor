@@ -104,13 +104,13 @@ ok("before/after tool hooks wrap gfx_capture (checkpoints, recap, suggestions)",
 
 // ── prompt / help / mode wiring ───────────────────────────────────────────────
 const configSrc = fs.readFileSync("src/core/config.js", "utf8");
-ok("visualizer work mode focuses gfx_* commands", /focus:\s*\/\^\([^\n]*gfx_/.test(mainSrc));
+ok("creation work mode focuses gfx_* commands", /focus:\s*\/\^\([^\n]*gfx_/.test(mainSrc));
 ok("feature help has a 'gfx' topic with the workflow + alias triggers", /gfx:\{title:"Thumbnail & Icon Studio/.test(mainSrc) && /gfx:\/thumbnail\|game icon/.test(mainSrc));
 ok("mandates teach the gfx workflow (brief -> stage -> subject -> overlay -> camera -> capture -> teardown)", configSrc.includes("THUMBNAIL & ICON STUDIO (1.30 gfx pack)") && configSrc.includes("THUMBNAILS / ICONS: never say you cannot make images") && ["gfx_brief", "gfx_stage_create", "gfx_subject_add", "gfx_overlay", "gfx_camera", "gfx_capture", "gfx_teardown"].every((k) => configSrc.includes(k)));
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README documents the gfx pack", readme.includes("gfx_capture") && readme.includes("gfx_stage_create") && readme.includes("1.30.0") && readme.includes("gfx-sim.py"));
-ok("manifest version is 1.38.0", manifest.version === "1.38.0", manifest.version);
-ok("plugin / crate pinned at 1.38.0", /ORscript\s+1\.38\.0|1\.38\.0/.test(fs.readFileSync("plugin/ORscript.lua", "utf8")) && /^version = "1\.38\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
+ok("manifest version is 1.39.0", manifest.version === "1.39.0", manifest.version);
+ok("plugin / crate pinned at 1.39.0", /ORscript\s+1\.39\.0|1\.39\.0/.test(fs.readFileSync("plugin/ORscript.lua", "utf8")) && /^version = "1\.39\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
 
 // ── shared simulator module ───────────────────────────────────────────────────
 const sim = fs.readFileSync("tests/roblox_sim.py", "utf8");

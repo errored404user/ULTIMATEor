@@ -114,7 +114,7 @@ function dropFiles(target, files) {
     panel.querySelector("#rs-public-kind").value = "mode"; panel.querySelector("#rs-public-kind").dispatchEvent(new w.Event("change", { bubbles: true }));
     panel.querySelector("[data-public-save-text]").click(); await sleep(250);
     const modes = PS.list({ kind: "mode" });
-    ok("Save as-is with kind=mode installs a custom work mode (mandate verbatim, visualizer base)", modes.length === 1 && modes[0].base === "visualizer" && /horror-map specialist/.test(modes[0].mandate), JSON.stringify(modes.map((m) => [m.name, m.base])));
+    ok("Save as-is with kind=mode installs a custom work mode (mandate verbatim, creation base)", modes.length === 1 && modes[0].base === "creation" && /horror-map specialist/.test(modes[0].mandate), JSON.stringify(modes.map((m) => [m.name, m.base])));
     // Export .txt round-trips
     const txt = PS.exportText("lantern_line");
     ok("Export .txt round-trips through parseText", PS.parseText(txt).ok && PS.parseText(txt).def.name === "lantern_line");

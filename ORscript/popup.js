@@ -19,22 +19,22 @@ const isCodeCraftTab = (url) => !!(url && CODECRAFT_PAGE_URL && url.startsWith(C
 const isSupportedTab = (url) => !!url && (SUPPORTED_HOSTS.some((h) => url.includes(h)) || isCodeCraftTab(url));
 const ENGINE_KEY = "rs-engine"; // "roblox" | "local"
 const ENGINES = ["roblox", "local"];
-const WORK_MODES = ["ultimate", "visualizer", "animator"];
-// Every mode wants the deeper self-review loop; specialists run on top of Ultimate.
+const WORK_MODES = ["creation"];
+// 1.39.0: ONE built-in work mode. Creation = the former Ultimate (Luau
+// engineering + modeling), Visualizer (VFX / lighting / UI) and Animator
+// (rigs, keyframes, tweens, camera) merged; legacy stored ids migrate to it.
+const LEGACY_WORK_MODES = { ultimate: "creation", visualizer: "creation", animator: "creation", adaptive: "creation" };
+const normalizeWorkMode = (id) => (WORK_MODES.includes(id) ? id : (LEGACY_WORK_MODES[id] || "creation"));
 const WORK_PRESETS = {
-  ultimate:   { thinking: "max",  extra: false },
-  visualizer: { thinking: "max",  extra: false },
-  animator:   { thinking: "max",  extra: false },
+  creation: { thinking: "max", extra: false },
 };
 const WORK_HELP = {
-  ultimate:   "Flagship mode: senior Luau engineer and 3D modeler in one. First move: blueprints / project index. Architects server-authoritative systems with typed modules, validated remotes and session-locked DataStores, blocks out and details models to scale, batches independent commands, and verifies with read-backs, playtests, console reads and screenshots.",
-  visualizer: "VFX, lighting and UI specialist. First move: screenshot + lighting read. Sets the mood (lighting, atmosphere, post-FX stack), layers every hero effect (core, glow, sparks, light, sound with real curves), builds UI from design tokens, then screenshots after every milestone and runs a polish pass until it looks shipped.",
-  animator:   "Animation specialist. First move: read the rig. Blocks key poses with anticipation and follow-through, polishes easing and holds, adds markers, IK and runtime tweens, gives every hero animation a camera beat, and previews every clip before calling it done.",
+  creation: "One creator mode: senior Luau engineer, 3D modeler, VFX / lighting / UI artist and animator at once. First move: blueprints / project index for systems, a blockout for builds, screenshot + lighting read for looks, rig read for motion. Architects server-authoritative systems with typed modules, remotes and DataStores, builds to scale, sets the mood and layers VFX, generates design-system UI, blocks key poses with anticipation and follow-through and gives every hero animation a camera beat. Verifies everything: playtests, console reads, screenshots, animation previews.",
 };
 
 const PERM_MODES = ["sandbox", "ask", "full"];
 const settings = {
-  workMode: "ultimate",
+  workMode: "creation",
   permMode: "sandbox",
   theme: "night",
   extra: false,
@@ -88,7 +88,7 @@ function renderSettings() {
     if (el) el.classList.toggle("on", settings.workMode === id);
   }
   const help = document.getElementById("work-help");
-  if (help) help.textContent = WORK_HELP[settings.workMode] || WORK_HELP.ultimate;
+  if (help) help.textContent = WORK_HELP[settings.workMode] || WORK_HELP.creation;
   for (const id of PERM_MODES) {
     const el = document.getElementById("perm-" + id);
     if (el) el.classList.toggle("on", settings.permMode === id);
@@ -122,7 +122,7 @@ async function loadSettings() {
     const r = await chrome.storage.local.get([
       "rsWorkMode", "rsPermMode", "rsTheme", "rsSounds", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsBgMode",
     ]);
-    if (WORK_MODES.includes(r.rsWorkMode)) settings.workMode = r.rsWorkMode;
+    if (r.rsWorkMode) settings.workMode = normalizeWorkMode(r.rsWorkMode);
     if (PERM_MODES.includes(r.rsPermMode)) settings.permMode = r.rsPermMode;
     if (THEMES.includes(r.rsTheme)) settings.theme = r.rsTheme;
     if (typeof r.rsSounds === "boolean") settings.sounds = r.rsSounds;
@@ -308,7 +308,7 @@ bindToggle("tgl-sounds", "rsSounds", "sounds");
 try {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local" || !changes) return;
-    if (changes.rsWorkMode && WORK_MODES.includes(changes.rsWorkMode.newValue)) settings.workMode = changes.rsWorkMode.newValue;
+    if (changes.rsWorkMode && changes.rsWorkMode.newValue) settings.workMode = normalizeWorkMode(changes.rsWorkMode.newValue);
     if (changes.rsPermMode && PERM_MODES.includes(changes.rsPermMode.newValue)) settings.permMode = changes.rsPermMode.newValue;
     if (changes.rsTheme && THEMES.includes(changes.rsTheme.newValue)) settings.theme = changes.rsTheme.newValue;
     if (changes.rsSounds && typeof changes.rsSounds.newValue === "boolean") settings.sounds = changes.rsSounds.newValue;
