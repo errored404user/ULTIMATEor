@@ -60,9 +60,16 @@ The brush button next to Settings (or **Ctrl/⌘+Shift+P**) opens **ORscript Pai
 
 ## Agent
 
-- Native crate: `agent/` (`or-agent` 1.34.1). It runs as a background bridge only; the removed desktop status window is not part of ORscript.
+- Native crate: `agent/` (`or-agent` 1.34.2). It runs as a background bridge only; the removed desktop status window is not part of ORscript.
 - Service worker skips stale-socket reconnect and MCP heal while a `call_tool` is in flight (the 25 s stale window used to kill long tools).
 - 637 advertised Studio commands (27 of them the 1.22.0 work-mode pack, 13 the 1.29.0 design pack, 11 the 1.30.0 gfx pack, 6 the 1.31.0 blueprint pack, 6 the 1.32.0 project pack, 2 the 1.33.0 inspect pack) plus 110 hidden legacy aliases that stay callable (`list_commands`), a 24-command animation suite, AgentScript file/terminal tools.
+**1.34.2 — Templates tab: a gallery, not a list.**
+- **Cards.** Templates now render as cards in two columns on the wide panel (one column under 760px): a coloured type tile (P prompt, C command, W workflow, R roblox, B blender, U ui, J project, A ai-agent — each type has its own accent that also colours the card's top hairline and hover ring), the title with a type badge, a 3-line description, and badge meta (category, environment, command count, version, "Project attached") plus the updated date — instead of one grey dotted sentence.
+- **One primary action per card.** Run template is the gradient pill and fills the footer; Edit sits next to it; Improve with AI, Copy, Export, Archive/Restore and Delete live in a round `⋯` menu. Four competing buttons per row are gone.
+- **Category chips.** A row of chips (All · each category · Archived, each with a count) sits under the toolbar and drives the same filter as the category select — both stay in sync, and the count pill updates. The empty state now says "No templates match" when a search/filter is active instead of pretending the library is empty.
+- **Quieter toolbar, Idea Generator moved.** The search field gets an inline magnifier, the toolbar loses its dark band, and the Idea Generator — which used to sit on top of the whole tab — is now a titled strip under the cards ("Pick a genre and a theme — get a ready-to-run game brief…").
+- Tests: `tests/test-v1341.js` grew to 53 checks — the jsdom render now seeds three real templates (roblox / ui / prompt) in `ORTemplateRegistry`, checks the card markup, the chip filter ↔ select sync, the "no match" state and the generator placement.
+
 **1.34.1 — Cards panel: one design for Library, Activity, Public and Tasks.**
 - 1.33 enlarged the Templates (Library) tab — 84px rows, 14.5px titles, gradient pill buttons — but the other tabs kept their old look: Activity was a stack of small 4px-radius grey cards with 12px type, Public had 8.5px copy, square `#222730` buttons and a blue accent that ignored the theme, Tasks rows had 9px buttons. Switching tabs looked like switching apps.
 - **One shell.** The Activity tab (and the local-engine Session view) now render inside the same `.rs-template-library` shell as Library / Public / Tasks: the same header (title, count pill, ok/err pills, actions on the right), the same empty state, and tool results become `.rs-template-row` cards — 44px icon tile, monospace command name, two-line detail, Done / Failed / Running status with the accent bar coloured to match. Clear is a ghost pill that disables when the list is empty.
@@ -161,7 +168,7 @@ node tests/test-design-pack.js     # Design pack: registration, presets, every s
 node tests/test-gfx-pack.js        # Thumbnail & Icon Studio: registration, styles/poses/cameras, generated Luau, gfx_capture composite in main.js (1.30.0)
 node tests/test-blueprints.js      # System Blueprints: library contract (Start/SelfTest/Bus), dependency DAG, generated Luau, prompt/help wiring (1.31.0)
 node tests/test-project-index.js   # Project Index: registration, generated Luau (hash, extraction, require/remote graphs, conventions, storage), map cache + reminder wiring (1.32.0)
-node tests/test-v1341.js           # 1.34.1: cards panel — Library / Activity / Public / Tasks share one shell, row model and pill buttons (string + jsdom render)
+node tests/test-v1341.js           # 1.34.1 + 1.34.2: unified cards panel + Templates gallery (cards, type tiles, chips, ⋯ menu) — string + jsdom render
 node tests/test-v134.js            # 1.34.0: multi-command parsing + batch loop, work modes 2.0 (loop + profiles, switch rider, checklist, quick starts), prompt budgets
 node tests/test-v133.js            # 1.33.0: inspect pack + hidden aliases, runtime-dead command fixes, embedded catalogue (full/compact/local prompts), typography + path cleaning
 python3 tests/luau-runtime-scan.py # executes every Studio command's Luau in the simulator; fails on undefined helpers, unbounded loops, compile errors (found the 199 dead commands)

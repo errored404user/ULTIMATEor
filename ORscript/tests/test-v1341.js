@@ -1,4 +1,4 @@
-// 1.34.1 — Cards panel consistency: Library / Activity / Public / Tasks share one
+// 1.34.1 / 1.34.2 — Cards panel consistency + Templates gallery: Library / Activity / Public / Tasks share one
 // shell (.rs-template-library header + .rs-template-row rows), the panel heading
 // names the open tab, and overlay.css section 11 maps every tab onto the same
 // row model + theme pill buttons. String checks always run; the jsdom render
@@ -35,6 +35,17 @@ ok("Tasks: rows, check box, add form, progress bar on the same tokens", /\.rs-ta
 ok("Idea generator + Session view restyled with the same card language", /\.rs-idea-generator \{[^}]*border-radius: var\(--cp-r\)/.test(sec) && /\.rs-idea-generator select \{ height: 40px/.test(sec) && /\.rs-session \.rs-cards-title \{ font-size: 16px/.test(sec));
 ok("responsive + reduced-motion rules for the unified panel", /@media \(max-width: 720px\) \{\s*#rs-cards-panel \{ --cp-x: 12px; \}/.test(sec) && /prefers-reduced-motion: reduce\) \{\s*#rs-cards-panel \.rs-template-library button/.test(sec));
 ok("legacy classes the tests/handlers rely on still exist in the markup", main.includes('#rs-cards-clear') && main.includes("rs-card-title") && main.includes("rs-card-detail") && main.includes("rs-cards-count") && css.includes(".rs-public-compose") && css.includes(".rs-task-row"));
+
+// ── 1.34.2 — Templates gallery ──
+ok("1.34.2: Library renders header → toolbar → category chips → gallery → Idea Generator (generator no longer on top)", /<section class="rs-template-library" aria-label="Template library"><div class="rs-template-controls"><header/.test(main) && /\$\{templateChipsHtml\(\)\}<\/div><div id="rs-cards-grid-wrap">\$\{gridHtml\(\)\}<\/div>\$\{ideaGeneratorHtml\(\)\}<\/section>/.test(main));
+ok("1.34.2: cards carry a type tile + type/category/env/commands/version badges + updated date", /function templateCardHtml\(c,i\)/.test(main) && /rs-template-row rs-template-card" data-prompt-index="\$\{i\}" data-template-type=/.test(main) && /<div class="rs-template-ico" aria-hidden="true">\$\{glyph\}<\/div>/.test(main) && /<i class="rs-tag rs-tag-type">\$\{typeLabel\}<\/i>/.test(main) && /<i class="rs-tag rs-tag-env">/.test(main) && /command\$\{cmdN===1\?"":"s"\}/.test(main) && /<time>Updated /.test(main));
+ok("1.34.2: one primary Run + Edit + ⋯ menu (Improve with AI, Copy, Export, Archive/Restore, Delete)", /<button type="button" class="rs-template-run" data-template-action="run">Run template<\/button><button type="button" data-template-action="open">Edit<\/button><details class="rs-template-more"><summary aria-label="More actions" title="More actions">(?:\u22EF|\\u22EF)<\/summary><div><button type="button" class="rs-template-improve" data-template-action="improve">Improve with AI<\/button><button type="button" data-template-action="duplicate">Copy<\/button>/.test(main));
+ok("1.34.2: category chips with counts drive the same filter as the select (both stay in sync)", /function templateChipsHtml\(\)/.test(main) && /data-template-chip="\$\{escRs\(x\)\}" class="\$\{cardsCategory===x\?"on":""\}" aria-pressed=/.test(main) && /const applyTemplateCategory=\(value\)=>\{cardsCategory=value;/.test(main) && /if\(sel&&sel\.value!==value\)sel\.value=value;/.test(main) && /b\.classList\.toggle\("on",on\)/.test(main));
+ok("1.34.2: empty state distinguishes 'no match' from 'no templates yet'", /No templates match/.test(main) && /No templates yet\. Create your first template/.test(main));
+ok("1.34.2: Idea Generator has a titled head", /<div class="rs-idea-head"><div class="rs-idea-mark" aria-hidden="true">\u2726<\/div><div><b>Idea Generator<\/b>/.test(main));
+const sec12 = css.slice(css.indexOf("── 12. 1.34.2"));
+ok("1.34.2: overlay.css section 12 — gallery grid, type-coloured cards, chips, footer actions, idea strip", sec12.length > 3000 && /\.rs-template-gallery \{ display: grid !important; grid-template-columns: repeat\(auto-fill, minmax\(340px, 1fr\)\)/.test(sec12) && /\.rs-template-card\[data-template-type="roblox"\]\s*\{ --card-accent: var\(--tt-roblox\); \}/.test(sec12) && /#rs-cards-panel \.rs-template-ico \{/.test(sec12) && /\.rs-template-chips button\.on \{\s*background: var\(--orx-grad\)/.test(sec12) && /\.rs-template-card \.rs-template-run \{ flex: 1 1 auto/.test(sec12) && /\.rs-template-card \.rs-template-more > summary \{\s*width: 38px/.test(sec12) && /#rs-cards-panel \.rs-idea-head \{/.test(sec12) && /@media \(max-width: 760px\) \{\s*#rs-cards-panel \.rs-template-gallery \{ grid-template-columns: 1fr !important; \}/.test(sec12));
+ok("1.34.2: search field gets an inline magnifier and the toolbar loses its dark band", /#rs-cards-search \{\s*padding-left: 40px !important;\s*background-image: url\("data:image\/svg\+xml/.test(sec12) && /\.rs-template-toolbar \{[^}]*background: transparent !important; border-bottom: 0 !important;/.test(sec12));
 
 // ── jsdom render (optional) ──
 let JSDOM; try { ({ JSDOM } = require("jsdom")); } catch { JSDOM = null; }
@@ -90,10 +101,35 @@ async function render() {
 
   await waitFor(() => d.getElementById("rs-bar"), 8000, "#rs-bar");
   await sleep(600);
+  const R = w.ORTemplateRegistry;
+  const made = [];
+  for (const t of [
+    { name: "Boss arena", description: "Circular arena with pillars, neon ring and a throne platform.", type: "roblox", category: "Building", environment: "ROBLOX_STUDIO", instructions: ["Build a 120-stud circular floor"], workflow: [{ title: "Floor", command: "part_create" }, { title: "Ring", command: "part_create" }] },
+    { name: "Shop UI", description: "A responsive shop ScreenGui with a currency label.", type: "ui", category: "UI", environment: "ROBLOX_STUDIO", instructions: ["Create the ScreenGui"] },
+    { name: "Daily brief", description: "Prompt that summarises the place and proposes next steps.", type: "prompt", category: "Planning", environment: "GENERAL", instructions: ["Summarise"] },
+  ]) { const r = await R.createTemplate(t); made.push(r); }
+  ok("render: three templates created in the registry (roblox / ui / prompt)", made.every((r) => r && r.success), JSON.stringify(made.filter((r) => !r.success).map((r) => r.error)));
   const cardsBtn = await waitFor(() => d.getElementById("rs-cards-btn"), 4000, "cards button");
   cardsBtn.click(); await sleep(150);
   const panel = d.getElementById("rs-cards-panel");
   ok("render: cards panel opens", panel && !panel.hidden);
+  const lib = panel.querySelector(".rs-template-library");
+  const order = [...lib.children].map((el) => el.className.split(" ")[0] || el.id);
+  ok("render: Library order is controls → grid → idea generator", order[0] === "rs-template-controls" && order[1] === "" || order.join(",") === "rs-template-controls,rs-cards-grid-wrap,rs-idea-generator" || (lib.children[0].classList.contains("rs-template-controls") && lib.children[1].id === "rs-cards-grid-wrap" && lib.children[2].classList.contains("rs-idea-generator")), order.join(","));
+  const cards = panel.querySelectorAll(".rs-template-gallery > .rs-template-card");
+  ok("render: templates render as gallery cards with type tiles and badges", cards.length === 3 && [...cards].every((c) => c.querySelector(".rs-template-ico") && c.querySelector(".rs-tag-type") && c.querySelector(".rs-tag-env") && c.querySelector("time")), String(cards.length));
+  const boss = [...cards].find((c) => /Boss arena/.test(c.textContent));
+  ok("render: roblox card → data-template-type=roblox, 'R' tile, 'Roblox' type badge, 'Roblox Studio' env badge", boss && boss.dataset.templateType === "roblox" && boss.querySelector(".rs-template-ico").textContent === "R" && boss.querySelector(".rs-tag-type").textContent === "Roblox" && boss.querySelector(".rs-tag-env").textContent === "Roblox Studio" && boss.querySelectorAll(".rs-tag").length >= 4, boss && boss.textContent.slice(0, 120));
+  ok("render: card footer = Run (primary) + Edit + ⋯ menu holding Improve with AI / Copy / Export / Archive / Delete", boss && boss.querySelector(".rs-template-actions > .rs-template-run") && boss.querySelector('.rs-template-actions > [data-template-action="open"]') && boss.querySelector(".rs-template-more > summary").textContent === "\u22EF" && [...boss.querySelectorAll(".rs-template-more > div button")].map((b) => b.dataset.templateAction).join(",") === "improve,duplicate,export,archive,delete");
+  const chips = panel.querySelectorAll(".rs-template-chips [data-template-chip]");
+  ok("render: category chips = All / Building / Planning / UI / Archived with counts, All active", [...chips].map((c) => c.dataset.templateChip).join(",") === "All,Building,Planning,UI,Archived" && chips[0].classList.contains("on") && chips[0].querySelector("i").textContent === "3", [...chips].map((c) => c.dataset.templateChip + ":" + c.querySelector("i").textContent).join(" "));
+  [...chips].find((c) => c.dataset.templateChip === "UI").click(); await sleep(60);
+  ok("render: clicking the UI chip filters the gallery to 1 card, syncs the select, count pill and chip state", panel.querySelectorAll(".rs-template-gallery > .rs-template-card").length === 1 && panel.querySelector("#rs-template-category").value === "UI" && panel.querySelector("[data-template-count]").textContent === "1" && [...chips].find((c) => c.dataset.templateChip === "UI").classList.contains("on") && !chips[0].classList.contains("on"));
+  [...chips].find((c) => c.dataset.templateChip === "Archived").click(); await sleep(60);
+  ok("render: Archived chip (empty) shows the 'No templates match' state", /No templates match/.test(panel.querySelector("#rs-cards-grid-wrap").textContent));
+  panel.querySelector("#rs-template-category").value = "All"; panel.querySelector("#rs-template-category").dispatchEvent(new w.Event("change", { bubbles: true })); await sleep(60);
+  ok("render: the select still works and re-activates the All chip", panel.querySelectorAll(".rs-template-gallery > .rs-template-card").length === 3 && chips[0].classList.contains("on"));
+  ok("render: Idea Generator strip sits under the gallery with its titled head", lib.lastElementChild.classList.contains("rs-idea-generator") && /Idea Generator/.test(lib.lastElementChild.querySelector(".rs-idea-head b").textContent));
   const headTxt = () => (panel.querySelector(".rs-cards-heading") || {}).textContent;
   const subTxt = () => (panel.querySelector(".rs-cards-subheading") || {}).textContent || "";
   const shell = () => panel.querySelector(".rs-cards-body > .rs-template-library");

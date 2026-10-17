@@ -7883,3 +7883,126 @@ html.rs-light #rs-cards-panel .rs-public-kind-skill { color: #0369a1 !important;
   #rs-cards-panel .rs-template-library button, #rs-cards-panel .rs-task-check { transition: none !important; transform: none !important; }
   #rs-cards-panel .rs-activity-row.rs-card-run .rs-card-dot { animation: none; }
 }
+
+/* ── 12. 1.34.2 — Templates tab: gallery cards, category chips, quieter toolbar ──
+   The Library used to be a single column of wide rows, each dragging four
+   buttons, with the Idea Generator parked on top of everything. It is now a
+   gallery: cards in two columns on the wide panel, a coloured type tile and
+   badge meta per card, ONE primary Run button plus Edit and a "⋯" menu, a row
+   of category chips under the toolbar, and the Idea Generator as a titled
+   strip under the cards. Tokens come from section 11 (--cp-*) and section 4.
+   ─────────────────────────────────────────────────────────────────────────── */
+#rs-cards-panel {
+  --tt-prompt: #a78bfa; --tt-command: #38bdf8; --tt-workflow: #34d399; --tt-roblox: var(--orx-a, #59b8dd);
+  --tt-blender: #fb923c; --tt-ui: #f472b6; --tt-project: #facc15; --tt-ai-agent: #2dd4bf;
+}
+/* toolbar: search grows, the three file actions sit tight on the right */
+#rs-cards-panel .rs-template-controls .rs-template-toolbar {
+  grid-template-columns: minmax(220px, 1fr) 180px auto auto auto !important;
+  padding: 0 var(--cp-x) 12px !important; gap: 10px !important; background: transparent !important; border-bottom: 0 !important;
+}
+#rs-cards-panel .rs-template-controls #rs-cards-search {
+  padding-left: 40px !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%238c95a1' stroke-width='2.2' stroke-linecap='round'><circle cx='11' cy='11' r='7'/><path d='m20 20-3.5-3.5'/></svg>") !important;
+  background-repeat: no-repeat !important; background-position: 15px 50% !important;
+}
+#rs-cards-panel .rs-template-controls .rs-template-project-import,
+#rs-cards-panel .rs-template-controls .rs-template-export-all,
+#rs-cards-panel .rs-template-controls .rs-template-import { min-height: 40px !important; padding: 0 16px !important; }
+
+/* category chips */
+#rs-cards-panel .rs-template-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 var(--cp-x) 14px; border-bottom: 1px solid var(--cp-line); }
+#rs-cards-panel .rs-template-library .rs-template-chips button {
+  min-height: 30px !important; padding: 0 12px !important; font-size: 11.5px !important; font-weight: 700 !important;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+#rs-cards-panel .rs-template-chips button i { font-style: normal; font-size: 10.5px; font-weight: 800; min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center; border-radius: 999px; background: rgba(0,0,0,.28); color: inherit; opacity: .85; }
+html[data-rs-theme] #rs-cards-panel .rs-template-library .rs-template-chips button.on {
+  background: var(--orx-grad) !important; color: var(--orx-on) !important;
+  border: 1px solid color-mix(in srgb, var(--orx-a) 60%, transparent) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.22) inset, 0 4px 14px var(--orx-glow) !important;
+}
+#rs-cards-panel .rs-template-chips button.on i { background: rgba(0,0,0,.16); opacity: 1; }
+html.rs-light #rs-cards-panel .rs-template-chips button i { background: rgba(15,23,42,.08); }
+
+/* gallery grid: 2 columns on the 860px panel, 1 column when narrow */
+#rs-cards-panel .rs-template-gallery { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)) !important; gap: 12px !important; padding: 14px var(--cp-x) 6px !important; align-items: stretch; }
+#rs-cards-panel .rs-template-card {
+  display: grid !important; grid-template-columns: 44px minmax(0, 1fr); grid-template-rows: auto 1fr auto;
+  gap: 4px 14px !important; align-items: start !important; min-height: 0 !important;
+  padding: 18px 18px 14px 18px !important; border-radius: 16px !important;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cp-row) 88%, #fff 0%), var(--cp-row)) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.035) inset, 0 6px 18px rgba(0,0,0,.14) !important;
+  transition: transform .16s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease;
+}
+#rs-cards-panel .rs-template-card:hover { transform: translateY(-2px); box-shadow: 0 1px 0 rgba(255,255,255,.05) inset, 0 14px 34px rgba(0,0,0,.24), 0 0 0 1px var(--card-accent, var(--orx-a, #59b8dd)) inset !important; border-color: transparent !important; }
+#rs-cards-panel .rs-template-card::before { left: 18px !important; right: 18px; top: 0 !important; bottom: auto !important; width: auto !important; height: 3px; border-radius: 0 0 3px 3px; opacity: 1 !important; background: linear-gradient(90deg, var(--card-accent, var(--orx-a, #59b8dd)), color-mix(in srgb, var(--card-accent, var(--orx-a, #59b8dd)) 20%, transparent)) !important; }
+#rs-cards-panel .rs-template-card[data-template-type="prompt"]   { --card-accent: var(--tt-prompt); }
+#rs-cards-panel .rs-template-card[data-template-type="command"]  { --card-accent: var(--tt-command); }
+#rs-cards-panel .rs-template-card[data-template-type="workflow"] { --card-accent: var(--tt-workflow); }
+#rs-cards-panel .rs-template-card[data-template-type="roblox"]   { --card-accent: var(--tt-roblox); }
+#rs-cards-panel .rs-template-card[data-template-type="blender"]  { --card-accent: var(--tt-blender); }
+#rs-cards-panel .rs-template-card[data-template-type="ui"]       { --card-accent: var(--tt-ui); }
+#rs-cards-panel .rs-template-card[data-template-type="project"]  { --card-accent: var(--tt-project); }
+#rs-cards-panel .rs-template-card[data-template-type="ai-agent"] { --card-accent: var(--tt-ai-agent); }
+#rs-cards-panel .rs-template-ico {
+  grid-row: 1 / 3; width: 44px; height: 44px; display: grid; place-items: center;
+  border-radius: 13px; font: 800 17px/1 -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: -.02em;
+  color: var(--card-accent, var(--orx-a, #59b8dd));
+  background: color-mix(in srgb, var(--card-accent, var(--orx-a, #59b8dd)) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--card-accent, var(--orx-a, #59b8dd)) 38%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--card-accent, var(--orx-a, #59b8dd)) 18%, transparent), 0 1px 0 rgba(255,255,255,.12) inset;
+}
+#rs-cards-panel .rs-template-card .rs-template-copy { grid-column: 2; grid-row: 1 / 3; min-width: 0; align-self: start; }
+#rs-cards-panel .rs-template-card .rs-template-copy > b { font-size: 15px !important; line-height: 1.25; align-items: center; }
+#rs-cards-panel .rs-template-card .rs-template-copy > p { -webkit-line-clamp: 3; margin: 6px 0 10px !important; }
+#rs-cards-panel .rs-template-card .rs-template-copy > span { display: flex !important; flex-wrap: wrap; align-items: center; gap: 6px !important; white-space: normal !important; overflow: visible !important; }
+#rs-cards-panel .rs-tag {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px;
+  font-family: inherit; font-size: 10.5px; font-weight: 700; line-height: 1; font-style: normal; letter-spacing: .02em; white-space: nowrap;
+  color: var(--cp-fg-2); background: rgba(255,255,255,.045); border: 1px solid var(--cp-line);
+}
+#rs-cards-panel .rs-tag-type { color: var(--card-accent, var(--orx-a, #59b8dd)); background: color-mix(in srgb, var(--card-accent, var(--orx-a, #59b8dd)) 10%, transparent); border-color: color-mix(in srgb, var(--card-accent, var(--orx-a, #59b8dd)) 38%, transparent); text-transform: uppercase; font-size: 10px; letter-spacing: .08em; }
+#rs-cards-panel .rs-tag-env { color: var(--orx-ghost-fg, var(--cp-fg)); }
+#rs-cards-panel .rs-tag-ref { color: var(--cp-ok); border-color: color-mix(in srgb, var(--cp-ok) 40%, transparent); background: color-mix(in srgb, var(--cp-ok) 9%, transparent); }
+#rs-cards-panel .rs-template-card .rs-template-copy > span time { font-size: 11px; color: var(--cp-fg-3); margin-left: 2px; }
+html.rs-light #rs-cards-panel .rs-tag { background: rgba(15,23,42,.05); }
+
+/* card footer: Run fills, Edit ghost, ⋯ round menu */
+#rs-cards-panel .rs-template-card .rs-template-actions {
+  grid-column: 1 / -1; grid-row: 3; justify-content: flex-start !important; gap: 8px !important;
+  margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--cp-line); width: 100%;
+}
+#rs-cards-panel .rs-template-card .rs-template-run { flex: 1 1 auto; justify-content: center; text-align: center; min-height: 38px !important; }
+#rs-cards-panel .rs-template-card .rs-template-actions > button:not(.rs-template-run) { min-width: 72px; }
+#rs-cards-panel .rs-template-card .rs-template-more { position: relative; }
+#rs-cards-panel .rs-template-card .rs-template-more > summary {
+  width: 38px !important; min-width: 38px; min-height: 38px !important; padding: 0 !important; line-height: 36px !important;
+  display: grid !important; place-items: center; font-size: 18px !important; letter-spacing: .05em; list-style: none; cursor: pointer;
+}
+#rs-cards-panel .rs-template-card .rs-template-more > summary::-webkit-details-marker { display: none; }
+#rs-cards-panel .rs-template-card .rs-template-more > summary::after { content: none !important; }
+#rs-cards-panel .rs-template-card .rs-template-more > div { right: 0 !important; top: calc(100% + 8px) !important; min-width: 180px !important; padding: 6px !important; border-radius: 14px !important; background: var(--cp-row) !important; border: 1px solid var(--cp-line-hi) !important; box-shadow: 0 18px 44px rgba(0,0,0,.4) !important; z-index: 20; }
+#rs-cards-panel .rs-template-card .rs-template-more > div button { width: 100%; text-align: left; min-height: 34px !important; padding: 0 12px !important; border-radius: 9px !important; font-size: 12.5px !important; font-weight: 600 !important; }
+#rs-cards-panel .rs-template-card .rs-template-more > div .rs-template-improve { font-weight: 750 !important; color: var(--orx-ghost-fg, var(--cp-fg)) !important; }
+#rs-cards-panel .rs-template-card .rs-template-more > div .rs-template-improve::before { content: "\2726"; margin-right: 8px; color: var(--card-accent, var(--orx-a)); }
+
+/* "no templates" block sits in the gallery lane with the same radius */
+#rs-cards-panel .rs-template-library:not(.rs-public):not(.rs-tasks):not(.rs-activity) > #rs-cards-grid-wrap > .rs-template-empty { margin-top: 14px !important; min-height: 260px !important; }
+
+/* Idea Generator: a titled strip under the cards instead of a box above them */
+#rs-cards-panel .rs-idea-generator { margin: 10px var(--cp-x) 22px !important; padding: 16px 18px !important; border-radius: 16px !important; border: 1px dashed var(--cp-line-hi) !important; background: linear-gradient(135deg, color-mix(in srgb, var(--orx-a, #59b8dd) 8%, transparent), transparent 60%), color-mix(in srgb, var(--cp-row) 70%, transparent) !important; }
+#rs-cards-panel .rs-idea-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+#rs-cards-panel .rs-idea-mark { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; font-size: 15px; color: var(--orx-on, #061018); background: var(--orx-grad, var(--rsa, #24afe2)); box-shadow: 0 4px 14px var(--orx-glow, rgba(36,175,226,.3)); }
+#rs-cards-panel .rs-idea-head b { display: block; font-size: 14px !important; color: var(--cp-fg) !important; }
+#rs-cards-panel .rs-idea-head span { display: block; font-size: 12px !important; color: var(--cp-fg-2) !important; line-height: 1.4; margin-top: 2px; }
+#rs-cards-panel .rs-idea-controls { grid-template-columns: 1fr 1fr auto !important; }
+#rs-cards-panel .rs-idea-empty { margin-top: 10px !important; }
+
+@media (max-width: 760px) {
+  #rs-cards-panel .rs-template-gallery { grid-template-columns: 1fr !important; }
+  #rs-cards-panel .rs-template-controls .rs-template-toolbar { grid-template-columns: 1fr 1fr !important; }
+  #rs-cards-panel .rs-template-controls .rs-template-search { grid-column: 1 / -1 !important; }
+  #rs-cards-panel .rs-template-card .rs-template-actions { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { #rs-cards-panel .rs-template-card, #rs-cards-panel .rs-template-card:hover { transition: none; transform: none; } }
