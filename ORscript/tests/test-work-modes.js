@@ -46,7 +46,7 @@ for (const wm of ["ultimate", "visualizer", "animator"]) {
   const full = RS.workModePrompt(wm), tight = RS.workModePrompt(wm, { tight: true });
   assert(full.startsWith("━━━ OPERATING LOOP (every work mode) ━━━") && tight.startsWith("━━━ OPERATING LOOP ━━━"), wm + ": shared loop first");
   assert(full.includes("━━━ " + wm.toUpperCase() + " WORK MODE") && tight.includes("━━━ " + wm.toUpperCase() + " WORK MODE"), wm + ": own heading");
-  assert(full.length > 5500 && full.length < 9500, wm + ": full profile is substantial but bounded (" + full.length + ")");
+  assert(full.length > 5500 && full.length < 11000, wm + ": full profile is substantial but bounded (" + full.length + ")"); // 1.38.0: + PLAYBOOKS
   assert(tight.length > 1500 && tight.length < 3600, wm + ": tight profile fits a 14k budget (" + tight.length + ")");
   for (const other of ["ultimate", "visualizer", "animator"]) if (other !== wm) assert(!full.includes("━━━ " + other.toUpperCase() + " WORK MODE"), wm + " must not stack " + other);
   assert(/FIRST MOVE:/.test(full) && /NEVER:/.test(full), wm + ": first move + never list");
@@ -74,7 +74,7 @@ const missing = cited.filter((n) => !new RegExp("[\"'`]" + n + "[\"'`:]|\\b" + n
 assert.deepStrictEqual(missing, [], "prompts cite unknown commands: " + missing.join(", "));
 
 // main.js wiring (1.34): starters per mode, light mode-switch rider, checklist in the reminder
-for (const id of ["ultimate", "visualizer", "animator"]) assert(new RegExp(id + ": \\{[\\s\\S]{0,900}starters: \\[").test(main), id + " has quick-start prompts");
+for (const id of ["ultimate", "visualizer", "animator"]) assert(new RegExp(id + ": \\{[\\s\\S]{0,1400}starters: \\[").test(main), id + " has quick-start prompts");
 assert(main.includes('data-work-starter="${i}"') && main.includes('menuEl.querySelectorAll("[data-work-starter]")') && main.includes("pasteLibraryCard({ title: q.label, prompt: q.prompt }, { silent: true })"), "quick starts render under the mode cards and paste into the composer");
 assert(main.includes("A.workModeSwitchPending = true; A.forceSysResend = true;") && main.includes("if (A.workModeSwitchPending && !periodicDue) {") && main.includes("RS.workModeSwitchNote(mode, { tight })") && main.includes("function workModeFocusSignatures(limitChars)"), "mode switch sends a short profile + focus signatures rider, not the whole prompt");
 assert(main.includes("modeCheck = RS.workModeChecklist(normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()))"), "periodic reminder carries the mode checklist");

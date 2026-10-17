@@ -443,13 +443,36 @@ FIRST MOVE: animation_select_rig / rig_joints_inspect + or_screenshot. PRINCIPLE
     visualizer: "VISUALIZER CHECK: mood first (lighting / atmosphere / post stack) · 3+ layers per hero effect with NumberSequence curves · UI from design_tokens_set + ui_screen_generate, responsive, never a grey Frame · or_screenshot after every milestone and one polish pass · emitter budget.",
     animator: "ANIMATOR CHECK: rig read (joints, R6/R15, existing clips) · key poses with anticipation / follow-through / arcs · easing per keyframe, holds, markers · a camera beat per hero animation · animation_preview before you call it done.",
   };
+  // 1.38.0: PLAYBOOKS - concrete command chains for the four jobs each mode is
+  // asked to do most. Prose mandates say WHAT good looks like; a playbook says
+  // WHICH commands in WHICH order, so the first move is never a guess and the
+  // verification step is never skipped. Full profiles only (tight budgets keep
+  // the one-line pipeline).
+  const WORK_MODE_PLAYBOOKS = {
+    ultimate: `PLAYBOOKS (pick the one that matches, adapt it, verify every step):
+- NEW SYSTEM: blueprint_list → blueprint_install {name, config} (no blueprint fits → module_scaffold + remote_scaffold + datastore_profile_scaffold) → script_read the Service → extend with multi_edit → design_tokens_set + ui_screen_generate on its remotes → blueprint_verify → start_stop_play + get_console_output → report.
+- BUG FIX: start_stop_play + get_console_output → script_read around the failing line (project_index_search {query} for callers) → multi_edit the cause plus a guard → script_check → start_stop_play again until the console is clean.
+- EXISTING PLACE / REFACTOR: project_index_build → read the PROJECT MAP (hubs, mismatches, conventions) → project_index_script {path} per touched script → multi_edit in small verified steps → script_lint + audit_script_errors → project_index_changes to summarise.
+- BUILD: get_studio_state + or_screenshot → part_create blockout at real scale → model_wall / staircase_generate / model_build for structure → material_set + color_set palette → model_group + set_primary_part → model_snap_to_ground + audit_unanchored_parts → or_screenshot from two angles → polish.`,
+    visualizer: `PLAYBOOKS (pick the one that matches, adapt it, screenshot every milestone):
+- MOOD PASS: or_screenshot → lighting_inspect → lighting_set_preset or postfx_cinematic → atmosphere_set + bloom_set + color_correction_set → or_screenshot → one polish pass → or_screenshot.
+- HERO VFX: search_game_tree the target → fx_create_vfx {effect} → fx_create_emitter layers (core / glow / sparks) + point_light_add + sfx_layered_event_create → tune the NumberSequence curves → execute_luau trigger → start_stop_play + or_screenshot {target:"game"}.
+- UI SCREEN: design_tokens_set {preset, primary} → ui_screen_generate {kind} (custom layout → ui_from_spec) → ui_bind_button + ui_sound_effects_wire → ui_make_responsive + ui_audit → or_screenshot → fix what it shows.
+- THUMBNAIL / ICON: gfx_brief → gfx_stage_create → gfx_subject_add → gfx_prop_add → gfx_overlay → gfx_camera → gfx_capture → gfx_teardown.`,
+    animator: `PLAYBOOKS (pick the one that matches, adapt it, preview every pass):
+- COMBAT CLIP: animation_select_rig → rig_joints_inspect → animation_create {name, priority Action} → animation_set_pose + animation_add_keyframe at anticipation / action / follow-through / settle → animation_set_easing per key → animation_set_marker {hit} → camera_shake_preset + camera_field_of_view_set on impact → animation_preview → fix → animation_preview.
+- LOCOMOTION LOOP: animation_create {loop} → contact / down / passing / up keys → animation_mirror the second half → animation_set_easing → animation_loop_set → animation_preview (seams, foot sliding) → animation_test.
+- PROP / UI MOTION: tween_sequence with a deliberate EasingStyle and overshoot → spring_create for follow-through → start_stop_play to watch it → or_screenshot at the extremes.
+- CUTSCENE: cutscene_camera_track with eased keys (dolly, hero angle, orbit, FOV reveal) → camera_orbit_preview → camera_reset → report the beats with timings.`,
+  };
   function normalizeModeId(wm) { return WORK_MODE_PROMPTS[wm] ? wm : "ultimate"; }
   // The mode block that goes into the system prompt: shared loop + the mode.
   function workModePrompt(wm, opts) {
     const k = opts && opts.tight ? "tight" : "full";
     const id = normalizeModeId(wm);
-    return WORK_MODE_LOOP[k] + "\n\n" + WORK_MODE_PROMPTS[id][k];
+    return WORK_MODE_LOOP[k] + "\n\n" + WORK_MODE_PROMPTS[id][k] + (k === "full" ? "\n" + WORK_MODE_PLAYBOOKS[id] : "");
   }
+  function workModePlaybook(wm) { return WORK_MODE_PLAYBOOKS[normalizeModeId(wm)] || ""; }
   // One-line checklist appended to the periodic tools reminder (anti-drift).
   function workModeChecklist(wm) { return WORK_MODE_CHECKLIST[normalizeModeId(wm)] || ""; }
   // Mid-session switch: a short rider instead of re-sending the whole prompt.
@@ -458,7 +481,7 @@ FIRST MOVE: animation_select_rig / rig_joints_inspect + or_screenshot. PRINCIPLE
     const title = id[0].toUpperCase() + id.slice(1);
     return "━━━ WORK MODE SWITCHED → " + title.toUpperCase() + " ━━━\n"
       + "(System note from " + APP_NAME + ": the user changed the work mode. From now on apply the profile below instead of the previous mode's block; the OPERATING LOOP and every command you already know remain valid. Do not acknowledge this note - continue the task in the new mode.)\n\n"
-      + WORK_MODE_PROMPTS[id][opts && opts.tight ? "tight" : "full"];
+      + WORK_MODE_PROMPTS[id][opts && opts.tight ? "tight" : "full"] + (opts && opts.tight ? "" : "\n" + WORK_MODE_PLAYBOOKS[id]);
   }
 
   function buildSystemPrompt(opts = {}) {
@@ -923,6 +946,8 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
     buildSystemPrompt,
     workModePrompt,
     workModeChecklist,
+    workModePlaybook,
+    WORK_MODE_PLAYBOOKS,
     workModeSwitchNote,
     WORK_MODE_PROMPTS,
     compactTools,

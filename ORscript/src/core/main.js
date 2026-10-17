@@ -884,7 +884,9 @@
   const COMMAND_DISCOVERY_TOOLS = [
     {name:"orscript_help",description:"Explain OrScript features without starting work or executing commands.",inputSchema:{type:"object",required:["question"],properties:{question:{type:"string"},topic:{type:"string"}}},server:"orscript",executionMode:"READ"},
   ];
-  const STUDIO_ALIAS_TOOLS=Object.entries(TOOL_ALIASES).filter(([id])=>id.startsWith("studio.")).map(([id,target])=>({name:id,description:`Namespaced Studio command routed to ${target}.`,inputSchema:{type:"object",properties:{}},server:"roblox",aliasTarget:target}));
+  // 1.38.0: hidden - 34 "studio.x {}" alias rows with empty schemas used to sit
+  // at the TOP of every catalogue (ranked as native tools). They stay routable.
+  const STUDIO_ALIAS_TOOLS=Object.entries(TOOL_ALIASES).filter(([id])=>id.startsWith("studio.")).map(([id,target])=>({name:id,description:`Namespaced Studio command routed to ${target}.`,inputSchema:{type:"object",properties:{}},server:"roblox",aliasTarget:target,hidden:true}));
   const RELIABILITY_TOOLS=[
     {name:"mcp.healthCheck",description:"Measure the live MCP transport and capability state.",inputSchema:{type:"object",properties:{debug:{type:"boolean"}}},server:"orscript"},
     {name:"mcp.reconnect",description:"Close an unhealthy MCP transport and perform one bounded reconnect.",inputSchema:{type:"object",properties:{}},server:"orscript"},
@@ -1806,7 +1808,7 @@
     ultimate: {
       name: "Ultimate", badge: "ULTIMATE", short: "Ultimate",
       sub: "Luau systems · Modeling · Architecture — production-grade, verified",
-      note: "Flagship mode: senior Luau engineer and 3D modeler in one. Full scripting, instance, physics, build and terrain arsenal, continuous autonomy, deep verification.",
+      note: "Flagship mode: senior Luau engineer and 3D modeler in one. Full scripting, instance, physics, build and terrain arsenal, continuous autonomy, deep verification. Catalogue: scripting, blueprints, data, build and physics families first. Playbooks: new system, bug fix, existing place, build. Gate: changed scripts must be read back and checked before 'done'.",
       toast: "Ultimate Work Mode — senior Luau engineer + modeler, full arsenal, every build verified",
       starters: [
         { label: "Index this place", prompt: "Build the project index for this place and give me the PROJECT MAP: folder layout, conventions, hubs, remotes and every mismatch. Then tell me the three riskiest problems you see and fix the first one." },
@@ -1819,7 +1821,7 @@
     visualizer: {
       name: "Visualizer", badge: "VISUALIZER", short: "Visualizer",
       sub: "VFX · Lighting · UI — layered, cinematic, screenshot-verified",
-      note: "VFX, lighting and UI specialist on top of Ultimate: mood, layered effects, design-system UI, screenshot-verified polish.",
+      note: "VFX, lighting and UI specialist on top of Ultimate: mood, layered effects, design-system UI, screenshot-verified polish. Catalogue: lighting, VFX, UI, thumbnail and audio families first. Playbooks: mood pass, hero VFX, UI screen, thumbnail. Gate: a changed look must be screenshotted before 'done'.",
       toast: "Visualizer Work Mode — full VFX, lighting and UI arsenal, screenshot-verified",
       starters: [
         { label: "Cinematic mood", prompt: "Take a screenshot, then set a complete cinematic mood for this scene: lighting preset, atmosphere, sky, bloom, color correction and a post-FX stack. Screenshot again, judge it as an art director and run one polish pass." },
@@ -1832,7 +1834,7 @@
     animator: {
       name: "Animator", badge: "ANIMATOR", short: "Animator",
       sub: "Rigs · Keyframes · Tweens · Camera — motion-first, preview-verified",
-      note: "Animation specialist on top of Ultimate: rigs, keyframes, easing, tweens, IK and camera beats, preview-verified.",
+      note: "Animation specialist on top of Ultimate: rigs, keyframes, easing, tweens, IK and camera beats, preview-verified. Catalogue: animation, tweens/camera and playtest families first. Playbooks: combat clip, locomotion loop, prop motion, cutscene. Gate: new motion must be previewed before 'done'.",
       toast: "Animator Work Mode — full animation editor, tween and camera arsenal, preview-verified",
       starters: [
         { label: "Sword swing", prompt: "Select the rig in my selection, read its joints, and create a 1.2 s sword swing with anticipation, a fast action beat, follow-through and a settle. Ease every key, add a hit marker, give it a camera FOV punch, preview it and screenshot the key poses." },
@@ -1870,6 +1872,44 @@
     try { const pm = typeof window.__rsPublicMode === "function" ? window.__rsPublicMode() : null; if (pm && Array.isArray(pm.focus)) customFocus = new Set(pm.focus); } catch {}
     return [...new Set(names.filter((n) => n && (mode.focus.test(String(n).replace(/^[^.]*\./, "")) || customFocus.has(String(n).replace(/^[^.]*\./, "")) || isUniversalCommand(n))))].sort();
   }
+  // 1.38.0 — MODE EVIDENCE GATE. Each mode defines what "I changed something"
+  // and what "I proved it" look like. When a run that mutated things ends with
+  // a final answer and no proof command was ever run, the loop sends ONE
+  // verification request (per run) instead of accepting "done". This is the
+  // code-level teeth behind "VERIFY DEEPLY" / "PROVE IT WITH PIXELS" /
+  // "PREVIEW OR IT DID NOT HAPPEN".
+  const MODE_GATES = {
+    ultimate: {
+      did: /^(script_create|script_set_source|multi_edit|script_replace|script_insert|script_append|script_module|script_new|module_scaffold|blueprint_install|blueprint_configure|remote_scaffold|datastore_profile_scaffold|script_delete_lines|script_rename_symbol|script_deprecations_fix)$/,
+      proof: /^(script_read|script_check|script_analysis|script_lint|get_console_output|start_stop_play|or_debug|blueprint_verify|audit_script_errors|script_diff|project_index_changes|studio_playtest)$/,
+      nudge: "━━━ ULTIMATE GATE (System note from OR, not the user) ━━━\nYou wrote or changed scripts in this run but never verified them. Before the final answer: script_read the changed script(s) back, run script_check (or script_lint), then start_stop_play + get_console_output until the console is clean - fix anything it shows. Then give the final report with evidence. Do not acknowledge this note; just do it.",
+    },
+    visualizer: {
+      did: /^(fx_|vfx_|lighting|atmosphere|sky|clouds|bloom|blur|color_correction|postfx|sunrays|fog|ui_(?!list_tree|audit|inspect)|gui_(?!hide|show)|design_tokens_set|design_kit_install|beam|trail|point_light|spot_light|surface_light|fire_add|smoke_add|sparkles|highlight|portal_|gfx_(stage|subject|prop|overlay|fx|camera|lighting|pose))/,
+      proof: /^(or_screenshot|gfx_capture|screen_capture|screenshot_frame|lighting_time_lapse)$/,
+      nudge: "━━━ VISUALIZER GATE (System note from OR, not the user) ━━━\nYou changed the look of the place in this run but never looked at it. Take or_screenshot {target:\"studio\"} now, judge it as an art director (contrast, hierarchy, colour harmony, readability), do one polish pass that fixes what the screenshot shows, screenshot again, then finish with the VISUAL SPEC. Do not acknowledge this note; just do it.",
+    },
+    animator: {
+      did: /^(animation_(create|set_pose|add_keyframe|update_keyframe|motion_preset|stagger_parts|set_easing|mirror|retime|reverse|import|move_keyframe|clone_keyframe)|tween_(create|sequence)|spring_create|cutscene_camera_track|ik_control_setup)$/,
+      proof: /^(animation_preview|animation_test|animation_simulate|camera_orbit_preview|or_screenshot|start_stop_play|studio_playtest)$/,
+      nudge: "━━━ ANIMATOR GATE (System note from OR, not the user) ━━━\nMotion was created in this run but never previewed. Run animation_preview now (animation_test for an exported clip, start_stop_play for tweens / camera work), judge timing, arcs, weight and loop seams, fix what you see, preview again, then finish with the MOTION SPEC. Do not acknowledge this note; just do it.",
+    },
+  };
+  // Returns the gate nudge for the active mode when this run mutated without
+  // proving, else "". `runTools` = bare names of every command executed this run.
+  function modeGateNudge(runTools) {
+    try {
+      const mode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode());
+      const g = MODE_GATES[mode];
+      if (!g || !runTools || !runTools.size) return "";
+      let did = false, proof = false;
+      for (const n of runTools) { const b = bareToolName(n); if (g.did.test(b)) did = true; if (g.proof.test(b)) proof = true; }
+      return did && !proof ? g.nudge : "";
+    } catch { return ""; }
+  }
+  // 1.38.0: skill programs that legitimately run long (whole-place scans, system
+  // installs with self-tests). They get a 90 s execute budget instead of 20 s.
+  const SLOW_SKILL_RE = /^(project_index_(build|changes|summary|search|graph)|project_health_report|blueprint_(install|verify|remove|configure|status)|script_analysis|script_deprecations_fix|diagnostics_(audit|fix_common)|audit_(script_errors|unanchored_parts)|model_optimize|workspace_export|script_rename_symbol|script_find_usages|script_requires|script_todo|script_lint)$/;
   const ALWAYS_BLOCKED_TOOLS = new Set([]);
   const VISION_TOOLS = new Set(["screen_capture"]);
   const bareToolName = (name) => (name && name.includes("/") ? name.split("/").pop() : name) || "";
@@ -2197,6 +2237,9 @@
     diag("tools.fetched", { ms: Date.now() - t0, n: (r && r.tools && r.tools.length) || 0, mcpAvailable:!!(r&&r.ok) });
     {
       const tools = (r&&Array.isArray(r.tools)?r.tools:[]).filter((t) => !isBlockedTool(t.name));
+      // 1.38.0: raw MCP capture stays callable but is not advertised - or_screenshot
+      // (with its target/attach semantics) is the documented surface.
+      for (const t of tools) if (t && bareToolName(t.name) === "screen_capture") t.hidden = true;
       // Virtual packs describe params as {type, req, desc}; convert to a real
       // JSON schema so signatures, required-param checks and the registry see
       // the same contract the pack's own describeCommands() prints.
@@ -2504,7 +2547,10 @@
     const props = schema.properties || {};
     const req = new Set(Array.isArray(schema.required) ? schema.required : []);
     // studio_id is injected by the bridge for every Studio tool - never shown.
-    const parts = Object.entries(props).filter(([k]) => k !== "studio_id").map(([k, v]) => {
+    const entries = Object.entries(props).filter(([k]) => k !== "studio_id");
+    // 1.38.0: required parameters first - the model reads "what must I pass" at a glance.
+    entries.sort((a, b) => (req.has(a[0]) ? 0 : 1) - (req.has(b[0]) ? 0 : 1));
+    const parts = entries.map(([k, v]) => {
       v = v || {};
       const en = Array.isArray(v.enum) && v.enum.length <= 5 ? v.enum.join("|") : null;
       const ty = en ? ":" + en : v.type === "array" ? ":[]" : v.type === "object" ? ":{}" : "";
@@ -2517,27 +2563,88 @@
     const str = String(line || "");
     const nm = nameFromLine(str);
     if (!nm) return null;
-    const rest = str.split("\n").slice(1).join("\n");
-    const parts = [];
-    const re = /(?:^\s+|,\s*)([A-Za-z_]\w*)(\??)\s*:/gm;
-    let m;
-    while ((m = re.exec(rest))) { if (!parts.some((x) => x.replace(/\?$/, "") === m[1])) parts.push(m[1] + m[2]); }
-    return `${nm} {${parts.join(", ")}}`;
+    // 1.38.0: only real parameter tokens count. The old regex also matched
+    // "Rewards:" inside a description example ({Currencies:[...], Rewards:{...}})
+    // and printed it as a required parameter. Required parameters come first.
+    const req = [], opt = [];
+    const push = (name, mark) => { if (!req.includes(name) && !opt.includes(name)) (mark ? opt : req).push(name); };
+    for (const ln of str.split("\n").slice(1)) {
+      const d = ln.match(/^\s{4}([A-Za-z_]\w*)(\??):\s*[a-z\[\]]+\s+-\s/);
+      if (d) { push(d[1], d[2]); continue; }
+      if (!/^\s{4}\S/.test(ln)) continue;
+      for (const tok of ln.trim().split(/,\s+(?=[A-Za-z_]\w*\??:)/)) { const m = tok.match(/^([A-Za-z_]\w*)(\??):[a-z\[\]]+/); if (m) push(m[1], m[2]); }
+    }
+    return `${nm} {${[...req, ...opt.map((o) => o + "?")].join(", ")}}`;
   }
   // Pack signatures several per line (line count is what costs on composers
   // that type text in; characters are nearly free). Returns the text and how
   // many were omitted once the character or line budget ran out.
   function packSignatures(sigs, limitChars, limitLines) {
-    const out = []; let cur = ""; let used = 0; let omitted = 0;
+    // 1.38.0: strict order - once a signature does not fit, everything after it
+    // is omitted too (`shown` = prefix length). The old "skip and continue"
+    // made the omitted set unpredictable, so callers that listed the tail as
+    // names repeated commands (blur_set showed up twice).
+    const out = []; let cur = ""; let used = 0; let shown = 0;
     const flush = () => { if (cur) { out.push(cur); cur = ""; } };
     for (const sg of sigs) {
       const add = (cur ? "  ·  " : "") + sg;
-      if (used + add.length + 1 > limitChars || (out.length >= limitLines && !cur) || (out.length >= limitLines - 1 && cur.length + add.length > 170)) { omitted++; continue; }
-      if (cur && cur.length + add.length > 170) { flush(); if (out.length >= limitLines) { omitted++; continue; } cur = sg; used += sg.length + 1; continue; }
-      cur += add; used += add.length + 1;
+      if (used + add.length + 1 > limitChars) break;
+      if (cur && cur.length + add.length > 170) {
+        if (out.length + 1 >= limitLines) break;
+        flush(); cur = sg; used += sg.length + 1; shown++; continue;
+      }
+      if (!cur && out.length >= limitLines) break;
+      cur += add; used += add.length + 1; shown++;
     }
     flush();
-    return { text: out.join("\n"), omitted, lines: out.length, chars: used };
+    return { text: out.join("\n"), omitted: sigs.length - shown, shown, lines: out.length, chars: used };
+  }
+  // ── 1.38.0: command FAMILIES ─────────────────────────────────────────────
+  // The signature tier of the catalogue used to be one alphabetical block of
+  // ~600 commands; the work mode only changed a header. Families give the model
+  // a table of contents, and each mode puts ITS families first - so a
+  // Visualizer sees lighting / VFX / UI signatures before data stores, and an
+  // Animator sees animation / tweens / camera first. Order = catalogue order.
+  const COMMAND_FAMILIES = [
+    { id: "script", label: "SCRIPTING", re: /^(script_|multi_edit|module_scaffold|execute_luau|project_health_report|project_index_|tag_scaffold|tag_add|tag_remove|get_service|wait_for_child|log_tag|gc_run)/ },
+    { id: "blueprint", label: "SYSTEM BLUEPRINTS", re: /^blueprint_/ },
+    { id: "data", label: "DATA, REMOTES, NETWORK & MONETIZATION", re: /^(ds_|datastore_|get_datastore|ordered_(get|set)|session_lock_|session_analytics|remote_|remotes_list|bindable_|leaderstats_|profile_|gamepass_|developer_product|devproduct_|marketplace_|badge_|value_set|replicated_first|server_auto_restart|network_(ping|bandwidth)|premium_check)/ },
+    { id: "gameplay", label: "GAMEPLAY SYSTEMS", re: /^(admin_|ammo_|anti_|shop_|quest_|checkpoint|team_|teams_setup|round_|spawn|npc_|tool_|tools_list|weapon_|inventory_|currency_|daily_|tycoon_|pet_|combat_|door_|elevator_|vehicle_|boat_|teleport|zone_|boundary|kill_|sprint|health_|damage_|respawn|leaderboard|dialog_|dialogue_|obby_|lobby_|matchmak|ragdoll|rank_|xp_|level_|loot_|chest_loot|crate_|trap_|hazard_|conveyor|jump_pad|jumppower_set|swim|ladder|seat_|proximity|click_detector|touch_|trigger_|timer_|countdown|event_|minigame|achievement|chat_|afk_|ban_|kick_|player_|players_list|character_|humanoid_|backpack_|hotbar|crafting|farming|fishing|mining|building_|plot_|forcefield|sword|gun_|projectile|turret|wave_|enemy_|boss_|pathfind|patrol|mob_|drop_|item_drop|dummy_spawn|target_dummy|first_person|head_tracking|head_position|input_(bind|unbind)|mouse_(pos_get|region)|spin_wheel|status_effect|trading_system|set_waypoint|skill$|select_class|game_stats|haptics|gamepad_rumble|knockback_apply)/ },
+    { id: "build", label: "MODELING & BUILD", re: /^(part_|model_|meshpart_|wedge_|instance_|folder_|generate_|staircase_|archway_|roof_|road_|fence_|bridge_|dungeon_|tree_|ground_|water_|window_|duplicate_n|grid_clone|mirror_model|rotate_model|scale_model|raise_model|flatten_model|ungroup_model|size_set|cframe_set|rotation_set|pivot_|snap_|set_primary_part|selection_set|color_set|material_set|brickcolor_set|transparency_set|reflectance_set|decal_|texture_|mesh_|anchored_set|collision_|register_collision_group|property_copy|csg_|workspace_(export|import|list|clear)|get_template|template_|search_creator_store|insert_from_creator_store|asset_|distance_measure|nearest_part)/ },
+    { id: "physics", label: "PHYSICS, RAYCASTS & MECHANISMS", re: /^(physics_|constraint|hinge_|rope_|weld_|rigid_|align_|attachment_|chain_constraint|float_part|ice_part|magnetic_part|gear_mechanism|network_owner|raycast_do|swept_ray|overlap_(box|sphere)|launch_pad|speed_pad|trampoline_|zipline|rail_grind|plane_seat|floating_water_craft|destructible_wall|wind_force_zone|gravity_|linear_velocity|vector_force|angular_velocity|body_)/ },
+    { id: "terrain", label: "TERRAIN", re: /^terrain_/ },
+    { id: "lighting", label: "LIGHTING & ATMOSPHERE", re: /^(lighting|light_|atmosphere|sky|clouds|cloud_layer|bloom|blur|color_correction|sunrays|sun_|fog|postfx|shadow|cast_sh|depth_of_field|aurora|weather_|time_of_day|day_night|ambient_set|exposure_set|film_)/ },
+    { id: "vfx", label: "VFX & PARTICLES", re: /^(fx_|vfx_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|explosion|portal_|point_light|spot_light|surface_light|emitter|snowfall|sandstorm|underwater_effect|volcanic|firefly|debris_add|screen_shake|shield_bubble|rain_)/ },
+    { id: "ui", label: "UI & HUD", re: /^(ui_|gui_|design_|billboard_gui|notification_|loading_(screen|show)|progress_show|screen_gui|surface_gui|hud_|menu_|image_label|text_button|starter_gui|fps_counter|mini_map|radial_menu|scoreboard|status_bar|performance_monitor_gui|waypoint_arrow|colors_ui|crosshair|frame_create|text_label|toast_show|tooltip_)|_ui$/ },
+    { id: "gfx", label: "THUMBNAIL & ICON STUDIO", re: /^gfx_/ },
+    { id: "audio", label: "AUDIO", re: /^(audio_|sfx_|sound|ambient_|music_|background_music|directional_audio|jingle|radio_station|footstep_|impact_sound|voice_)/ },
+    { id: "animation", label: "ANIMATION", re: /^(animation_|anim_|rig_|ik_|motor6d|facial_|character_emote|eclipse_|keyframe|pose_|emote_)/ },
+    { id: "motion", label: "TWEENS, SPRINGS & CAMERA", re: /^(tween|spring_|camera_|cutscene|walkspeed)/ },
+    { id: "play", label: "PLAYTEST & DEBUG", re: /^(start_stop_play|get_console_output|or_debug|studio_playtest|audit_|wait_job_finished|studio_output|user_keyboard|user_mouse|debug_|profiler|benchmark|memory_get|script_stats|workspace_stats|perf_|diagnos)/ },
+    { id: "studio", label: "STUDIO CONTROL, PLUGIN & OR", re: /^(studio_|plugin|plugins_|open_script|screenshot_frame|place_|selection_|or_status|or_agent|capture_id|list_roblox_studios|set_active_studio|screen_capture|or_screenshot|memory_|task_|roadmap_|public_|orscript_help|or_)/ },
+    { id: "web", label: "WEB & API", re: /^(web_|api_|http_)/ },
+    { id: "other", label: "OTHER", re: /./ },
+  ];
+  const FAMILY_ORDER = {
+    ultimate: ["script", "blueprint", "data", "build", "physics", "terrain", "gameplay", "play", "studio", "ui", "lighting", "vfx", "audio", "animation", "motion", "gfx", "web", "other"],
+    visualizer: ["lighting", "vfx", "ui", "gfx", "audio", "motion", "build", "play", "script", "gameplay", "data", "blueprint", "physics", "terrain", "animation", "studio", "web", "other"],
+    animator: ["animation", "motion", "play", "audio", "vfx", "build", "physics", "script", "ui", "lighting", "gameplay", "data", "blueprint", "terrain", "studio", "gfx", "web", "other"],
+  };
+  const commandFamily = (name) => { const b = String(name || "").replace(/^[^.]*\./, ""); for (const f of COMMAND_FAMILIES) if (f.re.test(b)) return f.id; return "other"; };
+  function familyOrderFor(modeId) { return FAMILY_ORDER[modeId] || FAMILY_ORDER.ultimate; }
+  // Group catalogue entries by family in the mode's order. A custom (public)
+  // work mode's focus names get a family of their own at the very top.
+  function groupByFamily(entries, modeId, focusSet) {
+    const byId = new Map(COMMAND_FAMILIES.map((f) => [f.id, { id: f.id, label: f.label, entries: [] }]));
+    let custom = null;
+    try { const pm = typeof window.__rsPublicMode === "function" ? window.__rsPublicMode() : null; if (pm && Array.isArray(pm.focus) && pm.focus.length) custom = { id: "custom", label: String(pm.title || pm.name || "CUSTOM MODE").toUpperCase() + " FOCUS", entries: [], set: new Set(pm.focus) }; } catch {}
+    for (const e of entries) {
+      if (custom && custom.set.has(e.name)) { custom.entries.push(e); continue; }
+      byId.get(commandFamily(e.name)).entries.push(e);
+    }
+    const out = familyOrderFor(modeId).map((id) => byId.get(id)).filter((g) => g && g.entries.length);
+    for (const g of out) g.entries.sort((a, b) => a.name.localeCompare(b.name));
+    return custom && custom.entries.length ? [custom, ...out] : out;
   }
   // Full detail line for a bridge tool (description + param docs + usage note).
   function toolDetailLine(t) {
@@ -2598,7 +2705,12 @@
   // compact composers), signatures for everything else, names only when even
   // signatures do not fit. Nothing is ever listed twice.
   function buildCatalogue(o) {
-    const { toolName, requested, nativeTools, virtualLines, webLines, focusBlock, focusNames, compact, limit, lineLimit, heading } = o;
+    const { toolName, requested, nativeTools, virtualLines, focusBlock, focusNames, compact, limit, lineLimit, heading } = o;
+    // 1.38.0: helper lines are deduplicated by their label ("— Screenshot:" came
+    // from two packs and was printed twice).
+    const webLines = (() => { const seen = new Set(); return (o.webLines || []).filter((l) => { const k = String(l || "").match(/^—\s*([^:—]{2,40}):/); const key = k ? k[1].trim().toLowerCase() : String(l); if (seen.has(key)) return false; seen.add(key); return true; }); })();
+    let modeId = o.modeId || "ultimate";
+    if (!o.modeId) { const m = String(focusBlock || "").match(/━━━ (\w+) WORK MODE/); if (m) modeId = m[1].toLowerCase(); }
     const entries = []; const seen = new Set();
     for (const line of virtualLines) {
       const nm = nameFromLine(line);
@@ -2668,20 +2780,35 @@
     const rest = entries.filter((e) => !e.done);
     // Compact: signatures take ~60% of what is left so a name index of the
     // remaining commands still fits; full: signatures may use everything.
-    const sigBudget = Math.max(800, Math.floor((limit - usedChars - 600) * (compact ? 0.6 : 1)));
-    const sigLines = Math.max(6, lineLimit - usedLines - 4);
-    const packed = packSignatures(rest.map((e) => e.sig), sigBudget, sigLines);
-    const shown = rest.length - packed.omitted;
+    let sigBudget = Math.max(800, Math.floor((limit - usedChars - 600) * (compact ? 0.6 : 1)));
+    let sigLines = Math.max(6, lineLimit - usedLines - 4);
+    // 1.38.0: signatures grouped by FAMILY, this mode's families first. The
+    // budget is spent in that order, so the mode's own families always get
+    // full signatures; what does not fit is listed per family as names.
+    const groups = groupByFamily(rest, modeId, focus);
+    const sigParts = []; const nameGroups = []; let packedChars = 0;
+    for (const g of groups) {
+      const header = `── ${g.label} (${g.entries.length}) ──`;
+      if (sigBudget - header.length < 120 || sigLines < 2) { nameGroups.push(g); continue; }
+      const packed = packSignatures(g.entries.map((e) => e.sig), sigBudget - header.length - 1, sigLines - 1);
+      if (!packed.shown) { nameGroups.push(g); continue; }
+      sigParts.push(header + "\n" + packed.text);
+      sigBudget -= packed.chars + header.length + 2; sigLines -= packed.lines + 1; packedChars += packed.chars + header.length + 2;
+      if (packed.shown < g.entries.length) nameGroups.push({ id: g.id, label: g.label, entries: g.entries.slice(packed.shown) });
+    }
     let namesBlock = "", omitted = 0;
-    if (packed.omitted) {
-      const leftover = rest.slice(shown).map((e) => e.name);
-      const nameBudget = Math.max(300, limit - usedChars - packed.chars - 400);
-      let list = "";
-      for (const nm of leftover) { if (list.length + nm.length + 2 > nameBudget) { omitted++; continue; } list += (list ? ", " : "") + nm; }
-      namesBlock = list ? `\n\nMORE COMMANDS (names only - call them directly; a wrong parameter returns the exact schema, never look them up):\n${list}` : "";
+    if (nameGroups.length) {
+      let nameBudget = Math.max(300, limit - usedChars - packedChars - 400);
+      const rows = [];
+      for (const g of nameGroups) {
+        let list = "";
+        for (const e of g.entries) { if (list.length + e.name.length + 2 > nameBudget) { omitted++; continue; } list += (list ? ", " : "") + e.name; }
+        if (list) { rows.push(`${g.label}: ${list}`); nameBudget -= list.length + g.label.length + 3; }
+      }
+      namesBlock = rows.length ? `\n\nNAMES ONLY (call them directly; a wrong parameter returns the exact schema, never look them up):\n${rows.join("\n")}` : "";
     }
     const detailBlock = detail.length ? `${String((focusBlock || "").match(/━━━ (\w+) WORK MODE/) ? RegExp.$1 : "FOCUS")} FAMILY (full schemas):\n\n${detail.join("\n\n")}\n\n` : "";
-    const sigBlock = packed.text ? `SIGNATURES (callable as shown):\n${packed.text}` : "";
+    const sigBlock = sigParts.length ? `SIGNATURES BY FAMILY (callable as shown; ${(WORK_MODES[modeId] || WORK_MODES.ultimate).badge} families first):\n${sigParts.join("\n")}` : "";
     const tail = omitted ? `\n[${omitted} more specialised commands exist; do not search for them - execute_luau {code} covers anything not listed.]` : "";
     return intro + universalBlock + (focusBlock || "") + webBlock + detailBlock + sigBlock + namesBlock + tail;
   }
@@ -3705,7 +3832,7 @@
         ]);
         // Compact composers get the header only - the family is listed first
         // (as signatures) in the index anyway, so the name list would be paid twice.
-        if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily (the UNIVERSAL set above plus this mode's family; all listed with their signatures below) ━━━\n${P.compactCommandList ? "" : focusNames.join(", ") + "\n"}\n`;
+        if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily (the UNIVERSAL set above plus this mode's families, which come FIRST in SIGNATURES BY FAMILY below) ━━━\n${P.compactCommandList ? "" : focusNames.join(", ") + "\n"}\n`;
       }
       const compact = !!P.compactCommandList;
       const limit = compact
@@ -3746,7 +3873,7 @@
         nativeTools: [...allScoped, ...helperTools],
         virtualLines: [...animLines, ...skillLines, ...agentLines],
         webLines: [...headers, ...webLines],
-        focusBlock, focusNames, compact, limit, lineLimit,
+        focusBlock, focusNames, compact, limit, lineLimit, modeId: focusMode,
       });
       diag("list_commands.catalogue", { compact, limit, lineLimit, chars: out.length, lines: out.split("\n").length });
       return out;
@@ -3830,7 +3957,8 @@
       }
       const built = RobloxScriptSkills.buildLuau(name, args);
       if (built.err) return built.err;
-      let res = await runTool({ tool: "execute_luau", arguments: { code: built.code, datamodel_type: "Edit", _orInternal: true } });
+      const slowBudget = SLOW_SKILL_RE.test(name) ? 90000 : 0;
+      let res = await runTool({ tool: "execute_luau", arguments: { code: built.code, datamodel_type: "Edit", _orInternal: true, _orTimeout: slowBudget || undefined } });
       // A big place can push project_index_build past the transport budget on
       // its first pass. Retry ONCE with a smaller scan instead of surfacing a
       // timeout the model cannot act on.
@@ -3838,7 +3966,7 @@
         diag("projectIndex.retrySmall", {});
         const small = RobloxScriptSkills.buildLuau(name, Object.assign({}, args, { max_scripts: 150, max_chars: Math.min(Number(args.max_chars) || 1500, 1500) }));
         if (!small.err) {
-          const res2 = await runTool({ tool: "execute_luau", arguments: { code: small.code, datamodel_type: "Edit", _orInternal: true } });
+          const res2 = await runTool({ tool: "execute_luau", arguments: { code: small.code, datamodel_type: "Edit", _orInternal: true, _orTimeout: 90000 } });
           if (!/^ERROR/.test(String(res2 || ""))) res = String(res2).replace(/^Output of '[^']*':\n?/, "Output of 'execute_luau':\n(partial index: the full scan timed out, so only the first 150 scripts were indexed - pass scope to index one service at a time)\n");
         }
       }
@@ -3985,7 +4113,11 @@
         return `ERROR MISSING_PARAMS calling '${name}': required parameter(s) not provided: ${missing.join(", ")}.\nSchema:\n${toolDetailLine(schemaTool)}\nFix the call and retry now - no list_commands needed.`;
       }
     }
-    const timeout = name === "execute_luau" ? 20000 : bareName === "script_read" ? 30000 : 120000;
+    // 1.38.0: heavy skill programs (project index, blueprint install, place-wide
+    // analysis) pass their own budget via _orTimeout - the flat 20 s execute_luau
+    // cap was the "bridge did not respond in time" behind project_index_build
+    // errors on large places. Capped at 115 s (below the worker's 130 s).
+    const timeout = Math.min(115000, Number(args && args._orTimeout) || 0) || (name === "execute_luau" ? 20000 : bareName === "script_read" ? 30000 : 120000);
     // Hard watchdog: even if the background worker never answers, the loop
     // gets a definitive result and continues.
     const hardCap = new Promise((res) =>
@@ -4228,6 +4360,8 @@
     let deadRetries = 0;
     let refuseRetries = 0;
     let parseRetries = 0;
+    let modeGateSent = false; // 1.38.0: one evidence gate per run
+    A.runTools = new Set();
     let toolTurns = A.steeringStep || 0;
     // Re-send the command list after this many successful tool calls. Kept high
     // so the reminder does not bloat the context too often.
@@ -4443,6 +4577,21 @@
             base = await submitAndGetBase(retryFeedback);
             continue;
           }
+          // 1.38.0: MODE EVIDENCE GATE - a run that mutated (scripts / visuals /
+          // motion) but never ran the mode's proof command gets ONE verification
+          // request before its final answer is accepted.
+          if (!modeGateSent && !A.stop && toolTurns >= 2) {
+            const nudge = modeGateNudge(A.runTools);
+            if (nudge) {
+              modeGateSent = true;
+              diag("loop.modeGate", { mode: (() => { try { return normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch { return "?"; } })(), tools: [...A.runTools].slice(0, 20) });
+              try { ui.toast("Work-mode gate — asking the model to verify before it finishes"); } catch {}
+              ui.steeringProgress("correcting", "Verification required by the work mode", toolTurns);
+              const state = asStateTag();
+              base = await submitAndGetBase(nudge + (state ? "\n" + state : ""));
+              continue;
+            }
+          }
           ui.steeringProgress("complete", toolTurns ? `${toolTurns} step${toolTurns === 1 ? "" : "s"} completed` : "Reply finished", toolTurns);
           break;
         }
@@ -4537,6 +4686,7 @@
             batchStopped = true; batchParts.length = 0; break;
           }
           toolTurns++;
+          try { A.runTools.add(bareToolName(call.tool)); } catch {}
           ui.steeringProgress("running", batchN > 1 ? `${call.tool} (step ${bi + 1}/${batchN})` : call.tool, toolTurns);
           // Loading chip with the real args (loop owns this item from here).
           decorate.toolBox(res.item, call.tool, "run", (batchN > 1 ? `step ${bi + 1}/${batchN} · ` : "") + argSummary(call), true, callBody(call), category);
@@ -4927,7 +5077,7 @@
         let focusNames = [], focusBlock = "";
         if (WORK_MODES[focusMode] && WORK_MODES[focusMode].focus) {
           focusNames = workModeFocusNames(focusMode, [...allScoped.map((t) => t.name), ...[...animLines, ...skillLines, ...agentLines].map(nameFromLine)]);
-          if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily (the UNIVERSAL set above plus this mode's family; all listed with their signatures below) ━━━\n\n`;
+          if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily (the UNIVERSAL set above plus this mode's families, which come FIRST in SIGNATURES BY FAMILY below) ━━━\n\n`;
         }
         const headers = [...animLines, ...skillLines, ...agentLines].filter((l) => !nameFromLine(l));
         const text = buildCatalogue({
@@ -4936,7 +5086,7 @@
           nativeTools: [...allScoped, ...helperTools],
           virtualLines: [...animLines, ...skillLines, ...agentLines],
           webLines: headers,
-          focusBlock, focusNames, compact: true, limit: budget, lineLimit: Math.max(120, Number(P.embedCatalogueLines) || 420),
+          focusBlock, focusNames, compact: true, limit: budget, lineLimit: Math.max(120, Number(P.embedCatalogueLines) || 420), modeId: focusMode,
         });
         diag("sys.embeddedCatalogue", { chars: text.length, lines: text.split("\n").length, budget, engine: requested });
         return text;

@@ -78,7 +78,7 @@ for (const bad of [
   'more via list_commands {"query":"keyword"}',
 ]) ok(`main.js no longer says: ${bad.slice(0, 60)}`, !main.includes(bad));
 ok("catalogue intro states the list is complete and forbids lookups", main.includes("This catalogue is COMPLETE: never search, browse or look up commands"));
-ok("MORE COMMANDS block tells the model to call names directly", main.includes("MORE COMMANDS (names only - call them directly; a wrong parameter returns the exact schema, never look them up)"));
+ok("names-only block tells the model to call names directly", main.includes("NAMES ONLY (call them directly; a wrong parameter returns the exact schema, never look them up)"));
 ok("reminder footer: never call lookups", main.includes('Never call list_commands {\\"query\\"}, search_commands or get_command.'));
 ok("param error no longer points at list_commands", main.includes("Fix the call and retry now - do not look the command up."));
 for (const bad of [
@@ -131,8 +131,8 @@ ok("offline feedback for project_index_* / blueprint_* gains the no-retry / no-s
 
 // ── G. release bookkeeping ──
 const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
-ok("manifest 1.37.1", manifest.version === "1.37.1", manifest.version);
-ok("plugin + crate pinned at 1.37.1", fs.readFileSync("plugin/ORscript.lua", "utf8").includes('local VERSION = "1.37.1"') && /^version = "1\.37\.1"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "or-agent"\nversion = "1\.37\.1"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
+ok("manifest 1.38.0", manifest.version === "1.38.0", manifest.version);
+ok("plugin + crate pinned at 1.38.0", fs.readFileSync("plugin/ORscript.lua", "utf8").includes('local VERSION = "1.38.0"') && /^version = "1\.38\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "or-agent"\nversion = "1\.38\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
 ok("README changelog 1.37.1", readme.includes("**1.37.1 — no command searching; project_index_build / blueprint_list hardened.**") && readme.includes("test-v1371.js"));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall 1.37.1 checks passed");
