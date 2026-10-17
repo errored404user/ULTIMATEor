@@ -94,6 +94,9 @@ pub enum ChatEvent {
     Status(String),
     /// Streamed assistant text (append to the current bubble).
     Delta(String),
+    /// Streamed reasoning / thinking text (DeepSeek R1, o-series via some
+    /// gateways, Gemini thinking…). Shown collapsed, never sent back.
+    Thinking(String),
     /// A new assistant message starts (after tool calls, the model speaks again).
     AssistantStart,
     ToolStart { id: String, name: String, args: Value },
@@ -310,8 +313,8 @@ struct Completion {
     tool_calls: Vec<ToolCallAcc>,
     prompt_tokens: u64,
     completion_tokens: u64,
-    #[allow(dead_code)]
     finish_reason: String,
+    reasoning: String,
 }
 
 fn absorb_usage(c: &mut Completion, v: &Value) {
@@ -354,6 +357,12 @@ fn absorb_chunk(c: &mut Completion, v: &Value, events: &Sender<ChatEvent>) -> Re
                     let _ = events.send(ChatEvent::Delta(text.to_string()));
                 }
             }
+            if let Some(think) = d.get("reasoning_content").or_else(|| d.get("reasoning")).and_then(|x| x.as_str()) {
+                if !think.is_empty() {
+                    c.reasoning.push_str(think);
+                    let _ = events.send(ChatEvent::Thinking(think.to_string()));
+                }
+            }
             if let Some(calls) = d.get("tool_calls").and_then(|x| x.as_array()) {
                 absorb_tool_calls(&mut c.tool_calls, calls);
             }
@@ -386,6 +395,12 @@ fn absorb_full(c: &mut Completion, v: &Value, events: &Sender<ChatEvent>) -> Res
                 }
             }
             _ => {}
+        }
+        if let Some(think) = m.get("reasoning_content").or_else(|| m.get("reasoning")).and_then(|x| x.as_str()) {
+            if !think.is_empty() {
+                c.reasoning.push_str(think);
+                let _ = events.send(ChatEvent::Thinking(think.to_string()));
+            }
         }
         if let Some(calls) = m.get("tool_calls").and_then(|x| x.as_array()) {
             absorb_tool_calls(&mut c.tool_calls, calls);
@@ -589,6 +604,24 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
         prompt_tokens += comp.prompt_tokens;
         completion_tokens += comp.completion_tokens;
         let calls: Vec<ToolCallAcc> = comp.tool_calls.into_iter().filter(|c| !c.name.is_empty()).collect();
+
+        // An empty reply must never look like "nothing happened": say why.
+        if calls.is_empty() && comp.text.trim().is_empty() {
+            let fr = if comp.finish_reason.is_empty() { "none".to_string() } else { comp.finish_reason.clone() };
+            let why = if !comp.reasoning.trim().is_empty() {
+                " — it only produced reasoning (see the thinking block). Ask again, or pick a non-reasoning model."
+            } else if fr == "length" {
+                " — the output limit was hit before any text; raise max tokens on the provider or ask for a shorter answer."
+            } else if fr == "content_filter" {
+                " — the provider's content filter blocked it."
+            } else {
+                " — try again, or pick another model."
+            };
+            let msg = format!("The model returned an empty reply (finish_reason: {fr}){why}");
+            state.ui.track("error", format!("chat: {}", crate::gui_truncate(&msg, 160)));
+            finish(appended, prompt_tokens, completion_tokens, steps, Some(msg));
+            return;
+        }
 
         // Record the assistant message exactly as the API expects it back.
         let content = if comp.text.is_empty() { Value::Null } else { Value::String(comp.text.clone()) };

@@ -611,6 +611,8 @@ struct ChatToolCard {
 struct ChatMsg {
     role: ChatRole,
     text: String,
+    /// Reasoning / thinking stream (shown collapsed, never sent back).
+    thinking: String,
     tools: Vec<ChatToolCard>,
     at: String,
 }
@@ -2291,6 +2293,8 @@ impl eframe::App for App {
                 }
             });
 
+        self.chat_setup_window(ctx);
+
         // Toast
         if let Some((text, at, ok)) = self.toast.clone() {
             if at.elapsed() < Duration::from_secs(3) {
@@ -2362,7 +2366,7 @@ impl App {
     }
 
     fn chat_push(&mut self, role: ChatRole, text: impl Into<String>) {
-        self.chat_items.push(ChatMsg { role, text: text.into(), tools: Vec::new(), at: chrono::Local::now().format("%H:%M").to_string() });
+        self.chat_items.push(ChatMsg { role, text: text.into(), thinking: String::new(), tools: Vec::new(), at: chrono::Local::now().format("%H:%M").to_string() });
     }
 
     fn chat_send(&mut self) {
@@ -2375,6 +2379,7 @@ impl App {
             return;
         }
         self.chat_input.clear();
+        self.chat_setup_open = false;
         self.chat_push(ChatRole::User, text.clone());
         self.chat_history.push(serde_json::json!({"role": "user", "content": text}));
         let request = crate::chat::TurnRequest {
@@ -2486,10 +2491,11 @@ impl App {
             match event {
                 E::Status(s) => self.chat_status = s,
                 E::AssistantStart => {
-                    let fresh = !matches!(self.chat_items.last(), Some(m) if m.role == ChatRole::Assistant && m.text.is_empty() && m.tools.is_empty());
+                    let fresh = !matches!(self.chat_items.last(), Some(m) if m.role == ChatRole::Assistant && m.text.is_empty() && m.tools.is_empty() && m.thinking.is_empty());
                     if fresh { self.chat_push(ChatRole::Assistant, ""); }
                 }
                 E::Delta(text) => { self.chat_last_assistant().text.push_str(&text); }
+                E::Thinking(text) => { self.chat_last_assistant().thinking.push_str(&text); }
                 E::ToolStart { id, name, args } => {
                     let args = match args { serde_json::Value::String(s) => s, other => serde_json::to_string_pretty(&other).unwrap_or_default() };
                     self.chat_last_assistant().tools.push(ChatToolCard { id, name, args, result: String::new(), ok: None, elapsed_ms: 0, images: Vec::new(), open: false });
@@ -2524,7 +2530,7 @@ impl App {
                     self.chat_tokens.1 += completion_tokens;
                     if let Some(turn) = &self.chat_turn { self.chat_last_turn_ms = turn.started.elapsed().as_millis(); }
                     // Drop a trailing empty assistant bubble (e.g. error before any text).
-                    if matches!(self.chat_items.last(), Some(m) if m.role == ChatRole::Assistant && m.text.trim().is_empty() && m.tools.is_empty()) { self.chat_items.pop(); }
+                    if matches!(self.chat_items.last(), Some(m) if m.role == ChatRole::Assistant && m.text.trim().is_empty() && m.tools.is_empty() && m.thinking.trim().is_empty()) { self.chat_items.pop(); }
                     match error {
                         Some(e) if e == "stopped" => { self.chat_push(ChatRole::Note, "Stopped."); self.chat_status = "stopped".into(); }
                         Some(e) => { self.chat_push(ChatRole::Note, e.clone()); self.chat_status = format!("error · {}", truncate(&e, 80)); }
@@ -2556,10 +2562,7 @@ impl App {
                     .show_inside(ui, |ui| self.chat_composer(ui, ctx));
                 egui::CentralPanel::default()
                     .frame(egui::Frame::none().fill(t.bg).inner_margin(Margin::symmetric(12.0, 8.0)))
-                    .show_inside(ui, |ui| {
-                        if self.chat_setup_open { self.chat_setup(ui); }
-                        self.chat_transcript(ui);
-                    });
+                    .show_inside(ui, |ui| self.chat_transcript(ui));
             });
         let w = inner.response.rect.width();
         if w >= 320.0 && (w - self.settings.chat_panel_width).abs() > 1.0 {
@@ -2571,15 +2574,23 @@ impl App {
     /// Full-page chat (sidebar → AI Chat). Same widgets as the side panel,
     /// laid out in a centred column; the side panel is hidden while this
     /// page is shown so the two never draw the same widget ids at once.
+    #[allow(deprecated)] // allocate_ui_at_rect: still the plain way to place a fixed-width column in egui 0.29
     fn page_chat(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
         let ctx = ui.ctx().clone();
         let column = ui.available_width().min(1040.0);
+        // A centred column of fixed width: compute the rect by hand so the
+        // widgets inside keep a normal left-aligned, top-down layout.
+        let column_rect = |ui: &egui::Ui| {
+            let r = ui.available_rect_before_wrap();
+            let half = column / 2.0;
+            egui::Rect::from_min_max(egui::pos2(r.center().x - half, r.top()), egui::pos2(r.center().x + half, r.bottom()))
+        };
         egui::TopBottomPanel::bottom("chat-page-composer")
             .frame(egui::Frame::none().fill(t.bg).inner_margin(Margin::symmetric(0.0, 8.0)))
             .show_inside(ui, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.set_max_width(column);
+                let rect = column_rect(ui);
+                ui.allocate_ui_at_rect(rect, |ui| {
                     egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(12.0, 10.0)).show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         self.chat_composer(ui, &ctx);
@@ -2589,17 +2600,44 @@ impl App {
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(t.bg))
             .show_inside(ui, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.set_max_width(column);
+                let rect = column_rect(ui);
+                ui.allocate_ui_at_rect(rect, |ui| {
+                    ui.set_min_height(rect.height());
                     egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(12.0, 8.0)).show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         self.chat_header(ui, true);
                     });
                     ui.add_space(8.0);
-                    if self.chat_setup_open { self.chat_setup(ui); }
                     self.chat_transcript(ui);
                 });
             });
+    }
+
+    /// Provider / key / model setup as a floating window, so it never squeezes
+    /// the transcript out of view (the old inline card did exactly that).
+    fn chat_setup_window(&mut self, ctx: &egui::Context) {
+        if !self.chat_setup_open { return; }
+        if !(self.settings.chat_panel_open || self.page == Page::Chat) { return; }
+        let mut open = true;
+        let max_h = (ctx.screen_rect().height() - 120.0).max(240.0);
+        egui::Window::new("AI chat setup")
+            .id(egui::Id::new("chat-setup-window"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
+            .default_width(540.0)
+            .max_height(max_h)
+            .vscroll(true)
+            .show(ctx, |ui| {
+                ui.set_width(520.0);
+                self.chat_setup(ui);
+            });
+        if !open {
+            self.chat_setup_open = false;
+            let _ = self.settings.save();
+            self.chat_pending_focus = true;
+        }
     }
 
     fn chat_header(&mut self, ui: &mut egui::Ui, in_page: bool) {
@@ -2739,7 +2777,11 @@ impl App {
         let busy = self.chat_turn.is_some();
         if self.chat_items.is_empty() {
             ui.add_space(12.0);
-            ui.label(RichText::new("Talk to your Studio.").size(18.0).strong().color(t.text));
+            ui.label(RichText::new("Talk to your Studio.").size(20.0).strong().color(t.text));
+            if !self.chat_ready() {
+                ui.add_space(4.0);
+                if pill(ui, t, "Open setup — provider, API key, model", true).clicked() { self.chat_setup_open = true; }
+            }
             ui.label(RichText::new("The model you pick gets execute_luau, screen_capture, the plugin commands and the workspace files as tools — it builds, inspects and fixes things in Studio for you, step by step.").color(t.muted));
             ui.add_space(10.0);
             let suggestions = [
@@ -2764,25 +2806,43 @@ impl App {
             for (idx, msg) in self.chat_items.iter_mut().enumerate() {
                 match msg.role {
                     ChatRole::User => {
-                        ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
-                            egui::Frame::none().fill(t.accent.linear_multiply(0.16)).stroke(Stroke::new(1.0, t.accent.linear_multiply(0.45))).rounding(Rounding::same(12.0)).inner_margin(Margin::symmetric(12.0, 8.0)).show(ui, |ui| {
-                                ui.set_max_width(avail * 0.86);
-                                ui.add(egui::Label::new(RichText::new(&msg.text).color(t.text)).wrap());
+                        // Right-aligned bubble; text inside stays left-aligned.
+                        ui.with_layout(Layout::top_down(Align::Max), |ui| {
+                            egui::Frame::none().fill(t.accent.linear_multiply(0.16)).stroke(Stroke::new(1.0, t.accent.linear_multiply(0.45))).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(14.0, 10.0)).show(ui, |ui| {
+                                ui.set_max_width(avail * 0.8);
+                                ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                                    ui.add(egui::Label::new(RichText::new(&msg.text).size(15.0).color(t.text)).wrap());
+                                });
                             });
-                        });
-                        ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
-                            ui.label(RichText::new(&msg.at).small().color(t.muted));
-                            if ui.add(egui::Button::new(RichText::new("edit").small()).frame(false)).on_hover_text("Copy this message back into the composer").clicked() { fill_input = Some(msg.text.clone()); }
+                            ui.horizontal(|ui| {
+                                if ui.add(egui::Button::new(RichText::new("edit").small()).frame(false)).on_hover_text("Copy this message back into the composer").clicked() { fill_input = Some(msg.text.clone()); }
+                                ui.label(RichText::new(&msg.at).small().color(t.muted));
+                            });
                         });
                     }
                     ChatRole::Assistant => {
-                        egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::symmetric(12.0, 10.0)).show(ui, |ui| {
+                        egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(14.0, 12.0)).show(ui, |ui| {
                             ui.set_width(avail - 4.0);
+                            ui.spacing_mut().item_spacing.y = 6.0;
+                            ui.horizontal(|ui| {
+                                status_dot(ui, if idx == last && busy { t.warn } else { t.accent });
+                                ui.label(RichText::new("ORSCRIPT").small().strong().color(t.accent));
+                                if !msg.tools.is_empty() { ui.label(RichText::new(format!("{} tool call(s)", msg.tools.len())).small().color(t.muted)); }
+                            });
+                            if !msg.thinking.trim().is_empty() {
+                                let n = msg.thinking.chars().count();
+                                egui::CollapsingHeader::new(RichText::new(format!("thinking · {n} chars")).small().color(t.muted))
+                                    .id_salt(("chat-thinking", idx))
+                                    .default_open(false)
+                                    .show(ui, |ui| {
+                                        ui.add(egui::Label::new(RichText::new(truncate(&msg.thinking, 12_000)).small().italics().color(t.muted)).wrap());
+                                    });
+                            }
                             for card in msg.tools.iter_mut() { chat_tool_card(ui, t, card); }
                             if !msg.text.is_empty() {
                                 chat_rich_text(ui, t, &msg.text);
                             } else if idx == last && busy {
-                                ui.label(RichText::new(if msg.tools.is_empty() { "thinking…" } else { "working…" }).italics().color(t.muted));
+                                ui.label(RichText::new(if msg.tools.is_empty() && msg.thinking.is_empty() { "waiting for the model…" } else if msg.tools.is_empty() { "thinking…" } else { "working…" }).italics().color(t.muted));
                             }
                             if idx == last && busy && !msg.text.is_empty() {
                                 ui.label(RichText::new("…").color(t.accent));
@@ -2920,7 +2980,7 @@ fn chat_rich_text(ui: &mut egui::Ui, t: Theme, text: &str) {
         } else {
             let plain = seg.trim_matches('\n');
             if plain.is_empty() { continue; }
-            ui.add(egui::Label::new(RichText::new(plain).color(t.text)).wrap());
+            ui.add(egui::Label::new(RichText::new(plain).size(15.0).color(t.text)).wrap());
         }
     }
 }

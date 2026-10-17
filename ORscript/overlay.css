@@ -8006,3 +8006,87 @@ html.rs-light #rs-cards-panel .rs-tag { background: rgba(15,23,42,.05); }
   #rs-cards-panel .rs-template-card .rs-template-actions { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { #rs-cards-panel .rs-template-card, #rs-cards-panel .rs-template-card:hover { transition: none; transform: none; } }
+
+/* ── 12. 1.37.0 — Templates tray XL ──────────────────────────────────────────
+   The 1.33 tray (860px × ~480px) still read as a strip on a 1080p+ screen:
+   users could not see what was in the library without scrolling. The cards
+   panel now opens as a proper workspace — up to 1180px wide and almost the
+   whole height above the bar (still clamped to --rs-room-above so it never
+   leaves the viewport), with the header / tabs pinned and only the body
+   scrolling, larger type on the rows, headings and controls, and a soft
+   backdrop glow so it clearly sits above the host transcript.
+   ─────────────────────────────────────────────────────────────────────────── */
+#rs-bar.rs-cards-open #rs-cards-panel,
+#rs-bar.rs-bar-inline.rs-cards-open #rs-cards-panel {
+  width: min(max(100%, 1180px), calc(100vw - 32px)) !important;
+  max-height: min(92vh, 980px, var(--rs-room-above, 980px)) !important;
+  min-height: min(680px, 86vh, var(--rs-room-above, 680px)) !important;
+  border-radius: 24px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  box-shadow:
+    0 40px 90px -24px rgba(0, 0, 0, 0.75),
+    0 0 0 1px color-mix(in srgb, var(--orx-a, #59b8dd) 28%, transparent),
+    0 0 120px -30px color-mix(in srgb, var(--orx-a, #59b8dd) 55%, transparent) !important;
+}
+#rs-bar.rs-cards-open #rs-cards-panel > .rs-cards-top { flex: 0 0 auto !important; }
+#rs-bar.rs-cards-open #rs-cards-panel > .rs-cards-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: stable !important;
+}
+#rs-bar.rs-tray-below.rs-cards-open #rs-cards-panel,
+#rs-bar.rs-tray-below.rs-bar-inline.rs-cards-open #rs-cards-panel {
+  min-height: 0 !important;
+  max-height: min(70vh, 720px) !important;
+}
+@media (max-width: 1260px) {
+  #rs-bar.rs-cards-open #rs-cards-panel,
+  #rs-bar.rs-bar-inline.rs-cards-open #rs-cards-panel { width: calc(100vw - 24px) !important; }
+}
+@media (max-width: 900px) {
+  #rs-bar.rs-cards-open #rs-cards-panel,
+  #rs-bar.rs-bar-inline.rs-cards-open #rs-cards-panel { width: 100% !important; left: 0 !important; translate: none; }
+}
+/* header + tabs: readable at arm's length */
+#rs-cards-panel { --cp-x: 24px; }
+#rs-cards-panel .rs-cards-top { padding: 18px var(--cp-x) 12px !important; }
+#rs-cards-panel .rs-cards-heading { font-size: 22px !important; }
+#rs-cards-panel .rs-cards-subheading { font-size: 13px !important; }
+#rs-cards-panel .rs-cards-tabs { height: 46px !important; margin-top: 14px !important; padding: 5px !important; gap: 5px !important; }
+#rs-cards-panel .rs-cards-tab { min-height: 36px !important; font-size: 13.5px !important; padding: 0 20px !important; letter-spacing: .04em; }
+/* library header / controls */
+#rs-cards-panel .rs-template-head { padding: 18px var(--cp-x) 14px !important; }
+#rs-cards-panel .rs-template-head-copy b { font-size: 18px !important; }
+#rs-cards-panel .rs-template-head-copy p { font-size: 13px !important; }
+#rs-cards-panel .rs-template-library .rs-template-head-actions button { min-height: 42px !important; min-width: 140px !important; font-size: 13.5px !important; padding: 0 20px !important; }
+#rs-cards-panel .rs-template-library input[type="text"], #rs-cards-panel .rs-template-library input:not([type]), #rs-cards-panel .rs-template-library select { height: 44px !important; min-height: 44px !important; font-size: 13.5px !important; }
+#rs-cards-panel .rs-template-library textarea { font-size: 13.5px !important; min-height: 110px !important; }
+#rs-cards-panel .rs-template-chips button { min-height: 34px !important; font-size: 12.5px !important; padding: 0 14px !important; }
+/* rows / cards */
+#rs-cards-panel .rs-template-row { min-height: 96px !important; padding: 18px 22px 18px 24px !important; gap: 20px !important; }
+#rs-cards-panel .rs-template-copy > b, #rs-cards-panel .rs-template-card .rs-template-copy > b { font-size: 16.5px !important; }
+#rs-cards-panel .rs-template-copy > p { font-size: 13.5px !important; line-height: 1.5 !important; }
+#rs-cards-panel .rs-template-card .rs-template-run { min-height: 42px !important; font-size: 13.5px !important; }
+#rs-cards-panel .rs-template-empty { min-height: 360px !important; }
+#rs-cards-panel .rs-template-empty b { font-size: 17px !important; }
+#rs-cards-panel .rs-template-empty span { font-size: 13.5px !important; max-width: 520px !important; }
+/* idea generator */
+#rs-cards-panel .rs-idea-generator { padding: 18px 20px !important; }
+#rs-cards-panel .rs-idea-generator label, #rs-cards-panel .rs-idea-generator .rs-idea-label { font-size: 12px !important; letter-spacing: .06em; }
+#rs-cards-panel .rs-idea-generator select { height: 46px !important; font-size: 14px !important; }
+#rs-cards-panel .rs-idea-generator button { min-height: 46px !important; font-size: 14px !important; padding: 0 22px !important; }
+#rs-cards-panel .rs-idea-head span { font-size: 13px !important; }
+#rs-cards-panel .rs-idea-result pre { font-size: 13px !important; max-height: 320px !important; }
+/* activity / public / tasks share the bump */
+#rs-cards-panel .rs-activity-row { min-height: 72px !important; }
+#rs-cards-panel .rs-task-text { font-size: 15px !important; }
+#rs-cards-panel .rs-task-row { min-height: 72px !important; }
+#rs-cards-panel .rs-public-ways span, #rs-cards-panel .rs-public-sharebox > span, #rs-cards-panel .rs-public-compose small { font-size: 12.5px !important; }
+@media (max-height: 760px) {
+  #rs-cards-panel .rs-cards-heading { font-size: 19px !important; }
+  #rs-cards-panel .rs-template-row { min-height: 84px !important; padding: 14px 20px !important; }
+}

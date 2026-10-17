@@ -100,6 +100,12 @@ ok("AI Chat is a sidebar page (second entry, Ctrl+2)", gui.includes("enum Page {
 ok("sidebar page has its own icon + busy dot", gui.includes("Page::Chat => {\n            // speech bubble") && gui.includes("if page == Page::Chat && self.chat_turn.is_some()"));
 ok("side panel hidden while the Chat page is shown", gui.includes("if self.page != Page::Chat { self.chat_panel(ctx); }"));
 ok("page offers Side panel hand-off", gui.includes('pill(ui, t, "Side panel", false)') && gui.includes("fn page_chat"));
+ok("setup is a floating window, never squeezing the transcript", gui.includes("fn chat_setup_window") && gui.includes('egui::Window::new("AI chat setup")') && gui.includes(".vscroll(true)") && !gui.includes("if self.chat_setup_open { self.chat_setup(ui); }"));
+ok("sending closes setup; empty transcript offers setup", gui.includes("self.chat_setup_open = false;\n        self.chat_push(ChatRole::User") && gui.includes('"Open setup — provider, API key, model"'));
+ok("reasoning streams land in a collapsed thinking block", chat.includes("ChatEvent::Thinking(") && chat.includes('"reasoning_content"') && gui.includes("E::Thinking(text)") && gui.includes('"chat-thinking"'));
+ok("empty replies are explained, not swallowed", chat.includes("The model returned an empty reply (finish_reason: {fr}){why}"));
+ok("assistant bubble has a header, 15px body text, left-aligned user bubble", gui.includes('RichText::new("ORSCRIPT").small().strong().color(t.accent)') && gui.includes("RichText::new(plain).size(15.0)") && gui.includes("Layout::top_down(Align::Max)"));
+ok("chat page uses a fixed-width centred column (no centred labels)", gui.includes("fn page_chat") && gui.includes("allocate_ui_at_rect(rect") && !gui.slice(gui.indexOf("fn page_chat")).slice(0, 2500).includes("vertical_centered"));
 ok("title-bar AI Chat pill", gui.includes('pill(ui, t, "AI Chat", chat_open)'));
 ok("Ctrl+J toggles", gui.includes("if i.key_pressed(egui::Key::J) { chat = true; }") && gui.includes("if chat { self.toggle_chat(); }"));
 ok("provider / model combos + Refresh", gui.includes('from_id_salt("chat-provider")') && gui.includes('from_id_salt("chat-model")') && gui.includes("fn chat_refresh_models"));
