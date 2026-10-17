@@ -871,11 +871,17 @@
     "agent.thinking","agent.activity","agent.tool_started","agent.tool_completed","agent.error","agent.warning",
     "validation.started","validation.completed","validation.failed",
   ]);
-  const COMMAND_DISCOVERY_TOOLS = [
+  // 1.37.1 — search_commands / get_command / command_registry_stats /
+  // generate_command_docs are NOT advertised any more: the model kept using
+  // them to browse the registry instead of acting. They stay callable (see
+  // noSearchReply) so a stray call gets a firm redirect, not COMMAND_NOT_FOUND.
+  const COMMAND_LOOKUP_TOOLS = [
     {name:"search_commands",description:"Search every registered Studio, Blender, Web and General command by aliases and natural-language terms.",inputSchema:{type:"object",required:["query"],properties:{query:{type:"string"},environment:{type:"string",enum:["ROBLOX_STUDIO","BLENDER","WEB","GENERAL"]},limit:{type:"integer"}}},server:"orscript"},
     {name:"get_command",description:"Get structured metadata and parameter schema for one command id or alias.",inputSchema:{type:"object",required:["command_id"],properties:{command_id:{type:"string"}}},server:"orscript"},
     {name:"command_registry_stats",description:"Return command totals grouped by environment and category.",inputSchema:{type:"object",properties:{}},server:"orscript"},
     {name:"generate_command_docs",description:"Generate command documentation from the live registry.",inputSchema:{type:"object",properties:{category:{type:"string"}}},server:"orscript"},
+  ];
+  const COMMAND_DISCOVERY_TOOLS = [
     {name:"orscript_help",description:"Explain OrScript features without starting work or executing commands.",inputSchema:{type:"object",required:["question"],properties:{question:{type:"string"},topic:{type:"string"}}},server:"orscript",executionMode:"READ"},
   ];
   const STUDIO_ALIAS_TOOLS=Object.entries(TOOL_ALIASES).filter(([id])=>id.startsWith("studio.")).map(([id,target])=>({name:id,description:`Namespaced Studio command routed to ${target}.`,inputSchema:{type:"object",properties:{}},server:"roblox",aliasTarget:target}));
@@ -905,7 +911,7 @@
     projectindex:{title:"Project Index (codebase awareness)",summary:"ORscript keeps a map of the whole place inside the place (ServerStorage.OR_ProjectIndex): every script hashed and outlined (functions + lines, requires resolved to modules, remotes fired / handled, services, DataStores, tags, TODOs, --!strict), the require graph with hubs / orphans / cycles, remote producers vs consumers with mismatch detection, the folder layout, the coding conventions in use and the installed blueprints. The compact PROJECT MAP is re-injected into the chat so the model works from a map instead of re-reading every script - Lemonade-style codebase awareness without a hosted account.",details:["project_index_build scans the place (or a scope), writes the index and returns added / modified / removed vs the previous index plus the PROJECT MAP text. Run it first on an unknown place and again after big changes; dry_run:true only computes.","project_index_summary is the cheap read: counts, layout per service, the style guide to match (indent, PascalCase / camelCase, strict ratio, task.wait vs wait, game:GetService), hubs, orphans, cycles, remotes with producer -> consumer, mismatches, DataStores, tags, TODO files, largest scripts, installed blueprints, and whether the index is stale.","project_index_search {query, kind} finds functions / exports / require targets / remote names / services / DataStore names / tags / paths / TODOs with script path + line, so you script_read a range instead of a whole file. project_index_script {path} gives one script's outline, requires + required_by, remote partners (who handles what it fires) and stale:true when the source changed since the index.","project_index_graph {kind:\"requires\"} returns the dependency graph (edges, hubs, orphans, cycles, unresolved requires; root + depth for a neighbourhood); {kind:\"remotes\"} the remote matrix with mismatches (fired but never handled, handled but never fired, referenced without an instance, unused instance) and handlers on the wrong side.","project_index_changes rehashes without writing: added / modified / removed scripts, and per modified script the line delta, new / removed functions and whether requires or remotes changed - use it to summarise your own edits or before trusting an old map.","Read before you write: on an existing place start with project_index_build (or project_index_summary when an index exists and is current), match the conventions it reports, wire new scripts into existing hubs and remotes instead of duplicating them, then rebuild the index at the end so the next session starts from an accurate map."]},
     templates:{title:"Templates",summary:"Reusable task recipes (name, instructions, steps, commands, variables) saved locally and run from the Templates library in the OR menu.",details:["Open the OR menu → Templates. New template opens the editor with Basics, Instructions, Steps, Project, Commands, Variables, Validation, AI Improvement and Versions tabs.","Templates can be imported/exported as JSON and versioned; AI Improvement asks the current provider for a structurally better draft that you approve before it is saved.","The agent can list and run them with the template_* commands (get_template, template_list, template_run_…) - nothing is mutated without your save."],howTo:["OR menu → Templates → New template","Fill Basics + Instructions, optionally attach a Roblox project in the Project tab","Save, then type the template name or pick it from the library"]},
     roadmap:{title:"Roadmap / plan",summary:"Optional multi-phase planning: the agent writes phases and tasks, tracks progress, and reports a checklist as work completes.",details:["Toggle Plan in the OR menu. With Plan ON the agent creates a roadmap first (roadmap_create / roadmap_update), then executes phase by phase.","Progress is shown in the chat as the agent ticks tasks; you can ask for the current roadmap or tell it to re-plan.","Plan OFF = direct execution with no roadmap overhead (better for small edits)."],howTo:["OR menu → Plan ON","Describe the whole feature; the agent proposes phases","Approve or edit the plan, then let it run"]},
-    commands:{title:"Commands / tool registry",summary:"ORscript exposes 630+ advertised Studio commands (plus hidden legacy aliases, workspace, template, roadmap and help tools) through an embedded catalogue in the system prompt, list_commands, search_commands and get_command.",details:["Since 1.33 roomy providers receive a compact command catalogue inside the system prompt (universal block + the active work mode's family as signatures, the rest as names), so the agent no longer starts every session with list_commands; tight-composer providers (Notion, ClickUp, Vani, CodeCraft, NVIDIA) still get the catalogue as the first tool result.","list_commands returns the catalogue for the active work mode: a UNIVERSAL block (42 inspection/scripting/verification commands present in every mode, including inspect_service and query_instances) followed by the mode family.","search_commands {query} finds commands by name/description; get_command {name} returns the full schema; command_registry_stats summarises the registry.","Commands are executed through or-core (127.0.0.1:3000) - either the Studio MCP helper or the ORscript Studio plugin when it is connected."],howTo:["Ask: 'list commands' or 'what can you do with lights'","The agent calls list_commands / search_commands and picks the right command"]},
+    commands:{title:"Commands / tool registry",summary:"ORscript exposes 630+ advertised Studio commands (plus hidden legacy aliases, workspace, template, roadmap and help tools) through an embedded catalogue in the system prompt (and a broad list_commands on tight providers). Since 1.37.1 the agent never searches commands: the catalogue is final and lookups are answered with the closest signatures plus an instruction to act.",details:["Since 1.33 roomy providers receive a compact command catalogue inside the system prompt (universal block + the active work mode's family as signatures, the rest as names), so the agent no longer starts every session with list_commands; tight-composer providers (Notion, ClickUp, Vani, CodeCraft, NVIDIA) still get the catalogue as the first tool result.","list_commands returns the catalogue for the active work mode: a UNIVERSAL block (42 inspection/scripting/verification commands present in every mode, including inspect_service and query_instances) followed by the mode family.","No command searching (1.37.1): search_commands / get_command / command_registry_stats / generate_command_docs are no longer advertised and list_commands {query} no longer opens a search - the agent gets at most five closest signatures and must act (or use execute_luau). A wrong parameter returns the exact schema in the error, so no lookup is ever needed.","Commands are executed through or-core (127.0.0.1:3000) - either the Studio MCP helper or the ORscript Studio plugin when it is connected."],howTo:["Ask: 'what can you do with lights'","The agent answers from the catalogue in its instructions and runs the command directly - it does not search"]},
     studio:{title:"Roblox Studio connection",summary:"The browser extension talks to the or-core desktop agent on 127.0.0.1:3000, which bridges to Studio through the Studio MCP helper and the optional ORscript Studio plugin.",details:["Run or-core (agent/ crate, cargo build) once; it stays in the background and auto-installs plugin/ORscript.lua into the Studio Plugins folder.","In Studio: Plugins → ORscript panel → enable; click Allow on the HTTP prompt. The plugin runs execute_luau with plugin-level APIs and adds csg_*, open_script, script_live_update, studio_undo/redo, screenshot_frame, gamepass_handler_create…","or_status / studio_plugin_status report the connection; or_screenshot captures the Studio window through the MCP screen_capture tool."],howTo:["Start or-core","Open the place in Studio and enable the ORscript plugin","Check the status pill in the OR bar is green, then chat"]},
     workmode:{title:"Work modes",summary:"Ultimate (default: Luau engineering + modeling), Visualizer (VFX/UI/lighting) and Animator (rigs, keyframes, animation suite) change the catalogue order, mandates and skills the agent leans on.",details:["Switch in the OR menu → Work mode. Every mode keeps the same UNIVERSAL command block, then prioritises its own family.","Since 1.34 each mode is a distinct profile on a shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence): Ultimate = Luau engineering + modeling mandates, blueprints, project index; Visualizer = read the scene → mood → layered VFX → UI as a system → prove it with pixels; Animator = read the rig → block keys → polish curves → runtime motion → camera beats → preview.","Switching mid-session sends the AI a short MODE SWITCH note (the new profile + that mode's focus commands) instead of the whole system prompt; the periodic reminder carries a one-line mode checklist.","Each mode card has Quick starts: one-click prompts (index this place, shop + currency, cinematic mood, hero spell VFX, sword swing, cutscene camera …) pasted into the composer for you to edit and send."],howTo:["OR menu → Work mode → pick Ultimate / Visualizer / Animator","Click a Quick start pill under the mode cards, adjust the text, press Enter"]},
     projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .orscript-project-reference.json you can re-import."],howTo:["OR menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
@@ -1993,6 +1999,43 @@
     if (ALWAYS_BLOCKED_TOOLS.has(bare)) return true;
     return false;
   };
+  // 1.37.1 — NO COMMAND SEARCHING. The catalogue in the system prompt is the
+  // complete command list; every "find me a command" call (search_commands,
+  // get_command, list_commands {query}) used to open a browsing loop that
+  // burned turns and never shipped anything. Such calls now get the closest
+  // names WITH signatures (so a typo is still fixed in one step) plus a firm
+  // "act now" — never a search surface to keep exploring.
+  const LOOKUP_TOOL_RE = /^(search_commands|get_command|command_registry_stats|generate_command_docs)$/;
+  function closestCommands(query, limit) {
+    const q = String(query || "").trim().toLowerCase();
+    const names = [...A.toolNames].filter((n) => !LOOKUP_TOOL_RE.test(bareToolName(n)) && !/^(list_tools|list_mcp_servers)$/.test(bareToolName(n)));
+    if (!q) return [];
+    const terms = q.split(/[^a-z0-9]+/).filter((t) => t.length > 1);
+    const scored = [];
+    for (const n of names) {
+      const bare = bareToolName(n).toLowerCase();
+      let score = 0;
+      if (bare === q) score = 1000;
+      else {
+        for (const t of terms) { if (bare === t) score += 40; else if (bare.startsWith(t)) score += 20; else if (bare.includes(t)) score += 10; }
+        if (!score) { const t = A.toolList.find((x) => x && x.name === n); const d = String((t && t.description) || "").toLowerCase(); for (const w of terms) if (d.includes(w)) score += 3; }
+      }
+      if (score) scored.push([score, bare]);
+    }
+    scored.sort((a, b) => b[0] - a[0] || a[1].localeCompare(b[1]));
+    const out = []; const seen = new Set();
+    for (const [, nm] of scored) { if (seen.has(nm)) continue; seen.add(nm); out.push(nm); if (out.length >= (limit || 5)) break; }
+    if (!out.length) { try { for (const nm of RS.suggestToolNames(q, names)) { const b = bareToolName(nm); if (!seen.has(b)) { seen.add(b); out.push(b); } } } catch {} }
+    return out.slice(0, limit || 5);
+  }
+  function noSearchReply(name, query) {
+    const q = String(query || "").trim();
+    const total = [...A.toolNames].filter((n) => !LOOKUP_TOOL_RE.test(bareToolName(n))).length;
+    const sigs = closestCommands(q, 5).map((nm) => { const t = A.toolList.find((x) => x && bareToolName(x.name) === nm); return t ? toolSignature(t) : nm; });
+    return `Output of '${name}':\nCOMMAND SEARCH IS DISABLED. The COMMAND CATALOGUE in your instructions is complete and final (${total} commands) - never search, browse, list or look up commands again.` +
+      (sigs.length ? `\nClosest to "${q}" (? = optional; call directly): ${sigs.join("  ·  ")}` : "") +
+      "\nIf no command fits, write the Luau yourself: execute_luau {code} can do anything in Studio. A wrong parameter is not a reason to search - the error returns the exact schema. Act now: your next reply must be a real command or the final answer.";
+  }
 
   // ── Learned image tools (reload-proof "screen" chip) ──────────────────────
   // The known Roblox vision tool (screen_capture) is themed "screen" by name via
@@ -2572,8 +2615,8 @@
     const intro = `${heading || `Output of '${toolName}':`}\n${requested} commands - ${entries.length} total${compact ? " (compact index for this chat)" : ""}.\n`
       + `HOW TO READ: "name {a, b?, c?:x|y}" = call name with a (required), b (optional), c (one of x|y). `
       + `Every command shown with {…} can be called DIRECTLY - do not fetch its schema first. `
-      + `list_commands {"query":"exact_name"} returns one command's full description and usage notes: use it only when a parameter is unclear or a call errored. `
-      + `list_commands {"query":"keyword"} finds commands that are not shown here.\n\n`;
+      + `This catalogue is COMPLETE: never search, browse or look up commands (no list_commands {"query"}, search_commands or get_command). `
+      + `A name shown without a signature is still callable - call it with sensible parameters; if one is wrong the error returns the exact schema. Anything not covered: execute_luau {code}.\n\n`;
     const webBlock = webLines && webLines.length ? `HELPERS:\n${webLines.join("\n")}\n\n` : "";
     const countLines = (x) => (x ? x.split("\n").length : 0);
     let usedChars = intro.length + (focusBlock || "").length + webBlock.length;
@@ -2635,11 +2678,11 @@
       const nameBudget = Math.max(300, limit - usedChars - packed.chars - 400);
       let list = "";
       for (const nm of leftover) { if (list.length + nm.length + 2 > nameBudget) { omitted++; continue; } list += (list ? ", " : "") + nm; }
-      namesBlock = list ? `\n\nMORE COMMANDS (names only - fetch one with list_commands {"query":"name"} before use):\n${list}` : "";
+      namesBlock = list ? `\n\nMORE COMMANDS (names only - call them directly; a wrong parameter returns the exact schema, never look them up):\n${list}` : "";
     }
     const detailBlock = detail.length ? `${String((focusBlock || "").match(/━━━ (\w+) WORK MODE/) ? RegExp.$1 : "FOCUS")} FAMILY (full schemas):\n\n${detail.join("\n\n")}\n\n` : "";
     const sigBlock = packed.text ? `SIGNATURES (callable as shown):\n${packed.text}` : "";
-    const tail = omitted ? `\n[${omitted} more commands omitted - list_commands {"query":"keyword"} finds them.]` : "";
+    const tail = omitted ? `\n[${omitted} more specialised commands exist; do not search for them - execute_luau {code} covers anything not listed.]` : "";
     return intro + universalBlock + (focusBlock || "") + webBlock + detailBlock + sigBlock + namesBlock + tail;
   }
   // ── Project Index map cache (1.32) ──
@@ -2689,8 +2732,8 @@
       "(System note from OR - this is an automatic REMINDER, not a request and not a new result. " +
       "Do NOT reply to it or run any command because of it; just keep it in mind for your next command.)\n" +
       (packed.text ? "Signatures (? = optional; call directly):\n" + packed.text + "\n" : "") +
-      "Other exact command names: " + list + (omitted ? `\n[${omitted} more names omitted - search by keyword with list_commands.]` : "") +
-      "\nFor a name without a signature, fetch its parameters with {\"command\":\"list_commands\",\"params\":{\"query\":\"exact_command_name\"}} before first use; never guess parameters.";
+      "Other exact command names: " + list + (omitted ? `\n[${omitted} more names omitted - do not search for them; execute_luau {code} covers anything not listed.]` : "") +
+      "\nA name without a signature is still callable: call it directly with sensible parameters - a wrong one returns the exact schema. Never call list_commands {\"query\"}, search_commands or get_command.";
   }
   function compressToolFeedback(text, name) {
     const s = String(text || "");
@@ -3193,7 +3236,7 @@
     if (!name) return RS.FEEDBACK.parseError("malformed");
     try { name = remapToolName(name); } catch {}
     const roadmapName = bareToolName(name);
-    if (roadmapName.startsWith("public_item")) return typeof dispatchPublicItemTool === "function" ? dispatchPublicItemTool(roadmapName, args) : `ERROR: '${roadmapName}' is not available in this build. Use list_commands and continue with the listed commands.`;
+    if (roadmapName.startsWith("public_item")) return typeof dispatchPublicItemTool === "function" ? dispatchPublicItemTool(roadmapName, args) : `ERROR: '${roadmapName}' is not available in this build. Do not search for a replacement - continue with the catalogue commands.`;
     if (roadmapName.startsWith("public_skill_")) return await runPublicSkillTool(roadmapName, args);
     if (/^task_(list|next|add|update)$/.test(roadmapName) && typeof ORTaskList !== "undefined") {
       const r = ORTaskList.run(roadmapName, args);
@@ -3204,7 +3247,14 @@
     if(roadmapName==="orscript_help"){
       const question=String(args.question||"").toLowerCase(),aliases={tasklist:/task list|tasklist|checklist|to-do|todo list|my tasks|next task/,templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|ultimate mode|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projectindex:/project index|project map|codebase|architecture|index the (place|project|game)|require graph|dependency graph|who requires|what requires|which script (fires|handles)|stale index|project_index|code map|conventions/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/,plugins:/other plugin|plugins|eclipse|moon animator|interop|full control|macro|settings\(\)/,publicskills:/public skill|own skill|own command|custom command|custom mode|own mode|make a skill|create a skill|new skill|ability|share code|orskill/,design:/design token|design pack|ui kit|uikit|screengui|gui gen|generate (a |the )?(gui|ui|menu|hud|shop|inventory)|main menu|hud|shop ui|inventory ui|settings screen|leaderboard ui|daily reward|quest log|loading screen|dialog box|responsive|ui audit|ui_from_spec|ui_screen_generate/,gfx:/thumbnail|game icon|gfx|render (a |the )?(thumbnail|icon)|cover art|key art|promo (image|art)|gfx_/,blueprints:/blueprint|complete system|game system|starter system|pet system|shop system|currency system|tycoon|anticheat|anti-cheat|admin command|round system|checkpoint system|quest system|leaderboard system|sprint system|data ?store profile/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
     }
-    if (["search_commands","get_command","command_registry_stats","generate_command_docs","orscript_help"].includes(roadmapName)) {
+    if (LOOKUP_TOOL_RE.test(roadmapName)) {
+      // 1.37.1: no command searching (see noSearchReply). The registry paths
+      // below are kept only for the Settings "Command registry" panel tooling.
+      await ensureTools();
+      diag("lookup.blocked", { tool: roadmapName, query: String(args.query || args.command_id || args.id || args.name || args.category || "").slice(0, 80) });
+      return noSearchReply(roadmapName, args.query || args.command_id || args.id || args.name || args.category || "");
+    }
+    if (["search_commands","get_command","command_registry_stats","generate_command_docs","orscript_help"].includes(roadmapName) && args && args._orRegistry === true) {
       const reg=typeof ORCommandRegistry!=="undefined"?ORCommandRegistry:null;if(!reg)return `ERROR in ${roadmapName}: command registry unavailable; reload this page.`;await hydrateCommandRegistry();
       if(roadmapName==="search_commands"){const found=reg.search(args.query||"",{environment:args.environment,limit:args.limit||25});return `Output of 'search_commands':\n`+JSON.stringify({ok:true,count:found.length,commands:found.map((c)=>({id:c.id,name:c.name,description:c.description,category:c.category,environment:c.environment,aliases:c.aliases}))},null,2);}
       if(roadmapName==="get_command"){const c=reg.get(args.command_id||args.id||args.name);return c?`Output of 'get_command':\n`+JSON.stringify({ok:true,command:c},(k,v)=>typeof v==="function"?undefined:v,2):`ERROR in get_command: unknown command '${args.command_id||args.id||args.name||""}'.`;}
@@ -3524,6 +3574,13 @@
     }
     if (name === "list_commands" || name === "list_tools") {
       await ensureTools();
+      // 1.37.1: a keyword / name lookup is a search - answer with the closest
+      // signatures and "act now" (noSearchReply). The broad bootstrap call
+      // (no query) still returns the catalogue below.
+      if (String(args.query || args.search || "").trim() && !args._orInternal) {
+        diag("lookup.blocked", { tool: name, query: String(args.query || args.search).slice(0, 80) });
+        return noSearchReply(name, args.query || args.search);
+      }
       if(args.category&&typeof ORCommandRegistry!=="undefined"){const rows=ORCommandRegistry.list(String(args.category),args.environment);return `Output of '${name}':\n`+JSON.stringify({ok:true,category:args.category,count:rows.length,commands:rows.map((c)=>({id:c.id,description:c.description,environment:c.environment,parameters:c.parameters}))},null,2);}
       const curEng = activeEngine();
       const requested = (args.server || curEng).trim().toLowerCase();
@@ -3627,7 +3684,7 @@
       }
       const virtualCount = animLines.length + skillLines.length + agentLines.length + webLines.length;
       if (commandQuery && !scoped.length && !virtualCount) {
-        return `Output of '${name}':\nNo ${requested} commands matched query "${commandQuery}". Call list_commands with another exact command name or keyword.`;
+        return `Output of '${name}':\nNo ${requested} commands matched query "${commandQuery}". Do not search again - use the closest catalogue command or execute_luau {code}.`;
       }
 
       // Browser playground composers can wedge
@@ -3665,7 +3722,7 @@
             ...[...animLines, ...skillLines, ...agentLines].map(sigFromLine).filter(Boolean),
           ])].sort();
           const intro = `Output of '${name}':\nQuery "${commandQuery}" matched ${matched} commands (signatures; ? = optional):\n`;
-          const guide = `\n\nCall one directly with the params shown, or list_commands {"query":"exact_name"} for its full description.`;
+          const guide = `\n\nCall one directly with the params shown - do not look commands up.`;
           const packed = packSignatures(sigs, Math.max(1800, limit - intro.length - guide.length - 200), lineLimit);
           const marker = packed.omitted > 0 ? `\n[${packed.omitted} additional matches omitted; narrow the keyword.]` : "";
           return intro + packed.text + marker + guide + (webLines.length ? "\n\n" + webLines.join("\n") : "");
@@ -3703,7 +3760,7 @@
     if (name.startsWith("animation_")) {
       const op = name.slice("animation_".length);
       if (!RSAnim.ANIM_OPS.includes(op)) {
-        return `ERROR: unknown OR animation command '${name}'. Use list_commands to see the animation_* tools.`;
+        return `ERROR: unknown OR animation command '${name}'. Do not search: the animation_* commands in your catalogue are ${RSAnim.ANIM_OPS.slice(0, 12).map((o) => "animation_" + o).join(", ")}${RSAnim.ANIM_OPS.length > 12 ? ", …" : ""}. Pick one or use execute_luau {code}.`;
       }
       const built = RSAnim.buildLuau(op, args);
       if (built.err) return built.err;
@@ -3735,9 +3792,61 @@
       if (name === "ui_create_component") {
         try { if (window.__rsForge && window.__rsForge()) args = Object.assign({}, args, { forge: true }); } catch {}
       }
+      // 1.37.1 — blueprint_list is answered from JS data (the catalogue never
+      // needed Studio); only the installed flags come from a tiny Luau probe,
+      // and an offline / failing Studio degrades to installed:"unknown" instead
+      // of an ERROR the model then tries to search its way around.
+      if (name === "blueprint_list" && typeof RobloxScriptSkills.blueprintListLocal === "function") {
+        const rows = RobloxScriptSkills.blueprintListLocal(args);
+        let installed = null, note = "";
+        try {
+          const probe = await runTool({ tool: "execute_luau", arguments: { code: RobloxScriptSkills.blueprintInstalledProbeLuau(), datamodel_type: "Edit", _orInternal: true } });
+          const body = String(probe || "").replace(/^Output of '[^']*':\n?/, "").trim();
+          const m = body.match(/\{[\s\S]*\}/);
+          const j = m ? JSON.parse(m[0]) : null;
+          if (j && j.ok && Array.isArray(j.installed)) { installed = {}; for (const it of j.installed) installed[String(it.key)] = String(it.version || "?"); }
+          else note = "installed state unknown (Studio did not answer the probe); the catalogue itself is complete";
+        } catch (e) { note = "installed state unknown (Studio offline or busy); the catalogue itself is complete"; }
+        let n = 0;
+        for (const c of rows) { c.installed = installed ? Object.prototype.hasOwnProperty.call(installed, c.name) : "unknown"; if (c.installed === true) { c.installed_version = installed[c.name]; n++; } }
+        const out = { ok: true, version: RobloxScriptSkills.BLUEPRINT_VERSION, count: rows.length, installed_count: installed ? n : "unknown", blueprints: rows, usage: 'blueprint_install {name:"pets"} installs with dependencies, demo content and a self-test; blueprint_install {name:"all"} installs everything.' };
+        if (note) out.note = note;
+        const res0 = `Output of 'blueprint_list':\n${JSON.stringify(out)}`;
+        try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(name, args, true, res0); } catch {}
+        return res0;
+      }
+      // project_index_build is the heaviest read-only command; with Studio
+      // explicitly disconnected it cannot work, so say so once, tell the model to
+      // continue WITHOUT the index, and never let it retry/search in a loop.
+      if (name === "project_index_build" || name === "project_index_summary") {
+        try {
+          const b = A.bridge || {};
+          if (b.connected === true && b.roblox_connected === false) await refreshCurrentEngineState();
+          const b2 = A.bridge || {};
+          if (b2.connected === true && b2.roblox_connected === false) {
+            return RS.FEEDBACK.studioOffline + `\n(${name} needs Roblox Studio. Skip the project index: continue the task with what the user told you, do NOT retry ${name} and do NOT search for another command.)`;
+          }
+        } catch {}
+      }
       const built = RobloxScriptSkills.buildLuau(name, args);
       if (built.err) return built.err;
       let res = await runTool({ tool: "execute_luau", arguments: { code: built.code, datamodel_type: "Edit", _orInternal: true } });
+      // A big place can push project_index_build past the transport budget on
+      // its first pass. Retry ONCE with a smaller scan instead of surfacing a
+      // timeout the model cannot act on.
+      if (name === "project_index_build" && args && args.max_scripts == null && /did not respond|timed out|timeout|no response/i.test(String(res || "")) && /^ERROR/.test(String(res || ""))) {
+        diag("projectIndex.retrySmall", {});
+        const small = RobloxScriptSkills.buildLuau(name, Object.assign({}, args, { max_scripts: 150, max_chars: Math.min(Number(args.max_chars) || 1500, 1500) }));
+        if (!small.err) {
+          const res2 = await runTool({ tool: "execute_luau", arguments: { code: small.code, datamodel_type: "Edit", _orInternal: true } });
+          if (!/^ERROR/.test(String(res2 || ""))) res = String(res2).replace(/^Output of '[^']*':\n?/, "Output of 'execute_luau':\n(partial index: the full scan timed out, so only the first 150 scripts were indexed - pass scope to index one service at a time)\n");
+        }
+      }
+      // Studio commands that are only useful WITH Studio: when the bridge says
+      // offline, add the one instruction that stops the retry/search loop.
+      if (/^(project_index_|blueprint_)/.test(name) && typeof res === "string" && (res === RS.FEEDBACK.studioOffline || res === RS.FEEDBACK.bridgeOffline)) {
+        res += `\n(${name} cannot run without Studio. Continue the task without it - do NOT retry and do NOT search for another command.)`;
+      }
       // The model asked for `name`, not execute_luau - label the output with the
       // command it called so it never thinks its command was swapped.
       if (typeof res === "string" && res.startsWith("Output of 'execute_luau':")) res = `Output of '${name}':` + res.slice("Output of 'execute_luau':".length);
@@ -3916,7 +4025,7 @@
     // of misreading it as tool output.
     if (r.ok && r.text && /^[\w .'"-]{0,60}\bis (required|not available|invalid)\b[\w .'"-]{0,80}$/i.test(r.text.trim())) {
       const schemaText = schemaTextFor(name);
-      return `ERROR calling '${name}': ${r.text.trim()}.\nA required or invalid parameter.${schemaText ? ` Schema:\n${schemaText}\n` : " Check the command's parameters with list_commands, "}Fix the call and retry.`;
+      return `ERROR calling '${name}': ${r.text.trim()}.\nA required or invalid parameter.${schemaText ? ` Schema:\n${schemaText}\n` : " "}Fix the call and retry now - do not look the command up.`;
     }
     // The Roblox MCP also reports Luau PARSE/RUNTIME errors as a SUCCESS whose
     // text is the executor's own stack trace ("…ExecuteLuauTool:139: …
@@ -5008,7 +5117,7 @@
       for (const line of [...animLines, ...skillLines]) { const nm = nameFromLine(line); if (nm && want.has(nm) && !seen.has(nm)) { seen.add(nm); sigs.push(sigFromLine(line) || `${nm} {}`); } }
       for (const t of tools) if (want.has(t.name) && !seen.has(t.name)) { seen.add(t.name); sigs.push(toolSignature(t)); }
       const packed = packSignatures(sigs, Math.max(1200, limitChars || 6000), 160);
-      return `${WORK_MODES[mode].badge} FOCUS FAMILY (${sigs.length} commands; callable as shown${packed.omitted ? `, ${packed.omitted} more via list_commands {"query":"keyword"}` : ""}):\n${packed.text}`;
+      return `${WORK_MODES[mode].badge} FOCUS FAMILY (${sigs.length} commands; callable as shown${packed.omitted ? `, ${packed.omitted} more in the main catalogue - never search for them` : ""}):\n${packed.text}`;
     } catch { return ""; }
   }
   function withSysResend(text) {

@@ -296,6 +296,22 @@ local function statusReport() local list=installedSystems() local out={version=B
   RobloxScriptSkills.BLUEPRINT_COMMANDS = C.map((c) => c.name);
   RobloxScriptSkills.BLUEPRINT_NAMES = NAMES.slice();
   RobloxScriptSkills.BLUEPRINT_CATALOG = CATALOG;
+  // 1.37.1 — blueprint_list no longer needs Studio for the catalogue itself:
+  // the metadata is JS data, so main.js answers it locally and only asks
+  // Studio (with this ~400-byte probe, not the 34 KB program) which systems
+  // are installed. Offline Studio therefore degrades to installed="unknown"
+  // instead of an ERROR the model then tries to "search" its way around.
+  RobloxScriptSkills.blueprintListLocal = function (a) {
+    a = a && typeof a === "object" ? a : {};
+    const tag = a.tag ? String(a.tag).toLowerCase() : "";
+    const list = CATALOG.filter((c) => !tag || c.tags.includes(tag) || c.name.includes(tag) || c.title.toLowerCase().includes(tag));
+    return list.map((c) => ({ name: c.name, system: c.system, title: c.title, summary: c.summary, tags: c.tags, depends: c.depends, api: c.api, remotes: c.remotes, bus: c.bus, has_client: c.has_client, config_keys: c.config_keys, next_steps: c.next_steps }));
+  };
+  RobloxScriptSkills.blueprintInstalledProbeLuau = function () {
+    return "local RS=game:GetService('ReplicatedStorage') local H=game:GetService('HttpService') local out={} local rs=RS:FindFirstChild('OR_Systems')\n" +
+      "if rs then for _,c in ipairs(rs:GetChildren()) do if c:IsA('Folder') and c:GetAttribute('OR_Blueprint') then out[#out+1]={key=tostring(c:GetAttribute('OR_Blueprint')),version=tostring(c:GetAttribute('OR_BlueprintVersion') or '?')} end end end\n" +
+      "return H:JSONEncode({ok=true,installed=out})";
+  };
   RobloxScriptSkills.BLUEPRINT_VERSION = BP_VERSION;
   RobloxScriptSkills.blueprintOrder = (names, withDeps) => resolveOrder(normNames(names), withDeps !== false);
 })();

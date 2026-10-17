@@ -96,8 +96,13 @@ local function findEntry(idx,path) local p=tostring(path or '') if p=='' then re
     "local added,modified,removed=diffIndex(old,idx)",
     "local bytes=0 if not " + bb(a.dry_run, false) + " then local rec=wp() local _,n=writeIndex(idx) bytes=n wpDone(rec) end",
     "local map=mapText(idx," + nn(a.max_chars, 1500) + ")",
-    "local r={version=PI_VERSION,written=not " + bb(a.dry_run, false) + ",module='ServerStorage.'..INDEX_NAME,bytes=bytes,counts=idx.counts,previous=old and {built_at=old.built_at,scripts=old.counts.scripts} or nil,added=added,modified=modified,removed=removed,conventions=idx.conventions,hubs=idx.hubs,orphans=idx.orphans,cycles=idx.cycles,mismatches=idx.mismatches,blueprints=idx.blueprints,truncated=(#idx.scripts>=maxN),map_text=map}",
-    "return ok(r,'indexed '..idx.counts.scripts..' scripts ('..idx.counts.modules..' modules, '..idx.counts.remotes..' remotes)'..(old and (': +'..#added..' / ~'..#modified..' / -'..#removed..' since '..os.date('!%H:%M',old.built_at or 0)..' UTC') or '')..(#idx.mismatches>0 and ('; '..#idx.mismatches..' remote issue(s)') or '')..(#idx.cycles>0 and ('; '..#idx.cycles..' require cycle(s)') or ''))",
+    // 1.37.1: the first build of a 600-script place used to echo every path
+    // three times (added + hubs + map) - tens of KB that the MCP transport and
+    // the chat both choke on. Keep the counts exact, cap the path lists.
+    "local function capList(t,n) if #t<=n then return t,0 end local o={} for i=1,n do o[i]=t[i] end return o,#t-n end",
+    "local addedTotal,modifiedTotal,removedTotal=#added,#modified,#removed local addedMore,modifiedMore,removedMore added,addedMore=capList(added,60) modified,modifiedMore=capList(modified,60) removed,removedMore=capList(removed,60)",
+    "local r={version=PI_VERSION,written=not " + bb(a.dry_run, false) + ",module='ServerStorage.'..INDEX_NAME,bytes=bytes,counts=idx.counts,previous=old and {built_at=old.built_at,scripts=old.counts.scripts} or nil,added=added,modified=modified,removed=removed,added_total=addedTotal,modified_total=modifiedTotal,removed_total=removedTotal,lists_truncated=(addedMore+modifiedMore+removedMore)>0 and ('added +'..addedMore..', modified +'..modifiedMore..', removed +'..removedMore..' more (use project_index_search / project_index_changes for details)') or nil,conventions=idx.conventions,hubs=idx.hubs,orphans=idx.orphans,cycles=idx.cycles,mismatches=idx.mismatches,blueprints=idx.blueprints,truncated=(#idx.scripts>=maxN),map_text=map}",
+    "return ok(r,'indexed '..idx.counts.scripts..' scripts ('..idx.counts.modules..' modules, '..idx.counts.remotes..' remotes)'..(old and (': +'..addedTotal..' / ~'..modifiedTotal..' / -'..removedTotal..' since '..os.date('!%H:%M',old.built_at or 0)..' UTC') or '')..(#idx.mismatches>0 and ('; '..#idx.mismatches..' remote issue(s)') or '')..(#idx.cycles>0 and ('; '..#idx.cycles..' require cycle(s)') or ''))",
   ].join("\n");
 
   B.project_index_changes = (a) => [
