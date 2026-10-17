@@ -1,0 +1,49 @@
+name: ORscript Desktop (Rust)
+
+on:
+  push:
+    paths:
+      - "ORscript/agent/**"
+      - ".github/workflows/desktop.yml"
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: ORscript/agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ORscript/agent
+      - name: Build (release)
+        run: cargo build --release --locked || cargo build --release
+      - name: Smoke test (headless flag parses)
+        run: .\target\release\or-core.exe --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: or-core-windows-x64
+          path: ORscript/agent/target/release/or-core.exe
+
+  macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: ORscript/agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ORscript/agent
+      - name: Build (release)
+        run: cargo build --release --locked || cargo build --release
+      - name: Smoke test
+        run: ./target/release/or-core --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: or-core-macos
+          path: ORscript/agent/target/release/or-core
