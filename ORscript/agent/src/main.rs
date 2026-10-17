@@ -1,4 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// ORscript Desktop targets Windows and macOS only (Roblox Studio does not run
+// natively anywhere else). Fail loudly instead of producing a half-working
+// binary on other platforms.
+#[cfg(not(any(windows, target_os = "macos")))]
+compile_error!("ORscript Desktop supports Windows and macOS only.");
 
 use axum::{extract::{Query, State}, http::Method, response::IntoResponse, routing::{get, post}, Json, Router};
 use clap::Parser;
@@ -43,7 +48,7 @@ impl std::io::Write for FileLog {
 }
 
 fn init_file_logger(ui: Option<Arc<gui::UiShared>>) {
-    // Windows: <exe dir>/logs. macOS/Linux: the per-user data dir (see gui::data_dir).
+    // Windows: <exe dir>/logs. macOS: the per-user data dir (see gui::data_dir).
     let dir = gui::data_dir().join("logs");
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("agent.log");
@@ -152,8 +157,6 @@ fn bridge_alive_on(port: u16) -> bool {
 /// Platform default for the Roblox Studio MCP helper (stdio JSON-RPC):
 ///   Windows  cmd /C %LOCALAPPDATA%\Roblox\mcp.bat
 ///   macOS    /Applications/RobloxStudio.app/Contents/MacOS/StudioMCP (run directly)
-///   Linux    Studio only runs through Wine (Vinegar / Grapejuice / plain prefix):
-///            the mcp.bat inside the prefix is started with `wine cmd /c`.
 /// `OR_MCP_COMMAND` (or Settings → MCP launcher) always wins over this.
 fn default_mcp_launcher() -> anyhow::Result<(String, Vec<String>)> {
     const ENABLE_HINT: &str = "In Studio: Assistant → … → Manage MCP Servers → Enable Studio as MCP server.";
@@ -181,40 +184,6 @@ fn default_mcp_launcher() -> anyhow::Result<(String, Vec<String>)> {
             ),
         }
     }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        match linux_wine_mcp_bat() {
-            Some(bat) => Ok(("wine".to_string(), vec!["cmd".to_string(), "/c".to_string(), bat.to_string_lossy().to_string()])),
-            None => anyhow::bail!(
-                "No Roblox Studio MCP launcher found. Roblox Studio only runs on Linux through Wine \
-                 (Vinegar / Grapejuice). {ENABLE_HINT} Then set the launcher in Settings → MCP launcher \
-                 (or OR_MCP_COMMAND), e.g.: wine cmd /c /home/you/.wine/drive_c/users/you/AppData/Local/Roblox/mcp.bat"
-            ),
-        }
-    }
-}
-
-/// Search the usual Wine prefixes for Studio's mcp.bat.
-#[cfg(all(unix, not(target_os = "macos")))]
-fn linux_wine_mcp_bat() -> Option<PathBuf> {
-    let home = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()));
-    let mut prefixes: Vec<PathBuf> = Vec::new();
-    if let Ok(p) = std::env::var("WINEPREFIX") { if !p.trim().is_empty() { prefixes.push(PathBuf::from(p)); } }
-    prefixes.push(home.join(".wine"));
-    prefixes.push(home.join(".local/share/vinegar/prefixes/studio"));
-    prefixes.push(home.join(".var/app/org.vinegarhq.Vinegar/data/vinegar/prefixes/studio"));
-    if let Ok(rd) = std::fs::read_dir(home.join(".local/share/grapejuice/prefixes")) {
-        for e in rd.flatten() { prefixes.push(e.path()); }
-    }
-    for prefix in prefixes {
-        let users = prefix.join("drive_c").join("users");
-        let Ok(rd) = std::fs::read_dir(&users) else { continue; };
-        for user in rd.flatten() {
-            let bat = user.path().join("AppData").join("Local").join("Roblox").join("mcp.bat");
-            if bat.is_file() { return Some(bat); }
-        }
-    }
-    None
 }
 
 /// Human-readable default launcher, shown as the Settings placeholder.
@@ -223,13 +192,6 @@ pub(crate) fn default_mcp_launcher_hint() -> String {
     { r"%LOCALAPPDATA%\Roblox\mcp.bat (Studio default)".to_string() }
     #[cfg(target_os = "macos")]
     { "/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP (Studio default)".to_string() }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        match linux_wine_mcp_bat() {
-            Some(bat) => format!("wine cmd /c {} (auto-detected)", bat.display()),
-            None => "wine cmd /c <prefix>/drive_c/users/<you>/AppData/Local/Roblox/mcp.bat".to_string(),
-        }
-    }
 }
 
 /// Folder that contains the default launcher (for "Open launcher folder").
@@ -238,8 +200,6 @@ pub(crate) fn mcp_launcher_folder() -> Option<PathBuf> {
     { std::env::var("LOCALAPPDATA").ok().map(|l| PathBuf::from(l).join("Roblox")) }
     #[cfg(target_os = "macos")]
     { Some(PathBuf::from("/Applications/RobloxStudio.app/Contents/MacOS")) }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    { linux_wine_mcp_bat().and_then(|b| b.parent().map(|p| p.to_path_buf())) }
 }
 
 /// Ask an already-running ORscript Desktop (any OS) to raise its window.
@@ -696,7 +656,7 @@ fn port_owner_pid(port: u16) -> Option<u32> {
 }
 #[cfg(not(windows))]
 fn port_owner_pid(port: u16) -> Option<u32> {
-    // lsof is present on macOS and nearly every Linux desktop; -sTCP:LISTEN
+    // lsof ships with macOS; -sTCP:LISTEN
     // ignores clients that merely connected to the port.
     let out = std::process::Command::new("lsof")
         .args(["-nP", &format!("-iTCP:{port}"), "-sTCP:LISTEN", "-t"])

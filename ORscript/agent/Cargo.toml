@@ -1,6 +1,6 @@
 [package]
 name = "or-agent"
-version = "1.35.0"
+version = "1.35.1"
 edition = "2021"
 build = "build.rs"
 description = "ORscript Desktop — native Roblox Studio MCP + AgentScript workspace bridge with a workspace window and tray"
@@ -41,17 +41,10 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 
 [features]
 default = []
-# Linux notification-area icon. Requires: libgtk-3-dev libayatana-appindicator3-dev
-# (Debian/Ubuntu) or gtk3 libayatana-appindicator (Arch/Fedora).
-linux-tray = ["dep:tray-icon", "dep:gtk"]
 
-# Tray icon: always on Windows + macOS, opt-in on Linux (see `linux-tray`).
+# Tray icon: Windows + macOS (the only supported platforms).
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 tray-icon = "0.19"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-tray-icon = { version = "0.19", optional = true }
-gtk = { version = "0.18", optional = true }
 
 [profile.release]
 opt-level = "z"

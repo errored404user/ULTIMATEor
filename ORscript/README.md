@@ -26,11 +26,11 @@ Large `execute_luau` scripts are auto-chunked around 24 KB so Studio's parser ne
 ## Setup
 
 1. Open `chrome://extensions` → Developer mode → **Load unpacked** → this folder (`manifest.json`).
-2. Start the bridge — **ORscript Desktop**, the Rust app in `agent/` (Windows: build once with `Build-ORscript-Desktop.cmd`; macOS/Linux: `./build-orscript-desktop.sh`; or `cd agent && cargo build --release` anywhere). Launch `bin/or-core.exe` (Windows) / `bin/or-core` (macOS, Linux):
+2. Start the bridge — **ORscript Desktop**, the Rust app in `agent/` (Windows: build once with `Build-ORscript-Desktop.cmd`; macOS: `./build-orscript-desktop.sh`; or `cd agent && cargo build --release`). Launch `bin/or-core.exe` (Windows) / `bin/or-core` (macOS):
    - Workspace window: Home / Explorer / Tools / Servers / Terminal / Settings — live Bridge / Roblox Studio / Tools / Workspace status, Studio viewport snapshots, a Luau runner that executes inside Studio, and a workspace folder you can switch without restarting.
    - Closing the window hides it to the notification area; the bridge keeps running. Background controls: **left-click the ORscript tray icon** (or launch `or-core` again) to reopen the window, right-click → **Quit** (or the **Quit** pill in the title bar / Settings) to stop the bridge and exit. If no tray icon could be created, Close quits instead of hiding so the app can never become unreachable. `--hidden` starts in the tray, `--headless` runs without any window.
    - It starts the HTTP API on `http://127.0.0.1:3000`, the WS bridges on `17613` (RS) and `17615` (AS), and the AgentScript workspace (`OR_WORKSPACE_ROOT` / `--workspace` / Settings → Workspace / `%USERPROFILE%\ORWorkspace`).
-   - Runs on Windows, macOS and Linux (Linux drives a Studio running under Wine/Vinegar — set the MCP launcher in Settings). See `agent/README.md` for build details, per-OS paths and flags.
+   - Runs on Windows and macOS — the platforms Roblox Studio ships for. See `agent/README.md` for build details, per-OS paths and flags.
 3. **RS:** Roblox Studio → Assistant AI → ⋯ → Manage MCP Servers → Enable Studio as MCP Server.
 4. Open a supported chat and click **Start agent**.
 
@@ -60,9 +60,11 @@ The brush button next to Settings (or **Ctrl/⌘+Shift+P**) opens **ORscript Pai
 
 ## Agent
 
-- Native crate: `agent/` (`or-agent` 1.35.0). It runs as a background bridge only; the removed desktop status window is not part of ORscript.
+- Native crate: `agent/` (`or-agent` 1.35.1). It runs as a background bridge only; the removed desktop status window is not part of ORscript.
 - Service worker skips stale-socket reconnect and MCP heal while a `call_tool` is in flight (the 25 s stale window used to kill long tools).
 - 637 advertised Studio commands (27 of them the 1.22.0 work-mode pack, 13 the 1.29.0 design pack, 11 the 1.30.0 gfx pack, 6 the 1.31.0 blueprint pack, 6 the 1.32.0 project pack, 2 the 1.33.0 inspect pack) plus 110 hidden legacy aliases that stay callable (`list_commands`), a 24-command animation suite, AgentScript file/terminal tools.
+**1.35.1 — Linux support removed.** ORscript Desktop now targets **Windows and macOS only**, the two platforms Roblox Studio ships for. Gone: the `linux-tray` feature and GTK/AppIndicator tray thread, the Wine/Vinegar/Grapejuice `mcp.bat` auto-detection, the `$XDG_CONFIG_HOME` data dir, the `.desktop` autostart entry, the `zenity`/`kdialog` folder picker, `xdg-open`, the Linux CI job and the Linux build notes. Building for any other target now stops with `compile_error!("ORscript Desktop supports Windows and macOS only.")`, and `build-orscript-desktop.sh` refuses to run outside macOS. Side fix: the workspace `open_path` tool used `xdg-open` on macOS — it now uses `open`.
+
 **1.35.0 — Reliability, stability and performance pass.**
 - **The placement loop no longer does a full layout pass on every animation frame.** `placeBar` ran provider editor/composer lookups, `getBoundingClientRect` reads, reserved-strip padding writes and tray `offsetHeight` reads 60 times a second, forever, on top of the host page's own work. It keeps the rAF heartbeat (so a detached `#rs-root` still self-heals within a frame) but runs the body only every frame for 700 ms after a trigger (resize / scroll / wheel / pointer / key / focus / input / transitions / visibility / visualViewport, a bar content change, a cards re-render), else every 100 ms while a session is live or a tray is open, else every 200 ms. Measured in the jsdom harness over 3 s idle: placement passes 185 → 14, `getBoundingClientRect` 373 → 31, `querySelectorAll` 484 → 26.
 - **Fixed: the bar was detached and re-attached on every frame on the CodeCraft page.** `barMount()` returned `before: comp.firstElementChild`, which is the bar itself once mounted, so the core's "out of place?" check was always true and `insertBefore` ran ~60×/s. Besides the churn, that is what kept stealing focus from our own trays (task input, Public composer, search box). The core now re-inserts only when the bar is genuinely out of place (`before === bar` and `before: undefined` are treated as in place) and CodeCraft skips the bar when computing `before`.

@@ -464,10 +464,8 @@ pub async fn call(state: &AppState, name: &str, args: Value) -> anyhow::Result<M
 fn plugins_dir() -> Option<PathBuf> {
     if cfg!(windows) {
         std::env::var_os("LOCALAPPDATA").map(|p| PathBuf::from(p).join("Roblox").join("Plugins"))
-    } else if cfg!(target_os = "macos") {
-        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Documents").join("Roblox").join("Plugins"))
     } else {
-        None
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Documents").join("Roblox").join("Plugins"))
     }
 }
 

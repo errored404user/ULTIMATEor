@@ -1,16 +1,15 @@
 #!/usr/bin/env sh
-# Builds ORscript Desktop (Rust) from ORscript/agent on macOS / Linux and
-# installs the binary as ORscript/bin/or-core. Requires Rust (https://rustup.rs).
+# Builds ORscript Desktop (Rust) from ORscript/agent on macOS and installs the
+# binary as ORscript/bin/or-core. Requires Rust (https://rustup.rs) and the
+# Xcode command line tools (xcode-select --install).
+# Windows users: run Build-ORscript-Desktop.cmd instead.
 #
-#   ./build-orscript-desktop.sh                # window + bridge
-#   ./build-orscript-desktop.sh --features linux-tray   # Linux: also the tray icon (needs GTK3 + libayatana-appindicator)
-#
-# Linux build dependencies (Debian/Ubuntu):
-#   sudo apt install build-essential pkg-config libssl-dev libxkbcommon-dev libgl1-mesa-dev \
-#        libwayland-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libfontconfig1-dev
-#   # optional tray:  sudo apt install libgtk-3-dev libayatana-appindicator3-dev
-# macOS: Xcode command line tools (xcode-select --install).
+#   ./build-orscript-desktop.sh                # window + bridge + menu-bar icon
 set -eu
+case "$(uname -s)" in
+  Darwin) ;;
+  *) echo "ORscript Desktop supports Windows and macOS only (this is $(uname -s))." >&2; exit 1 ;;
+esac
 here="$(cd "$(dirname "$0")" && pwd)"
 cd "$here/agent"
 if ! command -v cargo >/dev/null 2>&1; then

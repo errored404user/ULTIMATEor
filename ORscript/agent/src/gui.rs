@@ -107,7 +107,7 @@ pub fn request_quit(shared: &UiShared) {
 
 /// Where settings.json and logs/ live.
 /// Windows: next to the executable (portable, unchanged from or-core 1.18).
-/// macOS: ~/Library/Application Support/ORscript. Linux: $XDG_CONFIG_HOME/orscript.
+/// macOS: ~/Library/Application Support/ORscript.
 pub fn data_dir() -> PathBuf {
     #[cfg(windows)]
     {
@@ -120,18 +120,11 @@ pub fn data_dir() -> PathBuf {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
         PathBuf::from(home).join("Library").join("Application Support").join("ORscript")
     }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        let base = std::env::var("XDG_CONFIG_HOME").ok().filter(|s| !s.trim().is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".config"));
-        base.join("orscript")
-    }
 }
 
 /// True when this build has a notification-area icon to come back from.
 pub const HAS_TRAY: bool = cfg!(has_tray);
-pub const OS_LABEL: &str = if cfg!(windows) { "Windows" } else if cfg!(target_os = "macos") { "macOS" } else { "Linux" };
+pub const OS_LABEL: &str = if cfg!(windows) { "Windows" } else { "macOS" };
 const ACTIVITY_CAP: usize = 120;
 const HISTORY_CAP: usize = 60;
 
@@ -2449,30 +2442,6 @@ fn pick_folder(initial: &str) -> Receiver<Option<String>> {
             });
             let _ = tx.send(picked);
         }
-        #[cfg(all(unix, not(target_os = "macos")))]
-        {
-            // zenity (GNOME) then kdialog (KDE); without either the user types the path.
-            let mut picked: Option<String> = None;
-            let mut tried = false;
-            if let Ok(o) = std::process::Command::new("zenity")
-                .args(["--file-selection", "--directory", "--title=Choose the ORscript workspace folder", &format!("--filename={}/", initial.trim_end_matches('/'))])
-                .output()
-            {
-                tried = true;
-                let text = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                if o.status.success() && !text.is_empty() { picked = Some(text); }
-            }
-            if !tried {
-                if let Ok(o) = std::process::Command::new("kdialog")
-                    .args(["--getexistingdirectory", if initial.trim().is_empty() { "." } else { initial.as_str() }, "--title", "Choose the ORscript workspace folder"])
-                    .output()
-                {
-                    let text = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                    if o.status.success() && !text.is_empty() { picked = Some(text); }
-                }
-            }
-            let _ = tx.send(picked);
-        }
     });
     rx
 }
@@ -2489,8 +2458,6 @@ pub fn open_external(target: &str) {
     }
     #[cfg(target_os = "macos")]
     { let _ = std::process::Command::new("open").arg(target).spawn(); }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    { let _ = std::process::Command::new("xdg-open").arg(target).spawn(); }
 }
 
 #[cfg(windows)]
@@ -2549,27 +2516,6 @@ fn set_launch_at_login(enable: bool) -> Result<(), String> {
     }
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
-fn set_launch_at_login(enable: bool) -> Result<(), String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let base = std::env::var("XDG_CONFIG_HOME").ok().filter(|s| !s.trim().is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".config"));
-    let dir = base.join("autostart");
-    let entry = dir.join("orscript-desktop.desktop");
-    if enable {
-        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        let body = format!("[Desktop Entry]\nType=Application\nName=ORscript Desktop\nComment=Roblox Studio MCP + AgentScript bridge\nExec=\"{}\" --hidden\nTerminal=false\nX-GNOME-Autostart-enabled=true\n", exe.display());
-        std::fs::write(&entry, body).map_err(|e| e.to_string())
-    } else {
-        match std::fs::remove_file(&entry) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(e.to_string()),
-        }
-    }
-}
-
 /// Decode the bundled PNG logo into RGBA (window icon, tray icon, in-app logo).
 fn load_logo() -> Option<(Vec<u8>, u32, u32)> {
     const PNG: &[u8] = include_bytes!("../../assets/icon.png");
@@ -2593,19 +2539,16 @@ fn downscale_rgba(rgba: &[u8], w: u32, h: u32, size: u32) -> Vec<u8> {
 }
 
 // ───────────────────────────── tray ─────────────────────────────
-// Windows + macOS: tray-icon on the main thread. Linux: opt-in `linux-tray`
-// feature (needs GTK + libayatana-appindicator); the icon lives on a dedicated
-// GTK thread because tray-icon's Linux backend requires a GTK main loop.
+// Windows + macOS: tray-icon on the main thread.
 
 #[cfg(has_tray)]
 pub struct TrayState {
-    /// `None` on Linux: the icon is owned by the GTK thread (tooltip updates are skipped there).
     icon: Option<tray_icon::TrayIcon>,
     _menu: Option<tray_icon::menu::Menu>,
     last_tooltip: String,
 }
 
-#[cfg(all(has_tray, not(target_os = "linux")))]
+#[cfg(has_tray)]
 fn build_tray(
     logo: Option<&(Vec<u8>, u32, u32)>,
     shared: Arc<UiShared>,
@@ -2613,32 +2556,6 @@ fn build_tray(
 ) -> anyhow::Result<TrayState> {
     let (icon, menu) = tray_menu_and_icon(logo, shared, cmd_tx)?;
     Ok(TrayState { icon: Some(icon), _menu: Some(menu), last_tooltip: String::new() })
-}
-
-#[cfg(all(has_tray, target_os = "linux"))]
-fn build_tray(
-    logo: Option<&(Vec<u8>, u32, u32)>,
-    shared: Arc<UiShared>,
-    cmd_tx: UnboundedSender<UiCommand>,
-) -> anyhow::Result<TrayState> {
-    let logo = logo.cloned();
-    let (tx, rx) = std::sync::mpsc::channel::<anyhow::Result<()>>();
-    std::thread::Builder::new().name("tray-gtk".into()).spawn(move || {
-        if let Err(e) = gtk::init() {
-            let _ = tx.send(Err(anyhow::anyhow!("GTK init failed: {e}")));
-            return;
-        }
-        match tray_menu_and_icon(logo.as_ref(), shared, cmd_tx) {
-            Ok(keep) => {
-                let _ = tx.send(Ok(()));
-                let _keep = keep; // the icon must stay alive on this thread
-                gtk::main();
-            }
-            Err(e) => { let _ = tx.send(Err(e)); }
-        }
-    })?;
-    rx.recv().map_err(|_| anyhow::anyhow!("tray thread exited early"))??;
-    Ok(TrayState { icon: None, _menu: None, last_tooltip: String::new() })
 }
 
 #[cfg(has_tray)]

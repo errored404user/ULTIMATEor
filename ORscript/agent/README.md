@@ -2,8 +2,8 @@
 
 Native desktop app + bridge for the ORscript browser extension. One binary does both jobs:
 
-* **Bridge** — HTTP `127.0.0.1:3000`, WebSocket `17613` (Roblox Studio) and `17615` (AgentScript workspace), Roblox Studio MCP helper (Windows `%LOCALAPPDATA%\Roblox\mcp.bat`, macOS `RobloxStudio.app/Contents/MacOS/StudioMCP`, Linux via Wine — see below), 18 workspace tools. Protocol-identical to or-core 1.18, so the extension needs no change.
-* **Desktop window** — pure Rust (eframe/egui), 6 pages: **Home** (setup checklist that tells you the next step, status cards, live Studio viewport snapshot, quick access, recent activity), **Explorer** (workspace browser + editor), **Tools** (Studio + workspace tool catalog with a Run panel), **Servers** (Studio MCP, local bridge, channels), **Terminal** (workspace shell *and* a Luau runner that executes code inside Roblox Studio), **Settings** (workspace folder picker applied live, MCP launcher override, diagnostics, about). Closing the window hides it to the notification area; the bridge keeps running. Left-click the tray icon (or launch `or-core` again) to reopen the window; right-click → **Quit**, or the **Quit** pill in the title bar, stops the bridge. Since 1.22.0 the tray icon is created on the event-loop thread and serviced by a dedicated worker, so it keeps working while the window is hidden; a hidden window does no layout work. Runs on **Windows, macOS and Linux** (see *Platforms*).
+* **Bridge** — HTTP `127.0.0.1:3000`, WebSocket `17613` (Roblox Studio) and `17615` (AgentScript workspace), Roblox Studio MCP helper (Windows `%LOCALAPPDATA%\Roblox\mcp.bat`, macOS `RobloxStudio.app/Contents/MacOS/StudioMCP`), 18 workspace tools. Protocol-identical to or-core 1.18, so the extension needs no change.
+* **Desktop window** — pure Rust (eframe/egui), 6 pages: **Home** (setup checklist that tells you the next step, status cards, live Studio viewport snapshot, quick access, recent activity), **Explorer** (workspace browser + editor), **Tools** (Studio + workspace tool catalog with a Run panel), **Servers** (Studio MCP, local bridge, channels), **Terminal** (workspace shell *and* a Luau runner that executes code inside Roblox Studio), **Settings** (workspace folder picker applied live, MCP launcher override, diagnostics, about). Closing the window hides it to the notification area; the bridge keeps running. Left-click the tray icon (or launch `or-core` again) to reopen the window; right-click → **Quit**, or the **Quit** pill in the title bar, stops the bridge. Since 1.22.0 the tray icon is created on the event-loop thread and serviced by a dedicated worker, so it keeps working while the window is hidden; a hidden window does no layout work. Runs on **Windows and macOS** (see *Platforms*).
 
 Keyboard: `Esc` close panel / clear search · `Ctrl+1…6` pages · `Ctrl+R` restart Studio MCP · `F5` probe Studio + refresh tools · `Ctrl+Shift+S` Studio snapshot · `Ctrl+S` save file · `Ctrl+Enter` run Luau.
 
@@ -22,7 +22,7 @@ copy target\release\or-core.exe ..\bin\or-core.exe
 
 Or double-click `ORscript\Build-ORscript-Desktop.cmd`, which runs the same steps.
 
-**macOS / Linux**
+**macOS**
 
 ```sh
 cd ORscript/agent
@@ -31,9 +31,9 @@ cargo build --release
 cp target/release/or-core ../bin/or-core
 ```
 
-Or run `ORscript/build-orscript-desktop.sh` (same steps; pass `--features linux-tray` on Linux for the tray icon).
+Or run `ORscript/build-orscript-desktop.sh` (same steps). Needs the Xcode command line tools (`xcode-select --install`).
 
-Linux build packages (Debian/Ubuntu names): `build-essential pkg-config libssl-dev libxkbcommon-dev libgl1-mesa-dev libwayland-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libfontconfig1-dev`; the optional tray additionally needs `libgtk-3-dev libayatana-appindicator3-dev`.
+ORscript Desktop supports **Windows and macOS only** — the two platforms Roblox Studio ships for. Building for any other target stops with a `compile_error!`.
 
 The first build downloads the crates (eframe, winit, tokio, axum, …) and takes a few minutes; later builds are incremental.
 
@@ -62,16 +62,16 @@ What it adds (all appear in `list_commands` while connected, `studio_plugin_stat
 
 ## Platforms
 
-| | Windows | macOS | Linux |
-|---|---|---|---|
-| Window + bridge | yes | yes | yes |
-| Tray icon | yes | yes (menu bar) | with `--features linux-tray` (GTK + AppIndicator); otherwise *Close* quits (the app never hides without a tray icon to bring it back); use `--headless` for a window-less bridge |
-| Launch at sign-in | `HKCU\…\Run` | `~/Library/LaunchAgents/com.orscript.desktop.plist` | `~/.config/autostart/orscript-desktop.desktop` |
-| Studio MCP launcher (default) | `%LOCALAPPDATA%\Roblox\mcp.bat` | `/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP` | auto-detected `mcp.bat` inside `$WINEPREFIX`, `~/.wine`, Vinegar or Grapejuice prefixes → `wine cmd /c …`; otherwise set it in **Settings → MCP launcher** |
-| Data dir (`settings.json`, `logs/agent.log`) | next to the binary | `~/Library/Application Support/ORscript` | `$XDG_CONFIG_HOME/orscript` (default `~/.config/orscript`) |
-| Folder picker | Explorer dialog | `osascript` choose folder | `zenity` or `kdialog` if installed, else type the path |
+| | Windows | macOS |
+|---|---|---|
+| Window + bridge | yes | yes |
+| Tray icon | yes | yes (menu bar) |
+| Launch at sign-in | `HKCU\…\Run` | `~/Library/LaunchAgents/com.orscript.desktop.plist` |
+| Studio MCP launcher (default) | `%LOCALAPPDATA%\Roblox\mcp.bat` | `/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP` |
+| Data dir (`settings.json`, `logs/agent.log`) | next to the binary | `~/Library/Application Support/ORscript` |
+| Folder picker | Explorer dialog | `osascript` choose folder |
 
-Roblox does not ship Studio for Linux; ORscript Desktop talks to a Studio running under Wine (Vinegar/Grapejuice) exactly like on Windows once the launcher command is set. A second launch of `or-core` on any OS raises the running window (`POST /api/window`) instead of starting a second bridge.
+If no tray icon could be created, *Close* quits instead of hiding (the app never hides without an icon to bring it back); use `--headless` for a window-less bridge. A second launch of `or-core` on either OS raises the running window (`POST /api/window`) instead of starting a second bridge.
 
 ## Files written
 
@@ -84,8 +84,8 @@ Location per OS: see the *Data dir* row above (Windows keeps them next to `or-co
 
 ```
 agent/
-  Cargo.toml          crate or-agent, binary name or-core (feature `linux-tray`)
-  build.rs            sets cfg(has_tray): Windows/macOS always, Linux with the feature
+  Cargo.toml          crate or-agent, binary name or-core
+  build.rs            sets cfg(has_tray) on Windows/macOS
   src/main.rs         bridge: HTTP/WS servers, Studio MCP client, UI command loop
   src/workspace.rs    AgentScript workspace engine (18 tools, sandbox rules)
   src/gui.rs          desktop window, theme, pages, tray icon, per-OS data dir / autostart

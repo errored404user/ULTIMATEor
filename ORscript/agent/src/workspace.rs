@@ -846,7 +846,7 @@ pub async fn tool_open_path(ws: &Workspace, args: &serde_json::Value) -> Result<
     };
     #[cfg(not(windows))]
     let ok = {
-        std::process::Command::new("xdg-open").arg(&resolved).spawn().is_ok()
+        std::process::Command::new("open").arg(&resolved).spawn().is_ok()
     };
     if ok { Ok(format!("Opened {resolved} with the default application.")) }
     else { Err(format!("could not open '{resolved}'")) }

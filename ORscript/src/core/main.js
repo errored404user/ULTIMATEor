@@ -364,7 +364,7 @@
   try { window.__rsBrowserName = () => USER_BROWSER; } catch {}
   // Which bridge launcher to tell the user to run. ORscript Desktop (the Rust
   // app in agent/) builds to bin/or-core.exe on Windows and bin/or-core on
-  // macOS / Linux (cargo build --release).
+  // macOS (cargo build --release).
   const IS_WINDOWS_HOST = /win/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "");
   const RUN_CMD = IS_WINDOWS_HOST ? "bin/or-core.exe" : "bin/or-core (ORscript Desktop)";
   // (The setup tutorial is now an in-app modal — see openTutorial() — so the
