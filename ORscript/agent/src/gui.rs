@@ -536,14 +536,15 @@ impl Theme {
 // ───────────────────────────── pages ─────────────────────────────
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Page { Home, Explorer, Tools, Servers, Terminal, Settings }
+enum Page { Home, Chat, Explorer, Tools, Servers, Terminal, Settings }
 
 impl Page {
-    const ALL: [Page; 6] = [Page::Home, Page::Explorer, Page::Tools, Page::Servers, Page::Terminal, Page::Settings];
+    const ALL: [Page; 7] = [Page::Home, Page::Chat, Page::Explorer, Page::Tools, Page::Servers, Page::Terminal, Page::Settings];
 
     fn title(self) -> &'static str {
         match self {
             Page::Home => "Home",
+            Page::Chat => "AI Chat",
             Page::Explorer => "Explorer",
             Page::Tools => "Tools",
             Page::Servers => "MCP Servers",
@@ -555,6 +556,7 @@ impl Page {
     fn subtitle(self) -> &'static str {
         match self {
             Page::Home => "Bridge overview, Studio link and quick access",
+            Page::Chat => "Chat with any model on your own API key — it builds and fixes things in Studio through this bridge",
             Page::Explorer => "Browse and edit the AgentScript workspace",
             Page::Tools => "Every tool the extension can call through this bridge — run any of them by hand",
             Page::Servers => "Roblox Studio MCP, the local filesystem engine and the extension channels",
@@ -566,11 +568,12 @@ impl Page {
     fn shortcut_key(self) -> egui::Key {
         match self {
             Page::Home => egui::Key::Num1,
-            Page::Explorer => egui::Key::Num2,
-            Page::Tools => egui::Key::Num3,
-            Page::Servers => egui::Key::Num4,
-            Page::Terminal => egui::Key::Num5,
-            Page::Settings => egui::Key::Num6,
+            Page::Chat => egui::Key::Num2,
+            Page::Explorer => egui::Key::Num3,
+            Page::Tools => egui::Key::Num4,
+            Page::Servers => egui::Key::Num5,
+            Page::Terminal => egui::Key::Num6,
+            Page::Settings => egui::Key::Num7,
         }
     }
 }
@@ -1230,6 +1233,9 @@ impl App {
                         FontId::new(14.0, FontFamily::Proportional),
                         if selected { t.text } else { t.muted },
                     );
+                    if page == Page::Chat && self.chat_turn.is_some() {
+                        ui.painter().circle_filled(rect.right_center() - Vec2::new(16.0, 0.0), 3.5, t.warn);
+                    }
                     if resp.clicked() { self.page = page; }
                     ui.add_space(2.0);
                 }
@@ -2268,7 +2274,7 @@ impl eframe::App for App {
 
         self.titlebar(ctx);
         self.sidebar(ctx);
-        self.chat_panel(ctx);
+        if self.page != Page::Chat { self.chat_panel(ctx); }
         let t = self.theme;
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(t.bg).inner_margin(Margin::symmetric(22.0, 18.0)))
@@ -2276,6 +2282,7 @@ impl eframe::App for App {
                 self.page_header(ui);
                 match self.page {
                     Page::Home => self.page_home(ui),
+                    Page::Chat => self.page_chat(ui),
                     Page::Explorer => self.page_explorer(ui),
                     Page::Tools => self.page_tools(ui),
                     Page::Servers => self.page_servers(ui),
@@ -2543,7 +2550,7 @@ impl App {
             .show(ctx, |ui| {
                 egui::TopBottomPanel::top("chat-head")
                     .frame(egui::Frame::none().fill(t.bg2).inner_margin(Margin::symmetric(12.0, 10.0)))
-                    .show_inside(ui, |ui| self.chat_header(ui));
+                    .show_inside(ui, |ui| self.chat_header(ui, false));
                 egui::TopBottomPanel::bottom("chat-composer")
                     .frame(egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).inner_margin(Margin::symmetric(12.0, 10.0)))
                     .show_inside(ui, |ui| self.chat_composer(ui, ctx));
@@ -2561,16 +2568,57 @@ impl App {
         }
     }
 
-    fn chat_header(&mut self, ui: &mut egui::Ui) {
+    /// Full-page chat (sidebar → AI Chat). Same widgets as the side panel,
+    /// laid out in a centred column; the side panel is hidden while this
+    /// page is shown so the two never draw the same widget ids at once.
+    fn page_chat(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
+        let ctx = ui.ctx().clone();
+        let column = ui.available_width().min(1040.0);
+        egui::TopBottomPanel::bottom("chat-page-composer")
+            .frame(egui::Frame::none().fill(t.bg).inner_margin(Margin::symmetric(0.0, 8.0)))
+            .show_inside(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.set_max_width(column);
+                    egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(12.0, 10.0)).show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        self.chat_composer(ui, &ctx);
+                    });
+                });
+            });
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none().fill(t.bg))
+            .show_inside(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.set_max_width(column);
+                    egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(12.0, 8.0)).show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        self.chat_header(ui, true);
+                    });
+                    ui.add_space(8.0);
+                    if self.chat_setup_open { self.chat_setup(ui); }
+                    self.chat_transcript(ui);
+                });
+            });
+    }
+
+    fn chat_header(&mut self, ui: &mut egui::Ui, in_page: bool) {
         let t = self.theme;
         let busy = self.chat_turn.is_some();
         ui.horizontal(|ui| {
-            ui.label(RichText::new("AI Chat").size(16.0).strong().color(t.text));
+            if !in_page { ui.label(RichText::new("AI Chat").size(16.0).strong().color(t.text)); }
             let model = self.chat_model();
             let sub = if model.is_empty() { format!("{} · no model", self.chat_provider().name) } else { format!("{} · {}", self.chat_provider().name, model) };
             ui.label(RichText::new(truncate(&sub, 44)).small().color(t.muted)).on_hover_text(sub);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if window_button(ui, WinGlyph::Close, t.text, t).on_hover_text("Hide the chat panel (Ctrl+J)").clicked() { self.toggle_chat(); }
+                if in_page {
+                    if pill(ui, t, "Side panel", false).on_hover_text("Keep chatting in a side panel while you use the other pages (Ctrl+J)").clicked() {
+                        self.settings.chat_panel_open = true;
+                        let _ = self.settings.save();
+                        self.page = Page::Home;
+                        self.chat_pending_focus = true;
+                    }
+                } else if window_button(ui, WinGlyph::Close, t.text, t).on_hover_text("Hide the chat panel (Ctrl+J)").clicked() { self.toggle_chat(); }
                 if pill(ui, t, "Setup", self.chat_setup_open).on_hover_text("Provider, API key, model, tools").clicked() {
                     self.chat_setup_open = !self.chat_setup_open;
                     if !self.chat_setup_open { let _ = self.settings.save(); }
@@ -2995,6 +3043,13 @@ fn nav_icon(p: &egui::Painter, r: egui::Rect, page: Page, c: Color32) {
             p.line_segment([pt(0.1, 0.5), pt(0.5, 0.12)], s);
             p.line_segment([pt(0.5, 0.12), pt(0.9, 0.5)], s);
             p.rect_stroke(egui::Rect::from_min_max(pt(0.22, 0.48), pt(0.78, 0.92)), Rounding::same(1.5), s);
+        }
+        Page::Chat => {
+            // speech bubble with a tail and three dots
+            p.rect_stroke(egui::Rect::from_min_max(pt(0.08, 0.14), pt(0.92, 0.7)), Rounding::same(4.0), s);
+            p.line_segment([pt(0.3, 0.7), pt(0.22, 0.92)], s);
+            p.line_segment([pt(0.22, 0.92), pt(0.48, 0.7)], s);
+            for x in [0.32, 0.5, 0.68] { p.circle_filled(pt(x, 0.42), 1.3, c); }
         }
         Page::Explorer => {
             p.rect_stroke(egui::Rect::from_min_max(pt(0.08, 0.25), pt(0.92, 0.88)), Rounding::same(2.0), s);

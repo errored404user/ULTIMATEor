@@ -96,6 +96,10 @@ ok("settings keep serde(default) so old settings.json still loads", /#\[serde\(d
 // ── gui.rs: panel ──
 ok("right side panel", gui.includes('egui::SidePanel::right("chat-panel")') && gui.includes("width_range(320.0..=760.0)"));
 ok("panel drawn before the central panel on every page", gui.indexOf("self.chat_panel(ctx);") > 0 && gui.indexOf("self.chat_panel(ctx);") < gui.indexOf("Page::Home => self.page_home(ui)"));
+ok("AI Chat is a sidebar page (second entry, Ctrl+2)", gui.includes("enum Page { Home, Chat, Explorer, Tools, Servers, Terminal, Settings }") && gui.includes("Page::Chat => egui::Key::Num2") && gui.includes('Page::Chat => "AI Chat"') && gui.includes("Page::Chat => self.page_chat(ui)"));
+ok("sidebar page has its own icon + busy dot", gui.includes("Page::Chat => {\n            // speech bubble") && gui.includes("if page == Page::Chat && self.chat_turn.is_some()"));
+ok("side panel hidden while the Chat page is shown", gui.includes("if self.page != Page::Chat { self.chat_panel(ctx); }"));
+ok("page offers Side panel hand-off", gui.includes('pill(ui, t, "Side panel", false)') && gui.includes("fn page_chat"));
 ok("title-bar AI Chat pill", gui.includes('pill(ui, t, "AI Chat", chat_open)'));
 ok("Ctrl+J toggles", gui.includes("if i.key_pressed(egui::Key::J) { chat = true; }") && gui.includes("if chat { self.toggle_chat(); }"));
 ok("provider / model combos + Refresh", gui.includes('from_id_salt("chat-provider")') && gui.includes('from_id_salt("chat-model")') && gui.includes("fn chat_refresh_models"));
