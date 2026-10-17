@@ -52,7 +52,13 @@ const RSProvider = (() => {
   };
 
   // ---------- settings ----------
-  const settings = { key: "", model: DEFAULT_MODEL, temperature: null };
+  // 1.36.0: generation settings + page preferences live in the same record.
+  const settings = { key: "", model: DEFAULT_MODEL, temperature: null, maxTokens: null, reasoning: "", instructions: "", autoRetry: true, ctrlEnter: false, showMeta: true, sideCollapsed: false };
+  const SETTING_KEYS = ["key", "model", "temperature", "maxTokens", "reasoning", "instructions", "autoRetry", "ctrlEnter", "showMeta", "sideCollapsed"];
+  const CHAT_INDEX_KEY = "rsCodeCraftChats";
+  const CHAT_KEY_PREFIX = "rsCodeCraftChat:";
+  const USAGE_KEY = "rsCodeCraftUsage";
+  const MAX_SAVED_CHATS = 200;
   const hasChromeStorage = () => { try { return !!(window.chrome && chrome.storage && chrome.storage.local); } catch { return false; } };
   async function loadSettings() {
     try {
@@ -69,9 +75,39 @@ const RSProvider = (() => {
   async function saveSettings(patch) {
     Object.assign(settings, patch || {});
     try {
-      if (hasChromeStorage()) await new Promise((res) => chrome.storage.local.set({ [STORE_KEY]: { key: settings.key, model: settings.model, temperature: settings.temperature } }, res));
-      else if (window.localStorage) localStorage.setItem(STORE_KEY, JSON.stringify(settings));
+      const rec = {}; for (const k of SETTING_KEYS) rec[k] = settings[k];
+      if (hasChromeStorage()) await new Promise((res) => chrome.storage.local.set({ [STORE_KEY]: rec }, res));
+      else if (window.localStorage) localStorage.setItem(STORE_KEY, JSON.stringify(rec));
     } catch {}
+  }
+  // Generic key/value storage for the chat library (chrome.storage.local on the
+  // extension page, localStorage when the provider runs elsewhere).
+  function storeGet(key) {
+    return new Promise((res) => {
+      try {
+        if (hasChromeStorage()) { chrome.storage.local.get(key, (v) => res(v && v[key] != null ? v[key] : null)); return; }
+        if (window.localStorage) { const raw = localStorage.getItem(key); res(raw ? JSON.parse(raw) : null); return; }
+      } catch {}
+      res(null);
+    });
+  }
+  function storeSet(key, value) {
+    return new Promise((res) => {
+      try {
+        if (hasChromeStorage()) { chrome.storage.local.set({ [key]: value }, () => res(true)); return; }
+        if (window.localStorage) { localStorage.setItem(key, JSON.stringify(value)); res(true); return; }
+      } catch {}
+      res(false);
+    });
+  }
+  function storeRemove(key) {
+    return new Promise((res) => {
+      try {
+        if (hasChromeStorage()) { chrome.storage.local.remove(key, () => res(true)); return; }
+        if (window.localStorage) { localStorage.removeItem(key); res(true); return; }
+      } catch {}
+      res(false);
+    });
   }
   const hasKey = () => /^cc_[A-Za-z0-9_-]{16,}$/.test(String(settings.key || "").trim()) || String(settings.key || "").trim().length >= 24;
   const maskKey = (k) => (k && k.length > 10 ? k.slice(0, 5) + "…" + k.slice(-4) : k ? "cc_…" : "");
@@ -95,28 +131,275 @@ const RSProvider = (() => {
     get attach() { return $("cc-attach"); },
     get attachList() { return $("cc-attachments"); },
     get fileInput() { return $("cc-file"); },
+    // 1.36.0 additions (all optional: the provider works without them).
+    get side() { return $("cc-side"); },
+    get sideToggle() { return $("cc-side-toggle"); },
+    get sideNew() { return $("cc-side-new"); },
+    get search() { return $("cc-search"); },
+    get chats() { return $("cc-chats"); },
+    get usage() { return $("cc-usage"); },
+    get usageTotal() { return $("cc-usage-total"); },
+    get usageReset() { return $("cc-usage-reset"); },
+    get importBtn() { return $("cc-import"); },
+    get importFile() { return $("cc-import-file"); },
+    get clearAll() { return $("cc-clear-all"); },
+    get modelLogo() { return $("cc-model-logo"); },
+    get settingsBtn() { return $("cc-settings-btn"); },
+    get settingsPanel() { return $("cc-settings"); },
+    get settingsClose() { return $("cc-settings-close"); },
+    get exportBtn() { return $("cc-export"); },
+    get temp() { return $("cc-temp"); },
+    get tempOut() { return $("cc-temp-out"); },
+    get tempReset() { return $("cc-temp-reset"); },
+    get maxTokens() { return $("cc-max-tokens"); },
+    get reasoning() { return $("cc-reasoning"); },
+    get instructions() { return $("cc-instructions"); },
+    get autoRetry() { return $("cc-auto-retry"); },
+    get ctrlEnter() { return $("cc-ctrl-enter"); },
+    get showMeta() { return $("cc-show-meta"); },
+    get jump() { return $("cc-jump"); },
+    get drop() { return $("cc-drop"); },
   };
   const isHostPage = () => !!ui.log && !!ui.input;
 
   // ---------- session / transcript ----------
-  const sess = { id: "", messages: [], seq: 0 };
+  const sess = { id: "", messages: [], seq: 0, title: "", createdAt: 0, usage: { prompt: 0, completion: 0, total: 0, requests: 0 } };
   const newId = () => "cc" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const sessKey = () => "cc:" + sess.id;
+  // Chat library index: [{ id, title, createdAt, updatedAt, model, pinned, count, preview }]
+  let chatIndex = [];
+  let indexLoaded = false;
+  const BOOTSTRAP_RE = /CodeCraft API rules|ORscript|list_commands|command catalogue/i;
+  function deriveTitle() {
+    if (sess.title) return sess.title;
+    for (const m of sess.messages) {
+      if (m.role !== "user") continue;
+      const t = String(m.content || "").trim();
+      if (!t) continue;
+      if (t.length > 600 || (BOOTSTRAP_RE.test(t) && t.length > 200)) continue;
+      return t.replace(/\s+/g, " ").slice(0, 64);
+    }
+    const agent = sess.messages.some((m) => m.role === "user" && BOOTSTRAP_RE.test(m.content || ""));
+    return agent ? "ORscript agent session" : "New chat";
+  }
+  function slimMessages() {
+    // Pixels are not persisted (sessionStorage is ~5 MB; one screenshot can be
+    // a third of that) - a reload keeps the text and notes the attachment.
+    return sess.messages.map((m) => ({ role: m.role, content: m.content, thinking: m.thinking || "", imageCount: (m.images || []).length, error: m.error || "", at: m.at || 0, model: m.model || "", meta: m.meta || null, truncated: !!m.truncated }));
+  }
+  let _persistTimer = 0;
   function persist() {
     try {
-      if (!window.sessionStorage) return;
-      // Pixels are not persisted (sessionStorage is ~5 MB; one screenshot can be
-      // a third of that) - a reload keeps the text and notes the attachment.
-      const slim = sess.messages.map((m) => ({ role: m.role, content: m.content, thinking: m.thinking || "", imageCount: (m.images || []).length, error: m.error || "" }));
+      const slim = slimMessages();
       let json = JSON.stringify(slim);
-      try { sessionStorage.setItem(sessKey(), json); }
-      catch {
-        // Quota: drop the oldest half of the transcript (keep the bootstrap).
-        const half = slim.length > 2 ? [slim[0], ...slim.slice(Math.ceil(slim.length / 2))] : slim;
-        json = JSON.stringify(half);
-        try { sessionStorage.setItem(sessKey(), json); } catch {}
+      if (window.sessionStorage) {
+        try { sessionStorage.setItem(sessKey(), json); }
+        catch {
+          // Quota: drop the oldest half of the transcript (keep the bootstrap).
+          const half = slim.length > 2 ? [slim[0], ...slim.slice(Math.ceil(slim.length / 2))] : slim;
+          json = JSON.stringify(half);
+          try { sessionStorage.setItem(sessKey(), json); } catch {}
+        }
       }
     } catch {}
+    // The library copy (chrome.storage.local) is debounced: streaming paints
+    // call persist() on every finished turn, not on every token, but a batch
+    // of agent turns can still land several times a second.
+    try { clearTimeout(_persistTimer); } catch {}
+    _persistTimer = setTimeout(() => { persistLibrary().catch(() => {}); }, 500);
+  }
+  async function persistLibrary() {
+    if (!sess.id || !sess.messages.length) return;
+    const now = Date.now();
+    const title = deriveTitle();
+    const entry = chatIndex.find((c) => c.id === sess.id) || null;
+    const lastUser = [...sess.messages].reverse().find((m) => m.role === "user" && !(BOOTSTRAP_RE.test(m.content || "") && m.content.length > 200));
+    const rec = {
+      id: sess.id, title, createdAt: (entry && entry.createdAt) || sess.createdAt || now, updatedAt: now,
+      model: settings.model, pinned: !!(entry && entry.pinned), count: sess.messages.length,
+      preview: String((lastUser && lastUser.content) || "").replace(/\s+/g, " ").slice(0, 120),
+    };
+    if (entry) Object.assign(entry, rec); else chatIndex.unshift(rec);
+    if (chatIndex.length > MAX_SAVED_CHATS) {
+      const drop = chatIndex.filter((c) => !c.pinned).slice(MAX_SAVED_CHATS);
+      for (const c of drop) { chatIndex.splice(chatIndex.indexOf(c), 1); storeRemove(CHAT_KEY_PREFIX + c.id).catch(() => {}); }
+    }
+    await storeSet(CHAT_KEY_PREFIX + sess.id, { id: sess.id, title, messages: slimMessages(), usage: sess.usage, model: settings.model, createdAt: rec.createdAt, updatedAt: now });
+    await storeSet(CHAT_INDEX_KEY, chatIndex);
+    renderChats();
+    try { document.title = (title === "New chat" ? "CodeCraft API" : title) + " — CodeCraft · ORscript"; } catch {}
+  }
+  async function loadIndex() {
+    if (indexLoaded) return chatIndex;
+    const idx = await storeGet(CHAT_INDEX_KEY);
+    chatIndex = Array.isArray(idx) ? idx.filter((c) => c && c.id) : [];
+    indexLoaded = true;
+    return chatIndex;
+  }
+  const sortedChats = () => chatIndex.slice().sort((a, b) => (b.pinned - a.pinned) || (b.updatedAt - a.updatedAt));
+  function relTime(ts) {
+    const d = Date.now() - (ts || 0);
+    if (!ts || d < 0) return "";
+    if (d < 60e3) return "just now";
+    if (d < 3600e3) return Math.round(d / 60e3) + " min ago";
+    if (d < 86400e3) return Math.round(d / 3600e3) + " h ago";
+    if (d < 7 * 86400e3) return Math.round(d / 86400e3) + " d ago";
+    try { return new Date(ts).toLocaleDateString(); } catch { return ""; }
+  }
+  let _search = "";
+  function renderChats() {
+    const box = ui.chats;
+    if (!box) return;
+    const q = _search.trim().toLowerCase();
+    const list = sortedChats().filter((c) => !q || (c.title + " " + (c.preview || "")).toLowerCase().includes(q));
+    if (!list.length) {
+      box.innerHTML = `<div class="cc-chats-empty">${q ? "No chat matches “" + esc(_search) + "”." : "No saved chats yet — your conversations appear here."}</div>`;
+      return;
+    }
+    box.innerHTML = list.map((c) => `<div class="cc-chat${c.id === sess.id ? " cc-chat-active" : ""}${c.pinned ? " cc-chat-pinned" : ""}" role="listitem" data-chat-id="${esc(c.id)}" title="${esc(c.preview || c.title)}">
+      <button type="button" class="cc-chat-open" data-chat-open="${esc(c.id)}">
+        <span class="cc-chat-title">${c.pinned ? "📌 " : ""}${esc(c.title || "New chat")}</span>
+        <span class="cc-chat-meta">${esc(relTime(c.updatedAt))}${c.model ? " · " + esc(c.model) : ""}${c.count ? " · " + c.count + " msgs" : ""}</span>
+      </button>
+      <span class="cc-chat-actions">
+        <button type="button" class="cc-chat-act" data-chat-pin="${esc(c.id)}" title="${c.pinned ? "Unpin" : "Pin to top"}" aria-label="${c.pinned ? "Unpin" : "Pin"}">${c.pinned ? "📍" : "📌"}</button>
+        <button type="button" class="cc-chat-act" data-chat-rename="${esc(c.id)}" title="Rename" aria-label="Rename">✎</button>
+        <button type="button" class="cc-chat-act cc-chat-del" data-chat-delete="${esc(c.id)}" title="Delete" aria-label="Delete">🗑</button>
+      </span>
+    </div>`).join("");
+  }
+  function renderUsage() {
+    const u = sess.usage || {};
+    if (ui.usage) ui.usage.textContent = u.total ? `This chat: ${fmtTokens(u.total)} tokens · ${u.requests} request${u.requests === 1 ? "" : "s"}` : "This chat: no tokens used yet";
+    if (ui.usageTotal) { const t = _usageTotal || {}; ui.usageTotal.textContent = t.total ? `${fmtTokens(t.total)} tokens · ${t.requests} requests${t.byModel ? " · top: " + topModels(t.byModel) : ""}` : "No usage recorded yet"; }
+  }
+  const fmtTokens = (n) => (n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e4 ? (n / 1e3).toFixed(1) + "k" : String(n || 0));
+  const topModels = (by) => Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, n]) => `${m} ${fmtTokens(n)}`).join(", ");
+  let _usageTotal = null;
+  async function recordUsage(u, model) {
+    if (!u) return;
+    const total = Number(u.total_tokens || 0) || (Number(u.prompt_tokens || 0) + Number(u.completion_tokens || 0));
+    sess.usage.prompt += Number(u.prompt_tokens || 0);
+    sess.usage.completion += Number(u.completion_tokens || 0);
+    sess.usage.total += total;
+    sess.usage.requests += 1;
+    if (!_usageTotal) _usageTotal = (await storeGet(USAGE_KEY)) || { total: 0, requests: 0, byModel: {} };
+    _usageTotal.total += total; _usageTotal.requests += 1;
+    _usageTotal.byModel = _usageTotal.byModel || {};
+    _usageTotal.byModel[model || "?"] = (_usageTotal.byModel[model || "?"] || 0) + total;
+    storeSet(USAGE_KEY, _usageTotal).catch(() => {});
+    renderUsage();
+  }
+  const guardAgent = (what) => {
+    if (hooks && hooks.isBlocked()) { status(`ORscript agent is working — ${what} is disabled until its turn finishes (Stop in the bar first)`, "warn"); return false; }
+    return true;
+  };
+  async function openChat(id) {
+    if (!id || id === sess.id) return false;
+    if (!guardAgent("switching chats")) return false;
+    if (_stream) stopGeneration();
+    await startSession(id);
+    renderChats();
+    status(`Opened “${deriveTitle()}”`, "ok");
+    if (ui.input) try { ui.input.focus(); } catch {}
+    return true;
+  }
+  async function deleteChat(id) {
+    const i = chatIndex.findIndex((c) => c.id === id);
+    if (i < 0) return;
+    if (!guardAgent("deleting a chat")) return;
+    chatIndex.splice(i, 1);
+    await storeRemove(CHAT_KEY_PREFIX + id);
+    try { sessionStorage.removeItem("cc:" + id); } catch {}
+    await storeSet(CHAT_INDEX_KEY, chatIndex);
+    if (id === sess.id) { if (_stream) stopGeneration(); sess.title = ""; startSession(newId()); }
+    renderChats();
+    status("Chat deleted", "ok");
+  }
+  async function renameChat(id, title) {
+    const c = chatIndex.find((x) => x.id === id);
+    if (!c) return;
+    title = String(title || "").trim().slice(0, 80);
+    if (!title) return;
+    c.title = title; c.updatedAt = Date.now();
+    if (id === sess.id) sess.title = title;
+    const rec = await storeGet(CHAT_KEY_PREFIX + id);
+    if (rec) { rec.title = title; await storeSet(CHAT_KEY_PREFIX + id, rec); }
+    await storeSet(CHAT_INDEX_KEY, chatIndex);
+    renderChats();
+  }
+  async function pinChat(id) {
+    const c = chatIndex.find((x) => x.id === id);
+    if (!c) return;
+    c.pinned = !c.pinned;
+    await storeSet(CHAT_INDEX_KEY, chatIndex);
+    renderChats();
+  }
+  async function clearAllChats() {
+    if (!guardAgent("clearing the library")) return;
+    for (const c of chatIndex) { await storeRemove(CHAT_KEY_PREFIX + c.id); try { sessionStorage.removeItem("cc:" + c.id); } catch {} }
+    chatIndex = [];
+    await storeSet(CHAT_INDEX_KEY, chatIndex);
+    if (_stream) stopGeneration();
+    sess.title = "";
+    startSession(newId());
+    renderChats();
+    status("Library cleared", "ok");
+  }
+  // ---------- export / import ----------
+  function toMarkdown() {
+    const lines = [`# ${deriveTitle()}`, "", `_CodeCraft API · ${settings.model} · exported ${new Date().toISOString()} · ${sess.messages.length} messages_`, ""];
+    for (const m of sess.messages) {
+      lines.push(`## ${m.role === "user" ? "You" : (m.model || "Assistant")}${m.at ? " · " + new Date(m.at).toLocaleString() : ""}`, "");
+      if (m.thinking) lines.push("<details><summary>Reasoning</summary>", "", m.thinking, "", "</details>", "");
+      if (m.images && m.images.length) lines.push(`_${m.images.length} image(s) attached_`, "");
+      lines.push(m.content || "", "");
+      if (m.error) lines.push(`> ⚠ ${m.error}`, "");
+    }
+    return lines.join("\n");
+  }
+  function toJson() {
+    return JSON.stringify({ format: "orscript-codecraft-chat", version: 1, id: sess.id, title: deriveTitle(), model: settings.model, exportedAt: Date.now(), usage: sess.usage, messages: slimMessages() }, null, 2);
+  }
+  function download(name, text, type) {
+    try {
+      const blob = new Blob([text], { type: type || "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = name; a.rel = "noopener";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 2000);
+      return true;
+    } catch (e) {
+      // No Blob/object URLs (test harness or locked-down profile): put it on the clipboard instead.
+      try { navigator.clipboard && navigator.clipboard.writeText(text); } catch {}
+      return false;
+    }
+  }
+  const safeName = (t) => String(t || "chat").replace(/[^a-z0-9\-_ ]+/gi, "").trim().replace(/\s+/g, "-").slice(0, 48) || "chat";
+  function exportChat(kind) {
+    if (!sess.messages.length) { status("Nothing to export yet", "warn"); return false; }
+    const name = safeName(deriveTitle());
+    const ok = kind === "json" ? download(name + ".json", toJson(), "application/json") : download(name + ".md", toMarkdown(), "text/markdown;charset=utf-8");
+    status(ok ? `Exported ${name}.${kind === "json" ? "json" : "md"}` : "Download unavailable — transcript copied to the clipboard instead", ok ? "ok" : "warn");
+    return ok;
+  }
+  async function importChat(json) {
+    let rec; try { rec = typeof json === "string" ? JSON.parse(json) : json; } catch { status("That file is not JSON", "err"); return false; }
+    const msgs = rec && (Array.isArray(rec.messages) ? rec.messages : Array.isArray(rec) ? rec : null);
+    if (!msgs || !msgs.length) { status("No messages found in that file", "err"); return false; }
+    if (!guardAgent("importing")) return false;
+    if (_stream) stopGeneration();
+    const id = newId();
+    sess.id = id; sess.title = String(rec.title || "").slice(0, 80); sess.createdAt = Date.now(); sess.usage = { prompt: 0, completion: 0, total: 0, requests: 0 };
+    setHash(); clearTranscript();
+    for (const m of msgs) {
+      if (!m || (m.role !== "user" && m.role !== "assistant")) continue;
+      pushMessage({ role: m.role, content: String(m.content == null ? "" : (typeof m.content === "string" ? m.content : Array.isArray(m.content) ? m.content.map((p) => p.text || "").join("") : JSON.stringify(m.content))), thinking: m.thinking || "", imageCount: m.imageCount || 0, at: m.at || 0, model: m.model || "", meta: m.meta || null });
+    }
+    await persistLibrary();
+    status(`Imported ${sess.messages.length} messages`, "ok");
+    return true;
   }
   function setHash() { try { if (location.hash !== "#c=" + sess.id) history.replaceState(null, "", "#c=" + sess.id); } catch {} }
 
@@ -189,6 +472,12 @@ const RSProvider = (() => {
     const who = document.createElement("div");
     who.className = "cc-who";
     who.textContent = msg.role === "user" ? "You" : (msg.model || settings.model || "CodeCraft");
+    if (!msg.at) msg.at = Date.now();
+    try { who.title = new Date(msg.at).toLocaleString(); } catch {}
+    const when = document.createElement("time");
+    when.className = "cc-when";
+    try { when.dateTime = new Date(msg.at).toISOString(); when.textContent = new Date(msg.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch {}
+    who.appendChild(when);
     art.appendChild(who);
     if (msg.imageCount && !(msg.images && msg.images.length)) {
       const note = document.createElement("div");
@@ -230,10 +519,56 @@ const RSProvider = (() => {
       err.textContent = msg.error;
       art.appendChild(err);
     }
+    // Hover actions (copy / edit & resend / regenerate / delete). Delegated in
+    // boot() through #cc-log, so rows restored from storage get them too.
+    const acts = document.createElement("div");
+    acts.className = "cc-actions";
+    acts.setAttribute("aria-label", "Message actions");
+    acts.innerHTML = msg.role === "user"
+      ? `<button type="button" data-act="copy" title="Copy text">Copy</button><button type="button" data-act="edit" title="Edit this message and resend (drops everything after it)">Edit</button><button type="button" data-act="delete" title="Delete this message">Delete</button>`
+      : `<button type="button" data-act="copy" title="Copy reply as Markdown">Copy</button><button type="button" data-act="regen" title="Regenerate this reply">Regenerate</button><button type="button" data-act="delete" title="Delete this reply">Delete</button>`;
+    art.appendChild(acts);
+    const meta = document.createElement("div");
+    meta.className = "cc-meta";
+    meta.hidden = true;
+    art.appendChild(meta);
     msg.el = art;
     msg.bodyEl = body;
     paintBody(msg, true);
+    paintMeta(msg);
     return art;
+  }
+  function paintMeta(msg) {
+    const el = msg.el && msg.el.querySelector(".cc-meta");
+    if (!el) return;
+    const m = msg.meta;
+    if (!m || settings.showMeta === false || msg.role !== "assistant") { el.hidden = true; return; }
+    const bits = [];
+    if (m.model) bits.push(m.model);
+    if (m.secs) bits.push(m.secs + " s");
+    if (m.ttft) bits.push("first token " + m.ttft + " s");
+    if (m.tokens) bits.push(m.tokens + " tokens");
+    if (m.tps) bits.push(m.tps + " tok/s");
+    if (m.finish && m.finish !== "stop") bits.push("finish=" + m.finish);
+    if (m.retries) bits.push(m.retries + " retr" + (m.retries === 1 ? "y" : "ies"));
+    el.textContent = bits.join(" · ");
+    el.hidden = !bits.length;
+  }
+  // Copy button + language label above every non-command code block (final
+  // paint only; command blocks stay masked behind ORscript's chips).
+  function decorateCode(msg) {
+    const body = msg.bodyEl;
+    if (!body) return;
+    for (const pre of body.querySelectorAll("pre")) {
+      if (pre.classList.contains("rs-tool-hide") || CMD_SHAPE.test(pre.textContent || "")) continue;
+      if (pre.previousElementSibling && pre.previousElementSibling.classList.contains("cc-pre-bar")) continue;
+      const code = pre.querySelector("code");
+      const lang = ((code && code.className.match(/language-([\w+-]+)/)) || [])[1] || "";
+      const bar = document.createElement("div");
+      bar.className = "cc-pre-bar";
+      bar.innerHTML = `<span class="cc-pre-lang">${esc(lang === "text" ? "" : lang)}</span><button type="button" data-act="copy-code" title="Copy code">Copy</button>`;
+      pre.parentNode.insertBefore(bar, pre);
+    }
   }
   function paintBody(msg, final) {
     if (!msg.bodyEl) return;
@@ -244,6 +579,7 @@ const RSProvider = (() => {
     msg.bodyEl.innerHTML = renderMarkdown(msg.content);
     msg.bodyEl.classList.toggle("cc-streaming", !final);
     if (msg.el && msg.el.classList.contains("rs-cmd-mask")) { try { findToolBlockSpot(msg.el); } catch {} }
+    if (final) { try { decorateCode(msg); } catch {} }
     if (msg.el) {
       const think = msg.el.querySelector(".cc-think");
       if (think) {
@@ -279,22 +615,117 @@ const RSProvider = (() => {
   }
   function startSession(id) {
     sess.id = id || newId();
+    sess.title = ""; sess.createdAt = Date.now(); sess.usage = { prompt: 0, completion: 0, total: 0, requests: 0 };
     setHash();
     clearTranscript();
+    let restored = false;
     try {
       const raw = window.sessionStorage && sessionStorage.getItem(sessKey());
-      if (raw) for (const m of JSON.parse(raw)) pushMessage(Object.assign({}, m));
+      if (raw) { for (const m of JSON.parse(raw)) pushMessage(Object.assign({}, m)); restored = sess.messages.length > 0; }
     } catch {}
-    persist();
+    const entry = chatIndex.find((c) => c.id === sess.id);
+    if (entry) { sess.title = entry.title || ""; sess.createdAt = entry.createdAt || sess.createdAt; }
+    renderUsage();
+    renderChats();
+    try { document.title = "CodeCraft API — ORscript"; } catch {}
+    if (restored) { persist(); return Promise.resolve(true); }
+    // Not in this tab's sessionStorage: fall back to the library (another tab,
+    // a closed tab, a reload after the browser dropped session state).
+    const want = sess.id;
+    return storeGet(CHAT_KEY_PREFIX + want).then((rec) => {
+      if (!rec || sess.id !== want || sess.messages.length) return false;
+      sess.title = rec.title || sess.title; sess.createdAt = rec.createdAt || sess.createdAt;
+      if (rec.usage) sess.usage = Object.assign({ prompt: 0, completion: 0, total: 0, requests: 0 }, rec.usage);
+      for (const m of rec.messages || []) pushMessage(Object.assign({}, m));
+      renderUsage();
+      try { document.title = (sess.title || deriveTitle()) + " — CodeCraft · ORscript"; } catch {}
+      return true;
+    }).catch(() => false);
   }
   function newChat() {
     if (_stream) stopGeneration();
+    if (hooks && hooks.isBlocked()) { status("ORscript agent is working — press Stop in the bar before starting a new chat", "warn"); return; }
     startSession(newId());
     _lastError = "";
     _pendingImages = [];
     renderAttachments();
     if (ui.input) { ui.input.value = ""; ui.input.focus(); }
     status("New chat");
+  }
+
+  // ---------- message actions ----------
+  function removeMessage(msg) {
+    const i = sess.messages.indexOf(msg);
+    if (i >= 0) sess.messages.splice(i, 1);
+    try { msg.el && msg.el.remove(); } catch {}
+    if (!sess.messages.length) { if (ui.empty) ui.empty.hidden = false; if (ui.app) ui.app.classList.remove("cc-has-msgs"); }
+  }
+  function truncateAfter(msg, inclusive) {
+    const i = sess.messages.indexOf(msg);
+    if (i < 0) return;
+    const gone = sess.messages.splice(inclusive ? i : i + 1);
+    for (const g of gone) { try { g.el && g.el.remove(); } catch {} }
+    if (!sess.messages.length) { if (ui.empty) ui.empty.hidden = false; if (ui.app) ui.app.classList.remove("cc-has-msgs"); }
+  }
+  async function copyText(text, label) {
+    try { await navigator.clipboard.writeText(String(text || "")); status((label || "Copied") + " to clipboard", "ok"); return true; }
+    catch { status("Clipboard unavailable", "warn"); return false; }
+  }
+  function regenerate(msg) {
+    if (!msg || msg.role !== "assistant") return false;
+    if (!guardAgent("regenerating")) return false;
+    if (!hasKey()) { status("Paste your CodeCraft API key first (cc_…)", "warn"); return false; }
+    if (_stream) stopGeneration();
+    truncateAfter(msg, true);
+    _lastError = "";
+    const reply = pushMessage({ role: "assistant", content: "", thinking: "", model: settings.model });
+    const ctrl = new AbortController();
+    _stream = { ctrl, msg: reply, startedAt: Date.now(), lastAt: Date.now(), firstTokenAt: 0, retries: 0 };
+    setBusy(true);
+    status(`Regenerating with ${settings.model}…`);
+    paintBody(reply, false);
+    diag("codecraft.regenerate", { model: settings.model, history: sess.messages.length });
+    runStream(_stream).catch(() => {});
+    return true;
+  }
+  function editMessage(msg) {
+    if (!msg || msg.role !== "user") return false;
+    if (!guardAgent("editing")) return false;
+    if (_stream) stopGeneration();
+    const ta = ui.input;
+    if (!ta) return false;
+    truncateAfter(msg, true);
+    ta.value = msg.content || "";
+    if (msg.images && msg.images.length) { _pendingImages = msg.images.slice(0, 8); renderAttachments(); }
+    autoGrow();
+    try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch {}
+    persist();
+    status("Editing — press Enter to resend; everything after this message was removed", "warn");
+    return true;
+  }
+  function onLogClick(e) {
+    const btn = e.target && e.target.closest && e.target.closest("button[data-act]");
+    if (!btn) return;
+    const act = btn.getAttribute("data-act");
+    if (act === "copy-code") {
+      const pre = btn.parentElement && btn.parentElement.nextElementSibling;
+      const code = pre && (pre.querySelector("code") || pre);
+      copyText(code ? code.textContent : "", "Code copied");
+      return;
+    }
+    const row = btn.closest("article.cc-msg");
+    const msg = msgOf(row);
+    if (!msg) return;
+    if (act === "copy") copyText(msg.content, msg.role === "user" ? "Message copied" : "Reply copied");
+    else if (act === "regen") regenerate(msg);
+    else if (act === "edit") editMessage(msg);
+    else if (act === "delete") {
+      if (!guardAgent("deleting")) return;
+      if (_stream && _stream.msg === msg) stopGeneration();
+      removeMessage(msg);
+      persist();
+      status("Message deleted", "ok");
+    }
   }
 
   // ---------- status / errors ----------
@@ -407,7 +838,7 @@ const RSProvider = (() => {
     pushMessage({ role: "user", content: text, images: imgs });
     const reply = pushMessage({ role: "assistant", content: "", thinking: "", model: settings.model });
     const ctrl = new AbortController();
-    _stream = { ctrl, msg: reply, startedAt: Date.now(), lastAt: Date.now(), firstTokenAt: 0 };
+    _stream = { ctrl, msg: reply, startedAt: Date.now(), lastAt: Date.now(), firstTokenAt: 0, retries: 0 };
     setBusy(true);
     status(`Sending to ${settings.model}…`);
     paintBody(reply, false);
@@ -416,24 +847,51 @@ const RSProvider = (() => {
     return true;
   }
 
+  const RETRY_DELAYS_MS = [1500, 4000];
+  const retryable = (status) => status === 429 || status === 408 || status === 409 || (status >= 500 && status <= 599);
+  function requestBody() {
+    const messages = apiMessages();
+    const instr = String(settings.instructions || "").trim();
+    if (instr) messages.unshift({ role: "system", content: instr.slice(0, 8000) });
+    const body = { model: settings.model || DEFAULT_MODEL, messages, stream: true };
+    if (settings.temperature != null && settings.temperature !== "") body.temperature = Number(settings.temperature);
+    const mt = Number(settings.maxTokens);
+    if (mt && mt > 0) body.max_tokens = Math.floor(mt);
+    if (settings.reasoning) body.reasoning_effort = settings.reasoning;
+    return body;
+  }
   async function runStream(st) {
     const { ctrl, msg } = st;
-    const body = { model: settings.model || DEFAULT_MODEL, messages: apiMessages(), stream: true };
-    if (settings.temperature != null && settings.temperature !== "") body.temperature = Number(settings.temperature);
+    const body = requestBody();
     let res;
-    try {
-      res = await fetch(API_BASE + "/chat/completions", {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: "Bearer " + settings.key.trim() },
-        body: JSON.stringify(body),
-      });
-    } catch (e) {
-      return finish(st, ctrl.signal.aborted ? "" : "Network error reaching codecraftapi.com: " + (e && e.message || e));
-    }
-    if (!res.ok) {
-      let t = ""; try { t = await res.text(); } catch {}
-      return finish(st, errorText(res.status, t));
+    // Transient failures (429 / 5xx / network) are retried in place - the row
+    // keeps its position, the status line shows the countdown, and a Stop
+    // during the wait aborts cleanly.
+    for (let attempt = 0; ; attempt++) {
+      let failure = "", transient = false;
+      try {
+        res = await fetch(API_BASE + "/chat/completions", {
+          method: "POST",
+          signal: ctrl.signal,
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: "Bearer " + settings.key.trim() },
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        if (ctrl.signal.aborted) return finish(st, "");
+        failure = "Network error reaching codecraftapi.com: " + (e && e.message || e); transient = true;
+      }
+      if (!failure && !res.ok) {
+        let t = ""; try { t = await res.text(); } catch {}
+        failure = errorText(res.status, t); transient = retryable(res.status);
+      }
+      if (!failure) break;
+      const delay = RETRY_DELAYS_MS[attempt];
+      if (!transient || settings.autoRetry === false || delay == null) return finish(st, failure);
+      st.retries = attempt + 1;
+      status(`${failure.slice(0, 90)} — retrying in ${delay / 1000}s (${attempt + 1}/${RETRY_DELAYS_MS.length})`, "warn");
+      diag("codecraft.retry", { attempt: attempt + 1, delay, error: failure.slice(0, 120) });
+      await new Promise((r) => { const t = setTimeout(r, delay); ctrl.signal.addEventListener("abort", () => { clearTimeout(t); r(); }, { once: true }); });
+      if (ctrl.signal.aborted) return finish(st, "");
     }
     const ctype = (res.headers.get("content-type") || "").toLowerCase();
     if (!ctype.includes("event-stream")) {
@@ -519,8 +977,13 @@ const RSProvider = (() => {
     } else {
       const u = st.usage || {};
       const secs = ((Date.now() - st.startedAt) / 1000).toFixed(1);
-      status(`${settings.model} · ${secs}s${u.total_tokens ? ` · ${u.total_tokens} tokens` : ""}${st.finish && st.finish !== "stop" ? ` · finish=${st.finish}` : ""}`, "ok");
+      const genMs = Date.now() - (st.firstTokenAt || st.startedAt);
+      const tps = u.completion_tokens && genMs > 300 ? Math.round(u.completion_tokens / (genMs / 1000)) : 0;
+      status(`${settings.model} · ${secs}s${u.total_tokens ? ` · ${u.total_tokens} tokens` : ""}${tps ? ` · ${tps} tok/s` : ""}${st.finish && st.finish !== "stop" ? ` · finish=${st.finish}` : ""}`, "ok");
       if (st.finish === "length") msg.truncated = true;
+      msg.meta = { model: msg.model || settings.model, secs: Number(secs), ttft: st.firstTokenAt ? Number(((st.firstTokenAt - st.startedAt) / 1000).toFixed(1)) : 0, tokens: u.total_tokens || 0, tps, finish: st.finish || "", retries: st.retries || 0 };
+      paintMeta(msg);
+      if (u.total_tokens || u.prompt_tokens || u.completion_tokens) recordUsage(u, msg.model || settings.model).catch(() => {});
       if (!msg.content && !msg.thinking && msg.el && !msg.el.querySelector(".cc-error")) {
         // Nothing came back (filtered / empty choice): say so instead of
         // leaving a blank bubble the user cannot interpret.
@@ -578,12 +1041,20 @@ const RSProvider = (() => {
     if (booted || !isHostPage()) return;
     booted = true;
     await loadSettings();
+    await loadIndex();
+    _usageTotal = (await storeGet(USAGE_KEY)) || { total: 0, requests: 0, byModel: {} };
     if (ui.key) ui.key.value = settings.key || "";
     fillModels();
+    applySettingsUi();
+    if (ui.app) ui.app.classList.toggle("cc-side-collapsed", !!settings.sideCollapsed);
+    if (ui.sideToggle) ui.sideToggle.setAttribute("aria-expanded", settings.sideCollapsed ? "false" : "true");
     status(hasKey() ? `key ${maskKey(settings.key)} · ${settings.model}` : "No API key yet — create one at codecraftapi.com → Dashboard → API Keys", hasKey() ? "ok" : "warn");
     const m = (location.hash || "").match(/#c=([A-Za-z0-9]+)/);
-    startSession(m ? m[1] : newId());
+    await startSession(m ? m[1] : newId());
+    renderChats();
+    renderUsage();
     refreshModels();
+    wireExtras();
 
     const onSave = async () => {
       const k = String(ui.key && ui.key.value || "").trim();
@@ -594,10 +1065,11 @@ const RSProvider = (() => {
     };
     if (ui.keySave) ui.keySave.addEventListener("click", onSave);
     if (ui.key) ui.key.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); onSave(); } });
-    if (ui.model) ui.model.addEventListener("change", () => { saveSettings({ model: ui.model.value }); status(`Model: ${ui.model.value}`, "ok"); });
+    if (ui.model) ui.model.addEventListener("change", () => { saveSettings({ model: ui.model.value }); status(`Model: ${ui.model.value}`, "ok"); paintModelLogo(); });
     if (ui.newChat) ui.newChat.addEventListener("click", newChat);
     if (ui.stop) ui.stop.addEventListener("click", () => { stopGeneration(); if (hooks) try { hooks.onNativeStop(); } catch {} });
-    if (ui.log) ui.log.addEventListener("scroll", () => { const l = ui.log; _autoScroll = l.scrollHeight - l.scrollTop - l.clientHeight < 80; });
+    if (ui.log) ui.log.addEventListener("scroll", () => { const l = ui.log; _autoScroll = l.scrollHeight - l.scrollTop - l.clientHeight < 80; if (ui.jump) ui.jump.hidden = _autoScroll; });
+    if (ui.log) ui.log.addEventListener("click", onLogClick);
     if (ui.attach && ui.fileInput) {
       ui.attach.addEventListener("click", () => ui.fileInput.click());
       ui.fileInput.addEventListener("change", async () => {
@@ -608,7 +1080,16 @@ const RSProvider = (() => {
     }
     if (ui.input) {
       ui.input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); userSend(); }
+        if (e.key === "Enter" && !e.isComposing) {
+          const plain = !e.shiftKey && !e.ctrlKey && !e.metaKey;
+          const chord = e.ctrlKey || e.metaKey;
+          if ((settings.ctrlEnter ? chord : plain)) { e.preventDefault(); userSend(); return; }
+        }
+        // ↑ in an empty composer: edit the last message you sent (ChatGPT-style).
+        if (e.key === "ArrowUp" && !ui.input.value && !e.shiftKey && !e.altKey) {
+          const last = [...sess.messages].reverse().find((m) => m.role === "user" && !(BOOTSTRAP_RE.test(m.content || "") && m.content.length > 200));
+          if (last && !(hooks && hooks.isBlocked())) { e.preventDefault(); editMessage(last); }
+        }
       });
       ui.input.addEventListener("input", autoGrow);
       ui.input.addEventListener("paste", async (e) => {
@@ -627,6 +1108,131 @@ const RSProvider = (() => {
     if (!ta) return;
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 260) + "px";
+  }
+  // ---------- 1.36.0 page extras (library, settings drawer, export, shortcuts, drag & drop) ----------
+  function paintModelLogo() {
+    const img = ui.modelLogo;
+    if (!img) return;
+    const m = String(settings.model || "").trim();
+    if (!m) { img.hidden = true; return; }
+    img.hidden = false;
+    img.src = `${SITE}/images/models/${encodeURIComponent(m)}.png`;
+  }
+  function applySettingsUi() {
+    if (ui.temp) { ui.temp.value = settings.temperature == null || settings.temperature === "" ? "1" : String(settings.temperature); }
+    if (ui.tempOut) ui.tempOut.textContent = settings.temperature == null || settings.temperature === "" ? "default" : String(settings.temperature);
+    if (ui.maxTokens) ui.maxTokens.value = settings.maxTokens ? String(settings.maxTokens) : "";
+    if (ui.reasoning) ui.reasoning.value = settings.reasoning || "";
+    if (ui.instructions) ui.instructions.value = settings.instructions || "";
+    if (ui.autoRetry) ui.autoRetry.checked = settings.autoRetry !== false;
+    if (ui.ctrlEnter) ui.ctrlEnter.checked = !!settings.ctrlEnter;
+    if (ui.showMeta) ui.showMeta.checked = settings.showMeta !== false;
+    if (ui.input) ui.input.setAttribute("placeholder", settings.ctrlEnter ? "Message CodeCraft… (Ctrl+Enter to send, Enter for a new line)" : "Message CodeCraft… (Enter to send, Shift+Enter for a new line)");
+    paintModelLogo();
+    renderUsage();
+  }
+  function toggleSettings(force) {
+    const p = ui.settingsPanel;
+    if (!p) return;
+    const open = force == null ? p.hidden : !!force;
+    p.hidden = !open;
+    if (ui.settingsBtn) ui.settingsBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (ui.app) ui.app.classList.toggle("cc-settings-open", open);
+    if (open) applySettingsUi();
+  }
+  function toggleSide(force) {
+    const collapsed = force == null ? !settings.sideCollapsed : !force;
+    saveSettings({ sideCollapsed: collapsed });
+    if (ui.app) ui.app.classList.toggle("cc-side-collapsed", collapsed);
+    if (ui.sideToggle) ui.sideToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  }
+  function wireExtras() {
+    if (ui.modelLogo) ui.modelLogo.addEventListener("error", () => { ui.modelLogo.hidden = true; });
+    if (ui.sideToggle) ui.sideToggle.addEventListener("click", () => toggleSide());
+    if (ui.sideNew) ui.sideNew.addEventListener("click", newChat);
+    if (ui.search) ui.search.addEventListener("input", () => { _search = ui.search.value || ""; renderChats(); });
+    if (ui.chats) ui.chats.addEventListener("click", (e) => {
+      const t = e.target && e.target.closest && e.target.closest("button[data-chat-open],button[data-chat-pin],button[data-chat-rename],button[data-chat-delete]");
+      if (!t) return;
+      e.preventDefault();
+      if (t.hasAttribute("data-chat-open")) openChat(t.getAttribute("data-chat-open"));
+      else if (t.hasAttribute("data-chat-pin")) pinChat(t.getAttribute("data-chat-pin"));
+      else if (t.hasAttribute("data-chat-rename")) {
+        const id = t.getAttribute("data-chat-rename");
+        const c = chatIndex.find((x) => x.id === id);
+        let name = null; try { name = window.prompt("Rename chat", (c && c.title) || ""); } catch {}
+        if (name != null) renameChat(id, name);
+      } else if (t.hasAttribute("data-chat-delete")) {
+        const id = t.getAttribute("data-chat-delete");
+        const c = chatIndex.find((x) => x.id === id);
+        let yes = true; try { yes = window.confirm(`Delete “${(c && c.title) || "this chat"}”? This cannot be undone.`); } catch {}
+        if (yes) deleteChat(id);
+      }
+    });
+    if (ui.clearAll) ui.clearAll.addEventListener("click", () => { let yes = true; try { yes = window.confirm(`Delete all ${chatIndex.length} saved chats?`); } catch {} if (yes) clearAllChats(); });
+    if (ui.importBtn && ui.importFile) {
+      ui.importBtn.addEventListener("click", () => ui.importFile.click());
+      ui.importFile.addEventListener("change", async () => {
+        const f = ui.importFile.files && ui.importFile.files[0];
+        ui.importFile.value = "";
+        if (!f) return;
+        try { await importChat(await f.text()); } catch (e) { status("Import failed: " + (e && e.message || e), "err"); }
+      });
+    }
+    if (ui.exportBtn) ui.exportBtn.addEventListener("click", (e) => exportChat(e.shiftKey ? "json" : "md"));
+    if (ui.settingsBtn) ui.settingsBtn.addEventListener("click", () => toggleSettings());
+    if (ui.settingsClose) ui.settingsClose.addEventListener("click", () => toggleSettings(false));
+    if (ui.temp) ui.temp.addEventListener("input", () => { const v = Number(ui.temp.value); saveSettings({ temperature: v }); if (ui.tempOut) ui.tempOut.textContent = String(v); });
+    if (ui.tempReset) ui.tempReset.addEventListener("click", () => { saveSettings({ temperature: null }); applySettingsUi(); });
+    if (ui.maxTokens) ui.maxTokens.addEventListener("change", () => { const v = Number(ui.maxTokens.value); saveSettings({ maxTokens: v > 0 ? Math.floor(v) : null }); });
+    if (ui.reasoning) ui.reasoning.addEventListener("change", () => saveSettings({ reasoning: ui.reasoning.value || "" }));
+    if (ui.instructions) ui.instructions.addEventListener("change", () => saveSettings({ instructions: String(ui.instructions.value || "").slice(0, 8000) }));
+    if (ui.autoRetry) ui.autoRetry.addEventListener("change", () => saveSettings({ autoRetry: !!ui.autoRetry.checked }));
+    if (ui.ctrlEnter) ui.ctrlEnter.addEventListener("change", () => { saveSettings({ ctrlEnter: !!ui.ctrlEnter.checked }); applySettingsUi(); });
+    if (ui.showMeta) ui.showMeta.addEventListener("change", () => { saveSettings({ showMeta: !!ui.showMeta.checked }); for (const m of sess.messages) paintMeta(m); });
+    if (ui.usageReset) ui.usageReset.addEventListener("click", () => { _usageTotal = { total: 0, requests: 0, byModel: {} }; storeSet(USAGE_KEY, _usageTotal).catch(() => {}); renderUsage(); });
+    if (ui.jump) ui.jump.addEventListener("click", () => { _autoScroll = true; ui.jump.hidden = true; scrollToEnd(); });
+    // Quick prompts on the empty state fill the composer (the user still presses Enter).
+    if (ui.empty) ui.empty.addEventListener("click", (e) => {
+      const b = e.target && e.target.closest && e.target.closest("button[data-cc-prompt]");
+      if (!b || !ui.input) return;
+      ui.input.value = b.getAttribute("data-cc-prompt") || "";
+      autoGrow();
+      try { ui.input.focus(); } catch {}
+      if (hooks && !hooks.isStarted() && chatIsEmpty()) status("Press Start in the ORscript bar to let the agent build this in Studio, or Enter to just chat", "ok");
+    });
+    // Drag & drop images anywhere on the page.
+    const app = ui.app;
+    if (app) {
+      let depth = 0;
+      const hasFiles = (e) => !!(e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files"));
+      app.addEventListener("dragenter", (e) => { if (!hasFiles(e)) return; depth++; if (ui.drop) ui.drop.hidden = false; });
+      app.addEventListener("dragover", (e) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } });
+      app.addEventListener("dragleave", () => { depth = Math.max(0, depth - 1); if (!depth && ui.drop) ui.drop.hidden = true; });
+      app.addEventListener("drop", async (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault(); depth = 0; if (ui.drop) ui.drop.hidden = true;
+        let n = 0;
+        for (const f of e.dataTransfer.files || []) { if (/^image\//.test(f.type) && _pendingImages.length < 8) { try { _pendingImages.push(await fileToImage(f)); n++; } catch {} } }
+        renderAttachments();
+        if (n) status(`${n} image${n === 1 ? "" : "s"} attached`, "ok");
+      });
+    }
+    // Keyboard shortcuts.
+    document.addEventListener("keydown", (e) => {
+      const mod = e.ctrlKey || e.metaKey;
+      const k = String(e.key || "").toLowerCase();
+      if (e.key === "Escape") {
+        if (_stream) { e.preventDefault(); stopGeneration(); if (hooks) try { hooks.onNativeStop(); } catch {} return; }
+        if (ui.settingsPanel && !ui.settingsPanel.hidden) { toggleSettings(false); return; }
+        return;
+      }
+      if (!mod) return;
+      if (k === "k" && !e.shiftKey) { e.preventDefault(); newChat(); }
+      else if (k === "b" && !e.shiftKey) { e.preventDefault(); toggleSide(); }
+      else if (k === "," ) { e.preventDefault(); toggleSettings(); }
+      else if (k === "s" && e.shiftKey) { e.preventDefault(); exportChat(e.altKey ? "json" : "md"); }
+    });
   }
   // Manual send from the composer: mirrors what installSendHooks does on
   // hosted sites (block while the agent is mid-turn, nudge to Start on an
@@ -845,7 +1451,13 @@ const RSProvider = (() => {
     chipAtItemLevel: true,
     chipAnchor: (item) => (item && item.querySelector(".cc-chips")) || item,
     // Page-level helpers (used by codecraft.html controls and tests).
-    codecraft: { API_BASE, SITE, STORE_KEY, DEFAULT_MODEL, FALLBACK_MODELS, loadSettings, saveSettings, hasKey, refreshModels, newChat, submit, renderMarkdown, apiMessages, session: sess, settings },
+    codecraft: {
+      API_BASE, SITE, STORE_KEY, DEFAULT_MODEL, FALLBACK_MODELS, CHAT_INDEX_KEY, CHAT_KEY_PREFIX, USAGE_KEY,
+      loadSettings, saveSettings, hasKey, refreshModels, newChat, submit, renderMarkdown, apiMessages, session: sess, settings,
+      // 1.36.0 page extras
+      requestBody, retryable, RETRY_DELAYS_MS, deriveTitle, chats: () => chatIndex, openChat, deleteChat, renameChat, pinChat, clearAllChats,
+      regenerate, editMessage, exportChat, importChat, toMarkdown, toJson, toggleSettings, toggleSide, renderChats, persistLibrary,
+    },
   };
 })();
 

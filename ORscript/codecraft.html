@@ -3,7 +3,9 @@
 <!-- CodeCraft API chat: ORscript's own chat surface for https://codecraftapi.com
      (an OpenAI-compatible API without a web chat). The page loads the same
      bundle a hosted chat site would get; src/providers/codecraft.js drives the
-     transcript below and streams /v1/chat/completions into it. -->
+     transcript below and streams /v1/chat/completions into it.
+     1.36.0: persistent chat library (sidebar), message actions, generation
+     settings drawer, usage meter, export/import, drag & drop, quick prompts. -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -17,6 +19,7 @@
   <div id="cc-app" class="cc-app">
     <header class="cc-top">
       <div class="cc-brand">
+        <button id="cc-side-toggle" type="button" class="cc-icon cc-icon-sm" title="Toggle chat library (Ctrl+B)" aria-label="Toggle chat library" aria-expanded="true">☰</button>
         <img src="assets/icon48.png" alt="" width="28" height="28">
         <div class="cc-brand-text">
           <strong>CodeCraft API</strong>
@@ -29,43 +32,122 @@
           <input id="cc-key" type="password" autocomplete="new-password" spellcheck="false" placeholder="cc_…  (Dashboard → API Keys)">
           <button id="cc-key-save" type="button">Save</button>
         </label>
-        <label class="cc-field">
+        <label class="cc-field cc-field-model">
           <span>Model</span>
+          <img id="cc-model-logo" class="cc-model-logo" alt="" width="18" height="18" hidden>
           <select id="cc-model" aria-label="Model"></select>
         </label>
-        <button id="cc-new" type="button" class="cc-btn" title="Start a new conversation">New chat</button>
+        <button id="cc-settings-btn" type="button" class="cc-icon cc-icon-sm" title="Generation settings (Ctrl+,)" aria-label="Generation settings" aria-expanded="false">⚙</button>
+        <button id="cc-export" type="button" class="cc-icon cc-icon-sm" title="Export this chat as Markdown (Ctrl+Shift+S) · Shift-click for JSON" aria-label="Export chat">⤓</button>
+        <button id="cc-new" type="button" class="cc-btn" title="Start a new conversation (Ctrl+K)">New chat</button>
       </div>
       <div id="cc-status" class="cc-status" aria-live="polite"></div>
     </header>
 
-    <main class="cc-main">
-      <div id="cc-log" class="cc-log" role="log" aria-live="polite" aria-label="Conversation">
-      </div>
-      <div id="cc-empty" class="cc-empty">
-        <img src="ui/hero.jpg" alt="" class="cc-hero">
-        <h1>Chat with any CodeCraft model</h1>
-        <p>Paste your <code>cc_</code> key once, choose a model, then press <b>Start</b> in the ORscript bar below to let the agent build in Roblox Studio — or just chat.</p>
-        <ul>
-          <li>Your key is stored locally in this browser profile and is only sent to <code>codecraftapi.com</code>.</li>
-          <li>Streaming replies, reasoning (when the model emits it), image attachments for vision models.</li>
-          <li>Each conversation lives in this tab (<code>#c=…</code> in the URL); <b>New chat</b> starts a fresh context.</li>
-        </ul>
-      </div>
-    </main>
+    <div class="cc-shell">
+      <aside id="cc-side" class="cc-side" aria-label="Chat library">
+        <div class="cc-side-head">
+          <button id="cc-side-new" type="button" class="cc-btn cc-btn-wide">+ New chat</button>
+          <input id="cc-search" type="search" placeholder="Search chats…" aria-label="Search chats" autocomplete="off">
+        </div>
+        <div id="cc-chats" class="cc-chats" role="list" aria-label="Saved chats"></div>
+        <div class="cc-side-foot">
+          <div id="cc-usage" class="cc-usage" title="Tokens reported by the API (usage.total_tokens) — what your plan is billed for"></div>
+          <div class="cc-side-actions">
+            <button id="cc-import" type="button" class="cc-link" title="Import a chat exported as JSON">Import</button>
+            <input id="cc-import-file" type="file" accept="application/json,.json" hidden>
+            <button id="cc-clear-all" type="button" class="cc-link cc-link-danger" title="Delete every saved chat">Clear all</button>
+          </div>
+        </div>
+      </aside>
 
-    <div class="cc-dock">
-      <div id="cc-composer" class="cc-composer">
-        <div id="cc-attachments" class="cc-attachments" hidden></div>
-        <form id="cc-form" class="cc-form" autocomplete="off">
-          <button id="cc-attach" type="button" class="cc-icon" title="Attach image" aria-label="Attach image">+</button>
-          <input id="cc-file" type="file" accept="image/*" multiple hidden>
-          <textarea id="cc-input" rows="1" placeholder="Message CodeCraft… (Enter to send, Shift+Enter for a new line)" aria-label="Message"></textarea>
-          <button id="cc-stop" type="button" class="cc-icon cc-stop" title="Stop generating" aria-label="Stop generating" hidden>■</button>
-          <button id="cc-send" type="submit" class="cc-send" aria-label="Send">Send</button>
-        </form>
-        <div class="cc-foot">Powered by <a href="https://codecraftapi.com" target="_blank" rel="noopener">CodeCraft API</a> · 33 models on one key · ORscript never proxies your traffic.</div>
+      <div class="cc-column">
+        <main class="cc-main">
+          <div id="cc-log" class="cc-log" role="log" aria-live="polite" aria-label="Conversation">
+          </div>
+          <div id="cc-empty" class="cc-empty">
+            <img src="ui/hero.jpg" alt="" class="cc-hero">
+            <h1>Chat with any CodeCraft model</h1>
+            <p>Paste your <code>cc_</code> key once, choose a model, then press <b>Start</b> in the ORscript bar below to let the agent build in Roblox Studio — or just chat.</p>
+            <div class="cc-quick" aria-label="Quick prompts">
+              <button type="button" class="cc-qp" data-cc-prompt="Build a complete obby with 12 stages, checkpoints that save with DataStore, a kill brick system and a stage counter GUI. Verify it after building.">🏁 Build a 12-stage obby with checkpoints</button>
+              <button type="button" class="cc-qp" data-cc-prompt="Create a polished shop GUI (ScreenGui, UICorner, UIGradient, responsive UDim2 scaling) with three items, a currency display and a working purchase flow through a RemoteEvent.">🛒 Shop GUI with a working purchase flow</button>
+              <button type="button" class="cc-qp" data-cc-prompt="Make a pet hatching system: an egg model, rarity table (Common 60%, Rare 30%, Epic 9%, Legendary 1%), hatch animation and a pet that follows the player.">🥚 Pet hatching system with rarities</button>
+              <button type="button" class="cc-qp" data-cc-prompt="Inspect the current place: list the services, scripts and models, then propose three concrete improvements and apply the first one.">🔍 Inspect my place and improve it</button>
+              <button type="button" class="cc-qp" data-cc-prompt="Write a server-authoritative sword combat system with hit detection, damage, cooldowns, a leaderstats kill counter and client VFX.">⚔️ Sword combat with leaderstats</button>
+              <button type="button" class="cc-qp" data-cc-prompt="Explain the difference between Script, LocalScript and ModuleScript in Roblox and when to use RemoteEvents vs RemoteFunctions, with short Luau examples.">📘 Explain Scripts vs LocalScripts vs Modules</button>
+            </div>
+            <ul>
+              <li>Your key is stored locally in this browser profile and is only sent to <code>codecraftapi.com</code>.</li>
+              <li>Streaming replies, reasoning (when the model emits it), image attachments for vision models — paste, drop or pick a file.</li>
+              <li>Chats are saved in the library on the left; <b>New chat</b> (Ctrl+K) starts a fresh context, <b>⤓</b> exports the transcript.</li>
+            </ul>
+          </div>
+          <button id="cc-jump" type="button" class="cc-jump" title="Jump to the latest message" hidden>↓ Latest</button>
+        </main>
+
+        <div class="cc-dock">
+          <div id="cc-composer" class="cc-composer">
+            <div id="cc-attachments" class="cc-attachments" hidden></div>
+            <form id="cc-form" class="cc-form" autocomplete="off">
+              <button id="cc-attach" type="button" class="cc-icon" title="Attach image" aria-label="Attach image">+</button>
+              <input id="cc-file" type="file" accept="image/*" multiple hidden>
+              <textarea id="cc-input" rows="1" placeholder="Message CodeCraft… (Enter to send, Shift+Enter for a new line)" aria-label="Message"></textarea>
+              <button id="cc-stop" type="button" class="cc-icon cc-stop" title="Stop generating (Esc)" aria-label="Stop generating" hidden>■</button>
+              <button id="cc-send" type="submit" class="cc-send" aria-label="Send">Send</button>
+            </form>
+            <div class="cc-foot">Powered by <a href="https://codecraftapi.com" target="_blank" rel="noopener">CodeCraft API</a> · 33 models on one key · ORscript never proxies your traffic.</div>
+          </div>
+        </div>
       </div>
+
+      <aside id="cc-settings" class="cc-settings" aria-label="Generation settings" hidden>
+        <div class="cc-settings-head">
+          <strong>Generation settings</strong>
+          <button id="cc-settings-close" type="button" class="cc-icon cc-icon-sm" aria-label="Close settings">×</button>
+        </div>
+        <label class="cc-set">
+          <span>Temperature <output id="cc-temp-out">default</output></span>
+          <input id="cc-temp" type="range" min="0" max="2" step="0.1" value="1">
+          <small>Lower = more deterministic Luau; higher = more creative prose. Default leaves it to the model.</small>
+        </label>
+        <button id="cc-temp-reset" type="button" class="cc-link">Use model default</button>
+        <label class="cc-set">
+          <span>Max output tokens</span>
+          <input id="cc-max-tokens" type="number" min="256" max="200000" step="256" placeholder="model default">
+          <small>Caps each reply (max_tokens). Leave empty for the model default.</small>
+        </label>
+        <label class="cc-set">
+          <span>Reasoning effort</span>
+          <select id="cc-reasoning">
+            <option value="">Model default</option>
+            <option value="low">Low — fastest, cheapest</option>
+            <option value="medium">Medium</option>
+            <option value="high">High — deepest planning</option>
+          </select>
+          <small>Sent as reasoning_effort; ignored by models without reasoning.</small>
+        </label>
+        <label class="cc-set">
+          <span>Custom instructions</span>
+          <textarea id="cc-instructions" rows="4" placeholder="e.g. Always use strict-mode Luau with type annotations. Keep replies under 200 words."></textarea>
+          <small>Sent as a system message before every request of every chat (plain chat and agent sessions alike).</small>
+        </label>
+        <label class="cc-set cc-set-row"><input id="cc-auto-retry" type="checkbox" checked> <span>Retry automatically on rate limits / server errors (2 attempts)</span></label>
+        <label class="cc-set cc-set-row"><input id="cc-ctrl-enter" type="checkbox"> <span>Send with Ctrl+Enter instead of Enter</span></label>
+        <label class="cc-set cc-set-row"><input id="cc-show-meta" type="checkbox" checked> <span>Show reply stats (time, tokens, tok/s)</span></label>
+        <div class="cc-set">
+          <span>Shortcuts</span>
+          <small><kbd>Ctrl+K</kbd> new chat · <kbd>Ctrl+B</kbd> library · <kbd>Ctrl+,</kbd> settings · <kbd>Ctrl+Shift+S</kbd> export · <kbd>Esc</kbd> stop · <kbd>↑</kbd> in an empty composer edits your last message</small>
+        </div>
+        <div class="cc-set">
+          <span>Usage (all chats on this profile)</span>
+          <small id="cc-usage-total">—</small>
+          <button id="cc-usage-reset" type="button" class="cc-link">Reset counters</button>
+        </div>
+      </aside>
     </div>
+
+    <div id="cc-drop" class="cc-drop" hidden><div>Drop images to attach them</div></div>
   </div>
 
   <script src="src/core/config.js"></script>
