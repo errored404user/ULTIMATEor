@@ -693,7 +693,11 @@ const RSProvider = (() => {
   function barMount() {
     const comp = ui.composer;
     if (!comp) return null;
-    return { parent: comp, before: comp.firstElementChild || null };
+    // Skip our own bar when it is already the first child - otherwise `before`
+    // is the bar itself and the core would re-insert it on every pass.
+    let first = comp.firstElementChild;
+    while (first && first.id === "rs-bar") first = first.nextElementSibling;
+    return { parent: comp, before: first || null };
   }
 
   function setInputLock(on) {

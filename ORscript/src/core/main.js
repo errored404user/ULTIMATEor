@@ -1737,17 +1737,38 @@
   const isContextInvalidated = (m) =>
     /Extension context invalidated|Receiving end does not exist|message port closed/i.test(m || "");
 
+  // 1.35.0 — hang guard. The background always answers (its handler catches
+  // and replies on failure), but a service worker that is torn down mid-call
+  // under memory pressure, or an extension update landing while a call is in
+  // flight, can leave the callback un-fired with no lastError: the promise
+  // never settled and the agent loop sat on it forever ("the input never
+  // unlocked"). Every call now has a ceiling - generous (the background's own
+  // tool timeout + 20 s, or 150 s) so it never pre-empts a legitimate slow
+  // tool, but finite, so the loop can report it and carry on.
+  const BG_TIMEOUT_DEFAULT_MS = 150000, BG_TIMEOUT_FLOOR_MS = 15000;
+  function bgTimeoutFor(msg) {
+    const t = msg && Number(msg.timeout);
+    if (t && isFinite(t) && t > 0) return Math.max(BG_TIMEOUT_FLOOR_MS, t + 20000);
+    return BG_TIMEOUT_DEFAULT_MS;
+  }
   function bg(msg) {
     return new Promise((resolve) => {
-      const fail = (m) => resolve({
+      let settled = false;
+      const done = (v) => { if (settled) return; settled = true; clearTimeout(timer); resolve(v); };
+      const fail = (m) => done({
         ok: false,
         kind: isContextInvalidated(m) ? "stale-extension" : "disconnected",
         error: m,
       });
+      const budget = bgTimeoutFor(msg);
+      const timer = setTimeout(() => {
+        try { diag("bg.hung", { type: msg && msg.type, name: msg && msg.name, afterMs: budget }); } catch {}
+        done({ ok: false, kind: "timeout", errorCode: "BACKGROUND_TIMEOUT", error: `background did not answer '${msg && msg.type}' within ${Math.round(budget / 1000)}s` });
+      }, budget);
       try {
         chrome.runtime.sendMessage(msg, (resp) => {
           if (chrome.runtime.lastError) fail(chrome.runtime.lastError.message);
-          else resolve(resp || { ok: false, kind: "disconnected", error: "no response from background" });
+          else done(resp || { ok: false, kind: "disconnected", error: "no response from background" });
         });
       } catch (e) {
         fail(String(e && e.message || e));
@@ -6974,7 +6995,7 @@
       el.hidden = !show;
       if (show) { el.textContent = `Tasks ${p.done}/${p.total}`; el.dataset.done = p.done === p.total ? "all" : p.doing ? "doing" : "open"; el.title = `${p.done} of ${p.total} tasks done${p.open ? ` - ${p.open} open` : ""} - click to open the Tasks tab`; }
     }
-    window.addEventListener("or-tasklist-change", () => { try { syncTaskPill(); } catch {} try { if (menuEl && !menuEl.hidden) buildMenu(); } catch {} try { if (cardsPanel && !cardsPanel.hidden && (cardsTab === "tasks" || !taskListOn())) renderCards(cardsPanel); } catch {} });
+    window.addEventListener("or-tasklist-change", () => { try { syncTaskPill(); } catch {} try { if (menuEl && !menuEl.hidden) buildMenu(); } catch {} try { if (cardsPanel && !cardsPanel.hidden && (cardsTab === "tasks" || !taskListOn())) scheduleRenderCards(); } catch {} });
     function setMultiAgent(v){ multiAgent=!!v; try{chrome.storage.local.set({rsMultiAgent: multiAgent});}catch{}; try{ window.__rsMultiAgent = () => multiAgent; }catch{}; buildMenu(); try { if (typeof ORAgentCrew !== "undefined" && ORAgentCrew) ORAgentCrew.reset(); } catch {} try { syncCrewBadge(); } catch {} toast(v ? "Multi-Agent on — planner, builder, scripter, reviewer, tester, debugger" : "Multi-Agent off"); markModesChanged(); }
     // Toggling a mode mid-session must reach the AI on the NEXT turn, not ~12
     // results later: force the full system prompt (which now carries the
@@ -7725,7 +7746,7 @@
         recentCards.unshift({ tool, status, detail: String(detail || "").slice(0, 120), category: category || "tool", at: Date.now() });
         if (recentCards.length > 24) recentCards.pop();
       }
-      if (cardsTab === "activity" || (activeEngine() === "local" && cardsPanel && !cardsPanel.hidden)) renderCards(cardsPanel);
+      if (cardsTab === "activity" || (activeEngine() === "local" && cardsPanel && !cardsPanel.hidden)) scheduleRenderCards();
     }
     try { window.__rsTrackCard = trackCard; } catch {} // tests / other IIFEs can feed the Activity tab
 
@@ -7853,7 +7874,7 @@
       apply.onclick=async()=>{if(apply.disabled)return;const {value,audit}=readProposal();if(!audit.success){validate();return;}apply.disabled=true;status.textContent="Applying and verifying…";try{await ORTemplateRegistry.initialize();const r=await ORTemplateRegistry.updateTemplate(original.id,audit.template||value);if(!r.success)throw Error(`${r.error?.code||"TEMPLATE_UPDATE_FAILED"}: ${r.error?.message||"Template could not be updated"}`);const saved=ORTemplateRegistry.getTemplate(original.id);if(!saved||saved.currentVersion!==r.template.currentVersion)throw Error("TEMPLATE_SAVE_UNVERIFIED: Applied version could not be read back");modal.remove();closeTemplateEditor();cardsQuery="";cardsCategory="All";renderCards(cardsPanel);toast(`Accepted and applied v${saved.currentVersion}`);}catch(e){apply.disabled=false;status.classList.add("rs-template-error");status.textContent=String(e&&e.message||e);}};
     }
 
-    window.addEventListener("or-templates-synced",()=>{try{if(cardsPanel&&!cardsPanel.hidden)renderCards(cardsPanel);}catch{}});
+    window.addEventListener("or-templates-synced",()=>{try{if(cardsPanel&&!cardsPanel.hidden)scheduleRenderCards();}catch{}});
     window.addEventListener("or-template-ai-result",e=>{const d=e.detail||{};if(d.kind==="template_create_draft")openTemplateEditor(d.template,{draft:true});else if(d.kind==="template_propose_improvement"){const original=ORTemplateRegistry.getTemplate(d.originalId);if(original)showTemplateProposal(original,d.improved,d.summary);}else if(d.kind==="template_test_result"){const t=ORTemplateRegistry.getTemplate(d.templateId);if(t)alert(`STATIC ANALYSIS — ${t.name}\n\n${d.summary||""}\n\n${JSON.stringify(d.findings||[],null,2)}`);}});
     async function runTemplateCard(card){const t=ORTemplateRegistry.getTemplate(card.templateId);if(!t)return toast("TEMPLATE_NOT_FOUND");const vars={};for(const spec of t.variables||[]){const value=prompt(`${spec.name}${spec.required?" (required)":""}`,spec.default??"");if(value===null)return;vars[spec.name]=spec.type==="number"?Number(value):spec.type==="boolean"?/^(true|1|yes)$/i.test(value):value;}const resolved=ORTemplateRegistry.resolve(t.id,vars,t.environment,{registry:globalThis.ORCommandRegistry});if(!resolved.success)return toast(`${resolved.error.code}: ${resolved.error.message}`);if(resolved.requiresConfirmation&&!await requestApproval(`Run template: ${t.name}`,{executionLevel:t.executionLevel,steps:resolved.plan.length},true))return;if(!resolved.plan.some(x=>x.command)){runLibraryCard({...card,prompt:`Execute this reviewed prompt template. Do not claim any operation without tool verification.\n\n${resolved.instructions.join("\n")}`},true);return;}const results=[];for(const step of resolved.plan){if(!step.command)continue;const output=await runTool({tool:step.command,arguments:step.parameters||{}});const text=String(output),rules=step.validation||{};let failed=text.startsWith("ERROR");if(rules.outputIncludes&&!text.includes(String(rules.outputIncludes)))failed=true;if(rules.outputExcludes&&text.includes(String(rules.outputExcludes)))failed=true;results.push({step:step.id,command:step.command,success:!failed,output:text.slice(0,2000),validation:Object.keys(rules).length?rules:undefined});if(failed&&(step.errorBehavior||"STOP")==="STOP")break;}const success=results.every(x=>x.success);recentCards.unshift({tool:`Template: ${t.name}`,detail:`${success?"Completed":"Failed"} · ${results.filter(x=>x.success).length}/${results.length} commands verified`,status:success?"ok":"err",category:"tool",at:Date.now()});renderCards(cardsPanel);toast(success?"Template completed":"Template stopped on a failed command");}
     function templateCards(){if(!globalThis.ORTemplateRegistry)return [];const opts=cardsCategory==="Archived"?{archived:true}:cardsCategory!=="All"?{category:cardsCategory}:{};return ORTemplateRegistry.searchTemplates(cardsQuery,opts).map(t=>({templateId:t.id,engine:"rs",icon:"T",cat:t.category,title:t.name,desc:t.description,environment:t.environment,version:t.currentVersion,commands:t.commands.map(x=>x.command),updatedAt:t.updatedAt,type:t.type,executionLevel:t.executionLevel,projectReference:t.projectReference,prompt:(t.instructions||[]).join("\n")}));}
@@ -7997,7 +8018,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       modal.querySelector("[data-public-installed-open]").onclick = () => { closePublicEditor(); cardsTab = "public"; try { if (openCardsPanel) openCardsPanel(true); else { cardsPanel.hidden = false; renderCards(cardsPanel); } } catch {} };
     }
     window.addEventListener("or-public-skill-result", (e) => { try { const d = e.detail || {}; if (d.kind === "removed") { toast(`Public ${d.item && d.item.kind || "skill"} '${d.item && d.item.name}' deleted`); return; } if (d.kind === "toggled") return; showPublicInstalled(d); } catch (err) { try { diag("publicSkills.resultUi", { error: String(err) }); } catch {} } });
-    window.addEventListener("or-public-skills-change", () => { try { syncWorkModeUi(); } catch {} try { if (menuEl && !menuEl.hidden) buildMenu(); } catch {} try { if (cardsPanel && !cardsPanel.hidden && cardsTab === "public") renderCards(cardsPanel); } catch {} });
+    window.addEventListener("or-public-skills-change", () => { try { syncWorkModeUi(); } catch {} try { if (menuEl && !menuEl.hidden) buildMenu(); } catch {} try { if (cardsPanel && !cardsPanel.hidden && cardsTab === "public") scheduleRenderCards(); } catch {} });
     // ── Tasks tab (Settings → Task list) ──
     const TASK_MARK = { todo: "", doing: "▶", done: "✓", skipped: "–" };
     function tasksHtml(){
@@ -8116,13 +8137,49 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       return '<section class="rs-template-library rs-session" aria-label="Session">' + head + danger + stats + '<div class="rs-cards-grid rs-sum-feed">' + rows + '</div></section>';
     }
 
+    // 1.35.0 — coalesce bursts of panel re-renders (a batch of 6 commands fires
+    // trackCard twice per command; skills / tasks change events pile up too)
+    // into ONE innerHTML rebuild per frame, and never while the user is
+    // mid-edit inside the panel (typing a task, the Public composer, a search):
+    // the rebuild would eat the focused element. Deferred renders retry on the
+    // next frame until the editor blurs.
+    var renderCardsQueued = false;
+    function panelHasFocusedEditor(panel) {
+      try { const a = document.activeElement; return !!(a && panel && panel.contains(a) && (a.matches("input, textarea, select, [contenteditable=\"true\"]"))); } catch { return false; }
+    }
+    function scheduleRenderCards() {
+      if (renderCardsQueued) return;
+      renderCardsQueued = true;
+      const run = () => {
+        if (!cardsPanel || cardsPanel.hidden) { renderCardsQueued = false; return; }
+        if (panelHasFocusedEditor(cardsPanel)) { setTimeout(run, 400); return; }
+        renderCardsQueued = false;
+        try { renderCards(cardsPanel); } catch (e) { diag("cards.renderFailed", { error: String(e && e.message || e).slice(0, 160) }); }
+      };
+      if (document.hidden) setTimeout(run, 120); else requestAnimationFrame(run);
+    }
+    try { window.__rsScheduleRenderCards = scheduleRenderCards; } catch {}
+    function renderCardsBody(local) {
+      // one broken tab must never take the whole panel down: render a fallback
+      // block for that tab, keep the tabs clickable, and log the cause.
+      try {
+        return cardsTab === "activity" ? activityHtml() : cardsTab === "public" ? publicHtml() : cardsTab === "tasks" ? tasksHtml() : (local ? summaryHtml() : libraryHtml());
+      } catch (e) {
+        const msg = String(e && e.message || e).slice(0, 200);
+        diag("cards.tabFailed", { tab: cardsTab, error: msg });
+        return '<section class="rs-template-library rs-cards-broken" aria-label="Panel error"><div class="rs-template-empty"><div class="rs-template-empty-mark">!</div><b>This tab could not be drawn</b><span>' + escRs(msg) + '</span><div><button type="button" class="rs-btn-secondary" data-cards-retry>Try again</button></div></div></section>';
+      }
+    }
+    var cardsRenders = 0;
     function renderCards(panel) {
       if (!panel) return;
+      cardsRenders++;
+      try { kickPlaceBar(); } catch {}
       const actN = recentCards.length ? ' <b>' + recentCards.length + '</b>' : '';
       const local = activeEngine() === "local";
       const mainLabel = local ? "Session" : "Library";
       if (cardsTab === "tasks" && !taskListOn()) cardsTab = "library";
-      const body = cardsTab === "activity" ? activityHtml() : cardsTab === "public" ? publicHtml() : cardsTab === "tasks" ? tasksHtml() : (local ? summaryHtml() : libraryHtml());
+      const body = renderCardsBody(local);
       // 1.34.1 — the panel heading names the open tab instead of always saying
       // "Templates"; data-cards-tab lets overlay.css style per tab.
       const tabHead = cardsTab === "activity" ? ["Activity", "What the AI ran this session"]
@@ -8155,6 +8212,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         tab.style.pointerEvents = "auto";
         tab.style.touchAction = "manipulation";
       });
+      const retryBtn = panel.querySelector("[data-cards-retry]"); if (retryBtn) retryBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); renderCards(panel); };
       panel.querySelectorAll(".rs-roadmap-phase-head").forEach((button) => button.addEventListener("click", (event) => {
         event.stopPropagation();
         if (!roadmap) return;
@@ -8219,7 +8277,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     }
 
     window.addEventListener("or-roadmap-change", () => {
-      try { if (cardsPanel && !cardsPanel.hidden && cardsTab === "roadmap") renderCards(cardsPanel); } catch {}
+      try { if (cardsPanel && !cardsPanel.hidden && cardsTab === "roadmap") scheduleRenderCards(); } catch {}
     });
 
     // ── Card send-embed ──
@@ -8767,6 +8825,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const sig = [toneClass, indicator, msg, label, kind, disabled, warn, busy, showExtras, coreReady].join("|");
       if (sig === lastBarSig) return;
       lastBarSig = sig;
+      try { kickPlaceBar(); } catch {} // the bar's content (and so its height) is about to change
       // Set the tone WITHOUT clobbering other classes (e.g. rs-bar-inline, which
       // placeBar adds for the in-flow mount - overwriting className broke the
       // layout, making the bar fall back to fixed positioning and overlap).
@@ -9218,7 +9277,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
 
     // Session/cards control lives in the status row; this lightweight upkeep
     // replaces the old fixed-position FAB geometry loop.
-    let fabActivityTick = 0;
+    let fabActivityLastAt = 0;
     function refreshCardsControl() {
       if (!cardsBtn || !bar) return;
       // The control now participates in the bar's reserved layout. Keep it glued
@@ -9234,8 +9293,11 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       // Keep Activity timestamps/results fresh while the panel sits open
       // (AgentScript session view refreshes too — its "ago" stamps go stale).
       if (cardsPanel && !cardsPanel.hidden && (cardsTab === "activity" || activeEngine() === "local") && recentCards.length) {
-        fabActivityTick++;
-        if (fabActivityTick % 300 === 0) renderCards(cardsPanel);
+        // time-based (placeBar no longer runs once per frame): refresh the
+        // "ago" stamps every 5 s, coalesced like every other re-render.
+        const t = Date.now();
+        if (!fabActivityLastAt) fabActivityLastAt = t;
+        else if (t - fabActivityLastAt >= 5000) { fabActivityLastAt = t; scheduleRenderCards(); }
       }
     }
 
@@ -9403,6 +9465,34 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       return true;
     }
 
+    // ── Adaptive placement cadence (1.35.0) ──────────────────────────────────
+    // placeBar used to run its FULL body on every animation frame, forever:
+    // provider editor/composer lookups, getBoundingClientRect reads, reserved-
+    // strip padding writes and tray offsetHeight reads - 60 layout passes a
+    // second on top of the host page's own work, even while nothing moved. It
+    // now keeps the rAF heartbeat (so the self-heal below still reacts within a
+    // frame) but runs the body only
+    //   • every frame for PLACE_HOT_MS after a trigger (resize / scroll / wheel /
+    //     pointer / key / focus / input / transitions / visibility, a bar
+    //     content change, a cards re-render, a tray toggle),
+    //   • else every PLACE_BUSY_MS while a session is live or a tray is open,
+    //   • else every PLACE_IDLE_MS.
+    // Anything the user does that moves the composer fires one of those events,
+    // so the bar still follows within a frame; host-driven layout changes (a
+    // reply finishing, the composer dropping to the bottom) are picked up by
+    // the next 100 ms busy pass. Idle cost drops ~12x.
+    var PLACE_HOT_MS = 700, PLACE_BUSY_MS = 100, PLACE_IDLE_MS = 200; // var: callers above this line run before it is evaluated
+    var placeHotUntil = 0, placeLastRun = 0;
+    function kickPlaceBar(ms) { placeHotUntil = Math.max(placeHotUntil || 0, performance.now() + (ms || PLACE_HOT_MS || 700)); }
+    try { window.__rsKickPlaceBar = kickPlaceBar; } catch {}
+    (function installPlaceTriggers() {
+      const opts = { capture: true, passive: true };
+      for (const ev of ["resize", "scroll", "wheel", "pointerdown", "pointerup", "keydown", "focusin", "input", "transitionend", "animationend", "orientationchange"]) {
+        try { window.addEventListener(ev, () => kickPlaceBar(), opts); } catch {}
+      }
+      try { document.addEventListener("visibilitychange", () => kickPlaceBar(1500), opts); } catch {}
+      try { if (window.visualViewport) { window.visualViewport.addEventListener("resize", () => kickPlaceBar(), opts); window.visualViewport.addEventListener("scroll", () => kickPlaceBar(), opts); } } catch {}
+    })();
     function placeBar() {
       barRaf = requestAnimationFrame(placeBar);
       if (!bar) return;
@@ -9415,7 +9505,21 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       // so the panel reappears on the very next frame.
       if (root && !root.isConnected) {
         try { document.documentElement.appendChild(root); } catch {}
+        kickPlaceBar();
       }
+      const now = performance.now();
+      if (now >= placeHotUntil) {
+        const trayOpen = !!((menuEl && !menuEl.hidden) || (cardsPanel && !cardsPanel.hidden) || (cardEmbedEl && !cardEmbedEl.hidden) || (setupCard && !setupCard.hidden));
+        const period = (A.running || A.starting || A.injecting || A.toolRunning || trayOpen) ? PLACE_BUSY_MS : PLACE_IDLE_MS;
+        if (now - placeLastRun < period) return;
+      }
+      placeLastRun = now;
+      placeBodyRuns++;
+      placeBarBody();
+    }
+    var placeBodyRuns = 0; // read via window.__rsPerf() — how many full placement passes ran
+    try { window.__rsPerf = () => ({ placeBodyRuns, placeHot: performance.now() < placeHotUntil, cardsRenders }); } catch {}
+    function placeBarBody() {
 
       // The instability warning floats just ABOVE the bar (not inside it), so it
       // never crowds the row on narrow composers like Gemini. Positioned from the
@@ -9449,8 +9553,17 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       if (mount) {
         bar.classList.remove("rs-bar-float");
         clearAnchorReserve();
-        if (bar.parentElement !== mount.parent || bar.nextElementSibling !== mount.before) {
-          try { mount.parent.insertBefore(bar, mount.before || null); } catch {}
+        // 1.35.0: re-insert ONLY when the bar is genuinely out of place. Two
+        // cases used to re-insert on every pass: a provider whose `before`
+        // resolves to the bar itself once mounted (CodeCraft returned
+        // comp.firstElementChild), and `before: undefined` vs nextElementSibling
+        // null. Each re-insert detaches + re-attaches the bar - 60x a second -
+        // which kills focus inside our own trays (the task input, the Public
+        // composer, the search box) and churns layout for nothing.
+        const ref = (mount.before && mount.before !== bar) ? mount.before : null;
+        const inPlace = bar.parentElement === mount.parent && (mount.before === bar || bar.nextElementSibling === ref);
+        if (!inPlace) {
+          try { mount.parent.insertBefore(bar, ref); } catch {}
         }
         if (!bar.classList.contains("rs-bar-inline")) {
           bar.classList.add("rs-bar-inline");

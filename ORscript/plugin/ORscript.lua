@@ -1,5 +1,5 @@
 --!nocheck
--- ORscript Studio plugin  (ORscript 1.34.2)
+-- ORscript Studio plugin  (ORscript 1.35.0)
 -- SPDX-License-Identifier: GPL-3.0-or-later
 --
 -- A tiny worker that lives INSIDE Roblox Studio and lets ORscript (the browser
@@ -50,7 +50,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 if not plugin then return end
 if RunService:IsRunning() then return end -- edit mode only; play-test DataModels do not run the worker
 
-local VERSION = "1.34.2"
+local VERSION = "1.35.0"
 local DEFAULT_BRIDGE = "http://127.0.0.1:3000"
 local CLIENT_ID = "studio-plugin-" .. tostring(math.random(100000, 999999))
 local CAPABILITIES = {
@@ -2059,7 +2059,16 @@ local function runJob(job)
 	end
 	result.elapsed_ms = math.floor((os.clock() - started) * 1000)
 	log(string.format("%s %s (%d ms)", result.ok and "ok " or "ERR", tostring(job.name), result.elapsed_ms))
-	request("POST", "/api/plugin/result", result)
+	-- 1.35.0: a bridge hiccup right as a job finishes used to drop the result on
+	-- the floor (or-core then waited out its full timeout). Retry the POST a few
+	-- times with a short backoff before giving up; the work itself is not redone.
+	local delivered = false
+	for attempt = 1, 4 do
+		local okP, errP = request("POST", "/api/plugin/result", result)
+		if okP then delivered = true break end
+		if attempt < 4 then task.wait(attempt * 0.75) else log("result for " .. tostring(job.name) .. " not delivered: " .. tostring(errP)) end
+	end
+	return delivered
 end
 
 local unloading = false
@@ -2069,24 +2078,43 @@ task.spawn(function()
 	pcall(function() HttpService.HttpEnabled = true end)
 	local connected = false
 	local lastHello = 0
+	-- 1.35.0: while or-core is down, back off from 3 s up to 15 s between hellos
+	-- (instead of knocking every 3 s for hours); the first successful hello
+	-- resets it. A failed poll also waits a little longer each time in a row so a
+	-- restarting bridge is not hammered, and the whole loop body is pcall-guarded
+	-- so one unexpected error can never kill the poller for the session.
+	local offlineWait, pollFailures = 3, 0
 	while not unloading do
-		if not enabled then
-			setStatus("paused", false)
-			task.wait(1)
-			continue
-		end
-		if os.clock() - lastHello > 25 or not connected then
-			connected = hello()
-			lastHello = os.clock()
-			if not connected then task.wait(3) continue end
-		end
-		local data, err = request("GET", "/api/plugin/poll?client_id=" .. CLIENT_ID)
-		if not data then
-			connected = false
-			setStatus("lost or-core: " .. tostring(err), false)
+		local okLoop, errLoop = pcall(function()
+			if not enabled then
+				setStatus("paused", false)
+				task.wait(1)
+				return
+			end
+			if os.clock() - lastHello > 25 or not connected then
+				connected = hello()
+				lastHello = os.clock()
+				if not connected then
+					task.wait(offlineWait)
+					offlineWait = math.min(15, offlineWait + 3)
+					return
+				end
+				offlineWait = 3
+			end
+			local data, err = request("GET", "/api/plugin/poll?client_id=" .. CLIENT_ID)
+			if not data then
+				connected = false
+				pollFailures = pollFailures + 1
+				setStatus("lost or-core: " .. tostring(err), false)
+				task.wait(math.min(10, 2 * pollFailures))
+			else
+				pollFailures = 0
+				if data.job then task.spawn(runJob, data.job) end
+			end
+		end)
+		if not okLoop then
+			log("poll loop error: " .. tostring(errLoop))
 			task.wait(2)
-		elseif data.job then
-			task.spawn(runJob, data.job)
 		end
 	end
 end)
