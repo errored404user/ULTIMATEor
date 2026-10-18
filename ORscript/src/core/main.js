@@ -371,13 +371,22 @@
   };
   const BRAND_LABEL_KEYS = ["start", "stop", "think", "voice"];
   const BRAND_LABEL_DEFAULTS = { start: "Start Agent", stop: "\u25A0 Stop", think: "Think", voice: "\ud83c\udf99 Voice" };
-  const BRAND_HIDEABLE = ["think", "voice", "discord", "paint"];
-  const BRAND_HIDE_META = { think: "Think", voice: "Voice", discord: "Discord", paint: "Paint" };
+  const BRAND_HIDEABLE = ["think", "voice", "discord", "paint", "logo", "badge", "status", "corners", "motion"];
+  const BRAND_HIDE_META = { think: "Think", voice: "Voice", discord: "Discord", paint: "Paint", logo: "Logo", badge: "Mode badge", status: "Status pill", corners: "Corner marks", motion: "Animations" };
+  // 1.44.0: more knobs — typeface, density, name style, glow strength, panel +
+  // text colours and a background picture for the trays.
+  const BRAND_FONTS = ["system", "rounded", "mono", "serif", "display"];
+  const BRAND_FONT_META = { "": "Default (per site)", system: "System", rounded: "Rounded", mono: "Monospace", serif: "Serif", display: "Display" };
+  const BRAND_SIZES = ["compact", "large"];
+  const BRAND_SIZE_META = { "": "Normal", compact: "Compact", large: "Large" };
+  const BRAND_NAME_STYLES = ["upper", "wide", "light"];
+  const BRAND_NAME_META = { "": "Normal", upper: "UPPERCASE", wide: "W I D E", light: "Light" };
+  const BRAND_BG_MAX = 480000; // chars of data URL (~360 KB) — a 720 px JPEG is ~60–150 KB
   const BRAND_LOGO_MAX = 400000; // chars of data URL (~300 KB) — a 128 px PNG is ~10–40 KB
   const BRAND_LOGO_RE = /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i;
   function sanitizeBrand(raw) {
     const src = raw && typeof raw === "object" ? raw : {};
-    const out = { name: "", logo: "", accent: "", accent2: "", style: "glow", radius: null, labels: {}, hide: [] };
+    const out = { name: "", logo: "", accent: "", accent2: "", style: "glow", radius: null, labels: {}, hide: [], font: "", size: "", nameStyle: "", glow: null, panel: "", text: "", bg: "" };
     const txt = (v, max) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
     const hex = (v) => (/^#[0-9a-f]{6}$/i.test(String(v == null ? "" : v).trim()) ? String(v).trim().toLowerCase() : "");
     out.name = txt(src.name, 24);
@@ -394,9 +403,19 @@
     for (const k of BRAND_LABEL_KEYS) { const v = txt(labels[k], 18); if (v) out.labels[k] = v; }
     const hide = Array.isArray(src.hide) ? src.hide : [];
     out.hide = BRAND_HIDEABLE.filter((k) => hide.includes(k));
+    if (BRAND_FONTS.includes(src.font)) out.font = src.font;
+    if (BRAND_SIZES.includes(src.size)) out.size = src.size;
+    if (BRAND_NAME_STYLES.includes(src.nameStyle)) out.nameStyle = src.nameStyle;
+    const g = Number(src.glow);
+    out.glow = (src.glow === null || src.glow === undefined || src.glow === "" || !Number.isFinite(g)) ? null : Math.max(0, Math.min(100, Math.round(g)));
+    out.panel = hex(src.panel);
+    out.text = hex(src.text);
+    const bg = typeof src.bg === "string" ? src.bg.trim() : "";
+    if (bg.length <= BRAND_BG_MAX && BRAND_LOGO_RE.test(bg)) out.bg = bg;
     return out;
   }
-  const brandIsDefault = (b) => !b.name && !b.logo && !b.accent && !b.accent2 && b.style === "glow" && b.radius === null && !Object.keys(b.labels).length && !b.hide.length;
+  const brandIsDefault = (b) => !b.name && !b.logo && !b.accent && !b.accent2 && b.style === "glow" && b.radius === null && !Object.keys(b.labels).length && !b.hide.length
+    && !b.font && !b.size && !b.nameStyle && b.glow === null && !b.panel && !b.text && !b.bg;
   let BRAND = sanitizeBrand(null);
   const productName = () => BRAND.name || defaultProductName();
   const brandLabel = (key, fallback) => BRAND.labels[key] || fallback;
@@ -404,11 +423,14 @@
   const hexToRgb = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const mixHex = (h, target, t) => { const a = hexToRgb(h), b = hexToRgb(target); return "#" + a.map((c, i) => Math.round(c + (b[i] - c) * t).toString(16).padStart(2, "0")).join(""); };
   const relLuma = (h) => { const [r, g, b] = hexToRgb(h).map((c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-  const BRAND_CSS_VARS = ["--orx-a", "--orx-b", "--orx-on", "--orx-glow", "--or-accent", "--or-accent-2", "--or-glow", "--orx-r", "--ti-radius-ctl"];
+  const BRAND_CSS_VARS = ["--orx-a", "--orx-b", "--orx-on", "--orx-glow", "--or-accent", "--or-accent-2", "--or-glow", "--orx-r", "--ti-radius-ctl", "--orx-bg", "--or-bg", "--or-fg", "--or-muted", "--orx-img", "--orx-ghost-fg"];
+  const BRAND_HTML_ATTRS = ["data-rs-btn", "data-rs-hide", "data-rs-font", "data-rs-size", "data-rs-name", "data-rs-custom-bg", "data-rs-custom-text", "data-rs-custom"];
+  const DEFAULT_ACCENT = "#ece4d8";
   function applyBrand() {
     try {
       const html = document.documentElement, st = html.style;
       for (const v of BRAND_CSS_VARS) st.removeProperty(v);
+      for (const a of BRAND_HTML_ATTRS) html.removeAttribute(a);
       if (BRAND.accent) {
         const a = BRAND.accent, b = BRAND.accent2 || mixHex(a, "#000000", 0.28);
         const [r, g, bl] = hexToRgb(a);
@@ -417,10 +439,28 @@
         st.setProperty("--orx-glow", `rgba(${r},${g},${bl},.32)`);
         st.setProperty("--or-accent", a); st.setProperty("--or-accent-2", b); st.setProperty("--or-glow", `rgba(${r},${g},${bl},.28)`);
       }
+      if (BRAND.glow !== null) {
+        // Glow strength 0–100 on whichever accent is live (0 = no glow at all).
+        const [r, g, bl] = hexToRgb(BRAND.accent || DEFAULT_ACCENT);
+        const alpha = Math.round(BRAND.glow * 0.6) / 100;
+        st.setProperty("--orx-glow", `rgba(${r},${g},${bl},${alpha})`);
+        st.setProperty("--or-glow", `rgba(${r},${g},${bl},${alpha})`);
+      }
+      if (BRAND.panel) { st.setProperty("--orx-bg", BRAND.panel); st.setProperty("--or-bg", BRAND.panel); }
+      if (BRAND.text) {
+        st.setProperty("--or-fg", BRAND.text);
+        st.setProperty("--or-muted", mixHex(BRAND.text, BRAND.panel || "#100f0e", 0.38));
+        st.setProperty("--orx-ghost-fg", BRAND.text);
+        html.setAttribute("data-rs-custom-text", "1");
+      }
+      if (BRAND.bg) { st.setProperty("--orx-img", `url("${BRAND.bg}") center / cover no-repeat`); html.setAttribute("data-rs-custom-bg", "1"); }
       if (BRAND.radius !== null) { st.setProperty("--orx-r", BRAND.radius + "px"); st.setProperty("--ti-radius-ctl", BRAND.radius + "px"); }
-      if (BRAND.style !== "glow") html.setAttribute("data-rs-btn", BRAND.style); else html.removeAttribute("data-rs-btn");
-      if (BRAND.hide.length) html.setAttribute("data-rs-hide", BRAND.hide.join(" ")); else html.removeAttribute("data-rs-hide");
-      if (brandIsDefault(BRAND)) html.removeAttribute("data-rs-custom"); else html.setAttribute("data-rs-custom", "1");
+      if (BRAND.style !== "glow") html.setAttribute("data-rs-btn", BRAND.style);
+      if (BRAND.hide.length) html.setAttribute("data-rs-hide", BRAND.hide.join(" "));
+      if (BRAND.font) html.setAttribute("data-rs-font", BRAND.font);
+      if (BRAND.size) html.setAttribute("data-rs-size", BRAND.size);
+      if (BRAND.nameStyle) html.setAttribute("data-rs-name", BRAND.nameStyle);
+      if (!brandIsDefault(BRAND)) html.setAttribute("data-rs-custom", "1");
       const name = productName();
       document.querySelectorAll("#rs-brand, [data-rs-brand], [data-rs-brand-short]").forEach((el) => { if (el.textContent !== name) el.textContent = name; });
       const logoUrl = brandLogoUrl();
@@ -7590,12 +7630,19 @@
       const accent = b.accent || "#ece4d8", accent2 = b.accent2 || (b.accent ? mixHex(b.accent, "#000000", 0.28) : "#aaa296");
       const styles = BRAND_STYLES.map((id) => `<button type="button" class="rs-work-card ${b.style===id?"on":""}" data-brand-style="${id}" role="radio" aria-checked="${b.style===id?"true":"false"}"><span class="rs-work-name">${escRs(BRAND_STYLE_META[id][0])}</span><span class="rs-work-sub">${escRs(BRAND_STYLE_META[id][1])}</span></button>`).join("");
       const labels = BRAND_LABEL_KEYS.map((k) => `<label><span>${k}</span><input type="text" data-brand-label="${k}" class="rs-mcp-field" maxlength="18" placeholder="${escRs(BRAND_LABEL_DEFAULTS[k])}" value="${escRs(b.labels[k] || "")}"></label>`).join("");
+      const opts = (ids, meta, cur) => [""].concat(ids).map((id) => `<option value="${id}" ${cur === id ? "selected" : ""}>${escRs(meta[id])}</option>`).join("");
+      const panel = b.panel || "#100f0e", text = b.text || "#f6f3ee";
       const shows = BRAND_HIDEABLE.map((k) => { const on = !b.hide.includes(k); return `<button type="button" class="rs-brand-tgl ${on?"on":""}" data-brand-show="${k}" aria-pressed="${on?"true":"false"}" title="${on?"Shown":"Hidden"} — click to ${on?"hide":"show"}">${escRs(BRAND_HIDE_META[k])}</button>`; }).join("");
       return `<section class="rs-menu-sec rs-brand-sec" data-rs-brand-sec>
               <div class="rs-sec-label"><span>Customize</span><span class="rs-sec-state" id="rs-brand-state">${isDef ? "default look" : "custom look"}</span></div>
-              <div class="rs-menu-note">Make it yours: name, logo, colours, button style and labels. Only this browser sees it — the AI, the commands and Studio are unaffected.</div>
+              <div class="rs-menu-note">Make it yours: name, logo, colours, typeface, size, button style, labels and a background picture. Only this browser sees it — the AI, the commands and Studio are unaffected.</div>
               <div class="rs-brand-grid">
                 <label class="rs-brand-field"><span>Name</span><input type="text" id="rs-brand-name" class="rs-mcp-field" maxlength="24" autocomplete="off" spellcheck="false" placeholder="${escRs(defaultProductName())}" value="${escRs(b.name)}"></label>
+                <div class="rs-brand-field rs-brand-field-row">
+                  <label><span>Name style</span><select id="rs-brand-name-style" class="rs-mcp-field rs-brand-select">${opts(BRAND_NAME_STYLES, BRAND_NAME_META, b.nameStyle)}</select></label>
+                  <label><span>Typeface</span><select id="rs-brand-font" class="rs-mcp-field rs-brand-select">${opts(BRAND_FONTS, BRAND_FONT_META, b.font)}</select></label>
+                  <label><span>Size</span><select id="rs-brand-size" class="rs-mcp-field rs-brand-select">${opts(BRAND_SIZES, BRAND_SIZE_META, b.size)}</select></label>
+                </div>
                 <div class="rs-brand-field"><span>Logo</span>
                   <div class="rs-brand-logo-row">
                     <img id="rs-brand-logo-preview" class="rs-logo${b.logo ? " rs-logo-custom" : ""}" alt="" src="${brandLogoUrl()}">
@@ -7609,7 +7656,19 @@
                   <div class="rs-brand-colors">
                     <label>Accent <input type="color" id="rs-brand-accent" value="${accent}"></label>
                     <label>Gradient end <input type="color" id="rs-brand-accent2" value="${accent2}"></label>
-                    <button type="button" class="rs-brand-btn" id="rs-brand-color-reset" ${b.accent || b.accent2 ? "" : "disabled"}>Default colours</button>
+                    <label>Panels <input type="color" id="rs-brand-panel" value="${panel}"></label>
+                    <label>Text <input type="color" id="rs-brand-text" value="${text}"></label>
+                    <button type="button" class="rs-brand-btn" id="rs-brand-color-reset" ${b.accent || b.accent2 || b.panel || b.text ? "" : "disabled"}>Default colours</button>
+                  </div>
+                  <label class="rs-brand-range">Glow <input type="range" id="rs-brand-glow" min="0" max="100" step="5" value="${b.glow === null ? 50 : b.glow}"><span id="rs-brand-glow-val">${b.glow === null ? "theme" : b.glow + " %"}</span><button type="button" class="rs-brand-btn rs-brand-btn-sm" id="rs-brand-glow-reset" ${b.glow === null ? "disabled" : ""} title="Back to the theme glow">↺</button></label>
+                </div>
+                <div class="rs-brand-field"><span>Background picture</span>
+                  <div class="rs-brand-logo-row">
+                    <span id="rs-brand-bg-preview" class="rs-brand-bg-preview${b.bg ? " on" : ""}" style="${b.bg ? `background-image:url(&quot;${b.bg}&quot;)` : ""}"></span>
+                    <button type="button" class="rs-brand-btn" id="rs-brand-bg-pick">Upload picture</button>
+                    <button type="button" class="rs-brand-btn" id="rs-brand-bg-reset" ${b.bg ? "" : "disabled"}>Remove</button>
+                    <input type="file" id="rs-brand-bg-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                    <span class="rs-brand-hint">Shown behind the settings tray and the Templates panel; resized to 720 px, kept in this browser only</span>
                   </div>
                 </div>
                 <div class="rs-brand-field"><span>Buttons</span>
@@ -7617,7 +7676,7 @@
                   <label class="rs-brand-range">Corner radius <input type="range" id="rs-brand-radius" min="0" max="40" step="1" value="${b.radius === null ? 12 : b.radius}"><span id="rs-brand-radius-val">${b.radius === null ? "theme" : b.radius + " px"}</span><button type="button" class="rs-brand-btn rs-brand-btn-sm" id="rs-brand-radius-reset" ${b.radius === null ? "disabled" : ""} title="Back to the theme radius">↺</button></label>
                 </div>
                 <div class="rs-brand-field"><span>Button labels</span><div class="rs-brand-labels">${labels}</div></div>
-                <div class="rs-brand-field"><span>Show buttons</span><div class="rs-brand-toggles">${shows}</div></div>
+                <div class="rs-brand-field"><span>Show</span><div class="rs-brand-toggles">${shows}</div></div>
               </div>
               <div class="rs-set-row rs-brand-actions">
                 <button type="button" class="rs-brand-btn" id="rs-brand-export" title="Copy this look as JSON to share or back up">Copy preset</button>
@@ -7629,7 +7688,11 @@
     }
     // Shrink an uploaded picture to a 128 px PNG data URL (contain, transparent
     // padding) so the stored logo stays small whatever the source size.
-    function brandLogoFromFile(file) {
+    function brandLogoFromFile(file) { return brandImageFromFile(file, { size: 128, square: true, mime: "image/png", max: BRAND_LOGO_MAX }); }
+    // Background pictures: longest side 720 px, JPEG (no alpha needed), so a
+    // phone photo lands around 60–150 KB.
+    function brandBackgroundFromFile(file) { return brandImageFromFile(file, { size: 720, square: false, mime: "image/jpeg", quality: 0.82, max: BRAND_BG_MAX }); }
+    function brandImageFromFile(file, opt) {
       return new Promise((resolve, reject) => {
         if (!file) return reject(new Error("no file"));
         if (!/^image\/(?:png|jpeg|webp|gif)$/.test(file.type || "")) return reject(new Error("Use a PNG, JPG, WebP or GIF image"));
@@ -7638,15 +7701,19 @@
         const img = new Image();
         img.onload = () => {
           try {
-            const size = 128, c = document.createElement("canvas"); c.width = size; c.height = size;
-            const ctx = c.getContext("2d");
-            const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight);
+            const size = opt.size, c = document.createElement("canvas");
+            const scale = Math.min(1, size / img.naturalWidth, size / img.naturalHeight);
             const w = Math.max(1, Math.round(img.naturalWidth * scale)), h = Math.max(1, Math.round(img.naturalHeight * scale));
+            if (opt.square) { c.width = size; c.height = size; } else { c.width = w; c.height = h; }
+            const ctx = c.getContext("2d");
             ctx.imageSmoothingQuality = "high";
-            ctx.drawImage(img, Math.round((size - w) / 2), Math.round((size - h) / 2), w, h);
-            const data = c.toDataURL("image/png");
+            if (opt.mime === "image/jpeg") { ctx.fillStyle = "#000"; ctx.fillRect(0, 0, c.width, c.height); }
+            ctx.drawImage(img, opt.square ? Math.round((size - w) / 2) : 0, opt.square ? Math.round((size - h) / 2) : 0, w, h);
+            let data = opt.mime === "image/png" ? c.toDataURL("image/png") : c.toDataURL(opt.mime, opt.quality || 0.82);
+            // Too big for the store? Try a smaller / rougher encode once.
+            if (data.length > opt.max && opt.mime !== "image/png") data = c.toDataURL(opt.mime, 0.6);
             URL.revokeObjectURL(url);
-            if (!BRAND_LOGO_RE.test(data) || data.length > BRAND_LOGO_MAX) return reject(new Error("Could not encode that image"));
+            if (!BRAND_LOGO_RE.test(data) || data.length > opt.max) return reject(new Error("Could not encode that image (too large)"));
             resolve(data);
           } catch (e) { URL.revokeObjectURL(url); reject(new Error("Could not read that image")); }
         };
@@ -7667,7 +7734,12 @@
         const st = sec.querySelector("#rs-brand-state"); if (st) st.textContent = isDef ? "default look" : "custom look";
         const rs = sec.querySelector("#rs-brand-reset"); if (rs) rs.disabled = isDef;
         const lr = sec.querySelector("#rs-brand-logo-reset"); if (lr) lr.disabled = !b.logo;
-        const cr = sec.querySelector("#rs-brand-color-reset"); if (cr) cr.disabled = !(b.accent || b.accent2);
+        const cr = sec.querySelector("#rs-brand-color-reset"); if (cr) cr.disabled = !(b.accent || b.accent2 || b.panel || b.text);
+        const gr = sec.querySelector("#rs-brand-glow-reset"); if (gr) gr.disabled = b.glow === null;
+        const gv = sec.querySelector("#rs-brand-glow-val"); if (gv) gv.textContent = b.glow === null ? "theme" : b.glow + " %";
+        const br = sec.querySelector("#rs-brand-bg-reset"); if (br) br.disabled = !b.bg;
+        const bp = sec.querySelector("#rs-brand-bg-preview"); if (bp) { bp.classList.toggle("on", !!b.bg); bp.style.backgroundImage = b.bg ? `url("${b.bg}")` : ""; }
+        for (const [id, key] of [["rs-brand-font", "font"], ["rs-brand-size", "size"], ["rs-brand-name-style", "nameStyle"]]) { const el = sec.querySelector("#" + id); if (el && el.value !== b[key]) el.value = b[key]; }
         const rr = sec.querySelector("#rs-brand-radius-reset"); if (rr) rr.disabled = b.radius === null;
         const rv = sec.querySelector("#rs-brand-radius-val"); if (rv) rv.textContent = b.radius === null ? "theme" : b.radius + " px";
         sec.querySelectorAll("[data-brand-style]").forEach((c) => { const on = c.dataset.brandStyle === b.style; c.classList.toggle("on", on); c.setAttribute("aria-checked", on ? "true" : "false"); });
@@ -7692,7 +7764,26 @@
       const pushColors = debounce(() => { setBrand({ accent: acc ? acc.value : "", accent2: acc2 ? acc2.value : "" }); refreshLocal(); }, 60);
       if (acc) acc.addEventListener("input", pushColors);
       if (acc2) acc2.addEventListener("input", pushColors);
-      if (colReset) colReset.addEventListener("click", () => { setBrand({ accent: "", accent2: "" }); if (acc) acc.value = "#ece4d8"; if (acc2) acc2.value = "#aaa296"; refreshLocal(); say("Default colours ✓"); });
+      const panelIn = sec.querySelector("#rs-brand-panel"), textIn = sec.querySelector("#rs-brand-text");
+      if (panelIn) panelIn.addEventListener("input", debounce(() => { setBrand({ panel: panelIn.value }); refreshLocal(); }, 60));
+      if (textIn) textIn.addEventListener("input", debounce(() => { setBrand({ text: textIn.value }); refreshLocal(); }, 60));
+      if (colReset) colReset.addEventListener("click", () => { setBrand({ accent: "", accent2: "", panel: "", text: "" }); if (acc) acc.value = "#ece4d8"; if (acc2) acc2.value = "#aaa296"; if (panelIn) panelIn.value = "#100f0e"; if (textIn) textIn.value = "#f6f3ee"; refreshLocal(); say("Default colours ✓"); });
+      const glow = sec.querySelector("#rs-brand-glow"), glowReset = sec.querySelector("#rs-brand-glow-reset");
+      if (glow) glow.addEventListener("input", () => { setBrand({ glow: Number(glow.value) }); refreshLocal(); });
+      if (glowReset) glowReset.addEventListener("click", () => { setBrand({ glow: null }); if (glow) glow.value = "50"; refreshLocal(); });
+      for (const [id, key] of [["rs-brand-font", "font"], ["rs-brand-size", "size"], ["rs-brand-name-style", "nameStyle"]]) {
+        const el = sec.querySelector("#" + id);
+        if (el) el.addEventListener("change", () => { setBrand({ [key]: el.value }); refreshLocal(); });
+      }
+      const bgIn = sec.querySelector("#rs-brand-bg-file"), bgPick = sec.querySelector("#rs-brand-bg-pick"), bgReset = sec.querySelector("#rs-brand-bg-reset");
+      if (bgPick && bgIn) bgPick.addEventListener("click", () => { try { bgIn.value = ""; } catch {} bgIn.click(); });
+      if (bgIn) bgIn.addEventListener("change", () => {
+        const f = bgIn.files && bgIn.files[0];
+        if (!f) return;
+        say("Reading picture…");
+        brandBackgroundFromFile(f).then((data) => { setBrand({ bg: data }); refreshLocal(); say("Background updated ✓"); }).catch((e) => say(String(e && e.message || e), true));
+      });
+      if (bgReset) bgReset.addEventListener("click", () => { setBrand({ bg: "" }); refreshLocal(); say("Background removed ✓"); });
       sec.querySelectorAll("[data-brand-style]").forEach((c) => c.addEventListener("click", () => { setBrand({ style: c.dataset.brandStyle }); refreshLocal(); }));
       const range = sec.querySelector("#rs-brand-radius"), rangeReset = sec.querySelector("#rs-brand-radius-reset");
       if (range) range.addEventListener("input", () => { setBrand({ radius: Number(range.value) }); refreshLocal(); });

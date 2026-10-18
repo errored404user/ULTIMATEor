@@ -8378,3 +8378,52 @@ html[data-rs-btn="glass"] #rs-stop {
 .rs-brand-actions { margin-top: 10px; }
 #rs-brand-status { font-size: 12px; color: var(--or-ok, #34d399); }
 #rs-brand-status.rs-brand-status-bad { color: #fda4af; }
+
+/* 1.44.0 — more Customize knobs: typeface, density, name style, extra hides,
+   custom text colour, background picture. All attributes / vars on <html>. */
+html[data-rs-hide~="logo"] #rs-logo,
+html[data-rs-hide~="badge"] #rs-work-badge,
+html[data-rs-hide~="status"] #rs-status-pill,
+html[data-rs-hide~="corners"] #rs-root .rs-theme-corners { display: none !important; }
+html[data-rs-hide~="motion"] #rs-root, html[data-rs-hide~="motion"] #rs-root *,
+html[data-rs-hide~="motion"] #rs-bar, html[data-rs-hide~="motion"] #rs-bar *,
+html[data-rs-hide~="motion"] #rs-menu *, html[data-rs-hide~="motion"] #rs-cards-panel *,
+html[data-rs-hide~="motion"] #rs-approve * { transition: none !important; animation: none !important; }
+
+/* typeface */
+html[data-rs-font="system"] :is(#rs-root, #rs-bar, #rs-menu, #rs-cards-panel, #rs-approve, #rs-brand, #rs-state) { font-family: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif !important; }
+html[data-rs-font="rounded"] :is(#rs-root, #rs-bar, #rs-menu, #rs-cards-panel, #rs-approve, #rs-brand, #rs-state) { font-family: ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", "Segoe UI", system-ui, sans-serif !important; }
+html[data-rs-font="mono"] :is(#rs-root, #rs-bar, #rs-menu, #rs-cards-panel, #rs-approve, #rs-brand, #rs-state) { font-family: ui-monospace, "JetBrains Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace !important; }
+html[data-rs-font="serif"] :is(#rs-root, #rs-bar, #rs-menu, #rs-cards-panel, #rs-approve, #rs-brand, #rs-state) { font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, "Times New Roman", serif !important; }
+html[data-rs-font="display"] :is(#rs-root, #rs-bar, #rs-menu, #rs-cards-panel, #rs-approve, #rs-brand, #rs-state) { font-family: "Bahnschrift", "Avenir Next Condensed", "Oswald", "Arial Narrow", "Segoe UI", system-ui, sans-serif !important; letter-spacing: .01em; }
+
+/* density — the whole chrome scales, host page untouched */
+html[data-rs-size="compact"] :is(#rs-bar, #rs-menu, #rs-cards-panel, #rs-approve .rs-approve-card) { zoom: .88; }
+html[data-rs-size="large"] :is(#rs-bar, #rs-menu, #rs-cards-panel, #rs-approve .rs-approve-card) { zoom: 1.14; }
+
+/* name style */
+html[data-rs-name="upper"] #rs-brand, html[data-rs-name="upper"] .rs-cards-kicker { text-transform: uppercase !important; letter-spacing: .08em !important; }
+html[data-rs-name="wide"] #rs-brand, html[data-rs-name="wide"] .rs-cards-kicker { text-transform: uppercase !important; letter-spacing: .22em !important; font-weight: 700 !important; }
+html[data-rs-name="light"] #rs-brand, html[data-rs-name="light"] .rs-cards-kicker { font-weight: 400 !important; letter-spacing: .02em !important; }
+
+/* custom text colour reaches the labels the themes paint directly */
+html[data-rs-custom-text] :is(#rs-brand, #rs-state, .rs-menu-note, .rs-tgl-name, .rs-tgl-sub, .rs-sec-label, .rs-work-name, .rs-work-sub, .rs-cards-heading, .rs-cards-subheading, .rs-cards-kicker, .rs-brand-field > span:first-child, .rs-brand-colors label, .rs-brand-range) { color: var(--or-fg) !important; }
+html[data-rs-custom-text] :is(.rs-tgl-sub, .rs-menu-note, .rs-work-sub, .rs-cards-subheading, .rs-brand-hint) { color: var(--or-muted) !important; }
+/* a custom background picture is shown at full strength on the settings head */
+html[data-rs-custom-bg] .rs-menu-head { min-height: 72px; }
+
+/* Settings → Customize: the new rows */
+.rs-brand-field-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.rs-brand-field-row label { display: grid; gap: 4px; min-width: 0; }
+.rs-brand-field-row label > span {
+  font: 700 10.5px/1.2 ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--or-muted, #a39e96);
+}
+select.rs-brand-select { appearance: auto; -webkit-appearance: auto; cursor: pointer; margin-bottom: 0; }
+select.rs-brand-select option { background: #15130f; color: #f6f3ee; }
+.rs-brand-bg-preview {
+  width: 56px; height: 36px; border-radius: 8px; flex: none; display: inline-block;
+  background: rgba(255,255,255,.05) center / cover no-repeat; border: 1px dashed rgba(255,255,255,.22);
+}
+.rs-brand-bg-preview.on { border-style: solid; box-shadow: 0 0 0 1px rgba(255,255,255,.2), 0 0 10px rgba(255,255,255,.1); }
+@media (max-width: 520px) { .rs-brand-field-row { grid-template-columns: 1fr; } }
