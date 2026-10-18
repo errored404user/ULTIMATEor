@@ -26,7 +26,7 @@ ok("rail link enables the task list and jumps to the Tasks tab", /enableTasks\.o
 ok("heading / tabs / brand markup unchanged (older pins)", /rs-cards-heading">' \+ tabHead\[0\] \+ '<\/span><span class="rs-cards-subheading">/.test(main) && main.includes('data-tab="library"') && main.includes('data-tab="activity"') && main.includes('data-tab="public"') && main.includes('data-tab="tasks"'));
 const sec = css.slice(css.indexOf("§15 · 1.41.0 Workspace panel"));
 ok("overlay.css §15 exists and is the last panel block", sec.length > 6000 && !/§16/.test(sec));
-ok("§15: two-column grid (rail + content), rail stacks under 860px", /#rs-cards-panel\[data-cards-tab\] \{[^}]*grid-template-columns: var\(--cp-rail\) minmax\(0, 1fr\) !important/.test(sec) && /@media \(max-width: 860px\) \{\s*#rs-cards-panel\[data-cards-tab\] \{ grid-template-columns: minmax\(0, 1fr\) !important/.test(sec));
+ok("§15: two-column grid (rail + content), rail stacks under 860px", /#rs-cards-panel\[data-cards-tab\] \{[^}]*grid-template-columns: var\(--cp-rail\) minmax\(0, 1fr\) !important/.test(sec) && /@media \(max-width: 860px\) \{\s*#rs-cards-panel\[data-cards-tab\],[^{]*\{ grid-template-columns: minmax\(0, 1fr\) !important/.test(sec));
 ok("§15: vertical nav with SVG mask icons per tab + count pills", /\.rs-cards-tabs \{[^}]*flex-direction: column !important/.test(sec) && ['[data-tab="library"]', '[data-tab="activity"]', '[data-tab="public"]', '[data-tab="tasks"]'].every((t) => sec.includes(".rs-cards-tab" + t + " { --tab-ico: url(")) && /\.rs-cards-tab b \{[^}]*border-radius: 999px/.test(sec));
 ok("§15 selectors use [data-cards-tab] so they outrank the earlier :has(.rs-template-library) layers", (sec.match(/#rs-cards-panel\[data-cards-tab\]/g) || []).length > 100 && !/#rs-cards-panel \./.test(sec));
 ok("§15: body still scrolls (test-v137 contract)", /> \.rs-cards-body \{[^}]*overflow-y: auto !important/.test(sec));
@@ -53,11 +53,17 @@ ok("§15: kind-coloured cards (skill blue / ability purple / mode amber), active
 
 // ── E. Library + version ──
 ok("§15: sticky library toolbar + card hover lift", /\.rs-template-controls \{ position: sticky; top: 0; z-index: 3;/.test(sec) && /\.rs-template-card:hover \{ transform: translateY\(-2px\)/.test(sec));
-const V = "1.41.0";
 const mf = JSON.parse(read("manifest.json"));
-ok("manifest " + V, mf.version === V, mf.version);
-ok("plugin + crate pinned", read("plugin/ORscript.lua").includes(`local VERSION = "${V}"`) && /^version = "1\.41\.0"/m.test(read("agent/Cargo.toml")) && /name = "or-agent"\nversion = "1\.41\.0"/.test(read("agent/Cargo.lock")));
-ok("README changelog + test listed", readme.includes("**1.41.0 — Workspace panel.**") && readme.includes("node tests/test-v141.js") && readme.includes("(`or-agent` 1.41.0)"));
+const semver = (v) => String(v).split(".").map(Number).reduce((acc, x, i) => acc + x * [1e6, 1e3, 1][i], 0);
+const V = mf.version;
+ok("manifest is a release at or above 1.41.1", /^\d+\.\d+\.\d+$/.test(V) && semver(V) >= 1041001, V);
+ok("plugin + crate pinned to the manifest version", read("plugin/ORscript.lua").includes(`local VERSION = "${V}"`) && read("agent/Cargo.toml").includes(`version = "${V}"`) && read("agent/Cargo.lock").includes(`name = "or-agent"\nversion = "${V}"`));
+ok("README changelog + test listed", readme.includes("**1.41.0 — Workspace panel.**") && readme.includes("**1.41.1 — Workspace panel: rail stays in its column.**") && readme.includes("node tests/test-v141.js") && readme.includes("(`or-agent` " + V + ")"));
+// 1.41.1 — the §12 open-state rule (#rs-bar.rs-cards-open #rs-cards-panel, specificity 2-1-0) forces
+// display:flex/column; the grid must be declared at >= 2-2-0 or the rail stacks on top of the content.
+ok("§15 declares the grid on the open-state selectors too (outranks §12's display:flex)", /#rs-cards-panel\[data-cards-tab\],\s*#rs-bar\.rs-cards-open #rs-cards-panel\[data-cards-tab\],\s*#rs-bar\.rs-bar-inline\.rs-cards-open #rs-cards-panel\[data-cards-tab\],\s*#rs-bar\.rs-tray-below\.rs-cards-open #rs-cards-panel\[data-cards-tab\] \{\s*display: grid !important;\s*flex-direction: unset !important;\s*grid-template-columns: var\(--cp-rail\) minmax\(0, 1fr\) !important/.test(sec) && /#rs-bar\.rs-cards-open #rs-cards-panel\[data-cards-tab\] > \.rs-cards-top,\s*#rs-bar\.rs-cards-open #rs-cards-panel\[data-cards-tab\] > \.rs-cards-body \{ flex: unset !important; min-height: 0 !important;/.test(sec));
+ok("§15: narrow stack also declared on the open-state selectors", /@media \(max-width: 860px\) \{\s*#rs-cards-panel\[data-cards-tab\],\s*#rs-bar\.rs-cards-open #rs-cards-panel\[data-cards-tab\],\s*#rs-bar\.rs-bar-inline\.rs-cards-open #rs-cards-panel\[data-cards-tab\] \{ grid-template-columns: minmax\(0, 1fr\) !important/.test(sec));
+ok("§15: rail text is not force-uppercased (Turkish-locale İ)", /\.rs-cards-tab \{[^}]*text-transform: none !important/.test(sec) && /\.rs-cards-heading \{[^}]*text-transform: none !important/.test(sec) && /\.rs-cards-kicker \{[^}]*text-transform: none !important/.test(sec));
 
 if (!JSDOM) { console.log("SKIP  jsdom walk (jsdom not installed)"); finish(); } else { render().catch((e) => { ok("jsdom walk completed", false, String(e && e.stack || e)); finish(); }); }
 function finish() { const failed = results.filter((r) => !r[1]); console.log(`\n${results.length - failed.length}/${results.length} checks passed`); if (failed.length) { console.log("FAILURES:"); failed.forEach((r) => console.log("  - " + r[0])); } process.exit(failed.length ? 1 : 0); }
