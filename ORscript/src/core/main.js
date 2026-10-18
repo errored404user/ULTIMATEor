@@ -6404,6 +6404,23 @@
             renderCards(cardsPanel);
             return;
           }
+          // 1.41.0 — tab-local filter chips (Activity / Tasks / Public kinds).
+          const actF = e.target.closest && e.target.closest("[data-act-filter]");
+          if (actF) { e.stopPropagation(); cardsActFilter = actF.dataset.actFilter || "all"; renderCards(cardsPanel); return; }
+          const taskF = e.target.closest && e.target.closest("[data-task-filter]");
+          if (taskF) { e.stopPropagation(); cardsTaskFilter = taskF.dataset.taskFilter || "all"; renderCards(cardsPanel); return; }
+          const pubF = e.target.closest && e.target.closest("[data-public-filter]");
+          if (pubF) { e.stopPropagation(); cardsPublicFilter = pubF.dataset.publicFilter || "all"; renderCards(cardsPanel); return; }
+          // 1.41.0 — a failed command → draft a fix request in the composer.
+          const actAsk = e.target.closest && e.target.closest("[data-act-ask]");
+          if (actAsk) {
+            e.stopPropagation();
+            const c = recentCards[Number(actAsk.dataset.actAsk)];
+            if (!c) return;
+            const okP = pasteLibraryCard({ title: "Fix " + c.tool, prompt: `The command ${c.tool} failed with: "${String(c.detail || "").slice(0, 200)}". Find the cause, fix it with real commands, verify the fix, and tell me in one sentence what was wrong.` }, { silent: true });
+            if (okP) { setCardsOpen(false); toast("Drafted a fix request in the message box — press Enter to send it"); }
+            return;
+          }
           const clear = e.target.closest && e.target.closest("#rs-cards-clear");
           if (clear) {
             e.stopPropagation();
@@ -7992,9 +8009,14 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       ability: { kind: "ability", name: "my_ability", title: "My Ability", description: "A reusable procedure the agent follows with real commands.", params: [{ name: "target", type: "string", description: "What to work on", required: true }], instructions: "Audit {{target}} and fix what you find. Work step by step and verify each change.", steps: ["Locate {{target}} with instance_find", "Inspect it with inspect_instance / script_read", "Apply the fix with the right write command", "Verify the result and report"], commands: ["instance_find", "inspect_instance", "script_read", "script_set_source"] },
       mode: { kind: "mode", name: "my_mode", title: "My Mode", badge: "MYMODE", base: "creation", sub: "One-line tagline shown on the mode card", note: "Short blurb shown in the menu", description: "When to use this mode and what it optimises for.", mandate: "You are now a specialist in ... Priorities: 1) ... 2) ... 3) ... Pipeline: plan, build, verify with screenshots/console. Quality bar: ... Never: ...", focus: ["instance_find", "part_create", "script_create"] },
     };
+    var cardsPublicFilter = "all"; // 1.41.0 — all | skill | ability | mode
     function publicHtml(){
       const PS = typeof PublicSkills !== "undefined" ? PublicSkills : null;
-      const items = PS ? PS.list() : [];
+      const allItems = PS ? PS.list() : [];
+      const items = cardsPublicFilter === "all" ? allItems : allItems.filter((i) => i.kind === cardsPublicFilter);
+      const kcount = (k) => allItems.filter((i) => i.kind === k).length;
+      const pchip = (id, label, n) => `<button type="button" class="rs-act-chip${cardsPublicFilter === id ? " on" : ""}" data-public-filter="${id}" aria-pressed="${cardsPublicFilter === id}">${label}<i>${n}</i></button>`;
+      const pfilters = allItems.length ? `<div class="rs-act-filters rs-public-filters" role="group" aria-label="Filter by kind">${pchip("all", "All", allItems.length)}${pchip("skill", "Skills", kcount("skill"))}${pchip("ability", "Abilities", kcount("ability"))}${pchip("mode", "Work modes", kcount("mode"))}</div>` : "";
       const active = PS ? PS.activeMode() : null;
       const kindLabel = { skill: "skill", ability: "ability", mode: "work mode" };
       const rows = items.map((i) => {
@@ -8011,7 +8033,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         ? `<div class="rs-public-hint rs-public-hint-convert">Looks like a full prompt → the AI will convert it faithfully (nothing dropped, nothing invented).${publicHow === "auto" ? ' <button type="button" data-public-how="design">Design a new one from it instead</button>' : ' <button type="button" data-public-how="auto">Auto</button>'}</div>`
         : `<div class="rs-public-hint">Short description → the AI designs the ${publicKind === "auto" ? "skill / ability / mode" : publicKind} for you.${publicHow === "auto" ? ' <button type="button" data-public-how="convert">Treat it as a full prompt instead</button>' : ' <button type="button" data-public-how="auto">Auto</button>'}</div>`;
       const examples = [["skill", "A skill that places N street lamps with warm PointLights along the selected path"], ["ability", "An ability that audits every script for deprecated APIs and fixes them"], ["mode", "A 'Horror builder' work mode focused on fog, flickering lights and sound"]];
-      return `<section class="rs-template-library rs-public" aria-label="Public skills"><div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div><b>Public Skills</b><span class="rs-template-count">${items.length}</span></div><p>Your own commands, procedures and work modes — no coding needed.</p></div><div class="rs-template-head-actions"><button type="button" class="rs-btn-secondary" data-public-manual>New by hand</button></div></header><ol class="rs-public-ways"><li><b>Describe it</b><span>one sentence → the AI designs and installs it</span></li><li><b>Paste a full prompt</b><span>or drop a .txt → it becomes a skill as-is</span></li><li><b>Import</b><span>a .txt / .json file or share code from a friend</span></li></ol><div class="rs-public-sharebox"><b>Share</b><span>Give friends a .txt / .json file or a code; they press Import. Nothing is uploaded — files and codes are the only channel.</span><div class="rs-public-share-actions"><button type="button" data-public-import>Import file / code…</button><button type="button" data-public-paste>Paste share code</button><button type="button" data-public-export-all ${items.length ? "" : "disabled"}>Export all (${items.length})</button><button type="button" data-public-share-all ${items.length ? "" : "disabled"}>Copy share code for all</button></div></div><div class="rs-public-compose" data-public-drop><div class="rs-public-examples">Try: ${examples.map(([k, t]) => `<button type="button" data-public-example="${escRs(t)}" class="rs-public-kind rs-public-kind-${k}">${k}</button>`).join("")}</div><textarea id="rs-public-prompt" rows="${isPrompt ? 7 : 3}" spellcheck="false" placeholder="Describe what you want in a sentence — or paste a whole prompt you already wrote (any length). You can also drop a .txt file here.">${escRs(publicDraft)}</textarea>${hint}<div class="rs-public-compose-row"><select id="rs-public-kind" aria-label="Kind"><option value="auto"${publicKind === "auto" ? " selected" : ""}>Auto — AI decides</option><option value="skill"${publicKind === "skill" ? " selected" : ""}>Skill — Luau command with params</option><option value="ability"${publicKind === "ability" ? " selected" : ""}>Ability — reusable procedure</option><option value="mode"${publicKind === "mode" ? " selected" : ""}>Work mode — mandate + focus</option></select><button type="button" class="rs-btn-primary rs-btn-ai" data-public-create>${createLabel}</button></div><div class="rs-public-compose-row rs-public-compose-alt"><button type="button" data-public-load-text>Load .txt / .json…</button><button type="button" data-public-save-text ${publicDraft.trim().length >= 20 ? "" : "disabled"} title="Install the text above right now, without AI: kept word-for-word as an ability (or a work mode / skill if you picked that kind)">Save as-is (no AI)</button><span class="rs-public-drop-note">or drop a file on this box</span></div><small>Installed on this device only (chrome.storage). Share with Export / Share code; others press Import. Skills run only when called — nothing touches your place until then.</small></div></div><div class="rs-template-list rs-public-list">${rows || empty}</div></section>`;
+      return `<section class="rs-template-library rs-public" aria-label="Public skills"><div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div><b>Public Skills</b><span class="rs-template-count">${allItems.length}</span></div><p>Your own commands, procedures and work modes — no coding needed.</p></div><div class="rs-template-head-actions"><button type="button" class="rs-btn-secondary" data-public-import>Import file / code…</button><button type="button" class="rs-btn-secondary" data-public-manual>New by hand</button></div></header><div class="rs-public-grid"><div class="rs-public-side"><ol class="rs-public-ways"><li><b>Describe it</b><span>one sentence → the AI designs and installs it</span></li><li><b>Paste a full prompt</b><span>or drop a .txt → it becomes a skill as-is</span></li><li><b>Import</b><span>a .txt / .json file or share code from a friend</span></li></ol><div class="rs-public-sharebox"><b>Share</b><span>Give friends a .txt / .json file or a code; they press Import. Nothing is uploaded — files and codes are the only channel.</span><div class="rs-public-share-actions"><button type="button" data-public-import>Import file / code…</button><button type="button" data-public-paste>Paste share code</button><button type="button" data-public-export-all ${allItems.length ? "" : "disabled"}>Export all (${allItems.length})</button><button type="button" data-public-share-all ${allItems.length ? "" : "disabled"}>Copy share code for all</button></div></div></div><div class="rs-public-compose" data-public-drop><div class="rs-public-compose-head"><b>Create one</b><span>Describe it, paste a prompt, or drop a file</span></div><div class="rs-public-examples">Try: ${examples.map(([k, t]) => `<button type="button" data-public-example="${escRs(t)}" class="rs-public-kind rs-public-kind-${k}">${k}</button>`).join("")}</div><textarea id="rs-public-prompt" rows="${isPrompt ? 7 : 3}" spellcheck="false" placeholder="Describe what you want in a sentence — or paste a whole prompt you already wrote (any length). You can also drop a .txt file here.">${escRs(publicDraft)}</textarea>${hint}<div class="rs-public-compose-row"><select id="rs-public-kind" aria-label="Kind"><option value="auto"${publicKind === "auto" ? " selected" : ""}>Auto — AI decides</option><option value="skill"${publicKind === "skill" ? " selected" : ""}>Skill — Luau command with params</option><option value="ability"${publicKind === "ability" ? " selected" : ""}>Ability — reusable procedure</option><option value="mode"${publicKind === "mode" ? " selected" : ""}>Work mode — mandate + focus</option></select><button type="button" class="rs-btn-primary rs-btn-ai" data-public-create>${createLabel}</button></div><div class="rs-public-compose-row rs-public-compose-alt"><button type="button" data-public-load-text>Load .txt / .json…</button><button type="button" data-public-save-text ${publicDraft.trim().length >= 20 ? "" : "disabled"} title="Install the text above right now, without AI: kept word-for-word as an ability (or a work mode / skill if you picked that kind)">Save as-is (no AI)</button><span class="rs-public-drop-note">or drop a file on this box</span></div><small>Installed on this device only (chrome.storage). Share with Export / Share code; others press Import. Skills run only when called — nothing touches your place until then.</small></div></div>${pfilters}</div><div class="rs-template-list rs-public-list">${rows || (allItems.length ? `<div class="rs-template-empty rs-act-none"><div class="rs-template-empty-mark">P</div><b>Nothing of this kind yet</b><span>Switch to All, or create one above.</span></div>` : empty)}</div></section>`;
     }
     var publicDraft = "", publicKind = "auto";
     var publicHow = "auto"; // "auto" | "design" | "convert" - how the Create button treats the text
@@ -8092,17 +8114,41 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     window.addEventListener("or-public-skills-change", () => { try { syncWorkModeUi(); } catch {} try { if (menuEl && !menuEl.hidden) buildMenu(); } catch {} try { if (cardsPanel && !cardsPanel.hidden && cardsTab === "public") scheduleRenderCards(); } catch {} });
     // ── Tasks tab (Settings → Task list) ──
     const TASK_MARK = { todo: "", doing: "▶", done: "✓", skipped: "–" };
+    var cardsTaskFilter = "all"; // 1.41.0 — all | open | done
     function tasksHtml(){
       const TL = ORTaskList; const tasks = TL.list(); const p = TL.progress();
-      const rows = tasks.map((t, i) => `<li class="rs-task-row rs-task-${t.status}" data-task-id="${escRs(t.id)}"><button type="button" class="rs-task-check" data-task-action="toggle" title="${t.status === "done" ? "Mark open" : "Mark done"}" aria-label="${t.status === "done" ? "Mark open" : "Mark done"}">${TASK_MARK[t.status]}</button><div class="rs-task-copy"><span class="rs-task-n">#${i + 1}</span><span class="rs-task-text" contenteditable="true" spellcheck="false" data-task-edit>${escRs(t.text)}</span>${t.notes ? `<small class="rs-task-notes">${escRs(t.notes)}</small>` : ""}${t.by === "ai" ? '<small class="rs-task-by">added by AI</small>' : ""}</div><div class="rs-task-actions"><button type="button" data-task-action="run" title="Ask the AI to do this task">Run</button><button type="button" data-task-action="doing" title="Mark in progress">▶</button><button type="button" data-task-action="skip" title="Skip">Skip</button><button type="button" data-task-action="up" title="Move up">↑</button><button type="button" data-task-action="down" title="Move down">↓</button><button type="button" class="rs-template-delete" data-task-action="delete" title="Delete">×</button></div></li>`).join("");
+      const visible = cardsTaskFilter === "open" ? tasks.filter((t) => t.status === "todo" || t.status === "doing") : cardsTaskFilter === "done" ? tasks.filter((t) => t.status === "done" || t.status === "skipped") : tasks;
+      const nextT = tasks.find((t) => t.status === "doing") || tasks.find((t) => t.status === "todo");
+      const nextIdx = nextT ? tasks.indexOf(nextT) + 1 : 0;
+      const tchip = (id, label, n) => `<button type="button" class="rs-act-chip${cardsTaskFilter === id ? " on" : ""}" data-task-filter="${id}" aria-pressed="${cardsTaskFilter === id}">${label}<i>${n}</i></button>`;
+      const rowsHtml = tasks.map((t, i) => !visible.includes(t) ? "" : `<li class="rs-task-row rs-task-${t.status}" data-task-id="${escRs(t.id)}"><button type="button" class="rs-task-check" data-task-action="toggle" title="${t.status === "done" ? "Mark open" : "Mark done"}" aria-label="${t.status === "done" ? "Mark open" : "Mark done"}">${TASK_MARK[t.status]}</button><div class="rs-task-copy"><span class="rs-task-n">#${i + 1}</span><span class="rs-task-text" contenteditable="true" spellcheck="false" data-task-edit>${escRs(t.text)}</span>${t.notes ? `<small class="rs-task-notes">${escRs(t.notes)}</small>` : ""}${t.by === "ai" ? '<small class="rs-task-by">added by AI</small>' : ""}</div><div class="rs-task-actions"><button type="button" data-task-action="run" title="Ask the AI to do this task">Run</button><button type="button" data-task-action="doing" title="Mark in progress">▶</button><button type="button" data-task-action="skip" title="Skip">Skip</button><button type="button" data-task-action="up" title="Move up">↑</button><button type="button" data-task-action="down" title="Move down">↓</button><button type="button" class="rs-template-delete" data-task-action="delete" title="Delete">×</button></div></li>`).join("");
+      const rows = rowsHtml;
       const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-      return `<section class="rs-template-library rs-tasks" aria-label="Task list"><div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div><b>Task list</b><span class="rs-template-count">${p.done}/${p.total}</span></div><p>Your checklist for this project. The AI sees it, works it with <code>task_next</code> and ticks items with <code>task_update</code> after verifying.</p></div><div class="rs-template-head-actions"><button type="button" class="rs-btn-primary" data-task-run-all ${p.open ? "" : "disabled"}>Run all with AI</button><button type="button" class="rs-btn-secondary" data-task-run-next ${p.open ? "" : "disabled"}>Run next</button></div></header><div class="rs-task-progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div><form class="rs-task-add" data-task-add-form><input id="rs-task-input" type="text" autocomplete="off" spellcheck="false" placeholder="Add a task and press Enter (paste several lines to add many)"><button type="button" class="rs-btn-secondary" data-task-ai-plan title="Let the AI break the project into tasks">Plan with AI</button></form><div class="rs-task-tools"><button type="button" data-task-clear-done ${p.done + p.skipped ? "" : "disabled"}>Clear done</button><button type="button" data-task-export ${p.total ? "" : "disabled"}>Export</button><button type="button" data-task-import>Import</button><button type="button" data-task-disable title="Same as Settings → Task list">Disable task list</button></div></div>${tasks.length ? `<ol class="rs-task-list">${rows}</ol>` : `<div class="rs-template-empty"><div class="rs-template-empty-mark">✓</div><b>No tasks yet</b><span>Type a task above, paste a list, or press Plan with AI to let the agent propose the steps for your project.</span></div>`}</section>`;
+      const ring = `<svg class="rs-task-ring" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" class="rs-task-ring-bg"></circle><circle cx="18" cy="18" r="15.5" class="rs-task-ring-fg" style="stroke-dasharray:${(pct * 97.4 / 100).toFixed(1)} 97.4"></circle></svg>`;
+      const nextUp = nextT
+        ? `<div class="rs-task-next" data-task-id="${escRs(nextT.id)}"><span class="rs-task-next-kicker">${nextT.status === "doing" ? "In progress" : "Next up"}</span><b>#${nextIdx} ${escRs(nextT.text)}</b>${nextT.notes ? `<small>${escRs(nextT.notes)}</small>` : ""}<div class="rs-template-actions"><button type="button" class="rs-template-run" data-task-action="run">Run with AI</button><button type="button" data-task-action="toggle">Mark done</button><button type="button" data-task-action="skip">Skip</button></div></div>`
+        : (p.total ? `<div class="rs-task-next rs-task-next-done"><span class="rs-task-next-kicker">All done</span><b>Every task is finished or skipped.</b><small>Add more below, or Clear done to start a fresh list.</small></div>` : "");
+      const filters = p.total ? `<div class="rs-act-filters rs-task-filters" role="group" aria-label="Filter tasks">${tchip("all", "All", p.total)}${tchip("open", "Open", p.open)}${tchip("done", "Done", p.done + p.skipped)}</div>` : "";
+      return `<section class="rs-template-library rs-tasks" aria-label="Task list"><div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div>${ring}<b>Task list</b><span class="rs-template-count">${p.done}/${p.total}</span></div><p>Your checklist for this project. The AI sees it, works it with <code>task_next</code> and ticks items with <code>task_update</code> after verifying.</p></div><div class="rs-template-head-actions"><button type="button" class="rs-btn-primary" data-task-run-all ${p.open ? "" : "disabled"}>Run all with AI</button><button type="button" class="rs-btn-secondary" data-task-run-next ${p.open ? "" : "disabled"}>Run next</button></div></header><div class="rs-task-progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>${nextUp}<form class="rs-task-add" data-task-add-form><input id="rs-task-input" type="text" autocomplete="off" spellcheck="false" placeholder="Add a task and press Enter (paste several lines to add many)"><button type="button" class="rs-btn-secondary" data-task-ai-plan title="Let the AI break the project into tasks">Plan with AI</button></form><div class="rs-task-tools"><button type="button" data-task-clear-done ${p.done + p.skipped ? "" : "disabled"}>Clear done</button><button type="button" data-task-export ${p.total ? "" : "disabled"}>Export</button><button type="button" data-task-import>Import</button><button type="button" data-task-disable title="Same as Settings → Task list">Disable task list</button></div>${filters}</div>${tasks.length ? (rows ? `<ol class="rs-task-list">${rows}</ol>` : `<div class="rs-template-empty rs-act-none"><div class="rs-template-empty-mark">✓</div><b>Nothing in this filter</b><span>Switch to All to see every task.</span></div>`) : `<div class="rs-template-empty"><div class="rs-template-empty-mark">✓</div><b>No tasks yet</b><span>Type a task above, paste a list, or press Plan with AI to let the agent propose the steps for your project.</span></div>`}</section>`;
     }
     function taskRunPrompt(t, idx){ return `Work on task #${idx} from my OrScript task list now: "${t.text}"${t.notes ? ` (notes: ${t.notes})` : ""}. First call task_update {"id":"${t.id}","status":"doing"}, then do the work with real commands and verify it, then call task_update {"id":"${t.id}","status":"done","notes":"<one line of what you did>"}. If it cannot be done, mark it "skipped" with the reason. Do not start other tasks.`; }
+    var cardsActFilter = "all"; // 1.41.0 — all | ok | err | run
+    // 1.41.0 — Activity timeline: status filters (All / Done / Failed / Running)
+    // over the whole recentCards stream; up to 40 rows are drawn.
+    function activityFilterState() {
+      const all = recentCards;
+      const okAll = all.filter((c) => c.status === "ok").length;
+      const errAll = all.filter((c) => c.status === "err").length;
+      const runAll = all.length - okAll - errAll;
+      const filtered = cardsActFilter === "ok" ? all.filter((c) => c.status === "ok") : cardsActFilter === "err" ? all.filter((c) => c.status === "err") : cardsActFilter === "run" ? all.filter((c) => c.status !== "ok" && c.status !== "err") : all;
+      const chip = (id, label, n) => '<button type="button" class="rs-act-chip' + (cardsActFilter === id ? " on" : "") + '" data-act-filter="' + id + '" aria-pressed="' + (cardsActFilter === id) + '">' + label + '<i>' + n + '</i></button>';
+      const filters = all.length ? '<div class="rs-act-filters" role="group" aria-label="Filter activity">' + chip("all", "All", all.length) + chip("ok", "Done", okAll) + chip("err", "Failed", errAll) + chip("run", "Running", runAll) + '</div>' : "";
+      return { shown: filtered.slice(0, 40), filters };
+    }
     function activityHtml() {
       // 1.34.1 — the Activity tab shares the Library shell (.rs-template-library
       // header + .rs-template-row rows) so every cards-panel tab has one look.
-      const shown = recentCards.slice(0, 12);
+      const { shown, filters } = activityFilterState();
       const doneN = shown.filter((c) => c.status === "ok").length;
       const errN = shown.filter((c) => c.status === "err").length;
       const head =
@@ -8110,7 +8156,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         + (doneN ? '<span class="rs-cards-count">' + doneN + '<i>ok</i></span>' : "")
         + (errN ? '<span class="rs-cards-count err">' + errN + '<i>err</i></span>' : "")
         + '</div><p>Every command the AI ran this session, newest first, with its result.</p></div>'
-        + '<div class="rs-template-head-actions"><button id="rs-cards-clear" type="button" class="rs-btn-secondary"' + (recentCards.length ? "" : " disabled") + '>Clear</button></div></header></div>';
+        + '<div class="rs-template-head-actions"><button id="rs-cards-clear" type="button" class="rs-btn-secondary"' + (recentCards.length ? "" : " disabled") + '>Clear</button></div></header>' + filters + '</div>';
       if (!recentCards.length) {
         return '<section class="rs-template-library rs-activity" aria-label="Activity">' + head
           + '<div class="rs-template-empty rs-cards-empty"><div class="rs-template-empty-mark">\u2726</div><b>No results yet</b><span>Every tool result lands here as a card — what ran, what it did and whether it worked.</span></div></section>';
@@ -8120,6 +8166,8 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         const cls = c.status === "ok" ? "done" : c.status === "err" ? "err" : "run";
         const ago = Math.max(0, Math.round((Date.now() - c.at) / 1000));
         const agoStr = ago < 60 ? ago + "s" : ago < 3600 ? Math.round(ago / 60) + "m" : Math.round(ago / 3600) + "h";
+        const realIdx = recentCards.indexOf(c);
+        const fix = c.status === "err" ? '<div class="rs-template-actions rs-act-actions"><button type="button" class="rs-template-run" data-act-ask="' + realIdx + '">Ask the AI to fix it</button></div>' : "";
         return '<article class="rs-template-row rs-activity-row rs-card rs-card-' + cls + '" data-idx="' + i + '" style="animation-delay:' + Math.min(i * 45, 400) + 'ms">'
           + '<div class="rs-card-icon">' + icon + '</div>'
           + '<div class="rs-template-copy rs-card-body"><b class="rs-card-title">' + escRs(c.tool) + '</b>'
@@ -8127,9 +8175,11 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
           + '<span class="rs-card-meta"><span class="rs-card-status"><span class="rs-card-dot"></span>'
           + (c.status === "ok" ? "Done" : c.status === "err" ? "Failed" : "Running")
           + '</span><span class="rs-card-time">' + agoStr + ' ago</span></span></div>'
+          + fix
           + '</article>';
       }).join("");
-      return '<section class="rs-template-library rs-activity" aria-label="Activity">' + head + '<div class="rs-template-list rs-activity-list">' + rows + '</div></section>';
+      const none = !shown.length ? '<div class="rs-template-empty rs-act-none"><div class="rs-template-empty-mark">\u2726</div><b>Nothing in this filter</b><span>Switch back to All to see every command.</span></div>' : "";
+      return '<section class="rs-template-library rs-activity" aria-label="Activity">' + head + '<div class="rs-template-list rs-activity-list">' + rows + '</div>' + none + '</section>';
     }
 
     function roadmapProgress() {
@@ -8258,6 +8308,13 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         : cardsTab === "tasks" ? ["Tasks", "Your checklist for this project"]
         : local ? ["Session", "What the agent did this session"] : ["Templates", "Reusable workflows"];
       panel.dataset.cardsTab = cardsTab;
+      // 1.41.0 — workspace layout: .rs-cards-top is a left rail (brand, title,
+      // vertical nav with icons + counters, a contextual tip); .rs-cards-body is
+      // the content column. Narrow panels stack the rail back on top (CSS).
+      const railTip = cardsTab === "activity" ? "Failed rows have an <b>Ask the AI to fix it</b> button — it drafts the message for you."
+        : cardsTab === "public" ? "Drop a <b>.txt</b> prompt on the composer and it becomes a reusable skill."
+        : cardsTab === "tasks" ? "The AI reads this list: <b>Run next</b> hands it the first open task."
+        : local ? "Everything the agent did on this PC this session, with results." : "One click on <b>Run</b> executes a whole template with real commands.";
       panel.innerHTML =
         '<div class="rs-cards-top">'
         + '<div class="rs-cards-brand"><img class="rs-logo rs-cards-logo" alt="" aria-hidden="true" src="' + chrome.runtime.getURL("assets/icon128.png") + '"><span class="rs-cards-kicker" data-rs-brand-short>' + (orTheme==="void"?"VoidScript":"OrScript") /* selected-skin branding */ + '</span><span class="rs-cards-heading">' + tabHead[0] + '</span><span class="rs-cards-subheading">' + tabHead[1] + ' · v' + EXT_VERSION + '</span></div>'
@@ -8266,8 +8323,13 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "activity" ? " on" : "") + '" data-tab="activity">Activity' + actN + '</button>'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "public" ? " on" : "") + '" data-tab="public">Public' + (publicCount() ? ' <b>' + publicCount() + '</b>' : '') + '</button>'
         + (taskListOn() ? '<button type="button" class="rs-cards-tab' + (cardsTab === "tasks" ? " on" : "") + '" data-tab="tasks">Tasks' + (() => { try { const p = ORTaskList.progress(); return p.total ? ' <b>' + p.done + '/' + p.total + '</b>' : ''; } catch { return ''; } })() + '</button>' : '')
+        + '</div>'
+        + '<div class="rs-cards-rail-foot"><span class="rs-cards-rail-tip">' + railTip + '</span>'
+        + (taskListOn() ? '' : '<button type="button" class="rs-cards-rail-link" data-cards-enable-tasks>+ Turn on the task list</button>')
         + '</div></div>'
         + '<div class="rs-cards-body">' + body + '</div>';
+      const enableTasks = panel.querySelector("[data-cards-enable-tasks]");
+      if (enableTasks) enableTasks.onclick = (e) => { e.preventDefault(); e.stopPropagation(); try { setTaskList(true); cardsTab = "tasks"; renderCards(panel); } catch {} };
       // Bind tabs on every render. The panel is re-created frequently, so a
       // listener attached only during the first open becomes detached.
       panel.querySelectorAll(".rs-cards-tab").forEach((tab) => {

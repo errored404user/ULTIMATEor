@@ -79,12 +79,15 @@ ok("popup.js ticks the steps from the bridge snapshot and writes a plain 'Next:'
 ok("popup CSS styles the pips", popupHtml.includes("#start-steps li.ok .pip") && popupHtml.includes("#start-steps li.now .pip"));
 
 // ── E. Version pins ────────────────────────────────────────────────────────
-const V = "1.40.0";
-ok("manifest is " + V, manifest.version === V, manifest.version);
-ok("plugin pinned", read("plugin/ORscript.lua").includes(`local VERSION = "${V}"`) && read("plugin/ORscript.lua").split("\n")[1].includes(V));
-ok("crate pinned (Cargo.toml + Cargo.lock)", /^version = "1\.40\.0"/m.test(read("agent/Cargo.toml")) && /name = "or-agent"\nversion = "1\.40\.0"/.test(read("agent/Cargo.lock")));
+// Shipped in 1.40.0; later releases bump the pins (their own test-v* pins the
+// exact number) so this file only requires >= 1.40.0 and consistent pins.
+const semver = (v) => String(v).split(".").map(Number).reduce((acc, x, i) => acc + x * [1e6, 1e3, 1][i], 0);
+const V = manifest.version;
+ok("manifest is a release at or above 1.40.0", /^\d+\.\d+\.\d+$/.test(V) && semver(V) >= 1040000, V);
+ok("plugin pinned to the manifest version", read("plugin/ORscript.lua").includes(`local VERSION = "${V}"`) && read("plugin/ORscript.lua").split("\n")[1].includes(V));
+ok("crate pinned to the manifest version (Cargo.toml + Cargo.lock)", read("agent/Cargo.toml").includes(`version = "${V}"`) && read("agent/Cargo.lock").includes(`name = "or-agent"\nversion = "${V}"`));
 ok("README changelog + test listed + crate line",
-  readme.includes("**1.40.0 — Beginner mode.**") && readme.includes("node tests/test-v140.js") && readme.includes("(`or-agent` 1.40.0)"));
+  readme.includes("**1.40.0 — Beginner mode.**") && readme.includes("node tests/test-v140.js") && readme.includes("(`or-agent` " + V + ")"));
 
 if (failed) { console.log(`\n${failed} 1.40.0 check(s) failed.`); process.exit(1); }
 console.log("\nall 1.40.0 checks passed");
