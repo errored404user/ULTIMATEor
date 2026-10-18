@@ -7,12 +7,16 @@ on:
       - ".github/workflows/desktop.yml"
   workflow_dispatch:
 
+# Compiler / test failures are re-emitted as GitHub annotations (::error
+# file=…,line=…::…) so they show up on the commit and in the Checks API even
+# when the raw log is not reachable.
 jobs:
   windows:
     runs-on: windows-latest
     defaults:
       run:
         working-directory: ORscript/agent
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -20,9 +24,31 @@ jobs:
         with:
           workspaces: ORscript/agent
       - name: Build (release)
-        run: cargo build --release --locked || cargo build --release
+        run: |
+          set -o pipefail
+          (cargo build --release --locked --message-format=short 2>&1 || cargo build --release --message-format=short 2>&1) | tee build.log
+      - name: Annotate compiler errors
+        if: failure()
+        run: |
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: (error|warning: unused)' build.log | head -10 | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::error file=ORscript/agent/$f,line=$l::$msg"
+          done
+          grep -E 'error(\[E[0-9]+\])?:' build.log | head -40 || true
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          cargo test --release --locked --message-format=short 2>&1 | tee test.log
+      - name: Annotate test failures
+        if: failure()
+        run: |
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' test.log | head -10 | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::error file=ORscript/agent/$f,line=$l::$msg"
+          done
+          grep -E "^test .* FAILED|panicked at|^---- " test.log | head -20 | while IFS= read -r line; do echo "::error::$line"; done
       - name: Smoke test (headless flag parses)
-        run: .\target\release\or-core.exe --help
+        run: ./target/release/or-core.exe --help
       - uses: actions/upload-artifact@v4
         with:
           name: or-core-windows-x64
@@ -33,6 +59,7 @@ jobs:
     defaults:
       run:
         working-directory: ORscript/agent
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -40,7 +67,29 @@ jobs:
         with:
           workspaces: ORscript/agent
       - name: Build (release)
-        run: cargo build --release --locked || cargo build --release
+        run: |
+          set -o pipefail
+          (cargo build --release --locked --message-format=short 2>&1 || cargo build --release --message-format=short 2>&1) | tee build.log
+      - name: Annotate compiler errors
+        if: failure()
+        run: |
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: (error|warning: unused)' build.log | head -10 | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::error file=ORscript/agent/$f,line=$l::$msg"
+          done
+          grep -E 'error(\[E[0-9]+\])?:' build.log | head -40 || true
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          cargo test --release --locked --message-format=short 2>&1 | tee test.log
+      - name: Annotate test failures
+        if: failure()
+        run: |
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' test.log | head -10 | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::error file=ORscript/agent/$f,line=$l::$msg"
+          done
+          grep -E "^test .* FAILED|panicked at|^---- " test.log | head -20 | while IFS= read -r line; do echo "::error::$line"; done
       - name: Smoke test
         run: ./target/release/or-core --help
       - uses: actions/upload-artifact@v4
