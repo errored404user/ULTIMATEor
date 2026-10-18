@@ -1,6 +1,6 @@
 [package]
 name = "or-agent"
-version = "1.39.1"
+version = "1.39.2"
 edition = "2021"
 build = "build.rs"
 description = "ORscript Desktop — native Roblox Studio MCP + AgentScript workspace bridge with a workspace window and tray"

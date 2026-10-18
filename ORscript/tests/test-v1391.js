@@ -67,9 +67,9 @@ ok("in-Studio handbook commands are untouched", main.includes('"memory_update_se
 }
 
 // ── F. Pins / docs ────────────────────────────────────────────────────────────
-ok("manifest 1.39.1", mf.version === "1.39.1", mf.version);
-ok("plugin + crate pinned at 1.39.1", read("plugin/ORscript.lua").includes('local VERSION = "1.39.1"') && /^version = "1\.39\.1"/m.test(read("agent/Cargo.toml")) && read("agent/Cargo.lock").includes('name = "or-agent"\nversion = "1.39.1"'));
-ok("README changelog 1.39.1 + test listed", readme.includes("**1.39.1 — Settings: themes and memory removed.**") && readme.includes("`or-agent` 1.39.1") && readme.includes("test-v1391.js"));
+ok("manifest 1.39.1+", /^1\.39\.[1-9]\d*$|^1\.[4-9]\d\./.test(mf.version), mf.version);
+ok("plugin + crate pinned to the manifest version", read("plugin/ORscript.lua").includes('local VERSION = "' + mf.version + '"') && read("agent/Cargo.toml").includes('version = "' + mf.version + '"') && read("agent/Cargo.lock").includes('name = "or-agent"\nversion = "' + mf.version + '"'));
+ok("README changelog 1.39.1 + test listed", readme.includes("**1.39.1 — Settings: themes and memory removed.**") && readme.includes("`or-agent` " + mf.version) && readme.includes("test-v1391.js"));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall 1.39.1 checks passed");
 process.exit(failed ? 1 : 0);
