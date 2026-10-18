@@ -356,8 +356,11 @@ const STUDIO_COMMANDS: &[(&str, u64)] = &[
     ("eclipse_handoff", 60),
     ("eclipse_import", 120),
     ("eclipse_play", 30),
+    // 1.45.0 — animation publishing
+    ("animation_export", 60),
+    ("animation_apply", 30),
 ];
-const CLOUD_COMMANDS: &[&str] = &["cloud_gamepass_create", "cloud_gamepass_update", "cloud_gamepass_list", "cloud_product_create", "cloud_product_list"];
+const CLOUD_COMMANDS: &[&str] = &["cloud_gamepass_create", "cloud_gamepass_update", "cloud_gamepass_list", "cloud_product_create", "cloud_product_update", "cloud_product_list", "cloud_animation_publish"];
 
 pub fn is_plugin_tool(name: &str) -> bool {
     let bare = name.rsplit('/').next().unwrap_or(name);
@@ -416,6 +419,9 @@ pub fn tools(connected: bool, key_set: bool) -> Vec<Value> {
             tool("eclipse_handoff", "ORscript → Eclipse: copy an AnimLib animation (animation name) or any KeyframeSequence (path) into <rig>.AnimSaves + ServerStorage.ORscriptAnimations, select the rig and open Eclipse - import it from Eclipse's library/import menu.", json!({"animation": {"type": "string"}, "path": {"type": "string"}, "rig_path": {"type": "string"}, "name": {"type": "string"}}), &[]),
             tool("eclipse_import", "Eclipse → ORscript: convert an Eclipse save / export (KeyframeSequence, folder, Module Exporter ModuleScript, or Animation asset) into a KeyframeSequence in ServerStorage.RobloxScript.AnimLib (+ <rig>.AnimSaves) so animation_open / animation_preview / animation_retime / animation_mirror work on it. fps overrides frame-based tables; overwrite replaces an existing name.", json!({"path": {"type": "string"}, "rig_path": {"type": "string"}, "name": {"type": "string"}, "fps": {"type": "number"}, "overwrite": {"type": "boolean"}}), &["path"]),
             tool("eclipse_play", "Preview a KeyframeSequence / Animation (path) or AnimLib clip (animation) on the rig in edit mode (Animator:StepAnimations): loop, speed, duration; action=stop ends it. Pair with or_screenshot.", json!({"path": {"type": "string"}, "animation": {"type": "string"}, "rig_path": {"type": "string"}, "loop": {"type": "boolean"}, "speed": {"type": "number"}, "duration": {"type": "number"}, "action": {"type": "string"}}), &[]),
+            // ── 1.45.0 animation publishing ──
+            tool("animation_export", "Serialise a KeyframeSequence (path, or animation = AnimLib / AnimSaves name, or the Explorer selection) to .rbxmx XML plus creator ids, ready for upload. Used by animation_publish.", json!({"path": {"type": "string"}, "animation": {"type": "string"}, "rig_path": {"type": "string"}}), &[]),
+            tool("animation_apply", "After an upload: create / update ReplicatedStorage.Animations.<name> (Animation with AnimationId rbxassetid://asset_id), tag the source KeyframeSequence, optionally copy it under rig_path.Animations.", json!({"asset_id": {"type": "number"}, "name": {"type": "string"}, "path": {"type": "string"}, "parent": {"type": "string"}, "rig_path": {"type": "string"}}), &["asset_id"]),
         ]);
     }
     if key_set {
@@ -424,7 +430,9 @@ pub fn tools(connected: bool, key_set: bool) -> Vec<Value> {
             tool("cloud_gamepass_update", "Update a game pass: name, description, price / for_sale (Open Cloud).", json!({"gamepass_id": {"type": "number"}, "name": {"type": "string"}, "description": {"type": "string"}, "price": {"type": "number"}, "for_sale": {"type": "boolean"}}), &["gamepass_id"]),
             tool("cloud_gamepass_list", "List the universe's game passes (id, name, price).", json!({"universe_id": {"type": "number"}}), &[]),
             tool("cloud_product_create", "Create a DEVELOPER PRODUCT on the universe through Open Cloud: name, description, price in Robux. Returns the product id.", json!({"name": {"type": "string"}, "description": {"type": "string"}, "price": {"type": "number"}, "universe_id": {"type": "number"}}), &["name", "price"]),
+            tool("cloud_product_update", "Update a developer product: name, description, price / for_sale, icon_path (Open Cloud).", json!({"product_id": {"type": "number"}, "name": {"type": "string"}, "description": {"type": "string"}, "price": {"type": "number"}, "for_sale": {"type": "boolean"}, "icon_path": {"type": "string"}, "universe_id": {"type": "number"}}), &["product_id"]),
             tool("cloud_product_list", "List the universe's developer products (Open Cloud).", json!({"universe_id": {"type": "number"}}), &[]),
+            tool("cloud_animation_publish", "Upload a KeyframeSequence (the .rbxmx from animation_export) as a real Animation asset through Open Cloud (asset:write). Returns asset_id / rbxassetid://. Prefer the animation_publish command, which runs export → upload → animation_apply.", json!({"xml": {"type": "string"}, "name": {"type": "string"}, "description": {"type": "string"}, "creator_type": {"type": "string"}, "creator_id": {"type": "number"}, "user_id": {"type": "number"}}), &["xml"]),
         ]);
     }
     v
@@ -486,7 +494,9 @@ pub async fn call(state: &AppState, name: &str, args: Value) -> anyhow::Result<M
         "cloud_gamepass_update" => cloud::gamepass_update(state, &args).await.map(|v| text_out(v.to_string())),
         "cloud_gamepass_list" => cloud::gamepass_list(state, &args).await.map(|v| text_out(v.to_string())),
         "cloud_product_create" => cloud::product_create(state, &args).await.map(|v| text_out(v.to_string())),
+        "cloud_product_update" => cloud::product_update(state, &args).await.map(|v| text_out(v.to_string())),
         "cloud_product_list" => cloud::product_list(state, &args).await.map(|v| text_out(v.to_string())),
+        "cloud_animation_publish" => cloud::animation_publish(state, &args).await.map(|v| text_out(v.to_string())),
         _ => {
             let secs = STUDIO_COMMANDS.iter().find(|(n, _)| *n == bare).map(|(_, s)| *s).unwrap_or(60);
             let res = state.plugin.run(&bare, args, Duration::from_secs(secs)).await?;
@@ -523,13 +533,24 @@ pub fn install() -> anyhow::Result<Option<(PathBuf, bool)>> {
     Ok(Some((path, true)))
 }
 
-// ───────────────────────── Open Cloud (game passes / products) ─────────────────────────
+// ───────────────────────── Open Cloud (game passes / products / animations) ─────────────────────────
+//
+// 1.45.0: Roblox retired the legacy monetization endpoints on 2026-04-23
+// (POST game-passes/v1/game-passes, …/{id}/details, developer-products/v1
+// …/developerproducts, games.roblox.com/v1/games/{id}/game-passes). Everything
+// below uses the documented Open Cloud routes, which take the same `x-api-key`:
+//   POST  /game-passes/v1/universes/{u}/game-passes                 (multipart)
+//   PATCH /game-passes/v1/universes/{u}/game-passes/{id}            (multipart)
+//   GET   /game-passes/v1/universes/{u}/game-passes/creator
+//   POST  /developer-products/v2/universes/{u}/developer-products   (multipart)
+//   PATCH /developer-products/v2/universes/{u}/developer-products/{id}
+//   GET   /developer-products/v2/universes/{u}/developer-products/creator
+//   POST  /assets/v1/assets  (assetType Animation, .rbxmx body) + GET /assets/v1/operations/{id}
 
 mod cloud {
     use super::*;
 
-    const GAMEPASS_API: &str = "https://apis.roblox.com/game-passes/v1/game-passes";
-    const PRODUCTS_API: &str = "https://apis.roblox.com/developer-products/v1/universes";
+    const APIS: &str = "https://apis.roblox.com";
 
     fn client() -> anyhow::Result<reqwest::Client> {
         Ok(reqwest::Client::builder()
@@ -540,7 +561,7 @@ mod cloud {
 
     async fn key(state: &AppState) -> anyhow::Result<String> {
         state.plugin.key().await.ok_or_else(|| anyhow::anyhow!(
-            "no Open Cloud API key. Create one at https://create.roblox.com/dashboard/credentials (add this experience with Game Passes + Developer Products write access), paste it in Studio → Plugins → ORscript → Open Cloud API key → Save, or start or-core with OR_OPEN_CLOUD_KEY=… . Without a key, gamepass_create / developer_product_create still work through your roblox.com browser session."
+            "no Open Cloud API key. Create one at https://create.roblox.com/dashboard/credentials (add this experience with game-pass:write, developer-product:write and, for animations, asset:write), paste it in Studio → Plugins → ORscript → Open Cloud API key → Save, or start or-core with OR_OPEN_CLOUD_KEY=… . Without a key, gamepass_create / developer_product_create / animation_publish still work through your roblox.com browser session."
         ))
     }
 
@@ -565,13 +586,14 @@ mod cloud {
     fn explain(status: reqwest::StatusCode, body: &str, what: &str, universe: u64) -> anyhow::Error {
         let hint = match status.as_u16() {
             401 => "the Open Cloud key was rejected (wrong key, expired, or IP-restricted)",
-            403 => "the key lacks permission - in Creator Dashboard → Open Cloud → API keys add this experience with Game Passes / Developer Products write access",
+            403 => "the key lacks permission - in Creator Dashboard → Open Cloud → API keys add this experience with the write scope for this feature (game-pass:write / developer-product:write / asset:write)",
             404 => "endpoint or universe not found - publish the place and check the universe id",
             429 => "rate limited by Roblox - wait a minute and retry",
             _ => "the request failed",
         };
         let snippet: String = body.chars().take(300).collect();
-        anyhow::anyhow!("could not change the {what}: HTTP {status} - {hint}. Response: {snippet}. Manual fallback: {}", dashboard(universe, what))
+        let fallback = if universe > 0 { format!(" Manual fallback: {}", dashboard(universe, what)) } else { String::new() };
+        anyhow::anyhow!("could not change the {what}: HTTP {status} - {hint}. Response: {snippet}.{fallback}")
     }
 
     fn mp_field(body: &mut Vec<u8>, b: &str, name: &str, value: &str) {
@@ -617,20 +639,66 @@ mod cloud {
         Ok(buf)
     }
 
-    fn icon_bytes(args: &Value) -> anyhow::Result<(Vec<u8>, &'static str, String)> {
+    /// Icon bytes from `icon_path` (a PNG/JPG on this PC) or `icon_data_url`
+    /// (base64 data URL from the browser / Paint), else the placeholder.
+    fn icon_bytes(args: &Value, allow_placeholder: bool) -> anyhow::Result<Option<(Vec<u8>, &'static str, String)>> {
         if let Some(p) = args.get("icon_path").and_then(|v| v.as_str()).map(str::trim).filter(|p| !p.is_empty()) {
             let data = std::fs::read(p).map_err(|e| anyhow::anyhow!("icon_path {p}: {e}"))?;
             let lower = p.to_lowercase();
             let mime = if lower.ends_with(".jpg") || lower.ends_with(".jpeg") { "image/jpeg" } else { "image/png" };
             let name = std::path::Path::new(p).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "icon.png".into());
-            return Ok((data, mime, name));
+            return Ok(Some((data, mime, name)));
         }
-        Ok((placeholder_icon()?, "image/png", "icon.png".into()))
+        if let Some(d) = args.get("icon_data_url").and_then(|v| v.as_str()).map(str::trim).filter(|d| d.starts_with("data:image/")) {
+            if let Some((head, b64)) = d.split_once(",") {
+                use base64::Engine as _;
+                if let Ok(data) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
+                    let mime = if head.contains("image/jpeg") { "image/jpeg" } else { "image/png" };
+                    let name = if mime == "image/jpeg" { "icon.jpg" } else { "icon.png" };
+                    return Ok(Some((data, mime, name.to_string())));
+                }
+            }
+            anyhow::bail!("icon_data_url is not a decodable base64 image data URL");
+        }
+        if allow_placeholder {
+            return Ok(Some((placeholder_icon()?, "image/png", "icon.png".into())));
+        }
+        Ok(None)
     }
 
     fn parse(text: &str) -> Value {
         serde_json::from_str::<Value>(text).unwrap_or_else(|_| json!({ "raw": text }))
     }
+
+    async fn send_multipart(method: reqwest::Method, url: String, key: &str, b: &str, body: Vec<u8>) -> anyhow::Result<(reqwest::StatusCode, String)> {
+        let resp = client()?
+            .request(method, url)
+            .header("x-api-key", key)
+            .header("content-type", format!("multipart/form-data; boundary={b}"))
+            .body(body)
+            .send()
+            .await?;
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        Ok((status, text))
+    }
+
+    /// Price in the v2 config payloads lives under `priceInformation`.
+    fn price_of(v: &Value) -> Value {
+        if let Some(p) = v.get("price").filter(|p| !p.is_null()) {
+            return p.clone();
+        }
+        if let Some(pi) = v.get("priceInformation") {
+            for k in ["defaultPriceInRobux", "price", "priceInRobux"] {
+                if let Some(p) = pi.get(k).filter(|p| !p.is_null()) {
+                    return p.clone();
+                }
+            }
+        }
+        Value::Null
+    }
+
+    // ── game passes ──
 
     pub async fn gamepass_create(state: &AppState, args: &Value) -> anyhow::Result<Value> {
         let key = key(state).await?;
@@ -640,88 +708,73 @@ mod cloud {
             anyhow::bail!("name is required");
         }
         let description = { let d = str_of(args, "description"); if d.is_empty() { name.clone() } else { d } };
-        let (icon, mime, filename) = icon_bytes(args)?;
+        let price = num_u64(args.get("price")).max(num_u64(args.get("priceInRobux")));
+        let for_sale = args.get("for_sale").and_then(|v| v.as_bool()).unwrap_or(price > 0);
         let b = boundary();
         let mut body = Vec::new();
-        mp_field(&mut body, &b, "UniverseId", &universe.to_string());
-        mp_field(&mut body, &b, "Name", name.trim());
-        mp_field(&mut body, &b, "Description", description.trim());
-        mp_file(&mut body, &b, "File", &filename, mime, &icon);
+        mp_field(&mut body, &b, "name", name.trim());
+        mp_field(&mut body, &b, "description", description.trim());
+        if price > 0 {
+            mp_field(&mut body, &b, "price", &price.to_string());
+        }
+        mp_field(&mut body, &b, "isForSale", if for_sale && price > 0 { "true" } else { "false" });
+        if let Some((icon, mime, filename)) = icon_bytes(args, true)? {
+            mp_file(&mut body, &b, "imageFile", &filename, mime, &icon);
+        }
         mp_end(&mut body, &b);
-        let resp = client()?
-            .post(GAMEPASS_API)
-            .header("x-api-key", &key)
-            .header("content-type", format!("multipart/form-data; boundary={b}"))
-            .body(body)
-            .send()
-            .await?;
-        let status = resp.status();
-        let text = resp.text().await.unwrap_or_default();
+        let (status, text) = send_multipart(reqwest::Method::POST, format!("{APIS}/game-passes/v1/universes/{universe}/game-passes"), &key, &b, body).await?;
         if !status.is_success() {
             return Err(explain(status, &text, "game pass", universe));
         }
         let created = parse(&text);
         let id = num_u64(created.get("gamePassId")).max(num_u64(created.get("id")));
-        let price = num_u64(args.get("price"));
-        let mut out = json!({
+        Ok(json!({
             "ok": true,
             "gamepass_id": id,
             "universe_id": universe,
             "name": name.trim(),
+            "price": if price > 0 { json!(price) } else { Value::Null },
+            "for_sale": for_sale && price > 0,
             "response": created,
             "dashboard": dashboard(universe, "game pass"),
             "next": "gamepass_handler_create {gamepass_id} writes the server handler; the client prompts with MarketplaceService:PromptGamePassPurchase(player, id)",
-        });
-        if id > 0 && price > 0 {
-            match update_details(&key, id, None, None, Some(price), Some(true)).await {
-                Ok(v) => { out["price"] = json!(price); out["for_sale"] = json!(true); out["details"] = v; }
-                Err(e) => { out["price_warning"] = json!(format!("created, but setting the price failed: {e:#}")); }
-            }
-        }
-        Ok(out)
-    }
-
-    async fn update_details(key: &str, id: u64, name: Option<&str>, description: Option<&str>, price: Option<u64>, for_sale: Option<bool>) -> anyhow::Result<Value> {
-        let b = boundary();
-        let mut body = Vec::new();
-        if let Some(n) = name { mp_field(&mut body, &b, "Name", n); }
-        if let Some(d) = description { mp_field(&mut body, &b, "Description", d); }
-        if let Some(p) = price { mp_field(&mut body, &b, "Price", &p.to_string()); }
-        if let Some(s) = for_sale.or(if price.is_some() { Some(true) } else { None }) { mp_field(&mut body, &b, "IsForSale", if s { "true" } else { "false" }); }
-        mp_end(&mut body, &b);
-        let resp = client()?
-            .post(format!("{GAMEPASS_API}/{id}/details"))
-            .header("x-api-key", key)
-            .header("content-type", format!("multipart/form-data; boundary={b}"))
-            .body(body)
-            .send()
-            .await?;
-        let status = resp.status();
-        let text = resp.text().await.unwrap_or_default();
-        if !status.is_success() {
-            return Err(explain(status, &text, "game pass", 0));
-        }
-        Ok(parse(&text))
+        }))
     }
 
     pub async fn gamepass_update(state: &AppState, args: &Value) -> anyhow::Result<Value> {
         let key = key(state).await?;
+        let universe = universe(state, args).await?;
         let id = num_u64(args.get("gamepass_id")).max(num_u64(args.get("id")));
         if id == 0 {
             anyhow::bail!("gamepass_id is required");
         }
-        let name = args.get("name").and_then(|v| v.as_str());
-        let description = args.get("description").and_then(|v| v.as_str());
+        let b = boundary();
+        let mut body = Vec::new();
+        let mut fields = 0;
+        if let Some(n) = args.get("name").and_then(|v| v.as_str()).filter(|n| !n.trim().is_empty()) { mp_field(&mut body, &b, "name", n.trim()); fields += 1; }
+        if let Some(d) = args.get("description").and_then(|v| v.as_str()) { mp_field(&mut body, &b, "description", d); fields += 1; }
         let price = args.get("price").map(|p| num_u64(Some(p)));
-        let for_sale = args.get("for_sale").and_then(|v| v.as_bool());
-        let v = update_details(&key, id, name, description, price, for_sale).await?;
-        Ok(json!({ "ok": true, "gamepass_id": id, "response": v }))
+        if let Some(p) = price { mp_field(&mut body, &b, "price", &p.to_string()); fields += 1; }
+        let for_sale = args.get("for_sale").and_then(|v| v.as_bool()).or(match price { Some(p) if p > 0 => Some(true), _ => None });
+        if let Some(s) = for_sale { mp_field(&mut body, &b, "isForSale", if s { "true" } else { "false" }); fields += 1; }
+        if let Some((icon, mime, filename)) = icon_bytes(args, false)? { mp_file(&mut body, &b, "imageFile", &filename, mime, &icon); fields += 1; }
+        if fields == 0 {
+            anyhow::bail!("nothing to update - pass name, description, price, for_sale or icon_path");
+        }
+        mp_end(&mut body, &b);
+        let (status, text) = send_multipart(reqwest::Method::PATCH, format!("{APIS}/game-passes/v1/universes/{universe}/game-passes/{id}"), &key, &b, body).await?;
+        if !status.is_success() {
+            return Err(explain(status, &text, "game pass", universe));
+        }
+        Ok(json!({ "ok": true, "gamepass_id": id, "universe_id": universe, "updated": fields, "response": if text.trim().is_empty() { json!({ "status": status.as_u16() }) } else { parse(&text) } }))
     }
 
     pub async fn gamepass_list(state: &AppState, args: &Value) -> anyhow::Result<Value> {
+        let key = key(state).await?;
         let universe = universe(state, args).await?;
         let resp = client()?
-            .get(format!("https://games.roblox.com/v1/games/{universe}/game-passes?limit=100&sortOrder=Asc"))
+            .get(format!("{APIS}/game-passes/v1/universes/{universe}/game-passes/creator?pageSize=100"))
+            .header("x-api-key", &key)
             .send()
             .await?;
         let status = resp.status();
@@ -730,12 +783,19 @@ mod cloud {
             return Err(explain(status, &text, "game pass", universe));
         }
         let v = parse(&text);
-        let passes: Vec<Value> = v.get("data").and_then(|d| d.as_array()).cloned().unwrap_or_default()
+        let passes: Vec<Value> = v.get("gamePasses").and_then(|d| d.as_array()).cloned().unwrap_or_default()
             .into_iter()
-            .map(|p| json!({ "id": p.get("id").cloned().unwrap_or(Value::Null), "name": p.get("name").cloned().unwrap_or(Value::Null), "price": p.get("price").cloned().unwrap_or(Value::Null) }))
+            .map(|p| json!({
+                "id": p.get("gamePassId").cloned().unwrap_or(Value::Null),
+                "name": p.get("name").cloned().unwrap_or(Value::Null),
+                "price": price_of(&p),
+                "for_sale": p.get("isForSale").cloned().unwrap_or(Value::Null),
+            }))
             .collect();
         Ok(json!({ "ok": true, "universe_id": universe, "count": passes.len(), "game_passes": passes }))
     }
+
+    // ── developer products ──
 
     pub async fn product_create(state: &AppState, args: &Value) -> anyhow::Result<Value> {
         let key = key(state).await?;
@@ -749,12 +809,66 @@ mod cloud {
             anyhow::bail!("price (Robux, >= 1) is required");
         }
         let description = { let d = str_of(args, "description"); if d.is_empty() { name.clone() } else { d } };
-        let price_s = price.to_string();
+        let b = boundary();
+        let mut body = Vec::new();
+        mp_field(&mut body, &b, "name", name.trim());
+        mp_field(&mut body, &b, "description", description.trim());
+        mp_field(&mut body, &b, "price", &price.to_string());
+        mp_field(&mut body, &b, "isForSale", if args.get("for_sale").and_then(|v| v.as_bool()).unwrap_or(true) { "true" } else { "false" });
+        if let Some((icon, mime, filename)) = icon_bytes(args, false)? {
+            mp_file(&mut body, &b, "imageFile", &filename, mime, &icon);
+        }
+        mp_end(&mut body, &b);
+        let (status, text) = send_multipart(reqwest::Method::POST, format!("{APIS}/developer-products/v2/universes/{universe}/developer-products"), &key, &b, body).await?;
+        if !status.is_success() {
+            return Err(explain(status, &text, "developer product", universe));
+        }
+        let v = parse(&text);
+        let id = num_u64(v.get("productId")).max(num_u64(v.get("id")));
+        Ok(json!({
+            "ok": true,
+            "product_id": id,
+            "universe_id": universe,
+            "name": name.trim(),
+            "price": price,
+            "response": v,
+            "dashboard": dashboard(universe, "developer product"),
+            "next": "developer_product_handler_create {product_id} writes the ProcessReceipt handler",
+        }))
+    }
+
+    pub async fn product_update(state: &AppState, args: &Value) -> anyhow::Result<Value> {
+        let key = key(state).await?;
+        let universe = universe(state, args).await?;
+        let id = num_u64(args.get("product_id")).max(num_u64(args.get("id")));
+        if id == 0 {
+            anyhow::bail!("product_id is required");
+        }
+        let b = boundary();
+        let mut body = Vec::new();
+        let mut fields = 0;
+        if let Some(n) = args.get("name").and_then(|v| v.as_str()).filter(|n| !n.trim().is_empty()) { mp_field(&mut body, &b, "name", n.trim()); fields += 1; }
+        if let Some(d) = args.get("description").and_then(|v| v.as_str()) { mp_field(&mut body, &b, "description", d); fields += 1; }
+        if let Some(p) = args.get("price").map(|p| num_u64(Some(p))).filter(|p| *p > 0) { mp_field(&mut body, &b, "price", &p.to_string()); fields += 1; }
+        if let Some(s) = args.get("for_sale").and_then(|v| v.as_bool()) { mp_field(&mut body, &b, "isForSale", if s { "true" } else { "false" }); fields += 1; }
+        if let Some((icon, mime, filename)) = icon_bytes(args, false)? { mp_file(&mut body, &b, "imageFile", &filename, mime, &icon); fields += 1; }
+        if fields == 0 {
+            anyhow::bail!("nothing to update - pass name, description, price, for_sale or icon_path");
+        }
+        mp_end(&mut body, &b);
+        let (status, text) = send_multipart(reqwest::Method::PATCH, format!("{APIS}/developer-products/v2/universes/{universe}/developer-products/{id}"), &key, &b, body).await?;
+        if !status.is_success() {
+            return Err(explain(status, &text, "developer product", universe));
+        }
+        Ok(json!({ "ok": true, "product_id": id, "universe_id": universe, "updated": fields, "response": if text.trim().is_empty() { json!({ "status": status.as_u16() }) } else { parse(&text) } }))
+    }
+
+    pub async fn product_list(state: &AppState, args: &Value) -> anyhow::Result<Value> {
+        let key = key(state).await?;
+        let universe = universe(state, args).await?;
         let resp = client()?
-            .post(format!("{PRODUCTS_API}/{universe}/developerproducts"))
-            .query(&[("name", name.trim()), ("description", description.trim()), ("priceInRobux", price_s.as_str())])
+            .get(format!("{APIS}/developer-products/v2/universes/{universe}/developer-products/creator?pageSize=100"))
             .header("x-api-key", &key)
-            .header("content-length", "0")
             .send()
             .await?;
         let status = resp.status();
@@ -763,31 +877,102 @@ mod cloud {
             return Err(explain(status, &text, "developer product", universe));
         }
         let v = parse(&text);
-        let id = num_u64(v.get("id")).max(num_u64(v.get("productId")));
-        Ok(json!({
-            "ok": true,
-            "product_id": id,
-            "universe_id": universe,
-            "name": name.trim(),
-            "price": price,
-            "response": v,
-            "next": "developer_product_handler_create {product_id} writes the ProcessReceipt handler",
-        }))
+        let products: Vec<Value> = v.get("developerProducts").and_then(|d| d.as_array()).cloned().unwrap_or_default()
+            .into_iter()
+            .map(|p| json!({
+                "id": p.get("productId").cloned().unwrap_or(Value::Null),
+                "name": p.get("name").cloned().unwrap_or(Value::Null),
+                "price": price_of(&p),
+                "for_sale": p.get("isForSale").cloned().unwrap_or(Value::Null),
+            }))
+            .collect();
+        Ok(json!({ "ok": true, "universe_id": universe, "count": products.len(), "products": products }))
     }
 
-    pub async fn product_list(state: &AppState, args: &Value) -> anyhow::Result<Value> {
+    // ── animations ──
+
+    /// Upload a KeyframeSequence (serialised to .rbxmx by the Studio plugin's
+    /// animation_export) as an Animation asset. Returns the new asset id once
+    /// the Open Cloud operation completes.
+    pub async fn animation_publish(state: &AppState, args: &Value) -> anyhow::Result<Value> {
         let key = key(state).await?;
-        let universe = universe(state, args).await?;
-        let resp = client()?
-            .get(format!("{PRODUCTS_API}/{universe}/developerproducts?pageNumber=1&pageSize=100"))
-            .header("x-api-key", &key)
-            .send()
-            .await?;
-        let status = resp.status();
-        let text = resp.text().await.unwrap_or_default();
-        if !status.is_success() {
-            return Err(explain(status, &text, "developer product", universe));
+        let xml = str_of(args, "xml");
+        if !xml.trim_start().starts_with("<roblox") || !xml.contains("class=\"KeyframeSequence\"") {
+            anyhow::bail!("xml must be the .rbxmx of a KeyframeSequence (run animation_export in the Studio plugin first)");
         }
-        Ok(json!({ "ok": true, "universe_id": universe, "products": parse(&text) }))
+        if xml.len() > 4_000_000 {
+            anyhow::bail!("animation is too large to upload ({} bytes) - split it or reduce keyframes", xml.len());
+        }
+        let name = { let n = str_of(args, "name"); if n.trim().is_empty() { "Animation".to_string() } else { n.trim().chars().take(50).collect() } };
+        let description = { let d = str_of(args, "description"); if d.trim().is_empty() { name.clone() } else { d.trim().chars().take(1000).collect() } };
+        let info = state.plugin.info().await;
+        let creator_type = str_of(args, "creator_type").to_lowercase();
+        let mut creator_id = num_u64(args.get("creator_id"));
+        let is_group = creator_type.contains("group") && creator_id > 0;
+        if !is_group {
+            creator_id = num_u64(args.get("user_id")).max(creator_id);
+            if creator_id == 0 {
+                creator_id = info.as_ref().map(|i| i.user_id).unwrap_or(0);
+            }
+        }
+        if creator_id == 0 {
+            anyhow::bail!("creator unknown - pass user_id (or creator_type 'Group' + creator_id); the Studio plugin reports them in animation_export");
+        }
+        let creator = if is_group { json!({ "groupId": creator_id.to_string() }) } else { json!({ "userId": creator_id.to_string() }) };
+        let request = json!({
+            "assetType": "Animation",
+            "displayName": name,
+            "description": description,
+            "creationContext": { "creator": creator },
+        });
+        let b = boundary();
+        let mut body = Vec::new();
+        mp_field(&mut body, &b, "request", &request.to_string());
+        mp_file(&mut body, &b, "fileContent", "animation.rbxmx", "model/x-rbxm", xml.as_bytes());
+        mp_end(&mut body, &b);
+        let (status, text) = send_multipart(reqwest::Method::POST, format!("{APIS}/assets/v1/assets"), &key, &b, body).await?;
+        if !status.is_success() {
+            return Err(explain(status, &text, "animation upload", 0));
+        }
+        let op = parse(&text);
+        let mut asset_id = num_u64(op.pointer("/response/assetId"));
+        let op_path = op.get("path").and_then(|v| v.as_str()).map(str::to_string)
+            .or_else(|| op.get("operationId").and_then(|v| v.as_str()).map(|id| format!("operations/{id}")));
+        let mut last = op.clone();
+        if asset_id == 0 {
+            if let Some(path) = op_path.as_deref() {
+                let url = format!("{APIS}/assets/v1/{path}");
+                for _ in 0..30 {
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
+                    let resp = client()?.get(&url).header("x-api-key", &key).send().await?;
+                    let st = resp.status();
+                    let t = resp.text().await.unwrap_or_default();
+                    if !st.is_success() {
+                        continue;
+                    }
+                    last = parse(&t);
+                    if last.get("done").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        asset_id = num_u64(last.pointer("/response/assetId"));
+                        break;
+                    }
+                }
+            }
+        }
+        if asset_id == 0 {
+            if let Some(err) = last.get("error") {
+                anyhow::bail!("Roblox rejected the animation: {err}");
+            }
+            anyhow::bail!("upload accepted but the asset id is not ready yet ({}). Check https://create.roblox.com/dashboard/creations?activeTab=Animation in a minute.", op_path.unwrap_or_default());
+        }
+        Ok(json!({
+            "ok": true,
+            "asset_id": asset_id,
+            "animation_id": format!("rbxassetid://{asset_id}"),
+            "name": name,
+            "creator": if is_group { "group" } else { "user" },
+            "creator_id": creator_id,
+            "moderation": last.pointer("/response/moderationResult/moderationState").cloned().unwrap_or(Value::Null),
+            "next": "animation_apply {asset_id, name} creates ReplicatedStorage.Animations.<name> with the AnimationId",
+        }))
     }
 }

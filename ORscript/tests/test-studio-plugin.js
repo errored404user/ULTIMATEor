@@ -22,9 +22,9 @@ const cargo = read("agent/Cargo.toml");
 
 // ── plugin source ──
 assert(lua.startsWith("--!nocheck"), "plugin disables type checking (plugin globals)");
-assert(lua.includes('local VERSION = "1.44.0"'), "plugin version 1.44.0");
-assert(manifest.version === "1.44.0", "manifest 1.44.0");
-assert(/version = "1\.44\.0"/.test(cargo), "crate 1.44.0");
+assert(lua.includes('local VERSION = "1.45.0"'), "plugin version 1.45.0");
+assert(manifest.version === "1.45.0", "manifest 1.45.0");
+assert(/version = "1\.45\.0"/.test(cargo), "crate 1.45.0");
 assert(lua.includes("if RunService:IsRunning() then return end"), "plugin is edit-mode only");
 assert(lua.includes('"/api/plugin/hello"') && lua.includes('"/api/plugin/poll?client_id="') && lua.includes('"/api/plugin/result"'), "plugin speaks the hub protocol");
 assert(lua.includes('http://127.0.0.1:3000'), "default bridge URL is or-core");
@@ -89,8 +89,8 @@ assert(rs.includes("pub async fn run(&self, name: &str, args: Value, timeout: Du
 assert(rs.includes("rx = self.results.subscribe();") && rs.indexOf("self.results.subscribe()") < rs.indexOf("push_back(Job"), "subscribe before enqueue (no lost results)");
 assert(rs.includes("OR_PLUGIN_EXEC") && rs.includes("OR_NO_PLUGIN_INSTALL") && rs.includes("OR_OPEN_CLOUD_KEY"), "env switches");
 for (const t of handlers.filter((h) => h !== "studio_plugin_ping")) assert(rs.includes('"' + t + '"'), "or-core advertises " + t);
-for (const t of ["cloud_gamepass_create", "cloud_gamepass_update", "cloud_gamepass_list", "cloud_product_create", "cloud_product_list"]) assert(rs.includes('"' + t + '"'), "Open Cloud tool " + t);
-assert(rs.includes("https://apis.roblox.com/game-passes/v1/game-passes") && rs.includes("/details"), "Open Cloud game pass endpoints");
+for (const t of ["cloud_gamepass_create", "cloud_gamepass_update", "cloud_gamepass_list", "cloud_product_create", "cloud_product_update", "cloud_product_list", "cloud_animation_publish"]) assert(rs.includes('"' + t + '"'), "Open Cloud tool " + t);
+assert(rs.includes('format!("{APIS}/game-passes/v1/universes/{universe}/game-passes")') && rs.includes('format!("{APIS}/game-passes/v1/universes/{universe}/game-passes/{id}")') && rs.includes("reqwest::Method::PATCH"), "Open Cloud game pass endpoints (1.45.0: universe-scoped create + PATCH, the legacy /details route is retired)");
 assert(rs.includes("multipart/form-data; boundary=") && !/reqwest::multipart/.test(rs), "multipart built by hand (no extra reqwest feature)");
 assert(rs.includes("x-api-key"), "Open Cloud key header");
 assert(rs.includes("/monetization/") && rs.includes('"passes"'), "errors point at the dashboard fallback");
@@ -109,10 +109,10 @@ assert(main.includes('bridgeTool("gamepass_handler_create"') && main.includes('t
 assert(main.includes('return await createGamePass({...args,universe_id:args.universeId||args.universe_id});'), "creator.createGamePass routes to the real flow");
 assert(main.includes('create_game_pass: "gamepass_create"'), "alias create_game_pass");
 for (const c of ['case "create_game_pass"', 'case "update_game_pass"', 'case "list_game_passes"']) assert(bg.includes(c), "background " + c);
-assert(bg.includes("async function robloxCreateGamePass") && bg.includes('form.append("UniverseId"') && bg.includes('form.append("File", icon, "icon.png")'), "browser-session create uses multipart with icon");
-assert(bg.includes("/game-passes/\" + gamePassId + \"/details") && bg.includes('form.append("IsForSale"'), "price set via /details");
+assert(bg.includes("async function robloxCreateGamePass") && bg.includes('RBX_APIS + "/game-passes/v1/universes/" + universeId + "/game-passes"') && bg.includes('form.append("imageFile", icon, "icon.png")'), "browser-session create uses the universe-scoped multipart route with icon");
+assert(bg.includes('"/game-passes/" + gamePassId, { method: "PATCH", body: form }') && bg.includes('form.append("isForSale"') && bg.includes('form.append("price", String(price))'), "price set at creation and via PATCH (no retired /details route)");
 assert(bg.includes("opts.body instanceof FormData"), "robloxAuthedFetch does not force JSON on FormData");
-assert(bg.includes("games.roblox.com/v1/games/\" + universeId + \"/game-passes"), "list via games.roblox.com");
+assert(bg.includes('"/game-passes/v1/universes/" + universeId + "/game-passes/creator?pageSize=100"') && !bg.includes("games.roblox.com/v1/games/\" + universeId"), "list via the Open Cloud creator route (games.roblox.com list was removed by Roblox)");
 assert(manifest.host_permissions.some((h) => h === "https://*.roblox.com/*"), "games.roblox.com covered by host permissions");
 assert(config.includes("STUDIO PLUGIN (when studio_plugin_status reports connected"), "mandates mention the plugin");
 assert(config.includes("gamepass_create {name, price, benefit}"), "mandates teach gamepass_create");

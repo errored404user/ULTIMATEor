@@ -139,6 +139,11 @@
     developerproduct_create: "developer_product_create",
     list_developer_products: "developer_product_list",
     devproduct_list: "developer_product_list",
+    // 1.45.0 monetization + publishing
+    update_developer_product: "developer_product_update", devproduct_update: "developer_product_update", dev_product_update: "developer_product_update", developer_product_edit: "developer_product_update",
+    update_game_pass: "gamepass_update", update_gamepass: "gamepass_update", gamepass_edit: "gamepass_update",
+    publish_animation: "animation_publish", upload_animation: "animation_publish", animation_upload: "animation_publish", animation_export_asset: "animation_publish",
+    publish_model: "studio_publish_selection", publish_selection: "studio_publish_selection", save_to_roblox: "studio_publish_selection",
     // 1.24.0 plugin control / interop / Eclipse Animator
     studio_run: "studio_playtest", studio_play: "studio_playtest", studio_stop: "studio_playtest", playtest: "studio_playtest",
     studio_setting: "studio_settings", studio_set_setting: "studio_settings", studio_get_setting: "studio_settings",
@@ -176,6 +181,7 @@
     "atmosphere_set","bloom_set","blur_set","color_correction_set","sunrays_set","gravity_set",
     "walkspeed_set","jumppower_set","forcefield_add","explosion_at","teleport_to","leaderstats_int","remote_event_create","sound_volume","set_property","scale_model","ungroup_model",
     "developer_product_create","developer_product_list","gamepass_create","gamepass_list","gamepass_update",
+    "developer_product_update","animation_publish","cloud_product_update","cloud_animation_publish","animation_apply",
     "script_replace","script_insert","script_delete_lines","script_rename_symbol","script_restore",
     "model_build","model_union","model_subtract","model_optimize","model_anchor_fix","model_paint","model_hollow_box","model_wall","model_pipe","model_array_radial",
     "memory_update_section","memory_remove_fact",
@@ -193,7 +199,7 @@
   ]);
   const needsConfirmation = (bareName, mode) => mode !== "full" && (CONFIRM_ALWAYS_OPS.has(bareName) || (mode === "ask" && ASK_OPS.has(bareName)));
   try { window.__rsNeedsConfirmation = needsConfirmation; } catch {}
-  const PUBLISH_OPS=new Set(["developer_product_create","gamepass_create","gamepass_update","cloud_gamepass_create","cloud_gamepass_update","cloud_product_create","studio_publish_selection","studio.publishPlace","studio.publishAnimation","studio.createGamePass"]);
+  const PUBLISH_OPS=new Set(["developer_product_create","gamepass_create","gamepass_update","cloud_gamepass_create","cloud_gamepass_update","cloud_product_create","developer_product_update","cloud_product_update","animation_publish","cloud_animation_publish","studio_publish_selection","studio.publishPlace","studio.publishAnimation","studio.createGamePass"]);
   async function publishAutomationEnabled(){try{const r=await chrome.storage.local.get("rsAllowPublishAutomation");return r.rsAllowPublishAutomation===true;}catch{return false;}}
   // Ask-mode / publish confirmation. The prompt is a full-screen modal, but a
   // modal nobody answers is a silent hang (seen on Notion: "stuck after
@@ -1076,7 +1082,7 @@
     {name:"creator.createGamePass",description:"Create a REAL game pass (same as gamepass_create: roblox.com browser session or or-core Open Cloud, then the server handler). Prefer gamepass_create.",inputSchema:{type:"object",required:["name"],properties:{name:{type:"string"},description:{type:"string"},price:{type:"integer"},universeId:{type:"integer"}}},server:"orscript"},
     {name:"creator.getGamePass",description:"Retrieve verified Roblox asset metadata for a game pass id.",inputSchema:{type:"object",required:["assetId"],properties:{assetId:{type:"integer"}}},server:"orscript"},
     {name:"creator.updateGamePass",description:"Update a game pass (same as gamepass_update {gamepass_id, name?, description?, price?, for_sale?}).",inputSchema:{type:"object",required:["assetId"],properties:{assetId:{type:"integer"},name:{type:"string"},description:{type:"string"},price:{type:"integer"}}},server:"orscript"},
-    {name:"creator.publishAnimation",description:"Prepare a Studio animation publishing workflow. Studio ownership and user confirmation are required.",inputSchema:{type:"object",properties:{path:{type:"string"},name:{type:"string"}}},server:"orscript"},
+    {name:"creator.publishAnimation",description:"Publish a KeyframeSequence as a REAL Animation asset (same as animation_publish: the Studio plugin serialises it, the roblox.com session or or-core Open Cloud uploads it, animation_apply wires the id). Prefer animation_publish.",inputSchema:{type:"object",properties:{path:{type:"string"},name:{type:"string"}}},server:"orscript"},
     {name:"creator.getPublishedAsset",description:"Retrieve verified Roblox metadata for a published asset id.",inputSchema:{type:"object",required:["assetId"],properties:{assetId:{type:"integer"}}},server:"orscript"},
     {name:"creator.publishPlace",description:"Prepare the supported Studio Publish to Roblox workflow. Never publishes silently.",inputSchema:{type:"object",properties:{placeId:{type:"integer"}}},server:"orscript"},
     {name:"creator.getPublishStatus",description:"Inspect current Studio place identity and publication prerequisites.",inputSchema:{type:"object",properties:{}},server:"orscript"},
@@ -2146,7 +2152,7 @@
     "or_agent", "multi_agent", "or_status", "status",
     "web_fetch", "web_search", "http_get", "skill",
     "get_template", "template", "list_templates", "get_templates",
-    "capture_id", "developer_product_create", "developer_product_list",
+    "capture_id", "developer_product_create", "developer_product_list", "developer_product_update", "animation_publish",
     "devproduct_create", "devproduct_list", "search_commands", "get_command", "command_registry_stats", "generate_command_docs",
   ]);
   function knownTool(name) {
@@ -3118,14 +3124,30 @@
     if (!Number.isFinite(price) || price < 1) return "ERROR: price must be Robux >= 1 (got " + String(args.price || args.price_in_robux || args.robux || "none") + ").";
     const ids = await studioUniverseIds();
     let universe = Number(args.universe_id || args.universeId || args.universe || ids.gameId || 0) || 0;
-    const r = await bg({ type: "create_dev_product", universeId: universe, placeId: Number(args.place_id || args.placeId || ids.placeId || 0) || 0, gameId: universe, name: productName, description: desc, priceInRobux: Math.floor(price) });
+    let r = null;
+    try {
+      r = await bg({ type: "create_dev_product", universeId: universe, placeId: Number(args.place_id || args.placeId || ids.placeId || 0) || 0, gameId: universe, name: productName, description: desc, priceInRobux: Math.floor(price), iconDataUrl: args.icon_data_url || args.iconDataUrl || "" });
+    } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    let via = "your roblox.com browser session";
+    let pid = r && r.ok ? Number(r.productId || (r.product && (r.product.productId || r.product.id)) || 0) || 0 : 0;
+    if (!(r && r.ok) && pluginToolAvailable("cloud_product_create")) {
+      try {
+        const text = await bridgeTool("cloud_product_create", { name: productName, description: desc, price: Math.floor(price), universe_id: universe || undefined, icon_path: args.icon_path || undefined, icon_data_url: args.icon_data_url || args.iconDataUrl || undefined }, 120000);
+        let parsed = null; try { parsed = JSON.parse(text); } catch {}
+        pid = Number((parsed && parsed.product_id) || 0) || 0;
+        universe = Number((parsed && parsed.universe_id) || universe) || universe;
+        via = "Open Cloud (or-core)";
+        r = { ok: true, text: text };
+      } catch (e) {
+        return "ERROR: could not create the developer product. Browser session: " + String(r && r.error || "failed") + " | Open Cloud: " + String(e && e.message || e) + "\nManual fallback: https://create.roblox.com/dashboard/creations/experiences/" + (universe || "<universe>") + "/monetization/developer-products";
+      }
+    }
     if (!r || !r.ok) {
-      return "ERROR: could not create developer product — could not reach the game. " + String((r && r.error) || "Sign into roblox.com in this Chrome profile, publish the place in Studio, then retry.");
+      return "ERROR: could not create developer product — " + String((r && r.error) || "Sign into roblox.com in this Chrome profile, publish the place in Studio, then retry.") + (r && r.dashboard ? "\nManual fallback: " + r.dashboard : "") + "\nTip: paste an Open Cloud API key in Studio → Plugins → ORscript to let or-core create products without the browser session.";
     }
     universe = Number(r.universeId || universe) || universe;
     const prod = r.product || {};
-    const pid = Number(prod.id || prod.productId || prod.developerProductId || r.productId || 0) || 0;
-    let out = "Output of 'developer_product_create':\nCreated Developer Product \"" + productName + "\" — " + Math.floor(price) + " Robux.\nproduct_id=" + (pid || "(see payload)") + " universe_id=" + universe + "\n" + String(r.text || JSON.stringify(prod)).slice(0, 1200);
+    let out = "Output of 'developer_product_create':\nCreated Developer Product \"" + productName + "\" — " + Math.floor(price) + " Robux via " + via + ".\nproduct_id=" + (pid || "(see payload)") + " universe_id=" + universe + "\n" + String(r.text || JSON.stringify(prod)).slice(0, 1200);
     if (pid && args.wire !== false) {
       try {
         const wired = await runTool({ tool: "marketplace_setup", arguments: { devproduct_id: pid, reward: reward || productName } });
@@ -3141,9 +3163,98 @@
   async function listDeveloperProducts(args) {
     const ids = await studioUniverseIds();
     let universe = Number(args.universe_id || args.universeId || args.universe || ids.gameId || 0) || 0;
-    const r = await bg({ type: "list_dev_products", universeId: universe, placeId: Number(args.place_id || args.placeId || ids.placeId || 0) || 0, gameId: universe });
+    let r = null;
+    try { r = await bg({ type: "list_dev_products", universeId: universe, placeId: Number(args.place_id || args.placeId || ids.placeId || 0) || 0, gameId: universe }); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    if (!(r && r.ok) && pluginToolAvailable("cloud_product_list")) {
+      try { return "Output of 'developer_product_list':\n" + (await bridgeTool("cloud_product_list", { universe_id: universe || undefined })).slice(0, 4000); } catch {}
+    }
     if (!r || !r.ok) return "ERROR: could not list developer products. " + String((r && r.error) || "Sign into roblox.com in this Chrome profile.");
-    return "Output of 'developer_product_list':\n" + String(r.text || JSON.stringify(r.products || r, null, 2)).slice(0, 4000);
+    const products = Array.isArray(r.products) ? r.products : [];
+    return "Output of 'developer_product_list':\nuniverse_id=" + (r.universeId || universe) + " (" + products.length + " products)\n" + (products.length ? products.map((p) => "- " + p.id + "  \"" + p.name + "\"  " + (p.price == null ? "no price" : p.price + " Robux") + (p.forSale === false ? "  (off sale)" : "")).join("\n") : "(none yet — developer_product_create {name, price})");
+  }
+  async function updateDeveloperProduct(args) {
+    const productId = Number(args.product_id || args.productId || args.id || 0) || 0;
+    if (!productId) return "ERROR: developer_product_update needs product_id (use developer_product_list).";
+    const ids = await studioUniverseIds();
+    const universe = Number(args.universe_id || args.universeId || args.universe || ids.gameId || 0) || 0;
+    const payload = { productId: productId, universeId: universe, placeId: Number(args.place_id || args.placeId || ids.placeId || 0) || 0, gameId: universe };
+    if (args.name != null) payload.name = String(args.name);
+    if (args.description != null) payload.description = String(args.description);
+    if (args.price != null) payload.price = Math.floor(Number(args.price)) || 0;
+    if (args.for_sale != null || args.isForSale != null) payload.isForSale = !!(args.for_sale != null ? args.for_sale : args.isForSale);
+    if (args.icon_data_url || args.iconDataUrl) payload.iconDataUrl = args.icon_data_url || args.iconDataUrl;
+    let r = null;
+    try { r = await bg({ type: "update_dev_product", ...payload }); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    if (!(r && r.ok) && pluginToolAvailable("cloud_product_update")) {
+      try {
+        const text = await bridgeTool("cloud_product_update", { product_id: productId, universe_id: universe || undefined, name: payload.name, description: payload.description, price: payload.price, for_sale: payload.isForSale, icon_path: args.icon_path || undefined });
+        return "Output of 'developer_product_update' (Open Cloud):\n" + text.slice(0, 1500);
+      } catch (e) {
+        return "ERROR: developer_product_update failed. Browser session: " + String(r && r.error || "failed") + " | Open Cloud: " + String(e && e.message || e);
+      }
+    }
+    if (!(r && r.ok)) return "ERROR: developer_product_update failed — " + String((r && r.error) || "Sign into roblox.com in this Chrome profile.");
+    const shown = Object.assign({}, payload); delete shown.iconDataUrl; delete shown.placeId; delete shown.gameId;
+    return "Output of 'developer_product_update':\nUpdated developer product " + productId + " " + JSON.stringify(shown) + "\n" + String(r.text || "").slice(0, 1200);
+  }
+
+  // ── Animation publishing ──
+  // Studio cannot upload an animation from Luau, so: the plugin serialises the
+  // KeyframeSequence to .rbxmx (animation_export) → the extension uploads it
+  // with the user's roblox.com session, or or-core with the Open Cloud key →
+  // the plugin wires the new id (animation_apply). Last resort: Studio's own
+  // Publish dialog on the selected KeyframeSequence.
+  async function publishAnimation(args) {
+    if (!pluginToolAvailable("animation_export")) {
+      return "ERROR: animation_publish needs the ORscript Studio plugin (it serialises the KeyframeSequence) - " + PLUGIN_HOWTO + "\nWithout it: select the KeyframeSequence in the Explorer, right-click → Save to Roblox, then put the asset id in an Animation instance.";
+    }
+    let exp = null;
+    try {
+      const text = await bridgeTool("animation_export", { path: args.path || args.keyframe_sequence || undefined, animation: args.animation || args.clip || args.name || undefined, rig_path: args.rig_path || args.rig || undefined }, 60000);
+      exp = JSON.parse(text);
+    } catch (e) {
+      return "ERROR: animation_publish could not read the animation — " + String(e && e.message || e).slice(0, 400);
+    }
+    if (!exp || !exp.xml) return "ERROR: animation_publish — the plugin returned no animation data.";
+    const title = String(args.title || args.name || exp.name || "Animation").trim().slice(0, 50) || "Animation";
+    const description = String(args.description || args.desc || title).trim();
+    const creatorType = String(args.creator_type || exp.creator_type || "User");
+    const creatorId = Number(args.creator_id || args.group_id || exp.creator_id || 0) || 0;
+    const asGroup = /group/i.test(creatorType) || Number(args.group_id || 0) > 0;
+    const summary = exp.keyframes + " keyframes, " + exp.poses + " poses, " + Number(exp.length || 0).toFixed(2) + " s, " + (exp.loop ? "looped" : "one-shot") + ", priority " + (exp.priority || "?") + ", " + Math.round((exp.bytes || 0) / 1024) + " KB";
+    let r = null;
+    try {
+      r = await bg({ type: "publish_animation", xml: exp.xml, name: title, description: description, creatorType: asGroup ? "Group" : "User", creatorId: asGroup ? creatorId : 0, userId: Number(exp.user_id || 0) || 0 });
+    } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    let assetId = r && r.ok ? Number(r.assetId || 0) || 0 : 0;
+    let via = r && r.ok ? (r.via || "your roblox.com browser session") : "";
+    const errors = [];
+    if (!assetId) errors.push("browser session: " + String((r && r.error) || "failed").slice(0, 300));
+    if (!assetId && pluginToolAvailable("cloud_animation_publish")) {
+      try {
+        const text = await bridgeTool("cloud_animation_publish", { xml: exp.xml, name: title, description: description, creator_type: asGroup ? "Group" : "User", creator_id: asGroup ? creatorId : 0, user_id: Number(exp.user_id || 0) || 0 }, 120000);
+        let parsed = null; try { parsed = JSON.parse(text); } catch {}
+        assetId = Number((parsed && parsed.asset_id) || 0) || 0;
+        if (assetId) via = "Open Cloud (or-core)";
+        else errors.push("Open Cloud: " + text.slice(0, 200));
+      } catch (e) { errors.push("Open Cloud: " + String(e && e.message || e).slice(0, 300)); }
+    }
+    if (!assetId) {
+      // Studio's own dialog: official, needs no session, the user clicks Submit.
+      let dialog = "";
+      try {
+        await bridgeTool("studio_publish_selection", { paths: [exp.path] }, 30000);
+        dialog = "\nOpened Studio's Publish-to-Roblox dialog for " + exp.path + " — finish it there (name: " + title + "), then run animation_apply {asset_id: <id from the dialog>, name: \"" + title + "\", path: \"" + exp.path + "\"}.";
+      } catch (e) { dialog = "\nFallback: select " + exp.path + " in the Explorer → right-click → Save to Roblox, then animation_apply {asset_id, name}."; }
+      return "ERROR: animation_publish could not upload \"" + title + "\" (" + summary + ") automatically — " + errors.join(" | ") + dialog + "\nTip: sign into roblox.com in this Chrome profile, or paste an Open Cloud API key with asset:write in Studio → Plugins → ORscript.";
+    }
+    let applied = "";
+    try {
+      const text = await bridgeTool("animation_apply", { asset_id: assetId, name: title, path: exp.path, rig_path: args.rig_path || args.rig || undefined, parent: args.parent || undefined }, 30000);
+      let parsed = null; try { parsed = JSON.parse(text); } catch {}
+      applied = parsed ? "\nAnimation instance: " + (parsed.path || "ReplicatedStorage.Animations." + title) + (parsed.rig_copy ? " (copy at " + parsed.rig_copy + ")" : "") + "\nPlay: " + (parsed.play || "") : "\n" + text.slice(0, 600);
+    } catch (e) { applied = "\n(uploaded, but wiring failed: " + String(e && e.message || e).slice(0, 200) + " — run animation_apply {asset_id: " + assetId + ", name: \"" + title + "\"})"; }
+    return "Output of 'animation_publish':\nPublished animation \"" + title + "\" (" + summary + ") via " + via + ".\nasset_id=" + assetId + "  AnimationId=rbxassetid://" + assetId + (r && r.moderation ? "  moderation=" + r.moderation : "") + applied + "\nNote: new uploads can take ~10-60 s before Studio can load them; the asset is private to its creator (" + (asGroup ? "group " + creatorId : "your account") + ").";
   }
 
   // ── Game passes ──
@@ -3161,7 +3272,9 @@
     // 1.24.0 — full Studio control, other plugins, Eclipse Animator bridge
     "studio_playtest", "studio_settings", "studio_selection", "studio_camera", "studio_script_editor", "studio_history", "studio_service_call", "studio_macro", "studio_save", "studio_output", "studio_test_run", "studio_mouse",
     "plugins_list", "plugin_widget", "plugin_invoke", "plugin_module_call", "plugin_source_read",
-    "eclipse_status", "eclipse_open", "eclipse_handoff", "eclipse_import", "eclipse_play"];
+    "eclipse_status", "eclipse_open", "eclipse_handoff", "eclipse_import", "eclipse_play",
+    // 1.45.0 monetization + publishing
+    "animation_export", "animation_apply", "cloud_product_update", "cloud_animation_publish"];
   const STUDIO_PLUGIN_SET = new Set(STUDIO_PLUGIN_COMMANDS);
   const PLUGIN_HOWTO = "the ORscript Studio plugin is not connected. or-core (ORscript Desktop, cargo build in ORscript/agent) installs plugin/ORscript.lua into Studio's local Plugins folder; restart Studio once, open Plugins → ORscript and click Allow on the HTTP prompt. Until then use execute_luau / the Luau skills (model_union, marketplace_setup, ...).";
   function pluginToolAvailable(name) {
@@ -3200,6 +3313,7 @@
     let via = "your roblox.com browser session";
     let gamePassId = r && r.ok ? Number(r.gamePassId || 0) || 0 : 0;
     let priceNote = r && r.ok ? (r.priceWarning ? "\n" + r.priceWarning : "") : "";
+    if (r && r.ok && price > 0 && r.forSale === false) priceNote += "\n(created, but it is not on sale yet — gamepass_update {gamepass_id, price, for_sale: true})";
     if (!(r && r.ok) && pluginToolAvailable("cloud_gamepass_create")) {
       try {
         const text = await bridgeTool("cloud_gamepass_create", { name: passName, description: desc, price: price, universe_id: universe || undefined, icon_path: args.icon_path || undefined }, 120000);
@@ -3230,7 +3344,10 @@
   async function updateGamePass(args) {
     const gamePassId = Number(args.gamepass_id || args.gamePassId || args.id || args.assetId || 0) || 0;
     if (!gamePassId) return "ERROR: gamepass_update needs gamepass_id (use gamepass_list).";
-    const payload = { gamePassId: gamePassId };
+    const ids = await studioUniverseIds();
+    const universeU = Number(args.universe_id || args.universeId || args.universe || ids.gameId || 0) || 0;
+    const payload = { gamePassId: gamePassId, universeId: universeU, placeId: Number(args.place_id || args.placeId || ids.placeId || 0) || 0, gameId: universeU };
+    if (args.icon_data_url || args.iconDataUrl) payload.iconDataUrl = args.icon_data_url || args.iconDataUrl;
     if (args.name != null) payload.name = String(args.name);
     if (args.description != null) payload.description = String(args.description);
     if (args.price != null) payload.price = Math.floor(Number(args.price)) || 0;
@@ -3239,14 +3356,15 @@
     try { r = await bg({ type: "update_game_pass", ...payload }); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
     if (!(r && r.ok) && pluginToolAvailable("cloud_gamepass_update")) {
       try {
-        const text = await bridgeTool("cloud_gamepass_update", { gamepass_id: gamePassId, name: payload.name, description: payload.description, price: payload.price, for_sale: payload.isForSale });
+        const text = await bridgeTool("cloud_gamepass_update", { gamepass_id: gamePassId, universe_id: universeU || undefined, name: payload.name, description: payload.description, price: payload.price, for_sale: payload.isForSale, icon_path: args.icon_path || undefined });
         return "Output of 'gamepass_update' (Open Cloud):\n" + text.slice(0, 1500);
       } catch (e) {
         return "ERROR: gamepass_update failed. Browser session: " + String(r && r.error || "failed") + " | Open Cloud: " + String(e && e.message || e);
       }
     }
     if (!(r && r.ok)) return "ERROR: gamepass_update failed — " + String((r && r.error) || "Sign into roblox.com in this Chrome profile.");
-    return "Output of 'gamepass_update':\nUpdated game pass " + gamePassId + " " + JSON.stringify(payload) + "\n" + String(r.text || "").slice(0, 1200);
+    const shown = Object.assign({}, payload); delete shown.iconDataUrl; delete shown.placeId; delete shown.gameId;
+    return "Output of 'gamepass_update':\nUpdated game pass " + gamePassId + " " + JSON.stringify(shown) + "\n" + String(r.text || "").slice(0, 1200);
   }
   async function listGamePasses(args) {
     const ids = await studioUniverseIds();
@@ -3258,7 +3376,7 @@
     }
     if (!(r && r.ok)) return "ERROR: could not list game passes. " + String((r && r.error) || "Sign into roblox.com in this Chrome profile, or publish the place first.");
     const passes = Array.isArray(r.passes) ? r.passes : [];
-    return "Output of 'gamepass_list':\nuniverse_id=" + (r.universeId || universe) + " (" + passes.length + " passes)\n" + (passes.length ? passes.map((p) => "- " + p.id + "  \"" + p.name + "\"  " + (p.price == null ? "not for sale" : p.price + " Robux")).join("\n") : "(none yet — gamepass_create {name, price})");
+    return "Output of 'gamepass_list':\nuniverse_id=" + (r.universeId || universe) + " (" + passes.length + " passes)\n" + (passes.length ? passes.map((p) => "- " + p.id + "  \"" + p.name + "\"  " + (p.price == null ? "no price" : p.price + " Robux") + (p.forSale === false ? "  (off sale)" : "")).join("\n") : "(none yet — gamepass_create {name, price})");
   }
 
   function isAssistantPluginNoise(text) {
@@ -3548,6 +3666,7 @@
       if(roadmapName==="creator.getPublishStatus"||roadmapName==="creator.validatePublish"){const state=await runTool({tool:"get_studio_state",arguments:{}});return `Output of '${roadmapName}':\n${JSON.stringify({success:!String(state).startsWith("ERROR"),operation:roadmapName,status:state},null,2)}`;}
       if(roadmapName==="creator.createGamePass")return await createGamePass({...args,universe_id:args.universeId||args.universe_id});
       if(roadmapName==="creator.updateGamePass")return await updateGamePass({...args,gamepass_id:args.assetId||args.gamepass_id});
+      if(roadmapName==="creator.publishAnimation")return await publishAnimation({...args,path:args.path||args.keyframeSequence||args.keyframe_sequence,name:args.name||args.title});
       const confirmed=await requestApproval(roadmapName,{...args,warning:"This publishing workflow modifies Roblox cloud content and requires Roblox ownership, authentication, moderation, and final confirmation."},true);if(!confirmed)return `ERROR USER_ACTION_REQUIRED: publishing was not confirmed; no cloud operation ran.`;
       const action=roadmapName==="creator.publishPlace"?"In Roblox Studio, use File > Publish to Roblox and confirm the target place.":roadmapName==="creator.publishAnimation"?"Open the Animation Editor for the target rig, choose Publish to Roblox, review ownership, and confirm. Return the asset ID only after Studio displays it.":roadmapName==="creator.createGamePass"?`Open Creator Dashboard > Creations > Experiences > Passes, select universe ${args.universeId||"the current experience"}, and create '${String(args.name||"").slice(0,100)}'.`:"Open Creator Dashboard for this pass, review the requested changes, and confirm them.";
       return `ERROR USER_ACTION_REQUIRED: ${action}`;
@@ -3644,6 +3763,10 @@
     if (bareName === "developer_product_list" || bareName === "devproduct_list") {
       return await listDeveloperProducts(args);
     }
+    if (bareName === "developer_product_update" || bareName === "devproduct_update") {
+      return await updateDeveloperProduct(args);
+    }
+    if (bareName === "animation_publish") return await publishAnimation(args);
     if (STUDIO_PLUGIN_SET.has(bareName) && !pluginToolAvailable(bareName)) {
       if (/^cloud_/.test(bareName)) return "ERROR: '" + bareName + "' needs an Open Cloud API key in or-core (paste it in Studio → Plugins → ORscript → Open Cloud API key, or start or-core with OR_OPEN_CLOUD_KEY). Browser-session alternatives: gamepass_create / gamepass_list / developer_product_create.";
       return "ERROR: '" + bareName + "' - " + PLUGIN_HOWTO;

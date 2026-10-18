@@ -251,19 +251,14 @@
     if (op === "ungroup_model") {
       return wrap(`local i=resolve(${path}) if not i or not i:IsA("Model") then return fail("need a Model path") end local par=i.Parent or workspace local n=0 local kids=i:GetChildren() for _,c in ipairs(kids) do c.Parent=par n=n+1 end i:Destroy() return ok({moved=n},"ungrouped")`);
     }
-    if (op === "developer_product_create") {
-      const nm = luaStr(a.name || "Product");
-      const desc = luaStr(a.description || a.desc || "");
-      const price = num(a.price || a.price_in_robux || a.robux, 10);
-      return wrap(`local hs=game:GetService("HttpService") local universe=tonumber(game.GameId) or 0 if universe<1 then return fail("publish the place first (GameId is 0), or pass universe_id to developer_product_create") end local url="https://apis.roblox.com/developer-products/v1/universes/"..universe.."/developerproducts?name="..hs:UrlEncode(${nm}).."&description="..hs:UrlEncode(${desc}).."&priceInRobux="..tostring(${price}) local okreq,res=pcall(function() return hs:RequestAsync({Url=url,Method="POST",Headers={["Content-Type"]="application/json"}}) end) if not okreq then return fail("Studio HTTP could not create the product: "..tostring(res)..". Sign into roblox.com in this browser and retry — OR creates it via your Roblox session.") end return ok({status=res.StatusCode,body=tostring(res.Body):sub(1,900)},"dev product HTTP "..tostring(res.StatusCode))`);
-    }
-    if (op === "gamepass_create" || op === "gamepass_update" || op === "gamepass_list") {
+    if (op === "developer_product_create" || op === "developer_product_list" || op === "developer_product_update" || op === "gamepass_create" || op === "gamepass_update" || op === "gamepass_list" || op === "animation_publish") {
       // Handled in main.js (browser session / Open Cloud via or-core). Studio
-      // itself cannot create passes: HttpService refuses every roblox.com host.
-      return wrap(`return fail("${op} runs through ORscript's browser session or or-core Open Cloud, not Studio Luau - make sure the ORscript extension is active (it intercepts this command) or create the pass at https://create.roblox.com/dashboard/creations and then call gamepass_handler_create {gamepass_id}")`);
-    }
-    if (op === "developer_product_list") {
-      return wrap(`local hs=game:GetService("HttpService") local universe=tonumber(game.GameId) or 0 if universe<1 then return fail("publish the place first (GameId is 0)") end local url="https://apis.roblox.com/developer-products/v1/universes/"..universe.."/developerproducts?pageNumber=1&pageSize=50" local okreq,res=pcall(function() return hs:GetAsync(url) end) if not okreq then return fail("list failed: "..tostring(res)) end return ok({body=tostring(res):sub(1,4000)},tostring(res):sub(1,4000))`);
+      // itself cannot create passes, products or upload animations: HttpService
+      // refuses every roblox.com host (Open Cloud from Luau needs a Secret,
+      // which edit-mode Studio does not have), and the legacy v1 product
+      // endpoints were retired by Roblox on 2026-04-23.
+      const where = op === "animation_publish" ? "select the KeyframeSequence in the Explorer → right-click → Save to Roblox" : "create it at https://create.roblox.com/dashboard/creations (Monetization)";
+      return wrap(`return fail("${op} runs through ORscript's browser session or or-core Open Cloud, not Studio Luau - make sure the ORscript extension is active (it intercepts this command) or ${where}")`);
     }
     return null;
   }
@@ -322,6 +317,8 @@
     { name: "gamepass_create", description: "Create a REAL Game Pass on this published universe (name, optional Robux price, description, icon) via the roblox.com browser session or or-core Open Cloud, then write its server handler (benefit: speed|coins|tool|custom) with the Studio plugin. Returns gamepass_id.", params: { name: { type: "string", req: true, desc: "pass title" }, price: { type: "number", req: false, desc: "Robux (0 = not for sale yet)" }, description: { type: "string", req: false }, benefit: { type: "string", req: false, desc: "speed | coins | tool | custom" }, amount: { type: "number", req: false }, tool_name: { type: "string", req: false }, universe_id: { type: "number", req: false }, wire: { type: "boolean", req: false, desc: "false = do not write the handler" } } },
     { name: "gamepass_update", description: "Change a game pass's name, description, price or for_sale flag.", params: { gamepass_id: { type: "number", req: true }, name: { type: "string", req: false }, description: { type: "string", req: false }, price: { type: "number", req: false }, for_sale: { type: "boolean", req: false } } },
     { name: "gamepass_list", description: "List this universe's game passes (id, name, price).", params: { universe_id: { type: "number", req: false } } },
+    { name: "developer_product_update", description: "Change a developer product's name, description, price, for_sale flag or icon (product_id from developer_product_list).", params: { product_id: { type: "number", req: true }, name: { type: "string", req: false }, description: { type: "string", req: false }, price: { type: "number", req: false }, for_sale: { type: "boolean", req: false } } },
+    { name: "animation_publish", description: "PUBLISH an animation as a real Roblox Animation asset: the Studio plugin serialises the KeyframeSequence (path, or animation = AnimLib / AnimSaves clip name, or the Explorer selection), the roblox.com browser session or or-core Open Cloud uploads it, then ReplicatedStorage.Animations.<name> gets the rbxassetid. Returns asset_id. Falls back to Studio's Publish dialog.", params: { animation: { type: "string", req: false, desc: "AnimLib / AnimSaves clip name" }, path: { type: "string", req: false, desc: "KeyframeSequence path" }, name: { type: "string", req: false, desc: "asset title (default clip name)" }, description: { type: "string", req: false }, rig_path: { type: "string", req: false, desc: "also copy the Animation under <rig>.Animations" }, group_id: { type: "number", req: false, desc: "publish under a group instead of your account" } } },
   ];
 
   const orig = RobloxScriptSkills.buildLuau;

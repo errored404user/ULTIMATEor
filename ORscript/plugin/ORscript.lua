@@ -1,5 +1,5 @@
 --!nocheck
--- ORscript Studio plugin  (ORscript 1.44.0)
+-- ORscript Studio plugin  (ORscript 1.45.0)
 -- SPDX-License-Identifier: GPL-3.0-or-later
 --
 -- A tiny worker that lives INSIDE Roblox Studio and lets ORscript (the browser
@@ -50,7 +50,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 if not plugin then return end
 if RunService:IsRunning() then return end -- edit mode only; play-test DataModels do not run the worker
 
-local VERSION = "1.44.0"
+local VERSION = "1.45.0"
 local DEFAULT_BRIDGE = "http://127.0.0.1:3000"
 local CLIENT_ID = "studio-plugin-" .. tostring(math.random(100000, 999999))
 local CAPABILITIES = {
@@ -63,6 +63,8 @@ local CAPABILITIES = {
 	"studio_service_call", "studio_macro", "studio_save", "studio_output", "studio_test_run", "studio_mouse",
 	"plugins_list", "plugin_widget", "plugin_invoke", "plugin_module_call", "plugin_source_read",
 	"eclipse_status", "eclipse_open", "eclipse_handoff", "eclipse_import", "eclipse_play",
+	-- 1.45.0 animation publishing
+	"animation_export", "animation_apply",
 }
 local ORSCRIPT_ENV = {} -- helper table exposed to plugin_execute_luau as `ORscript` (filled below)
 
@@ -137,7 +139,7 @@ local statusLabel = mkLabel("starting…", 34, 20, 13, Color3.fromRGB(180, 184, 
 local placeLabel = mkLabel("", 54, 36, 12, Color3.fromRGB(150, 154, 164))
 mkLabel("Bridge URL (or-core)", 94, 18, 12, Color3.fromRGB(150, 154, 164))
 local urlBox = mkBox(DEFAULT_BRIDGE, 112, bridgeUrl)
-mkLabel("Open Cloud API key (optional - lets or-core create game passes / products without a browser session; stored only in this plugin's settings and sent to 127.0.0.1)", 146, 44, 11, Color3.fromRGB(150, 154, 164))
+mkLabel("Open Cloud API key (optional - lets or-core create game passes / products and publish animations without a browser session; scopes game-pass:write, developer-product:write, asset:write; stored only in this plugin's settings and sent to 127.0.0.1)", 146, 44, 11, Color3.fromRGB(150, 154, 164))
 local keyBox = mkBox("rbx-cloud key with Game Passes + Developer Products write access", 192, openCloudKey)
 local toggleBtn = mkButton(enabled and "Pause worker" or "Resume worker", 230, 12, 150)
 local saveBtn = mkButton("Save settings", 230, 172, 150)
@@ -1998,6 +2000,185 @@ function H.eclipse_play(a)
 		anim:Destroy()
 	end)
 	return { playing = true, animation_id = animId, length = track.Length, duration = duration, rig = rig:GetFullName(), hint = "or_screenshot during playback or eclipse_play {action:'stop'}; the rig returns to rest when the preview ends" }
+end
+
+-- ───────────── 1.45.0 animation publishing ─────────────
+-- Studio has no Luau API that uploads an animation and a plugin cannot write
+-- .rbxm binaries, but it CAN walk a KeyframeSequence and emit the equivalent
+-- .rbxmx (Roblox XML). The extension (roblox.com session) or or-core (Open
+-- Cloud key) uploads that as an Animation asset; animation_apply then wires
+-- the returned id into ReplicatedStorage.Animations.
+local function xmlEsc(v)
+	return (tostring(v):gsub("[&<>\"']", { ["&"] = "&amp;", ["<"] = "&lt;", [">"] = "&gt;", ['"'] = "&quot;", ["'"] = "&apos;" }))
+end
+local function xmlNum(n)
+	n = tonumber(n) or 0
+	if n ~= n or n == math.huge or n == -math.huge then n = 0 end
+	if n == math.floor(n) and math.abs(n) < 1e15 then return string.format("%d", n) end
+	return string.format("%.9g", n)
+end
+local function xmlCFrame(name, cf)
+	local keys = { "X", "Y", "Z", "R00", "R01", "R02", "R10", "R11", "R12", "R20", "R21", "R22" }
+	local vals = { cf:GetComponents() }
+	local parts = {}
+	for i, k in ipairs(keys) do parts[#parts + 1] = "<" .. k .. ">" .. xmlNum(vals[i]) .. "</" .. k .. ">" end
+	return '<CoordinateFrame name="' .. name .. '">' .. table.concat(parts) .. "</CoordinateFrame>"
+end
+local function poseXml(pose, out, st)
+	st.ref = st.ref + 1
+	st.poses = st.poses + 1
+	out[#out + 1] = '<Item class="Pose" referent="RBX' .. st.ref .. '"><Properties>'
+	out[#out + 1] = xmlCFrame("CFrame", pose.CFrame)
+	out[#out + 1] = '<token name="EasingDirection">' .. tostring(pose.EasingDirection.Value) .. '</token>'
+	out[#out + 1] = '<token name="EasingStyle">' .. tostring(pose.EasingStyle.Value) .. '</token>'
+	out[#out + 1] = '<string name="Name">' .. xmlEsc(pose.Name) .. '</string>'
+	out[#out + 1] = '<float name="Weight">' .. xmlNum(pose.Weight) .. '</float>'
+	out[#out + 1] = '</Properties>'
+	for _, child in ipairs(pose:GetChildren()) do
+		if child:IsA("Pose") then poseXml(child, out, st) end
+	end
+	out[#out + 1] = '</Item>'
+end
+local function keyframeSequenceXml(ks)
+	local st = { ref = 1, poses = 0, markers = 0 }
+	local out = {}
+	out[#out + 1] = '<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">'
+	out[#out + 1] = '<Meta name="ExplicitAutoJoints">true</Meta><External>null</External><External>nil</External>'
+	out[#out + 1] = '<Item class="KeyframeSequence" referent="RBX1"><Properties>'
+	out[#out + 1] = '<float name="AuthoredHipHeight">' .. xmlNum(ks.AuthoredHipHeight) .. '</float>'
+	out[#out + 1] = '<bool name="Loop">' .. tostring(ks.Loop == true) .. '</bool>'
+	out[#out + 1] = '<string name="Name">' .. xmlEsc(ks.Name) .. '</string>'
+	out[#out + 1] = '<token name="Priority">' .. tostring(ks.Priority.Value) .. '</token>'
+	out[#out + 1] = '</Properties>'
+	local frames = ks:GetKeyframes()
+	table.sort(frames, function(x, y) return x.Time < y.Time end)
+	local length = 0
+	for _, kf in ipairs(frames) do
+		st.ref = st.ref + 1
+		if kf.Time > length then length = kf.Time end
+		out[#out + 1] = '<Item class="Keyframe" referent="RBX' .. st.ref .. '"><Properties>'
+		out[#out + 1] = '<string name="Name">' .. xmlEsc(kf.Name) .. '</string>'
+		out[#out + 1] = '<float name="Time">' .. xmlNum(kf.Time) .. '</float>'
+		out[#out + 1] = '</Properties>'
+		for _, child in ipairs(kf:GetChildren()) do
+			if child:IsA("Pose") then
+				poseXml(child, out, st)
+			elseif child:IsA("KeyframeMarker") then
+				st.ref = st.ref + 1
+				st.markers = st.markers + 1
+				out[#out + 1] = '<Item class="KeyframeMarker" referent="RBX' .. st.ref .. '"><Properties><string name="Name">' .. xmlEsc(child.Name) .. '</string><string name="Value">' .. xmlEsc(child.Value) .. '</string></Properties></Item>'
+			end
+		end
+		out[#out + 1] = '</Item>'
+	end
+	out[#out + 1] = '</Item></roblox>'
+	return table.concat(out), #frames, st.poses, st.markers, length
+end
+local function animationSource(a)
+	local src
+	if a.path then src = need(a.path, "animation") end
+	local clip = a.animation or a.clip
+	if not src and clip then
+		local lib = animLibFolder()
+		src = lib:FindFirstChild(tostring(clip))
+		if not src and a.rig_path then
+			local rig = resolve(a.rig_path)
+			local saves = rig and rig:FindFirstChild("AnimSaves")
+			src = saves and saves:FindFirstChild(tostring(clip)) or nil
+		end
+		if not src then
+			for _, root in ipairs({ ServerStorage, ReplicatedStorage, workspace }) do
+				for _, d in ipairs(root:GetDescendants()) do
+					if d:IsA("KeyframeSequence") and d.Name == tostring(clip) then src = d break end
+				end
+				if src then break end
+			end
+		end
+		if not src then error("no KeyframeSequence named '" .. tostring(clip) .. "' (animation_list shows AnimLib clips; or pass path)") end
+	end
+	if not src then
+		for _, sel in ipairs(Selection:Get()) do local k = findKeyframeSequence(sel) if k then src = k break end end
+	end
+	if not src then
+		local lib = animLibFolder()
+		local active = lib:FindFirstChild("Active")
+		src = active and active:IsA("StringValue") and lib:FindFirstChild(active.Value) or nil
+	end
+	if not src then error("pass path (a KeyframeSequence), animation (AnimLib / AnimSaves clip name) or select one in the Explorer") end
+	local ks = findKeyframeSequence(src)
+	if not ks then error(src:GetFullName() .. " contains no KeyframeSequence") end
+	return ks
+end
+function H.animation_export(a)
+	local ks = animationSource(a)
+	local xml, frames, poses, markers, length = keyframeSequenceXml(ks)
+	if frames == 0 then error(ks:GetFullName() .. " has no Keyframes - nothing to publish") end
+	if poses == 0 then error(ks:GetFullName() .. " has keyframes but no Poses - nothing would move") end
+	if #xml > 1500000 then error(ks:GetFullName() .. " serialises to " .. #xml .. " bytes - too large; reduce keyframes (animation_retime) or split the clip") end
+	local okU, userId = pcall(function() return StudioService:GetUserId() end)
+	return {
+		name = ks.Name,
+		path = ks:GetFullName(),
+		xml = xml,
+		bytes = #xml,
+		keyframes = frames,
+		poses = poses,
+		markers = markers,
+		length = length,
+		loop = ks.Loop,
+		priority = ks.Priority.Name,
+		creator_type = (tostring(game.CreatorType):gsub("^Enum%.CreatorType%.", "")),
+		creator_id = game.CreatorId,
+		user_id = okU and userId or 0,
+	}
+end
+function H.animation_apply(a)
+	local id = tonumber(a.asset_id or a.assetId or a.id)
+	if not id or id < 1 then error("asset_id required (the published animation id)") end
+	id = math.floor(id)
+	local name = tostring(a.name or "Animation")
+	local rec = record("animation publish")
+	local src = a.path and resolve(a.path) or nil
+	local ks = src and findKeyframeSequence(src) or nil
+	if ks then
+		pcall(function()
+			ks:SetAttribute("PublishedAssetId", id)
+			ks:SetAttribute("PublishedAt", os.date("!%Y-%m-%dT%H:%M:%SZ"))
+		end)
+		if not a.name then name = ks.Name end
+	end
+	local parent = a.parent and need(a.parent, "parent") or nil
+	if not parent then
+		parent = ReplicatedStorage:FindFirstChild("Animations")
+		if not parent then parent = Instance.new("Folder") parent.Name = "Animations" parent.Parent = ReplicatedStorage end
+	end
+	local anim = parent:FindFirstChild(name)
+	if not (anim and anim:IsA("Animation")) then anim = Instance.new("Animation") anim.Name = name anim.Parent = parent end
+	anim.AnimationId = "rbxassetid://" .. tostring(id)
+	anim:SetAttribute("PublishedAt", os.date("!%Y-%m-%dT%H:%M:%SZ"))
+	local rigCopy
+	if a.rig_path then
+		local rig = resolve(a.rig_path)
+		if rig then
+			local folder = rig:FindFirstChild("Animations")
+			if not folder then folder = Instance.new("Folder") folder.Name = "Animations" folder.Parent = rig end
+			local old = folder:FindFirstChild(name)
+			if old then old:Destroy() end
+			rigCopy = anim:Clone()
+			rigCopy.Parent = folder
+		end
+	end
+	commit(rec)
+	pcall(function() Selection:Set({ anim }) end)
+	return {
+		path = anim:GetFullName(),
+		animation_id = anim.AnimationId,
+		asset_id = id,
+		source = ks and ks:GetFullName() or nil,
+		rig_copy = rigCopy and rigCopy:GetFullName() or nil,
+		play = 'local anim = game.ReplicatedStorage.Animations:WaitForChild("' .. name:gsub('"', '') .. '") local track = humanoid:FindFirstChildOfClass("Animator"):LoadAnimation(anim) track:Play()',
+		hint = "a freshly uploaded animation can take ~10-60 s to load in Studio; it is private to the creator (user or group) that owns it",
+	}
 end
 
 -- expose helpers to plugin_execute_luau code as the `ORscript` global

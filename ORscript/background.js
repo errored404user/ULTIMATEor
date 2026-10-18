@@ -1451,6 +1451,33 @@ async function creatorAssetInfo(assetId){
   const id=Number(assetId);if(!Number.isInteger(id)||id<1)return {success:false,error:{code:"INVALID_PARAMETER",message:"assetId must be a positive integer"}};
   try{const r=await fetch(`https://economy.roblox.com/v2/assets/${id}/details`,{method:"GET",credentials:"include",redirect:"error"});const raw=await r.text();let data=null;try{data=JSON.parse(raw);}catch{}if(r.status===401||r.status===403)return {success:false,error:{code:"AUTH_REQUIRED",message:"Roblox authentication or asset permission is required"},status:r.status};if(!r.ok)return {success:false,error:{code:r.status===404?"COMMAND_NOT_FOUND":"PERMISSION_DENIED",message:data&&data.message||raw.slice(0,300)||`HTTP ${r.status}`},status:r.status};return {success:true,operation:"getPublishedAsset",assetId:id,status:"verified",asset:data};}catch(e){return {success:false,error:{code:"PUBLISH_FAILED",message:String(e&&e.message||e)}};}
 }
+// ── Monetization through the user's roblox.com browser session ──
+// 1.45.0: Roblox retired the legacy routes on 2026-04-23 (POST game-passes/v1/
+// game-passes, …/{id}/details, developer-products/v1 …/developerproducts,
+// games.roblox.com/v1/games/{id}/game-passes). The documented Open Cloud
+// endpoints accept the same .ROBLOSECURITY cookie (+ X-CSRF-TOKEN), so the
+// extension keeps working with zero setup — and or-core offers the identical
+// calls with an API key (cloud_* tools) for people who prefer that.
+const RBX_APIS = "https://apis.roblox.com";
+function robloxErrorText(res) {
+  const d = res.data || {};
+  return String(d.errorMessage || d.message || d.error || (Array.isArray(d.errors) && d.errors[0] && d.errors[0].message) || (res.text || "").slice(0, 280) || ("HTTP " + res.status)) + (d.field ? " (field " + d.field + ")" : "") + (d.hint ? " — " + d.hint : "");
+}
+function robloxPrice(p) {
+  if (!p || typeof p !== "object") return null;
+  if (p.price != null) return p.price;
+  const pi = p.priceInformation;
+  if (pi && typeof pi === "object") {
+    for (const k of ["defaultPriceInRobux", "price", "priceInRobux"]) if (pi[k] != null) return pi[k];
+  }
+  return p.priceInRobux != null ? p.priceInRobux : null;
+}
+async function robloxIconBlob(msg, placeholderLabel) {
+  if (msg.iconDataUrl && /^data:image\//.test(String(msg.iconDataUrl))) {
+    try { return await (await fetch(String(msg.iconDataUrl))).blob(); } catch {}
+  }
+  return placeholderLabel ? await robloxPlaceholderIcon(placeholderLabel) : null;
+}
 async function robloxCreateDevProduct(msg) {
   const resolved = await robloxResolveUniverse(msg);
   if (!resolved.ok) return resolved;
@@ -1460,54 +1487,52 @@ async function robloxCreateDevProduct(msg) {
   const priceInRobux = Math.floor(Number(msg.priceInRobux || msg.price || 0));
   if (!name) return { ok: false, error: "name required" };
   if (!priceInRobux || priceInRobux < 1) return { ok: false, error: "priceInRobux must be >= 1" };
-  const qUrl = "https://apis.roblox.com/developer-products/v1/universes/" + universeId +
-    "/developerproducts?name=" + encodeURIComponent(name) +
-    "&description=" + encodeURIComponent(description) +
-    "&priceInRobux=" + encodeURIComponent(String(priceInRobux));
-  let res = await robloxAuthedFetch(qUrl, { method: "POST" });
-  if (!res.ok && (res.status === 400 || res.status === 404 || res.status === 415)) {
-    res = await robloxAuthedFetch("https://apis.roblox.com/developer-products/v1/universes/" + universeId + "/developerproducts", {
-      method: "POST",
-      body: JSON.stringify({ name: name, description: description, priceInRobux: priceInRobux }),
-    });
-  }
+  const form = new FormData();
+  form.append("name", name);
+  form.append("description", description);
+  form.append("price", String(priceInRobux));
+  form.append("isForSale", msg.isForSale === false ? "false" : "true");
+  const icon = await robloxIconBlob(msg, "");
+  if (icon) form.append("imageFile", icon, "icon.png");
+  const res = await robloxAuthedFetch(RBX_APIS + "/developer-products/v2/universes/" + universeId + "/developer-products", { method: "POST", body: form });
   if (!res.ok) {
-    let err = res.text.slice(0, 280) || ("HTTP " + res.status);
-    try {
-      const d = res.data;
-      if (d) err = d.message || d.error || (d.errors && d.errors[0] && d.errors[0].message) || err;
-    } catch {}
-    if (res.status === 401 || res.status === 403) {
-      return { ok: false, error: "Not signed into Roblox in this Chrome profile. Open roblox.com, log in, then retry. (" + err + ")" };
-    }
-    return { ok: false, error: String(err) + " (universe " + universeId + (resolved.name ? " / " + resolved.name : "") + ")", status: res.status, universeId: universeId };
+    return { ok: false, error: robloxAuthError(res) + " (universe " + universeId + (resolved.name ? " / " + resolved.name : "") + ")", status: res.status, universeId: universeId, dashboard: "https://create.roblox.com/dashboard/creations/experiences/" + universeId + "/monetization/developer-products" };
   }
   const product = res.data || {};
-  return { ok: true, product: product, productId: product.id || product.productId, universeId: universeId, universeName: resolved.name || "", text: JSON.stringify(product) };
+  return { ok: true, product: product, productId: Number(product.productId || product.id || 0) || 0, universeId: universeId, universeName: resolved.name || "", price: priceInRobux, text: JSON.stringify(product) };
+}
+async function robloxUpdateDevProduct(msg) {
+  const productId = Number(msg.productId || msg.product_id || msg.id || 0) || 0;
+  if (!productId) return { ok: false, error: "productId required" };
+  const resolved = await robloxResolveUniverse(msg);
+  if (!resolved.ok) return resolved;
+  const form = new FormData();
+  let fields = 0;
+  if (msg.name != null && String(msg.name).trim()) { form.append("name", String(msg.name).trim()); fields++; }
+  if (msg.description != null) { form.append("description", String(msg.description)); fields++; }
+  const price = msg.price != null ? Math.floor(Number(msg.price)) : NaN;
+  if (Number.isFinite(price) && price >= 1) { form.append("price", String(price)); fields++; }
+  if (msg.isForSale != null) { form.append("isForSale", msg.isForSale ? "true" : "false"); fields++; }
+  const icon = await robloxIconBlob(msg, "");
+  if (icon) { form.append("imageFile", icon, "icon.png"); fields++; }
+  if (!fields) return { ok: false, error: "nothing to update - pass name, description, price, isForSale or iconDataUrl" };
+  const res = await robloxAuthedFetch(RBX_APIS + "/developer-products/v2/universes/" + resolved.universeId + "/developer-products/" + productId, { method: "PATCH", body: form });
+  if (!res.ok) return { ok: false, error: robloxAuthError(res), status: res.status };
+  return { ok: true, productId: productId, universeId: resolved.universeId, updated: fields, details: res.data || {}, text: res.text || ("HTTP " + res.status) };
 }
 async function robloxListDevProducts(msg) {
   const resolved = await robloxResolveUniverse(msg);
   if (!resolved.ok) return resolved;
   const universeId = resolved.universeId;
-  const url = "https://apis.roblox.com/developer-products/v1/universes/" + universeId + "/developerproducts?pageNumber=1&pageSize=50";
-  const res = await robloxAuthedFetch(url, { method: "GET" });
-  if (!res.ok) {
-    const err = (res.data && (res.data.message || res.data.error)) || res.text.slice(0, 280) || ("HTTP " + res.status);
-    if (res.status === 401 || res.status === 403) {
-      return { ok: false, error: "Not signed into Roblox in this Chrome profile. Open roblox.com, log in, then retry. (" + err + ")" };
-    }
-    return { ok: false, error: String(err), status: res.status };
-  }
-  return { ok: true, products: res.data, text: typeof res.text === "string" ? res.text.slice(0, 4000) : JSON.stringify(res.data) };
+  const res = await robloxAuthedFetch(RBX_APIS + "/developer-products/v2/universes/" + universeId + "/developer-products/creator?pageSize=100", { method: "GET" });
+  if (!res.ok) return { ok: false, error: robloxAuthError(res), status: res.status };
+  const list = (res.data && Array.isArray(res.data.developerProducts) ? res.data.developerProducts : []).map((p) => ({ id: p.productId, name: p.name, price: robloxPrice(p), forSale: p.isForSale, description: p.description }));
+  return { ok: true, universeId: universeId, universeName: resolved.name || "", products: list, text: JSON.stringify(list) };
 }
 
-// ── Game passes (browser roblox.com session, same auth as developer products) ──
-// Studio has no Luau API for creating passes and its HttpService blocks every
-// roblox.com host, so the extension does it with the user's own cookies. The
-// Open Cloud route in or-core (cloud_gamepass_create) is the alternative when an
-// API key is set; main.js picks whichever is available.
+// ── Game passes (same browser session, same Open Cloud routes) ──
 function robloxAuthError(res) {
-  let err = (res.data && (res.data.message || res.data.error || (res.data.errors && res.data.errors[0] && res.data.errors[0].message))) || (res.text || "").slice(0, 280) || ("HTTP " + res.status);
+  const err = robloxErrorText(res);
   if (res.status === 401 || res.status === 403) {
     return "Not signed into Roblox in this Chrome profile (or no edit rights on this experience). Open roblox.com, log in with the account that owns the game, then retry. (" + err + ")";
   }
@@ -1543,51 +1568,110 @@ async function robloxCreateGamePass(msg) {
   const price = Math.floor(Number(msg.price || msg.priceInRobux || 0)) || 0;
   if (!name) return { ok: false, error: "name required" };
   const form = new FormData();
-  form.append("UniverseId", String(universeId));
-  form.append("Name", name);
-  form.append("Description", description);
-  let icon = null;
-  if (msg.iconDataUrl && /^data:image\//.test(String(msg.iconDataUrl))) {
-    try { icon = await (await fetch(String(msg.iconDataUrl))).blob(); } catch {}
-  }
-  if (!icon) icon = await robloxPlaceholderIcon(name);
-  if (icon) form.append("File", icon, "icon.png");
-  const res = await robloxAuthedFetch("https://apis.roblox.com/game-passes/v1/game-passes", { method: "POST", body: form });
+  form.append("name", name);
+  form.append("description", description);
+  if (price > 0) form.append("price", String(price));
+  form.append("isForSale", price > 0 && msg.isForSale !== false ? "true" : "false");
+  const icon = await robloxIconBlob(msg, name);
+  if (icon) form.append("imageFile", icon, "icon.png");
+  const res = await robloxAuthedFetch(RBX_APIS + "/game-passes/v1/universes/" + universeId + "/game-passes", { method: "POST", body: form });
   if (!res.ok) {
     return { ok: false, error: robloxAuthError(res) + " (universe " + universeId + (resolved.name ? " / " + resolved.name : "") + ")", status: res.status, universeId: universeId, dashboard: "https://create.roblox.com/dashboard/creations/experiences/" + universeId + "/monetization/passes" };
   }
   const created = res.data || {};
   const gamePassId = Number(created.gamePassId || created.id || 0) || 0;
-  const out = { ok: true, gamePassId: gamePassId, universeId: universeId, universeName: resolved.name || "", name: name, price: 0, forSale: false, created: created, text: JSON.stringify(created) };
-  if (gamePassId && price > 0) {
-    const d = await robloxUpdateGamePass({ gamePassId: gamePassId, price: price, isForSale: true });
-    if (d.ok) { out.price = price; out.forSale = true; }
-    else out.priceWarning = "created, but setting the price failed: " + d.error;
-  }
-  return out;
+  return { ok: true, gamePassId: gamePassId, universeId: universeId, universeName: resolved.name || "", name: name, price: price > 0 ? price : 0, forSale: price > 0 && msg.isForSale !== false, created: created, text: JSON.stringify(created) };
 }
 async function robloxUpdateGamePass(msg) {
   const gamePassId = Number(msg.gamePassId || msg.gamepass_id || msg.id || 0) || 0;
   if (!gamePassId) return { ok: false, error: "gamePassId required" };
+  const resolved = await robloxResolveUniverse(msg);
+  if (!resolved.ok) return resolved;
   const form = new FormData();
-  if (msg.name != null && String(msg.name).trim()) form.append("Name", String(msg.name).trim());
-  if (msg.description != null) form.append("Description", String(msg.description));
+  let fields = 0;
+  if (msg.name != null && String(msg.name).trim()) { form.append("name", String(msg.name).trim()); fields++; }
+  if (msg.description != null) { form.append("description", String(msg.description)); fields++; }
   const price = msg.price != null ? Math.floor(Number(msg.price)) : NaN;
-  if (Number.isFinite(price) && price >= 0) form.append("Price", String(price));
+  if (Number.isFinite(price) && price >= 0) { form.append("price", String(price)); fields++; }
   const forSale = msg.isForSale != null ? !!msg.isForSale : (Number.isFinite(price) && price > 0 ? true : null);
-  if (forSale !== null) form.append("IsForSale", forSale ? "true" : "false");
-  const res = await robloxAuthedFetch("https://apis.roblox.com/game-passes/v1/game-passes/" + gamePassId + "/details", { method: "POST", body: form });
+  if (forSale !== null) { form.append("isForSale", forSale ? "true" : "false"); fields++; }
+  const icon = await robloxIconBlob(msg, "");
+  if (icon) { form.append("imageFile", icon, "icon.png"); fields++; }
+  if (!fields) return { ok: false, error: "nothing to update - pass name, description, price, isForSale or iconDataUrl" };
+  const res = await robloxAuthedFetch(RBX_APIS + "/game-passes/v1/universes/" + resolved.universeId + "/game-passes/" + gamePassId, { method: "PATCH", body: form });
   if (!res.ok) return { ok: false, error: robloxAuthError(res), status: res.status };
-  return { ok: true, gamePassId: gamePassId, details: res.data || {}, text: res.text };
+  return { ok: true, gamePassId: gamePassId, universeId: resolved.universeId, updated: fields, details: res.data || {}, text: res.text || ("HTTP " + res.status) };
 }
 async function robloxListGamePasses(msg) {
   const resolved = await robloxResolveUniverse(msg);
   if (!resolved.ok) return resolved;
   const universeId = resolved.universeId;
-  const res = await robloxAuthedFetch("https://games.roblox.com/v1/games/" + universeId + "/game-passes?limit=100&sortOrder=Asc", { method: "GET" });
+  const res = await robloxAuthedFetch(RBX_APIS + "/game-passes/v1/universes/" + universeId + "/game-passes/creator?pageSize=100", { method: "GET" });
   if (!res.ok) return { ok: false, error: robloxAuthError(res), status: res.status };
-  const list = (res.data && Array.isArray(res.data.data) ? res.data.data : []).map((p) => ({ id: p.id, name: p.name, price: p.price, productId: p.productId }));
+  const list = (res.data && Array.isArray(res.data.gamePasses) ? res.data.gamePasses : []).map((p) => ({ id: p.gamePassId, name: p.name, price: robloxPrice(p), forSale: p.isForSale, description: p.description }));
   return { ok: true, universeId: universeId, universeName: resolved.name || "", passes: list, text: JSON.stringify(list) };
+}
+
+// ── Animations (browser session) ──
+// The Studio plugin serialises the KeyframeSequence to .rbxmx (animation_export);
+// the upload itself needs a roblox.com identity. Two cookie routes, in order:
+//   1. apis.roblox.com/assets/user-auth/v1/assets — the Assets API as Studio's
+//      own asset manager calls it (same payload as Open Cloud, cookie + CSRF),
+//      then the operation is polled for the asset id;
+//   2. www.roblox.com/ide/publish/uploadnewanimation — the classic Animation
+//      Editor upload (response body = the new asset id).
+// or-core's cloud_animation_publish is the API-key variant of route 1.
+async function robloxWhoAmI() {
+  const who = await robloxAuthedFetch("https://users.roblox.com/v1/users/authenticated", { method: "GET" });
+  return who.ok && who.data ? { id: Number(who.data.id || 0) || 0, name: String(who.data.name || "") } : { id: 0, name: "" };
+}
+async function robloxPublishAnimation(msg) {
+  const xml = String(msg.xml || "");
+  if (!/^\s*<roblox[\s>]/.test(xml) || !xml.includes('class="KeyframeSequence"')) return { ok: false, error: "xml must be the .rbxmx of a KeyframeSequence (animation_export)" };
+  if (xml.length > 4000000) return { ok: false, error: "animation too large to upload (" + xml.length + " bytes)" };
+  const name = String(msg.name || "Animation").trim().slice(0, 50) || "Animation";
+  const description = String(msg.description || name).trim().slice(0, 1000);
+  const isGroup = /group/i.test(String(msg.creatorType || "")) && Number(msg.creatorId) > 0;
+  let userId = Number(msg.userId || 0) || 0;
+  const me = await robloxWhoAmI();
+  if (!me.id) return { ok: false, error: "Not signed into Roblox in this Chrome profile. Open roblox.com, log in with the account that owns the game, then retry." };
+  if (!userId) userId = me.id;
+  const creator = isGroup ? { groupId: String(msg.creatorId) } : { userId: String(userId) };
+  const tried = [];
+  // Route 1 — Assets API with the browser session.
+  try {
+    const form = new FormData();
+    form.append("request", JSON.stringify({ assetType: "Animation", displayName: name, description: description, creationContext: { creator: creator } }));
+    form.append("fileContent", new Blob([xml], { type: "model/x-rbxm" }), "animation.rbxmx");
+    const res = await robloxAuthedFetch(RBX_APIS + "/assets/user-auth/v1/assets", { method: "POST", body: form });
+    if (res.ok) {
+      const op = res.data || {};
+      let assetId = Number(op.response && op.response.assetId || 0) || 0;
+      const path = op.path || (op.operationId ? "operations/" + op.operationId : "");
+      let last = op;
+      for (let i = 0; !assetId && path && i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const poll = await robloxAuthedFetch(RBX_APIS + "/assets/user-auth/v1/" + path, { method: "GET" });
+        if (!poll.ok) continue;
+        last = poll.data || {};
+        if (last.done) { assetId = Number(last.response && last.response.assetId || 0) || 0; break; }
+      }
+      if (assetId) return { ok: true, assetId: assetId, animationId: "rbxassetid://" + assetId, name: name, via: "roblox.com session (Assets API)", creator: isGroup ? "group" : "user", moderation: last.response && last.response.moderationResult && last.response.moderationResult.moderationState || null };
+      tried.push("assets api: " + (last.error ? JSON.stringify(last.error).slice(0, 200) : "operation did not finish"));
+    } else {
+      tried.push("assets api: HTTP " + res.status + " " + robloxErrorText(res).slice(0, 160));
+    }
+  } catch (e) { tried.push("assets api: " + String(e && e.message || e).slice(0, 160)); }
+  // Route 2 — the classic animation upload.
+  try {
+    const q = new URLSearchParams({ assetTypeName: "Animation", name: name, description: description, AllID: "1", ispublic: "False", allowComments: "True", isGamesAsset: "False" });
+    if (isGroup) q.set("groupId", String(msg.creatorId));
+    const res = await robloxAuthedFetch("https://www.roblox.com/ide/publish/uploadnewanimation?" + q.toString(), { method: "POST", body: xml, headers: { "Content-Type": "application/xml" } });
+    const id = Number(String(res.text || "").trim()) || 0;
+    if (res.ok && id > 0) return { ok: true, assetId: id, animationId: "rbxassetid://" + id, name: name, via: "roblox.com session (animation upload)", creator: isGroup ? "group" : "user" };
+    tried.push("upload: HTTP " + res.status + " " + String(res.text || "").slice(0, 160));
+  } catch (e) { tried.push("upload: " + String(e && e.message || e).slice(0, 160)); }
+  return { ok: false, error: "could not upload the animation with the browser session — " + tried.join(" | "), tried: tried };
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -2004,6 +2088,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       case "list_dev_products": {
         try { sendResponse(await robloxListDevProducts(msg)); }
+        catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
+        break;
+      }
+      case "update_dev_product": {
+        try { sendResponse(await robloxUpdateDevProduct(msg)); }
+        catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
+        break;
+      }
+      case "publish_animation": {
+        try { sendResponse(await robloxPublishAnimation(msg)); }
         catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
         break;
       }
