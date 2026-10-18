@@ -22,9 +22,9 @@ const cargo = read("agent/Cargo.toml");
 
 // ── plugin source ──
 assert(lua.startsWith("--!nocheck"), "plugin disables type checking (plugin globals)");
-assert(lua.includes('local VERSION = "1.39.0"'), "plugin version 1.39.0");
-assert(manifest.version === "1.39.0", "manifest 1.39.0");
-assert(/version = "1\.39\.0"/.test(cargo), "crate 1.39.0");
+assert(lua.includes('local VERSION = "1.39.1"'), "plugin version 1.39.1");
+assert(manifest.version === "1.39.1", "manifest 1.39.1");
+assert(/version = "1\.39\.1"/.test(cargo), "crate 1.39.1");
 assert(lua.includes("if RunService:IsRunning() then return end"), "plugin is edit-mode only");
 assert(lua.includes('"/api/plugin/hello"') && lua.includes('"/api/plugin/poll?client_id="') && lua.includes('"/api/plugin/result"'), "plugin speaks the hub protocol");
 assert(lua.includes('http://127.0.0.1:3000'), "default bridge URL is or-core");

@@ -443,12 +443,13 @@
     npcenergy:["#c6c8c2","#e5e5dc"],
   };
   for(const [id,data] of Object.entries(MEME_THEME_DATA)){const th=OR_THEMES[id];if(th){th.background=data[0]+","+data[1];}}  // sound packs: see THEME_SOUNDS below
-  let orTheme = "night";
+  // 1.39.1: the chrome skin is fixed to Night. The theme picker (OR menu + popup) was
+  // removed from Settings; OR_THEMES/THEME_SOUNDS stay as the engine behind that one look.
+  const orTheme = "night";
   let soundOn = true;
-  let themeVolume = 70, memeEffects = "full", memeIntensity = "medium", themePreviewId = null, themeBeforePreview = null;
+  let themeVolume = 70, memeEffects = "full", memeIntensity = "medium";
   try {
-    chrome.storage.local.get(["rsTheme", "rsSounds"], (r) => {
-      if (r && OR_THEMES[r.rsTheme]) orTheme = r.rsTheme;
+    chrome.storage.local.get(["rsSounds", "rsThemeVolume", "rsMemeEffects", "rsMemeIntensity"], (r) => {
       if (r && typeof r.rsSounds === "boolean") soundOn = r.rsSounds;
       if (r && Number.isFinite(Number(r.rsThemeVolume))) themeVolume=Math.max(0,Math.min(100,Number(r.rsThemeVolume)));
       if (r && ["full","reduced","off"].includes(r.rsMemeEffects)) memeEffects=r.rsMemeEffects;
@@ -479,24 +480,10 @@
       if(root){let rail=root.querySelector(".rs-theme-corners");if(!rail){rail=document.createElement("div");rail.className="rs-theme-corners";rail.innerHTML='<span class="rs-theme-corner rs-corner-tl"></span><span class="rs-theme-corner rs-corner-tr"></span><span class="rs-theme-corner rs-corner-bl"></span><span class="rs-theme-corner rs-corner-br"></span>';root.appendChild(rail);}rail.dataset.kind=memeIds.includes(orTheme)?"meme":"classic";rail.hidden=memeEffects==="off";}
       const glyph = document.querySelector(".rs-menu-glyph");
       if (glyph) glyph.textContent = (th && th.glyph) || "☾";
-      document.querySelectorAll(".rs-theme-card").forEach((el) => {
-        el.classList.toggle("on", el.getAttribute("data-theme") === orTheme);
-      });
       const barEl = document.getElementById("rs-bar");
       if (barEl) barEl.setAttribute("data-or-theme", orTheme || "night");
     } catch {}
   }
-  function setOrTheme(id) {
-    if (!OR_THEMES[id]) return;
-    orTheme = id;
-    applyOrSkin();
-    try { chrome.storage.local.set({ rsTheme: id }); } catch {}
-  }
-  function previewOrTheme(id){if(!OR_THEMES[id])return;if(!themePreviewId)themeBeforePreview=orTheme;themePreviewId=id;orTheme=id;applyOrSkin();try{playSfx("special");(window.__rsBuildMenu||buildMenu)();}catch{}}
-  function exitThemePreview(){if(!themePreviewId)return;orTheme=themeBeforePreview||orTheme;themePreviewId=null;themeBeforePreview=null;applyOrSkin();(window.__rsBuildMenu||buildMenu)();}
-  function applyThemeVolume(v){themeVolume=Math.max(0,Math.min(100,Number(v)||0));try{chrome.storage.local.set({rsThemeVolume:themeVolume});}catch{}}
-  function setMemeEffects(v){memeEffects=["full","reduced","off"].includes(v)?v:"full";applyOrSkin();try{chrome.storage.local.set({rsMemeEffects:memeEffects});}catch{} }
-  function setMemeIntensity(v){memeIntensity=["low","medium","maximum"].includes(v)?v:"medium";applyOrSkin();try{chrome.storage.local.set({rsMemeIntensity:memeIntensity});}catch{} }
   function setSounds(v) {
     soundOn = !!v;
     try { chrome.storage.local.set({ rsSounds: soundOn }); } catch {}
@@ -662,7 +649,6 @@
     const th = OR_THEMES[id]; if (!th) continue;
     th.sound = Object.assign({}, th.sound || {}, { pack: id, label: pack.label, effects: SFX_KINDS.map((name) => ({ name })) });
   }
-  const SFX_LABELS = { start: "▶ start", done: "✓ done", stop: "■ stop", error: "✕ error", ok: "· ok", click: "click", special: "★ signature" };
 
   // kind: one of SFX_KINDS. themeId: optional — preview another theme's pack
   // from the picker without switching to it.
@@ -917,7 +903,6 @@
     studio:{title:"Roblox Studio connection",summary:"The browser extension talks to the or-core desktop agent on 127.0.0.1:3000, which bridges to Studio through the Studio MCP helper and the optional ORscript Studio plugin.",details:["Run or-core (agent/ crate, cargo build) once; it stays in the background and auto-installs plugin/ORscript.lua into the Studio Plugins folder.","In Studio: Plugins → ORscript panel → enable; click Allow on the HTTP prompt. The plugin runs execute_luau with plugin-level APIs and adds csg_*, open_script, script_live_update, studio_undo/redo, screenshot_frame, gamepass_handler_create…","or_status / studio_plugin_status report the connection; or_screenshot captures the Studio window through the MCP screen_capture tool."],howTo:["Start or-core","Open the place in Studio and enable the ORscript plugin","Check the status pill in the OR bar is green, then chat"]},
     workmode:{title:"Work mode: Creation",summary:"Since 1.39.0 there is ONE built-in work mode, Creation: the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. Custom Public-Skill modes layer their own mandate on top of it.",details:["Creation runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → or_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Creation automatically; custom modes created on an old base keep working on Creation.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send."],howTo:["OR menu → Work mode → Creation (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
     projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .orscript-project-reference.json you can re-import."],howTo:["OR menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
-    themes:{title:"Themes & appearance",summary:"16 themes with CSS backgrounds, swatch previews, per-theme corner decorations, gradient pill buttons and optional sound effects - applied to the ORscript UI only, never to the host site.",details:["OR menu → Theme. Each theme ships its own background, accent tokens (--orx-*), decorations and SFX set.","Sounds and decorations can be toggled independently in Settings.","VoidScript is OrScript's partner visual identity used by the Void theme family."],howTo:["OR menu → Theme → pick a swatch"]},
     permissions:{title:"Permissions",summary:"Sandbox (Studio + workspace only, no prompts), Ask (confirm writes, publishes and PC access with an approval card) or Full (entire PC via or-core).",details:["Sandbox is the default and never asks - ideal for Studio-only work.","Ask shows an approval card above the page for execute_luau, file writes, publishes and marketplace changes; it auto-denies after 120 s so a hidden card cannot stall the agent.","Full unlocks PC-wide file/terminal tools (OR_FULL_ACCESS in or-core). Publish/marketplace automation additionally requires the 'Allow publish automation' switch."],howTo:["OR menu → Permissions → Sandbox / Ask / Full"]},
     providers:{title:"Chat providers",summary:"ORscript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Meta, NVIDIA, Arena, Notion, Vani, ClickUp Brain, Crax, OxAlpha, MultiChat and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["ClickUp Brain (app.clickup.com) is the AI inside the ClickUp workspace: open Brain (sidebar AI / Ask AI) so its message box is visible - ORscript attaches to that box only, never to task, comment or Doc editors - then press Start. Brain gets the compact catalogue and is told to answer in chat only (no ClickUp task/doc actions).","CodeCraft API (codecraftapi.com) has no web chat, so ORscript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","Compact composers (Notion, Vani, ClickUp Brain, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the OR bar appears above the composer"]},
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the ORscript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the ORscript bus (shared.ORscript.register / CoreGui.ORscriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - ORscript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends an ORscript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure or-core and the ORscript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
@@ -4740,7 +4725,6 @@
           } catch {}
           A.toolRunning = false;
           diag("tool.done", { name: call.tool,requestId:A.activeRequestId,durationMs:Date.now()-A.toolStart, ok: !feedback.startsWith("ERROR"), out: feedback.slice(0, 50) });
-          try { recordSessionTool(call.tool, call.arguments, feedback); } catch {}
           if (A.stop) {
             // User halted mid-tool: settle the spinning chip so it doesn't look
             // stuck loading forever, and MARK the turn so the sweep classifier
@@ -4890,7 +4874,6 @@
     } finally {
       const steeringWasStopped = !!(A.stop || A.userStopped);
       try { playSfx(A.stop ? "stop" : (A._sfxErr ? "error" : "done")); A._sfxErr = false; } catch {}
-      try { flushSessionRecap(); } catch {}
       A.running = false;
       A.stop = false;
       // Keep the "Stopping…" state while the site's stream is still draining
@@ -5099,7 +5082,6 @@
       const text = RS.buildSystemPrompt({
         siteName: P.displayName,
         customPrompt: ui.getCustomPrompt(),
-        memory: ui.getCustomMemory(),
         providerNotes: P.promptExtra || "",
         providerId: P.id,
         engine,
@@ -5320,40 +5302,7 @@
   // ════════════════════════════════════════════════════════════════════════
   //  SESSION BOOTSTRAP  ("Starting Up" animated chip, shown in the conversation)
   // ════════════════════════════════════════════════════════════════════════
-  // Stable bridge between the session controller and the settings-owned memory.
-  // Keep this at the controller scope: settings UI is mounted in a nested scope,
-  // so calling its local helper from startup can otherwise produce a ReferenceError.
-  function clearTaskMemory() {
-    try {
-      if (typeof window.__rsClearTaskMemory === "function") { window.__rsClearTaskMemory(); return; }
-      chrome.storage.local.get("rsCustomMemory", (r) => {
-        const m = r && r.rsCustomMemory;
-        if (m && typeof m === "object" && m.task) chrome.storage.local.set({ rsCustomMemory: { ...m, task: "" } });
-      });
-    } catch {}
-  }
-
-  // ═════════════════════════════════════════════════════════════════
-  //  AUTO SESSION RECAP (memory that writes itself)
-  //  The user-maintained coding memory only knows what the user typed into it.
-  //  Everything the agent actually DID in a session - which scripts it edited,
-  //  which commands it leaned on, what failed - evaporated with the chat. This
-  //  recorder keeps a compact, factual trail of the last few sessions in
-  //  chrome.storage (rsAutoMemory) and the system prompt surfaces it as a
-  //  read-only "Recent sessions" block, so a fresh chat starts with continuity
-  //  ("last time you edited ServerScriptService.Main and the lint pass was
-  //  clean") instead of from zero. Opt-out: rsAutoRecap=false (menu toggle).
-  const RECAP_MAX_SESSIONS = 4;
-  const RECAP_MAX_CHARS = 2200;
-  const SESSION = { startedAt: 0, count: 0, tools: Object.create(null), touched: new Set(), errors: [], last: "", place: "" };
-  let autoRecap = [];
-  let autoRecapEnabled = true;
-  try {
-    chrome.storage.local.get(["rsAutoMemory", "rsAutoRecap"], (r) => {
-      if (r && Array.isArray(r.rsAutoMemory)) autoRecap = r.rsAutoMemory.slice(0, RECAP_MAX_SESSIONS);
-      if (r && r.rsAutoRecap === false) autoRecapEnabled = false;
-    });
-  } catch {}
+  // Repeat guard: the same failing call sent twice in a row gets a loop-guard rider.
   const REPEAT = { sig: "", count: 0 };
   function applyRepeatGuard(call, feedback) {
     const text = String(feedback || "");
@@ -5367,75 +5316,6 @@
     diag("tool.repeatFail", { name: call.tool, n });
     return text + `\n\n[LOOP GUARD] This exact call (same command, same parameters) has now failed ${n} times in a row. Do NOT send it again unchanged.${n >= 3 ? " Stop retrying it." : ""} Change the approach: read the current state first (script_read / inspect_instance / get_studio_state), fix the parameter the error names, split the step into smaller commands, or use a different command. If it genuinely cannot be done, tell the user what blocks it instead of retrying.`;
   }
-  function sessionTouchedPath(tool, args) {
-    if (!args || typeof args !== "object") return "";
-    const bare = bareToolName(tool);
-    if (/^(script_|multi_edit|memory_|model_)/.test(bare) || /_(set|create|add|apply|paint|fix)$/.test(bare)) {
-      const v = args.path || args.script || args.root || args.parent_path || args.name || "";
-      return typeof v === "string" ? v.slice(0, 80) : "";
-    }
-    return "";
-  }
-  function recordSessionTool(tool, args, feedback) {
-    if (!autoRecapEnabled || !tool) return;
-    if (!SESSION.startedAt) SESSION.startedAt = Date.now();
-    const bare = bareToolName(tool) || tool;
-    SESSION.count++;
-    SESSION.tools[bare] = (SESSION.tools[bare] || 0) + 1;
-    const touched = sessionTouchedPath(tool, args);
-    if (touched && SESSION.touched.size < 12) SESSION.touched.add(touched);
-    const text = String(feedback || "");
-    if (/^\s*ERROR\b/.test(text)) {
-      const first = text.split("\n")[0].replace(/\s+/g, " ").slice(0, 140);
-      if (!SESSION.errors.includes(first)) { SESSION.errors.push(first); if (SESSION.errors.length > 3) SESSION.errors.shift(); }
-    } else if (bare !== "list_commands") {
-      SESSION.last = bare;
-      if (!SESSION.place && /^(get_studio_state|place_info|game_stats|inspect_workspace)$/.test(bare)) {
-        const m = text.match(/"(?:placeName|PlaceName|place_name|name)"\s*:\s*"([^"]{1,60})"/) || text.match(/\bPlace(?:Name| name)?\s*[:=]\s*"?([^"\n,}]{1,60})/i);
-        if (m && m[1] && !/^\d+$/.test(m[1].trim())) SESSION.place = m[1].trim();
-      }
-    }
-  }
-  function flushSessionRecap() {
-    if (!autoRecapEnabled || SESSION.count < 2) { Object.assign(SESSION, { startedAt: 0, count: 0, tools: Object.create(null), touched: new Set(), errors: [], last: "", place: "" }); return; }
-    const top = Object.entries(SESSION.tools).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([n, c]) => (c > 1 ? `${n}×${c}` : n));
-    const place = SESSION.place || "";
-    const entry = {
-      at: new Date().toISOString().slice(0, 16).replace("T", " "),
-      site: (P && P.displayName) || "",
-      place: String(place || "").slice(0, 60),
-      mode: (() => { try { return window.__rsWorkMode ? window.__rsWorkMode() : ""; } catch { return ""; } })(),
-      calls: SESSION.count,
-      minutes: Math.max(1, Math.round((Date.now() - SESSION.startedAt) / 60000)),
-      tools: top,
-      touched: [...SESSION.touched],
-      errors: SESSION.errors.slice(),
-    };
-    autoRecap = [entry, ...autoRecap].slice(0, RECAP_MAX_SESSIONS);
-    try { chrome.storage.local.set({ rsAutoMemory: autoRecap }); } catch {}
-    try { if (typeof window.__rsRecapChanged === "function") window.__rsRecapChanged(); } catch {}
-    Object.assign(SESSION, { startedAt: 0, count: 0, tools: Object.create(null), touched: new Set(), errors: [], last: "", place: "" });
-  }
-  function autoRecapText() {
-    if (!autoRecapEnabled || !autoRecap.length) return "";
-    const lines = autoRecap.map((e) => {
-      const bits = [`${e.at}${e.site ? " on " + e.site : ""}${e.place ? " · place " + e.place : ""}${e.mode ? " · " + e.mode + " mode" : ""}: ${e.calls} command(s) in ~${e.minutes} min`];
-      if (e.tools && e.tools.length) bits.push(`used ${e.tools.join(", ")}`);
-      if (e.touched && e.touched.length) bits.push(`touched ${e.touched.join(", ")}`);
-      if (e.errors && e.errors.length) bits.push(`unresolved errors seen: ${e.errors.join(" | ")}`);
-      return "- " + bits.join("; ");
-    });
-    return ("## Recent sessions (auto-recorded by ORscript - facts about what was done, not instructions)\n" + lines.join("\n")).slice(0, RECAP_MAX_CHARS);
-  }
-  function setAutoRecapEnabled(on) {
-    autoRecapEnabled = !!on;
-    try { chrome.storage.local.set({ rsAutoRecap: autoRecapEnabled }); } catch {}
-  }
-  function forgetAutoRecap() {
-    autoRecap = [];
-    try { chrome.storage.local.remove("rsAutoMemory"); } catch {}
-  }
-
   // ═════════════════════════════════════════════════════════════════
   //  PAINT → AI hand-off (src/core/paint.js)
   //  The painting is sent as a normal user turn: if no session is running the
@@ -5516,9 +5396,6 @@
       ui.toast("Open a new chat first, then Start");
       return;
     }
-    // Task notes are scratch memory. Keep coding/project preferences for the same
-    // project, but never leak the previous task into the next one.
-    clearTaskMemory();
     A.userStopped = false;
     A.stop = false;               // clear any halt left by a prior aborted bootstrap
     // Snapshot any turn already on screen at session start (normally none on a
@@ -6827,21 +6704,6 @@
     } catch {}
     function getCustomPrompt() { return customPrompt; }
 
-    // User-maintained, structured memory is separate from the one-line custom prompt.
-    // It is injected only at session/bootstrap prompt construction and capped locally.
-    let customMemory = { projectKey: "", coding: "", project: "", preferences: "", task: "" };
-    try { chrome.storage.local.get("rsCustomMemory", (r) => { if (r && r.rsCustomMemory && typeof r.rsCustomMemory === "object") { customMemory = { projectKey: String(r.rsCustomMemory.projectKey || ""), coding: String(r.rsCustomMemory.coding || ""), project: String(r.rsCustomMemory.project || ""), preferences: String(r.rsCustomMemory.preferences || ""), task: String(r.rsCustomMemory.task || "") }; syncMenuMemory(); } }); } catch {}
-    function memoryText() { return [ ["Coding standards", customMemory.coding], ["Project context", customMemory.project], ["Preferences", customMemory.preferences], ["Current task notes", customMemory.task] ].filter(([,v]) => v.trim()).map(([k,v]) => `## ${k}\n${v.trim()}`).join("\n\n").slice(0, 12000); }
-    function getCustomMemory() {
-      const own = memoryText();
-      let recap = "";
-      try { recap = typeof autoRecapText === "function" ? autoRecapText() : ""; } catch {}
-      return [own, recap].filter(Boolean).join("\n\n").slice(0, 12000);
-    }
-    function syncMenuMemory() { if (!menuEl) return; for (const [id,key] of [["rs-mem-key","projectKey"],["rs-mem-coding","coding"],["rs-mem-project","project"],["rs-mem-preferences","preferences"],["rs-mem-task","task"]]) { const el=menuEl.querySelector(`#${id}`); if (el && document.activeElement !== el) el.value=customMemory[key] || ""; } }
-    function clearTaskMemory() { if (!customMemory.task.trim()) return; customMemory.task=""; try { chrome.storage.local.set({ rsCustomMemory: customMemory }); } catch {} }
-    try { window.__rsClearTaskMemory = clearTaskMemory; } catch {}
-    function switchMemoryProject(nextKey) { const key=String(nextKey || "").trim(); if (key && customMemory.projectKey && key !== customMemory.projectKey) { customMemory.project=""; customMemory.task=""; } customMemory.projectKey=key; }
     const DEFAULT_KEYBINDS = { menu: "Ctrl+Shift+O", start: "Ctrl+Enter", voice: "Ctrl+Shift+V", templates: "Ctrl+Shift+T" };
     let keybinds = { ...DEFAULT_KEYBINDS };
     try { chrome.storage.local.get("rsKeybinds", r => { if (r && r.rsKeybinds) { keybinds = { ...DEFAULT_KEYBINDS, ...r.rsKeybinds }; syncKeybindInputs(); } }); } catch {}
@@ -6975,11 +6837,6 @@
         if (changes.rsPermMode && ["sandbox","ask","full"].includes(changes.rsPermMode.newValue)) {
           permMode = changes.rsPermMode.newValue;
           try { window.__rsPermMode = () => permMode; } catch {}
-          dirty = true;
-        }
-        if (changes.rsTheme && OR_THEMES[changes.rsTheme.newValue]) {
-          orTheme = changes.rsTheme.newValue;
-          try { applyOrSkin(); } catch {}
           dirty = true;
         }
         if (changes.rsSounds && typeof changes.rsSounds.newValue === "boolean") {
@@ -7627,19 +7484,6 @@
                 <button type="button" class="rs-work-card ${permMode==="full"?"on":""}" data-perm="full"><span class="rs-work-name">Full</span><span class="rs-work-sub">All PC files + processes</span></button>
               </div>
             </section>
-            <section class="rs-menu-sec rs-theme-sec">
-              <div class="rs-sec-label"><span>Themes</span><span class="rs-sec-state">${Object.keys(OR_THEMES).length} looks · ${Object.keys(OR_THEMES).filter(id=>OR_THEMES[id].sound?.effects).length} sound packs</span></div>
-              <div class="rs-menu-note">${(OR_THEMES[orTheme] && OR_THEMES[orTheme].blurb) || "Pick a chrome skin. Colors, glows, and labels all follow it."}</div>
-              <div class="rs-work-row rs-theme-row">
-                ${Object.keys(OR_THEMES).map((id) => {
-                  const th = OR_THEMES[id];
-                  let art = "";
-                  try { art = chrome.runtime.getURL("ui/swatch-" + id + ".jpg"); } catch (e) {}
-                  return `<article class="rs-work-card rs-theme-card ${orTheme===id?"on":""}" data-theme-card="${id}" role="button" tabindex="0" aria-label="Select ${th.name}"><span class="rs-theme-art"${art ? ` style="background-image:url('${art}')"` : ""}></span><span class="rs-work-glyph">${th.glyph||""}</span><span class="rs-work-name">${th.name}</span><span class="rs-work-sub">${th.sub}</span></article>`;
-                }).join("")}
-              </div>
-              <div class="rs-theme-tools">${themePreviewId?`<button type="button" data-theme-exit-preview>Exit preview</button>`:""}<button type="button" data-theme-random>🎲 Surprise Me</button><div class="rs-theme-sound-list" aria-label="Sound pack preview">${OR_THEMES[orTheme]?.sound?.label?`<span class="rs-theme-sound-name">♪ ${OR_THEMES[orTheme].sound.label}</span>`:""}${(OR_THEMES[orTheme]?.sound?.effects||[]).map(e=>`<button type="button" data-theme-sound-preview="${orTheme}" data-effect="${e.name}" title="Play the ${e.name} sound">${SFX_LABELS[e.name]||e.name}</button>`).join("")}</div><label>Theme Sounds <input type="checkbox" data-theme-sounds ${soundOn?"checked":""}></label><label>Volume <input type="range" min="0" max="100" value="${themeVolume}" data-theme-volume></label><label>Effects <select data-meme-effects><option ${memeEffects==="full"?"selected":""}>full</option><option ${memeEffects==="reduced"?"selected":""}>reduced</option><option ${memeEffects==="off"?"selected":""}>off</option></select></label><label>Intensity <select data-meme-intensity><option ${memeIntensity==="low"?"selected":""}>low</option><option ${memeIntensity==="medium"?"selected":""}>medium</option><option ${memeIntensity==="maximum"?"selected":""}>maximum</option></select></label></div>
-            </section>
           <section class="rs-menu-sec">
             <div class="rs-sec-label"><span>Agent modes</span></div>
             <div class="rs-tgl-row" data-mode="bgmode" role="switch" aria-checked="${bgMode}" tabindex="0">
@@ -7683,20 +7527,6 @@
               <label>Templates <input data-keybind="templates" value="${keybinds.templates}" readonly></label>
             </div>
             <div class="rs-menu-note">Shortcuts work anywhere outside a text field. Voice coding remains opt-in and only starts after its shortcut is pressed.</div>
-          </section>
-          <section class="rs-menu-sec rs-memory-sec">
-            <div class="rs-sec-label"><span>Coding memory</span><span class="rs-sec-state">private · local</span></div>
-            <div class="rs-menu-note">Project memory stays across tasks for the same project. Task notes are cleared automatically when you start the next task. Keep this factual — never store secrets.</div>
-            <label class="rs-memory-label">Project key<textarea id="rs-mem-key" rows="1" placeholder="e.g. MyGame / place name / team project key"></textarea></label>
-            <label class="rs-memory-label">Coding standards<textarea id="rs-mem-coding" rows="3" placeholder="Luau style, naming, architecture, testing rules…"></textarea></label>
-            <label class="rs-memory-label">Project context<textarea id="rs-mem-project" rows="3" placeholder="Important systems, paths, services, constraints…"></textarea></label>
-            <label class="rs-memory-label">Preferences<textarea id="rs-mem-preferences" rows="2" placeholder="How you want plans, code, and explanations delivered…"></textarea></label>
-            <label class="rs-memory-label">Current task notes<textarea id="rs-mem-task" rows="2" placeholder="Temporary context for this task only…"></textarea></label>
-            <div class="rs-set-row"><button id="rs-mem-save">Save memory</button><span id="rs-mem-status"></span></div>
-            <div class="rs-sec-label"><span>Session recap</span><span class="rs-sec-state">auto · local</span></div>
-            <div class="rs-menu-note">ORscript records what each session actually did (commands used, scripts touched, errors seen) and shows the last few to the AI as read-only context. In Studio the AI also keeps the shared handbook at ServerStorage.RobloxScript.Memory via the memory_* commands.</div>
-            <pre id="rs-mem-recap" class="rs-mem-recap"></pre>
-            <div class="rs-set-row"><label class="rs-chk"><input type="checkbox" id="rs-mem-recap-on"> Auto-record session recap</label><button id="rs-mem-recap-forget">Forget sessions</button></div>
           </section>
           <section class="rs-menu-sec">
             <div class="rs-sec-label"><span>Custom prompt</span></div>
@@ -7746,35 +7576,6 @@
         try { chrome.storage.local.set({ rsCustomPrompt: customPrompt }); } catch {}
         if (status) status.textContent = "Saved ✓";
         setTimeout(() => { if (status) status.textContent = ""; }, 1600);
-      });
-      syncMenuMemory();
-      const paintRecap = () => {
-        const pre = menuEl.querySelector("#rs-mem-recap");
-        const chk = menuEl.querySelector("#rs-mem-recap-on");
-        if (chk) chk.checked = autoRecapEnabled;
-        if (!pre) return;
-        let txt = "";
-        try { txt = autoRecapEnabled ? (autoRecap.length ? autoRecapText().split("\n").slice(1).join("\n") : "No sessions recorded yet - run the agent once.") : "Auto recap is off."; } catch { txt = ""; }
-        pre.textContent = txt;
-      };
-      paintRecap();
-      try { window.__rsRecapChanged = paintRecap; } catch {}
-      const recapChk = menuEl.querySelector("#rs-mem-recap-on");
-      if (recapChk) recapChk.addEventListener("change", () => { setAutoRecapEnabled(recapChk.checked); paintRecap(); });
-      const recapForget = menuEl.querySelector("#rs-mem-recap-forget");
-      if (recapForget) recapForget.addEventListener("click", () => { forgetAutoRecap(); paintRecap(); toast("Session recap cleared"); });
-      const memSave = menuEl.querySelector("#rs-mem-save");
-      const memStatus = menuEl.querySelector("#rs-mem-status");
-      if (memSave) memSave.addEventListener("click", () => {
-        const nextKey = menuEl.querySelector("#rs-mem-key")?.value || "";
-        switchMemoryProject(nextKey);
-        customMemory.coding = menuEl.querySelector("#rs-mem-coding")?.value || "";
-        customMemory.project = menuEl.querySelector("#rs-mem-project")?.value || "";
-        customMemory.preferences = menuEl.querySelector("#rs-mem-preferences")?.value || "";
-        customMemory.task = menuEl.querySelector("#rs-mem-task")?.value || "";
-        try { chrome.storage.local.set({ rsCustomMemory: customMemory }); } catch {}
-        if (memStatus) memStatus.textContent = "Saved locally ✓";
-        setTimeout(() => { if (memStatus) memStatus.textContent = ""; }, 1800);
       });
       syncKeybindInputs();
       menuEl.querySelectorAll("[data-keybind]").forEach(input => {
@@ -7960,13 +7761,6 @@
       menuEl.querySelectorAll("[data-work]").forEach(btn=>{
         btn.addEventListener("click", () => setWorkMode(btn.dataset.work));
       });
-      menuEl.querySelectorAll("[data-theme-card]").forEach(card=>{const select=()=>{setOrTheme(card.dataset.themeCard);themePreviewId=null;themeBeforePreview=null;try{buildMenu();toast("Theme: "+OR_THEMES[orTheme].name);playSfx("click");}catch{}};card.addEventListener("click",select);card.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select();}});});
-      menuEl.querySelector("[data-theme-random]")?.addEventListener("click",()=>{const ids=Object.keys(OR_THEMES).filter(id=>OR_THEMES[id].sound?.effects);previewOrTheme(ids[Math.floor(Math.random()*ids.length)]);});
-      menuEl.querySelector("[data-theme-sounds]")?.addEventListener("change",e=>setSounds(e.target.checked));
-      menuEl.querySelectorAll("[data-theme-sound-preview]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();playSfx(b.dataset.effect,b.dataset.themeSoundPreview);}));
-      menuEl.querySelector("[data-theme-volume]")?.addEventListener("input",e=>applyThemeVolume(e.target.value));
-      menuEl.querySelector("[data-meme-effects]")?.addEventListener("change",e=>setMemeEffects(e.target.value));
-      menuEl.querySelector("[data-meme-intensity]")?.addEventListener("change",e=>setMemeIntensity(e.target.value));
       menuEl.querySelectorAll("[data-perm]").forEach(btn=>{
         btn.addEventListener("click", () => {
           setPermMode(btn.dataset.perm);
@@ -10199,7 +9993,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     }
 
     build();
-    return { setStatus, staleExtensionAlert, setStarted, setStarting, showStop, markStopping, inputCover, toast, banner, showImages, nudgeStart, updateStartGate, refreshSetup, getCustomPrompt, getCustomMemory, getCustomMcpServers, trackCard, hideCardEmbed, steeringProgress, takeSteeringSteering, peekSteeringSteering, clearSteeringSteering, syncSteeringUi, openMenu: (toSupport) => openMenuFn && openMenuFn(toSupport) };
+    return { setStatus, staleExtensionAlert, setStarted, setStarting, showStop, markStopping, inputCover, toast, banner, showImages, nudgeStart, updateStartGate, refreshSetup, getCustomPrompt, getCustomMcpServers, trackCard, hideCardEmbed, steeringProgress, takeSteeringSteering, peekSteeringSteering, clearSteeringSteering, syncSteeringUi, openMenu: (toSupport) => openMenuFn && openMenuFn(toSupport) };
   })();
 
   // ── Live token + timer, shown ONLY on a tool call's chip detail. The

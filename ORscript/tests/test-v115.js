@@ -24,11 +24,11 @@ ok("glass has @supports fallback", cssSrc.includes("@supports not") && cssSrc.in
 
 for (const id of THEMES) {
   ok("overlay theme " + id, cssSrc.includes(`html[data-rs-theme="${id}"]`));
-  ok("popup theme card " + id, popupHtml.includes(`id="theme-${id}"`));
+  ok("popup theme card removed " + id, !popupHtml.includes(`id="theme-${id}"`));
 }
 ok("overlay applyOrSkin writes data-rs-theme", mainSrc.includes('setAttribute("data-rs-theme", orTheme)'));
 ok("overlay brand supports appearance identity", mainSrc.includes("rs-cluster-left") && mainSrc.includes("productName()") && mainSrc.includes("data-rs-brand"));
-ok("popup html data-theme", popupJs.includes('setAttribute("data-theme", settings.theme)'));
+ok("popup html data-theme pinned", popupJs.includes('setAttribute("data-theme", "night")') && popupHtml.includes('<html data-theme="night">'));
 
 ok("discord invite overlay", mainSrc.includes("https://discord.gg/YqVZaZYuy") && mainSrc.includes("rs-discord"));
 ok("discord invite popup", popupHtml.includes('id="discord"') && popupJs.includes("https://discord.gg/YqVZaZYuy"));
@@ -66,9 +66,9 @@ ok("persona gone from prompt builder", !cfgSrc.includes("PERSONA: BUILDER") && !
 ok("blender MCP connect in menu", mainSrc.includes("blender_connect") && mainSrc.includes("rs-mcp-blender") && !mainSrc.includes("uvx blender-mcp"));
 ok("blender disconnect button", mainSrc.includes("rs-mcp-blender-off") && mainSrc.includes("blender_disconnect"));
 ok("blender prompt when connected", cfgSrc.includes("BLENDER MCP IS CONNECTED") && cfgSrc.includes("Start MCP Server"));
-ok("theme ornaments exist", cssSrc.includes("rs-ornament") && popupHtml.includes("theme-art") && mainSrc.includes("glyph"));
+ok("theme ornaments exist", cssSrc.includes("rs-ornament") && !popupHtml.includes("theme-art") && mainSrc.includes("glyph"));
 ok("popup illustrated hero", popupHtml.includes("ui/hero.jpg") && popupHtml.includes("assets/icon.png") && popupHtml.includes("class=\"hero\""));
-ok("popup theme photographs", ["night","blood-moon","sakura","starglaze","autumn"].every((id) => popupHtml.includes("swatch-" + id + ".jpg")));
+ok("popup theme photographs gone", ["blood-moon","sakura","starglaze","autumn"].every((id) => !popupHtml.includes("swatch-" + id + ".jpg")));
 ok("overlay atelier skin", cssSrc.includes("atelier skin 1.17.12"));
 ok("overlay float is a card not a capsule", cssSrc.includes("not a stretched capsule") && cssSrc.includes("border-radius: 18px"));
 ok("overlay panels revamp", cssSrc.includes("atelier panels 1.17.13"));
@@ -78,15 +78,15 @@ ok("user template interface", cssSrc.includes("User-owned Templates v2") && main
 ok("no motion tab", !mainSrc.includes('data-tab="motion"') && !mainSrc.includes("MOTION_CLIPS") && !mainSrc.includes("motionBuildClip"));
 ok("ui creator removed", !mainSrc.includes('data-tab="uicreator">UI Creator') && !mainSrc.includes("UI_STYLES") && !mainSrc.includes("uiCreatorHtml") && !cssSrc.includes(".rs-ui-style") && manJs.includes('"tabs"') && bg.includes("OffscreenCanvas"));
 ok("forge gui toggle removed", !popupHtml.includes('id="tgl-forge"') && !mainSrc.includes('data-mode="forge"'));
-ok("settings theme photos 1.17.18", cssSrc.includes("settings theme photos 1.17.18") && mainSrc.includes("rs-theme-art") && mainSrc.includes("ui/swatch-") && mainSrc.includes('chrome.runtime.getURL("ui/swatch-'));
+ok("settings theme photos removed 1.39.1", !cssSrc.includes("settings theme photos 1.17.18") && !mainSrc.includes("rs-theme-art") && !mainSrc.includes('chrome.runtime.getURL("ui/swatch-'));
 ok("robux pass ids live prices", ["1941228530","1941336506","1940736510","1941672495"].every((id) => mainSrc.includes(id)) && mainSrc.includes("fillRobuxPrices") && !mainSrc.includes("1865342947") && !mainSrc.includes("ko-fi.com") && !popupHtml.includes('id="kofi"'));
 ok("setup card 1.17.19", cssSrc.includes("setup card 1.17.19") && mainSrc.includes('setupCard.id = "rs-setup"') && mainSrc.includes('id="rs-setup-tutorial"') && !mainSrc.includes("<b>AN</b> animation"));
 ok("chat gui atelier composer", fs.readFileSync(path.join(root, "popup.html"), "utf8").includes("ui/hero.jpg"));
 ok("manifest exposes ui photos", JSON.stringify(manifest).includes("ui/*.jpg"));
-ok("theme picker is settings-only", !mainSrc.includes('id="rs-theme"') && !mainSrc.includes("setOrTheme(tdot.dataset.theme)") && mainSrc.includes("rs-theme-card") && popupHtml.includes('id="theme-sakura"'));
+ok("theme picker removed everywhere", !mainSrc.includes('id="rs-theme"') && !mainSrc.includes("setOrTheme(") && !mainSrc.includes("rs-theme-card") && !popupHtml.includes('id="theme-sakura"'));
 ok("chat bar still skins by theme", ["night","blood-moon","sakura","starglaze","autumn"].every((id) => cssSrc.includes('data-rs-theme="' + id + '"] #rs-bar')));
 ok("sharp edges on overlay chrome", cssSrc.includes("sharp edges 1.17.15") && cssSrc.includes("border-radius: 4px !important"));
-ok("applyOrSkin syncs settings theme cards", mainSrc.includes(".rs-theme-card") && mainSrc.includes("data-or-theme"));
+ok("applyOrSkin still tags the bar", !mainSrc.includes(".rs-theme-card") && mainSrc.includes("data-or-theme"));
 
 ok("mode lock SYSTEM_STATE", mainSrc.includes("MODE LOCK:") && mainSrc.includes("ENGINE=${eng}") && mainSrc.includes('name === "or_status"'));
 ok("think button on bar", mainSrc.includes('id="rs-extra"') && mainSrc.includes("Think ON") && mainSrc.includes("grill every") && !mainSrc.includes("<span>Image to model</span>") && !mainSrc.includes("<span>Thinking</span>"));
@@ -134,7 +134,7 @@ ok("deepseek screenshot always on", dsSrc.includes("get supportsVision() { retur
 
 // 1.18.1 additions
 const shotSrc = fs.readFileSync(path.join(root, "src/core/screenshot.js"), "utf8");
-ok("pixelated theme wired", cssSrc.includes('html[data-rs-theme="pixelated"]') && mainSrc.includes("pixelated:") && popupHtml.includes('id="theme-pixelated"') && popupJs.includes('"pixelated"') && fs.existsSync(path.join(root, "ui/swatch-pixelated.jpg")));
+ok("pixelated theme wired", cssSrc.includes('html[data-rs-theme="pixelated"]') && mainSrc.includes("pixelated:") && !popupHtml.includes('id="theme-pixelated"') && !popupJs.includes('"pixelated"') && fs.existsSync(path.join(root, "ui/swatch-pixelated.jpg")));
 ok("extra theme decorations", cssSrc.includes("1.18.1 - Pixelated theme + extra per-theme decorations") && cssSrc.includes("#rs-menu::after { box-shadow: 8px 0 0 -5px #140609"));
 ok("browser detection", mainSrc.includes("function detectBrowser") && mainSrc.includes("__rsBrowserName") && cfgSrc.includes("function browserLine") && cfgSrc.includes("BROWSER: the user is chatting from") && mainSrc.includes("browser: USER_BROWSER"));
 // copilot cloud host covered removed

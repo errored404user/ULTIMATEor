@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 const DISCORD_URL = "https://discord.gg/YqVZaZYuy";
-const THEMES = ["night", "blood-moon", "sakura", "starglaze", "autumn", "pixelated", "void", "epicface", "headooh", "ragequit", "killfeed", "shitpost", "skillissue", "pogchamp", "glitchlord", "npcenergy"];
 const SUPPORTED_HOSTS = [
   "chat.deepseek.com", "deepseek.com", "chatgpt.com", "chat.openai.com",
   "claude.ai", "claude.com",
@@ -36,7 +35,6 @@ const PERM_MODES = ["sandbox", "ask", "full"];
 const settings = {
   workMode: "creation",
   permMode: "sandbox",
-  theme: "night",
   extra: false,
   forge: true,
   autofix: true,
@@ -93,16 +91,9 @@ function renderSettings() {
     const el = document.getElementById("perm-" + id);
     if (el) el.classList.toggle("on", settings.permMode === id);
   }
-  for (const id of THEMES) {
-    const el = document.getElementById("theme-" + id);
-    if (el) el.classList.toggle("on", settings.theme === id);
-  }
-  document.documentElement.setAttribute("data-theme", settings.theme);
+  document.documentElement.setAttribute("data-theme", "night");
   const logo = document.getElementById("or-logo");
-  if (logo) {
-    const names = { night: "Night", "blood-moon": "Blood Moon", sakura: "Sakura", starglaze: "Starglaze", autumn: "Autumn", pixelated: "Pixelated" };
-    logo.textContent = settings.theme==="void"?"VoidScript":"OrScript";
-  }
+  if (logo) logo.textContent = "OrScript";
   const map = [
     ["tgl-extra", settings.extra],
     ["tgl-autofix", settings.autofix],
@@ -120,11 +111,10 @@ function renderSettings() {
 async function loadSettings() {
   try {
     const r = await chrome.storage.local.get([
-      "rsWorkMode", "rsPermMode", "rsTheme", "rsSounds", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsBgMode",
+      "rsWorkMode", "rsPermMode", "rsSounds", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsBgMode",
     ]);
     if (r.rsWorkMode) settings.workMode = normalizeWorkMode(r.rsWorkMode);
     if (PERM_MODES.includes(r.rsPermMode)) settings.permMode = r.rsPermMode;
-    if (THEMES.includes(r.rsTheme)) settings.theme = r.rsTheme;
     if (typeof r.rsSounds === "boolean") settings.sounds = r.rsSounds;
     if (typeof r.rsExtraThinking === "boolean") settings.extra = r.rsExtraThinking;
     if (typeof r.rsForgeMode === "boolean") settings.forge = r.rsForgeMode;
@@ -132,13 +122,6 @@ async function loadSettings() {
     if (typeof r.rsBgMode === "boolean") settings.bg = r.rsBgMode;
   } catch {}
   renderSettings();
-}
-
-async function setTheme(id) {
-  if (!THEMES.includes(id)) return;
-  settings.theme = id;
-  renderSettings();
-  try { await chrome.storage.local.set({ rsTheme: id }); } catch {}
 }
 
 async function setPermMode(id) {
@@ -289,9 +272,6 @@ for (const id of WORK_MODES) {
 for (const id of PERM_MODES) {
   document.getElementById("perm-" + id)?.addEventListener("click", () => setPermMode(id));
 }
-for (const id of THEMES) {
-  document.getElementById("theme-" + id)?.addEventListener("click", () => setTheme(id));
-}
 function bindToggle(elId, key, field) {
   const el = document.getElementById(elId);
   if (!el) return;
@@ -310,7 +290,6 @@ try {
     if (area !== "local" || !changes) return;
     if (changes.rsWorkMode && changes.rsWorkMode.newValue) settings.workMode = normalizeWorkMode(changes.rsWorkMode.newValue);
     if (changes.rsPermMode && PERM_MODES.includes(changes.rsPermMode.newValue)) settings.permMode = changes.rsPermMode.newValue;
-    if (changes.rsTheme && THEMES.includes(changes.rsTheme.newValue)) settings.theme = changes.rsTheme.newValue;
     if (changes.rsSounds && typeof changes.rsSounds.newValue === "boolean") settings.sounds = changes.rsSounds.newValue;
     if (changes.rsExtraThinking && typeof changes.rsExtraThinking.newValue === "boolean") settings.extra = changes.rsExtraThinking.newValue;
     if (changes.rsForgeMode && typeof changes.rsForgeMode.newValue === "boolean") settings.forge = changes.rsForgeMode.newValue;

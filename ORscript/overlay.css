@@ -3507,17 +3507,6 @@ html[data-rs-theme="autumn"] #rs-dot.on { background: #f59e0b !important; box-sh
 }
 #rs-discord:hover { background: rgba(88,101,242,.22); color: #fff; border-color: rgba(88,101,242,.45); transform: translateY(-0.5px); }
 #rs-discord svg { display: block; }
-
-.rs-theme-row { grid-template-columns: 1fr 1fr 1fr; }
-.rs-theme-card .rs-work-swatch {
-  display: block; height: 8px; border-radius: 999px; margin-bottom: 4px;
-  background: linear-gradient(90deg, var(--sw1), var(--sw2));
-}
-.rs-theme-card[data-theme="night"] { --sw1:#e8e0d4; --sw2:#6d6d78; }
-.rs-theme-card[data-theme="blood-moon"] { --sw1:#e11d48; --sw2:#7f1d1d; }
-.rs-theme-card[data-theme="sakura"] { --sw1:#f9a8d4; --sw2:#9d174d; }
-.rs-theme-card[data-theme="starglaze"] { --sw1:#67e8f9; --sw2:#6366f1; }
-.rs-theme-card[data-theme="autumn"] { --sw1:#f59e0b; --sw2:#7c2d12; }
 html[data-rs-theme]:not([data-rs-theme="night"])[data-rs-glass="true"] #rs-bar {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--or-accent) 16%, transparent), transparent 42%),
@@ -3662,8 +3651,6 @@ html[data-rs-theme="autumn"] .rs-menu-logo { letter-spacing: .3em; }
   display: block; font-size: 13px; line-height: 1; margin-bottom: 4px;
   color: var(--or-accent, #e8e0d4);
 }
-.rs-theme-card { min-height: 72px; }
-.rs-theme-card .rs-work-swatch { height: 10px !important; }
 
 .rs-tgl-row {
   background: rgba(0,0,0,.16);
@@ -4734,33 +4721,6 @@ html[data-rs-theme] #rs-stop {
   border-color: var(--or-line) !important;
 }
 
-.rs-theme-row {
-  grid-template-columns: 1fr 1fr !important;
-  gap: 8px !important;
-}
-.rs-theme-card {
-  padding: 0 0 9px !important;
-  overflow: hidden !important;
-  border-radius: 14px !important;
-}
-.rs-theme-card .rs-work-swatch {
-  height: 54px !important;
-  border-radius: 0 !important;
-  margin: 0 0 7px !important;
-  background-size: cover !important;
-  background-position: center !important;
-  filter: saturate(1.15);
-}
-.rs-theme-card[data-theme="night"] .rs-work-swatch { background-image: url(ui/swatch-night.jpg) !important; }
-.rs-theme-card[data-theme="blood-moon"] .rs-work-swatch { background-image: url(ui/swatch-blood-moon.jpg) !important; }
-.rs-theme-card[data-theme="sakura"] .rs-work-swatch { background-image: url(ui/swatch-sakura.jpg) !important; }
-.rs-theme-card[data-theme="starglaze"] .rs-work-swatch { background-image: url(ui/swatch-starglaze.jpg) !important; }
-.rs-theme-card[data-theme="autumn"] .rs-work-swatch { background-image: url(ui/swatch-autumn.jpg) !important; }
-.rs-theme-card .rs-work-name, .rs-theme-card .rs-work-sub, .rs-theme-card .rs-work-glyph { padding: 0 9px; }
-.rs-theme-card.on {
-  box-shadow: 0 0 0 1px var(--or-accent) inset, 0 10px 18px rgba(0,0,0,.28) !important;
-}
-
 /* ── sharp edges 1.17.15 ───────────────────────────────────────────────────
    Theme picker lives in Settings only. Chrome is clipped, not pilled. */
 #rs-theme, .rs-theme-dot { display: none !important; }
@@ -4825,8 +4785,6 @@ html[data-rs-theme="autumn"] #rs-bar.rs-bar-inline {
 #rs-engine, #rs-engine-thumb {
   border-radius: 4px !important;
 }
-.rs-theme-card { border-radius: 4px !important; overflow: hidden !important; }
-.rs-theme-card .rs-work-swatch { border-radius: 0 !important; }
 
 #rs-action, #rs-stop {
   height: 26px !important;
@@ -5105,34 +5063,6 @@ html[data-rs-theme="autumn"] #rs-bar.rs-bar-inline {
   min-height: 2.4em !important;
 }
 
-/* settings theme photos 1.17.18 */
-.rs-theme-row {
-  display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  gap: 6px !important;
-}
-.rs-theme-card {
-  padding: 0 0 8px !important;
-  overflow: hidden !important;
-  border-radius: 4px !important;
-  background: rgba(0,0,0,.35) !important;
-}
-.rs-theme-art {
-  display: block !important;
-  height: 88px !important;
-  margin: 0 0 8px !important;
-  background-color: #1a1714 !important;
-  background-size: cover !important;
-  background-position: center !important;
-  filter: saturate(1.15) contrast(1.05);
-}
-.rs-theme-card .rs-work-name,
-.rs-theme-card .rs-work-sub,
-.rs-theme-card .rs-work-glyph { padding: 0 9px !important; }
-.rs-theme-card.on {
-  box-shadow: 0 0 0 1px var(--or-accent, #e8d5b5) inset, 0 10px 18px rgba(0,0,0,.28) !important;
-}
-.rs-theme-card.on .rs-theme-art { filter: saturate(1.28) contrast(1.08); }
 .rs-motion, .rs-anim-clip, .rs-motion-clips { display: none !important; }
 
 /* setup card 1.17.19 */
@@ -5631,9 +5561,6 @@ html[data-rs-theme="night"] .rs-work-card.on {
   box-shadow: none !important;
 }
 html[data-rs-theme="night"] .rs-work-card.on .rs-work-sub { color: rgba(255,255,255,.62) !important; }
-html[data-rs-theme="night"] .rs-theme-card.on {
-  box-shadow: 0 0 0 1px rgba(255,255,255,.45) inset, 0 10px 18px rgba(0,0,0,.28) !important;
-}
 html[data-rs-theme="night"] #rs-bar::before {
   background:
     radial-gradient(circle at 18% 30%, rgba(255,255,255,.10) 0 1px, transparent 2px),
@@ -5960,9 +5887,6 @@ html[data-rs-theme="pixelated"] .rs-work-card.on {
   box-shadow: 3px 3px 0 rgba(0,0,0,.6) !important;
 }
 html[data-rs-theme="pixelated"] .rs-work-card.on .rs-work-sub { color: #0c2a17 !important; }
-html[data-rs-theme="pixelated"] .rs-theme-card.on {
-  box-shadow: 3px 3px 0 rgba(0,0,0,.6), 0 0 0 1px #58e07f inset !important;
-}
 html[data-rs-theme="pixelated"] .rs-tgl { border-radius: 0 !important; border-width: 2px !important; }
 html[data-rs-theme="pixelated"] .rs-tgl::after { border-radius: 0 !important; }
 html[data-rs-theme="pixelated"] .rs-sec-label::before,
@@ -6339,10 +6263,6 @@ html[data-rs-theme="void"] .rs-menu-logo,html[data-rs-theme="void"] .rs-cards-he
 html[data-rs-theme="void"] .rs-menu-sec{border-color:var(--void-line)!important}html[data-rs-theme="void"] .rs-sec-label{color:var(--void-text-2)!important;font-family:"Cascadia Mono",ui-monospace,monospace!important;letter-spacing:.085em!important}
 html[data-rs-theme="void"] .rs-work-card,html[data-rs-theme="void"] .rs-site-opt,html[data-rs-theme="void"] .rs-tip-opt,html[data-rs-theme="void"] .rs-mcp-item,html[data-rs-theme="void"] .rs-blender-card{position:relative;background:linear-gradient(145deg,rgba(24,31,44,.92),rgba(12,16,24,.96))!important;border:1px solid var(--void-line)!important;border-radius:7px!important;color:var(--void-text-2)!important;box-shadow:inset 0 1px rgba(255,255,255,.025)!important;transition:background-color .14s ease,border-color .14s ease,transform .14s ease!important}
 html[data-rs-theme="void"] .rs-work-card:hover,html[data-rs-theme="void"] .rs-site-opt:hover,html[data-rs-theme="void"] .rs-tip-opt:hover{background:var(--void-hover)!important;border-color:var(--void-line-strong)!important;transform:translateY(-1px)!important}html[data-rs-theme="void"] .rs-work-card.on{background:linear-gradient(100deg,var(--void-soft),rgba(16,22,32,.96) 58%)!important;border-color:rgba(255,112,72,.43)!important;box-shadow:inset 2px 0 var(--void-accent)!important}
-/* The theme gallery keeps normal dimensions: decoration is background-only. */
-html[data-rs-theme="void"] .rs-theme-sec{background:radial-gradient(circle at 88% 18%,rgba(255,151,116,.18) 0 1px,transparent 2px),radial-gradient(ellipse 70% 100% at 110% 50%,rgba(255,91,46,.12),transparent 65%),linear-gradient(rgba(150,171,203,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(150,171,203,.03) 1px,transparent 1px),rgba(9,13,20,.55)!important;background-size:97px 79px,auto,22px 22px,22px 22px,auto!important;border-top:1px solid var(--void-line)!important;border-bottom:1px solid var(--void-line)!important;box-shadow:inset 0 20px 45px rgba(255,112,72,.025)!important}
-html[data-rs-theme="void"] .rs-theme-row{position:relative}html[data-rs-theme="void"] .rs-theme-row::before{content:"";position:absolute;left:3%;right:3%;top:-5px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,112,72,.3),transparent)}
-html[data-rs-theme="void"] .rs-theme-card[data-theme="void"]{border-color:rgba(255,112,72,.44)!important;background:linear-gradient(145deg,rgba(255,112,72,.14),#0c111a 60%)!important}html[data-rs-theme="void"] .rs-theme-card[data-theme="void"] .rs-theme-art{background-image:radial-gradient(circle at 50% 50%,#ffe0d5 0 2px,transparent 3px),conic-gradient(from 24deg,transparent 0 12%,#ff7048 14% 31%,transparent 33% 49%,#ffad91 51% 70%,transparent 72%),radial-gradient(circle,#111925 0 27%,transparent 28%),linear-gradient(145deg,#1c2636,#07090e)!important;background-size:auto!important}
 html[data-rs-theme="void"] input,html[data-rs-theme="void"] textarea,html[data-rs-theme="void"] select{background:#080b11!important;border-color:var(--void-line-strong)!important;color:var(--void-text)!important;caret-color:var(--void-accent)}html[data-rs-theme="void"] input::placeholder,html[data-rs-theme="void"] textarea::placeholder{color:var(--void-muted)!important}html[data-rs-theme="void"] :focus-visible{outline:2px solid var(--void-accent)!important;outline-offset:2px!important}
 html[data-rs-theme="void"] #rs-action{background:linear-gradient(180deg,#ff805b,#e95831)!important;border-color:#ff9678!important;color:#180b07!important;box-shadow:0 5px 16px rgba(255,112,72,.14)!important}html[data-rs-theme="void"] #rs-stop{border-color:rgba(230,108,120,.45)!important;color:#ffadb5!important}html[data-rs-theme="void"] #rs-extra,html[data-rs-theme="void"] #rs-steering,html[data-rs-theme="void"] :is(#rs-settings-btn, #rs-paint-btn){background:var(--void-panel-2)!important;border-color:var(--void-line)!important;color:var(--void-text-2)!important}
 html[data-rs-theme="void"] #rs-state{color:var(--void-text-2)!important}html[data-rs-theme="void"] #rs-state::before{content:"VOID";margin-right:6px;color:var(--void-muted);font:700 7px "Cascadia Mono",monospace;letter-spacing:.12em}html[data-rs-theme="void"] .rs-state-warn .rs-state-txt{color:var(--void-bad)!important}
@@ -6562,17 +6482,6 @@ html.rs-light .rs-template-export-all{background:#fff!important;border-color:rgb
 #rs-voice.rs-voice-on { background: rgba(239,68,68,.18); border-color: rgba(248,113,113,.8); color: #fecaca; animation: rs-voice-pulse 1.35s ease-in-out infinite; }
 @keyframes rs-voice-pulse { 50% { box-shadow: 0 0 0 4px rgba(248,113,113,.10); } }
 
-/* Persistent coding memory editor */
-.rs-memory-sec { border-top: 1px solid rgba(148,163,184,.14); }
-.rs-memory-label { display:block; margin:8px 0; color:var(--rs-text, #e5e7eb); font-size:11px; }
-.rs-memory-label textarea { display:block; width:100%; box-sizing:border-box; margin-top:5px; min-height:42px; resize:vertical; border:1px solid rgba(148,163,184,.25); border-radius:7px; background:rgba(15,23,42,.55); color:inherit; padding:8px; font:inherit; line-height:1.35; }
-.rs-memory-label textarea:focus { outline:2px solid rgba(129,140,248,.45); border-color:rgba(129,140,248,.8); }
-.rs-mem-recap { margin:6px 0 8px; max-height:150px; overflow:auto; white-space:pre-wrap; word-break:break-word; border:1px solid rgba(148,163,184,.22); border-radius:7px; background:rgba(15,23,42,.45); color:var(--rs-text, #e5e7eb); opacity:.9; padding:8px; font:inherit; font-size:10.5px; line-height:1.4; }
-.rs-mem-recap:empty { display:none; }
-.rs-memory-sec .rs-chk { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--rs-text, #e5e7eb); }
-.rs-memory-sec .rs-chk input { accent-color:var(--orx-a, #f4c542); margin:0; }
-.rs-memory-sec .rs-sec-label + .rs-menu-note { margin-top:2px; }
-
 /* Customizable keyboard shortcut fields */
 .rs-keybind-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
 .rs-keybind-grid label { display:flex; flex-direction:column; gap:4px; color:var(--rs-muted,#94a3b8); font-size:10px; }
@@ -6585,7 +6494,7 @@ html.rs-light .rs-template-export-all{background:#fff!important;border-color:rgb
 
 /* Meme Theme Pack: data-driven visual tokens, isolated from runtime logic. */
 html[data-rs-theme="epicface"]{--rs-accent:#ffd84d;--rs-bg:#18243a;--rs-panel:#253b60;--rs-radius:18px;--rs-glow:rgba(255,216,77,.5);font-family:Impact,system-ui,sans-serif}html[data-rs-theme="epicface"] #rs-bar,html[data-rs-theme="epicface"] #rs-menu,html[data-rs-theme="epicface"] #rs-cards-panel{background:linear-gradient(135deg,#172a49,#426b9c)!important;border-color:#ffd84d!important;box-shadow:0 0 24px var(--rs-glow)!important}
-html[data-rs-theme="ragequit"]{--rs-accent:#ff4b22;--rs-bg:#210b0b;--rs-panel:#3b1717;--rs-radius:2px;--rs-glow:rgba(255,75,34,.55)}html[data-rs-theme="ragequit"] #rs-bar,html[data-rs-theme="ragequit"] #rs-menu{background:repeating-linear-gradient(135deg,#3a1111 0 14px,#581b13 14px 28px)!important;border-color:#ff4b22!important}html[data-rs-theme="ragequit"] .rs-theme-card:hover{transform:rotate(-1deg) scale(1.02)}
+html[data-rs-theme="ragequit"]{--rs-accent:#ff4b22;--rs-bg:#210b0b;--rs-panel:#3b1717;--rs-radius:2px;--rs-glow:rgba(255,75,34,.55)}html[data-rs-theme="ragequit"] #rs-bar,html[data-rs-theme="ragequit"] #rs-menu{background:repeating-linear-gradient(135deg,#3a1111 0 14px,#581b13 14px 28px)!important;border-color:#ff4b22!important}
 html[data-rs-theme="killfeed"]{--rs-accent:#8dff39;--rs-bg:#080d0b;--rs-panel:#142016;--rs-radius:4px;--rs-glow:rgba(141,255,57,.35);font-family:ui-monospace,monospace}html[data-rs-theme="killfeed"] #rs-bar{background:linear-gradient(90deg,#0a1710,#1c3d1b)!important;border-left:4px solid #8dff39!important}html[data-rs-theme="killfeed"] .rs-template-row{border-left:3px solid #8dff39!important}
 html[data-rs-theme="shitpost"]{--rs-accent:#ff46c8;--rs-bg:#fff200;--rs-panel:#ff8bdc;--rs-radius:0;--rs-glow:rgba(0,0,0,.5);font-family:Comic Sans MS,Impact,sans-serif}html[data-rs-theme="shitpost"] #rs-bar,html[data-rs-theme="shitpost"] #rs-menu{background:linear-gradient(117deg,#ff46c8,#43ffe0,#fff200)!important;color:#171017!important;border:3px dashed #171017!important;transform:rotate(-.4deg)}html[data-rs-theme="shitpost"] button{border:2px solid #171017!important;box-shadow:4px 4px #171017!important}
 html[data-rs-theme="skillissue"]{--rs-accent:#ff9b54;--rs-bg:#292631;--rs-panel:#403a4b;--rs-radius:12px;--rs-glow:rgba(255,155,84,.25)}html[data-rs-theme="skillissue"] #rs-bar::after{content:"skill issue detected";position:absolute;right:15px;color:#ff9b54;font:italic 11px monospace}html[data-rs-theme="skillissue"] .rs-template-empty{filter:grayscale(.35);opacity:.86}
@@ -6600,20 +6509,17 @@ html[data-rs-theme="epicface"] #rs-bar::after,html[data-rs-theme="headooh"] #rs-
 html[data-rs-theme="headooh"] #rs-bar{border:2px solid #ff315f!important;box-shadow:0 0 26px #ff315f!important}html[data-rs-theme="headooh"] .rs-template-row{border-left:4px solid #43eaff!important}html[data-rs-theme="npcenergy"] #rs-bar{filter:saturate(.55);border:1px solid #737b72!important}
 
 /* Custom generated image backgrounds for the meme pack. */
-html[data-rs-theme="epicface"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-epicface.svg");background-size:cover;background-position:center;background-attachment:fixed}html[data-rs-theme="epicface"] .rs-theme-card[data-theme="epicface"] .rs-theme-art{background-image:url("ui/theme-epicface.svg")!important;background-size:cover;background-position:center}
-html[data-rs-theme="headooh"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-headooh.svg");background-size:cover;background-position:center;background-attachment:fixed}html[data-rs-theme="headooh"] .rs-theme-card[data-theme="headooh"] .rs-theme-art{background-image:url("ui/theme-headooh.svg")!important;background-size:cover;background-position:center}
-html[data-rs-theme="ragequit"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-ragequit.svg");background-size:cover;background-position:center;background-attachment:fixed}html[data-rs-theme="ragequit"] .rs-theme-card[data-theme="ragequit"] .rs-theme-art{background-image:url("ui/theme-ragequit.svg")!important;background-size:cover;background-position:center}
-html[data-rs-theme="killfeed"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-killfeed.svg");background-size:cover;background-position:center;background-attachment:fixed}html[data-rs-theme="killfeed"] .rs-theme-card[data-theme="killfeed"] .rs-theme-art{background-image:url("ui/theme-killfeed.svg")!important;background-size:cover;background-position:center}
-html[data-rs-theme="shitpost"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-shitpost.svg");background-size:cover;background-position:center;background-attachment:fixed}html[data-rs-theme="shitpost"] .rs-theme-card[data-theme="shitpost"] .rs-theme-art{background-image:url("ui/theme-shitpost.svg")!important;background-size:cover;background-position:center}
-html[data-rs-theme="skillissue"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-skillissue.svg");background-size:cover;background-position:center;background-attachment:fixed}html[data-rs-theme="skillissue"] .rs-theme-card[data-theme="skillissue"] .rs-theme-art{background-image:url("ui/theme-skillissue.svg")!important;background-size:cover;background-position:center}
-html[data-rs-theme="pogchamp"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-pogchamp.svg");background-size:cover;background-position:center;background-attachment:fixed}html[data-rs-theme="pogchamp"] .rs-theme-card[data-theme="pogchamp"] .rs-theme-art{background-image:url("ui/theme-pogchamp.svg")!important;background-size:cover;background-position:center}
-html[data-rs-theme="glitchlord"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-glitchlord.svg");background-size:cover;background-position:center;background-attachment:fixed}html[data-rs-theme="glitchlord"] .rs-theme-card[data-theme="glitchlord"] .rs-theme-art{background-image:url("ui/theme-glitchlord.svg")!important;background-size:cover;background-position:center}
-html[data-rs-theme="npcenergy"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-npcenergy.svg");background-size:cover;background-position:center;background-attachment:fixed}html[data-rs-theme="npcenergy"] .rs-theme-card[data-theme="npcenergy"] .rs-theme-art{background-image:url("ui/theme-npcenergy.svg")!important;background-size:cover;background-position:center}
+html[data-rs-theme="epicface"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-epicface.svg");background-size:cover;background-position:center;background-attachment:fixed}
+html[data-rs-theme="headooh"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-headooh.svg");background-size:cover;background-position:center;background-attachment:fixed}
+html[data-rs-theme="ragequit"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-ragequit.svg");background-size:cover;background-position:center;background-attachment:fixed}
+html[data-rs-theme="killfeed"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-killfeed.svg");background-size:cover;background-position:center;background-attachment:fixed}
+html[data-rs-theme="shitpost"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-shitpost.svg");background-size:cover;background-position:center;background-attachment:fixed}
+html[data-rs-theme="skillissue"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-skillissue.svg");background-size:cover;background-position:center;background-attachment:fixed}
+html[data-rs-theme="pogchamp"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-pogchamp.svg");background-size:cover;background-position:center;background-attachment:fixed}
+html[data-rs-theme="glitchlord"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-glitchlord.svg");background-size:cover;background-position:center;background-attachment:fixed}
+html[data-rs-theme="npcenergy"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-npcenergy.svg");background-size:cover;background-position:center;background-attachment:fixed}
 /* Corner-safe meme decoration rails: visible over opened menus/cards, never interactive. */
 #rs-root .rs-theme-corners{position:fixed;inset:0;z-index:2147483645;pointer-events:none;overflow:hidden;display:block}#rs-root .rs-theme-corners[hidden]{display:none!important}#rs-root .rs-theme-corner{position:fixed;max-width:38vw;color:var(--rsa,#24afe2);font:900 12px/1.8 system-ui,sans-serif;letter-spacing:.12em;text-shadow:0 0 8px currentColor;opacity:.78;white-space:normal;word-spacing:.2em}#rs-root .rs-corner-tl{top:10px;left:12px;text-align:left}#rs-root .rs-corner-tr{top:10px;right:12px;text-align:right}#rs-root .rs-corner-bl{bottom:10px;left:12px;text-align:left}#rs-root .rs-corner-br{bottom:10px;right:12px;text-align:right}@media(max-width:600px){#rs-root .rs-theme-corner{font-size:9px;line-height:1.55;max-width:44vw;letter-spacing:.06em}}@media(prefers-reduced-motion:reduce){#rs-root .rs-theme-corner{transition:none!important;animation:none!important}}
-/* Premium theme cards and live preview controls */
-.rs-theme-card{position:relative;overflow:hidden;background:linear-gradient(145deg,rgba(255,255,255,.08),rgba(0,0,0,.22));transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}.rs-theme-card:hover{transform:translateY(-2px) scale(1.018);border-color:var(--rsa,#24afe2);box-shadow:0 10px 26px rgba(0,0,0,.28),0 0 18px color-mix(in srgb,var(--rsa,#24afe2) 28%,transparent)}.rs-theme-card .rs-theme-art{display:block;min-height:42px;background-size:cover!important;background-position:center!important;border-radius:7px;opacity:.9}.rs-theme-card-actions{display:flex;gap:5px;margin-top:7px}.rs-theme-card-actions button,.rs-theme-tools button,.rs-theme-sound-list button{border:1px solid rgba(255,255,255,.16);border-radius:5px;background:rgba(0,0,0,.26);color:inherit;padding:4px 7px;font-size:9px;cursor:pointer}.rs-theme-card-actions button:hover,.rs-theme-tools button:hover,.rs-theme-sound-list button:hover{background:var(--rsa,#24afe2);color:#071019}.rs-theme-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;padding:9px;border:1px solid rgba(255,255,255,.1);border-radius:8px}.rs-theme-tools label{display:inline-flex;align-items:center;gap:4px;font-size:9px;color:var(--text-dim,#b6bec9)}.rs-theme-tools input[type=range]{width:74px}.rs-theme-sound-list{display:flex;flex-wrap:wrap;gap:4px;flex-basis:100%}.rs-theme-sound-list button{font-size:8px}.rs-theme-card.on{outline:2px solid var(--rsa,#24afe2);outline-offset:2px}.rs-theme-card[data-theme-card="shitpost"]{font-family:Comic Sans MS,system-ui,sans-serif}.rs-theme-card[data-theme-card="glitchlord"] .rs-theme-art{filter:hue-rotate(18deg) saturate(1.5)}
-html[data-rs-theme="shitpost"] .rs-theme-card:hover{transform:rotate(-1deg) scale(1.02)}html[data-rs-theme="glitchlord"] .rs-theme-card:hover{filter:drop-shadow(2px 0 #ff00b8) drop-shadow(-2px 0 #00ffee)}html[data-rs-theme="npcenergy"] .rs-theme-card:hover{transform:none}
 
 /* ══════════════════════════════════════════════════════════════════════════
    OR 1.19.7 — theme visual refresh
@@ -6714,13 +6620,6 @@ html[data-rs-theme="pogchamp"] #rs-bar, html[data-rs-theme="glitchlord"] #rs-bar
   --orx-mark-l: 10px; --orx-mark-o: 5px;
   background: var(--orx-marks), var(--orx-wash), var(--orx-img), var(--orx-bg) !important;
 }
-/* Theme picker cards: VoidScript now has real art like the other classics. */
-html[data-rs-theme] .rs-theme-card[data-theme="void"] .rs-theme-art { background-image: url(ui/swatch-void.jpg) !important; }
-html[data-rs-theme] .rs-theme-card.on {
-  border-color: var(--orx-a) !important;
-  box-shadow: 0 0 0 1px var(--orx-a) inset, 0 0 22px var(--orx-glow), 0 10px 18px rgba(0,0,0,.28) !important;
-}
-html[data-rs-theme] .rs-theme-card.on .rs-theme-art { filter: saturate(1.3) contrast(1.08); }
 
 /* ── 3. Corner decorations — viewport glyph rail (all themes) ─────────────── */
 #rs-root .rs-theme-corners { display: block; }
@@ -6777,10 +6676,9 @@ html[data-rs-theme] {
 }
 html[data-rs-theme="npcenergy"], html.rs-light[data-rs-theme="night"] { --orx-ghost-fg: color-mix(in srgb, var(--orx-b) 80%, #000); }
 
-/* primary: Start, Approve, Surprise-me */
+/* primary: Start, Approve */
 html[data-rs-theme] #rs-action[data-kind="start"],
-html[data-rs-theme] #rs-approve-allow,
-html[data-rs-theme] .rs-theme-tools button[data-theme-random] {
+html[data-rs-theme] #rs-approve-allow {
   background: var(--orx-grad) !important;
   color: var(--orx-on) !important;
   border: 1px solid color-mix(in srgb, var(--orx-a) 60%, transparent) !important;
@@ -6791,15 +6689,13 @@ html[data-rs-theme] .rs-theme-tools button[data-theme-random] {
   transition: transform .14s ease, box-shadow .18s ease, filter .18s ease !important;
 }
 html[data-rs-theme] #rs-action[data-kind="start"]:hover,
-html[data-rs-theme] #rs-approve-allow:hover,
-html[data-rs-theme] .rs-theme-tools button[data-theme-random]:hover {
+html[data-rs-theme] #rs-approve-allow:hover {
   filter: brightness(1.07) saturate(1.05);
   transform: translateY(-1px);
   box-shadow: 0 1px 0 rgba(255,255,255,.26) inset, 0 -1px 0 rgba(0,0,0,.18) inset, 0 10px 26px var(--orx-glow), 0 0 0 3px color-mix(in srgb, var(--orx-a) 18%, transparent), 0 3px 10px rgba(0,0,0,.24) !important;
 }
 html[data-rs-theme] #rs-action[data-kind="start"]:active,
-html[data-rs-theme] #rs-approve-allow:active,
-html[data-rs-theme] .rs-theme-tools button[data-theme-random]:active {
+html[data-rs-theme] #rs-approve-allow:active {
   transform: translateY(0) scale(.98);
   filter: brightness(.96);
   box-shadow: 0 1px 0 rgba(255,255,255,.12) inset, 0 3px 10px var(--orx-glow) !important;
@@ -6818,9 +6714,7 @@ html[data-rs-theme] #rs-switch,
 html[data-rs-theme] #rs-settings-btn,
 html[data-rs-theme] :is(#rs-settings-btn, #rs-paint-btn),
 html[data-rs-theme] .rs-lvl-btn,
-html[data-rs-theme] #rs-approve-deny,
-html[data-rs-theme] .rs-theme-tools button:not([data-theme-random]),
-html[data-rs-theme] .rs-theme-sound-list button {
+html[data-rs-theme] #rs-approve-deny {
   background: linear-gradient(180deg, var(--orx-ghost-hi), var(--orx-ghost)) !important;
   color: var(--orx-ghost-fg) !important;
   border: 1px solid var(--orx-ghost-line) !important;
@@ -6834,9 +6728,7 @@ html[data-rs-theme] #rs-support:hover,
 html[data-rs-theme] #rs-switch:hover,
 html[data-rs-theme] :is(#rs-settings-btn, #rs-paint-btn):hover,
 html[data-rs-theme] .rs-lvl-btn:hover,
-html[data-rs-theme] #rs-approve-deny:hover,
-html[data-rs-theme] .rs-theme-tools button:not([data-theme-random]):hover,
-html[data-rs-theme] .rs-theme-sound-list button:hover {
+html[data-rs-theme] #rs-approve-deny:hover {
   background: linear-gradient(180deg, color-mix(in srgb, var(--orx-a) 30%, transparent), var(--orx-ghost-hi)) !important;
   border-color: color-mix(in srgb, var(--orx-a) 60%, transparent) !important;
   color: #fff !important;
@@ -6845,16 +6737,14 @@ html[data-rs-theme] .rs-theme-sound-list button:hover {
 }
 html[data-rs-theme="npcenergy"] #rs-action[data-kind="restart"]:hover, html[data-rs-theme="npcenergy"] #rs-discord:hover, html[data-rs-theme="npcenergy"] #rs-support:hover,
 html[data-rs-theme="npcenergy"] #rs-switch:hover, html[data-rs-theme="npcenergy"] :is(#rs-settings-btn, #rs-paint-btn):hover, html[data-rs-theme="npcenergy"] .rs-lvl-btn:hover,
-html[data-rs-theme="npcenergy"] #rs-approve-deny:hover, html[data-rs-theme="npcenergy"] .rs-theme-tools button:not([data-theme-random]):hover { color: #111 !important; }
+html[data-rs-theme="npcenergy"] #rs-approve-deny:hover { color: #111 !important; }
 html[data-rs-theme] #rs-action[data-kind="restart"]:active,
 html[data-rs-theme] #rs-discord:active,
 html[data-rs-theme] #rs-support:active,
 html[data-rs-theme] #rs-switch:active,
 html[data-rs-theme] :is(#rs-settings-btn, #rs-paint-btn):active,
 html[data-rs-theme] .rs-lvl-btn:active,
-html[data-rs-theme] #rs-approve-deny:active,
-html[data-rs-theme] .rs-theme-tools button:active,
-html[data-rs-theme] .rs-theme-sound-list button:active { transform: translateY(0) scale(.97); }
+html[data-rs-theme] #rs-approve-deny:active { transform: translateY(0) scale(.97); }
 /* selected level reads as "lit" rather than a filled block */
 html[data-rs-theme] .rs-lvl-btn.on {
   background: var(--orx-grad) !important;
@@ -6916,49 +6806,8 @@ html[data-rs-theme="pixelated"] #rs-menu :is(button, .rs-tgl, .rs-lvl-btn) { bor
 }
 
 /* ── 5. 1.19.7b — meme theme photos + sound-pack strip ─────────────────────── */
-/* Picker cards for meme themes used the flat SVG stickers; they now show the
-   same photo the panels use (the inline style from main.js already points at
-   the jpg, these beat the older per-theme svg !important overrides). */
-html[data-rs-theme] .rs-theme-card[data-theme="epicface"] .rs-theme-art   { background-image: url(ui/swatch-epicface.jpg) !important; }
-html[data-rs-theme] .rs-theme-card[data-theme="headooh"] .rs-theme-art    { background-image: url(ui/swatch-headooh.jpg) !important; }
-html[data-rs-theme] .rs-theme-card[data-theme="ragequit"] .rs-theme-art   { background-image: url(ui/swatch-ragequit.jpg) !important; }
-html[data-rs-theme] .rs-theme-card[data-theme="killfeed"] .rs-theme-art   { background-image: url(ui/swatch-killfeed.jpg) !important; }
-html[data-rs-theme] .rs-theme-card[data-theme="shitpost"] .rs-theme-art   { background-image: url(ui/swatch-shitpost.jpg) !important; }
-html[data-rs-theme] .rs-theme-card[data-theme="skillissue"] .rs-theme-art { background-image: url(ui/swatch-skillissue.jpg) !important; }
-html[data-rs-theme] .rs-theme-card[data-theme="pogchamp"] .rs-theme-art   { background-image: url(ui/swatch-pogchamp.jpg) !important; }
-html[data-rs-theme] .rs-theme-card[data-theme="glitchlord"] .rs-theme-art { background-image: url(ui/swatch-glitchlord.jpg) !important; }
-html[data-rs-theme] .rs-theme-card[data-theme="npcenergy"] .rs-theme-art  { background-image: url(ui/swatch-npcenergy.jpg) !important; }
-html[data-rs-theme] .rs-theme-card .rs-theme-art { background-size: cover !important; background-position: center !important; }
 /* The page-wide sticker wallpaper behind #rs-root is retired — the panels carry the photo now. */
 html[data-rs-theme] #rs-root { background-image: none !important; }
-
-/* Sound pack strip: pack name + seven preview pills, themed like the rest. */
-html[data-rs-theme] .rs-theme-tools {
-  border-color: color-mix(in srgb, var(--orx-a) 26%, transparent) !important;
-  background: color-mix(in srgb, var(--orx-a) 6%, transparent) !important;
-  border-radius: calc(var(--orx-r) + 2px) !important;
-}
-html[data-rs-theme] .rs-theme-sound-list { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; flex-basis: 100%; padding-top: 6px; border-top: 1px dashed color-mix(in srgb, var(--orx-a) 22%, transparent); }
-html[data-rs-theme] .rs-theme-sound-name {
-  flex-basis: 100%;
-  font: 600 10px/1.4 system-ui, sans-serif;
-  letter-spacing: .04em;
-  color: var(--orx-ghost-fg);
-  opacity: .9;
-}
-html[data-rs-theme] .rs-theme-sound-list button {
-  padding: 4px 9px !important;
-  font-size: 10px !important;
-  font-weight: 650 !important;
-  border-radius: 999px !important;
-}
-html[data-rs-theme] .rs-theme-sound-list button[data-effect="special"] {
-  background: var(--orx-grad) !important;
-  color: var(--orx-on) !important;
-  border-color: color-mix(in srgb, var(--orx-a) 60%, transparent) !important;
-  box-shadow: 0 1px 0 rgba(255,255,255,.2) inset, 0 4px 12px var(--orx-glow) !important;
-}
-html[data-rs-theme] .rs-theme-sound-list button:active { transform: scale(.95); }
 
 /* ── 6. 1.19.7c — designed ornaments (no emoji) ─────────────────────────────
    One monochrome SVG motif per theme, used as a CSS mask so it is painted with
@@ -6968,37 +6817,37 @@ html[data-rs-theme] .rs-theme-sound-list button:active { transform: scale(.95); 
    The main motif of every ornament sits in its top-left quadrant so the small
    badges can zoom into it (mask-size 200%) and still read.
    ─────────────────────────────────────────────────────────────────────────── */
-html[data-rs-theme="night"], .rs-theme-card[data-theme="night"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M22 6a14 14 0 1 0 12 22a11 11 0 1 1-12-22z' fill='%23fff'/><path d='M6 44v8M12 48v4M18 44v8M24 48v4M30 44v8' stroke='%23fff' stroke-width='1.3'/><circle cx='46' cy='10' r='1.6' fill='%23fff'/><circle cx='54' cy='20' r='1' fill='%23fff'/></svg>"); }
+html[data-rs-theme="night"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M22 6a14 14 0 1 0 12 22a11 11 0 1 1-12-22z' fill='%23fff'/><path d='M6 44v8M12 48v4M18 44v8M24 48v4M30 44v8' stroke='%23fff' stroke-width='1.3'/><circle cx='46' cy='10' r='1.6' fill='%23fff'/><circle cx='54' cy='20' r='1' fill='%23fff'/></svg>"); }
 html[data-rs-theme="night"] { --orx-tile: radial-gradient(circle, color-mix(in srgb, var(--orx-a) 12%, transparent) 1px, transparent 1.4px) 0 0 / 18px 18px; }
-html[data-rs-theme="blood-moon"], .rs-theme-card[data-theme="blood-moon"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='20' cy='20' r='10' fill='%23fff'/><circle cx='20' cy='20' r='15' fill='none' stroke='%23fff' stroke-width='1.3' stroke-dasharray='6 4'/><path d='M38 6l20-2-6 10zM6 40l-2 20 10-7z' fill='%23fff' opacity='.85'/><path d='M40 40l16 16' stroke='%23fff' stroke-width='2'/></svg>"); }
+html[data-rs-theme="blood-moon"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='20' cy='20' r='10' fill='%23fff'/><circle cx='20' cy='20' r='15' fill='none' stroke='%23fff' stroke-width='1.3' stroke-dasharray='6 4'/><path d='M38 6l20-2-6 10zM6 40l-2 20 10-7z' fill='%23fff' opacity='.85'/><path d='M40 40l16 16' stroke='%23fff' stroke-width='2'/></svg>"); }
 html[data-rs-theme="blood-moon"] { --orx-tile: repeating-linear-gradient(135deg, color-mix(in srgb, var(--orx-a) 9%, transparent) 0 1px, transparent 1px 14px); }
-html[data-rs-theme="sakura"], .rs-theme-card[data-theme="sakura"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M2 2c14 10 22 22 28 42' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round'/><g fill='%23fff'><g transform='translate(18 14)'><circle cy='-4' r='3'/><circle cx='3.8' cy='-1.2' r='3'/><circle cx='2.4' cy='3.2' r='3'/><circle cx='-2.4' cy='3.2' r='3'/><circle cx='-3.8' cy='-1.2' r='3'/></g><g transform='translate(32 30) scale(.8)'><circle cy='-4' r='3'/><circle cx='3.8' cy='-1.2' r='3'/><circle cx='2.4' cy='3.2' r='3'/><circle cx='-2.4' cy='3.2' r='3'/><circle cx='-3.8' cy='-1.2' r='3'/></g><circle cx='10' cy='30' r='2.2'/><ellipse cx='48' cy='10' rx='2.6' ry='1.4' transform='rotate(-30 48 10)'/><ellipse cx='54' cy='24' rx='2.6' ry='1.4' transform='rotate(20 54 24)'/><ellipse cx='44' cy='48' rx='2.6' ry='1.4' transform='rotate(-50 44 48)'/></g></svg>"); }
+html[data-rs-theme="sakura"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M2 2c14 10 22 22 28 42' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round'/><g fill='%23fff'><g transform='translate(18 14)'><circle cy='-4' r='3'/><circle cx='3.8' cy='-1.2' r='3'/><circle cx='2.4' cy='3.2' r='3'/><circle cx='-2.4' cy='3.2' r='3'/><circle cx='-3.8' cy='-1.2' r='3'/></g><g transform='translate(32 30) scale(.8)'><circle cy='-4' r='3'/><circle cx='3.8' cy='-1.2' r='3'/><circle cx='2.4' cy='3.2' r='3'/><circle cx='-2.4' cy='3.2' r='3'/><circle cx='-3.8' cy='-1.2' r='3'/></g><circle cx='10' cy='30' r='2.2'/><ellipse cx='48' cy='10' rx='2.6' ry='1.4' transform='rotate(-30 48 10)'/><ellipse cx='54' cy='24' rx='2.6' ry='1.4' transform='rotate(20 54 24)'/><ellipse cx='44' cy='48' rx='2.6' ry='1.4' transform='rotate(-50 44 48)'/></g></svg>"); }
 html[data-rs-theme="sakura"] { --orx-tile: radial-gradient(ellipse 3px 1.6px, color-mix(in srgb, var(--orx-a) 20%, transparent) 60%, transparent 100%) 0 0 / 26px 22px; }
-html[data-rs-theme="starglaze"], .rs-theme-card[data-theme="starglaze"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><g fill='%23fff'><path d='M14 4Q14 14 24 14Q14 14 14 24Q14 14 4 14Q14 14 14 4z'/><path d='M34 4Q34 8 38 8Q34 8 34 12Q34 8 30 8Q34 8 34 4z'/><path d='M10 36Q10 40 14 40Q10 40 10 44Q10 40 6 40Q10 40 10 36z'/><path d='M28 25Q28 28 31 28Q28 28 28 31Q28 28 25 28Q28 28 28 25z'/><circle cx='48' cy='18' r='1.2'/><circle cx='56' cy='8' r='1'/></g><path d='M2 54Q30 34 62 48' fill='none' stroke='%23fff' stroke-width='1.2' opacity='.6'/></svg>"); }
+html[data-rs-theme="starglaze"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><g fill='%23fff'><path d='M14 4Q14 14 24 14Q14 14 14 24Q14 14 4 14Q14 14 14 4z'/><path d='M34 4Q34 8 38 8Q34 8 34 12Q34 8 30 8Q34 8 34 4z'/><path d='M10 36Q10 40 14 40Q10 40 10 44Q10 40 6 40Q10 40 10 36z'/><path d='M28 25Q28 28 31 28Q28 28 28 31Q28 28 25 28Q28 28 28 25z'/><circle cx='48' cy='18' r='1.2'/><circle cx='56' cy='8' r='1'/></g><path d='M2 54Q30 34 62 48' fill='none' stroke='%23fff' stroke-width='1.2' opacity='.6'/></svg>"); }
 html[data-rs-theme="starglaze"] { --orx-tile: radial-gradient(circle, color-mix(in srgb, var(--orx-a) 26%, transparent) .8px, transparent 1.6px) 7px 11px / 34px 29px; }
-html[data-rs-theme="autumn"], .rs-theme-card[data-theme="autumn"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M18 4l3 8 7-4-3 9 9 1-7 6 6 7-9-2 1 9-7-6-7 6 1-9-9 2 6-7-7-6 9-1-3-9 7 4z' fill='%23fff'/><path d='M18 30v8' stroke='%23fff' stroke-width='1.6'/><path d='M4 48c8-6 14 8 22 2s10-10 20-4' fill='none' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/><circle cx='50' cy='14' r='2' fill='%23fff'/><circle cx='56' cy='26' r='1.5' fill='%23fff'/></svg>"); }
+html[data-rs-theme="autumn"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M18 4l3 8 7-4-3 9 9 1-7 6 6 7-9-2 1 9-7-6-7 6 1-9-9 2 6-7-7-6 9-1-3-9 7 4z' fill='%23fff'/><path d='M18 30v8' stroke='%23fff' stroke-width='1.6'/><path d='M4 48c8-6 14 8 22 2s10-10 20-4' fill='none' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/><circle cx='50' cy='14' r='2' fill='%23fff'/><circle cx='56' cy='26' r='1.5' fill='%23fff'/></svg>"); }
 html[data-rs-theme="autumn"] { --orx-tile: repeating-radial-gradient(ellipse 120% 60% at 30% 20%, color-mix(in srgb, var(--orx-a) 6%, transparent) 0 1px, transparent 1px 9px); }
-html[data-rs-theme="pixelated"], .rs-theme-card[data-theme="pixelated"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M2 2h12v12H2zM14 14h8v8h-8zM22 22h6v6h-6zM28 28h4v4h-4zM32 32h3v3h-3z' fill='%23fff'/><path d='M46 6h4v4h4v4h-4v4h-4v-4h-4v-4h4z' fill='%23fff'/><path d='M6 44h4v4H6zM14 50h4v4h-4zM50 46h4v4h-4z' fill='%23fff'/></svg>"); }
+html[data-rs-theme="pixelated"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M2 2h12v12H2zM14 14h8v8h-8zM22 22h6v6h-6zM28 28h4v4h-4zM32 32h3v3h-3z' fill='%23fff'/><path d='M46 6h4v4h4v4h-4v4h-4v-4h-4v-4h4z' fill='%23fff'/><path d='M6 44h4v4H6zM14 50h4v4h-4zM50 46h4v4h-4z' fill='%23fff'/></svg>"); }
 html[data-rs-theme="pixelated"] { --orx-tile: conic-gradient(from 90deg at 50% 50%, color-mix(in srgb, var(--orx-a) 7%, transparent) 25%, transparent 0 50%, color-mix(in srgb, var(--orx-a) 7%, transparent) 0 75%, transparent 0) 0 0 / 12px 12px; }
-html[data-rs-theme="void"], .rs-theme-card[data-theme="void"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle r='24' fill='none' stroke='%23fff' stroke-width='1.3'/><circle r='40' fill='none' stroke='%23fff' stroke-width='1' stroke-dasharray='3 5'/><circle r='56' fill='none' stroke='%23fff' stroke-width='.8' opacity='.6'/><circle cx='28.3' cy='28.3' r='2.6' fill='%23fff'/><path d='M24 0v7M0 24h7M40 0v5M0 40h5' stroke='%23fff' stroke-width='1.5'/></svg>"); }
+html[data-rs-theme="void"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle r='24' fill='none' stroke='%23fff' stroke-width='1.3'/><circle r='40' fill='none' stroke='%23fff' stroke-width='1' stroke-dasharray='3 5'/><circle r='56' fill='none' stroke='%23fff' stroke-width='.8' opacity='.6'/><circle cx='28.3' cy='28.3' r='2.6' fill='%23fff'/><path d='M24 0v7M0 24h7M40 0v5M0 40h5' stroke='%23fff' stroke-width='1.5'/></svg>"); }
 html[data-rs-theme="void"] { --orx-tile: linear-gradient(color-mix(in srgb, var(--orx-a) 7%, transparent) 1px, transparent 1px) 0 0 / 22px 22px, linear-gradient(90deg, color-mix(in srgb, var(--orx-a) 7%, transparent) 1px, transparent 1px) 0 0 / 22px 22px; }
-html[data-rs-theme="epicface"], .rs-theme-card[data-theme="epicface"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M0 0l14 60M0 0l30 54M0 0l44 44M0 0l54 30M0 0l60 14' stroke='%23fff' stroke-width='1.2' opacity='.45'/><path d='M24 10l4.1 8.3 9.2 1.3-6.7 6.5 1.6 9.1L24 31l-8.2 4.2 1.6-9.1-6.7-6.5 9.2-1.3z' fill='%23fff'/><path d='M44 60c0-10 6-16 16-16' fill='none' stroke='%23fff' stroke-width='1.6'/><path d='M48 58l-2-4M52 54l-3-3M56 50l-4-2' stroke='%23fff' stroke-width='1.6' stroke-linecap='round'/></svg>"); }
+html[data-rs-theme="epicface"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M0 0l14 60M0 0l30 54M0 0l44 44M0 0l54 30M0 0l60 14' stroke='%23fff' stroke-width='1.2' opacity='.45'/><path d='M24 10l4.1 8.3 9.2 1.3-6.7 6.5 1.6 9.1L24 31l-8.2 4.2 1.6-9.1-6.7-6.5 9.2-1.3z' fill='%23fff'/><path d='M44 60c0-10 6-16 16-16' fill='none' stroke='%23fff' stroke-width='1.6'/><path d='M48 58l-2-4M52 54l-3-3M56 50l-4-2' stroke='%23fff' stroke-width='1.6' stroke-linecap='round'/></svg>"); }
 html[data-rs-theme="epicface"] { --orx-tile: repeating-linear-gradient(45deg, color-mix(in srgb, var(--orx-a) 8%, transparent) 0 1px, transparent 1px 16px), repeating-linear-gradient(-45deg, color-mix(in srgb, var(--orx-a) 8%, transparent) 0 1px, transparent 1px 16px); }
-html[data-rs-theme="headooh"], .rs-theme-card[data-theme="headooh"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='22' cy='22' r='14' fill='none' stroke='%23fff' stroke-width='2.2'/><circle cx='22' cy='22' r='3.2' fill='%23fff'/><path d='M22 2v9M22 33v9M2 22h9M33 22h9' stroke='%23fff' stroke-width='2.2'/><path d='M46 4l6 12M58 14l-10 6M60 30l-12-2' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/></svg>"); }
+html[data-rs-theme="headooh"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='22' cy='22' r='14' fill='none' stroke='%23fff' stroke-width='2.2'/><circle cx='22' cy='22' r='3.2' fill='%23fff'/><path d='M22 2v9M22 33v9M2 22h9M33 22h9' stroke='%23fff' stroke-width='2.2'/><path d='M46 4l6 12M58 14l-10 6M60 30l-12-2' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/></svg>"); }
 html[data-rs-theme="headooh"] { --orx-tile: radial-gradient(circle, transparent 5px, color-mix(in srgb, var(--orx-a) 10%, transparent) 5.5px, transparent 6.5px) 0 0 / 28px 28px; }
-html[data-rs-theme="ragequit"], .rs-theme-card[data-theme="ragequit"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M0 0l16 10 6 14-4 8 10 12 2 12M0 0l10 22-4 10 14 8M16 10l10-4' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/><path d='M36 50l8-8 8 8M40 58l4-4 4 4' fill='none' stroke='%23fff' stroke-width='3'/></svg>"); }
+html[data-rs-theme="ragequit"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M0 0l16 10 6 14-4 8 10 12 2 12M0 0l10 22-4 10 14 8M16 10l10-4' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/><path d='M36 50l8-8 8 8M40 58l4-4 4 4' fill='none' stroke='%23fff' stroke-width='3'/></svg>"); }
 html[data-rs-theme="ragequit"] { --orx-tile: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--orx-a) 10%, transparent) 0 6px, transparent 6px 20px); }
-html[data-rs-theme="killfeed"], .rs-theme-card[data-theme="killfeed"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='14' cy='14' r='7' fill='none' stroke='%23fff' stroke-width='1.6'/><circle cx='14' cy='14' r='1.6' fill='%23fff'/><path d='M14 3v4M14 21v4M3 14h4M21 14h4' stroke='%23fff' stroke-width='1.6'/><path d='M4 34h24M8 30v8M16 31v6M24 30v8' stroke='%23fff' stroke-width='1.5'/><path d='M44 10l5 5-5 5-5-5zM52 26l3 3-3 3-3-3z' fill='%23fff'/></svg>"); }
+html[data-rs-theme="killfeed"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='14' cy='14' r='7' fill='none' stroke='%23fff' stroke-width='1.6'/><circle cx='14' cy='14' r='1.6' fill='%23fff'/><path d='M14 3v4M14 21v4M3 14h4M21 14h4' stroke='%23fff' stroke-width='1.6'/><path d='M4 34h24M8 30v8M16 31v6M24 30v8' stroke='%23fff' stroke-width='1.5'/><path d='M44 10l5 5-5 5-5-5zM52 26l3 3-3 3-3-3z' fill='%23fff'/></svg>"); }
 html[data-rs-theme="killfeed"] { --orx-tile: repeating-linear-gradient(0deg, color-mix(in srgb, var(--orx-a) 7%, transparent) 0 1px, transparent 1px 6px), linear-gradient(90deg, color-mix(in srgb, var(--orx-a) 10%, transparent) 1px, transparent 1px) 0 0 / 40px 100%; }
-html[data-rs-theme="shitpost"], .rs-theme-card[data-theme="shitpost"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M20 4l5 10 11 2-8 8 2 11-10-5-10 5 2-11-8-8 11-2z' fill='%23fff'/><path d='M44 44c8-8 16 0 10 6s-12-2-6-6' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/><path d='M4 50l6-6 6 6 6-6 6 6' fill='none' stroke='%23fff' stroke-width='2.6'/><circle cx='50' cy='14' r='4' fill='%23fff'/><circle cx='58' cy='26' r='2' fill='%23fff'/></svg>"); }
+html[data-rs-theme="shitpost"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M20 4l5 10 11 2-8 8 2 11-10-5-10 5 2-11-8-8 11-2z' fill='%23fff'/><path d='M44 44c8-8 16 0 10 6s-12-2-6-6' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/><path d='M4 50l6-6 6 6 6-6 6 6' fill='none' stroke='%23fff' stroke-width='2.6'/><circle cx='50' cy='14' r='4' fill='%23fff'/><circle cx='58' cy='26' r='2' fill='%23fff'/></svg>"); }
 html[data-rs-theme="shitpost"] { --orx-tile: conic-gradient(color-mix(in srgb, var(--orx-a) 9%, transparent) 25%, transparent 0 50%, color-mix(in srgb, var(--orx-b) 9%, transparent) 0 75%, transparent 0) 0 0 / 20px 20px; }
-html[data-rs-theme="skillissue"], .rs-theme-card[data-theme="skillissue"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M4 0v14a4 4 0 0 0 8 0V0M18 0v26a4 4 0 0 0 8 0V0M32 0v10a3 3 0 0 0 6 0V0' fill='%23fff'/><path d='M4 48q6-6 12 0t12 0 12 0 12 0' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round'/><path d='M50 18c0 4 6 8 6 12a6 6 0 0 1-12 0c0-4 6-8 6-12z' fill='%23fff'/></svg>"); }
+html[data-rs-theme="skillissue"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M4 0v14a4 4 0 0 0 8 0V0M18 0v26a4 4 0 0 0 8 0V0M32 0v10a3 3 0 0 0 6 0V0' fill='%23fff'/><path d='M4 48q6-6 12 0t12 0 12 0 12 0' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round'/><path d='M50 18c0 4 6 8 6 12a6 6 0 0 1-12 0c0-4 6-8 6-12z' fill='%23fff'/></svg>"); }
 html[data-rs-theme="skillissue"] { --orx-tile: repeating-radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--orx-a) 8%, transparent) 0 1px, transparent 1px 12px); }
-html[data-rs-theme="pogchamp"], .rs-theme-card[data-theme="pogchamp"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M22 4c2 8 10 10 10 20a10 10 0 0 1-20 0c0-6 4-8 4-14 2 2 4 4 4 8 2-4 2-8 2-14z' fill='%23fff'/><g fill='%23fff'><rect x='42' y='6' width='7' height='3' transform='rotate(25 45 7)'/><rect x='50' y='22' width='7' height='3' transform='rotate(-40 53 23)'/><rect x='8' y='46' width='7' height='3' transform='rotate(60 11 47)'/><circle cx='56' cy='40' r='2'/><circle cx='30' cy='52' r='2'/></g></svg>"); }
+html[data-rs-theme="pogchamp"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M22 4c2 8 10 10 10 20a10 10 0 0 1-20 0c0-6 4-8 4-14 2 2 4 4 4 8 2-4 2-8 2-14z' fill='%23fff'/><g fill='%23fff'><rect x='42' y='6' width='7' height='3' transform='rotate(25 45 7)'/><rect x='50' y='22' width='7' height='3' transform='rotate(-40 53 23)'/><rect x='8' y='46' width='7' height='3' transform='rotate(60 11 47)'/><circle cx='56' cy='40' r='2'/><circle cx='30' cy='52' r='2'/></g></svg>"); }
 html[data-rs-theme="pogchamp"] { --orx-tile: radial-gradient(circle, color-mix(in srgb, var(--orx-a) 22%, transparent) 1.2px, transparent 2px) 3px 5px / 23px 19px, radial-gradient(circle, color-mix(in srgb, var(--orx-b) 18%, transparent) 1px, transparent 1.8px) 13px 14px / 29px 23px; }
-html[data-rs-theme="glitchlord"], .rs-theme-card[data-theme="glitchlord"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M0 4h34v4H0zM6 12h20v3H6zM0 20h42v5H0zM10 29h14v2H10zM0 36h26v4H0zM4 46h30v2H4zM0 52h12v6H0z' fill='%23fff'/><path d='M46 8h8v2h-8zM50 30h12v3H50zM44 44h6v6h-6z' fill='%23fff' opacity='.7'/></svg>"); }
+html[data-rs-theme="glitchlord"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M0 4h34v4H0zM6 12h20v3H6zM0 20h42v5H0zM10 29h14v2H10zM0 36h26v4H0zM4 46h30v2H4zM0 52h12v6H0z' fill='%23fff'/><path d='M46 8h8v2h-8zM50 30h12v3H50zM44 44h6v6h-6z' fill='%23fff' opacity='.7'/></svg>"); }
 html[data-rs-theme="glitchlord"] { --orx-tile: repeating-linear-gradient(0deg, color-mix(in srgb, var(--orx-a) 7%, transparent) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, color-mix(in srgb, var(--orx-b) 5%, transparent) 0 2px, transparent 2px 41px); }
-html[data-rs-theme="npcenergy"], .rs-theme-card[data-theme="npcenergy"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M6 4h30a6 6 0 0 1 6 6v12a6 6 0 0 1-6 6H20l-8 8v-8H6a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6z' fill='none' stroke='%23fff' stroke-width='2'/><circle cx='14' cy='16' r='2' fill='%23fff'/><circle cx='22' cy='16' r='2' fill='%23fff'/><circle cx='30' cy='16' r='2' fill='%23fff'/><path d='M4 50h40M4 56h28' stroke='%23fff' stroke-width='2' opacity='.6'/></svg>"); }
+html[data-rs-theme="npcenergy"] { --orx-orn: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M6 4h30a6 6 0 0 1 6 6v12a6 6 0 0 1-6 6H20l-8 8v-8H6a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6z' fill='none' stroke='%23fff' stroke-width='2'/><circle cx='14' cy='16' r='2' fill='%23fff'/><circle cx='22' cy='16' r='2' fill='%23fff'/><circle cx='30' cy='16' r='2' fill='%23fff'/><path d='M4 50h40M4 56h28' stroke='%23fff' stroke-width='2' opacity='.6'/></svg>"); }
 html[data-rs-theme="npcenergy"] { --orx-tile: radial-gradient(circle, color-mix(in srgb, var(--orx-a) 14%, transparent) 1px, transparent 1.3px) 0 0 / 14px 14px; }
 
 /* shared ornament painter */
@@ -7092,38 +6941,9 @@ html[data-rs-theme] #rs-ornament {
   font-size: 0; animation: none !important;
 }
 html[data-rs-theme] #rs-ornament::before, html[data-rs-theme] #rs-ornament::after { content: none !important; }
-/* theme cards: badge painted with that card's own gradient; text glyph is the fallback */
-html[data-rs-theme] .rs-theme-card { --orx-grad: linear-gradient(135deg, var(--orx-a), var(--orx-b)); }
-html[data-rs-theme] .rs-theme-card .rs-work-glyph {
-  position: absolute; top: 6px; left: 6px; width: 24px; height: 24px; padding: 0 !important;
-  border-radius: 7px; background: rgba(0,0,0,.42); border: 1px solid color-mix(in srgb, var(--orx-a) 40%, transparent);
-  font-size: 0 !important; line-height: 0; color: transparent;
-}
-html[data-rs-theme] .rs-theme-card .rs-work-glyph::after {
-  content: ""; position: absolute; inset: 4px;
-  background: var(--orx-grad);
-  -webkit-mask: var(--orx-orn) 0 0 / 200% 200% no-repeat; mask: var(--orx-orn) 0 0 / 200% 200% no-repeat;
-}
-.rs-theme-card[data-theme="night"]      { --orx-a:#ece4d8; --orx-b:#aaa296; }
-.rs-theme-card[data-theme="blood-moon"] { --orx-a:#fb7185; --orx-b:#be123c; }
-.rs-theme-card[data-theme="sakura"]     { --orx-a:#f472b6; --orx-b:#db2777; }
-.rs-theme-card[data-theme="starglaze"]  { --orx-a:#38bdf8; --orx-b:#818cf8; }
-.rs-theme-card[data-theme="autumn"]     { --orx-a:#fbbf24; --orx-b:#d97706; }
-.rs-theme-card[data-theme="pixelated"]  { --orx-a:#58e07f; --orx-b:#22a35a; }
-.rs-theme-card[data-theme="void"]       { --orx-a:#ff7048; --orx-b:#d9481f; }
-.rs-theme-card[data-theme="epicface"]   { --orx-a:#ffd84d; --orx-b:#ff9f1a; }
-.rs-theme-card[data-theme="headooh"]    { --orx-a:#ff315f; --orx-b:#b51f4b; }
-.rs-theme-card[data-theme="ragequit"]   { --orx-a:#ff4d3d; --orx-b:#8f1d16; }
-.rs-theme-card[data-theme="killfeed"]   { --orx-a:#5bff7a; --orx-b:#1f8f3a; }
-.rs-theme-card[data-theme="shitpost"]   { --orx-a:#ff46c8; --orx-b:#43ffe0; }
-.rs-theme-card[data-theme="skillissue"] { --orx-a:#c4b5fd; --orx-b:#7c6aa6; }
-.rs-theme-card[data-theme="pogchamp"]   { --orx-a:#a855f7; --orx-b:#22c55e; }
-.rs-theme-card[data-theme="glitchlord"] { --orx-a:#e879f9; --orx-b:#22d3ee; }
-.rs-theme-card[data-theme="npcenergy"]  { --orx-a:#6b7280; --orx-b:#374151; }
 /* menu-head glyph (next to the brand) follows the same rule: no emoji */
 html[data-rs-theme] .rs-menu-glyph { font-size: 0 !important; width: 14px; height: 14px; display: inline-block; background: var(--orx-grad); -webkit-mask: var(--orx-orn) 0 0 / 200% 200% no-repeat; mask: var(--orx-orn) 0 0 / 200% 200% no-repeat; }
 @media (prefers-reduced-motion: reduce) { #rs-root .rs-theme-corner::after { filter: none; } }
-
 
 /* ── 7. Trays open ABOVE the bar ───────────────────────────────────────────────
    The 1.18.x collision patch parked the settings tray / templates panel / embed /

@@ -473,6 +473,7 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     log("clicked Start");
     await waitFor(() => userMessages.length >= 1, 20000, "bootstrap send");
     ok("bootstrap prompt sent to Notion", /ORscript|ROBLOX|Roblox/i.test(userMessages[0]), userMessages[0].length + " chars");
+    ok("bootstrap carries no coding-memory / session-recap block (removed 1.39.1)", !/My coding memory|Recent sessions \(auto-recorded/.test(userMessages[0]));
     await waitFor(() => userMessages.length >= 2, 30000, "catalogue reply send");
     ok("catalogue result typed back", /list_commands|commands|Output/i.test(userMessages[1]), userMessages[1].slice(0, 80).replace(/\n/g, " "));
     await waitFor(() => /Agent running|Restart/i.test(bar.textContent || ""), 30000, "session ready");
@@ -537,6 +538,7 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       ok("Tasks tab has add input, Run next and Run all", !!d.getElementById("rs-task-input") && !!d.querySelector("[data-task-run-next]") && !!d.querySelector("[data-task-run-all]"));
       // Settings toggle: disable → tab + pill + tools gone, tasks kept.
       const menuBtn = d.getElementById("rs-settings-btn"); if (menuBtn) { menuBtn.click(); await sleep(250); }
+      ok("Settings has no Themes or Coding memory section (removed 1.39.1)", !d.querySelector(".rs-theme-sec") && !d.querySelector("[data-theme-card]") && !d.querySelector(".rs-memory-sec") && !d.getElementById("rs-mem-save") && !d.getElementById("rs-mem-recap") && !!d.querySelector('.rs-tgl-row[data-mode="bgmode"]'));
       const tgl = d.querySelector('.rs-tgl-row[data-mode="tasklist"]');
       ok("Settings has the Task list toggle, currently on", !!tgl && tgl.getAttribute("aria-checked") === "true", tgl && tgl.getAttribute("aria-checked"));
       if (tgl) { tgl.click(); await sleep(250); }
