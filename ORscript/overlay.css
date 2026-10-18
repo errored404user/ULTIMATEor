@@ -7893,3 +7893,59 @@ html.rs-light #rs-cards-panel .rs-tag { background: rgba(15,23,42,.05); }
   #rs-cards-panel .rs-cards-heading { font-size: 19px !important; }
   #rs-cards-panel .rs-template-row { min-height: 84px !important; padding: 14px 20px !important; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   §14 · 1.40.0 Beginner mode — live getting-started checklist, starter chips,
+   simple / advanced Settings view.
+   ══════════════════════════════════════════════════════════════════════════ */
+#rs-setup-progress {
+  margin-left: auto !important; font-size: 10.5px !important; font-weight: 800 !important;
+  letter-spacing: .08em !important; color: var(--or-muted, #9a9288) !important;
+  padding: 2px 7px !important; border-radius: 999px !important; border: 1px solid rgba(255,255,255,.12) !important;
+}
+#rs-setup.rs-setup-ready #rs-setup-progress { color: #86efac !important; border-color: rgba(134,239,172,.45) !important; }
+#rs-setup-steps li { align-items: flex-start !important; gap: 10px !important; counter-increment: none !important; }
+#rs-setup-steps li::before { content: none !important; display: none !important; }
+.rs-step-pip {
+  flex: none; width: 16px; height: 16px; margin-top: 1px; border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,.28); background: transparent; position: relative;
+  box-sizing: border-box;
+}
+.rs-step-ok .rs-step-pip { border-color: #4ade80; background: #22c55e; }
+.rs-step-ok .rs-step-pip::after {
+  content: ""; position: absolute; left: 4.5px; top: 1.5px; width: 4px; height: 8px;
+  border: solid #04150a; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.rs-step-now .rs-step-pip { border-color: var(--or-accent, #e8d5b5); box-shadow: 0 0 0 3px color-mix(in srgb, var(--or-accent, #e8d5b5) 22%, transparent); animation: rs-step-pulse 1.6s ease-in-out infinite; }
+@keyframes rs-step-pulse { 0%,100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--or-accent, #e8d5b5) 22%, transparent); } 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--or-accent, #e8d5b5) 8%, transparent); } }
+.rs-step-wait { opacity: .55; }
+.rs-step-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.rs-step-title { font-weight: 700; font-size: 12px; line-height: 1.35; }
+.rs-step-ok .rs-step-title { text-decoration: line-through; text-decoration-color: rgba(255,255,255,.35); opacity: .75; }
+.rs-step-hint { font-size: 11.5px; line-height: 1.45; color: var(--or-muted, #b7afa3); }
+.rs-step-hint code { background: rgba(255,255,255,.1); padding: 0 4px; border-radius: 4px; font-family: ui-monospace, "Cascadia Mono", monospace; font-size: 10.5px; }
+.rs-step-state { flex: none; font-size: 9.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; margin-top: 3px; color: var(--or-muted, #9a9288); }
+.rs-step-ok .rs-step-state { color: #4ade80; }
+.rs-step-now .rs-step-state { color: var(--or-accent, #e8d5b5); }
+.rs-setup-fix {
+  align-self: flex-start; margin-top: 2px; padding: 5px 10px; border-radius: 999px; cursor: pointer;
+  font: 700 11px/1 var(--or-sans, ui-sans-serif, system-ui, sans-serif);
+  color: #0b0b0d; background: linear-gradient(135deg, var(--orx-a, #ece4d8), var(--orx-b, #aaa296));
+  border: 0; box-shadow: 0 4px 14px rgba(0,0,0,.35);
+}
+.rs-setup-fix:hover { filter: brightness(1.08); }
+#rs-setup-starters { margin: 2px 14px 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#rs-setup-starters[hidden] { display: none !important; }
+.rs-setup-starters-label { flex-basis: 100%; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--or-muted, #9a9288); margin-bottom: 2px; }
+.rs-setup-starter {
+  padding: 6px 11px; border-radius: 999px; cursor: pointer;
+  font: 600 11.5px/1.2 var(--or-sans, ui-sans-serif, system-ui, sans-serif);
+  color: var(--or-ink, #ece6dc); background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.14); transition: background .13s ease, border-color .13s ease, transform .13s ease;
+}
+.rs-setup-starter:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.3); transform: translateY(-1px); }
+/* Simple Settings view: advanced rows / sections collapse until the switch is on. */
+#rs-menu.rs-menu-simple .rs-adv { display: none !important; }
+.rs-adv-row { margin-top: 6px; }
+html.rs-light .rs-step-hint { color: #4b5563; }
+html.rs-light .rs-setup-starter { color: #1f2937; background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.12); }

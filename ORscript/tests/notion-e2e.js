@@ -469,6 +469,15 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
         await replyWith("Noted.");
       }
     };
+    // 1.40.0 Beginner mode: before Start, the getting-started card is a LIVE
+    // checklist - bridge / Studio / place already green from the stubbed bridge,
+    // "Press Start" is the highlighted next step.
+    {
+      const card = d.getElementById("rs-setup");
+      const steps = card ? [...card.querySelectorAll("#rs-setup-steps li")] : [];
+      ok("getting-started card shows 4 live steps with Start as the next one", !!card && !card.hidden && steps.length === 4 && steps.slice(0, 3).every((li) => li.classList.contains("rs-step-ok")) && steps[3].classList.contains("rs-step-now") && steps[3].dataset.step === "start" && /3\/4/.test(card.querySelector("#rs-setup-progress")?.textContent || ""), steps.map((li) => li.className + ":" + li.dataset.step).join(" | "));
+      ok("the next step carries a one-click fix (Start) and no starters yet", !!card?.querySelector('[data-setup-fix="start"]') && card?.querySelector("#rs-setup-starters")?.hidden === true);
+    }
     startBtn.click();
     log("clicked Start");
     await waitFor(() => userMessages.length >= 1, 20000, "bootstrap send");
@@ -478,6 +487,20 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     ok("catalogue result typed back", /list_commands|commands|Output/i.test(userMessages[1]), userMessages[1].slice(0, 80).replace(/\n/g, " "));
     await waitFor(() => /Agent running|Restart/i.test(bar.textContent || ""), 30000, "session ready");
     ok("session marked started", true, "bar=" + (bar.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120));
+    {
+      try { await waitFor(() => (w.__rsSetupSteps ? w.__rsSetupSteps() : []).every((st) => st.ok), 20000, "setup steps all ok"); } catch (e) { log("setup steps did not all turn ok:", String(e)); }
+      const card = d.getElementById("rs-setup");
+      const chips = card ? [...card.querySelectorAll("[data-setup-starter]")] : [];
+      ok("after Start the card is all green and offers 3 starter requests", !!card && !card.hidden && card.classList.contains("rs-setup-ready") && chips.length === 3 && /4\/4/.test(card.querySelector("#rs-setup-progress")?.textContent || ""), (card?.querySelector("#rs-setup-sub")?.textContent || "") + " chips=" + chips.length);
+      if (chips[0]) {
+        const ed = w.eval("document.querySelector('textarea')") || d.querySelector("textarea");
+        const before = ed ? ed.value : "";
+        chips[0].click(); await sleep(150);
+        const after = ed ? ed.value : "";
+        ok("clicking a starter types the request into the composer and closes the card", after.length > before.length && /lobby/i.test(after) && card.hidden === true && storage.rsSetupSeen === true, after.slice(0, 60).replace(/\n/g, " "));
+        if (ed && typeof ed.value === "string") { ed.value = ""; ed.dispatchEvent(new w.Event("input", { bubbles: true })); }
+      }
+    }
     // The user types a request.
     await sleep(800);
     ta.value = "Create a part named SimPart";
@@ -539,6 +562,25 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       // Settings toggle: disable → tab + pill + tools gone, tasks kept.
       const menuBtn = d.getElementById("rs-settings-btn"); if (menuBtn) { menuBtn.click(); await sleep(250); }
       ok("Settings has no Themes or Coding memory section (removed 1.39.1)", !d.querySelector(".rs-theme-sec") && !d.querySelector("[data-theme-card]") && !d.querySelector(".rs-memory-sec") && !d.getElementById("rs-mem-save") && !d.getElementById("rs-mem-recap") && !!d.querySelector('.rs-tgl-row[data-mode="bgmode"]'));
+      // 1.40.0 Beginner mode: Settings opens in the SIMPLE view (advanced rows
+      // carry .rs-adv and the tray carries .rs-menu-simple); the switch flips it
+      // and persists; Help has a "Getting-started checklist" button.
+      {
+        const menu = d.getElementById("rs-menu");
+        const adv = d.querySelector('.rs-tgl-row[data-mode="advanced"]');
+        const advRows = [...d.querySelectorAll("#rs-menu .rs-adv")];
+        ok("Settings opens in the simple view with advanced rows tagged", !!menu && menu.classList.contains("rs-menu-simple") && !!adv && adv.getAttribute("aria-checked") === "false" && advRows.length >= 6 && advRows.some((r) => r.dataset.mode === "tasklist") && advRows.some((r) => r.classList.contains("rs-keybind-sec")) && !!d.getElementById("rs-menu-setup"), "adv rows=" + advRows.length);
+        if (adv) { adv.click(); await sleep(250); }
+        const menu2 = d.getElementById("rs-menu");
+        const adv2 = d.querySelector('.rs-tgl-row[data-mode="advanced"]');
+        ok("'Show advanced settings' reveals everything and persists", !!menu2 && !menu2.classList.contains("rs-menu-simple") && !!adv2 && adv2.getAttribute("aria-checked") === "true" && storage.rsSettingsAdvanced === true);
+        const setupBtn = d.getElementById("rs-menu-setup");
+        if (setupBtn) { setupBtn.click(); await sleep(200); }
+        const card = d.getElementById("rs-setup");
+        ok("Help → Getting-started checklist reopens the card even after it was dismissed", !!card && card.hidden === false && !!card.querySelector("#rs-setup-steps li"), card && card.className);
+        const close = d.getElementById("rs-setup-close"); if (close) { close.click(); await sleep(100); }
+        if (menuBtn) { menuBtn.click(); await sleep(250); }
+      }
       const tgl = d.querySelector('.rs-tgl-row[data-mode="tasklist"]');
       ok("Settings has the Task list toggle, currently on", !!tgl && tgl.getAttribute("aria-checked") === "true", tgl && tgl.getAttribute("aria-checked"));
       if (tgl) { tgl.click(); await sleep(250); }

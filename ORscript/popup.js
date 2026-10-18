@@ -75,8 +75,10 @@ function renderEngine(v) {
   if (label) label.textContent = isLocal ? "AgentScript" : "Roblox";
   if (restart) restart.textContent = isLocal ? "⟳ Restart AgentScript server" : "⟳ Restart Roblox server";
   if (hintRow) {
-    const engEl = document.getElementById("hint-engine");
-    if (engEl) engEl.textContent = isLocal ? "your project folder" : "Roblox Studio";
+    const st = document.getElementById("hint-studio");
+    if (st) st.innerHTML = isLocal
+      ? "AgentScript works on this PC - nothing to connect"
+      : 'Open <b id="hint-engine">Roblox Studio</b> and switch on <i>Assistant → ⋯ → Manage MCP Servers → Studio as MCP server</i>';
   }
 }
 
@@ -213,7 +215,31 @@ function render(s) {
   servers.textContent = s.connected
     ? list.map((x) => `${x.alive ? "●" : "○"} ${x.id} (${x.alive ? x.tools + " tools" : "down"})`).join("\n")
     : "";
-  if (hintRow) hintRow.style.display = ok ? "none" : "";
+  // 1.40.0 Beginner mode: the hint row is a live checklist. It stays visible
+  // until Studio (or the AgentScript workspace) is actually usable, then folds
+  // away - the on-page bar continues with the "press Start" step.
+  if (hintRow) {
+    const studioLinked = mcpOk && (isLocal || editorOk || s.studioApp === true);
+    const placeOpen = mcpOk && editorOk;
+    const states = { bridge: mcpOk, studio: studioLinked, place: placeOpen, chat: false };
+    const order = ["bridge", "studio", "place", "chat"];
+    const firstOpen = order.find((k) => !states[k]);
+    for (const k of order) {
+      const li = hintRow.querySelector(`#start-steps li[data-step="${k}"]`);
+      if (!li) continue;
+      li.className = states[k] ? "ok" : (k === firstOpen ? "now" : "wait");
+    }
+    const placeEl = document.getElementById("hint-place");
+    if (placeEl) placeEl.textContent = isLocal ? "Workspace folder is created for you - nothing to open" : "Open a place (File → New → Baseplate works)";
+    const prog = document.getElementById("steps-progress");
+    if (prog) prog.textContent = `${order.filter((k) => states[k]).length}/${order.length}`;
+    const next = document.getElementById("next-step");
+    if (next) next.textContent = !mcpOk ? `Next: double-click ${RUN_CMD} - this list updates by itself.`
+      : !studioLinked ? (s.studioProc === true ? "Next: Studio is open - switch on its MCP server (Assistant → ⋯ → Manage MCP Servers)." : "Next: open Roblox Studio and switch on its MCP server.")
+      : !placeOpen ? "Next: open a place in Studio."
+      : "Ready - open an AI chat and press ▶ Start Agent on the ORscript bar.";
+    hintRow.style.display = ok ? "none" : "";
+  }
   // keep engine toggle in sync from bg status (in case popup opened after toggle)
   if (s.engine) try { const raw = s.engine === "anim" ? "roblox" : s.engine; const e = ENGINES.includes(raw) ? raw : "roblox"; if (typeof renderEngine === "function") renderEngine(e); } catch {}
 }

@@ -893,6 +893,7 @@
   // Keep it factual for THIS build - runTool returns one entry verbatim, or the
   // {id,title,summary} list when no topic matches.
   const FEATURE_HELP_TOPICS={
+    beginner:{title:"Getting started (beginner guide)",summary:"Four steps, then talk in plain words: (1) run the ORscript agent app (bin/or-core.exe) and leave it open, (2) open Roblox Studio and switch on Assistant → ⋯ → Manage MCP Servers → 'Studio as MCP server', (3) open a place, (4) press ▶ Start Agent on the OR bar. The bar's getting-started card ticks each step off live and offers three starter requests.",details:["No code is needed: describe the result ('make a coin pickup that saves', 'build a small lobby', 'fix the error in Output'). The AI reads the place first, then builds, playtests and screenshots to verify.","Settings opens in a SIMPLE view (Help, Work mode, Access, everyday toggles). Flip 'Show advanced settings' for Multi-Agent, task list, shortcuts, custom prompt and MCP servers.","Access: Sandbox (default) touches only Studio and the agent workspace. Ask shows an approval card before writes / runs. Full unlocks the whole PC - leave it off while learning.","Settings → Help → 'Getting-started checklist' reopens the live card any time; 'Read the Tutorial' opens the full walkthrough.","Stuck? Red text on the bar names the missing piece in plain words. 'Agent app offline' → run bin/or-core.exe; 'Studio not connected' → the MCP switch in Studio (or Repair Studio link in Settings → MCP servers); 'open a place' → File → New → Baseplate."]},
     design:{title:"Design pack (GUI generation)",summary:"Generate real, responsive Roblox GUI - ScreenGui trees with LocalScripts, remotes and server stubs - from design tokens and screen templates instead of static mock-ups.",details:["design_tokens_set {preset, primary, secondary, surface, text, font, radius} writes ReplicatedStorage.OR_Design (Tokens, UIKit, Responsive ModuleScripts). Presets: midnight, clean_light, candy, neon, royal_gold, forest, horror, ocean, sakura, retro. Re-run it to restyle every generated screen at once; design_tokens_get reads the current set.","ui_screen_generate {kind} builds complete screens: main_menu, hud, shop, inventory, settings, leaderboard, daily_rewards, quest_log, loading, dialog, notification_stack - each with an OR_Controller LocalScript (actions, open keys, gamepad B, typewriter), data feeds (leaderstats pills, health, leaderboard rows, toasts) and, where needed, remotes plus server scripts (shop purchase validation, DataStore-backed daily rewards).","ui_from_spec {name, spec} turns a JSON tree (Window, Panel, Row, Column, Grid, ScrollList, Tabs, Button, Label, ItemCard, Slot, CurrencyPill, ProgressBar, Toggle, Input...) sized in pixels on a 1280x720 canvas into scale-based UI with aspect/size constraints and TextScaled text. ui_component_place adds one component to an existing GUI; ui_export_spec converts any GUI back into a spec.","Retrofit tools: ui_apply_tokens (restyle legacy UI), ui_make_responsive (offset roots -> scale + constraints + OR_Responsive script), ui_gamepad_focus (NextSelection links + selection cursor), ui_states_wire (hover/press states + OR_Controller).","ui_audit {path} scores 0-100 and lists issues (contrast, tiny text, small touch targets, offset-only roots, overlap, static canvases, global ZIndex, missing runtime). ui_preview {path, device} stages a window for or_screenshot; call it again with restore:true before shipping.","Everything lives in Studio as normal instances - no account, no web app, no image-only mock-ups. The Creation work mode focuses these commands and uses them whenever a request involves a menu, HUD, shop or any other screen."]},
     gfx:{title:"Thumbnail & Icon Studio (gfx pack)",summary:"Stage, light, pose and photograph real game thumbnails (1920x1080) and icons (512x512) inside Roblox Studio - the finished PNG is cropped, downloaded and attached to the chat - instead of a static AI image you cannot edit.",details:["gfx_stage_create {style, kind} builds a cyclorama stage far above the map (floor, cove, backdrop, Key/Fill/Rim SpotLights) and applies the style lighting + post stack: cinematic, cartoony, horror, neon, clean or chroma (green screen). Lighting and the camera are snapshotted so gfx_teardown leaves no trace.","gfx_subject_add {source, pose, face, slot} puts a character on stage: 'dummy' (R15), 'r6', 'player:USERID' / 'user:Name' (the real avatar) or any model path. Poses: hero, point, jump, wave, scared, victory, run, think, sit, dab, fight, crossed_arms. Faces on dynamic heads: happy, shocked, angry, scared, smirk, determined, laughing, wink (face_id for classic decal heads). gfx_pose re-poses; gfx_prop_add floats a glowing sword / pet / chest beside the subject.","gfx_camera {preset} frames the shot: hero_low, three_quarter, front, closeup, top_down, dutch, wide, icon (+ fov / pitch / yaw / roll / distance_scale). gfx_overlay {title, subtitle, badge, logo_image} adds a huge outlined gradient title in the style font with 16:9 / 1:1 masks, safe-area and thirds guides. gfx_fx adds sparkles / embers / smoke / confetti / snow / magic / rays; gfx_lighting fine-tunes bloom, saturation, DOF, fog, time and the rig lights.","gfx_capture photographs the viewport through the Studio MCP, hides the guides, crops to the aspect box and returns the PNG (thumbnail 1920x1080, icon 512x512 or custom) - downloaded by the browser and attached to the chat so the model can judge and iterate. gfx_brief writes an art-director brief, an image-generation prompt and a CTR checklist for chats that can paint.","Workflow: gfx_brief -> gfx_stage_create -> gfx_subject_add (+ gfx_prop_add) -> gfx_overlay -> gfx_fx -> gfx_camera -> gfx_capture (judge, iterate) -> gfx_teardown. Maximise the 3D viewport first: the capture is only as sharp as the viewport."]},
     blueprints:{title:"System Blueprints (built-in skills)",summary:"Twelve production-grade game systems that install into the place as real code - shared Core (Signal bus, remotes, DataStore profiles with session locks, receipts, leaderstats, notifications) + a Config ModuleScript, a server Service and a client script per system - then verify themselves in edit mode. Lemonade-style 'complete systems', but built in, inspectable and yours.",details:["blueprint_list shows the catalogue: currency (wallet + data profiles), shop (items, game passes, dev-product packs), pets (eggs, rarity, luck, following pets), combat (weapons, hitboxes, damage pipeline, statuses), rounds (intermission / round / results loop with maps), checkpoints (obby stages + skip product), quests (Bus-driven daily objectives), tycoon (plots, buttons, droppers, collector), leaderboards (OrderedDataStore boards), admin (ranks + chat commands), anticheat (speed / fly / teleport rules), sprint (stamina).","blueprint_install {name:\"pets\"} installs dependencies first (pets -> currency), writes ReplicatedStorage.OR_Systems.<System>.{Config,Remotes}, ServerScriptService.OR_Systems.<System>.Service and StarterPlayerScripts.OR_Systems.<System>Client, generates weapon Tools / a demo course / plots / boards / an arena when the place has none, then runs blueprint_verify. name:\"all\" installs everything; config:{...} seeds the Config.","blueprint_configure {name, config} deep-merges into the Config module (readable Lua table, OR_ConfigJSON attribute) and re-verifies; blueprint_verify compiles Config + Service against Core in edit mode and runs each Service's SelfTest (shop validation, pet odds, cooldowns, round state machine, quest progress, tycoon gates, anticheat rules...); blueprint_status reports versions, remotes and missing dependencies; blueprint_remove uninstalls without touching player data.","Systems talk through Core.Bus topics (Combat.Kill -> Currency reward + Quests + Leaderboards; Checkpoints.Reached -> reward; Round.Won -> reward + quest) so any subset works together. Extend them with script_read / multi_edit on the Service, or build UI on their remotes with ui_screen_generate.","Workflow for a 'make me a pet simulator' request: blueprint_install {name:[\"currency\",\"pets\",\"shop\",\"quests\",\"leaderboards\"]} -> blueprint_configure the eggs / prices -> ui_screen_generate {kind:\"shop\"} wired to the Hatch / Purchase remotes -> start_stop_play + get_console_output -> blueprint_status."]},
@@ -3356,7 +3357,7 @@
     }
     if (typeof PublicSkills !== "undefined" && PublicSkills.isCommand(roadmapName)) return await runPublicSkill(roadmapName, args);
     if(roadmapName==="orscript_help"){
-      const question=String(args.question||"").toLowerCase(),aliases={tasklist:/task list|tasklist|checklist|to-do|todo list|my tasks|next task/,templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|ultimate mode|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projectindex:/project index|project map|codebase|architecture|index the (place|project|game)|require graph|dependency graph|who requires|what requires|which script (fires|handles)|stale index|project_index|code map|conventions/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/,plugins:/other plugin|plugins|eclipse|moon animator|interop|full control|macro|settings\(\)/,publicskills:/public skill|own skill|own command|custom command|custom mode|own mode|make a skill|create a skill|new skill|ability|share code|orskill/,design:/design token|design pack|ui kit|uikit|screengui|gui gen|generate (a |the )?(gui|ui|menu|hud|shop|inventory)|main menu|hud|shop ui|inventory ui|settings screen|leaderboard ui|daily reward|quest log|loading screen|dialog box|responsive|ui audit|ui_from_spec|ui_screen_generate/,gfx:/thumbnail|game icon|gfx|render (a |the )?(thumbnail|icon)|cover art|key art|promo (image|art)|gfx_/,blueprints:/blueprint|complete system|game system|starter system|pet system|shop system|currency system|tycoon|anticheat|anti-cheat|admin command|round system|checkpoint system|quest system|leaderboard system|sprint system|data ?store profile/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
+      const question=String(args.question||"").toLowerCase(),aliases={tasklist:/task list|tasklist|checklist(?! for getting)|to-do|todo list|my tasks|next task/,beginner:/beginner|get(ting)? started|getting-started|first time|how do i (start|begin|use|set ?up)|new user|setup|set up|tutorial|where do i start|install/,templates:/template|reusable|library|save/,roadmap:/roadmap|plan|phase|task|progress/,commands:/command|tool|registry|what can/,studio:/studio|roblox|mcp|plugin|connect/,workmode:/work mode|ultimate mode|visualizer|animator mode|fast mode|balanced mode|thorough mode/,projectindex:/project index|project map|codebase|architecture|index the (place|project|game)|require graph|dependency graph|who requires|what requires|which script (fires|handles)|stale index|project_index|code map|conventions/,projects:/project|rbxl|upload|reference|analy/,themes:/theme|skin|void|appearance/,permissions:/permission|sandbox|full access|safety|confirm/,providers:/provider|model|chatgpt|claude|deepseek|minimax|arena/,troubleshooting:/error|broken|fail|stuck|repair|timeout|not start/,plugins:/other plugin|plugins|eclipse|moon animator|interop|full control|macro|settings\(\)/,publicskills:/public skill|own skill|own command|custom command|custom mode|own mode|make a skill|create a skill|new skill|ability|share code|orskill/,design:/design token|design pack|ui kit|uikit|screengui|gui gen|generate (a |the )?(gui|ui|menu|hud|shop|inventory)|main menu|hud|shop ui|inventory ui|settings screen|leaderboard ui|daily reward|quest log|loading screen|dialog box|responsive|ui audit|ui_from_spec|ui_screen_generate/,gfx:/thumbnail|game icon|gfx|render (a |the )?(thumbnail|icon)|cover art|key art|promo (image|art)|gfx_/,blueprints:/blueprint|complete system|game system|starter system|pet system|shop system|currency system|tycoon|anticheat|anti-cheat|admin command|round system|checkpoint system|quest system|leaderboard system|sprint system|data ?store profile/};let topic=String(args.topic||"").toLowerCase();if(!FEATURE_HELP_TOPICS[topic])topic=Object.keys(aliases).find(k=>aliases[k].test(question))||"";if(!topic)return `Output of 'orscript_help':\n${JSON.stringify({success:true,message:"Ask about any OrScript feature.",topics:Object.entries(FEATURE_HELP_TOPICS).map(([id,x])=>({id,title:x.title,summary:x.summary}))},null,2)}`;const help=FEATURE_HELP_TOPICS[topic];return `Output of 'orscript_help':\n${JSON.stringify({success:true,topic,...help,agentStarted:false,executedCommands:false},null,2)}`;
     }
     if (LOOKUP_TOOL_RE.test(roadmapName)) {
       // 1.37.1: no command searching (see noSearchReply). The registry paths
@@ -6706,6 +6707,13 @@
 
     const DEFAULT_KEYBINDS = { menu: "Ctrl+Shift+O", start: "Ctrl+Enter", voice: "Ctrl+Shift+V", templates: "Ctrl+Shift+T" };
     let keybinds = { ...DEFAULT_KEYBINDS };
+    // 1.40.0 Beginner mode: Settings opens in a SIMPLE view (Help, Work mode,
+    // Access, the everyday toggles). Everything a first-week user never needs -
+    // sub-toggles, Multi-Agent, task list, shortcuts, custom prompt, MCP servers -
+    // sits behind one "Show advanced settings" switch. Persisted.
+    let settingsAdvanced = false;
+    try { chrome.storage.local.get("rsSettingsAdvanced", (r) => { if (r && r.rsSettingsAdvanced === true) settingsAdvanced = true; try { if (menuEl && !menuEl.hidden) buildMenu(); } catch {} }); } catch {}
+    function setSettingsAdvanced(on) { settingsAdvanced = !!on; try { chrome.storage.local.set({ rsSettingsAdvanced: settingsAdvanced }); } catch {} }
     try { chrome.storage.local.get("rsKeybinds", r => { if (r && r.rsKeybinds) { keybinds = { ...DEFAULT_KEYBINDS, ...r.rsKeybinds }; syncKeybindInputs(); } }); } catch {}
     function comboFromEvent(e) { const parts=[]; if(e.ctrlKey)parts.push("Ctrl"); if(e.altKey)parts.push("Alt"); if(e.shiftKey)parts.push("Shift"); if(e.metaKey)parts.push("Meta"); const k=e.key.length===1?e.key.toUpperCase():e.key.replace(" ","Space"); if(!["Control","Alt","Shift","Meta"].includes(e.key))parts.push(k); return parts.join("+"); }
     function isEditableTarget(el) { return !!(el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))); }
@@ -7458,7 +7466,13 @@
          </section>
           <section class="rs-menu-sec">
             <div class="rs-sec-label"><span>Help</span></div>
-            <button class="rs-tip-opt rs-tip-star" id="rs-menu-tutorial"><span>Read the Tutorial</span><span class="rs-tip-sub">text walkthrough \u2014 always up to date</span></button>
+            <button class="rs-tip-opt rs-tip-star" id="rs-menu-setup"><span>Getting-started checklist</span><span class="rs-tip-sub">live 4-step setup \u2014 agent app, Studio, place, Start</span></button>
+            <button class="rs-tip-opt rs-tip-star" id="rs-menu-tutorial"><span>Read the Tutorial</span><span class="rs-tip-sub">plain-language walkthrough \u2014 always up to date</span></button>
+            <div class="rs-tgl-row rs-adv-row" data-mode="advanced" role="switch" aria-checked="${settingsAdvanced}" tabindex="0">
+              <span class="rs-tgl-info"><span class="rs-tgl-name">Show advanced settings</span>
+              <span class="rs-tgl-sub">${settingsAdvanced ? "Everything is visible. Switch off for the short beginner view." : "Hidden: playtest sub-options, Multi-Agent, task list, shortcuts, custom prompt, MCP servers."}</span></span>
+              <span class="rs-tgl ${settingsAdvanced ? "on" : ""}"></span>
+            </div>
             ${WORKINK_URL ?  `<button class="rs-tip-opt rs-tip-ad" data-u="${WORKINK_URL}"><span>Watch an ad to support</span><span class="rs-tip-sub">free, takes a minute</span></button>` : ""}
           </section>
          <section class="rs-menu-sec">
@@ -7496,20 +7510,20 @@
               <span class="rs-tgl-sub">Watches Output during Play and sends new errors to the AI.</span></span>
               <span class="rs-tgl ${autoFixEnabled ? "on" : ""}"></span>
             </div>
-            <div class="rs-tgl-row rs-tgl-sub-row" data-mode="autofixstop" role="switch" aria-checked="${autoFixStopPlay}" tabindex="0">
+            <div class="rs-tgl-row rs-tgl-sub-row rs-adv" data-mode="autofixstop" role="switch" aria-checked="${autoFixStopPlay}" tabindex="0">
               <span class="rs-tgl-info"><span class="rs-tgl-name">Stop playtest on error</span>
               <span class="rs-tgl-sub">Stop Play when an error is caught (off = keep playing while the AI fixes it).</span></span>
               <span class="rs-tgl ${autoFixStopPlay ? "on" : ""}"></span>
             </div>
-            <div class="rs-tgl-row" data-mode="autodebug" role="switch" aria-checked="${autoDebugEnabled}" tabindex="0">
+            <div class="rs-tgl-row rs-adv" data-mode="autodebug" role="switch" aria-checked="${autoDebugEnabled}" tabindex="0">
               <span class="rs-tgl-info"><span class="rs-tgl-name">Automatic Debugger</span><span class="rs-tgl-sub">After Studio edits, new Output errors are sent to the AI to fix.</span></span>
               <span class="rs-tgl ${autoDebugEnabled ? "on" : ""}"></span>
             </div>
-            <div class="rs-tgl-row" data-mode="multiagent" role="switch" aria-checked="${multiAgent}" tabindex="0">
+            <div class="rs-tgl-row rs-adv" data-mode="multiagent" role="switch" aria-checked="${multiAgent}" tabindex="0">
               <span class="rs-tgl-info"><span class="rs-tgl-name">Multi-Agent</span><span class="rs-tgl-sub">Crew with a shared board: planner → builder / scripter → reviewer → tester → debugger. Read-only roles cannot edit; "done" needs a verified playtest.</span></span>
               <span class="rs-tgl ${multiAgent ? "on" : ""}"></span>
             </div>
-            <div class="rs-tgl-row" data-mode="tasklist" role="switch" aria-checked="${taskListOn()}" tabindex="0">
+            <div class="rs-tgl-row rs-adv" data-mode="tasklist" role="switch" aria-checked="${taskListOn()}" tabindex="0">
               <span class="rs-tgl-info"><span class="rs-tgl-name">Task list</span><span class="rs-tgl-sub">${taskListOn() ? `Enabled — ${taskListSummary()}. The AI sees the list, gets task_list / task_next / task_add / task_update, and a progress pill shows on the bar.` : "Disabled — a checklist you (or the AI) keep for this project. Enable to show the Tasks tab in the cards panel and give the AI the task_* commands."}</span></span>
               <span class="rs-tgl ${taskListOn() ? "on" : ""}"></span>
             </div>
@@ -7518,7 +7532,7 @@
               <span class="rs-tgl ${soundOn ? "on" : ""}"></span>
             </div>
           </section>
-          <section class="rs-menu-sec rs-keybind-sec">
+          <section class="rs-menu-sec rs-keybind-sec rs-adv">
             <div class="rs-sec-label"><span>Keyboard shortcuts</span><span class="rs-sec-state">click a field, press keys</span></div>
             <div class="rs-keybind-grid">
               <label>Settings <input data-keybind="menu" value="${keybinds.menu}" readonly></label>
@@ -7528,13 +7542,13 @@
             </div>
             <div class="rs-menu-note">Shortcuts work anywhere outside a text field. Voice coding remains opt-in and only starts after its shortcut is pressed.</div>
           </section>
-          <section class="rs-menu-sec">
+          <section class="rs-menu-sec rs-adv">
             <div class="rs-sec-label"><span>Custom prompt</span></div>
             <div class="rs-menu-note">Added below the system prompt on every new session. The built-in prompt cannot be edited.</div>
             <textarea id="rs-set-text" rows="4" placeholder="e.g. Always comment your Luau code. Prefer small modular scripts."></textarea>
             <div class="rs-set-row"><button id="rs-set-save">Save</button><span id="rs-set-status"></span></div>
           </section>
-          <section class="rs-menu-sec">
+          <section class="rs-menu-sec rs-adv">
             <div class="rs-sec-label"><span>MCP servers</span></div>
             <div class="rs-menu-note">Roblox Studio is primary. Blender connects to the addon running in Blender on port 9876.</div>
             ${blenderCardHtml()}
@@ -7567,6 +7581,9 @@
       // In-app tutorial (no external link): opens the centered modal.
       const tutBtn = menuEl.querySelector("#rs-menu-tutorial");
       if (tutBtn) tutBtn.addEventListener("click", () => { setMenuOpen(false); openTutorial(); });
+      const setupBtn = menuEl.querySelector("#rs-menu-setup");
+      if (setupBtn) setupBtn.addEventListener("click", () => { setMenuOpen(false); try { openSetupChecklist(); } catch {} });
+      menuEl.classList.toggle("rs-menu-simple", !settingsAdvanced);
       const ta = menuEl.querySelector("#rs-set-text");
       const saveBtn = menuEl.querySelector("#rs-set-save");
       const status = menuEl.querySelector("#rs-set-status");
@@ -7595,6 +7612,7 @@
           else if(m==="multiagent") setMultiAgent(!multiAgent);
           else if(m==="tasklist") setTaskList(!taskListOn());
           else if(m==="sounds") { setSounds(!soundOn); try { buildMenu(); toast(soundOn ? "Sound effects on" : "Sound effects off"); if (soundOn) playSfx("ok"); } catch {} }
+          else if(m==="advanced") { setSettingsAdvanced(!settingsAdvanced); try { buildMenu(); toast(settingsAdvanced ? "Advanced settings shown" : "Simple view — the essentials only"); } catch {} }
         };
         btn.addEventListener("click", flip);
         btn.addEventListener("keydown", (e) => {
@@ -8477,25 +8495,66 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     }
     // Card event wiring moved into build() so cardsBtn/cardsPanel exist
     // ── First-time onboarding card (bridge missing) ─────────────────────────
-    let setupCard = null, setupSeen = false, setupRaf = null;
+    let setupCard = null, setupSeen = false, setupRaf = null, setupForced = false, setupReadyAt = 0;
     try {
       chrome.storage.local.get("rsSetupSeen", (r) => {
         if (r && r.rsSetupSeen) setupSeen = true;
       });
     } catch {}
 
+    // 1.40.0 Beginner mode: the first-run card is a LIVE checklist, not a static
+    // list. Each step reads the real bridge / Studio / place / session state and
+    // turns green on its own; the current blocker gets a plain-language hint and
+    // (where one exists) a one-click fix. When everything is green the card hands
+    // the beginner three starter requests that paste straight into the composer.
+    const SETUP_STARTERS = [
+      { title: "Build a small lobby", prompt: "Build a small lobby in this place: a spawn location, four walls with a door gap, a simple roof, and warm evening lighting. When it is done, take a screenshot so I can see it." },
+      { title: "Make a coin pickup", prompt: "Make a coin pickup system: a few spinning coins in Workspace, a server script that gives the player 1 Coin per pickup in leaderstats, and a pickup sound. Playtest it and tell me what you checked." },
+      { title: "Fix an error for me", prompt: "Read the latest error in the Studio Output, find the script that causes it, explain the bug in one sentence, fix it, and confirm the error is gone." },
+    ];
+    function setupSteps() {
+      const bridge = !!(A.bridge && A.bridge.connected);
+      const local = currentEngine === "local";
+      const studioLinked = bridge && (local || !studioDown || placeDown);
+      const placeOpen = bridge && (local || bridgeOk);
+      const started = !!A.started;
+      const steps = [
+        {
+          id: "bridge", ok: bridge, title: "Run the ORscript agent app",
+          hint: IS_WINDOWS_HOST
+            ? `Double-click <code>${RUN_CMD}</code> in your ORscript folder and leave its window open. This card turns green by itself.`
+            : `Start <code>${RUN_CMD}</code> and leave it running. This card turns green by itself.`,
+          fix: bridge ? "" : "retry",
+        },
+        local
+          ? { id: "studio", ok: bridge, title: "AgentScript works on this PC", hint: "Nothing to connect — the agent already has its workspace folder.", fix: "" }
+          : {
+            id: "studio", ok: studioLinked, title: "Open Roblox Studio and switch on its MCP server",
+            hint: studioProcUp
+              ? "Studio is open but not talking to us yet. In Studio: <b>Assistant</b> (AI panel) → <b>⋯</b> → <b>Manage MCP Servers</b> → turn on <b>Studio as MCP server</b>."
+              : "Open <b>Roblox Studio</b>. Then in Studio: <b>Assistant</b> (AI panel) → <b>⋯</b> → <b>Manage MCP Servers</b> → turn on <b>Studio as MCP server</b>.",
+            fix: bridge && !studioLinked && studioProcUp ? "repair" : "",
+          },
+        local
+          ? { id: "place", ok: bridge, title: "Workspace ready", hint: "Files and commands run inside the agent's workspace folder.", fix: "" }
+          : { id: "place", ok: placeOpen, title: "Open a place in Studio", hint: "Open any place (or <b>New → Baseplate</b>) so the agent has somewhere to build.", fix: "" },
+        {
+          id: "start", ok: started, title: "Press ▶ Start Agent on the bar",
+          hint: "The AI reads its command list, then waits for you. Describe what you want in plain words — no code needed.",
+          fix: started ? "" : "start",
+        },
+      ];
+      return steps;
+    }
     function buildSetup() {
       setupCard = document.createElement("div");
       setupCard.id = "rs-setup";
       setupCard.hidden = true;
       setupCard.innerHTML =
-        `<div id="rs-setup-head"><span id="rs-setup-logo">OR</span><span id="rs-setup-tag">Setup</span></div>` +
-        `<div id="rs-setup-sub">Three steps. Then talk to the AI like a teammate.</div>` +
-        `<ol id="rs-setup-steps">` +
-          `<li>Double-click <code>${RUN_CMD}</code> and leave it running</li>` +
-          `<li>Pick <b>RS</b> for Studio or <b>AS</b> for a folder on this PC</li>` +
-          `<li>Click <b>Start agent</b> on the bar</li>` +
-        `</ol>` +
+        `<div id="rs-setup-head"><span id="rs-setup-logo">OR</span><span id="rs-setup-tag">Getting started</span><span id="rs-setup-progress" aria-live="polite"></span></div>` +
+        `<div id="rs-setup-sub">Four steps. They tick themselves off as you go.</div>` +
+        `<ol id="rs-setup-steps"></ol>` +
+        `<div id="rs-setup-starters" hidden></div>` +
         `<div class="rs-setup-actions">` +
           `<button type="button" id="rs-setup-tutorial">Tutorial</button>` +
           `<button type="button" id="rs-setup-close" title="Dismiss setup">\u2715</button>` +
@@ -8509,53 +8568,121 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       });
 
       setupCard.querySelector("#rs-setup-close").addEventListener("click", () => {
-        setupSeen = true;
+        setupSeen = true; setupForced = false;
         try { chrome.storage.local.set({ rsSetupSeen: true }); } catch {}
         hideSetup();
       });
+      setupCard.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-setup-fix]");
+        if (btn) {
+          const fix = btn.dataset.setupFix;
+          if (fix === "retry") { try { bg({ type: "reconnect" }); } catch {} toast("Looking for the agent app…"); }
+          else if (fix === "repair") { try { bg({ type: "restart_mcp" }); } catch {} toast("Repairing the Studio link…"); }
+          else if (fix === "start") { try { const a = (root && root.querySelector && root.querySelector("#rs-action")) || document.getElementById("rs-action"); if (a) a.click(); } catch {} }
+          return;
+        }
+        const chip = e.target.closest("[data-setup-starter]");
+        if (chip) {
+          const st = SETUP_STARTERS[Number(chip.dataset.setupStarter)];
+          if (st) {
+            const ok = pasteLibraryCard({ title: st.title, prompt: st.prompt }, { silent: true });
+            toast(ok ? "Request typed in — press Enter to send it" : "Open the chat box first, then try again");
+            if (ok) { setupSeen = true; setupForced = false; try { chrome.storage.local.set({ rsSetupSeen: true }); } catch {} hideSetup(); }
+          }
+        }
+      });
+      renderSetup();
     }
+    // Paint the live checklist. Cheap (string compare) so renderBar can call it.
+    let setupLastHtml = "";
+    function renderSetup() {
+      if (!setupCard) return;
+      const steps = setupSteps();
+      const done = steps.filter((x) => x.ok).length;
+      const firstOpen = steps.find((x) => !x.ok);
+      const allOk = !firstOpen;
+      const html = steps.map((st) => {
+        const state = st.ok ? "ok" : (firstOpen && firstOpen.id === st.id ? "now" : "wait");
+        const fixBtn = state === "now" && st.fix
+          ? `<button type="button" class="rs-setup-fix" data-setup-fix="${st.fix}">${st.fix === "retry" ? "Check again" : st.fix === "repair" ? "Repair Studio link" : "▶ Start Agent"}</button>`
+          : "";
+        return `<li class="rs-step-${state}" data-step="${st.id}"><span class="rs-step-pip" aria-hidden="true"></span><span class="rs-step-body"><span class="rs-step-title">${st.title}</span>${state === "now" ? `<span class="rs-step-hint">${st.hint}</span>${fixBtn}` : ""}</span><span class="rs-step-state">${st.ok ? "done" : state === "now" ? "next" : ""}</span></li>`;
+      }).join("");
+      let mutated = false;
+      if (html !== setupLastHtml) {
+        setupLastHtml = html;
+        const ol = setupCard.querySelector("#rs-setup-steps");
+        if (ol) ol.innerHTML = html;
+        mutated = true;
+      }
+      const prog = setupCard.querySelector("#rs-setup-progress");
+      // Idempotent writes: setStatus ticks call this every few hundred ms and
+      // any DOM mutation on the bar costs a placement pass (see test-v135).
+      const setText = (el, t) => { if (el && el.textContent !== t) { el.textContent = t; mutated = true; } };
+      setText(prog, `${done}/${steps.length}`);
+      const sub = setupCard.querySelector("#rs-setup-sub");
+      setText(sub, allOk
+        ? "All set. Pick a starter below or type your own request — plain words are fine."
+        : (done === 0 ? "Four steps. They tick themselves off as you go." : `${done} of ${steps.length} done — ${firstOpen.title.replace(/^Press /, "press ")}.`));
+      const starters = setupCard.querySelector("#rs-setup-starters");
+      if (starters) {
+        if (starters.hidden !== !allOk) { starters.hidden = !allOk; mutated = true; }
+        if (allOk && !starters.childElementCount) {
+          starters.innerHTML = `<div class="rs-setup-starters-label">Try one</div>` + SETUP_STARTERS.map((st, i) => `<button type="button" class="rs-setup-starter" data-setup-starter="${i}" title="${st.prompt.replace(/"/g, "&quot;")}">${st.title}</button>`).join("");
+        }
+      }
+      if (setupCard.classList.contains("rs-setup-ready") !== allOk) setupCard.classList.toggle("rs-setup-ready", allOk);
+      if (mutated) { try { kickPlaceBar(); } catch {} }
+    }
+    try { window.__rsSetupSteps = () => setupSteps().map((x) => ({ id: x.id, ok: x.ok })); } catch {}
 
     // ── In-extension text tutorial (centered, scrollable modal) ─────────────
     // Replaces the outdated YouTube link: the walkthrough ships with the
     // extension and can never go stale relative to the UI.
     let tutorialEl = null;
     const TUTORIAL_HTML = `
-      <h3>Welcome to OR</h3>
-      <p>This extension turns your AI chat into a real agent. You talk, it <b>does</b> — switch engines on the bar:</p>
+      <h3>Welcome to ORscript</h3>
+      <p>ORscript turns this AI chat into a builder that works <b>inside Roblox Studio</b> for you. You describe what you want in plain words - it creates the parts, writes the scripts, tests the game and shows you screenshots. You never have to write code yourself (but you can).</p>
+      <p>Two things need to be running: the small <b>ORscript agent app</b> on your PC (it links the chat to Studio) and <b>Roblox Studio</b> with a place open. The card on the bar ticks these off for you.</p>
+
+      <h3>1 · Run the agent app</h3>
+      <p>In your ORscript folder, double-click <code>${RUN_CMD}</code>. A small window opens - leave it open while you work (it keeps running in the background if you close the window). The bar's first step turns green on its own.</p>
+
+      <h3>2 · Link Roblox Studio</h3>
+      <p>Open Roblox Studio. In Studio, open the <b>Assistant</b> (AI) panel, click the <b>⋯</b> menu → <b>Manage MCP Servers</b> → turn on <b>Studio as MCP server</b>. You only do this once per Studio install. ORscript also installs its own small Studio plugin automatically - nothing to do there.</p>
+
+      <h3>3 · Open a place</h3>
+      <p>Any place works. For a first try: <b>File → New → Baseplate</b>. The agent builds in the place that is open.</p>
+
+      <h3>4 · Press Start Agent</h3>
+      <p>Click <b>▶ Start Agent</b> on the ORscript bar next to the chat box. The AI quietly reads its command list, then says it is ready. Now just talk.</p>
+
+      <h3>What to say</h3>
       <ul>
-        <li><b>RS — Roblox</b>: builds inside Roblox Studio (instances, scripts, terrain, UI, lighting).</li>
-        <li><b>AS — AgentScript</b>: works directly on a folder on your PC — files, code, terminal commands.</li>
+        <li>"Build a small lobby with a spawn, walls and warm lighting, then show me a screenshot."</li>
+        <li>"Make a coin pickup system that saves the player's coins."</li>
+        <li>"There is an error in the Output - find it, explain it in one sentence and fix it."</li>
+        <li>"Make this UI look like a modern shop and add a buy button that works."</li>
+      </ul>
+      <p>Be specific about the <b>result</b>, not the steps. The AI reads your place first, builds, playtests and verifies with screenshots. If you want it to stop, press <b>■ Stop</b> on the bar.</p>
+
+      <h3>Good to know</h3>
+      <ul>
+        <li><b>Access:</b> <i>Sandbox</i> (default) can only touch Studio and the agent's own folder. <i>Ask</i> shows you an approval card before anything risky. <i>Full</i> unlocks your whole PC - leave it off while you learn.</li>
+        <li><b>Auto-fix playtest:</b> while you press Play in Studio, new errors are sent to the AI and fixed for you.</li>
+        <li><b>Background tabs:</b> the agent keeps building while you browse other tabs.</li>
+        <li><b>Settings (⚙ on the bar)</b> opens in a short <b>simple view</b>. Switch on <i>Show advanced settings</i> when you want Multi-Agent, task lists, shortcuts or extra MCP servers.</li>
+        <li><b>Templates (the library icon on the bar):</b> ready-made requests you can reuse; <b>Paint</b> (the brush icon) lets you sketch what you want and send the drawing.</li>
+        <li><b>Agent (AS) engine:</b> the second switch on the bar points the same AI at a folder on your PC instead of Studio - files, code and terminal commands. Nothing to connect.</li>
       </ul>
 
-      <h3>1 · Run the agent</h3>
-      <p>Double-click <code>bin/or-core.exe</code> in your folder. A status window opens showing engines and a live console. Keep it running while you work.</p>
-
-      <h3>2 · Connect an engine</h3>
-      <p><b>RS:</b> open Roblox Studio → Assistant AI → ⋯ → Manage MCP Servers → enable Studio as MCP Server.<br>
-      <b>AS:</b> nothing to connect — it's already your machine.</p>
-
-      <h3>3 · Start the agent</h3>
-      <p>Open any supported AI chat (DeepSeek, ChatGPT, Gemini, Kimi, Qwen, Arena, Meta AI, or Crax). Click <b>Start agent</b> on the bar. The AI runs <code>list_commands</code>, then waits for your first request.</p>
-
-      <h3>Power-ups</h3>
-      <p>In the ⋯ menu toggle <b>Work in background tabs</b> (on by default) so the agent keeps building while you browse other sites.</p>
-
-      <h3>AgentScript basics (AS)</h3>
-      <p>The terminal button next to your chatbox opens your <b>Session summary</b>: every file edit, command run and search, with pass/fail states and counters.</p>
-      <p>Ask naturally: "make a python script that sorts my downloads folder" or "fix the failing test in src/". The AI explores with <code>tree</code>/<code>grep_files</code>, edits with exact patches (<code>edit_file</code>) and verifies by running your tests itself — reading stdout/stderr without bothering you.</p>
-
-      <h3>Danger zone — FULL ACCESS</h3>
-      <p>By default AgentScript is confined to its workspace folder. At the bottom of the Session panel sits a red <b>Danger zone</b> with one toggle: <b>FULL ACCESS</b>. ON = the AI may use absolute paths anywhere on this PC and control processes. It stays off unless you flip it, and the agent window shows a red badge while it's on.</p>
-
-      <h3>4 · Screenshot</h3>
-      <p>Works in <b>Chrome, Edge, Brave, and Opera</b>. <code>or_screenshot {target:"studio"}</code> captures the real Roblox Studio/game viewport through Studio MCP and attaches it to the next message. Use <code>target:"tab"</code> only to capture this browser chat.</p>
-
-      <h3>Troubleshooting</h3>
+      <h3>If something is red</h3>
       <ul>
-        <li><b>"Bridge offline"</b> → run bin/or-core.exe.</li>
-        <li><b>RS says Studio offline</b> → enable the MCP server inside Studio (step 2), or hit <b>Repair Studio link</b> in the ⋯ menu.</li>
-        <li><b>Wrong tools appearing</b> → check the RS/AS switch; switching wipes caches automatically.</li>
-        <li><b>Commands do nothing</b> → reload the extension after updating the folder.</li>
+        <li><b>"Agent app offline" / "Run ${RUN_CMD}"</b> → the agent app is not running. Double-click it again.</li>
+        <li><b>"Studio not connected"</b> → the MCP switch in Studio is off (step 2), or Studio restarted: Settings → MCP servers → <b>Repair Studio link</b>.</li>
+        <li><b>"Open a place"</b> → Studio is open but no place is loaded.</li>
+        <li><b>The AI writes commands but nothing happens</b> → press <b>↻ Restart Agent</b>; if the page was open during an update, reload the page (F5).</li>
+        <li>Still stuck? Settings → Help → <b>Getting-started checklist</b> shows exactly which step is missing, and Discord is one click away.</li>
       </ul>`;
 
     function buildTutorial() {
@@ -8590,27 +8717,45 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     function showSetup() {
       if (!setupCard) buildSetup();
       if ((menuEl && !menuEl.hidden) || (cardsPanel && !cardsPanel.hidden) || (cardEmbedEl && !cardEmbedEl.hidden)) return;
+      renderSetup();
       if (setupCard.hidden) {
         setupCard.hidden = false;
         if (bar) bar.classList.add("rs-setup-open");
         cancelAnimationFrame(setupRaf);
+        try { kickPlaceBar(); } catch {}
       }
     }
 
     function hideSetup() {
+      const was = !!(setupCard && !setupCard.hidden);
       if (setupCard) setupCard.hidden = true;
       if (bar) bar.classList.remove("rs-setup-open");
       cancelAnimationFrame(setupRaf);
+      if (was) { try { kickPlaceBar(); } catch {} }
     }
+    // Settings → Help → "Setup checklist" reopens it any time, even after dismissal.
+    function openSetupChecklist() { setupForced = true; showSetup(); }
+    try { window.__rsOpenSetup = openSetupChecklist; } catch {}
 
-    function refreshSetup(bridgeConnected) {
-      if (setupSeen || bridgeConnected) { hideSetup(); return; }
-      // Bridge is down, but if the user is just READING an existing
-      // conversation with no OR session (the "No agent here" state),
-      // a "bridge down" onboarding popup is pure noise - they may not want an
-      // agent here at all (user request). Keep it for the states where the
-      // bridge actually matters: a fresh/empty chat (the Start affordance is
-      // showing) or a conversation with a live/starting session.
+    function refreshSetup() {
+      if (setupForced) { showSetup(); return; }
+      if (setupSeen) { hideSetup(); return; }
+      const steps = setupSteps();
+      const allOk = steps.every((x) => x.ok);
+      if (allOk) {
+        // First successful start: keep the "all set + starters" state up for a
+        // short while, then consider onboarding done for good.
+        if (!setupReadyAt) setupReadyAt = Date.now();
+        if (Date.now() - setupReadyAt > 180000) { setupSeen = true; try { chrome.storage.local.set({ rsSetupSeen: true }); } catch {} hideSetup(); return; }
+        showSetup();
+        return;
+      }
+      // Something is still missing, but if the user is just READING an existing
+      // conversation with no OR session (the "No agent here" state), an
+      // onboarding card is pure noise - they may not want an agent here at all.
+      // Keep it for the states where setup actually matters: a fresh/empty chat
+      // (the Start affordance is showing) or a conversation with a live/starting
+      // session.
       if (!A.started && !A.starting && !P.chatIsEmpty()) { hideSetup(); return; }
       showSetup();
     }
@@ -8959,7 +9104,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     let lastBarSig = "";
 
     // Thin wrappers kept for the core's call sites; the decision lives in renderBar.
-    function setStarted() { try{updateExtraButton();}catch{}; renderBar(); }
+    function setStarted() { try{updateExtraButton();}catch{}; renderBar(); try { refreshSetup(); } catch {} }
     function setStarting() { try{updateExtraButton();}catch{}; renderBar(); }
 
     function setStatus(s) {
@@ -9040,15 +9185,11 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       if (wasConnected && !s.connected) bridgeAlert(true);
       if (s.connected) bridgeAlert(false);
       wasConnected = s.connected;
-      // Once the bridge has connected at least once, onboarding is done: never
-      // resurface the "download the bridge" setup card again (otherwise, if the
-      // bridge later drops, it would reappear on top of the bridge-lost banner).
-      if (s.connected && !setupSeen) {
-        setupSeen = true;
-        try { chrome.storage.local.set({ rsSetupSeen: true }); } catch {}
-      }
+      // 1.40.0: the getting-started checklist decides for itself whether it is
+      // still useful (dismissed / all four steps green / reading an old chat).
+      // While the bridge-lost banner is up the card stays hidden to avoid stacking.
       renderBar();
-      refreshSetup(s.connected);
+      if (!bridgeBannerEl) refreshSetup(); else hideSetup();
     }
 
     // The page outlived its extension build (reload / Chrome auto-update /
@@ -9562,7 +9703,11 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       }
       const now = performance.now();
       if (now >= placeHotUntil) {
-        const trayOpen = !!((menuEl && !menuEl.hidden) || (cardsPanel && !cardsPanel.hidden) || (cardEmbedEl && !cardEmbedEl.hidden) || (setupCard && !setupCard.hidden));
+        // 1.40.0: the getting-started card no longer counts as an open tray - it
+        // now stays up while the user is connected-but-not-started, and its
+        // height only changes when renderSetup()/showSetup()/hideSetup() mutate
+        // it, each of which kicks a hot placement window itself.
+        const trayOpen = !!((menuEl && !menuEl.hidden) || (cardsPanel && !cardsPanel.hidden) || (cardEmbedEl && !cardEmbedEl.hidden));
         const period = (A.running || A.starting || A.injecting || A.toolRunning || trayOpen) ? PLACE_BUSY_MS : PLACE_IDLE_MS;
         if (now - placeLastRun < period) return;
       }

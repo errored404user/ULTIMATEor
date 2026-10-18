@@ -69,7 +69,7 @@ ok("logo rings are neutral white, not gold", logoCss.length > 100 && !logoCss.in
 ok("paint brand ring is neutral white", /\.rsp-logo \{[^}]*rgba\(255,255,255,\.3\)/.test(css) && !/\.rsp-logo \{[^}]*214,174,79/.test(css));
 ok("desktop app embeds assets/icon.png", fs.readFileSync(path.join(root, "agent/src/gui.rs"), "utf8").includes('include_bytes!("../../assets/icon.png")'));
 ok("README changelog 1.39.2 + test listed", /\*\*1\.39\.2 — Logo: black & white R\.\*\*/.test(fs.readFileSync(path.join(root, "README.md"), "utf8")) && fs.readFileSync(path.join(root, "README.md"), "utf8").includes("test-v1392.js"));
-ok("manifest 1.39.2", mf.version === "1.39.2", mf.version);
+ok("manifest version is a valid semver at or above 1.39.2", /^\d+\.\d+\.\d+$/.test(mf.version) && mf.version.split(".").map(Number).reduce((acc, v, i) => acc + v * [1e6, 1e3, 1][i], 0) >= 1039002, mf.version);
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall 1.39.2 checks passed");
 process.exit(failed ? 1 : 0);

@@ -200,6 +200,19 @@
     #hint-row code{background:rgba(255,255,255,.08); padding:1px 6px; border-radius:6px;
          font-family:"Cascadia Mono",ui-monospace,monospace; font-size:10.5px; color:var(--text)}
     #hint-row[style*="none"]{display:none}
+    .steps-label{font-size:10px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:var(--text-faint); display:flex; justify-content:space-between; margin-bottom:6px}
+    #steps-progress{color:var(--accent)}
+    #start-steps{list-style:none; margin:0; padding:0; display:grid; gap:6px}
+    #start-steps li{display:flex; gap:8px; align-items:flex-start; color:var(--text-dim); line-height:1.4}
+    #start-steps li .pip{flex:none; width:14px; height:14px; margin-top:1px; border-radius:50%; border:1.5px solid var(--line); box-sizing:border-box; position:relative}
+    #start-steps li.ok{color:var(--text-faint)}
+    #start-steps li.ok .pip{background:#22c55e; border-color:#4ade80}
+    #start-steps li.ok .pip::after{content:""; position:absolute; left:3.5px; top:1px; width:3.5px; height:7px; border:solid #04150a; border-width:0 2px 2px 0; transform:rotate(45deg)}
+    #start-steps li.now{color:var(--text)}
+    #start-steps li.now .pip{border-color:var(--accent); box-shadow:0 0 0 3px var(--glow)}
+    #start-steps li.wait{opacity:.55}
+    #next-step{margin-top:8px; font-size:11px; color:var(--text); font-weight:600}
+    #next-step:empty{display:none}
 
     html[data-theme="night"]{--bg:#090807; --text:#f7f1e8; --text-dim:#c4b7a6; --text-faint:#8f8374; --accent:#e8d5b5; --glow:rgba(232,213,181,.28); --line:rgba(255,232,204,.14); --surface:rgba(255,244,230,.06); --surface-2:rgba(255,244,230,.11)}
 
@@ -307,7 +320,14 @@
     </div>
 
     <div class="row" id="hint-row">
-      Double-click <code id="run-hint">bin/or-core.exe</code>, open <b id="hint-engine">Roblox Studio</b>, then open any chat.
+      <div class="steps-label">Getting started <span id="steps-progress"></span></div>
+      <ol id="start-steps">
+        <li data-step="bridge"><span class="pip"></span><span>Run <code id="run-hint">bin/or-core.exe</code> and leave it open</span></li>
+        <li data-step="studio"><span class="pip"></span><span id="hint-studio">Open <b id="hint-engine">Roblox Studio</b> and switch on <i>Assistant → ⋯ → Manage MCP Servers → Studio as MCP server</i></span></li>
+        <li data-step="place"><span class="pip"></span><span id="hint-place">Open a place (File → New → Baseplate works)</span></li>
+        <li data-step="chat"><span class="pip"></span><span>Open any supported AI chat and press <b>▶ Start Agent</b> on the ORscript bar</span></li>
+      </ol>
+      <div id="next-step"></div>
     </div>
   </div>
   <script src="popup.js"></script>
