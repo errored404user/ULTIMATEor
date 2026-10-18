@@ -173,7 +173,7 @@
     "script_set_source","script_disable","anchored_set","collision_set","transparency_set",
     "humanoid_set","lighting_set","folder_create","value_set","weld_constraint","instance_move","tag_remove",
     "append_file","copy_file","replace_in_files","patch_json","write_json","replace_once",
-    "execute_blender_code","blender_export_fbx",
+    "execute_blender_code","blender_export_fbx","blender_send_to_studio","asset_bridge_import",
     "size_set","color_set","cframe_set","rotation_set","massless_set","can_touch_set","can_query_set","cast_shadow_set","collision_group_set","brickcolor_set",
     "meshpart_create","wedge_create","spawn_box","ladder_create","trampoline_create","conveyor_create","ice_part","jump_pad","speed_pad",
     "attachment_create","hinge_create","spring_create","rope_create","vector_force_create","linear_velocity_create",
@@ -2443,79 +2443,140 @@
     return "{" + parts.join(",") + "}";
   }
 
-  function studioMeshLuau(meshes, dest, scale) {
-    const payload = luauLiteral({ meshes: meshes || [], dest: dest || "Workspace", scale: Number(scale) || 20 });
+  // Blender → Studio mesh builder (1.46.0). The dump travels as ONE JSON string
+  // (a JSONDecode call is far cheaper for Luau than a 1 MB table literal)
+  // and every mesh becomes a real MeshPart through EditableMesh: world-space
+  // vertices recentred on their bounding box, triangles from Blender's own
+  // triangulation, flat-shaded meshes get per-face normals, Blender's material
+  // base colour becomes Part.Color. publish=true additionally uploads each
+  // EditableMesh as a Mesh asset (AssetService:CreateAssetAsync - plugin-only,
+  // approval-gated in runAssetBridgeImport) so the import survives a save.
+  function studioMeshLuau(meshes, dest, scale, opts) {
+    const o = opts || {};
+    const json = JSON.stringify({ meshes: meshes || [], dest: dest || "Workspace", scale: Number(scale) || 20, append: !!o.append, publish: !!o.publish })
+      .replace(/\]==\]/g, "] == ]");
+    // The JSON goes in as many ONE-LINE long strings of <= 3000 chars: when the
+    // call has to travel through the Studio MCP (no ORscript plugin), the
+    // execute_luau auto-chunker can only split between lines that are outside
+    // a string, so a single 700 KB line would be sent whole and hit the ~64 KB
+    // wall. JSON has no raw newlines, so the concatenation is byte-exact.
+    const pieces = [];
+    for (let i = 0; i < json.length; i += 3000) pieces.push("J[#J + 1] = [==[" + json.slice(i, i + 3000) + "]==]");
     return [
+      "local HttpService = game:GetService(\"HttpService\")",
       "local AssetService = game:GetService(\"AssetService\")",
-      "local payload = " + payload,
-      "local meshes = payload.meshes or {}",
-      "local scale = tonumber(payload.scale) or 20",
-      "local destName = tostring(payload.dest or \"Workspace\")",
+      "local J = {}",
+      pieces.join("\n"),
+      "local decode = HttpService.JSONDecode",
+      "local data = decode(HttpService, table.concat(J))",
+      "local meshes = data.meshes or {}",
+      "local scale = tonumber(data.scale) or 20",
+      "local destName = tostring(data.dest or \"Workspace\")",
       "local parent = workspace",
-      "if destName ~= \"Workspace\" and destName ~= \"workspace\" then",
-      "  local t = workspace:FindFirstChild(destName)",
-      "  if t then parent = t end",
+      "if destName ~= \"Workspace\" and destName ~= \"workspace\" and destName ~= \"\" then",
+      "  local cur = game",
+      "  for seg in string.gmatch(destName, \"[^%.]+\") do",
+      "    if seg ~= \"game\" then",
+      "      local nxt = cur:FindFirstChild(seg)",
+      "      if not nxt then",
+      "        if cur == game then nxt = workspace:FindFirstChild(seg) end",
+      "        if not nxt then nxt = Instance.new(\"Folder\") nxt.Name = seg nxt.Parent = (cur == game) and workspace or cur end",
+      "      end",
+      "      cur = nxt",
+      "    end",
+      "  end",
+      "  if cur ~= game then parent = cur end",
       "end",
       "local folder = parent:FindFirstChild(\"OR_Imported\")",
-      "if folder then folder:Destroy() end",
-      "folder = Instance.new(\"Model\")",
-      "folder.Name = \"OR_Imported\"",
-      "folder.Parent = parent",
-      "local built = 0",
-      "local usedEditable = false",
-      "local function aabb(verts)",
-      "  local minx,miny,minz = math.huge, math.huge, math.huge",
-      "  local maxx,maxy,maxz = -math.huge, -math.huge, -math.huge",
-      "  for _,v in ipairs(verts) do",
-      "    local x,y,z = (v[1] or 0)*scale, (v[2] or 0)*scale, (v[3] or 0)*scale",
-      "    if x<minx then minx=x end if y<miny then miny=y end if z<minz then minz=z end",
-      "    if x>maxx then maxx=x end if y>maxy then maxy=y end if z>maxz then maxz=z end",
-      "  end",
-      "  return Vector3.new((minx+maxx)/2,(miny+maxy)/2,(minz+maxz)/2), Vector3.new(math.max(0.05,maxx-minx), math.max(0.05,maxy-miny), math.max(0.05,maxz-minz))",
+      "if folder and not data.append then folder:Destroy() folder = nil end",
+      "if not folder then",
+      "  folder = Instance.new(\"Model\")",
+      "  folder.Name = \"OR_Imported\"",
+      "  folder.Parent = parent",
       "end",
-      "local function addTri(em, ids, a, b, c)",
-      "  if not ids[a] or not ids[b] or not ids[c] then return end",
-      "  pcall(function() em:AddTriangle(ids[a], ids[b], ids[c]) end)",
-      "end",
-      "for _,entry in ipairs(meshes) do",
+      "local report = {}",
+      "local built, viaEm, viaBox, published = 0, 0, 0, 0",
+      "for _, entry in ipairs(meshes) do",
       "  local verts, faces = entry.verts or {}, entry.faces or {}",
       "  local name = tostring(entry.name or \"Mesh\")",
-      "  local part",
-      "  local okEm, em = pcall(function() return AssetService:CreateEditableMesh() end)",
-      "  if okEm and em then",
-      "    local ids = {}",
-      "    for i,v in ipairs(verts) do",
-      "      local x,y,z = (v[1] or 0)*scale, (v[2] or 0)*scale, (v[3] or 0)*scale",
-      "      local okv, id = pcall(function() return em:AddVertex(Vector3.new(x,y,z)) end)",
-      "      if okv then ids[i] = id ids[i-1] = id end",
-      "    end",
-      "    for _,f in ipairs(faces) do",
-      "      if #f >= 3 then",
-      "        for i=2,#f-1 do addTri(em, ids, f[1], f[i], f[i+1]) end",
+      "  local minx, miny, minz = math.huge, math.huge, math.huge",
+      "  local maxx, maxy, maxz = -math.huge, -math.huge, -math.huge",
+      "  for _, v in ipairs(verts) do",
+      "    local x, y, z = (tonumber(v[1]) or 0) * scale, (tonumber(v[2]) or 0) * scale, (tonumber(v[3]) or 0) * scale",
+      "    if x < minx then minx = x end if y < miny then miny = y end if z < minz then minz = z end",
+      "    if x > maxx then maxx = x end if y > maxy then maxy = y end if z > maxz then maxz = z end",
+      "  end",
+      "  if #verts == 0 then minx, miny, minz, maxx, maxy, maxz = 0, 0, 0, 0, 0, 0 end",
+      "  local cx, cy, cz = (minx + maxx) / 2, (miny + maxy) / 2, (minz + maxz) / 2",
+      "  local size = Vector3.new(math.max(0.05, maxx - minx), math.max(0.05, maxy - miny), math.max(0.05, maxz - minz))",
+      "  local part, how, err, em = nil, nil, nil, nil",
+      "  local okEm, emOrErr = pcall(function() return AssetService:CreateEditableMesh() end)",
+      "  if okEm and emOrErr then",
+      "    em = emOrErr",
+      "    local tris = 0",
+      "    local okAdd, addErr = pcall(function()",
+      "      local ids = {}",
+      "      for i, v in ipairs(verts) do",
+      "        ids[i] = em:AddVertex(Vector3.new((tonumber(v[1]) or 0) * scale - cx, (tonumber(v[2]) or 0) * scale - cy, (tonumber(v[3]) or 0) * scale - cz))",
       "      end",
-      "    end",
-      "    local okPart, mp = pcall(function()",
-      "      if Content and Content.fromObject then return AssetService:CreateMeshPartAsync(Content.fromObject(em)) end",
-      "      return AssetService:CreateMeshPartAsync(em)",
+      "      local flat = entry.flat == true",
+      "      for i = 1, #faces - 2, 3 do",
+      "        local a, b, c = ids[(tonumber(faces[i]) or -1) + 1], ids[(tonumber(faces[i + 1]) or -1) + 1], ids[(tonumber(faces[i + 2]) or -1) + 1]",
+      "        if a and b and c and a ~= b and b ~= c and a ~= c then",
+      "          local fid = em:AddTriangle(a, b, c)",
+      "          tris = tris + 1",
+      "          if flat and fid then",
+      "            local nid = em:AddNormal()",
+      "            em:SetFaceNormals(fid, { nid, nid, nid })",
+      "          end",
+      "        end",
+      "      end",
+      "      pcall(function() em:RemoveUnused() end)",
       "    end)",
-      "    if okPart and mp then part = mp usedEditable = true end",
+      "    if okAdd and tris > 0 then",
+      "      local okPart, mpOrErr = pcall(function()",
+      "        return AssetService:CreateMeshPartAsync(Content.fromObject(em), { CollisionFidelity = Enum.CollisionFidelity.Default })",
+      "      end)",
+      "      if okPart and mpOrErr then part = mpOrErr how = string.format(\"MeshPart (%d tris)\", tris) viaEm = viaEm + 1 else err = tostring(mpOrErr) end",
+      "    else",
+      "      err = okAdd and \"no valid triangles\" or tostring(addErr)",
+      "    end",
+      "  else",
+      "    err = \"EditableMesh unavailable: \" .. tostring(emOrErr)",
+      "  end",
+      "  if part and em and data.publish then",
+      "    local okPub, res, idOrErr = pcall(function()",
+      "      return AssetService:CreateAssetAsync(em, Enum.AssetType.Mesh, { Name = name, Description = \"Blender mesh sent by ORscript\" })",
+      "    end)",
+      "    if okPub and res == Enum.CreateAssetResult.Success and idOrErr then",
+      "      part:SetAttribute(\"PublishedMeshId\", tonumber(idOrErr) or tostring(idOrErr))",
+      "      how = how .. string.format(\", published as rbxassetid://%s\", tostring(idOrErr))",
+      "      published = published + 1",
+      "    else",
+      "      how = how .. \" (publish failed: \" .. (okPub and (tostring(res) .. \" \" .. tostring(idOrErr)) or tostring(res)) .. \")\"",
+      "    end",
       "  end",
       "  if not part then",
-      "    local cf, size = aabb(verts)",
       "    part = Instance.new(\"Part\")",
       "    part.Size = size",
-      "    part.CFrame = CFrame.new(cf)",
-      "    part.Anchored = true",
       "    part.Material = Enum.Material.SmoothPlastic",
+      "    how = \"bounding-box Part\" .. (err and (\" - \" .. err) or \"\")",
+      "    viaBox = viaBox + 1",
       "  end",
       "  part.Name = name",
       "  part.Anchored = true",
+      "  part.CFrame = CFrame.new(cx, cy, cz)",
+      "  if type(entry.color) == \"table\" and entry.color[1] then",
+      "    pcall(function() part.Color = Color3.new(math.clamp(tonumber(entry.color[1]) or 0.6, 0, 1), math.clamp(tonumber(entry.color[2]) or 0.6, 0, 1), math.clamp(tonumber(entry.color[3]) or 0.6, 0, 1)) end)",
+      "  end",
+      "  part:SetAttribute(\"BlenderObject\", name)",
       "  part.Parent = folder",
-      "  built += 1",
+      "  built = built + 1",
+      "  table.insert(report, name .. \": \" .. how)",
       "end",
-      "pcall(function() if folder.GetPivot then folder:PivotTo(CFrame.new(0, 3, 0)) end end)",
-      "local how = usedEditable and \"EditableMesh\" or \"bounding-box Parts (EditableMesh unavailable)\"",
-      "return string.format(\"imported %d mesh(es) into Workspace.OR_Imported via %s\", built, how)",
+      "local primary = folder:FindFirstChildWhichIsA(\"BasePart\")",
+      "if primary and not folder.PrimaryPart then folder.PrimaryPart = primary end",
+      "return string.format(\"imported %d mesh(es) into %s.OR_Imported (%d real MeshParts, %d bounding boxes, %d published)\\n%s\", built, parent:GetFullName(), viaEm, viaBox, published, table.concat(report, \"\\n\"))",
     ].join("\n");
   }
 
@@ -2632,27 +2693,69 @@
     if (!dump || !dump.ok) {
       return "ERROR in asset_bridge_import: " + ((dump && dump.error) || "could not dump meshes from Blender");
     }
-    let data = null;
+    // 1.46.0: background.js hands the meshes over directly (it reads the ops
+    // script's OR_MESH_JSON line from Blender's captured stdout, then the
+    // wrapped mesh file). The text channel only carries a summary now.
+    let meshes = Array.isArray(dump.meshes) ? dump.meshes : null;
+    let info = null;
     const textOut = String(dump.text || "");
-    const mark = textOut.indexOf("OR_MESH_JSON:");
-    try { data = JSON.parse(mark >= 0 ? textOut.slice(mark + 13) : textOut); } catch {}
-    try { if (!data) data = JSON.parse(textOut); } catch {}
-    let meshes = data && (data.meshes || (data.result && data.result.meshes));
-    const meshPath = (data && data.mesh_file) || dump.meshFile || "or_mesh.json";
+    try { info = JSON.parse(textOut); } catch {}
     if (!meshes || !meshes.length) {
-      const file = await bg({ type: "local_read", path: meshPath });
-      if (file && file.ok && file.text) {
-        try {
-          const parsed = JSON.parse(String(file.text).replace(/^\uFEFF/, "").trim());
-          meshes = parsed.meshes || (parsed.result && parsed.result.meshes);
-        } catch {}
+      const mark = textOut.indexOf("OR_MESH_JSON:");
+      let data = null;
+      try { data = JSON.parse(mark >= 0 ? textOut.slice(mark + 13) : textOut); } catch {}
+      meshes = data && (data.meshes || (data.result && data.result.meshes));
+      if (data && !info) info = data;
+    }
+    const skipped = Array.isArray(dump.skipped) ? dump.skipped : (info && Array.isArray(info.skipped) ? info.skipped : []);
+    const skippedText = skipped.length ? "\nSkipped in Blender:\n" + skipped.map((k) => "- " + k.name + ": " + (k.reason || "skipped")).join("\n") : "";
+    if (!meshes || !meshes.length) {
+      return "ERROR in asset_bridge_import: Blender returned no meshes. Add or select mesh objects, then blender_send_to_studio." + skippedText + "\n" + textOut.slice(0, 400);
+    }
+    meshes = meshes.filter((m) => m && Array.isArray(m.verts) && m.verts.length && Array.isArray(m.faces) && m.faces.length);
+    if (!meshes.length) return "ERROR in asset_bridge_import: every Blender mesh was empty (no faces)." + skippedText;
+    // Publishing uploads Mesh assets to the user's account: same gate as the
+    // other publish commands (Allow publish automation, or an explicit Allow).
+    let publish = a.publish === true || a.publish === "true";
+    let publishNote = "";
+    if (publish && !(await publishAutomationEnabled())) {
+      const okPub = await requestApproval("blender_send_to_studio", { objects: meshes.map((m) => m.name), publish: true, warning: "publish:true uploads each mesh as a Mesh asset owned by your Roblox account (moderation, ownership and rate limits apply)." }, true);
+      if (!okPub) { publish = false; publishNote = "\n(publish was not approved - the meshes were built in Studio without uploading them)"; }
+    }
+    // One execute_luau per ~700 KB of JSON (or-core's HTTP body limit is 2 MB
+    // and Studio decodes each call in one go); the first batch replaces the
+    // previous OR_Imported unless append was requested, later batches append.
+    const BATCH_CHARS = 700000;
+    const batches = [];
+    let cur = [], curChars = 0;
+    for (const m of meshes) {
+      const n = JSON.stringify(m).length;
+      if (cur.length && curChars + n > BATCH_CHARS) { batches.push(cur); cur = []; curChars = 0; }
+      cur.push(m); curChars += n;
+    }
+    if (cur.length) batches.push(cur);
+    const results = [];
+    let firstAppend = a.append === true || a.append === "true";
+    // With the ORscript Studio plugin connected the whole batch is ONE call
+    // (plugin_execute_luau: HTTP poll + loadstring, no size wall, its own undo
+    // record). Through the Studio MCP alone, execute_luau auto-chunks the
+    // program into 18 KB pieces (one round trip each) - slower but correct.
+    const viaPlugin = pluginToolAvailable("plugin_execute_luau");
+    for (let i = 0; i < batches.length; i++) {
+      const code = studioMeshLuau(batches[i], dest, scale, { append: firstAppend || i > 0, publish });
+      let r;
+      if (viaPlugin) {
+        try { r = await bridgeTool("plugin_execute_luau", { code }, 180000); }
+        catch (e) { r = "ERROR in blender_send_to_studio (plugin_execute_luau): " + String(e && e.message || e); }
+      } else {
+        r = await runTool({ tool: "execute_luau", arguments: { code, datamodel_type: "Edit", _orInternal: true } });
       }
+      results.push(String(r == null ? "" : r));
+      if (/^ERROR/.test(String(r || "")) || /ERROR in execute_luau/.test(String(r || ""))) break;
     }
-    if (!meshes || !meshes.length) {
-      return "ERROR in asset_bridge_import: Blender returned no meshes. Add or select mesh objects, then blender_send_to_studio.\n" + textOut.slice(0, 400);
-    }
-    const code = studioMeshLuau(meshes, dest, scale);
-    return await runTool({ tool: "execute_luau", arguments: { code, datamodel_type: "Edit", _orInternal: true } });
+    const out = results.join("\n");
+    if (/^ERROR/.test(out) || /ERROR in execute_luau/.test(out)) return out + skippedText;
+    return out + publishNote + skippedText;
   }
 
   function wrapStudioTxn(code, label) {

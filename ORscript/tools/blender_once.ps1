@@ -16,6 +16,22 @@ function Write-Utf8NoBom([string]$Path, [string]$Text) {
   [System.IO.File]::WriteAllText($Path, $Text, $utf8)
 }
 
+# OR reads the reply through or-core's read_file, which clips one read at 40k
+# characters - a mesh dump is a single long JSON line and was silently cut.
+# Write it as 3000-character lines; JSON never contains raw newlines, so OR
+# simply joins the lines again.
+function Write-Wrapped([string]$Path, [string]$Text) {
+  $sb = New-Object System.Text.StringBuilder
+  $i = 0
+  while ($i -lt $Text.Length) {
+    $n = [Math]::Min(3000, $Text.Length - $i)
+    [void]$sb.Append($Text.Substring($i, $n))
+    [void]$sb.Append("`n")
+    $i += $n
+  }
+  Write-Utf8NoBom $Path $sb.ToString()
+}
+
 if ($Probe -or $InFile -eq "--probe") {
   try {
     $c = New-Object System.Net.Sockets.TcpClient
@@ -62,7 +78,7 @@ try {
   $stream.Write($bytes, 0, $bytes.Length)
   $rawOut = Recv-Json $stream
   $stream.Close(); $client.Close()
-  Write-Utf8NoBom $OutFile $rawOut
+  Write-Wrapped $OutFile $rawOut
   Write-Output "OR_BLENDER_OK"
   exit 0
 } catch {

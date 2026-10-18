@@ -173,7 +173,7 @@ const BLENDER_TOOLS = [
   btool("get_object_info", "Details for one object in the Blender scene.", { name: { type: "string" } }, ["name"]),
   btool("execute_blender_code", "Run Python (bpy) inside Blender. Prefer the named blender_* tools.", { code: { type: "string" } }, ["code"]),
   btool("get_viewport_screenshot", "Capture the Blender 3D viewport.", { max_size: { type: "integer" } }, []),
-  btool("blender_send_to_studio", "ONE SHOT: dump the live Blender meshes and import them into Roblox Studio as Workspace.OR_Imported. No filepath needed.", { objects: { type: "array", items: { type: "string" } }, dest: { type: "string" }, scale: { type: "number" } }, []),
+  btool("blender_send_to_studio", "ONE SHOT: read the live Blender meshes (selected objects, or objects[]; modifiers applied, world transforms, material base colour) and build them in Roblox Studio as real MeshParts (EditableMesh) under Workspace.OR_Imported. No file, no FBX. Limits per send: 20k triangles per mesh (blender_decimate first), 40k triangles total (send in groups). publish:true also uploads each mesh as a Mesh asset you own (permanent MeshId; asks for approval).", { objects: { type: "array", items: { type: "string" } }, dest: { type: "string", description: "parent in Workspace (default Workspace)" }, scale: { type: "number", description: "studs per Blender metre (default 20)" }, publish: { type: "boolean" }, append: { type: "boolean", description: "keep the previous OR_Imported and add to it" } }, []),
   btool("blender_export_fbx", "Export meshes to an FBX (Forward -Z, Up Y). filepath optional. Also dumps meshes so blender_send_to_studio / asset_bridge_import can run with no path.", { filepath: { type: "string" }, objects: { type: "array", items: { type: "string" } } }, []),
   btool("blender_import_fbx", "Import an FBX into the live Blender scene. filepath optional — defaults to the last OR export.", { filepath: { type: "string" } }, []),
   btool("blender_export_obj", "Export selected/all meshes to OBJ. filepath optional.", { filepath: { type: "string" }, objects: { type: "array", items: { type: "string" } } }, []),
@@ -1017,6 +1017,23 @@ async function localReadAll(path) {
   return chunks.join("\n");
 }
 
+// Read a file that was written as short (<= 3000-char) lines by
+// blender_once.* / blender_ops.py and join the lines back together. or-core's
+// read_file clips ONE read at 40k characters, so a 1 MB mesh dump can only
+// cross the native transport eight short lines at a time (same trick as the
+// screenshot base64 below). Returns "" when the file is missing.
+async function localReadWrapped(path) {
+  let offset = 1, chunks = [];
+  for (let i = 0; i < 4000; i++) {
+    let part;
+    try { part = await localRead(path, offset, 8); } catch (e) { if (!chunks.length) throw e; break; }
+    if (part.text) chunks.push(part.text.split("\n").join(""));
+    if (!part.more || !part.count) break;
+    offset = part.next || (offset + part.count);
+  }
+  return chunks.join("").replace(/^\uFEFF/, "").trim();
+}
+
 async function localImageBase64(imagePath) {
   // The upstream Blender addon requires a filepath and returns metadata, not
   // transferable image bytes. Encode the workspace-owned capture in bounded
@@ -1200,10 +1217,18 @@ async function blenderOpsCode(cmd, args) {
   let py = await extText("tools/blender_ops.py");
   const status = "or_status.json";
   const mesh = "or_mesh.json";
+  // Blender's working directory is its install folder (often read-only) and
+  // never the or-core workspace that OR reads from, so hand it absolute paths
+  // inside the workspace. OR keeps reading the relative names (same files).
+  let root = "";
+  try { root = await agentWorkspaceRoot(); } catch {}
+  root = String(root || "").replace(/[\\/]+$/, "");
+  const sep = /\\/.test(root) ? "\\" : "/";
+  const abs = (name) => (root ? root + sep + name : name);
   py = py.split("__OR_CMD__").join(String(cmd || ""));
   py = py.split("__OR_ARGS__").join(JSON.stringify(args || {}));
-  py = py.split("__OR_OUT__").join(JSON.stringify(status || "or_status.json"));
-  py = py.split("__OR_MESH__").join(JSON.stringify(mesh || "or_mesh.json"));
+  py = py.split("__OR_OUT__").join(JSON.stringify(abs(status)));
+  py = py.split("__OR_MESH__").join(JSON.stringify(abs(mesh)));
   return { py, status, mesh };
 }
 
@@ -1286,6 +1311,17 @@ function blenderScreenshotImages(result) {
   return out;
 }
 
+function blenderInlinePayload(stdoutText) {
+  const lines = String(stdoutText || "").split(/\r?\n/).filter((l) => l.startsWith("OR_MESH_JSON:"));
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const v = JSON.parse(lines[i].slice(13));
+      if (v && typeof v === "object") return v;
+    } catch {}
+  }
+  return null;
+}
+
 async function blenderCall(name, args, timeout) {
   if (!blenderAddon) {
     return { ok: false, error: "Blender is not connected. Click Connect Blender (Blender: N → MCP for Blender → Start MCP Server)." };
@@ -1321,7 +1357,7 @@ async function blenderCall(name, args, timeout) {
       if (!/not recognized|cannot find|No such file|not found|is not recognized/i.test(last)) break;
     }
     let raw = "";
-    try { raw = (await localReadAll("or_blender_out.json")).replace(/^\uFEFF/, "").trim(); } catch (e) {
+    try { raw = await localReadWrapped("or_blender_out.json"); } catch (e) {
       if (!okRun) return { ok: false, error: last.slice(0, 400) || String(e.message || e) };
     }
     let data;
@@ -1336,17 +1372,22 @@ async function blenderCall(name, args, timeout) {
       return { ok: false, error: msg };
     }
     let result = (data && Object.prototype.hasOwnProperty.call(data, "result")) ? data.result : data;
-    const rawText = typeof result === "string" ? result : JSON.stringify(result);
-    const marker = String(rawText).indexOf("OR_MESH_JSON:");
-    if (marker >= 0) {
-      try { result = JSON.parse(String(rawText).slice(marker + 13)); } catch {}
-    }
+    // execute_code answers {executed:true, result:"<captured stdout>"}; our ops
+    // script prints its whole payload on one "OR_MESH_JSON:" line there. Read
+    // it from the stdout STRING (the old code searched JSON.stringify(result),
+    // where the payload's quotes are escaped, so JSON.parse never succeeded).
+    const stdoutText = result && typeof result === "object" && typeof result.result === "string" ? result.result
+      : typeof result === "string" ? result : "";
+    const inline = blenderInlinePayload(stdoutText);
+    if (inline) result = inline;
     if (result && result.ok === false) {
-      return { ok: false, error: result.error || "Blender FBX failed" };
+      return { ok: false, error: result.error || "Blender FBX failed", skipped: result.skipped };
     }
-    if (statusPath) {
+    if (statusPath && !inline) {
+      // Fallback only: the status file lives in the workspace when or-core told
+      // us its root; otherwise Blender wrote it next to its own executable.
       try {
-        const st = (await localReadAll(statusPath)).replace(/^\uFEFF/, "").trim();
+        const st = await localReadWrapped(statusPath);
         if (st) {
           try { result = JSON.parse(st); } catch {}
         }
@@ -1357,10 +1398,11 @@ async function blenderCall(name, args, timeout) {
     }
     let meshes = result && result.meshes;
     const mf = (result && result.mesh_file) || meshPath || "or_mesh.json";
-    if ((!meshes || !meshes.length) && mf) {
-      for (const cand of [mf, "or_mesh.json"]) {
+    const wantsMeshes = payload.type === "execute_code" && /"dump"|"export_fbx"/.test(String(payload.params && payload.params.code || "").slice(0, 400));
+    if ((!meshes || !meshes.length) && mf && (wantsMeshes || (result && result.inline === false))) {
+      for (const cand of [meshPath || "or_mesh.json", "or_mesh.json"]) {
         try {
-          const rawM = (await localReadAll(cand)).replace(/^\uFEFF/, "").trim();
+          const rawM = await localReadWrapped(cand);
           if (!rawM) continue;
           const parsed = JSON.parse(rawM);
           meshes = parsed.meshes || (parsed.result && parsed.result.meshes);
@@ -1375,8 +1417,14 @@ async function blenderCall(name, args, timeout) {
       catch(e){return {ok:false,error:`Blender created the viewport capture, but OrScript could not attach it: ${String(e&&e.message||e)}`};}
     }
     if(payload.type==="get_viewport_screenshot"&&!screenshotImages.length)return {ok:false,error:"Blender returned no viewport image data"};
-    let textOut = typeof result === "string" ? result : JSON.stringify(result, null, 2);
-    return { ok: true, text: textOut, images: screenshotImages, meshFile: mf, filepath: result && result.filepath, meshes: meshes || undefined };
+    let textResult = result;
+    if (result && typeof result === "object" && Array.isArray(result.meshes)) {
+      textResult = Object.assign({}, result);
+      delete textResult.meshes;
+      textResult.mesh_summary = result.meshes.map((m) => ({ name: m.name, verts: (m.verts || []).length, tris: m.tris || Math.floor((m.faces || []).length / 3) }));
+    }
+    let textOut = typeof textResult === "string" ? textResult : JSON.stringify(textResult, null, 2);
+    return { ok: true, text: textOut, images: screenshotImages, meshFile: mf, filepath: result && result.filepath, meshes: meshes || undefined, skipped: result && result.skipped };
   };
   const prev = blenderCallLock;
   let release;

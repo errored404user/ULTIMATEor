@@ -19,23 +19,53 @@ if not MESH:
 result = None
 
 
+# OR reads the result from this script's stdout (the blender-mcp addon returns
+# captured stdout as execute_code's result). The status / mesh files are only a
+# fallback: Blender's working directory is usually not writable (Program Files)
+# and never the or-core workspace, so nothing may depend on them.
+INLINE_LIMIT = 3000000
+WRAP = 3000
+
+
+def write_wrapped(path, text):
+    """Write ASCII JSON as <= WRAP-char lines: or-core's read_file clips one
+    read at 40k characters, so OR reads these files 8 short lines at a time."""
+    if not path:
+        return ""
+    try:
+        folder = os.path.dirname(path)
+        if folder:
+            os.makedirs(folder, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(text[i:i + WRAP] for i in range(0, len(text), WRAP)))
+        return path
+    except Exception:
+        return ""
+
+
 def emit(payload):
     global result
     result = payload
     try:
-        folder = os.path.dirname(OUT) if OUT else ""
-        if folder:
-            os.makedirs(folder, exist_ok=True)
-        with open(OUT, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=1)
+        full = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     except Exception:
-        pass
+        full = None
+    if full is not None and len(full) <= INLINE_LIMIT:
+        print("OR_MESH_JSON:" + full, flush=True)
+    else:
+        try:
+            slim = dict(payload)
+            slim.pop("meshes", None)
+            slim["inline"] = False
+            print("OR_MESH_JSON:" + json.dumps(slim, ensure_ascii=True, separators=(",", ":")), flush=True)
+        except Exception:
+            print("OR_MESH_JSON:{\"ok\":false}", flush=True)
     try:
         slim = dict(payload)
         slim.pop("meshes", None)
-        print("OR_MESH_JSON:" + json.dumps(slim, ensure_ascii=False, separators=(",", ":")), flush=True)
+        write_wrapped(OUT, json.dumps(slim, ensure_ascii=True, separators=(",", ":")))
     except Exception:
-        print("OR_MESH_JSON:{\"ok\":false}", flush=True)
+        pass
     return payload
 
 
@@ -214,14 +244,78 @@ def add_primitive(op_name, name, extra=None):
     return emit({"ok": True, "name": obj.name if obj else name, "type": "MESH", "location": list(loc)})
 
 
-def dump_meshes(names):
+# Studio import budgets. EditableMesh refuses more than 20,000 triangles per
+# mesh; the whole dump must also stay well inside or-core's 2 MB request limit
+# (OR splits it into several execute_luau calls, but one mesh is never split).
+MAX_MESHES = 32
+MAX_TRIS_PER_MESH = 20000
+MAX_TOTAL_TRIS = 40000
+MAX_TOTAL_VERTS = 40000
+
+
+def mesh_color(obj):
+    """Base colour of the object's first material (Principled Base Color, else
+    the viewport diffuse colour) as [r, g, b] in 0..1, or None."""
+    try:
+        mat = obj.active_material
+        if mat is None:
+            for slot in obj.material_slots:
+                if slot.material:
+                    mat = slot.material
+                    break
+        if mat is None:
+            return None
+        if mat.use_nodes and mat.node_tree:
+            for node in mat.node_tree.nodes:
+                if node.type == "BSDF_PRINCIPLED":
+                    inp = node.inputs.get("Base Color")
+                    if inp is not None:
+                        c = inp.default_value
+                        return [round(float(c[0]), 3), round(float(c[1]), 3), round(float(c[2]), 3)]
+        c = mat.diffuse_color
+        return [round(float(c[0]), 3), round(float(c[1]), 3), round(float(c[2]), 3)]
+    except Exception:
+        return None
+
+
+def mesh_triangles(mesh):
+    """Triangle corner indices (flat, 0-based) using Blender's own
+    triangulation when available (handles concave n-gons), else a fan."""
+    tris = []
+    try:
+        if hasattr(mesh, "calc_loop_triangles"):
+            mesh.calc_loop_triangles()
+        lt = getattr(mesh, "loop_triangles", None)
+        if lt is not None and len(lt) > 0:
+            for t in lt:
+                a, b, c = t.vertices
+                tris.extend((int(a), int(b), int(c)))
+            return tris
+    except Exception:
+        tris = []
+    for p in mesh.polygons:
+        ids = [int(i) for i in p.vertices]
+        if len(ids) == 3:
+            tris.extend(ids)
+        elif len(ids) > 3:
+            for i in range(1, len(ids) - 1):
+                tris.extend((ids[0], ids[i], ids[i + 1]))
+    return tris
+
+
+def dump_meshes(names, skipped=None):
     meshes = []
     total_v = 0
+    total_t = 0
     objs = [o for o in resolve_objects(names) if o.type == "MESH" and o.data]
     if not objs:
         objs = [o for o in bpy.data.objects if o.type == "MESH" and o.data]
     depsgraph = bpy.context.evaluated_depsgraph_get()
     for obj in objs:
+        if len(meshes) >= MAX_MESHES:
+            if skipped is not None:
+                skipped.append({"name": obj.name, "reason": "more than %d meshes - send the rest in a second blender_send_to_studio {objects:[...]}" % MAX_MESHES})
+            continue
         mesh = None
         eval_obj = None
         try:
@@ -237,42 +331,62 @@ def dump_meshes(names):
                 except Exception:
                     pass
             continue
+        tris = mesh_triangles(mesh)
+        tri_count = len(tris) // 3
+        vert_count = len(mesh.vertices)
+        reason = None
+        if tri_count == 0:
+            reason = "no faces (curve / empty mesh) - convert or fill it first"
+        elif tri_count > MAX_TRIS_PER_MESH:
+            reason = "%d triangles - Studio's EditableMesh limit is %d; run blender_decimate {objects:[\"%s\"], ratio:%.2f} first" % (tri_count, MAX_TRIS_PER_MESH, obj.name, max(0.05, min(0.95, (MAX_TRIS_PER_MESH * 0.9) / float(tri_count))))
+        elif total_t + tri_count > MAX_TOTAL_TRIS or total_v + vert_count > MAX_TOTAL_VERTS:
+            reason = "dump budget reached (%d triangles / %d vertices per send) - send it in a second blender_send_to_studio {objects:[\"%s\"]}" % (MAX_TOTAL_TRIS, MAX_TOTAL_VERTS, obj.name)
+        if reason:
+            if eval_obj is not None:
+                try:
+                    eval_obj.to_mesh_clear()
+                except Exception:
+                    pass
+            if skipped is not None:
+                skipped.append({"name": obj.name, "tris": tri_count, "reason": reason})
+            continue
         mw = obj.matrix_world
         verts = []
+        # Blender is Z-up / right-handed, Roblox is Y-up / right-handed:
+        # (x, y, z) -> (x, z, -y) is a pure rotation, so face winding survives.
         for v in mesh.vertices:
             c = mw @ v.co
             verts.append([round(float(c.x), 4), round(float(c.z), 4), round(float(-c.y), 4)])
-        faces = []
-        for p in mesh.polygons:
-            ids = [int(i) for i in p.vertices]
-            if len(ids) == 3:
-                faces.append(ids)
-            elif len(ids) > 3:
-                for i in range(1, len(ids) - 1):
-                    faces.append([ids[0], ids[i], ids[i + 1]])
+        smooth = 0
+        try:
+            for p in mesh.polygons:
+                if p.use_smooth:
+                    smooth += 1
+            flat = smooth * 2 < len(mesh.polygons)
+        except Exception:
+            flat = False
+        color = mesh_color(obj)
         if eval_obj is not None:
             try:
                 eval_obj.to_mesh_clear()
             except Exception:
                 pass
-        if not faces:
-            continue
-        meshes.append({"name": obj.name, "verts": verts, "faces": faces, "tris": len(faces)})
-        total_v += len(verts)
-        if len(meshes) >= 16 or total_v >= 1800:
-            break
+        entry = {"name": obj.name, "verts": verts, "faces": tris, "tris": tri_count, "flat": flat}
+        if color:
+            entry["color"] = color
+        meshes.append(entry)
+        total_v += vert_count
+        total_t += tri_count
     return meshes
 
 
 def write_mesh_file(meshes):
     if not MESH:
         return ""
-    folder = os.path.dirname(MESH)
-    if folder:
-        os.makedirs(folder, exist_ok=True)
-    with open(MESH, "w", encoding="utf-8") as f:
-        json.dump({"ok": True, "meshes": meshes}, f, ensure_ascii=False, indent=1)
-    return MESH
+    try:
+        return write_wrapped(MESH, json.dumps({"ok": True, "meshes": meshes}, ensure_ascii=True, separators=(",", ":")))
+    except Exception:
+        return ""
 
 
 def try_export_fbx(fp):
@@ -450,9 +564,13 @@ def cmd_import_obj():
 
 def cmd_dump():
     names = ARGS.get("objects")
-    meshes = dump_meshes(names)
+    skipped = []
+    meshes = dump_meshes(names, skipped)
     if not meshes:
-        return emit({"ok": False, "error": "no mesh objects in the Blender scene"})
+        why = "no mesh objects in the Blender scene"
+        if skipped:
+            why = "no mesh could be sent: " + "; ".join("%s (%s)" % (k["name"], k["reason"]) for k in skipped[:6])
+        return emit({"ok": False, "error": why, "skipped": skipped})
     mesh_path = write_mesh_file(meshes)
     return emit({
         "ok": True,
@@ -460,6 +578,9 @@ def cmd_dump():
         "mesh_count": len(meshes),
         "mesh_file": mesh_path,
         "tris": sum(m["tris"] for m in meshes),
+        "verts": sum(len(m["verts"]) for m in meshes),
+        "skipped": skipped,
+        "meshes": meshes,
     })
 
 

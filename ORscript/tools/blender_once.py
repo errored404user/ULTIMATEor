@@ -50,6 +50,18 @@ def recv_json(sock: socket.socket) -> dict:
     raise ValueError("incomplete JSON from Blender")
 
 
+WRAP = 3000
+
+
+def write_wrapped(path: str, text: str) -> None:
+    """OR reads this file through or-core's read_file, which clips a single read
+    at 40k characters - a mesh dump is one long JSON line, so it was silently
+    truncated. Write <= WRAP-char lines (JSON never contains raw newlines, so OR
+    just joins the lines back together)."""
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(text[i:i + WRAP] for i in range(0, len(text), WRAP)))
+
+
 def send_file(in_path: str, out_path: str) -> int:
     with open(in_path, "r", encoding="utf-8") as f:
         req = json.load(f)
@@ -65,8 +77,7 @@ def send_file(in_path: str, out_path: str) -> int:
             sock.close()
         except OSError:
             pass
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
+    write_wrapped(out_path, json.dumps(data, ensure_ascii=True))
     print("OR_BLENDER_OK", flush=True)
     return 0
 
