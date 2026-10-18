@@ -8193,6 +8193,17 @@ html.rs-light .rs-setup-starter { color: #1f2937; background: rgba(0,0,0,.04); b
   #rs-cards-panel[data-cards-tab] .rs-public-grid { grid-template-columns: 1fr; }
   #rs-cards-panel[data-cards-tab] .rs-public-list { grid-template-columns: 1fr; }
 }
+/* 1.41.2 — a closed panel must stay closed. renderCards() leaves data-cards-tab
+   on the panel, so after the first open the grid rules above (1-1-0 … 2-3-0)
+   outranked the plain `#rs-cards-panel[hidden]` (1-1-0) and the hidden panel
+   kept rendering as a 680px block in the bar's flow - the bar vanished behind
+   it. One extra attribute per selector beats every grid rule. */
+#rs-cards-panel[hidden][data-cards-tab],
+#rs-bar #rs-cards-panel[hidden][data-cards-tab],
+#rs-bar.rs-cards-open #rs-cards-panel[hidden][data-cards-tab],
+#rs-bar.rs-bar-inline.rs-cards-open #rs-cards-panel[hidden][data-cards-tab],
+#rs-bar.rs-tray-below.rs-cards-open #rs-cards-panel[hidden][data-cards-tab],
+#rs-bar.rs-tray-below.rs-bar-inline.rs-cards-open #rs-cards-panel[hidden][data-cards-tab] { display: none !important; }
 @media (max-height: 760px) {
   #rs-cards-panel[data-cards-tab] .rs-cards-heading { font-size: 18px !important; }
   #rs-cards-panel[data-cards-tab] .rs-cards-tab { min-height: 38px !important; }

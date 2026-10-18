@@ -6348,6 +6348,9 @@
           open = !!open;
           cardsPanel.hidden = !open;
           bar.classList.toggle("rs-cards-open", open);
+          // 1.41.2: the per-tab attribute drives the §15 grid rules; a closed
+          // panel must not keep matching them (renderCards sets it again on open).
+          if (!open) { try { cardsPanel.removeAttribute("data-cards-tab"); } catch {} }
           if (open) {
             // Menu and cards use the same reserved expansion lane; keep only one
             // open so neither surface can overlap the other or host content.
