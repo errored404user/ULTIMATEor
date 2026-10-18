@@ -2583,7 +2583,7 @@ impl App {
         let left = crate::chat::APPROVAL_TIMEOUT.as_secs().saturating_sub(waited);
         let mut answer: Option<bool> = None;
         egui::Frame::none()
-            .fill(t.bg3)
+            .fill(t.panel2)
             .stroke(Stroke::new(1.0, t.warn))
             .rounding(Rounding::same(8.0))
             .inner_margin(Margin::symmetric(10.0, 8.0))
