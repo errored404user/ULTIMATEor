@@ -15,8 +15,35 @@ use tokio::{
     process::{Child, ChildStdin, ChildStdout, Command},
     sync::{broadcast, Mutex, RwLock},
 };
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tracing::info;
+
+// ───────────────────────── caller origin policy ─────────────────────────
+// The bridge listens on loopback only, but every web page the user visits can
+// still reach 127.0.0.1 (fetch / WebSocket from an https page to ws://127.0.0.1
+// is not blocked as mixed content). Browsers always stamp such requests with
+// an `Origin` header, and the only browser caller we have is the extension
+// itself (chrome-extension:// / moz-extension:// …). The Studio plugin
+// (HttpService) and local tools send no Origin at all. So: no Origin → local
+// caller, allowed; extension scheme → allowed; any http(s)/null/file origin →
+// a web page → refused before any handler runs (HTTP 403, WS handshake 403).
+pub fn origin_allowed(origin: Option<&str>) -> bool {
+    let Some(o) = origin.map(str::trim) else { return true };
+    if o.is_empty() { return true; }
+    let lower = o.to_ascii_lowercase();
+    ["chrome-extension://", "moz-extension://", "safari-web-extension://", "ms-browser-extension://"]
+        .iter()
+        .any(|scheme| lower.starts_with(scheme) && lower.len() > scheme.len())
+}
+
+async fn origin_guard(req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+    let origin = req.headers().get(axum::http::header::ORIGIN).and_then(|v| v.to_str().ok()).map(|s| s.to_string());
+    if !origin_allowed(origin.as_deref()) {
+        tracing::warn!("refused bridge request from web origin {:?} ({} {})", origin.as_deref().unwrap_or(""), req.method(), req.uri().path());
+        return (axum::http::StatusCode::FORBIDDEN, "ORscript bridge: requests from web pages are not allowed").into_response();
+    }
+    next.run(req).await
+}
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -1090,7 +1117,12 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
     let s3 = state.clone();
     tokio::spawn(async move { let _ = run_legacy_ws(s3, 17615, "local").await; });
     let ws_root_display = state.workspace.root_display();
-    let cors = CorsLayer::new().allow_origin(Any).allow_methods([Method::GET, Method::POST, Method::OPTIONS]).allow_headers(Any);
+    // CORS only ever reflects extension origins; web-page origins are refused
+    // outright by `origin_guard` (which also rejects their preflights).
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(|origin: &axum::http::HeaderValue, _parts: &axum::http::request::Parts| origin_allowed(origin.to_str().ok())))
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers(Any);
     let app = Router::new()
         .route("/", get(|| async { Json(serde_json::json!({"ok": true, "service": "or-agent", "version": env!("CARGO_PKG_VERSION")})) }))
         .route("/api/connect", post(connect_handler))
@@ -1108,7 +1140,8 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
         .route("/api/plugin/config", post(plugin::config_handler))
         .route("/ws", get(ws_handler))
         .with_state(state)
-        .layer(cors);
+        .layer(cors)
+        .layer(axum::middleware::from_fn(origin_guard));
     let http_port = addr.port();
     reclaim_port(http_port).map_err(|e| { tracing::error!("{e}"); e })?;
     info!("OR bridge listening on http://{} (WS /ws)", addr);
@@ -1325,7 +1358,22 @@ async fn run_legacy_ws(state: AppState, port: u16, engine: &str) -> anyhow::Resu
         let (stream, _) = listener.accept().await?;
         let state = state.clone();
         let eng = engine.to_string();
-        tokio::spawn(async move { if let Ok(ws) = tokio_tungstenite::accept_async(stream).await { handle_legacy_ws(ws, state, eng).await; } });
+        tokio::spawn(async move {
+            // Same origin policy as the HTTP routes: web pages get a 403 at
+            // the handshake and never see the tool catalogue.
+            let guard = |req: &tokio_tungstenite::tungstenite::handshake::server::Request, resp: tokio_tungstenite::tungstenite::handshake::server::Response| {
+                let origin = req.headers().get("origin").and_then(|v| v.to_str().ok());
+                if origin_allowed(origin) {
+                    Ok(resp)
+                } else {
+                    tracing::warn!("refused WebSocket from web origin {:?} on port {port}", origin.unwrap_or(""));
+                    let mut err = tokio_tungstenite::tungstenite::handshake::server::ErrorResponse::new(Some("ORscript bridge: requests from web pages are not allowed".to_string()));
+                    *err.status_mut() = tokio_tungstenite::tungstenite::http::StatusCode::FORBIDDEN;
+                    Err(err)
+                }
+            };
+            if let Ok(ws) = tokio_tungstenite::accept_hdr_async(stream, guard).await { handle_legacy_ws(ws, state, eng).await; }
+        });
     }
 }
 
@@ -1517,4 +1565,21 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
         set_editor(&state, false);
     }
     info!("legacy WS [{engine}] client disconnected");
+}
+
+#[cfg(test)]
+mod origin_tests {
+    use super::origin_allowed;
+
+    #[test]
+    fn extension_and_local_callers_pass_web_pages_do_not() {
+        assert!(origin_allowed(None), "Studio plugin / curl send no Origin");
+        assert!(origin_allowed(Some("")));
+        assert!(origin_allowed(Some("chrome-extension://abcdefghijklmnopabcdefghijklmnop")));
+        assert!(origin_allowed(Some("moz-extension://3f2a6e7e-1c6e-4b1a-9c0d-0123456789ab")));
+        assert!(origin_allowed(Some("Chrome-Extension://ABC")));
+        for bad in ["https://evil.example", "http://127.0.0.1:3000", "http://localhost:8080", "null", "file://", "chrome-extension://", "https://chatgpt.com"] {
+            assert!(!origin_allowed(Some(bad)), "{bad} must be refused");
+        }
+    }
 }

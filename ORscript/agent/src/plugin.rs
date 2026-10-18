@@ -67,6 +67,29 @@ pub struct Job {
     pub args: Value,
 }
 
+/// A job the plugin did not answer in time. `in_flight` tells the caller
+/// whether Studio had already picked the job up (it may still be running —
+/// re-running the same Luau elsewhere would duplicate its side effects) or
+/// whether it was still waiting in the queue (safe to run another way).
+#[derive(Debug, Clone)]
+pub struct PluginTimeout {
+    pub name: String,
+    pub secs: u64,
+    pub in_flight: bool,
+}
+
+impl std::fmt::Display for PluginTimeout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.in_flight {
+            write!(f, "the ORscript Studio plugin picked up '{}' but did not finish it within {} s - it may still be running in Studio, so it was NOT re-run. Check the Output window before retrying (Studio busy, a modal dialog open, or an infinite loop in the code)", self.name, self.secs)
+        } else {
+            write!(f, "the ORscript Studio plugin did not pick up '{}' within {} s (Studio busy, a modal dialog open, or the worker paused in the ORscript panel)", self.name, self.secs)
+        }
+    }
+}
+
+impl std::error::Error for PluginTimeout {}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct JobResult {
@@ -149,11 +172,17 @@ impl Hub {
                 Ok(Err(broadcast::error::RecvError::Lagged(_))) => continue,
                 Ok(Err(_)) => anyhow::bail!("plugin result channel closed"),
                 Err(_) => {
-                    self.queue.lock().await.retain(|j| j.id != id);
-                    anyhow::bail!(
-                        "the ORscript Studio plugin did not answer '{name}' within {} s (Studio busy, a modal dialog open, or the worker paused in the ORscript panel)",
-                        timeout.as_secs()
-                    );
+                    // Still queued → Studio never saw it; remove it so it cannot
+                    // run later behind the caller's back. Already dequeued →
+                    // it is (or was) running: report that instead of a plain
+                    // timeout so callers never execute the same code twice.
+                    let in_flight = {
+                        let mut q = self.queue.lock().await;
+                        let before = q.len();
+                        q.retain(|j| j.id != id);
+                        before == q.len()
+                    };
+                    return Err(anyhow::Error::new(PluginTimeout { name: name.to_string(), secs: timeout.as_secs(), in_flight }));
                 }
             }
         }
@@ -434,6 +463,13 @@ pub async fn try_execute_luau(state: &AppState, args: &Value) -> Option<anyhow::
     }
     match state.plugin.run("plugin_execute_luau", args.clone(), Duration::from_secs(60)).await {
         Ok(res) => Some(render(res, "execute_luau")),
+        // Studio already took the job: it may still be running. Falling back
+        // to the MCP helper here used to run the SAME Luau a second time
+        // (duplicate models, double DataStore writes). Surface the timeout.
+        Err(e) if matches!(e.downcast_ref::<PluginTimeout>(), Some(t) if t.in_flight) => {
+            tracing::warn!("plugin execute_luau still running after its budget — not re-running it through the MCP helper");
+            Some(Err(e))
+        }
         Err(e) => {
             tracing::warn!("plugin execute_luau unavailable ({e:#}) — falling back to the MCP helper");
             None

@@ -38,6 +38,27 @@ chrome.storage?.local.get(ENGINE_KEY, (o) => {
   } catch {}
 })();
 function engineUrl() { return `ws://127.0.0.1:${engine === "local" ? PORT_LOCAL : PORT_ROBLOX}`; }
+// 1.42.0 — the AI's web tools (web_fetch / api_request) must never be able to
+// probe this machine or the LAN: the local bridge (127.0.0.1:3000), routers,
+// cloud metadata (169.254.169.254), *.local hosts. Public internet only.
+function privateNetworkReason(rawUrl) {
+  let u;
+  try { u = new URL(String(rawUrl || "")); } catch { return "invalid url"; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return "only http(s) urls are allowed";
+  const host = u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (!host) return "missing host";
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") || host === "0.0.0.0") return "local host names are not reachable from the AI's web tools";
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    if (a === 127 || a === 10 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224) return "private / loopback / link-local addresses are not reachable from the AI's web tools";
+    return "";
+  }
+  if (host.includes(":")) {
+    if (host === "::1" || host === "::" || /^fe[89ab]/.test(host) || /^f[cd]/.test(host) || host.startsWith("::ffff:")) return "private / loopback IPv6 addresses are not reachable from the AI's web tools";
+  }
+  return "";
+}
 function engineLabel() { return engine === "local" ? "AgentScript" : "Roblox"; }
 chrome.storage?.onChanged.addListener((changes, area) => {
   if (area === "local" && changes[ENGINE_KEY]) {
@@ -1854,6 +1875,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             sendResponse({ ok: false, error: "url must start with http:// or https://" });
             break;
           }
+          { const why = privateNetworkReason(url); if (why) { sendResponse({ ok: false, error: "api_request refused: " + why + " (" + url + ")" }); break; } }
           const method = String(msg.method || "GET").toUpperCase();
           const maxChars = Math.max(500, Math.min(100000, Number(msg.max_chars) || 16000));
           let headers = {};
@@ -1936,6 +1958,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               hits.map((h, i) => (i+1) + ". " + h.title + " — " + h.url).join("\n") + "\n\n";
           }
           if (!/^https?:\/\//i.test(url)) { sendResponse({ ok: false, error: "url must start with http:// or https://" }); break; }
+          { const why = privateNetworkReason(url); if (why) { sendResponse({ ok: false, error: "web_fetch refused: " + why + " (" + url + ")" }); break; } }
           const maxChars = Math.max(500, Math.min(50000, Number(msg.max_chars) || 12000));
           const fetchHeaders = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36", "Accept": "text/html,application/xhtml+xml,application/xml,application/json,text/plain,*/*", "Accept-Language": "en-US,en;q=0.9" };
           let res = await fetch(url, { headers: fetchHeaders, redirect: "follow" });

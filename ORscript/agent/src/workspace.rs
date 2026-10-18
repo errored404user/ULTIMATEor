@@ -31,8 +31,55 @@ const TREE_DEFAULT_DEPTH: usize = 3;
 const TREE_MAX_DEPTH: usize = 8;
 const IGNORED_DIRS: &[&str] = &[
     ".git", "node_modules", "__pycache__", ".venv", "venv",
-    ".idea", ".vscode", "dist", "build", ".next", "coverage",
+    ".idea", ".vscode", "dist", "build", ".next", "coverage", BACKUP_DIR,
 ];
+/// Where the bridge keeps a copy of every file it overwrites, edits or deletes
+/// (`<workspace>/.orscript-backups/<flattened path>.<unix µs>.bak`). Creation
+/// mode changes are therefore always reversible from inside the workspace,
+/// and the folder is excluded from tree / counts / grep like node_modules.
+pub const BACKUP_DIR: &str = ".orscript-backups";
+/// Backups kept per file; older ones are pruned on every new backup.
+const BACKUPS_PER_FILE: usize = 10;
+
+/// Copy an existing regular file into the backup folder before it is changed.
+/// Returns the backup's workspace-relative path, or `None` when there was
+/// nothing to back up (new file) or the copy failed (never blocks the edit —
+/// the failure is reported in the tool text instead).
+pub async fn backup_existing(ws: &Workspace, p: &Path) -> Option<String> {
+    if !p.is_file() { return None; }
+    let rel = ws.display(p);
+    if rel.starts_with(BACKUP_DIR) { return None; }
+    let flat: String = rel.chars().map(|c| if c == '/' || c == '\\' || c == ':' { "__".to_string() } else { c.to_string() }).collect::<Vec<_>>().join("");
+    // Unix microseconds, forced strictly increasing so two changes to the same
+    // file inside one tick never share a backup name (the second would have
+    // silently overwritten the first copy).
+    static LAST_STAMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_micros() as u64).unwrap_or(0);
+    let stamp = loop {
+        let prev = LAST_STAMP.load(Ordering::SeqCst);
+        let next = now.max(prev + 1);
+        if LAST_STAMP.compare_exchange(prev, next, Ordering::SeqCst, Ordering::SeqCst).is_ok() { break next; }
+    };
+    let dir = ws.root().join(BACKUP_DIR);
+    if tokio::fs::create_dir_all(&dir).await.is_err() { return None; }
+    let name = format!("{flat}.{stamp}.bak");
+    let dest = dir.join(&name);
+    if tokio::fs::copy(p, &dest).await.is_err() { return None; }
+    // Prune: keep the newest BACKUPS_PER_FILE copies of this file.
+    let prefix = format!("{flat}.");
+    let mut mine: Vec<(u64, PathBuf)> = Vec::new();
+    if let Ok(mut rd) = tokio::fs::read_dir(&dir).await {
+        while let Ok(Some(e)) = rd.next_entry().await {
+            let n = e.file_name().to_string_lossy().to_string();
+            if let Some(rest) = n.strip_prefix(&prefix) {
+                if let Some(ts) = rest.strip_suffix(".bak").and_then(|t| t.parse::<u64>().ok()) { mine.push((ts, e.path())); }
+            }
+        }
+    }
+    mine.sort_by(|a, b| b.0.cmp(&a.0));
+    for (_, old) in mine.into_iter().skip(BACKUPS_PER_FILE) { let _ = tokio::fs::remove_file(old).await; }
+    Some(format!("{BACKUP_DIR}/{name}"))
+}
 
 pub struct Workspace {
     /// Canonicalized root - every sandbox check compares against this.
@@ -453,9 +500,15 @@ pub async fn tool_write_file(ws: &Workspace, args: &serde_json::Value) -> Result
         }
     }
     let existed = p.exists();
+    let backup = if existed { backup_existing(ws, &p).await } else { None };
     tokio::fs::write(&p, content.as_bytes()).await.map_err(|e| format!("write failed: {e}"))?;
     let action = if existed { "Overwrote" } else { "Created" };
-    Ok(format!("{action} {} ({} chars, ~{} lines).", ws.display(&p), content.chars().count(), count_lines(content)))
+    let note = match (&backup, existed) {
+        (Some(b), _) => format!(" Previous version saved to {b}."),
+        (None, true) => " (no backup could be written)".to_string(),
+        _ => String::new(),
+    };
+    Ok(format!("{action} {} ({} chars, ~{} lines).{note}", ws.display(&p), content.chars().count(), count_lines(content)))
 }
 
 pub async fn tool_edit_file(ws: &Workspace, args: &serde_json::Value) -> Result<String, String> {
@@ -500,9 +553,11 @@ pub async fn tool_edit_file(ws: &Workspace, args: &serde_json::Value) -> Result<
     let replaced = if replace_all { normalized.replace(&old_norm, &new_norm) }
         else { normalized.replacen(&old_norm, &new_norm, 1) };
     let new_text = if eol != "\n" { replaced.replace('\n', eol) } else { replaced };
+    let backup = backup_existing(ws, &p).await;
     tokio::fs::write(&p, new_text.as_bytes()).await.map_err(|e| format!("write failed: {e}"))?;
     let where_ = if replace_all { format!("{occurrences} occurrences") } else { "first occurrence".to_string() };
-    Ok(format!("Edited {}: replaced {where_} of old_string ({} chars -> {} chars).", ws.display(&p), old.chars().count(), new.chars().count()))
+    let note = backup.map(|b| format!(" Previous version saved to {b}.")).unwrap_or_else(|| " (no backup could be written)".to_string());
+    Ok(format!("Edited {}: replaced {where_} of old_string ({} chars -> {} chars).{note}", ws.display(&p), old.chars().count(), new.chars().count()))
 }
 
 pub async fn tool_create_folder(ws: &Workspace, args: &serde_json::Value) -> Result<String, String> {
@@ -525,8 +580,12 @@ pub async fn tool_delete_path(ws: &Workspace, args: &serde_json::Value) -> Resul
         tokio::fs::remove_dir_all(&p).await.map_err(|e| format!("delete failed: {e}"))?;
         Ok(format!("Deleted folder {display}/ ({files} files removed)."))
     } else {
+        let backup = backup_existing(ws, &p).await;
         tokio::fs::remove_file(&p).await.map_err(|e| format!("delete failed: {e}"))?;
-        Ok(format!("Deleted file {display}."))
+        match backup {
+            Some(b) => Ok(format!("Deleted file {display}. A copy was kept at {b}.")),
+            None => Ok(format!("Deleted file {display}.")),
+        }
     }
 }
 
@@ -854,11 +913,47 @@ pub async fn tool_open_path(ws: &Workspace, args: &serde_json::Value) -> Result<
 
 const DOWNLOAD_MAX_BYTES: u64 = 200 * 1024 * 1024;
 
+/// Host part of an http(s) URL, lower-cased, without port / brackets / auth.
+fn url_host(url: &str) -> Option<String> {
+    let lower = url.trim().to_ascii_lowercase();
+    let rest = lower.strip_prefix("http://").or_else(|| lower.strip_prefix("https://"))?;
+    let authority = rest.split(|c| c == '/' || c == '?' || c == '#').next()?;
+    let authority = authority.rsplit('@').next()?;
+    let host = if let Some(stripped) = authority.strip_prefix('[') {
+        stripped.split(']').next()?.to_string()
+    } else {
+        authority.split(':').next()?.to_string()
+    };
+    if host.is_empty() { None } else { Some(host) }
+}
+
+/// Why `url` must not be fetched by an AI tool: loopback (this very bridge),
+/// RFC-1918 / link-local / CGNAT ranges, cloud metadata, `.local` names.
+/// `None` = public internet, go ahead.
+pub fn private_network_reason(url: &str) -> Option<String> {
+    let host = match url_host(url) { Some(h) => h, None => return Some("invalid or non-http(s) url".into()) };
+    if host == "localhost" || host.ends_with(".localhost") || host.ends_with(".local") || host.ends_with(".internal") || host == "0.0.0.0" {
+        return Some(format!("'{host}' is a local host name - the AI's download tool only reaches the public internet"));
+    }
+    let octets: Vec<u8> = host.split('.').filter_map(|p| p.parse::<u8>().ok()).collect();
+    if octets.len() == 4 && host.split('.').count() == 4 {
+        let (a, b) = (octets[0], octets[1]);
+        let private = a == 127 || a == 10 || a == 0 || (a == 169 && b == 254) || (a == 172 && (16..=31).contains(&b)) || (a == 192 && b == 168) || (a == 100 && (64..=127).contains(&b)) || a >= 224;
+        return if private { Some(format!("'{host}' is a private / loopback / link-local address - the AI's download tool only reaches the public internet")) } else { None };
+    }
+    if host.contains(':') {
+        let v6 = host == "::1" || host == "::" || host.starts_with("fe8") || host.starts_with("fe9") || host.starts_with("fea") || host.starts_with("feb") || host.starts_with("fc") || host.starts_with("fd") || host.starts_with("::ffff:");
+        if v6 { return Some(format!("'{host}' is a private / loopback IPv6 address - the AI's download tool only reaches the public internet")); }
+    }
+    None
+}
+
 pub async fn tool_download_file(ws: &Workspace, args: &serde_json::Value) -> Result<String, String> {
     let url = arg_str(args, "url")?;
     if !url.to_lowercase().starts_with("http://") && !url.to_lowercase().starts_with("https://") {
         return Err("'url' must be an http(s) URL".into());
     }
+    if let Some(why) = private_network_reason(&url) { return Err(format!("download refused: {why}")); }
     let dest_rel = arg_str(args, "path")?;
     let dest = ws.resolve_path(dest_rel.as_str(), false)?;
     if let Some(parent) = dest.parent() {
@@ -945,8 +1040,8 @@ pub fn catalog() -> Vec<serde_json::Value> {
         serde_json::json!({"name": "list_directory", "description": "List one folder's entries with types and sizes.", "inputSchema": schema(serde_json::json!({"path": {"type": "string"}}), &[])}),
         serde_json::json!({"name": "tree", "description": "Recursive directory tree. Generated folders (.git, node_modules, __pycache__, dist...) are skipped.", "inputSchema": schema(serde_json::json!({"path": {"type": "string"}, "depth": {"type": "integer"}}), &[])}),
         serde_json::json!({"name": "read_file", "description": "Read a text file. Returns numbered lines as 'LINE | content'. Always read before editing so your old_string matches byte-for-byte.", "inputSchema": schema(serde_json::json!({"path": {"type": "string"}, "offset": {"type": "integer"}, "limit": {"type": "integer"}}), &["path"])}),
-        serde_json::json!({"name": "write_file", "description": "Create a file or OVERWRITE an existing one with complete new content. Parent folders are created automatically. Prefer edit_file for partial changes.", "inputSchema": schema(serde_json::json!({"path": {"type": "string"}, "content": {"type": "string"}}), &["path", "content"])}),
-        serde_json::json!({"name": "edit_file", "description": "Exact-match string replacement inside a file. Replaces the FIRST match, or every match with replace_all:true. Fails loudly when old_string is missing or ambiguous.", "inputSchema": schema(serde_json::json!({"path": {"type": "string"}, "old_string": {"type": "string"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean"}}), &["path", "old_string", "new_string"])}),
+        serde_json::json!({"name": "write_file", "description": "Create a file or OVERWRITE an existing one with complete new content. Parent folders are created automatically; an overwritten file is first copied to .orscript-backups/ inside the workspace. Prefer edit_file for partial changes.", "inputSchema": schema(serde_json::json!({"path": {"type": "string"}, "content": {"type": "string"}}), &["path", "content"])}),
+        serde_json::json!({"name": "edit_file", "description": "Exact-match string replacement inside a file. Replaces the FIRST match, or every match with replace_all:true. Fails loudly when old_string is missing or ambiguous. The previous version is copied to .orscript-backups/ first.", "inputSchema": schema(serde_json::json!({"path": {"type": "string"}, "old_string": {"type": "string"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean"}}), &["path", "old_string", "new_string"])}),
         serde_json::json!({"name": "create_folder", "description": "Create a folder (and missing parents).", "inputSchema": schema(serde_json::json!({"path": {"type": "string"}}), &["path"])}),
         serde_json::json!({"name": "delete_path", "description": "Permanently DELETE a file or folder (folders recursive). Confirm scope with the user before deleting anything broad.", "inputSchema": schema(serde_json::json!({"path": {"type": "string"}}), &["path"])}),
         serde_json::json!({"name": "move_path", "description": "Move or rename a file/folder. If destination is an existing folder, the source moves INSIDE it keeping its name.", "inputSchema": schema(serde_json::json!({"source": {"type": "string"}, "destination": {"type": "string"}}), &["source", "destination"])}),
@@ -996,6 +1091,46 @@ mod tests {
         assert!(msg.contains("first occurrence"), "{msg}");
         let data = std::fs::read_to_string(ws.root().join("notes/a.txt")).unwrap();
         assert_eq!(data, "one\r\nTWO!\r\nthree\r\n");
+        let _ = std::fs::remove_dir_all(&ws.root());
+    }
+
+    #[test]
+    fn download_refuses_private_networks() {
+        for bad in ["http://127.0.0.1:3000/api/status", "http://localhost/x", "http://10.1.2.3/", "http://169.254.169.254/latest/meta-data", "http://192.168.0.1", "http://172.31.0.9/", "http://[::1]/", "http://printer.local/", "http://user:pw@127.0.0.1/"] {
+            assert!(private_network_reason(bad).is_some(), "{bad} must be refused");
+        }
+        for ok in ["https://example.com/file.zip", "http://8.8.8.8/x", "https://create.roblox.com/", "https://172.15.0.1/", "https://cdn.example.net:8443/a?b=c"] {
+            assert!(private_network_reason(ok).is_none(), "{ok} must pass");
+        }
+        assert_eq!(url_host("https://user:pw@Example.com:8443/p?q#f").as_deref(), Some("example.com"));
+        assert_eq!(url_host("http://[::1]:80/").as_deref(), Some("::1"));
+    }
+
+    #[tokio::test]
+    async fn overwrite_edit_and_delete_keep_backups_inside_the_workspace() {
+        let ws = temp_ws("bak");
+        let path = serde_json::json!({"path": "src/Main.lua", "content": "print(1)\n"});
+        let first = tool_write_file(&ws, &path).await.unwrap();
+        assert!(first.starts_with("Created") && !first.contains("Previous version"), "{first}");
+        let second = tool_write_file(&ws, &serde_json::json!({"path": "src/Main.lua", "content": "print(2)\n"})).await.unwrap();
+        assert!(second.contains(&format!("Previous version saved to {BACKUP_DIR}/src__Main.lua.")), "{second}");
+        let edited = tool_edit_file(&ws, &serde_json::json!({"path": "src/Main.lua", "old_string": "2", "new_string": "3"})).await.unwrap();
+        assert!(edited.contains("Previous version saved to"), "{edited}");
+        let deleted = tool_delete_path(&ws, &serde_json::json!({"path": "src/Main.lua"})).await.unwrap();
+        assert!(deleted.contains("A copy was kept at"), "{deleted}");
+        let dir = ws.root().join(BACKUP_DIR);
+        let mut copies: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
+        copies.sort();
+        assert_eq!(copies.len(), 3, "{copies:?}");
+        assert!(copies.iter().all(|n| n.starts_with("src__Main.lua.") && n.ends_with(".bak")), "{copies:?}");
+        let mut bodies: Vec<String> = copies.iter().map(|n| std::fs::read_to_string(dir.join(n)).unwrap()).collect();
+        bodies.sort();
+        assert_eq!(bodies, vec!["print(1)\n", "print(2)\n", "print(3)\n"]);
+        // the backup folder is invisible to tree / counts like node_modules
+        let tree = tool_tree(&ws, &serde_json::json!({})).await.unwrap();
+        assert!(!tree.contains(BACKUP_DIR), "{tree}");
+        // the sandbox still refuses to read outside through the backups folder
+        assert!(ws.resolve_path(&format!("{BACKUP_DIR}/../../x"), false).is_err());
         let _ = std::fs::remove_dir_all(&ws.root());
     }
 

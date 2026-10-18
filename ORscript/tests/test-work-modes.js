@@ -14,7 +14,9 @@ assert(main.includes('const normalizeWorkMode = (id) => (WORK_MODE_IDS.includes(
 assert(main.includes('let workMode = "creation"') && main.includes('rsWorkMode:"creation"'), "creation is the default and the migration target");
 assert(main.includes("workMode = normalizeWorkMode(r.rsWorkMode);"), "stored mode is restored through the normaliser");
 assert(main.includes("chrome.storage.local.set({rsWorkMode: workMode})"), "setWorkMode persists the chosen mode");
-assert(main.includes("WORK_MODE_IDS.includes(changes.rsWorkMode.newValue)"), "popup changes propagate");
+// 1.42.0: the storage listener normalises the incoming id (a legacy id from an
+// old popup/tab used to be ignored, leaving the two surfaces out of sync).
+assert(main.includes("workMode = normalizeWorkMode(changes.rsWorkMode.newValue);") && !main.includes("WORK_MODE_IDS.includes(changes.rsWorkMode.newValue)"), "popup changes propagate (normalised)");
 assert(main.includes('data-work="${id}"') && main.includes('WORK_MODE_IDS.map((id) =>'), "settings tray renders one card per built-in mode");
 assert(main.includes('<span id="rs-work-badge" hidden></span>') && main.includes("function syncWorkModeUi()") && main.includes('setAttribute("data-rs-work", workMode)'), "bar badge + html flag");
 assert(main.includes('name: "Creation", badge: "CREATION", short: "Creation"'), "creation card + badge");

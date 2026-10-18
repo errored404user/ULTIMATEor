@@ -88,7 +88,7 @@ pub struct TurnRequest {
     pub instructions: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum ChatEvent {
     /// Short progress line for the status bar ("contacting model", "step 3/16").
     Status(String),
@@ -101,9 +101,47 @@ pub enum ChatEvent {
     AssistantStart,
     ToolStart { id: String, name: String, args: Value },
     ToolDone { id: String, name: String, ok: bool, text: String, images: Vec<(String, String)>, elapsed_ms: u128 },
+    /// A guarded tool (shell / process / delete / download / open) wants to
+    /// run. The turn is paused until the window answers through `reply`
+    /// (true = run it). Dropping the sender counts as Deny.
+    Approval { id: String, name: String, args: Value, reply: tokio::sync::oneshot::Sender<bool> },
     /// Turn finished. `appended` are the messages to add to the GUI's history
     /// (assistant + tool messages) so the next turn has full context.
     Finished { appended: Vec<Value>, prompt_tokens: u64, completion_tokens: u64, steps: usize, error: Option<String> },
+}
+
+/// Tools that run programs or destroy / fetch data on the user's PC. They
+/// never run unattended from the desktop chat: the turn pauses and the window
+/// asks Allow / Deny (same rule the browser extension applies in Sandbox and
+/// Ask access modes). Studio Luau and workspace file writes are the product's
+/// normal output and stay automatic; the write tools keep backups instead.
+pub const GUARDED_TOOLS: &[&str] = &["run_command", "process_kill", "delete_path", "download_file", "open_path"];
+/// How long a paused turn waits for Allow / Deny before the call is denied.
+pub const APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
+
+pub fn is_guarded(name: &str) -> bool {
+    let bare = name.rsplit('/').next().unwrap_or(name);
+    GUARDED_TOOLS.contains(&bare)
+}
+
+/// Ask the window and wait. `Ok(())` = allowed; `Err(text)` = the reason the
+/// tool must not run (denied, timed out, window gone, turn stopped).
+async fn await_approval(events: &Sender<ChatEvent>, cancel: &Arc<AtomicBool>, id: &str, name: &str, args: &Value) -> Result<(), String> {
+    let (tx, mut rx) = tokio::sync::oneshot::channel::<bool>();
+    if events.send(ChatEvent::Approval { id: id.to_string(), name: name.to_string(), args: args.clone(), reply: tx }).is_err() {
+        return Err(format!("'{name}' was not run: the window that must approve it is gone"));
+    }
+    let deadline = Instant::now() + APPROVAL_TIMEOUT;
+    loop {
+        if cancel.load(Ordering::Relaxed) { return Err(format!("'{name}' was not run: stopped by the user")); }
+        match tokio::time::timeout(Duration::from_millis(200), &mut rx).await {
+            Ok(Ok(true)) => return Ok(()),
+            Ok(Ok(false)) => return Err(format!("'{name}' was DENIED by the user. Do not retry it; ask the user what they want instead")),
+            Ok(Err(_)) => return Err(format!("'{name}' was not run: the approval prompt was dismissed")),
+            Err(_) if Instant::now() >= deadline => return Err(format!("'{name}' was not run: nobody answered the Allow / Deny prompt within {} s. Stop and ask the user to answer it in the ORscript window", APPROVAL_TIMEOUT.as_secs())),
+            Err(_) => continue,
+        }
+    }
 }
 
 // ───────────────────────────── models ─────────────────────────────
@@ -280,7 +318,7 @@ fn system_prompt(state: &AppState, cat: &Catalogue, instructions: &str, tools_en
         s.push_str("- Workspace tools (read_file, write_file, edit_file, tree, run_command…) operate on the user's project folder");
         if !root.is_empty() { s.push_str(&format!(" at {root}")); }
         s.push_str(". Use them for Rojo-style projects, assets and notes.\n\n");
-        s.push_str("WORKING STYLE\n- Plan briefly in one or two sentences, then execute. Verify results (count children, print names/positions, take a screenshot for visuals) before reporting.\n- Prefer complete, production-quality Luau: typed where sensible, services cached, no deprecated APIs, server/client split respected (LocalScripts under StarterPlayerScripts/StarterGui, Scripts under ServerScriptService).\n- Destructive actions (deleting many instances, overwriting scripts, running shell commands) need an explicit user request.\n- Final answers are short: what was done, where it lives, what to check. No filler.\n\n");
+        s.push_str("WORKING STYLE\n- Plan briefly in one or two sentences, then execute. Verify results (count children, print names/positions, take a screenshot for visuals) before reporting.\n- Prefer complete, production-quality Luau: typed where sensible, services cached, no deprecated APIs, server/client split respected (LocalScripts under StarterPlayerScripts/StarterGui, Scripts under ServerScriptService).\n- Destructive actions (deleting many instances, overwriting scripts, running shell commands) need an explicit user request. run_command, process_kill, delete_path, download_file and open_path pause the turn until the user clicks Allow in this window — if the result says DENIED, do not retry, ask instead. write_file / edit_file keep a copy of the previous version in .orscript-backups/.\n- Final answers are short: what was done, where it lives, what to check. No filler.\n\n");
     } else {
         s.push_str("Tools are disabled for this chat — answer with code and precise Studio instructions the user can apply by hand.\n\n");
     }
@@ -671,10 +709,16 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
             let _ = events.send(ChatEvent::Status(format!("step {steps}/{max_steps} · running {real}")));
             let _ = events.send(ChatEvent::ToolStart { id: id.clone(), name: real.clone(), args: args.clone() });
             let t0 = Instant::now();
-            let outcome = if by_wire.contains_key(&call.name) {
-                execute(&state, engine, &real, args).await
-            } else {
+            let outcome = if !by_wire.contains_key(&call.name) {
                 Err(anyhow::anyhow!("unknown tool '{}' — only the advertised tools exist", call.name))
+            } else if is_guarded(&real) {
+                let _ = events.send(ChatEvent::Status(format!("step {steps}/{max_steps} · waiting for your Allow / Deny on {real}")));
+                match await_approval(&events, &cancel, &id, &real, &args).await {
+                    Ok(()) => execute(&state, engine, &real, args).await,
+                    Err(why) => { state.ui.track("chat", format!("{real} not run: approval missing")); Err(anyhow::anyhow!("{why}")) }
+                }
+            } else {
+                execute(&state, engine, &real, args).await
             };
             let elapsed_ms = t0.elapsed().as_millis();
             let (ok, text, images) = match outcome {
@@ -736,4 +780,57 @@ pub fn strip_images(msg: &Value) -> Value {
         }
     }
     m
+}
+
+#[cfg(test)]
+mod approval_tests {
+    use super::*;
+    use std::sync::mpsc::channel;
+
+    #[test]
+    fn guarded_set_covers_shell_and_destructive_tools_only() {
+        for t in ["run_command", "process_kill", "delete_path", "download_file", "open_path", "local/run_command"] { assert!(is_guarded(t), "{t}"); }
+        for t in ["execute_luau", "write_file", "edit_file", "read_file", "screen_capture", "get_studio_state"] { assert!(!is_guarded(t), "{t}"); }
+    }
+
+    #[tokio::test]
+    async fn approval_allow_deny_and_dismiss() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        // allow
+        let (tx, rx) = channel::<ChatEvent>();
+        let waiter = tokio::spawn({ let tx = tx.clone(); let cancel = cancel.clone(); async move { await_approval(&tx, &cancel, "c1", "run_command", &json!({"command": "dir"})).await } });
+        let ev = tokio::task::spawn_blocking(move || rx.recv().unwrap()).await.unwrap();
+        match ev { ChatEvent::Approval { name, reply, .. } => { assert_eq!(name, "run_command"); reply.send(true).unwrap(); } _ => panic!("expected Approval") }
+        assert!(waiter.await.unwrap().is_ok());
+        // deny
+        let (tx, rx) = channel::<ChatEvent>();
+        let waiter = tokio::spawn({ let tx = tx.clone(); let cancel = cancel.clone(); async move { await_approval(&tx, &cancel, "c2", "delete_path", &json!({"path": "x"})).await } });
+        let ev = tokio::task::spawn_blocking(move || rx.recv().unwrap()).await.unwrap();
+        if let ChatEvent::Approval { reply, .. } = ev { reply.send(false).unwrap(); }
+        let err = waiter.await.unwrap().unwrap_err();
+        assert!(err.contains("DENIED"), "{err}");
+        // dismissed (sender dropped without an answer)
+        let (tx, rx) = channel::<ChatEvent>();
+        let waiter = tokio::spawn({ let tx = tx.clone(); let cancel = cancel.clone(); async move { await_approval(&tx, &cancel, "c3", "open_path", &json!({})).await } });
+        let ev = tokio::task::spawn_blocking(move || rx.recv().unwrap()).await.unwrap();
+        drop(ev);
+        let err = waiter.await.unwrap().unwrap_err();
+        assert!(err.contains("dismissed"), "{err}");
+        // window gone (receiver dropped before the request)
+        let (tx, rx) = channel::<ChatEvent>();
+        drop(rx);
+        let err = await_approval(&tx, &cancel, "c4", "run_command", &json!({})).await.unwrap_err();
+        assert!(err.contains("window"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn approval_respects_stop() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (tx, rx) = channel::<ChatEvent>();
+        let waiter = tokio::spawn({ let tx = tx.clone(); let cancel = cancel.clone(); async move { await_approval(&tx, &cancel, "c5", "run_command", &json!({})).await } });
+        let _keep = tokio::task::spawn_blocking(move || rx.recv().unwrap()).await.unwrap();
+        cancel.store(true, Ordering::Relaxed);
+        let err = waiter.await.unwrap().unwrap_err();
+        assert!(err.contains("stopped"), "{err}");
+    }
 }

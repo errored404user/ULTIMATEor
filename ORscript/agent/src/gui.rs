@@ -623,6 +623,16 @@ struct ChatTurn {
     started: Instant,
 }
 
+/// A guarded tool call (shell / process / delete / download / open) waiting
+/// for the user's Allow / Deny in the chat composer. The turn is paused until
+/// `reply` is answered; dropping it (Stop, New chat) counts as Deny.
+struct PendingApproval {
+    name: String,
+    args: String,
+    reply: Option<tokio::sync::oneshot::Sender<bool>>,
+    since: Instant,
+}
+
 pub struct App {
     shared: Arc<UiShared>,
     cmd_tx: UnboundedSender<UiCommand>,
@@ -697,6 +707,7 @@ pub struct App {
     chat_tokens: (u64, u64),
     chat_last_turn_ms: u128,
     chat_pending_focus: bool,
+    chat_approval: Option<PendingApproval>,
 }
 
 /// See `App::native_hwnd`.
@@ -793,6 +804,7 @@ impl App {
             chat_tokens: (0, 0),
             chat_last_turn_ms: 0,
             chat_pending_focus: false,
+            chat_approval: None,
         };
         // Open the chat panel straight into setup when nothing is configured yet.
         app.chat_setup_open = !app.chat_ready();
@@ -2405,6 +2417,8 @@ impl App {
     }
 
     fn chat_stop(&mut self) {
+        // A pending Allow / Deny is answered "deny" so the turn can unwind.
+        self.chat_answer_approval(false);
         if let Some(turn) = &self.chat_turn {
             turn.cancel.store(true, Ordering::Relaxed);
             self.chat_status = "stopping after the current step…".into();
@@ -2412,6 +2426,7 @@ impl App {
     }
 
     fn chat_new(&mut self) {
+        self.chat_answer_approval(false);
         if let Some(turn) = &self.chat_turn { turn.cancel.store(true, Ordering::Relaxed); }
         self.chat_turn = None;
         self.chat_items.clear();
@@ -2500,6 +2515,12 @@ impl App {
                     let args = match args { serde_json::Value::String(s) => s, other => serde_json::to_string_pretty(&other).unwrap_or_default() };
                     self.chat_last_assistant().tools.push(ChatToolCard { id, name, args, result: String::new(), ok: None, elapsed_ms: 0, images: Vec::new(), open: false });
                 }
+                E::Approval { id: _, name, args, reply } => {
+                    let args = serde_json::to_string_pretty(&args).unwrap_or_default();
+                    self.chat_status = format!("waiting for Allow / Deny · {name}");
+                    self.chat_approval = Some(PendingApproval { name, args, reply: Some(reply), since: Instant::now() });
+                    show_window();
+                }
                 E::ToolDone { id, name, ok, text, images, elapsed_ms } => {
                     let mut textures = Vec::new();
                     for (n, (_mime, data)) in images.iter().enumerate().take(2) {
@@ -2541,7 +2562,54 @@ impl App {
                 }
             }
         }
-        if finished { self.chat_turn = None; self.chat_pending_focus = true; }
+        if finished { self.chat_turn = None; self.chat_approval = None; self.chat_pending_focus = true; }
+    }
+
+    /// Answer the pending Allow / Deny (no-op when nothing is waiting).
+    fn chat_answer_approval(&mut self, allow: bool) {
+        if let Some(mut p) = self.chat_approval.take() {
+            if let Some(tx) = p.reply.take() { let _ = tx.send(allow); }
+            self.chat_status = if allow { format!("running {}", p.name) } else { format!("{} denied", p.name) };
+        }
+    }
+
+    /// The Allow / Deny box shown above the composer while a guarded tool waits.
+    fn chat_approval_box(&mut self, ui: &mut egui::Ui) {
+        let Some(p) = &self.chat_approval else { return };
+        let t = self.theme;
+        let name = p.name.clone();
+        let args = p.args.clone();
+        let waited = p.since.elapsed().as_secs();
+        let left = crate::chat::APPROVAL_TIMEOUT.as_secs().saturating_sub(waited);
+        let mut answer: Option<bool> = None;
+        egui::Frame::none()
+            .fill(t.bg3)
+            .stroke(Stroke::new(1.0, t.warn))
+            .rounding(Rounding::same(8.0))
+            .inner_margin(Margin::symmetric(10.0, 8.0))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    status_dot(ui, t.warn);
+                    ui.label(RichText::new(format!("The model wants to run {name}")).strong());
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        ui.label(RichText::new(format!("auto-deny in {left} s")).small().color(t.muted));
+                    });
+                });
+                ui.label(RichText::new("This runs a program, kills a process, deletes, downloads or opens something on your PC. Nothing happens until you answer.").small().color(t.muted));
+                let shown = truncate(&args, 600);
+                egui::ScrollArea::vertical().max_height(120.0).show(ui, |ui| {
+                    ui.add(egui::Label::new(RichText::new(shown).monospace().small()).wrap());
+                });
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    if pill(ui, t, "Allow once", true).clicked() { answer = Some(true); }
+                    if pill(ui, t, "Deny", false).clicked() { answer = Some(false); }
+                    ui.label(RichText::new("Esc = Deny").small().color(t.muted));
+                });
+            });
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) { answer = Some(false); }
+        if let Some(a) = answer { self.chat_answer_approval(a); }
+        ui.add_space(6.0);
     }
 
     fn chat_panel(&mut self, ctx: &egui::Context) {
@@ -2871,6 +2939,7 @@ impl App {
     fn chat_composer(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let t = self.theme;
         let busy = self.chat_turn.is_some();
+        if busy { self.chat_approval_box(ui); } else if self.chat_approval.is_some() { self.chat_approval = None; }
         let id = egui::Id::new("chat-composer-edit");
         let focused = ctx.memory(|m| m.has_focus(id));
         let mut send = false;

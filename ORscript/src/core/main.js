@@ -156,6 +156,7 @@
   const ASK_OPS = new Set([
     "execute_luau","multi_edit","write_file","edit_file","delete_path","move_path","create_folder","insert_from_creator_store","generate_mesh","generate_material","generate_procedural_model","start_stop_play","user_keyboard_input","user_mouse_input",
     "run_command","process_kill","download_file","open_path",
+    "api_request","web_api","api_json_get","api_json_post","web_fetch",
     "lighting_set_preset","lighting_setup_day_night","terrain_fill_region","terrain_clear",
     "ui_create_screen","ui_create_component","fx_create_emitter","fx_create_light","fx_create_vfx",
     "audio_setup_sound_hierarchy","audio_create_sound","camera_set_style","datastore_setup",
@@ -179,6 +180,19 @@
     "model_build","model_union","model_subtract","model_optimize","model_anchor_fix","model_paint","model_hollow_box","model_wall","model_pipe","model_array_radial",
     "memory_update_section","memory_remove_fact",
   ]);
+  // 1.42.0 — Creation mode safety. Everything that leaves the Studio +
+  // workspace sandbox (a shell command, killing a process, deleting or moving
+  // files, downloading, opening a path, running code in Blender) asks the user
+  // first in BOTH Sandbox and Ask access modes - generated code never runs
+  // unattended. Only the explicit "Full PC access" mode runs them directly.
+  // When the approval modal is missing these calls are DENIED (fail closed),
+  // unlike the ordinary Ask-mode prompt that still fails open.
+  const CONFIRM_ALWAYS_OPS = new Set([
+    "run_command","process_kill","delete_path","move_path","download_file","open_path",
+    "execute_blender_code","blender_export_fbx",
+  ]);
+  const needsConfirmation = (bareName, mode) => mode !== "full" && (CONFIRM_ALWAYS_OPS.has(bareName) || (mode === "ask" && ASK_OPS.has(bareName)));
+  try { window.__rsNeedsConfirmation = needsConfirmation; } catch {}
   const PUBLISH_OPS=new Set(["developer_product_create","gamepass_create","gamepass_update","cloud_gamepass_create","cloud_gamepass_update","cloud_product_create","studio_publish_selection","studio.publishPlace","studio.publishAnimation","studio.createGamePass"]);
   async function publishAutomationEnabled(){try{const r=await chrome.storage.local.get("rsAllowPublishAutomation");return r.rsAllowPublishAutomation===true;}catch{return false;}}
   // Ask-mode / publish confirmation. The prompt is a full-screen modal, but a
@@ -197,7 +211,9 @@
       const body = document.getElementById("rs-approve-body");
       const allow = document.getElementById("rs-approve-allow");
       const deny = document.getElementById("rs-approve-deny");
-      if (!root || !allow || !deny) { resolve(!required); return; }
+      // Missing modal: publish confirmations and the always-confirm ops fail
+      // CLOSED (nothing runs); a plain Ask-mode prompt keeps the old behaviour.
+      if (!root || !allow || !deny) { resolve(!(required || CONFIRM_ALWAYS_OPS.has(op))); return; }
       // Keep the modal outside #rs-root so a collapsed / hidden bar cannot hide it.
       try { if (root.parentElement !== document.documentElement) document.documentElement.appendChild(root); } catch {}
       const oldAllowText=allow.textContent;
@@ -2173,6 +2189,7 @@
     catch(e){diag("registry.catalogFailed",{error:String(e&&e.message||e)});}
   }
 
+  try { window.__rsEnsureTools = (force) => ensureTools(force); } catch {}
   async function ensureTools(force) {
     if (!force && A.toolList.length && Date.now() - A.toolsAt < TOOLS_TTL_MS) {
       diag("tools.cached", { age: Date.now() - A.toolsAt, n: A.toolList.length });
@@ -3342,6 +3359,9 @@
     return fail("UNKNOWN_OPERATION", [`'${name}' is not a public_skill command`], "Available: public_skill_create/from_prompt/list/get/update/delete/enable/test/export/import.");
   }
 
+  // 1.42.0: harness hook so tests can drive the real dispatcher (permission
+  // gates, bridge message shapes) without a provider page.
+  try { window.__rsRunTool = (call) => runTool(call); } catch {}
   async function runTool(call) {
     let name = call.tool;
     let args = call.arguments || {};
@@ -3422,9 +3442,12 @@
     if (!internalCall && PUBLISH_OPS.has(bareName) && !(await publishAutomationEnabled())) {
       const ok=await requestApproval(bareName,{...args,warning:"Publishing will modify a Roblox cloud resource and remains subject to Roblox ownership, moderation, permissions, and rate limits."},true);
       if(!ok)return approvalTimedOut() ? `ERROR USER_ACTION_REQUIRED in ${bareName}: the user did not answer the publish confirmation within ${Math.round(APPROVAL_TIMEOUT_MS / 1000)} s, so nothing was published. Stop and ask the user to confirm in the OR bar (or enable publish automation), then continue.` : `ERROR USER_ACTION_REQUIRED in ${bareName}: publishing was not confirmed. Nothing was published.`;
-    } else if (!internalCall && permMode === "ask" && ASK_OPS.has(bareName)) {
+    } else if (!internalCall && needsConfirmation(bareName, permMode)) {
       const ok = await requestApproval(bareName, args);
-      if (!ok) return approvalTimedOut() ? `ERROR USER_ACTION_REQUIRED in ${bareName}: the user did not answer the Ask-mode approval prompt within ${Math.round(APPROVAL_TIMEOUT_MS / 1000)} s, so the command did NOT run. Stop here and tell the user to click Allow in the OR bar (or switch Permissions to Sandbox), then continue when they reply.` : `ERROR in ${bareName}: the user declined this action (Ask mode). Do not retry unless they ask.`;
+      if (!ok) {
+        const why = CONFIRM_ALWAYS_OPS.has(bareName) ? "this command leaves the Studio + workspace sandbox, so it always needs the user's Allow" : "Ask mode";
+        return approvalTimedOut() ? `ERROR USER_ACTION_REQUIRED in ${bareName}: the user did not answer the approval prompt within ${Math.round(APPROVAL_TIMEOUT_MS / 1000)} s (${why}), so the command did NOT run. Stop here and tell the user to click Allow in the OR bar, then continue when they reply.` : `ERROR in ${bareName}: the user declined this action (${why}). Do not retry unless they ask.`;
+      }
     }
     // Multi-Agent role guard: planner / reviewer / tester are read-only. The
     // crew module refuses the mutation with a handoff recipe (and auto-promotes
@@ -6192,6 +6215,14 @@
   // ════════════════════════════════════════════════════════════════════════
   const ui = (() => {
     let root, bar, dot, brandEl, stateEl, actionBtn, stopBtn, extraBtn, menuEl, unstableEl, cardsBtn, cardsPanel, supportBtn;
+    // 1.42.0: the bar is moved INTO the host composer on inline mounts, so a
+    // late `root.querySelector("#rs-…")` finds nothing there (the CREATION
+    // badge, status pill, task pill and engine button silently stopped
+    // updating on those providers). Look in the bar first, then the root,
+    // then the document.
+    function uiEl(id) {
+      try { return (bar && bar.querySelector("#" + id)) || (root && root.querySelector("#" + id)) || document.getElementById(id) || null; } catch { return null; }
+    }
     let steeringStrip, steeringProgressEl, steeringStepEl, steeringDetailEl, steeringQueuedEl, steeringInput, steeringSendBtn;
     let cover, coverRaf, barRaf;
     let openMenuFn = null; // set by build(); lets the popup force the panel open via runtime message
@@ -6856,8 +6887,8 @@
           try { window.__rsThinkingLevel = () => thinkingLevel; } catch {}
           dirty = true;
         }
-        if (changes.rsWorkMode && WORK_MODE_IDS.includes(changes.rsWorkMode.newValue)) {
-          workMode = changes.rsWorkMode.newValue;
+        if (changes.rsWorkMode && normalizeWorkMode(changes.rsWorkMode.newValue) !== workMode) {
+          workMode = normalizeWorkMode(changes.rsWorkMode.newValue);
           try { window.__rsWorkMode = () => workMode; } catch {}
           try { syncWorkModeUi(); } catch {}
           dirty = true;
@@ -7009,7 +7040,7 @@
     try { window.__rsSetWorkMode = (id) => setWorkMode(id); } catch {}
     // Multi-Agent crew badge: which specialist is active + plan progress.
     function syncCrewBadge(){
-      const el = root && root.querySelector("#rs-crew-badge");
+      const el = uiEl("rs-crew-badge");
       if (!el) return;
       let b = { text: "", title: "", role: "" };
       try { if (typeof ORAgentCrew !== "undefined" && ORAgentCrew) b = ORAgentCrew.badge(); } catch {}
@@ -7021,11 +7052,11 @@
     try { window.addEventListener("or-crew-change", () => { try { syncCrewBadge(); } catch {} }); } catch {}
     // Bar badge + <html data-rs-work> for CSS; every mode has a badge.
     function syncWorkModeUi(){
-      const mode = WORK_MODES[workMode] || WORK_MODES.ultimate;
+      const mode = WORK_MODES[workMode] || WORK_MODES.creation;
       const pm = publicMode();
       try { document.documentElement.setAttribute("data-rs-work", workMode); } catch {}
       try { document.documentElement.toggleAttribute("data-rs-public-mode", !!pm); } catch {}
-      const badge = root && root.querySelector("#rs-work-badge");
+      const badge = uiEl("rs-work-badge");
       if (badge) {
         badge.textContent = pm ? pm.badge : mode.badge; badge.dataset.work = workMode; badge.hidden = !(pm ? pm.badge : mode.badge);
         badge.title = pm ? `${pm.title} — custom work mode on ${mode.name} — ${pm.sub}` : mode.name + " work mode — " + mode.sub;
@@ -7048,7 +7079,7 @@
       const visible = on && !!(A.started || A.starting || A.running || A.steeringQueue.length);
       steeringStrip.hidden = !visible;
       bar.classList.toggle("rs-steering-expanded", visible);
-      const steeringBtn = root && root.querySelector("#rs-steering");
+      const steeringBtn = uiEl("rs-steering");
       if (steeringBtn) {
         steeringBtn.classList.toggle("on", on);
         steeringBtn.textContent = on ? "Steering ON" : "Steering";
@@ -7132,7 +7163,7 @@
       if (v) { try { cardsTab = "tasks"; if (openCardsPanel) openCardsPanel(true); } catch {} }
     }
     function syncTaskPill(){
-      const el = root && root.querySelector("#rs-task-pill");
+      const el = uiEl("rs-task-pill");
       if (!el) return;
       let p = null; try { p = taskListOn() ? ORTaskList.progress() : null; } catch {}
       const show = !!(p && p.total);
@@ -7310,7 +7341,7 @@
 
 
     function syncMenuPrompt() {
-      const ta = root && root.querySelector("#rs-set-text");
+      const ta = uiEl("rs-set-text");
       if (ta && document.activeElement !== ta) ta.value = customPrompt;
     }
 
@@ -7511,11 +7542,11 @@
             </section>
             <section class="rs-menu-sec">
               <div class="rs-sec-label"><span>Access</span></div>
-              <div class="rs-menu-note">Sandbox = Studio and the project folder. Ask = confirm each write. Full = the whole PC (AgentScript).</div>
+              <div class="rs-menu-note">Sandbox = Studio and the project folder; shell commands, deletes, downloads and process kills always ask first. Ask = confirm each write too. Full = the whole PC (AgentScript), no prompts.</div>
               <div class="rs-work-row">
                 <button type="button" class="rs-work-card ${permMode==="sandbox"?"on":""}" data-perm="sandbox"><span class="rs-work-name">Sandbox</span><span class="rs-work-sub">Roblox / workspace only</span></button>
                 <button type="button" class="rs-work-card ${permMode==="ask"?"on":""}" data-perm="ask"><span class="rs-work-name">Ask</span><span class="rs-work-sub">Confirm each write / run</span></button>
-                <button type="button" class="rs-work-card ${permMode==="full"?"on":""}" data-perm="full"><span class="rs-work-name">Full</span><span class="rs-work-sub">All PC files + processes</span></button>
+                <button type="button" class="rs-work-card ${permMode==="full"?"on":""}" data-perm="full"><span class="rs-work-name">Full</span><span class="rs-work-sub">All PC files + processes, no prompts</span></button>
               </div>
             </section>
           <section class="rs-menu-sec">
@@ -8843,7 +8874,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       // Persona badge: only visible when a specialist persona is active.
       
       try {
-        const engEl = root && root.querySelector("#rs-engine");
+        const engEl = uiEl("rs-engine");
         if (engEl) {
           // Dim = hint only. Never set .disabled here: a disabled button swallows
           // clicks before the delegated handler can fire, which made the toggle
@@ -9098,7 +9129,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       stateEl.classList.toggle("rs-state-warn", warn);
       // Inline dynamic status pill — RS/US Connected, Simulated, Offline
       try {
-        const pill = root.querySelector("#rs-status-pill");
+        const pill = uiEl("rs-status-pill");
         const dot = pill && pill.querySelector(".rs-status-dot");
         const txt = pill && pill.querySelector(".rs-status-text");
         if (pill && txt) {
@@ -9143,7 +9174,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       // Context meter: approximate system-prompt cost beside Start/Restart so
       // users see what this engine+site combination actually spends.
       try {
-        const cEl = root.querySelector("#rs-ctx");
+        const cEl = uiEl("rs-ctx");
         if (cEl) {
           const si = A.sysInfo;
           const relevant = kind === "start" || kind === "start-degraded" || kind === "restart";
