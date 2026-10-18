@@ -19,6 +19,13 @@ const isSupportedTab = (url) => !!url && (SUPPORTED_HOSTS.some((h) => url.includ
 const ENGINE_KEY = "rs-engine"; // "roblox" | "local"
 const ENGINES = ["roblox", "local"];
 const WORK_MODES = ["creation"];
+const BRAND_LOGO_RE = /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i;
+function sanitizeBrandLite(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const name = String(src.name == null ? "" : src.name).replace(/[\u0000-\u001f\u007f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 24);
+  const logo = typeof src.logo === "string" && src.logo.length <= 400000 && BRAND_LOGO_RE.test(src.logo.trim()) ? src.logo.trim() : "";
+  return { name, logo };
+}
 // 1.39.0: ONE built-in work mode. Creation = the former Ultimate (Luau
 // engineering + modeling), Visualizer (VFX / lighting / UI) and Animator
 // (rigs, keyframes, tweens, camera) merged; legacy stored ids migrate to it.
@@ -96,6 +103,11 @@ function renderSettings() {
   document.documentElement.setAttribute("data-theme", "night");
   const logo = document.getElementById("or-logo");
   if (logo) logo.textContent = "OrScript";
+  if (logo && settings.brand && settings.brand.name) logo.textContent = settings.brand.name;
+  try {
+    const crest = document.querySelector(".crest img");
+    if (crest) { const custom = settings.brand && settings.brand.logo; crest.src = custom || "assets/icon.png"; crest.classList.toggle("custom", !!custom); }
+  } catch {}
   const map = [
     ["tgl-extra", settings.extra],
     ["tgl-autofix", settings.autofix],
@@ -113,8 +125,11 @@ function renderSettings() {
 async function loadSettings() {
   try {
     const r = await chrome.storage.local.get([
-      "rsWorkMode", "rsPermMode", "rsSounds", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsBgMode",
+      "rsWorkMode", "rsPermMode", "rsSounds", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsBgMode", "rsBrand",
     ]);
+    // 1.43.0 Customize: the popup mirrors the user's name + logo (sanitised
+    // the same way the content script does — text and an inline raster only).
+    settings.brand = sanitizeBrandLite(r.rsBrand);
     if (r.rsWorkMode) settings.workMode = normalizeWorkMode(r.rsWorkMode);
     if (PERM_MODES.includes(r.rsPermMode)) settings.permMode = r.rsPermMode;
     if (typeof r.rsSounds === "boolean") settings.sounds = r.rsSounds;

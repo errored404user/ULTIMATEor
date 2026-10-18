@@ -356,7 +356,108 @@
   // Central product name. The bar shows THIS constantly; which ENGINE is live
   // is communicated by the RS/AS/AN pill plus a top-right toast on switch.
   const BRAND_NAME = "OrScript";
-  const productName=()=>orTheme==="void"?"VoidScript":BRAND_NAME;
+  const defaultProductName = () => (orTheme==="void"?"VoidScript":"OrScript");
+  // ── 1.43.0 Customize — the user's own look ──────────────────────────────
+  // Name, logo, colours, button style / radius / labels and which bar buttons
+  // show. Stored once per browser (chrome.storage.local.rsBrand), sanitised on
+  // every read, applied as text / <img src> / inline custom properties on
+  // <html> — never as HTML, never to the prompt, never to Studio or the bridge.
+  const BRAND_STYLES = ["glow", "flat", "outline", "glass"];
+  const BRAND_STYLE_META = {
+    glow:    ["Glow pill", "gradient + soft glow (default)"],
+    flat:    ["Flat", "solid accent, no glow"],
+    outline: ["Outline", "transparent with an accent border"],
+    glass:   ["Glass", "translucent, blurred"],
+  };
+  const BRAND_LABEL_KEYS = ["start", "stop", "think", "voice"];
+  const BRAND_LABEL_DEFAULTS = { start: "Start Agent", stop: "\u25A0 Stop", think: "Think", voice: "\ud83c\udf99 Voice" };
+  const BRAND_HIDEABLE = ["think", "voice", "discord", "paint"];
+  const BRAND_HIDE_META = { think: "Think", voice: "Voice", discord: "Discord", paint: "Paint" };
+  const BRAND_LOGO_MAX = 400000; // chars of data URL (~300 KB) — a 128 px PNG is ~10–40 KB
+  const BRAND_LOGO_RE = /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i;
+  function sanitizeBrand(raw) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const out = { name: "", logo: "", accent: "", accent2: "", style: "glow", radius: null, labels: {}, hide: [] };
+    const txt = (v, max) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, max);
+    const hex = (v) => (/^#[0-9a-f]{6}$/i.test(String(v == null ? "" : v).trim()) ? String(v).trim().toLowerCase() : "");
+    out.name = txt(src.name, 24);
+    out.accent = hex(src.accent);
+    out.accent2 = hex(src.accent2);
+    if (BRAND_STYLES.includes(src.style)) out.style = src.style;
+    const r = Number(src.radius);
+    out.radius = (src.radius === null || src.radius === undefined || src.radius === "" || !Number.isFinite(r)) ? null : Math.max(0, Math.min(40, Math.round(r)));
+    // Logo: an inline raster image only, size-capped. No http(s) (tracking,
+    // mixed content), no SVG (scripts), no javascript:, no blobs.
+    const logo = typeof src.logo === "string" ? src.logo.trim() : "";
+    if (logo.length <= BRAND_LOGO_MAX && BRAND_LOGO_RE.test(logo)) out.logo = logo;
+    const labels = src.labels && typeof src.labels === "object" ? src.labels : {};
+    for (const k of BRAND_LABEL_KEYS) { const v = txt(labels[k], 18); if (v) out.labels[k] = v; }
+    const hide = Array.isArray(src.hide) ? src.hide : [];
+    out.hide = BRAND_HIDEABLE.filter((k) => hide.includes(k));
+    return out;
+  }
+  const brandIsDefault = (b) => !b.name && !b.logo && !b.accent && !b.accent2 && b.style === "glow" && b.radius === null && !Object.keys(b.labels).length && !b.hide.length;
+  let BRAND = sanitizeBrand(null);
+  const productName = () => BRAND.name || defaultProductName();
+  const brandLabel = (key, fallback) => BRAND.labels[key] || fallback;
+  const brandLogoUrl = () => { if (BRAND.logo) return BRAND.logo; try { return chrome.runtime.getURL("assets/icon128.png"); } catch { return ""; } };
+  const hexToRgb = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const mixHex = (h, target, t) => { const a = hexToRgb(h), b = hexToRgb(target); return "#" + a.map((c, i) => Math.round(c + (b[i] - c) * t).toString(16).padStart(2, "0")).join(""); };
+  const relLuma = (h) => { const [r, g, b] = hexToRgb(h).map((c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const BRAND_CSS_VARS = ["--orx-a", "--orx-b", "--orx-on", "--orx-glow", "--or-accent", "--or-accent-2", "--or-glow", "--orx-r", "--ti-radius-ctl"];
+  function applyBrand() {
+    try {
+      const html = document.documentElement, st = html.style;
+      for (const v of BRAND_CSS_VARS) st.removeProperty(v);
+      if (BRAND.accent) {
+        const a = BRAND.accent, b = BRAND.accent2 || mixHex(a, "#000000", 0.28);
+        const [r, g, bl] = hexToRgb(a);
+        st.setProperty("--orx-a", a); st.setProperty("--orx-b", b);
+        st.setProperty("--orx-on", relLuma(a) > 0.45 ? "#15130f" : "#ffffff");
+        st.setProperty("--orx-glow", `rgba(${r},${g},${bl},.32)`);
+        st.setProperty("--or-accent", a); st.setProperty("--or-accent-2", b); st.setProperty("--or-glow", `rgba(${r},${g},${bl},.28)`);
+      }
+      if (BRAND.radius !== null) { st.setProperty("--orx-r", BRAND.radius + "px"); st.setProperty("--ti-radius-ctl", BRAND.radius + "px"); }
+      if (BRAND.style !== "glow") html.setAttribute("data-rs-btn", BRAND.style); else html.removeAttribute("data-rs-btn");
+      if (BRAND.hide.length) html.setAttribute("data-rs-hide", BRAND.hide.join(" ")); else html.removeAttribute("data-rs-hide");
+      if (brandIsDefault(BRAND)) html.removeAttribute("data-rs-custom"); else html.setAttribute("data-rs-custom", "1");
+      const name = productName();
+      document.querySelectorAll("#rs-brand, [data-rs-brand], [data-rs-brand-short]").forEach((el) => { if (el.textContent !== name) el.textContent = name; });
+      const logoUrl = brandLogoUrl();
+      document.querySelectorAll("#rs-logo, .rs-cards-logo, #rs-brand-logo-preview").forEach((img) => { if (img.getAttribute("src") !== logoUrl) img.setAttribute("src", logoUrl); img.classList.toggle("rs-logo-custom", !!BRAND.logo); });
+      document.querySelectorAll(".rs-menu-mark-logo").forEach((el) => { el.style.backgroundImage = `url("${logoUrl}")`; });
+      const think = document.getElementById("rs-extra"); if (think) think.textContent = brandLabel("think", BRAND_LABEL_DEFAULTS.think);
+      const voice = document.getElementById("rs-voice"); if (voice && !voice.classList.contains("rs-voice-on") && voice.textContent !== "Voice unavailable") voice.textContent = brandLabel("voice", BRAND_LABEL_DEFAULTS.voice);
+      const stop = document.getElementById("rs-stop"); if (stop && !/Stopping/.test(stop.textContent)) stop.textContent = brandLabel("stop", BRAND_LABEL_DEFAULTS.stop);
+      try { if (typeof window.__rsBrandRefresh === "function") window.__rsBrandRefresh(); } catch {}
+      try { if (typeof window.__rsBrandSectionRefresh === "function") window.__rsBrandSectionRefresh(); } catch {}
+    } catch {}
+  }
+  let brandSaveTimer = 0;
+  function setBrand(patch, opts) {
+    const replace = !!(opts && opts.replace);
+    const merged = replace ? patch : Object.assign({}, BRAND, patch || {}, { labels: Object.assign({}, BRAND.labels, (patch && patch.labels) || {}) });
+    BRAND = sanitizeBrand(merged);
+    applyBrand();
+    clearTimeout(brandSaveTimer);
+    brandSaveTimer = setTimeout(() => {
+      try { if (brandIsDefault(BRAND)) chrome.storage.local.remove("rsBrand"); else chrome.storage.local.set({ rsBrand: BRAND }); } catch {}
+    }, opts && opts.now ? 0 : 200);
+    return BRAND;
+  }
+  try {
+    window.__rsBrand = () => JSON.parse(JSON.stringify(BRAND));
+    window.__rsSetBrand = (patch, opts) => JSON.parse(JSON.stringify(setBrand(patch, opts)));
+    window.__rsSanitizeBrand = (raw) => sanitizeBrand(raw);
+  } catch {}
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local" || !changes.rsBrand) return;
+      const next = sanitizeBrand(changes.rsBrand.newValue);
+      if (JSON.stringify(next) === JSON.stringify(BRAND)) return;
+      BRAND = next; applyBrand();
+    });
+  } catch {}
   // Shown in the panel instead of a static "Free" label, so a user's screenshot
   // alone tells us which build they're on for debugging. Pulled from
   // manifest.json (single source of truth) rather than duplicated here.
@@ -465,6 +566,9 @@
   let soundOn = true;
   let themeVolume = 70, memeEffects = "full", memeIntensity = "medium";
   try {
+    // Customize (1.43.0): the stored look is read first so the bar is built
+    // with the user's name / logo instead of flashing the defaults.
+    chrome.storage.local.get("rsBrand", (r) => { if (r && r.rsBrand) { BRAND = sanitizeBrand(r.rsBrand); try { applyBrand(); } catch {} } });
     chrome.storage.local.get(["rsSounds", "rsThemeVolume", "rsMemeEffects", "rsMemeIntensity"], (r) => {
       if (r && typeof r.rsSounds === "boolean") soundOn = r.rsSounds;
       if (r && Number.isFinite(Number(r.rsThemeVolume))) themeVolume=Math.max(0,Math.min(100,Number(r.rsThemeVolume)));
@@ -481,11 +585,11 @@
       document.documentElement.style.setProperty("--rs-theme-bg",th?.background||"");document.documentElement.dataset.memeEffects=memeEffects;document.documentElement.dataset.memeIntensity=memeIntensity;
       const brand = document.getElementById("rs-brand");
       if (brand) {
-        const product=orTheme==="void"?"VoidScript":"OrScript";brand.textContent=product;
+        const product=productName();brand.textContent=product;
         brand.title = product + (th ? " · " + th.name : "");
       }
       const tag = document.querySelector(".rs-menu-tag");
-      if (tag){const product=orTheme==="void"?"VoidScript":"OrScript";tag.textContent=product+" · v"+EXT_VERSION+" · "+((th&&th.name)||"Night");}
+      if (tag){const product=productName();tag.textContent=product+" · v"+EXT_VERSION+" · "+((th&&th.name)||"Night");}
       const orn = document.getElementById("rs-ornament");
       if (orn) orn.setAttribute("data-theme", orTheme || "night");
       // Every theme paints four corner rails; overlay.css draws a bracket frame and
@@ -6247,8 +6351,8 @@
           <div class="rs-cluster rs-cluster-left">
           <span id="rs-dot" class="off" title=""></span>
           <span id="rs-ornament" aria-hidden="true"></span>
-          <img id="rs-logo" class="rs-logo" alt="" aria-hidden="true" draggable="false" src="${chrome.runtime.getURL("assets/icon128.png")}">
-          <span id="rs-brand" data-rs-brand>OrScript</span>
+          <img id="rs-logo" class="rs-logo${BRAND.logo ? " rs-logo-custom" : ""}" alt="" aria-hidden="true" draggable="false" src="${brandLogoUrl()}">
+          <span id="rs-brand" data-rs-brand>${escRs(productName())}</span>
           <span id="rs-work-badge" hidden></span>
           <span id="rs-crew-badge" hidden></span>
           <button type="button" id="rs-task-pill" hidden title="Task list"></button>
@@ -6342,7 +6446,7 @@
         }
         return true;
       };
-      const stopVoice = () => { voiceRunning=false; try { voiceRecognition && voiceRecognition.stop(); } catch {} voiceRecognition=null; if (voiceBtn) { voiceBtn.classList.remove("rs-voice-on"); voiceBtn.setAttribute("aria-pressed","false"); voiceBtn.textContent="🎙 Voice"; voiceBtn.title="Enable voice coding"; } };
+      const stopVoice = () => { voiceRunning=false; try { voiceRecognition && voiceRecognition.stop(); } catch {} voiceRecognition=null; if (voiceBtn) { voiceBtn.classList.remove("rs-voice-on"); voiceBtn.setAttribute("aria-pressed","false"); voiceBtn.textContent=brandLabel("voice", BRAND_LABEL_DEFAULTS.voice); voiceBtn.title="Enable voice coding"; } };
       if (voiceBtn) voiceBtn.addEventListener("click", (e) => {
         e.preventDefault(); e.stopPropagation();
         if (voiceRunning) { stopVoice(); return; }
@@ -7480,6 +7584,145 @@
     // ── The "more" menu (⋯) ─────────────────────────────────────────────────
     // One popover holding every secondary control: other AI sites, the custom
     // prompt, and support (Robux). Opens above the bar.
+    // ── Customize (1.43.0): Settings → name / logo / colours / buttons ──────
+    function brandSectionHtml() {
+      const b = BRAND, isDef = brandIsDefault(b);
+      const accent = b.accent || "#ece4d8", accent2 = b.accent2 || (b.accent ? mixHex(b.accent, "#000000", 0.28) : "#aaa296");
+      const styles = BRAND_STYLES.map((id) => `<button type="button" class="rs-work-card ${b.style===id?"on":""}" data-brand-style="${id}" role="radio" aria-checked="${b.style===id?"true":"false"}"><span class="rs-work-name">${escRs(BRAND_STYLE_META[id][0])}</span><span class="rs-work-sub">${escRs(BRAND_STYLE_META[id][1])}</span></button>`).join("");
+      const labels = BRAND_LABEL_KEYS.map((k) => `<label><span>${k}</span><input type="text" data-brand-label="${k}" class="rs-mcp-field" maxlength="18" placeholder="${escRs(BRAND_LABEL_DEFAULTS[k])}" value="${escRs(b.labels[k] || "")}"></label>`).join("");
+      const shows = BRAND_HIDEABLE.map((k) => { const on = !b.hide.includes(k); return `<button type="button" class="rs-brand-tgl ${on?"on":""}" data-brand-show="${k}" aria-pressed="${on?"true":"false"}" title="${on?"Shown":"Hidden"} — click to ${on?"hide":"show"}">${escRs(BRAND_HIDE_META[k])}</button>`; }).join("");
+      return `<section class="rs-menu-sec rs-brand-sec" data-rs-brand-sec>
+              <div class="rs-sec-label"><span>Customize</span><span class="rs-sec-state" id="rs-brand-state">${isDef ? "default look" : "custom look"}</span></div>
+              <div class="rs-menu-note">Make it yours: name, logo, colours, button style and labels. Only this browser sees it — the AI, the commands and Studio are unaffected.</div>
+              <div class="rs-brand-grid">
+                <label class="rs-brand-field"><span>Name</span><input type="text" id="rs-brand-name" class="rs-mcp-field" maxlength="24" autocomplete="off" spellcheck="false" placeholder="${escRs(defaultProductName())}" value="${escRs(b.name)}"></label>
+                <div class="rs-brand-field"><span>Logo</span>
+                  <div class="rs-brand-logo-row">
+                    <img id="rs-brand-logo-preview" class="rs-logo${b.logo ? " rs-logo-custom" : ""}" alt="" src="${brandLogoUrl()}">
+                    <button type="button" class="rs-brand-btn" id="rs-brand-logo-pick">Upload image</button>
+                    <button type="button" class="rs-brand-btn" id="rs-brand-logo-reset" ${b.logo ? "" : "disabled"}>Default logo</button>
+                    <input type="file" id="rs-brand-logo-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                    <span class="rs-brand-hint">PNG / JPG / WebP / GIF, resized to 128 px, kept in this browser only</span>
+                  </div>
+                </div>
+                <div class="rs-brand-field"><span>Colours</span>
+                  <div class="rs-brand-colors">
+                    <label>Accent <input type="color" id="rs-brand-accent" value="${accent}"></label>
+                    <label>Gradient end <input type="color" id="rs-brand-accent2" value="${accent2}"></label>
+                    <button type="button" class="rs-brand-btn" id="rs-brand-color-reset" ${b.accent || b.accent2 ? "" : "disabled"}>Default colours</button>
+                  </div>
+                </div>
+                <div class="rs-brand-field"><span>Buttons</span>
+                  <div class="rs-work-row rs-brand-styles" role="radiogroup" aria-label="Button style">${styles}</div>
+                  <label class="rs-brand-range">Corner radius <input type="range" id="rs-brand-radius" min="0" max="40" step="1" value="${b.radius === null ? 12 : b.radius}"><span id="rs-brand-radius-val">${b.radius === null ? "theme" : b.radius + " px"}</span><button type="button" class="rs-brand-btn rs-brand-btn-sm" id="rs-brand-radius-reset" ${b.radius === null ? "disabled" : ""} title="Back to the theme radius">↺</button></label>
+                </div>
+                <div class="rs-brand-field"><span>Button labels</span><div class="rs-brand-labels">${labels}</div></div>
+                <div class="rs-brand-field"><span>Show buttons</span><div class="rs-brand-toggles">${shows}</div></div>
+              </div>
+              <div class="rs-set-row rs-brand-actions">
+                <button type="button" class="rs-brand-btn" id="rs-brand-export" title="Copy this look as JSON to share or back up">Copy preset</button>
+                <button type="button" class="rs-brand-btn" id="rs-brand-import" title="Paste a preset JSON">Paste preset</button>
+                <button type="button" class="rs-brand-btn rs-brand-danger" id="rs-brand-reset" ${isDef ? "disabled" : ""}>Reset all</button>
+                <span id="rs-brand-status" role="status"></span>
+              </div>
+            </section>`;
+    }
+    // Shrink an uploaded picture to a 128 px PNG data URL (contain, transparent
+    // padding) so the stored logo stays small whatever the source size.
+    function brandLogoFromFile(file) {
+      return new Promise((resolve, reject) => {
+        if (!file) return reject(new Error("no file"));
+        if (!/^image\/(?:png|jpeg|webp|gif)$/.test(file.type || "")) return reject(new Error("Use a PNG, JPG, WebP or GIF image"));
+        if (file.size > 8 * 1024 * 1024) return reject(new Error("Image is over 8 MB"));
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const size = 128, c = document.createElement("canvas"); c.width = size; c.height = size;
+            const ctx = c.getContext("2d");
+            const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight);
+            const w = Math.max(1, Math.round(img.naturalWidth * scale)), h = Math.max(1, Math.round(img.naturalHeight * scale));
+            ctx.imageSmoothingQuality = "high";
+            ctx.drawImage(img, Math.round((size - w) / 2), Math.round((size - h) / 2), w, h);
+            const data = c.toDataURL("image/png");
+            URL.revokeObjectURL(url);
+            if (!BRAND_LOGO_RE.test(data) || data.length > BRAND_LOGO_MAX) return reject(new Error("Could not encode that image"));
+            resolve(data);
+          } catch (e) { URL.revokeObjectURL(url); reject(new Error("Could not read that image")); }
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That file is not a readable image")); };
+        img.src = url;
+      });
+    }
+    function wireBrandSection() {
+      const sec = menuEl.querySelector("[data-rs-brand-sec]");
+      if (!sec) return;
+      const status = sec.querySelector("#rs-brand-status");
+      let statusTimer = 0;
+      const say = (t, bad) => { if (!status) return; status.textContent = t; status.classList.toggle("rs-brand-status-bad", !!bad); clearTimeout(statusTimer); statusTimer = setTimeout(() => { status.textContent = ""; status.classList.remove("rs-brand-status-bad"); }, bad ? 3200 : 1600); };
+      // Section chrome that depends on the current look, refreshed in place
+      // (never rebuild the whole menu while the user is typing).
+      const refreshLocal = () => {
+        const b = BRAND, isDef = brandIsDefault(b);
+        const st = sec.querySelector("#rs-brand-state"); if (st) st.textContent = isDef ? "default look" : "custom look";
+        const rs = sec.querySelector("#rs-brand-reset"); if (rs) rs.disabled = isDef;
+        const lr = sec.querySelector("#rs-brand-logo-reset"); if (lr) lr.disabled = !b.logo;
+        const cr = sec.querySelector("#rs-brand-color-reset"); if (cr) cr.disabled = !(b.accent || b.accent2);
+        const rr = sec.querySelector("#rs-brand-radius-reset"); if (rr) rr.disabled = b.radius === null;
+        const rv = sec.querySelector("#rs-brand-radius-val"); if (rv) rv.textContent = b.radius === null ? "theme" : b.radius + " px";
+        sec.querySelectorAll("[data-brand-style]").forEach((c) => { const on = c.dataset.brandStyle === b.style; c.classList.toggle("on", on); c.setAttribute("aria-checked", on ? "true" : "false"); });
+        sec.querySelectorAll("[data-brand-show]").forEach((c) => { const on = !b.hide.includes(c.dataset.brandShow); c.classList.toggle("on", on); c.setAttribute("aria-pressed", on ? "true" : "false"); });
+      };
+      // Changes that arrive from elsewhere (another tab, a preset, the hooks)
+      // refresh the section's state too — as long as this section is the live one.
+      try { window.__rsBrandSectionRefresh = () => { if (sec.isConnected) refreshLocal(); }; } catch {}
+      const debounce = (fn, ms) => { let t = 0; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+      const nameIn = sec.querySelector("#rs-brand-name");
+      if (nameIn) nameIn.addEventListener("input", debounce(() => { setBrand({ name: nameIn.value }); refreshLocal(); }, 120));
+      const fileIn = sec.querySelector("#rs-brand-logo-file"), pick = sec.querySelector("#rs-brand-logo-pick"), logoReset = sec.querySelector("#rs-brand-logo-reset");
+      if (pick && fileIn) pick.addEventListener("click", () => { try { fileIn.value = ""; } catch {} fileIn.click(); });
+      if (fileIn) fileIn.addEventListener("change", () => {
+        const f = fileIn.files && fileIn.files[0];
+        if (!f) return;
+        say("Reading image…");
+        brandLogoFromFile(f).then((data) => { setBrand({ logo: data }); refreshLocal(); say("Logo updated ✓"); }).catch((e) => say(String(e && e.message || e), true));
+      });
+      if (logoReset) logoReset.addEventListener("click", () => { setBrand({ logo: "" }); refreshLocal(); say("Default logo ✓"); });
+      const acc = sec.querySelector("#rs-brand-accent"), acc2 = sec.querySelector("#rs-brand-accent2"), colReset = sec.querySelector("#rs-brand-color-reset");
+      const pushColors = debounce(() => { setBrand({ accent: acc ? acc.value : "", accent2: acc2 ? acc2.value : "" }); refreshLocal(); }, 60);
+      if (acc) acc.addEventListener("input", pushColors);
+      if (acc2) acc2.addEventListener("input", pushColors);
+      if (colReset) colReset.addEventListener("click", () => { setBrand({ accent: "", accent2: "" }); if (acc) acc.value = "#ece4d8"; if (acc2) acc2.value = "#aaa296"; refreshLocal(); say("Default colours ✓"); });
+      sec.querySelectorAll("[data-brand-style]").forEach((c) => c.addEventListener("click", () => { setBrand({ style: c.dataset.brandStyle }); refreshLocal(); }));
+      const range = sec.querySelector("#rs-brand-radius"), rangeReset = sec.querySelector("#rs-brand-radius-reset");
+      if (range) range.addEventListener("input", () => { setBrand({ radius: Number(range.value) }); refreshLocal(); });
+      if (rangeReset) rangeReset.addEventListener("click", () => { setBrand({ radius: null }); if (range) range.value = "12"; refreshLocal(); });
+      sec.querySelectorAll("[data-brand-label]").forEach((inp) => inp.addEventListener("input", debounce(() => { setBrand({ labels: { [inp.dataset.brandLabel]: inp.value } }); refreshLocal(); }, 120)));
+      sec.querySelectorAll("[data-brand-show]").forEach((c) => c.addEventListener("click", () => {
+        const k = c.dataset.brandShow, hide = BRAND.hide.includes(k) ? BRAND.hide.filter((x) => x !== k) : BRAND.hide.concat(k);
+        setBrand({ hide }); refreshLocal();
+      }));
+      const exp = sec.querySelector("#rs-brand-export"), imp = sec.querySelector("#rs-brand-import"), reset = sec.querySelector("#rs-brand-reset");
+      if (exp) exp.addEventListener("click", () => {
+        const json = JSON.stringify(Object.assign({ orscriptPreset: 1 }, BRAND));
+        const done = () => say("Preset copied ✓");
+        try { navigator.clipboard.writeText(json).then(done, () => { try { window.prompt("Copy your preset:", json); } catch {} }); } catch { try { window.prompt("Copy your preset:", json); } catch {} }
+      });
+      if (imp) imp.addEventListener("click", () => {
+        let raw = ""; try { raw = window.prompt("Paste a preset (JSON):", "") || ""; } catch {}
+        if (!raw.trim()) return;
+        let obj = null; try { obj = JSON.parse(raw); } catch {}
+        if (!obj || typeof obj !== "object") { say("That is not a preset", true); return; }
+        setBrand(obj, { replace: true, now: true });
+        try { buildMenu(); } catch {}
+        try { toast("Preset applied"); } catch {}
+      });
+      if (reset) reset.addEventListener("click", () => {
+        setBrand({}, { replace: true, now: true });
+        try { buildMenu(); } catch {}
+        try { toast("Back to the default look"); } catch {}
+      });
+    }
     function buildMenu() {
       try { window.__rsBuildMenu = buildMenu; } catch {}
       const here = (P.displayName || "").toLowerCase();
@@ -7510,7 +7753,7 @@
         mcpList += `<div class="rs-mcp-item"><span class="rs-mcp-health rs-mcp-health-${healthClass}" title="${healthTitle}"></span><div class="rs-mcp-info"><span class="rs-mcp-name">${esc(s.name)}</span><span class="rs-mcp-url">${esc(s.command || s.id)}</span></div><button class="rs-mcp-remove" data-id="${esc(s.id)}" title="Remove">✕</button></div>`;
       });
       menuEl.innerHTML =
-        `<div class="rs-menu-head"><span class="rs-menu-mark rs-menu-mark-logo" aria-hidden="true" style="background-image:url(${chrome.runtime.getURL("assets/icon128.png")})"></span><div class="rs-menu-head-txt"><span class="rs-menu-logo">Settings</span><span class="rs-menu-tag"><span data-rs-brand>${orTheme==="void"?"VoidScript":"OrScript"}</span> · v${EXT_VERSION}</span></div><button type="button" class="rs-menu-close" id="rs-menu-close" aria-label="Close settings" title="Close">×</button></div>
+        `<div class="rs-menu-head"><span class="rs-menu-mark rs-menu-mark-logo" aria-hidden="true" style="background-image:url(&quot;${brandLogoUrl()}&quot;)"></span><div class="rs-menu-head-txt"><span class="rs-menu-logo">Settings</span><span class="rs-menu-tag"><span data-rs-brand>${escRs(productName())}</span> · v${EXT_VERSION}</span></div><button type="button" class="rs-menu-close" id="rs-menu-close" aria-label="Close settings" title="Close">×</button></div>
          <section class="rs-menu-sec">
            <div class="rs-sec-label"><span>Switch AI</span></div>
            ${sites}
@@ -7549,6 +7792,7 @@
                 <button type="button" class="rs-work-card ${permMode==="full"?"on":""}" data-perm="full"><span class="rs-work-name">Full</span><span class="rs-work-sub">All PC files + processes, no prompts</span></button>
               </div>
             </section>
+            ${brandSectionHtml()}
           <section class="rs-menu-sec">
             <div class="rs-sec-label"><span>Agent modes</span></div>
             <div class="rs-tgl-row" data-mode="bgmode" role="switch" aria-checked="${bgMode}" tabindex="0">
@@ -7838,6 +8082,7 @@
           try { toast("Permissions: " + label); } catch {}
         });
       });
+      try { wireBrandSection(); } catch (e) { diag("brand.wireFailed", { error: String(e && e.message || e) }); }
       // ── Checkpoints undo ──
       menuEl.querySelectorAll(".rs-checkpoint-undo").forEach(btn=>{
         btn.addEventListener("click", ()=>{ undoLastCheckpoint(); });
@@ -8351,7 +8596,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         : local ? "Everything the agent did on this PC this session, with results." : "One click on <b>Run</b> executes a whole template with real commands.";
       panel.innerHTML =
         '<div class="rs-cards-top">'
-        + '<div class="rs-cards-brand"><img class="rs-logo rs-cards-logo" alt="" aria-hidden="true" src="' + chrome.runtime.getURL("assets/icon128.png") + '"><span class="rs-cards-kicker" data-rs-brand-short>' + (orTheme==="void"?"VoidScript":"OrScript") /* selected-skin branding */ + '</span><span class="rs-cards-heading">' + tabHead[0] + '</span><span class="rs-cards-subheading">' + tabHead[1] + ' · v' + EXT_VERSION + '</span></div>'
+        + '<div class="rs-cards-brand"><img class="rs-logo rs-cards-logo' + (BRAND.logo ? " rs-logo-custom" : "") + '" alt="" aria-hidden="true" src="' + brandLogoUrl() + '"><span class="rs-cards-kicker" data-rs-brand-short>' + escRs(productName()) /* brand name (Customize) or the selected-skin default */ + '</span><span class="rs-cards-heading">' + tabHead[0] + '</span><span class="rs-cards-subheading">' + tabHead[1] + ' · v' + EXT_VERSION + '</span></div>'
         + '<div class="rs-cards-tabs">'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "library" ? " on" : "") + '" data-tab="library">' + mainLabel + '</button>'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "activity" ? " on" : "") + '" data-tab="activity">Activity' + actN + '</button>'
@@ -9157,6 +9402,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
           }
         }
       } catch {}
+      if (BRAND.labels.start) { if (kind === "start") label = "\u25B6\uFE0E " + BRAND.labels.start; else if (kind === "start-degraded") label = "\u25B6\uFE0E " + BRAND.labels.start + " (engine offline)"; }
       actionBtn.textContent = label;
       actionBtn.dataset.kind = kind;
       actionBtn.title = !coreReady && startKind
@@ -9198,6 +9444,9 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       // visible in every state (it's the help link).
     }
     let lastBarSig = "";
+    // Customize (name / labels) changed: the bar signature no longer matches
+    // what is on screen, so force one full repaint.
+    try { window.__rsBrandRefresh = () => { lastBarSig = ""; try { renderBar(); } catch {} }; } catch {}
 
     // Thin wrappers kept for the core's call sites; the decision lives in renderBar.
     function setStarted() { try{updateExtraButton();}catch{}; renderBar(); try { refreshSetup(); } catch {} }
@@ -9346,7 +9595,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       // active turn (not a stop-in-progress).
       if (allow && !A.stopping && stopBtn.dataset.state === "stopping") {
         stopBtn.disabled = false;
-        stopBtn.textContent = "■ Stop";
+        stopBtn.textContent = brandLabel("stop", BRAND_LABEL_DEFAULTS.stop);
         delete stopBtn.dataset.state;
       }
       if (was !== stopBtn.hidden) renderBar(); // reflect the action/stop swap

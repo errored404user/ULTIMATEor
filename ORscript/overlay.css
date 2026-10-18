@@ -8215,3 +8215,166 @@ html.rs-light .rs-setup-starter { color: #1f2937; background: rgba(0,0,0,.04); b
 }
 html.rs-light #rs-cards-panel[data-cards-tab] .rs-cards-tab.on { box-shadow: inset 3px 0 0 var(--orx-a, #b08a4a), 0 4px 14px rgba(15,23,42,.08) !important; }
 html.rs-light #rs-cards-panel[data-cards-tab] .rs-template-card:hover { box-shadow: 0 12px 30px rgba(15,23,42,.12) !important; }
+
+/* ── 16. 1.43.0 — Customize: the user's own look ──────────────────────────────
+   Settings → Customize stores name / logo / colours / button style on this
+   browser only. Colours arrive as inline custom properties on <html>
+   (--orx-a, --orx-b, --orx-on, --orx-glow, --orx-r), which every section-4 pill
+   already reads, so a custom accent recolours the whole chrome at once.
+   Button styles and hidden buttons are attributes on <html>. */
+html[data-rs-hide~="think"] #rs-extra,
+html[data-rs-hide~="voice"] #rs-voice,
+html[data-rs-hide~="discord"] #rs-discord,
+html[data-rs-hide~="paint"] #rs-paint-btn { display: none !important; }
+
+/* custom logos are shown whole (contain) on a quiet plate instead of cropped */
+#rs-logo.rs-logo.rs-logo-custom,
+.rs-cards-logo.rs-logo.rs-logo-custom,
+#rs-brand-logo-preview.rs-logo-custom { object-fit: contain !important; background: rgba(0,0,0,.28); }
+
+/* flat: solid accent, no glow, no lift */
+html[data-rs-btn="flat"] #rs-action[data-kind="start"],
+html[data-rs-btn="flat"] #rs-approve-allow,
+html[data-rs-btn="flat"] .rs-lvl-btn.on {
+  background: var(--orx-a) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+html[data-rs-btn="flat"] #rs-action[data-kind="start"]:hover,
+html[data-rs-btn="flat"] #rs-approve-allow:hover { transform: none; filter: brightness(1.08); box-shadow: none !important; }
+html[data-rs-btn="flat"] #rs-action[data-kind="restart"],
+html[data-rs-btn="flat"] #rs-discord,
+html[data-rs-btn="flat"] #rs-extra,
+html[data-rs-btn="flat"] #rs-voice,
+html[data-rs-btn="flat"] #rs-undo,
+html[data-rs-btn="flat"] .rs-mode-btn,
+html[data-rs-btn="flat"] :is(#rs-settings-btn, #rs-paint-btn),
+html[data-rs-btn="flat"] #rs-approve-deny {
+  background: color-mix(in srgb, var(--orx-a) 14%, transparent) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+html[data-rs-btn="flat"] #rs-action[data-kind="restart"]:hover,
+html[data-rs-btn="flat"] #rs-discord:hover,
+html[data-rs-btn="flat"] :is(#rs-settings-btn, #rs-paint-btn):hover,
+html[data-rs-btn="flat"] #rs-approve-deny:hover { background: color-mix(in srgb, var(--orx-a) 26%, transparent) !important; transform: none; box-shadow: none !important; }
+html[data-rs-btn="flat"] #rs-stop { background: #ef4444 !important; border-color: transparent !important; box-shadow: none !important; }
+
+/* outline: transparent with an accent border */
+html[data-rs-btn="outline"] #rs-action[data-kind="start"],
+html[data-rs-btn="outline"] #rs-approve-allow,
+html[data-rs-btn="outline"] .rs-lvl-btn.on {
+  background: transparent !important;
+  color: var(--orx-a) !important;
+  border: 1.5px solid var(--orx-a) !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+html[data-rs-btn="outline"] #rs-action[data-kind="start"]:hover,
+html[data-rs-btn="outline"] #rs-approve-allow:hover {
+  background: color-mix(in srgb, var(--orx-a) 16%, transparent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--orx-a) 20%, transparent) !important;
+  transform: none;
+}
+html[data-rs-btn="outline"] #rs-action[data-kind="restart"],
+html[data-rs-btn="outline"] #rs-discord,
+html[data-rs-btn="outline"] #rs-extra,
+html[data-rs-btn="outline"] #rs-voice,
+html[data-rs-btn="outline"] #rs-undo,
+html[data-rs-btn="outline"] .rs-mode-btn,
+html[data-rs-btn="outline"] :is(#rs-settings-btn, #rs-paint-btn),
+html[data-rs-btn="outline"] #rs-approve-deny {
+  background: transparent !important;
+  border: 1px solid color-mix(in srgb, var(--orx-a) 45%, transparent) !important;
+  box-shadow: none !important;
+}
+html[data-rs-btn="outline"] #rs-stop { background: transparent !important; color: #fb7185 !important; border: 1.5px solid #fb7185 !important; box-shadow: none !important; }
+
+/* glass: translucent, blurred */
+html[data-rs-btn="glass"] #rs-action[data-kind="start"],
+html[data-rs-btn="glass"] #rs-approve-allow,
+html[data-rs-btn="glass"] .rs-lvl-btn.on {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--orx-a) 55%, transparent), color-mix(in srgb, var(--orx-b) 40%, transparent)) !important;
+  color: #fff !important;
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  backdrop-filter: blur(10px) saturate(1.3);
+  border: 1px solid color-mix(in srgb, #fff 35%, transparent) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.3) inset, 0 8px 24px var(--orx-glow) !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,.35) !important;
+}
+html[data-rs-btn="glass"] #rs-action[data-kind="restart"],
+html[data-rs-btn="glass"] #rs-discord,
+html[data-rs-btn="glass"] #rs-extra,
+html[data-rs-btn="glass"] #rs-voice,
+html[data-rs-btn="glass"] #rs-undo,
+html[data-rs-btn="glass"] .rs-mode-btn,
+html[data-rs-btn="glass"] :is(#rs-settings-btn, #rs-paint-btn),
+html[data-rs-btn="glass"] #rs-approve-deny {
+  background: rgba(255,255,255,.08) !important;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.22) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.14) inset !important;
+}
+html[data-rs-btn="glass"] #rs-stop {
+  background: linear-gradient(135deg, rgba(251,113,133,.6), rgba(185,28,28,.55)) !important;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.3) !important;
+}
+
+/* Settings → Customize */
+.rs-brand-grid { display: grid; gap: 12px; margin-top: 4px; }
+.rs-brand-field { display: grid; gap: 6px; min-width: 0; }
+.rs-brand-field > span:first-child {
+  font: 700 10.5px/1.2 ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--or-muted, #a39e96);
+}
+.rs-brand-field .rs-mcp-field { margin-bottom: 0; }
+.rs-brand-logo-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rs-brand-logo-row img {
+  width: 36px; height: 36px; border-radius: 9px; object-fit: cover; flex: none;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.28), 0 0 10px rgba(255,255,255,.1);
+}
+.rs-brand-hint { flex-basis: 100%; font-size: 10.5px; color: var(--or-muted, #a39e96); opacity: .85; }
+.rs-brand-btn {
+  background: rgba(255,255,255,.09); color: #ededf0;
+  border: 1px solid rgba(255,255,255,.12); border-radius: var(--orx-r, 8px);
+  padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+  transition: background .13s ease, opacity .13s ease;
+}
+.rs-brand-btn:hover:not(:disabled) { background: rgba(255,255,255,.15); }
+.rs-brand-btn:disabled { opacity: .4; cursor: default; }
+.rs-brand-btn-sm { padding: 3px 8px; font-size: 12px; line-height: 1; }
+.rs-brand-danger:not(:disabled) { border-color: rgba(251,113,133,.45); color: #fecdd3; }
+.rs-brand-colors { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.rs-brand-colors label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--or-fg, #efe6d8); }
+.rs-brand-colors input[type="color"] {
+  width: 34px; height: 24px; padding: 0; border: 1px solid rgba(255,255,255,.22); border-radius: 6px;
+  background: transparent; cursor: pointer;
+}
+.rs-brand-colors input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+.rs-brand-colors input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+.rs-brand-styles { margin-bottom: 8px; }
+.rs-brand-styles .rs-work-card { min-width: 0; }
+.rs-brand-range { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--or-fg, #efe6d8); }
+.rs-brand-range input[type="range"] { flex: 1; min-width: 80px; accent-color: var(--orx-a, #ece4d8); }
+.rs-brand-range #rs-brand-radius-val { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--or-muted, #a39e96); }
+.rs-brand-labels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+.rs-brand-labels label { display: grid; gap: 3px; font-size: 11px; text-transform: capitalize; color: var(--or-muted, #a39e96); min-width: 0; }
+.rs-brand-toggles { display: flex; gap: 6px; flex-wrap: wrap; }
+.rs-brand-tgl {
+  padding: 5px 11px; font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer;
+  border-radius: var(--orx-r, 999px); color: #d7d7dc;
+  background: rgba(255,255,255,.04); border: 1px dashed rgba(255,255,255,.22); opacity: .6;
+  transition: background .15s ease, border-color .15s ease, opacity .15s ease;
+}
+.rs-brand-tgl.on {
+  opacity: 1; border-style: solid;
+  background: color-mix(in srgb, var(--orx-a, #ece4d8) 18%, transparent);
+  border-color: color-mix(in srgb, var(--orx-a, #ece4d8) 55%, transparent);
+  color: #fff;
+}
+.rs-brand-actions { margin-top: 10px; }
+#rs-brand-status { font-size: 12px; color: var(--or-ok, #34d399); }
+#rs-brand-status.rs-brand-status-bad { color: #fda4af; }
