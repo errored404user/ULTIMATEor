@@ -676,7 +676,7 @@ const RSProvider = (() => {
     }, true);
   }
 
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|<tool_call\b|<(?:(?:[｜|]{1,2}DSML[｜|]{1,2})?invoke)\b|<｜tool call begin｜>|"(?:toolName|tool_name|name|function)"\s*:\s*"[^"\n]+"[\s\S]{0,240}"(?:arguments|args|parameters)"\s*:|###\s*lua|###mcp_tool###/i;
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|<tool_call\b|(?:<|&lt;)\s*(?:[｜|]{1,2}\s*DSML\s*[｜|]{1,2}\s*)?invoke\b|<｜tool call begin｜>|"(?:toolName|tool_name|name|function)"\s*:\s*"[^"\n]+"[\s\S]{0,240}"(?:arguments|args|parameters)"\s*:|###\s*lua|###mcp_tool###/i;
   function findToolBlockSpot(item) {
     if (!item?.querySelectorAll) return null;
     let spot = null;

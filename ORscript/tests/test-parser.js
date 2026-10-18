@@ -64,7 +64,24 @@ const mimoNative = RSParse.parseAlternateToolCalls('<tool_call><function=inspect
 ok("MiMo 2.6 native XML tool call", mimoNative.length === 1 && mimoNative[0].tool === "inspect_instance" && mimoNative[0].arguments.path === "game.Workspace");
 const dsmlNative = RSParse.parseAlternateToolCalls('<｜DSML｜tool_calls>\n<｜DSML｜invoke name="list_commands">\n<｜DSML｜parameter name="query" string="true">script</｜DSML｜parameter>\n<｜DSML｜parameter name="limit" string="false">5</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>');
 ok("DeepSeek V4 DSML tool call", dsmlNative.length === 1 && dsmlNative[0].tool === "list_commands" && dsmlNative[0].arguments.query === "script" && dsmlNative[0].arguments.limit === 5);
-const tokenNative = RSParse.parseAlternateToolCalls('<｜tool call begin｜>function=list_commands<｜tool sep｜>{"query":"ui"}<｜tool call end｜>');
+
+// 1.47.1 — DeepSeek's web UI renders the DSML envelope with doubled bars and a
+// space (`<｜｜DSML｜｜ invoke`), sometimes HTML-escaped; every spelling must parse
+// and count as a command signature (seen live: the reply ended as prose and the
+// user had to restart the agent after every question).
+const dsmlSpaced = '<｜｜DSML｜｜ calls>\n<｜｜DSML｜｜ invoke name="get_studio_state">\n\n</｜｜DSML｜｜ invoke>\n</｜｜DSML｜｜ calls>';
+const dsmlEscaped = '&lt;｜｜DSML｜｜ calls&gt;\n&lt;｜｜DSML｜｜ invoke name="get_studio_state"&gt;\n\n&lt;/｜｜DSML｜｜ invoke&gt;\n&lt;/｜｜DSML｜｜ calls&gt;';
+const dsmlSpacedParams = '<｜DSML｜ function_calls>\n<｜DSML｜ invoke name="script_read">\n<｜DSML｜ parameter name="path" string="true">ServerScriptService.Main</｜DSML｜ parameter>\n<｜DSML｜ parameter name="limit">5</｜DSML｜ parameter>\n</｜DSML｜ invoke>\n</｜DSML｜ function_calls>';
+for (const [label, txt] of [["spaced double-bar", dsmlSpaced], ["HTML-escaped", dsmlEscaped]]) {
+  const calls = RSParse.parseAlternateToolCalls(txt);
+  ok("DSML " + label + " spelling parses to get_studio_state", calls.length === 1 && calls[0].tool === "get_studio_state" && JSON.stringify(calls[0].arguments) === "{}", JSON.stringify(calls));
+  ok("DSML " + label + " spelling is a command signature / shape / native envelope", RSParse.hasToolSignature(txt) && RSParse.hasCommandShape(txt) && RSParse.NATIVE_TOOL_RE.test(txt));
+  ok("DSML " + label + " spelling names the tool for the chip", RSParse.toolNameFromText(txt) === "get_studio_state", RSParse.toolNameFromText(txt));
+}
+const spacedParams = RSParse.parseAlternateToolCalls(dsmlSpacedParams);
+ok("DSML spaced spelling keeps typed parameters", spacedParams.length === 1 && spacedParams[0].tool === "script_read" && spacedParams[0].arguments.path === "ServerScriptService.Main" && spacedParams[0].arguments.limit === 5, JSON.stringify(spacedParams));
+ok("unescapeDsml leaves ordinary escaped prose alone", RSParse.unescapeDsml("use &lt;b&gt; tags") === "use &lt;b&gt; tags" && RSParse.unescapeDsml(dsmlEscaped).startsWith("<｜｜DSML｜｜ calls>"));
+ok("prose that merely mentions DSML is not a command", RSParse.parseAlternateToolCalls("The DSML format is what DeepSeek uses internally.").length === 0 && !RSParse.hasToolSignature("I will not use DSML here."));const tokenNative = RSParse.parseAlternateToolCalls('<｜tool call begin｜>function=list_commands<｜tool sep｜>{"query":"ui"}<｜tool call end｜>');
 ok("DeepSeek native-token tool call", tokenNative.length === 1 && tokenNative[0].arguments.query === "ui");
 ok("native tool syntax is a command signature", RSParse.hasToolSignature('<tool_call>list_commands</tool_call>') && RSParse.hasCommandShape('<｜DSML｜invoke name="list_commands"></｜DSML｜invoke>'));
 const brokenNative = '<tool_call>{"name":"inspect_instance","arguments":{"path":}</tool_call>';
@@ -98,3 +115,17 @@ ok("salvage refuses trailing comma", RSParse.salvageCutOff('{"command": "multi_e
 // Escaped quotes inside values must not confuse the string tracking.
 const cutEsc = RSParse.salvageCutOff('{"command": "execute_luau", "params": {"code": "print(\\"hi\\")", "datamodel_type": "Edit"}');
 ok("salvage handles escaped quotes", cutEsc && cutEsc.tool === "execute_luau" && cutEsc.arguments.code === 'print("hi")');
+
+// 1.47.1 — the runtime steers the model back to JSON after a native envelope ran.
+{
+  const fs = require("fs"), path = require("path");
+  const mainSrc = fs.readFileSync(path.join(__dirname, "..", "src", "core", "main.js"), "utf8");
+  const cfgSrc = fs.readFileSync(path.join(__dirname, "..", "src", "core", "config.js"), "utf8");
+  const dsSrc = fs.readFileSync(path.join(__dirname, "..", "src", "providers", "deepseek.js"), "utf8");
+  const nvSrc = fs.readFileSync(path.join(__dirname, "..", "src", "providers", "nvidia.js"), "utf8");
+  ok("main flags alternate-envelope commands as native", mainSrc.includes('return { kind: "tool", calls: alternateCalls, item: d.item, native: true };'));
+  ok("main appends the format note to a native envelope's result", mainSrc.includes('if (res.native) { try { toSend += "\\n\\n" + RS.FEEDBACK.nativeEnvelope;'));
+  ok("config carries FEEDBACK.nativeEnvelope asking for fenced JSON", /nativeEnvelope:\s*\n\s*"\(Format note from OR/.test(cfgSrc) && cfgSrc.includes("never the DSML / <tool_call> envelope.)"));
+  ok("DeepSeek provider note forbids native DSML markup", dsSrc.includes("NEVER emit your native tool-call markup (<｜DSML｜function_calls>"));
+  ok("NVIDIA CMD_SHAPE accepts the spaced / escaped DSML spelling", nvSrc.includes("(?:<|&lt;)\\s*(?:[｜|]{1,2}\\s*DSML\\s*[｜|]{1,2}\\s*)?invoke\\b"));
+}

@@ -1061,7 +1061,8 @@ const RSProvider = (() => {
 - Production craft: build complete, named, textured models and features. Default grey is not finished art. Prefer inspect_instance / search_game_tree / generate_procedural_model over guessing.
 - You CAN see images ORscript attaches (or_screenshot of Studio or this tab). Flash v4.1 included. When a screenshot is in the message, look at it and continue — never say you cannot view images.
 - Call or_screenshot {target:"auto"} whenever you need to see the place. The photo is sent back to YOU in the next message.
-- Brief: the user's latest request is the specification. Ship a finished, named, textured product in their open place.`;
+- Brief: the user's latest request is the specification. Ship a finished, named, textured product in their open place.
+- COMMAND FORMAT (hard rule): this chat has NO native tools for Studio. NEVER emit your native tool-call markup (<｜DSML｜function_calls> / <｜DSML｜invoke name="..."> / <tool_call>) - the site prints it as plain text and nothing runs. Every command is JSON inside a fenced code block: {"command": "name", "params": {...}} (or a ###LUA### block for execute_luau).`;
 
   return {
     id: "deepseek",

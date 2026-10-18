@@ -16,7 +16,8 @@ process.chdir(path.join(__dirname, ".."));
 let failed = 0;
 const ok = (name, cond, extra) => { console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond || !extra ? "" : "  -> " + extra}`); if (!cond) failed++; };
 const read = (p) => fs.readFileSync(p, "utf8");
-const VERSION = "1.47.0";
+const VERSION = "1.47.1";
+const PACK_VERSION = "1.47.0"; // the pack itself last changed in 1.47.0
 const pack = read("src/core/skills/studio_quality.js"), main = read("src/core/main.js"), config = read("src/core/config.js"), readme = read("README.md");
 const manifest = JSON.parse(read("manifest.json"));
 
@@ -27,7 +28,7 @@ for (const f of bundle.js.filter((f) => /src\/core\/(skills\/|studio_bridge\.js)
 const S = vm.runInThisContext("RobloxScriptSkills");
 ok("pack registers six commands in order", JSON.stringify(S.QUALITY_COMMANDS) === JSON.stringify(["style_guide", "brief_set", "brief_get", "style_lighting_apply", "quality_audit", "quality_fix"]), JSON.stringify(S.QUALITY_COMMANDS));
 ok("all six are SKILL_OPS with a catalogue entry carrying params + description", S.QUALITY_COMMANDS.every((n) => S.SKILL_OPS.includes(n) && S.SKILL_COMMANDS.some((c) => c.name === n && c.params && c.description.length > 80)));
-ok("QUALITY_VERSION / pass score / 16 genres exported", S.QUALITY_VERSION === VERSION && S.QUALITY_PASS_SCORE === 85 && S.QUALITY_GENRES.length === 16 && typeof S.styleGuideLocal === "function" && typeof S.resolveStyleGenre === "function");
+ok("QUALITY_VERSION / pass score / 16 genres exported", S.QUALITY_VERSION === PACK_VERSION && S.QUALITY_PASS_SCORE === 85 && S.QUALITY_GENRES.length === 16 && typeof S.styleGuideLocal === "function" && typeof S.resolveStyleGenre === "function");
 ok("genre aliases resolve (castle, neon, forest, snow, simulator, obby, beach, Sci-Fi, unknown)", ["castle", "neon", "forest", "snow", "simulator", "obby", "beach", "Sci-Fi", "nothing-here"].map((g) => S.resolveStyleGenre(g)).join() === "medieval,cyberpunk,nature,winter,cartoon,cartoon,tropical,scifi,", ["castle", "neon", "forest", "snow", "simulator", "obby", "beach", "Sci-Fi", "nothing-here"].map((g) => S.resolveStyleGenre(g)).join());
 const sg = S.styleGuideLocal({ genre: "cyberpunk" });
 ok("style_guide data: palette roles hex + rgb + color3, lighting recipe, ui tokens, recipe of 5", sg.ok && sg.data.palette.accent.hex === "#ff00aa" && sg.data.palette.accent.color3 === "Color3.fromRGB(255, 0, 170)" && sg.data.lighting.preset === "cyberpunk" && sg.data.ui.tokens_preset === "neon" && sg.data.recipe.length === 5, JSON.stringify(sg.data.palette.accent));

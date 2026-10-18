@@ -1773,7 +1773,7 @@
       if (alternateCalls.length && alternateCalls.every((call) => knownTool(call.tool))) {
         diag("tool.alternateEnvelope", { names: alternateCalls.map((call) => call.tool) });
         finalizeDiag("tool");
-        return { kind: "tool", calls: alternateCalls, item: d.item };
+        return { kind: "tool", calls: alternateCalls, item: d.item, native: true };
       }
       if (RSParse.hasToolSignature(r)) {
         const calls = RSParse.parseToolCalls(r);
@@ -5227,6 +5227,10 @@
           // without it looking like a new result to act on. Errors don't count
           // (they already restate what's wrong) and list_commands is redundant.
           let toSend = feedback;
+          // The command came in the model's native envelope (DeepSeek DSML,
+          // <tool_call>): it ran, but tell the model once per turn to use the
+          // JSON contract so the site stops printing raw markup.
+          if (res.native) { try { toSend += "\n\n" + RS.FEEDBACK.nativeEnvelope; diag("tool.nativeEnvelopeNote", { name: call.tool }); } catch {} }
           if (!isErr && call.tool !== "list_commands" && A.toolList.length) {
             A.toolCallsSinceReminder++;
             if (A.toolCallsSinceReminder >= REMIND_TOOLS_EVERY) {

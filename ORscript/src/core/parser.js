@@ -90,7 +90,22 @@ const RSParse = (() => {
     return t.replace(TYPO_DQUOTE_RE, '"').replace(TYPO_SPACE_RE, " ").replace(TYPO_INVISIBLE_RE, "");
   }
 
-  const NATIVE_TOOL_RE = /<tool_call\b|<(?:(?:[｜|]{1,2}DSML[｜|]{1,2})?invoke)\b|<｜tool call begin｜>/i;
+  // DeepSeek DSML envelope prefix. The canonical token is `<｜DSML｜invoke`, but
+  // the web UI renders it with doubled bars and a space (`<｜｜DSML｜｜ invoke`),
+  // some stacks use ASCII bars, and a few surfaces hand the text over
+  // HTML-escaped (`&lt;｜DSML｜invoke`). One prefix covers all of them.
+  const DSML_PFX = "(?:[｜|]{1,2}\\s*DSML\\s*[｜|]{1,2}\\s*)?";
+  const LT = "(?:<|&lt;)\\s*";
+  const GT = "(?:>|&gt;)";
+  const DSML_CLOSE = LT + "\\/\\s*" + DSML_PFX;
+  const NATIVE_TOOL_RE = new RegExp("<tool_call\\b|" + LT + DSML_PFX + "invoke\\b|<｜tool call begin｜>", "i");
+  // Turn the escaped DSML spelling into the real one so the envelope parsers see
+  // plain tags (entity-escaped values inside parameters are decoded separately).
+  function unescapeDsml(text) {
+    const t = String(text == null ? "" : text);
+    if (!/&lt;\s*\/?\s*[｜|]{1,2}\s*DSML/i.test(t)) return t;
+    return t.replace(/&lt;(\s*\/?\s*[｜|]{1,2}\s*DSML\s*[｜|]{1,2}\s*[\s\S]*?)&gt;/gi, "<$1>");
+  }
 
   function hasToolSignature(r) {
     r = normalizeTypography(r);
@@ -293,7 +308,7 @@ const RSParse = (() => {
   }
 
   function parseAlternateToolCalls(text) {
-    text = normalizeTypography(text);
+    text = unescapeDsml(normalizeTypography(text));
     const out = [];
     const seen = new Set();
     const add = (call) => {
@@ -358,11 +373,11 @@ const RSParse = (() => {
 
     // DeepSeek V4 DSML. Accept the single- and double-fullwidth-bar spellings
     // seen from different serving stacks, plus a missing outer tool_calls block.
-    const dsmlInvoke = /<(?:[｜|]{1,2}DSML[｜|]{1,2})?invoke\b[^>]*\b(?:name|tool)\s*=\s*["']?([^\s"'>]+)["']?[^>]*>([\s\S]*?)(?:<\/(?:[｜|]{1,2}DSML[｜|]{1,2})?invoke\s*>|(?=<(?:[｜|]{1,2}DSML[｜|]{1,2})?invoke\b)|(?=<\/(?:[｜|]{1,2}DSML[｜|]{1,2})?tool_?calls\s*>)|$)/gi;
+    const dsmlInvoke = new RegExp(LT + DSML_PFX + "invoke\\b[^>]*\\b(?:name|tool)\\s*=\\s*[\"']?([^\\s\"'>]+)[\"']?[^>]*>([\\s\\S]*?)(?:" + DSML_CLOSE + "invoke\\s*" + GT + "|(?=" + LT + DSML_PFX + "invoke\\b)|(?=" + DSML_CLOSE + "(?:function_|tool_)?calls\\s*" + GT + ")|$)", "gi");
     let invoke;
     while ((invoke = dsmlInvoke.exec(text))) {
       const args = {};
-      const param = /<(?:[｜|]{1,2}DSML[｜|]{1,2})?(?:param|parameter)\b[^>]*\bname\s*=\s*["']?([^\s"'>]+)["']?([^>]*)>([\s\S]*?)<\/(?:[｜|]{1,2}DSML[｜|]{1,2})?(?:param|parameter)\s*>/gi;
+      const param = new RegExp(LT + DSML_PFX + "(?:param|parameter)\\b[^>]*\\bname\\s*=\\s*[\"']?([^\\s\"'>]+)[\"']?([^>]*)>([\\s\\S]*?)" + DSML_CLOSE + "(?:param|parameter)\\s*" + GT, "gi");
       let p;
       while ((p = param.exec(invoke[2]))) {
         const stringAttr = /\bstring\s*=\s*["']?(true|false)/i.exec(p[2] || "");
@@ -572,7 +587,7 @@ const RSParse = (() => {
     // through to the placeholder below instead.
     const m = txt.match(/"(?:command|tool)"\s*:\s*"([^"]*)/);
     if (m && m[1].trim()) return m[1].trim();
-    const native = txt.match(/<(?:[｜|]{1,2}DSML[｜|]{1,2})?invoke\b[^>]*(?:name|tool)\s*=\s*["']?([^\s"'>]+)/i)
+    const native = txt.match(new RegExp(LT + DSML_PFX + "invoke\\b[^>]*(?:name|tool)\\s*=\\s*[\"']?([^\\s\"'>]+)", "i"))
       || txt.match(/<function\s*=\s*["']?([^\s"'>]+)/i)
       || txt.match(/<tool_call\b[^>]*>\s*([A-Za-z_][\w./-]*)/i)
       || txt.match(/<｜tool call begin｜>\s*(?:function\s*=\s*)?([A-Za-z_][\w./-]*)/i);
@@ -601,7 +616,7 @@ const RSParse = (() => {
   }
 
   return {
-    START_M, END_M, LUA_START_RE, LUA_END_RE, CMD_KEY_RE, NATIVE_TOOL_RE,
+    START_M, END_M, LUA_START_RE, LUA_END_RE, CMD_KEY_RE, NATIVE_TOOL_RE, unescapeDsml,
     findLuaStart, findLuaEnd, matchBrace, extractJson, normalizeCall,
     hasToolSignature, hasOpenToolBlock, parseToolCalls, parseAlternateToolCalls, salvageCutOff, toolNameFromText,
     isInjectedFeedback, hasCommandShape, normalizeTypography,
