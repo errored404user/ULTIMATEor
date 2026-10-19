@@ -33,7 +33,7 @@ for (const s of [
 assert(main.indexOf('id="rs-paint-btn"') < main.indexOf('id="rs-settings-btn"'), "paint button must sit right before the settings button");
 
 const css = read("overlay.css");
-for (const s of ["#rs-paint {", "#rs-paint.open {", ".rsp-shell {", ".rsp-tools {", ".rsp-stage {", ".rsp-side {", ".rsp-send-btn {", ".rsp-sw {", ".rsp-layer {", ".rsp-text-input {", "html.rs-paint-open #rs-root", ":is(#rs-settings-btn, #rs-paint-btn)"])
+for (const s of ["#rs-paint {", "#rs-paint.open {", ".rsp-shell {", ".rsp-tools {", ".rsp-stage {", ".rsp-side {", ".rsp-send-btn {", ".rsp-sw {", ".rsp-layer {", ".rsp-text-input {", "html.rs-paint-open #rs-root", ":is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn)"])
   assert(css.includes(s), `overlay.css missing: ${s}`);
 
 // Load the module with a minimal DOM-free stub: only the public surface that does not touch the DOM is exercised.
