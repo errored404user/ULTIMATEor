@@ -1240,8 +1240,7 @@ const RSProvider = (() => {
   async function userSend() {
     const ta = ui.input;
     if (!ta || ta.readOnly) return;
-    const text = ta.value;
-    if (!text.trim() && !_pendingImages.length) return;
+    if (!ta.value.trim() && !_pendingImages.length) return;
     if (hooks) {
       if (hooks.isBlocked()) { status("ORscript agent is working — wait for its turn to finish or press Stop in the bar", "warn"); return; }
       if (!hooks.isStarted()) {
@@ -1250,6 +1249,8 @@ const RSProvider = (() => {
         hooks.onUserMessage(assistantCount());
       }
     }
+    // Read AFTER the hook: ORscript may have appended a GUI BRIEF (1.51) to the composer.
+    const text = ta.value;
     ta.value = "";
     autoGrow();
     await submit(text, null, { fromAgent: false });

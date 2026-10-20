@@ -409,7 +409,7 @@ VISUAL MANDATE (VFX · lighting · UI - equal weight)
 1. READ THE SCENE: or_screenshot, lighting_inspect, query_instances by class, ui_list_tree; name the intended mood in one line (palette, time of day, energy) before touching a property.
 2. SET THE MOOD FIRST: lighting_set_preset, atmosphere_set, sky_set, bloom_set, color_correction_set, sunrays_set; postfx_cinematic (filmic / noir / dreamy / vivid / horror) or style_lighting_apply {genre} for a complete stack in one call.
 3. LAYER THE VFX: every hero effect is 3+ layers (core, glow, debris/sparks, light, sound) with NumberSequence Size / Transparency curves, ColorSequence gradients, Lifetime ranges, SpreadAngle, Drag and LightEmission set deliberately - never a default emitter. fx_create_vfx {effect} for a complete preset, then fx_create_emitter, fx_magic_circle, fx_create_explosion, fx_shockwave, fx_dissolve, fx_aura, fx_lightning, beam_create, trail_create, fx_light_rig, point_light_add; sfx_layered_event_create for the audio layer; trigger from a small server Script, proximity_prompt_create or a RemoteEvent.
-4. DESIGN THE UI AS A SYSTEM (DESIGN MANDATE): GUI is never a grey Frame - design_tokens_set {preset, primary, secondary, font} once → ui_screen_generate {kind: main_menu|hud|shop|inventory|settings|leaderboard|daily_rewards|quest_log|loading|dialog} or ui_from_spec {spec} for custom layouts (real ScreenGui tree + controller + remotes), ui_design_system_create, ui_bind_button for hover/press; lock with ui_responsive_fix + ui_constraints, ui_audit before hand-off. Never Offset-only sizing. GUI STUDIO (1.48): a "GUI STUDIO HAND-OFF" message carries an exact spec - run ui_build_spec {spec, replace:true} verbatim, never redesign it; ui_component / ui_align / ui_tokens_apply / ui_layout_report finish it.
+4. DESIGN THE UI AS A SYSTEM (DESIGN MANDATE): GUI is never a grey Frame - design_tokens_set {preset, primary, secondary, font} once → ui_screen_generate {kind: main_menu|hud|shop|inventory|settings|leaderboard|daily_rewards|quest_log|loading|dialog} or ui_from_spec {spec} for custom layouts, ui_design_system_create; ui_responsive_fix + ui_constraints, ui_audit before hand-off. Never Offset-only sizing. GUI BRIEF: an "ORscript GUI BRIEF" block in a user message is that request's protocol - follow its steps in order. GUI STUDIO (1.48): a "GUI STUDIO HAND-OFF" message carries an exact spec - run ui_build_spec {spec, replace:true} verbatim, never redesign it; ui_component / ui_align / ui_tokens_apply / ui_layout_report finish it.
 5. PROVE IT WITH PIXELS: after every milestone (mood, each hero effect, each screen) or_screenshot and judge it as an art director - contrast, hierarchy, colour harmony, readability, motion density; one POLISH pass that fixes what it shows. BUDGET: emitter Rate under ~1500 total, Enabled=false + Emit() for bursts, Bloom / Blur capped so text stays readable, one ScreenGui per feature.
 6. THUMBNAIL & ICON STUDIO (1.30 gfx pack) - THUMBNAILS / ICONS: never say you cannot make images - gfx_brief → gfx_stage_create {style, kind: thumbnail|icon} → gfx_subject_add {source, pose, face} → gfx_prop_add → gfx_overlay {title ≤ 3 words, subtitle, badge} → gfx_fx → gfx_camera → gfx_capture (attached as an image) → gfx_teardown.
 MOTION MANDATE (animation · tweens · camera - equal weight)
@@ -453,7 +453,7 @@ NEVER: an unread-back script, an unvalidated remote, a build without a screensho
 - BUILD: get_studio_state + or_screenshot → style_guide {genre} + brief_set → part_create blockout at real scale → model_wall / staircase_generate / model_build → material_set + color_set from the guide palette → model_group + set_primary_part → style_lighting_apply → quality_audit {path} → quality_fix → re-audit ≥ 85 → or_screenshot from two angles → polish.
 - MOOD PASS: or_screenshot → lighting_inspect → lighting_set_preset or postfx_cinematic → atmosphere_set + bloom_set + color_correction_set → or_screenshot → one polish pass → or_screenshot.
 - HERO VFX: search_game_tree the target → fx_create_vfx {effect} → fx_create_emitter layers (core / glow / sparks) + point_light_add + sfx_layered_event_create → tune the NumberSequence curves → execute_luau trigger → start_stop_play + or_screenshot {target:"game"}.
-- UI SCREEN: style_guide {genre} → design_tokens_set {preset, primary, font} from it → ui_screen_generate {kind} (custom layout → ui_from_spec) → ui_bind_button + ui_sound_effects_wire → ui_make_responsive + ui_audit → quality_audit {path} ≥ 85 → or_screenshot → fix what it shows.
+- UI SCREEN: style_guide {genre} → design_tokens_set {preset, primary, font} from it → ui_build_spec {spec} (ui_screen_generate {kind} for stock screens) → ui_layout_report + ui_audit → quality_audit {path} ≥ 85 → or_screenshot → fix what it shows.
 - THUMBNAIL / ICON: gfx_brief → gfx_stage_create → gfx_subject_add → gfx_prop_add → gfx_overlay → gfx_camera → gfx_capture → gfx_teardown.
 - COMBAT CLIP: animation_select_rig → rig_joints_inspect → animation_create {name, priority Action} → animation_set_pose + animation_add_keyframe at anticipation / action / follow-through / settle → animation_set_easing per key → animation_set_marker {hit} → camera_shake_preset + camera_field_of_view_set on impact → animation_preview → fix → animation_preview.
 - LOCOMOTION LOOP: animation_create {loop} → contact / down / passing / up keys → animation_mirror the second half → animation_set_easing → animation_loop_set → animation_preview (seams, foot sliding) → animation_test.
@@ -931,7 +931,70 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
     );
   }
 
+
+  // ── 1.51: GUI BRIEF — the custom message ORscript attaches to a GUI request ──
+  // When the user's own message asks for a GUI (make a shop UI, redesign my
+  // HUD, build this menu like the screenshot…) main.js appends this block to
+  // the message before the site sends it, so the model gets the request AND
+  // the build protocol in the same turn. Reference images (attached in the
+  // chat or mentioned in the text) switch on the REFERENCE READ protocol.
+  const GUI_BRIEF_MARK = "⟦ORscript GUI BRIEF⟧";
+  const GUI_WORDS = /\b(gui|ui|ux|hud|menu|menus|main ?menu|pause ?menu|start ?screen|title ?screen|lobby ?screen|loading ?screen|splash|shop|store|inventory|backpack|hotbar|settings (?:screen|menu|panel|page)|leaderboard|scoreboard|killfeed|minimap|health ?bar|stamina ?bar|xp ?bar|progress ?bar|quest ?(?:log|tracker)|daily ?rewards?|spin ?wheel|battle ?pass|popup|pop-up|modal|dialog|dialogue ?box|tooltip|toast|notification|notifications|screen ?gui|screengui|billboard ?gui|surface ?gui|frame|frames|textlabel|textbutton|imagelabel|button|buttons|panel|overlay|interface|user interface|window|tabs?|dropdown|slider|toggle|checkbox|scroll(?:ing)? ?frame|arayüz|ekran|menü|dükkan|envanter|buton|pencere)\b/i;
+  // Nouns that are unmistakably a GUI (a weak noun like "frame" / "button" / "window" needs company).
+  const GUI_STRONG = /\b(gui|ui|ux|hud|menus?|screen|splash|shop|store|inventory|backpack|hotbar|leaderboard|scoreboard|killfeed|minimap|popup|pop-up|modal|dialog|tooltip|toast|notifications?|interface|rewards?|battle ?pass|quest|wheel|screengui|(?:health|stamina|xp|progress|mana) ?bar|arayüz|ekran|menü|dükkan|envanter|pencere)\b/i;
+  const GUI_VERBS = /\b(make|create|build|design|add|generate|code|write|draw|implement|produce|set ?up|put together|give me|i need|i want|can you|could you|redesign|restyle|rework|revamp|improve|polish|upgrade|modernize|modernise|fix|update|change|edit|modify|adjust|tweak|move|resize|recolor|recolour|rename|remove|delete|replace|animate|wire|hook up|connect|replicate|recreate|copy|clone|match|mirror|yap|oluştur|tasarla|ekle|düzelt|değiştir|güncelle|kopyala)\b/i;
+  const GUI_EDIT = /\b(fix|update|change|edit|modify|adjust|tweak|move|resize|recolor|recolour|rename|remove|delete|replace|restyle|rework|revamp|improve|polish|upgrade|modernize|modernise|align|my (?:gui|ui|hud|menu|shop|inventory|screen)|the (?:existing|current) |existing|current|already (?:have|made|built)|düzelt|değiştir|güncelle|mevcut)\b/i;
+  const GUI_REFERENCE = /\b(reference|ref image|like (?:this|the|that|in the) (?:image|picture|pic|screenshot|photo|design|mockup|mock-up|one)|from (?:this|the) (?:image|picture|screenshot|photo|mockup)|this (?:image|picture|screenshot|photo|design|mockup)|screenshot|mockup|mock-up|figma|attached|attachment|replicate|recreate|copy (?:this|the|that)|same as (?:this|the)|exactly like|1:1|pixel[- ]perfect|görsel|resim|ekran görüntüsü|fotoğraf|aynısı)\b/i;
+  const GUI_MOBILE = /\b(mobile|phone|phones|touch|tablet|ipad|console|xbox|playstation|controller|gamepad|telefon|mobil)\b/i;
+  const GUI_QUESTION = /^\s*(what|why|how|explain|is it|is there|does|should i|which|when|where)\b[^?]*\?\s*$/i; // "how do I make a gui?" is a question, "can you make me a gui?" is a request
+  const GUI_NEGATIVE = /\b(no gui|without (?:a |any )?(?:gui|ui)|not (?:a |the )?gui|just (?:the )?(?:script|code)|server[- ]?side only)\b/i;
+  function detectGuiIntent(text) {
+    const t = String(text || "");
+    const out = { gui: false, edit: false, reference: false, mobile: false, words: [] };
+    if (!t.trim() || t.includes(GUI_BRIEF_MARK) || /GUI STUDIO HAND-OFF/.test(t) || GUI_NEGATIVE.test(t)) return out;
+    const words = t.match(new RegExp(GUI_WORDS.source, "gi")) || [];
+    if (!words.length) return out;
+    // "write a script for the shop" is scripting, not GUI, unless a GUI word is explicit.
+    if (/\b(script|module ?script|luau|code|function|datastore|data store|remote ?events?|remote ?functions?|server ?script|local ?script)\b/i.test(t) && !/\b(gui|ui|ux|hud|menus?|screen|screengui|interface|popup|pop-up|modal|dialog|frame|button|panel|arayüz|ekran|menü)\b/i.test(t)) return out;
+    const strong = words.some((w) => GUI_STRONG.test(w));
+    const verb = GUI_VERBS.test(t);
+    // A GUI noun plus a build / edit verb, or a strong GUI noun in a short imperative
+    // message ("shop ui", "inventory screen pls"). Pure questions are not requests.
+    if (!(verb && (strong || words.length >= 2)) && !(strong && t.trim().length <= 60 && !GUI_QUESTION.test(t))) return out;
+    if (GUI_QUESTION.test(t)) return out;
+    out.gui = true;
+    out.words = [...new Set(words.map((w) => w.toLowerCase()))].slice(0, 8);
+    out.edit = GUI_EDIT.test(t) && !/\b(new|from scratch|fresh)\b/i.test(t);
+    out.reference = GUI_REFERENCE.test(t);
+    out.mobile = GUI_MOBILE.test(t);
+    return out;
+  }
+  // opts: { reference: bool (image attached or mentioned), edit, mobile, imageAttached }
+  function guiBrief(opts) {
+    const o = opts || {};
+    const L = [];
+    L.push(GUI_BRIEF_MARK + " attached by ORscript because this is a GUI request. Deliver a FINISHED, production-grade Roblox GUI in my open Studio place - not a sketch, not default grey, no TODOs. Follow these steps in order and run real commands:");
+    if (o.reference) {
+      L.push((o.imageAttached ? "0. REFERENCE IMAGE IS ATTACHED - replicate it, do not reinterpret it." : "0. A REFERENCE is given - replicate it, do not reinterpret it.")
+        + " Before any command write a REFERENCE READ: screen aspect + layout grid; every region with position and size as % of the screen; palette as hex (background, panels, primary, accent, text, muted); typography (weights, caps, relative sizes); corner radii, strokes, shadows, gradients; icons / art (describe each, use image:\"\" placeholders now, ui_set_image later); states shown (selected tab, hover, locked, disabled). Then rebuild it 1:1 with Scale positions that match the measured % - same proportions, spacing rhythm, alignment and labels. After building, or_screenshot and compare against the reference: list every difference (position, colour, size, font, spacing) and fix it; stop only when a side-by-side would pass as the same design. Anything unreadable in the reference: use the common Roblox convention and say so in the hand-off.");
+    }
+    if (o.edit) {
+      L.push("1. READ FIRST: ui_list_tree / ui_export_spec {path} the GUI I mean (search_game_tree if unsure) and change ONLY what I asked - keep names, remotes, scripts and behaviours working; ui_set_props / ui_component / ui_align / ui_tokens_apply for the edits, never rebuild from scratch unless I say so.");
+    } else {
+      L.push("1. UNDERSTAND: restate the screen in one line (purpose, platform, states, data it shows). Do not ask questions - infer sensible defaults and build.");
+    }
+    L.push("2. ART DIRECTION: style_guide {genre} if none exists, then one token set (design_tokens_set or ui_tokens_apply: bg, surface, surface2, primary, accent, text, muted, danger, success, font, title_font, radius). Coherent palette, real hierarchy (title > section > body), 8 px spacing rhythm, UICorner + UIStroke + UIGradient + UIPadding on every panel, never Offset-only sizing.");
+    L.push("3. BUILD IN ONE SHOT: the whole screen as ONE ui_build_spec {spec, replace:true} tree (ScreenGui → named Frames, layout list / grid, Scale sizes + anchors, z-order, visible:false windows, actions wired: toggle / open / close / tab / switch / tween_in / hover_grow / remote). Use ui_component for ready widgets (window, tabs, shop_card, health_bar, hotbar, toggle, dropdown, slider, toast, modal) instead of hand-made frames.");
+    L.push("4. WIRE IT: client controller + RemoteEvents wherever data moves (server authoritative - the client never decides prices or rewards); bind to real values (leaderstats / attributes / Humanoid); hover + press feedback, open / close tweens, sounds on confirm / error.");
+    L.push("5. VERIFY: ui_layout_report {path} → fix overlaps, off-screen, clipped or unreadable text; or_screenshot and judge it as an art director (hierarchy, contrast, alignment, spacing); " + (o.mobile ? "THIS MUST WORK ON TOUCH / SMALL SCREENS: check the phone preset, bigger hit targets (≥ 44 px), TextScaled with a max size, safe areas and the 58 px top inset; " : "check the phone preset too (TextScaled with a max size, 58 px top inset); ") + "quality_audit {path} ≥ 85.");
+    L.push("6. HAND-OFF: a short summary - ScreenGui path, what each control does, remotes created, anything I should swap (image ids, prices, texts).");
+    return L.join("\n");
+  }
+
   return {
+    GUI_BRIEF_MARK,
+    detectGuiIntent,
+    guiBrief,
     APP_NAME,
     SYS_MARKER,
     RESEND_MARKER,
