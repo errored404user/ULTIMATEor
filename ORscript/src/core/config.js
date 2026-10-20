@@ -973,13 +973,13 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
   function guiBrief(opts) {
     const o = opts || {};
     const L = [];
-    L.push(GUI_BRIEF_MARK + " attached by ORscript because this is a GUI request. Deliver a FINISHED, production-grade Roblox GUI in my open Studio place - not a sketch, not default grey, no TODOs. Follow these steps in order and run real commands:");
+    L.push(GUI_BRIEF_MARK + " ORscript's protocol for the user's GUI request above (automatic). Deliver a FINISHED, production-grade Roblox GUI in the open place - no sketch, no default grey, no TODOs. Follow these steps in order with real commands; if you already started, continue from the matching step - do not undo good work, do not ask whether to proceed:");
     if (o.reference) {
       L.push((o.imageAttached ? "0. REFERENCE IMAGE IS ATTACHED - replicate it, do not reinterpret it." : "0. A REFERENCE is given - replicate it, do not reinterpret it.")
         + " Before any command write a REFERENCE READ: screen aspect + layout grid; every region with position and size as % of the screen; palette as hex (background, panels, primary, accent, text, muted); typography (weights, caps, relative sizes); corner radii, strokes, shadows, gradients; icons / art (describe each, use image:\"\" placeholders now, ui_set_image later); states shown (selected tab, hover, locked, disabled). Then rebuild it 1:1 with Scale positions that match the measured % - same proportions, spacing rhythm, alignment and labels. After building, or_screenshot and compare against the reference: list every difference (position, colour, size, font, spacing) and fix it; stop only when a side-by-side would pass as the same design. Anything unreadable in the reference: use the common Roblox convention and say so in the hand-off.");
     }
     if (o.edit) {
-      L.push("1. READ FIRST: ui_list_tree / ui_export_spec {path} the GUI I mean (search_game_tree if unsure) and change ONLY what I asked - keep names, remotes, scripts and behaviours working; ui_set_props / ui_component / ui_align / ui_tokens_apply for the edits, never rebuild from scratch unless I say so.");
+      L.push("1. READ FIRST: ui_list_tree / ui_export_spec {path} the GUI the user means (search_game_tree if unsure) and change ONLY what was asked - keep names, remotes, scripts and behaviours working; ui_set_props / ui_component / ui_align / ui_tokens_apply for the edits, never rebuild from scratch unless the user says so.");
     } else {
       L.push("1. UNDERSTAND: restate the screen in one line (purpose, platform, states, data it shows). Do not ask questions - infer sensible defaults and build.");
     }
@@ -987,7 +987,7 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
     L.push("3. BUILD IN ONE SHOT: the whole screen as ONE ui_build_spec {spec, replace:true} tree (ScreenGui → named Frames, layout list / grid, Scale sizes + anchors, z-order, visible:false windows, actions wired: toggle / open / close / tab / switch / tween_in / hover_grow / remote). Use ui_component for ready widgets (window, tabs, shop_card, health_bar, hotbar, toggle, dropdown, slider, toast, modal) instead of hand-made frames.");
     L.push("4. WIRE IT: client controller + RemoteEvents wherever data moves (server authoritative - the client never decides prices or rewards); bind to real values (leaderstats / attributes / Humanoid); hover + press feedback, open / close tweens, sounds on confirm / error.");
     L.push("5. VERIFY: ui_layout_report {path} → fix overlaps, off-screen, clipped or unreadable text; or_screenshot and judge it as an art director (hierarchy, contrast, alignment, spacing); " + (o.mobile ? "THIS MUST WORK ON TOUCH / SMALL SCREENS: check the phone preset, bigger hit targets (≥ 44 px), TextScaled with a max size, safe areas and the 58 px top inset; " : "check the phone preset too (TextScaled with a max size, 58 px top inset); ") + "quality_audit {path} ≥ 85.");
-    L.push("6. HAND-OFF: a short summary - ScreenGui path, what each control does, remotes created, anything I should swap (image ids, prices, texts).");
+    L.push("6. HAND-OFF: a short summary - ScreenGui path, what each control does, remotes created, anything the user should swap (image ids, prices, texts).");
     return L.join("\n");
   }
 

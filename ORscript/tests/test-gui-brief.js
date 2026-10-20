@@ -1,6 +1,8 @@
-// 1.51.0 — GUI BRIEF: the custom message ORscript appends to a GUI request
-// (detection in config.js, attachment + settings toggle in main.js, reference
-// image protocol, system-prompt hook).
+// 1.51.0 / 1.51.1 — GUI BRIEF: the custom message ORscript sends the AI for a GUI
+// request (detection in config.js; delivery by the agent loop + settings toggle
+// in main.js; reference image protocol; system-prompt hook). 1.51.1: the user's
+// composer is never rewritten - the brief rides on the first command result or
+// goes out as its own message when the model answers without acting.
 const fs = require("fs"), path = require("path"), vm = require("vm");
 const R = path.join(__dirname, "..");
 const read = (f) => fs.readFileSync(path.join(R, f), "utf8");
@@ -26,7 +28,8 @@ ok("detection reports the GUI words it matched", D("make me a shop gui").words.i
 
 // ── the brief ────────────────────────────────────────────────────────────────
 const base = RS.guiBrief({}), ref = RS.guiBrief({ reference: true, imageAttached: true }), refText = RS.guiBrief({ reference: true, imageAttached: false }), edit = RS.guiBrief({ edit: true }), mob = RS.guiBrief({ mobile: true });
-ok("brief starts with the mark and says why it is there", base.startsWith(RS.GUI_BRIEF_MARK + " attached by ORscript because this is a GUI request."));
+ok("brief starts with the mark, says it is automatic and tells a model that already started to continue, not restart", base.startsWith(RS.GUI_BRIEF_MARK + " ORscript's protocol for the user's GUI request above (automatic).") && base.includes("if you already started, continue from the matching step - do not undo good work, do not ask whether to proceed:"));
+ok("brief speaks about 'the user' (it is ORscript's message, not the user's)", !/\b(I|my|me)\b/.test(edit) && edit.includes("change ONLY what was asked"));
 ok("brief: six numbered steps (understand → art direction → one-shot build → wire → verify → hand-off)", /\n1\. UNDERSTAND:/.test(base) && /\n2\. ART DIRECTION:/.test(base) && /\n3\. BUILD IN ONE SHOT:/.test(base) && /\n4\. WIRE IT:/.test(base) && /\n5\. VERIFY:/.test(base) && /\n6\. HAND-OFF:/.test(base));
 ok("brief: builds through ui_build_spec {spec, replace:true} + ui_component, tokens, never Offset-only", base.includes("ONE ui_build_spec {spec, replace:true} tree") && base.includes("Use ui_component for ready widgets") && base.includes("design_tokens_set or ui_tokens_apply") && base.includes("never Offset-only sizing"));
 ok("brief: verification with ui_layout_report, or_screenshot, quality_audit ≥ 85, phone preset + 58 px inset", base.includes("ui_layout_report {path}") && base.includes("or_screenshot") && base.includes("quality_audit {path} ≥ 85") && base.includes("58 px top inset"));
@@ -35,7 +38,7 @@ ok("brief: no questions, infer and build", base.includes("Do not ask questions -
 ok("reference image attached → step 0 REFERENCE READ with measurements, hex palette, typography, states, 1:1 rebuild and screenshot comparison", ref.includes("0. REFERENCE IMAGE IS ATTACHED - replicate it, do not reinterpret it.") && ref.includes("REFERENCE READ") && ref.includes("position and size as % of the screen") && ref.includes("palette as hex") && ref.includes("typography") && ref.includes("states shown") && ref.includes("rebuild it 1:1 with Scale positions that match the measured %") && ref.includes("or_screenshot and compare against the reference") && ref.includes("list every difference"));
 ok("reference mentioned in text only → softer header, same protocol", refText.includes("0. A REFERENCE is given - replicate it, do not reinterpret it.") && refText.includes("REFERENCE READ") && !refText.includes("REFERENCE IMAGE IS ATTACHED"));
 ok("no reference → no step 0", !base.includes("REFERENCE READ") && !/\n0\./.test(base));
-ok("edit → read first with ui_export_spec and change only what was asked", edit.includes("1. READ FIRST: ui_list_tree / ui_export_spec {path}") && edit.includes("change ONLY what I asked") && !edit.includes("1. UNDERSTAND:"));
+ok("edit → read first with ui_export_spec and change only what was asked", edit.includes("1. READ FIRST: ui_list_tree / ui_export_spec {path}") && edit.includes("change ONLY what was asked") && !edit.includes("1. UNDERSTAND:"));
 ok("mobile → touch targets ≥ 44 px, TextScaled max, safe areas", mob.includes("THIS MUST WORK ON TOUCH / SMALL SCREENS") && mob.includes("≥ 44 px") && mob.includes("TextScaled with a max size"));
 ok("brief stays compact: base < 2000 chars, everything on < 3200", base.length < 2000 && RS.guiBrief({ reference: true, imageAttached: true, edit: true, mobile: true }).length < 3200, [base.length, RS.guiBrief({ reference: true, imageAttached: true, edit: true, mobile: true }).length]);
 ok("brief never contains code fences or tool-call markup (plain user text)", !/```|<tool_call|DSML/.test(ref));
@@ -47,16 +50,19 @@ ok("Creation prompt: UI SCREEN playbook routes through ui_build_spec + ui_layout
 ok("Creation prompt still teaches the GUI STUDIO hand-off and stays under budget", full.includes('GUI STUDIO (1.48): a "GUI STUDIO HAND-OFF" message carries an exact spec') && full.length < 18500, full.length);
 
 // ── main.js wiring ──────────────────────────────────────────────────────────
-ok("send hook appends the brief BEFORE the site sends (first thing in onUserMessage)", main.includes("    onUserMessage: (base) => {\n      // 1.51: GUI request → append the GUI BRIEF to the composer before the\n      // site's own handler sends it (we run in the capture phase).\n      try { ui.attachGuiBrief(); } catch {}"));
-ok("attachGuiBrief: reads the composer, detects intent, skips when the mark is already there, pastes via pasteLibraryCard", main.includes("function attachGuiBrief() {") && main.includes("if (!text.trim() || text.includes(RS.GUI_BRIEF_MARK)) return null;") && main.includes("const intent = RS.detectGuiIntent(text);") && main.includes('const ok = pasteLibraryCard({ title: "GUI brief", prompt: brief }, { silent: true });') && main.includes("const brief = RS.guiBrief({ reference: intent.reference || imageAttached, imageAttached, edit: intent.edit, mobile: intent.mobile });"));
-ok("attachGuiBrief respects the setting and tells the user what was attached", main.includes("if (!guiBriefEnabled) return null;") && main.includes('"GUI brief attached — reference "') && main.includes('diag("guiBrief", { ok, edit: intent.edit, reference: intent.reference, image: imageAttached, mobile: intent.mobile });'));
+ok("send hook only NOTES the request (first thing in onUserMessage) - the composer is never rewritten", main.includes("    onUserMessage: (base) => {\n      // 1.51.1: GUI request → remember the GUI BRIEF; the loop delivers it with\n      // the first result (never by rewriting the composer).\n      A.guiBrief = null;\n      try { A.guiBrief = ui.noteGuiRequest(); } catch {}") && !main.includes("function attachGuiBrief()") && !/pasteLibraryCard\(\{ title: "GUI brief"/.test(main));
+ok("noteGuiRequest: reads the composer, detects intent, skips when the mark is already there, returns a pending record", main.includes("function noteGuiRequest() {") && main.includes("if (!text.trim() || text.includes(RS.GUI_BRIEF_MARK)) return null;") && main.includes("const intent = RS.detectGuiIntent(text);") && main.includes("const brief = RS.guiBrief({ reference: intent.reference || imageAttached, imageAttached, edit: intent.edit, mobile: intent.mobile });") && main.includes("return { text: brief, intent, imageAttached, at: Date.now(), sent: false };"));
+ok("noteGuiRequest respects the setting and tells the user what will be sent", main.includes("if (!guiBriefEnabled) return null;") && main.includes('"GUI brief ready — reference "') && main.includes('diag("guiBrief", { edit: intent.edit, reference: intent.reference, image: imageAttached, mobile: intent.mobile });'));
+ok("loop: the brief rides on the FIRST command result (appended after the output, before the re-statement budget)", main.includes('          if (A.guiBrief && !A.guiBrief.sent) {\n            toSend += "\\n\\n" + A.guiBrief.text;\n            A.guiBrief.sent = true;\n            diag("guiBrief.sent", { via: "result" });') && main.indexOf('diag("guiBrief.sent", { via: "result" });') < main.indexOf('bumpSys("results");\n          // Ride the system-prompt re-statement out on this result'));
+ok("loop: a command-less reply to a GUI request gets the brief as its own message, once, before the mode gate", main.includes('          if (A.guiBrief && !A.guiBrief.sent && !A.stop) {\n            A.guiBrief.sent = true;\n            diag("guiBrief.sent", { via: "text", toolTurns });') && main.includes('base = await submitAndGetBase(A.guiBrief.text + (state ? "\\n" + state : ""));\n            continue;') && main.indexOf('diag("guiBrief.sent", { via: "text", toolTurns });') < main.indexOf("// 1.38.0: MODE EVIDENCE GATE"));
+ok("A.guiBrief state exists and a new user message resets it", main.includes("    guiBrief: null, // 1.51.1: pending GUI BRIEF") && main.includes("      A.guiBrief = null;\n      try { A.guiBrief = ui.noteGuiRequest(); } catch {}"));
 ok("composerHasImage looks for attachment thumbnails / remove-attachment buttons around the composer form", main.includes("function composerHasImage() {") && main.includes('img[src^="blob:"], img[src^="data:image"], [data-testid*="attachment" i] img') && main.includes('let scope = ed.closest("form"); if (scope && scope.parentElement) scope = scope.parentElement;'));
 ok("codecraft page reads the composer AFTER the send hook so the appended brief goes out", read("src/providers/codecraft.js").includes("hooks.onUserMessage(assistantCount());\n      }\n    }\n    // Read AFTER the hook: ORscript may have appended a GUI BRIEF (1.51) to the composer.\n    const text = ta.value;"));
 ok("setting: rsGuiBrief (default on) with window.__rsGuiBrief, storage sync, menu toggle + setter", main.includes("guiBriefEnabled = true;") && main.includes("window.__rsGuiBrief = () => guiBriefEnabled;") && main.includes('chrome.storage.local.get("rsGuiBrief"') && main.includes("if (changes.rsGuiBrief && typeof changes.rsGuiBrief.newValue === \"boolean\")") && main.includes('data-mode="guibrief"') && main.includes('else if(m==="guibrief") setGuiBrief(!guiBriefEnabled);') && main.includes("function setGuiBrief(v){"));
-ok("menu row explains the feature in plain words (incl. reference images)", main.includes('<span class="rs-tgl-name">GUI brief</span><span class="rs-tgl-sub">When you ask for a GUI, ORscript appends its build protocol to your message — with a reference-image protocol when you attach or mention a screenshot.</span>'));
-ok("ui exposes attachGuiBrief + composerHasImage", main.includes("return { attachGuiBrief, composerHasImage, setStatus,"));
+ok("menu row explains the feature in plain words (incl. reference images)", main.includes('<span class="rs-tgl-name">GUI brief</span><span class="rs-tgl-sub">When you ask for a GUI, ORscript sends the AI its build protocol right after your message — with a reference-image protocol when you attach or mention a screenshot.</span>'));
+ok("ui exposes noteGuiRequest + composerHasImage", main.includes("return { noteGuiRequest, composerHasImage, setStatus,"));
 ok("GUI brief toggle is visible in Simple settings (not rs-adv)", /<div class="rs-tgl-row" data-mode="guibrief"/.test(main));
-ok("feature help has a factual guibrief topic", main.includes('guibrief:{title:"GUI brief (custom message for GUI requests)"') && main.includes("saved as rsGuiBrief") && main.includes("GUI Studio hand-offs are never double-briefed"));
+ok("feature help has a factual guibrief topic", main.includes('guibrief:{title:"GUI brief (custom message for GUI requests)"') && main.includes("saved as rsGuiBrief") && main.includes("GUI Studio hand-offs are never double-briefed") && main.includes("your message itself is never edited"));
 
 // ── composer image detection (selector exercised in jsdom) ──────────────────
 try {
@@ -112,34 +118,33 @@ try {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   async function waitFor(pred, ms, label) { const until = Date.now() + ms; while (Date.now() < until) { try { const v = pred(); if (v) return v; } catch {} await sleep(40); } throw new Error("timeout waiting for " + label); }
   try {
-    await waitFor(() => d.getElementById("rs-bar") && typeof w.__rsAttachGuiBrief === "function", 8000, "#rs-bar + hook");
+    await waitFor(() => d.getElementById("rs-bar") && typeof w.__rsNoteGuiRequest === "function", 8000, "#rs-bar + hook");
     await sleep(300);
     const ta = d.getElementById("cc-input");
-    ok("walk: hook + setting exposed, default on", typeof w.__rsAttachGuiBrief === "function" && w.__rsGuiBrief() === true);
+    ok("walk: hook + setting exposed, default on", typeof w.__rsNoteGuiRequest === "function" && w.__rsGuiBrief() === true);
     ta.value = "write a datastore script for coins";
-    ok("walk: a non-GUI message is left untouched", w.__rsAttachGuiBrief() === null && ta.value === "write a datastore script for coins");
+    ok("walk: a non-GUI message is ignored", w.__rsNoteGuiRequest() === null && ta.value === "write a datastore script for coins");
     ta.value = "make me a shop gui with 4 item cards";
-    const r1 = w.__rsAttachGuiBrief();
-    ok("walk: a GUI request gets the brief appended to the composer (request first, brief after a blank line)", r1 && r1.gui && ta.value.startsWith("make me a shop gui with 4 item cards\n\n" + RS.GUI_BRIEF_MARK) && ta.value.includes("3. BUILD IN ONE SHOT") && !ta.value.includes("REFERENCE READ"), ta.value.slice(0, 120));
-    ok("walk: calling it again does not double-brief", w.__rsAttachGuiBrief() === null && ta.value.split(RS.GUI_BRIEF_MARK).length === 2);
+    const r1 = w.__rsNoteGuiRequest();
+    ok("walk: a GUI request yields a pending brief and the composer is NOT touched", r1 && r1.intent.gui && r1.sent === false && r1.text.startsWith(RS.GUI_BRIEF_MARK) && r1.text.includes("3. BUILD IN ONE SHOT") && !r1.text.includes("REFERENCE READ") && ta.value === "make me a shop gui with 4 item cards", r1 && r1.text.slice(0, 120));
     // reference image attached in the CodeCraft composer (thumbnail strip beside the form)
     const att = d.getElementById("cc-attachments"); att.hidden = false; att.innerHTML = '<span class="cc-att"><img src="data:image/png;base64,iVBORw0KGgo="><button type="button">×</button></span>';
     ta.value = "build this inventory screen";
-    const r2 = w.__rsAttachGuiBrief();
-    ok("walk: an attached image switches on the REFERENCE IMAGE protocol even without reference words", r2 && r2.imageAttached === true && ta.value.includes("0. REFERENCE IMAGE IS ATTACHED - replicate it, do not reinterpret it.") && ta.value.includes("REFERENCE READ"), r2);
+    const r2 = w.__rsNoteGuiRequest();
+    ok("walk: an attached image switches on the REFERENCE IMAGE protocol even without reference words", r2 && r2.imageAttached === true && r2.text.includes("0. REFERENCE IMAGE IS ATTACHED - replicate it, do not reinterpret it.") && r2.text.includes("REFERENCE READ") && ta.value === "build this inventory screen", r2 && r2.imageAttached);
     att.innerHTML = ""; att.hidden = true;
     ta.value = "fix my HUD, the coins label overlaps the health bar on phones";
-    const r3 = w.__rsAttachGuiBrief();
-    ok("walk: edit + mobile wording → read-first protocol + touch rules", r3 && r3.edit && r3.mobile && ta.value.includes("1. READ FIRST: ui_list_tree / ui_export_spec {path}") && ta.value.includes("THIS MUST WORK ON TOUCH / SMALL SCREENS"), r3);
+    const r3 = w.__rsNoteGuiRequest();
+    ok("walk: edit + mobile wording → read-first protocol + touch rules", r3 && r3.intent.edit && r3.intent.mobile && r3.text.includes("1. READ FIRST: ui_list_tree / ui_export_spec {path}") && r3.text.includes("THIS MUST WORK ON TOUCH / SMALL SCREENS"), r3 && r3.intent);
     // the user's own toast confirms it
     const toastEl = d.querySelector("#rs-root .rs-toast, .rs-toast");
-    ok("walk: the bar toast tells the user a brief was attached", !!toastEl && /GUI brief attached/.test(toastEl.textContent || ""), toastEl && toastEl.textContent);
+    ok("walk: the bar toast tells the user the brief is ready", !!toastEl && /GUI brief ready/.test(toastEl.textContent || ""), toastEl && toastEl.textContent);
     // menu toggle turns it off
     const row = d.querySelector('[data-mode="guibrief"]');
     ok("walk: settings row rendered (GUI brief, on)", !!row && row.getAttribute("aria-checked") === "true");
     if (row) { row.click(); await sleep(50); }
     ta.value = "make me a main menu";
-    ok("walk: toggled off → stored as rsGuiBrief=false and the message is left alone", w.__rsGuiBrief() === false && storage.rsGuiBrief === false && w.__rsAttachGuiBrief() === null && ta.value === "make me a main menu");
+    ok("walk: toggled off → stored as rsGuiBrief=false and GUI requests are ignored", w.__rsGuiBrief() === false && storage.rsGuiBrief === false && w.__rsNoteGuiRequest() === null && ta.value === "make me a main menu");
   } catch (e) { ok("walk completed without throwing", false, String(e && e.stack || e)); }
   finish();
 })();

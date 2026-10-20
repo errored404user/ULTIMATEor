@@ -921,6 +921,7 @@
   ];
 
   const A = {
+    guiBrief: null, // 1.51.1: pending GUI BRIEF for the current user request ({ text, intent, imageAttached, sent })
     running: false,
     stop: false,
     // stopping: the user clicked Stop and we are winding the loop down. Set the
@@ -1064,7 +1065,7 @@
     beginner:{title:"Getting started (beginner guide)",summary:"Four steps, then talk in plain words: (1) run the ORscript agent app (bin/or-core.exe) and leave it open, (2) open Roblox Studio and switch on Assistant → ⋯ → Manage MCP Servers → 'Studio as MCP server', (3) open a place, (4) press ▶ Start Agent on the OR bar. The bar's getting-started card ticks each step off live and offers three starter requests.",details:["No code is needed: describe the result ('make a coin pickup that saves', 'build a small lobby', 'fix the error in Output'). The AI reads the place first, then builds, playtests and screenshots to verify.","Settings opens in a SIMPLE view (Help, Work mode, Access, everyday toggles). Flip 'Show advanced settings' for Multi-Agent, task list, shortcuts, custom prompt and MCP servers.","Access: Sandbox (default) touches only Studio and the agent workspace. Ask shows an approval card before writes / runs. Full unlocks the whole PC - leave it off while learning.","Settings → Help → 'Getting-started checklist' reopens the live card any time; 'Read the Tutorial' opens the full walkthrough.","Stuck? Red text on the bar names the missing piece in plain words. 'Agent app offline' → run bin/or-core.exe; 'Studio not connected' → the MCP switch in Studio (or Repair Studio link in Settings → MCP servers); 'open a place' → File → New → Baseplate."]},
     design:{title:"Design pack (GUI generation)",summary:"Generate real, responsive Roblox GUI - ScreenGui trees with LocalScripts, remotes and server stubs - from design tokens and screen templates instead of static mock-ups.",details:["design_tokens_set {preset, primary, secondary, surface, text, font, radius} writes ReplicatedStorage.OR_Design (Tokens, UIKit, Responsive ModuleScripts). Presets: midnight, clean_light, candy, neon, royal_gold, forest, horror, ocean, sakura, retro. Re-run it to restyle every generated screen at once; design_tokens_get reads the current set.","ui_screen_generate {kind} builds complete screens: main_menu, hud, shop, inventory, settings, leaderboard, daily_rewards, quest_log, loading, dialog, notification_stack - each with an OR_Controller LocalScript (actions, open keys, gamepad B, typewriter), data feeds (leaderstats pills, health, leaderboard rows, toasts) and, where needed, remotes plus server scripts (shop purchase validation, DataStore-backed daily rewards).","ui_from_spec {name, spec} turns a JSON tree (Window, Panel, Row, Column, Grid, ScrollList, Tabs, Button, Label, ItemCard, Slot, CurrencyPill, ProgressBar, Toggle, Input...) sized in pixels on a 1280x720 canvas into scale-based UI with aspect/size constraints and TextScaled text. ui_component_place adds one component to an existing GUI; ui_export_spec converts any GUI back into a spec.","Retrofit tools: ui_apply_tokens (restyle legacy UI), ui_make_responsive (offset roots -> scale + constraints + OR_Responsive script), ui_gamepad_focus (NextSelection links + selection cursor), ui_states_wire (hover/press states + OR_Controller).","ui_audit {path} scores 0-100 and lists issues (contrast, tiny text, small touch targets, offset-only roots, overlap, static canvases, global ZIndex, missing runtime). ui_preview {path, device} stages a window for or_screenshot; call it again with restore:true before shipping.","Everything lives in Studio as normal instances - no account, no web app, no image-only mock-ups. The Creation work mode focuses these commands and uses them whenever a request involves a menu, HUD, shop or any other screen."]},
     quality:{title:"Quality Gate (1.47 quality pack)",summary:"A measurable finish line for builds, UI, lighting and scripts: style_guide gives the art direction in numbers, brief_set stores the brief, quality_audit scores the place 0-100 with exact fix commands, quality_fix applies the mechanical ones, and Creation mode does not hand off below 85.",details:["style_guide {genre} (medieval, fantasy, scifi, cyberpunk, horror, cozy, nature, desert, winter, tropical, city, cartoon / simulator / obby, candy, industrial, underwater, space - aliases like castle, neon, forest, snow work) returns a palette (6 roles as hex + Color3), materials per surface, a full lighting recipe, UI tokens for design_tokens_set, real-scale notes, motifs, VFX / SFX beats, an avoid list and a 5-step recipe. It needs no Studio.","brief_set {title, genre, palette, scale, must_have, avoid} stores the brief in ServerStorage._ORBrief (palette filled from the guide when omitted); brief_get reads it back when a project continues. style_lighting_apply {genre} writes the recipe into Lighting (Atmosphere, Bloom, ColorCorrection) in one undoable step.","quality_audit {path?, scope?} finds default grey Plastic, one-material / two-colour builds, plain-block-only builds, unanchored parts, Models without PrimaryPart, Part / Model names, loose parts, parts off the brief palette, untouched Lighting, white 1px-border Frames, default fonts, fixed 14px text, Offset-only roots, containers without layouts, wait() / LocalScript-in-server / LocalPlayer-on-server / DataStore-without-pcall / --!strict / print() issues. Each finding carries severity, examples and the command that fixes it; the score is 100 minus weighted deductions, pass is >= 85.","quality_fix {fixes: anchor | primary_part | names | ui} anchors free parts, sets the largest part as PrimaryPart, renames Part -> BrickWall_3 by material + role, strips legacy borders, adds UICorner, TextScaled + UITextSizeConstraint and replaces default fonts; dry_run:true only reports. Colours, materials, lighting and layout stay design decisions."],howTo:["style_guide {genre} before the first build / UI / lighting command","brief_set once; brief_get when continuing","quality_audit before every hand-off; quality_fix, then re-audit until >= 85 and report the score"]},
-    guibrief:{title:"GUI brief (custom message for GUI requests)",summary:"When your own message asks for a GUI (make a shop UI, redesign my HUD, build this menu like the screenshot) ORscript appends an 'ORscript GUI BRIEF' block to it before it is sent: a six-step build protocol (understand, art direction with tokens, one-shot ui_build_spec, wiring with remotes, verification with ui_layout_report + screenshots + quality_audit, hand-off). If a reference image is attached or mentioned, a REFERENCE READ step makes the AI measure the image (regions as % of the screen, hex palette, typography, states) and rebuild it 1:1, then compare its screenshot against the reference until they match. Editing an existing GUI switches to a read-first protocol (ui_export_spec, change only what was asked).",details:["Toggle: OR menu → GUI brief (on by default, saved as rsGuiBrief). Off = your message goes out untouched.","Detection is local and instant: GUI nouns (gui, ui, hud, menu, shop, inventory, popup, settings menu, health bar...) plus a build / edit verb; questions ('how do I make a gui?'), pure scripting requests and messages that say 'no gui' are left alone.","Reference images: attach the screenshot in the chat as usual (ChatGPT, Claude, Gemini... any multimodal provider); ORscript detects the attachment thumbnail in the composer or words like 'like this screenshot', 'from the image', '1:1', 'mockup'.","The block is visible in your message so you always see what was added; GUI Studio hand-offs are never double-briefed."]},
+    guibrief:{title:"GUI brief (custom message for GUI requests)",summary:"When your own message asks for a GUI (make a shop UI, redesign my HUD, build this menu like the screenshot) ORscript sends the AI an 'ORscript GUI BRIEF' message right after it (appended to the first command result, or as its own message when the AI answers without acting - your message itself is never edited): a six-step build protocol (understand, art direction with tokens, one-shot ui_build_spec, wiring with remotes, verification with ui_layout_report + screenshots + quality_audit, hand-off). If a reference image is attached or mentioned, a REFERENCE READ step makes the AI measure the image (regions as % of the screen, hex palette, typography, states) and rebuild it 1:1, then compare its screenshot against the reference until they match. Editing an existing GUI switches to a read-first protocol (ui_export_spec, change only what was asked).",details:["Toggle: OR menu → GUI brief (on by default, saved as rsGuiBrief). Off = your message goes out untouched.","Detection is local and instant: GUI nouns (gui, ui, hud, menu, shop, inventory, popup, settings menu, health bar...) plus a build / edit verb; questions ('how do I make a gui?'), pure scripting requests and messages that say 'no gui' are left alone.","Reference images: attach the screenshot in the chat as usual (ChatGPT, Claude, Gemini... any multimodal provider); ORscript detects the attachment thumbnail in the composer or words like 'like this screenshot', 'from the image', '1:1', 'mockup'.","The brief is a normal visible message in the chat; GUI Studio hand-offs are never double-briefed."]},
     gui:{title:"GUI Studio (1.48 visual GUI builder)",summary:"A Paint-style designer for Roblox GUIs: open it from the bar (window icon, Ctrl+Shift+G), draw Frames / buttons / labels / images / scrolling lists on a phone, tablet, desktop or console screen, drop finished components (toggle, slider, window, tabs, hotbar, currency, health bar, shop card...), pick a theme preset, then Build in Studio (ui_build_spec runs directly) or Send to AI - the spec, Luau and your intent go to the chat and the AI wires the behaviour.",details:["Tools: Select (drag, resize with 8 handles, multi-select with marquee or Shift, arrows nudge 1 px / 10 px with Shift), Frame, Text label, Button, Image, Image button, TextBox, Scrolling frame and Component. Snap grid, smart guides, align / distribute / group, undo / redo, duplicate, z-order, visibility per node, device presets with the 58 px topbar inset preview.","Props panel edits Name, UDim2 Size / Position, AnchorPoint presets, colours (tokens or hex), transparency, UICorner / UIStroke / UIGradient / UIPadding / list / grid layouts, text + font + align, image id + ScaleType, scrolling, ZIndex, Visible, Active and actions (open / close / toggle / destroy a target, fire a remote, message, tween effect).","Theme tab: 10 token presets (midnight, clean_light, candy, neon, royal_gold, forest, horror, ocean, sakura, retro) re-colour every token-bound node live. Code tab: the JSON spec (editable, round-trips) and generated Luau (StarterGui builder script).","Extra GUI commands (1.48 pack): ui_build_spec {spec, replace}, ui_export_spec {path} (Studio -> designer import), ui_component {kind, parent, ...}, ui_align, ui_distribute, ui_anchor_preset, ui_to_scale, ui_responsive_fix, ui_text_fit, ui_zorder_fix, ui_tokens_apply {preset | tokens}, ui_tween {path, effect}, ui_state_toggle {button, target, action}, ui_find {query}, ui_bulk_set, ui_screen_create, ui_layout_report {path}."],howTo:["Open GUI Studio from the bar or Ctrl+Shift+G; pick a template (HUD, main menu, shop, inventory, settings, leaderboard, quests, dialogue, loading, rewards) or start empty","Design, choose a theme, then Build in Studio for an instant preview or Send to AI with your intent so the behaviour gets scripted","Afterwards: ui_responsive_fix + ui_layout_report {path}, then quality_audit"]},
     gfx:{title:"Thumbnail & Icon Studio (gfx pack)",summary:"Stage, light, pose and photograph real game thumbnails (1920x1080) and icons (512x512) inside Roblox Studio - the finished PNG is cropped, downloaded and attached to the chat - instead of a static AI image you cannot edit.",details:["gfx_stage_create {style, kind} builds a cyclorama stage far above the map (floor, cove, backdrop, Key/Fill/Rim SpotLights) and applies the style lighting + post stack: cinematic, cartoony, horror, neon, clean or chroma (green screen). Lighting and the camera are snapshotted so gfx_teardown leaves no trace.","gfx_subject_add {source, pose, face, slot} puts a character on stage: 'dummy' (R15), 'r6', 'player:USERID' / 'user:Name' (the real avatar) or any model path. Poses: hero, point, jump, wave, scared, victory, run, think, sit, dab, fight, crossed_arms. Faces on dynamic heads: happy, shocked, angry, scared, smirk, determined, laughing, wink (face_id for classic decal heads). gfx_pose re-poses; gfx_prop_add floats a glowing sword / pet / chest beside the subject.","gfx_camera {preset} frames the shot: hero_low, three_quarter, front, closeup, top_down, dutch, wide, icon (+ fov / pitch / yaw / roll / distance_scale). gfx_overlay {title, subtitle, badge, logo_image} adds a huge outlined gradient title in the style font with 16:9 / 1:1 masks, safe-area and thirds guides. gfx_fx adds sparkles / embers / smoke / confetti / snow / magic / rays; gfx_lighting fine-tunes bloom, saturation, DOF, fog, time and the rig lights.","gfx_capture photographs the viewport through the Studio MCP, hides the guides, crops to the aspect box and returns the PNG (thumbnail 1920x1080, icon 512x512 or custom) - downloaded by the browser and attached to the chat so the model can judge and iterate. gfx_brief writes an art-director brief, an image-generation prompt and a CTR checklist for chats that can paint.","Workflow: gfx_brief -> gfx_stage_create -> gfx_subject_add (+ gfx_prop_add) -> gfx_overlay -> gfx_fx -> gfx_camera -> gfx_capture (judge, iterate) -> gfx_teardown. Maximise the 3D viewport first: the capture is only as sharp as the viewport."]},
     blueprints:{title:"System Blueprints (built-in skills)",summary:"Twelve production-grade game systems that install into the place as real code - shared Core (Signal bus, remotes, DataStore profiles with session locks, receipts, leaderstats, notifications) + a Config ModuleScript, a server Service and a client script per system - then verify themselves in edit mode. Lemonade-style 'complete systems', but built in, inspectable and yours.",details:["blueprint_list shows the catalogue: currency (wallet + data profiles), shop (items, game passes, dev-product packs), pets (eggs, rarity, luck, following pets), combat (weapons, hitboxes, damage pipeline, statuses), rounds (intermission / round / results loop with maps), checkpoints (obby stages + skip product), quests (Bus-driven daily objectives), tycoon (plots, buttons, droppers, collector), leaderboards (OrderedDataStore boards), admin (ranks + chat commands), anticheat (speed / fly / teleport rules), sprint (stamina).","blueprint_install {name:\"pets\"} installs dependencies first (pets -> currency), writes ReplicatedStorage.OR_Systems.<System>.{Config,Remotes}, ServerScriptService.OR_Systems.<System>.Service and StarterPlayerScripts.OR_Systems.<System>Client, generates weapon Tools / a demo course / plots / boards / an arena when the place has none, then runs blueprint_verify. name:\"all\" installs everything; config:{...} seeds the Config.","blueprint_configure {name, config} deep-merges into the Config module (readable Lua table, OR_ConfigJSON attribute) and re-verifies; blueprint_verify compiles Config + Service against Core in edit mode and runs each Service's SelfTest (shop validation, pet odds, cooldowns, round state machine, quest progress, tycoon gates, anticheat rules...); blueprint_status reports versions, remotes and missing dependencies; blueprint_remove uninstalls without touching player data.","Systems talk through Core.Bus topics (Combat.Kill -> Currency reward + Quests + Leaderboards; Checkpoints.Reached -> reward; Round.Won -> reward + quest) so any subset works together. Extend them with script_read / multi_edit on the Service, or build UI on their remotes with ui_screen_generate.","Workflow for a 'make me a pet simulator' request: blueprint_install {name:[\"currency\",\"pets\",\"shop\",\"quests\",\"leaderboards\"]} -> blueprint_configure the eggs / prices -> ui_screen_generate {kind:\"shop\"} wired to the Hatch / Purchase remotes -> start_stop_play + get_console_output -> blueprint_status."]},
@@ -4976,6 +4977,17 @@
             base = await submitAndGetBase(retryFeedback);
             continue;
           }
+          // 1.51.1: the model answered a GUI request without a command (plan,
+          // questions, prose) - deliver the GUI BRIEF now as its own message.
+          if (A.guiBrief && !A.guiBrief.sent && !A.stop) {
+            A.guiBrief.sent = true;
+            diag("guiBrief.sent", { via: "text", toolTurns });
+            try { ui.toast("GUI brief sent — the AI now has the build protocol"); } catch {}
+            ui.steeringProgress("sending", "Sending the GUI brief", toolTurns);
+            const state = asStateTag();
+            base = await submitAndGetBase(A.guiBrief.text + (state ? "\n" + state : ""));
+            continue;
+          }
           // 1.38.0: MODE EVIDENCE GATE - a run that mutated (scripts / visuals /
           // motion) but never ran the mode's proof command gets ONE verification
           // request before its final answer is accepted.
@@ -5264,6 +5276,13 @@
             ui.steeringProgress( "Current step finished — applying your update next", toolTurns);
           } else {
             ui.steeringProgress("sending", `${chipName} finished — sending ${batchN > 1 ? "the combined result" : "its result"}`, toolTurns);
+          }
+          // 1.51.1: the GUI BRIEF for this request rides on the first result.
+          if (A.guiBrief && !A.guiBrief.sent) {
+            toSend += "\n\n" + A.guiBrief.text;
+            A.guiBrief.sent = true;
+            diag("guiBrief.sent", { via: "result" });
+            try { ui.toast("GUI brief sent with the result"); } catch {}
           }
           // This result becomes a turn, so it counts toward the re-statement
           // budget - context volume is what makes the site summarise, and the
@@ -7196,7 +7215,7 @@
     // reload - they used to silently reset to these defaults on every page
     // refresh because only the setters ever touched chrome.storage.
     let autoFixEnabled = true, extraThinking = false, planMode = false, steeringMode = false, forgeMode = false, autoFixStopPlay = true, autoDebugEnabled = true, multiAgent = false, guiBriefEnabled = true;
-    try { window.__rsGuiBrief = () => guiBriefEnabled; window.__rsAttachGuiBrief = () => attachGuiBrief(); } catch {}
+    try { window.__rsGuiBrief = () => guiBriefEnabled; window.__rsNoteGuiRequest = () => noteGuiRequest(); } catch {}
     try { chrome.storage.local.get("rsGuiBrief", (r) => { if (r && typeof r.rsGuiBrief === "boolean") { guiBriefEnabled = r.rsGuiBrief; try { window.__rsGuiBrief = () => guiBriefEnabled; } catch {} } }); } catch {}
     let workMode = "creation";
     try { window.__rsWorkMode = () => workMode; } catch {}
@@ -7588,11 +7607,14 @@
     }
     function setPlanMode(v){ planMode=!!v; try{chrome.storage.local.set({rsPlanMode: planMode});}catch{}; try{ window.__rsPlanMode = () => planMode; }catch{}; buildMenu(); renderBar(); toast(v ? "Plan mode on — the AI writes a plan, then production code" : "Plan mode off"); markModesChanged(); }
     function setGuiBrief(v){ guiBriefEnabled=!!v; try{chrome.storage.local.set({rsGuiBrief: guiBriefEnabled});}catch{}; try{ window.__rsGuiBrief = () => guiBriefEnabled; }catch{}; buildMenu(); toast(v ? "GUI brief on — GUI requests get the build protocol attached" : "GUI brief off"); markModesChanged(); }
-    // 1.51 GUI BRIEF: when the message being sent asks for a GUI, append ORscript's
-    // build protocol (and the reference-image protocol when an image is attached
-    // or mentioned) to the composer BEFORE the site sends it. Runs synchronously
-    // from the provider's send hook (capture phase), so the appended text goes
-    // out in the same message. Returns the detection result or null.
+    // 1.51.1 GUI BRIEF: when the message the user is sending asks for a GUI,
+    // remember ORscript's build protocol for that request (and whether a
+    // reference image is attached). The composer is NEVER rewritten - rewriting
+    // it from the send hook raced the sites' own editors (ProseMirror / Lexical
+    // read their state before our insert landed) and left the brief stuck in
+    // the box. The agent loop delivers the brief instead: appended to the first
+    // command result of the turn, or sent as its own message when the model
+    // answers without acting. Returns the pending record or null.
     function composerHasImage() {
       try {
         const ed = (typeof P !== "undefined" && P.getEditor && P.getEditor()) || null; if (!ed) return false;
@@ -7604,7 +7626,7 @@
         return scope.querySelectorAll(sel).length > 0;
       } catch { return false; }
     }
-    function attachGuiBrief() {
+    function noteGuiRequest() {
       if (!guiBriefEnabled) return null;
       if (typeof RS === "undefined" || typeof RS.detectGuiIntent !== "function") return null;
       let text = "";
@@ -7614,10 +7636,9 @@
       if (!intent.gui) return null;
       const imageAttached = composerHasImage();
       const brief = RS.guiBrief({ reference: intent.reference || imageAttached, imageAttached, edit: intent.edit, mobile: intent.mobile });
-      const ok = pasteLibraryCard({ title: "GUI brief", prompt: brief }, { silent: true });
-      if (ok) toast(imageAttached || intent.reference ? "GUI brief attached — reference " + (imageAttached ? "image" : "") + " protocol on" : (intent.edit ? "GUI brief attached — edit protocol" : "GUI brief attached"));
-      diag("guiBrief", { ok, edit: intent.edit, reference: intent.reference, image: imageAttached, mobile: intent.mobile });
-      return ok ? Object.assign({ imageAttached }, intent) : null;
+      toast(imageAttached || intent.reference ? "GUI brief ready — reference " + (imageAttached ? "image " : "") + "protocol goes to the AI with the first result" : (intent.edit ? "GUI brief ready — edit protocol goes to the AI with the first result" : "GUI brief ready — sent to the AI with the first result"));
+      diag("guiBrief", { edit: intent.edit, reference: intent.reference, image: imageAttached, mobile: intent.mobile });
+      return { text: brief, intent, imageAttached, at: Date.now(), sent: false };
     }
     function setAutoDebug(v){ autoDebugEnabled=!!v; try{chrome.storage.local.set({rsAutoDebug: autoDebugEnabled});}catch{}; try{ window.__rsAutoDebug = () => autoDebugEnabled; }catch{}; buildMenu(); toast(v ? "Automatic Debugger on — new Studio errors are sent to the AI" : "Automatic Debugger off"); markModesChanged(); }
     // Task list (Settings → Task list). State lives in ORTaskList; this only
@@ -8232,7 +8253,7 @@
               <span class="rs-tgl ${autoDebugEnabled ? "on" : ""}"></span>
             </div>
             <div class="rs-tgl-row" data-mode="guibrief" role="switch" aria-checked="${guiBriefEnabled}" tabindex="0">
-              <span class="rs-tgl-info"><span class="rs-tgl-name">GUI brief</span><span class="rs-tgl-sub">When you ask for a GUI, ORscript appends its build protocol to your message — with a reference-image protocol when you attach or mention a screenshot.</span></span>
+              <span class="rs-tgl-info"><span class="rs-tgl-name">GUI brief</span><span class="rs-tgl-sub">When you ask for a GUI, ORscript sends the AI its build protocol right after your message — with a reference-image protocol when you attach or mention a screenshot.</span></span>
               <span class="rs-tgl ${guiBriefEnabled ? "on" : ""}"></span>
             </div>
             <div class="rs-tgl-row rs-adv" data-mode="multiagent" role="switch" aria-checked="${multiAgent}" tabindex="0">
@@ -10905,7 +10926,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     }
 
     build();
-    return { attachGuiBrief, composerHasImage, setStatus, staleExtensionAlert, setStarted, setStarting, showStop, markStopping, inputCover, toast, banner, showImages, nudgeStart, updateStartGate, refreshSetup, getCustomPrompt, getCustomMcpServers, trackCard, hideCardEmbed, steeringProgress, takeSteeringSteering, peekSteeringSteering, clearSteeringSteering, syncSteeringUi, openMenu: (toSupport) => openMenuFn && openMenuFn(toSupport) };
+    return { noteGuiRequest, composerHasImage, setStatus, staleExtensionAlert, setStarted, setStarting, showStop, markStopping, inputCover, toast, banner, showImages, nudgeStart, updateStartGate, refreshSetup, getCustomPrompt, getCustomMcpServers, trackCard, hideCardEmbed, steeringProgress, takeSteeringSteering, peekSteeringSteering, clearSteeringSteering, syncSteeringUi, openMenu: (toSupport) => openMenuFn && openMenuFn(toSupport) };
   })();
 
   // ── Live token + timer, shown ONLY on a tool call's chip detail. The
@@ -11485,9 +11506,10 @@ statusTimer = rsInterval(() => bg({ type: "status" }).then(onStatus), 5000);
       else ui.nudgeStart();
     },
     onUserMessage: (base) => {
-      // 1.51: GUI request → append the GUI BRIEF to the composer before the
-      // site's own handler sends it (we run in the capture phase).
-      try { ui.attachGuiBrief(); } catch {}
+      // 1.51.1: GUI request → remember the GUI BRIEF; the loop delivers it with
+      // the first result (never by rewriting the composer).
+      A.guiBrief = null;
+      try { A.guiBrief = ui.noteGuiRequest(); } catch {}
       // A fresh user message = fresh intent: clear any previous manual stop so
       // the loop is allowed to run again.
       A.userStopped = false;
