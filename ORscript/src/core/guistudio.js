@@ -116,7 +116,13 @@
   let drag = null; // active pointer op
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const toast = (m) => { try { S.hooks && S.hooks.toast ? S.hooks.toast(m) : console.log("[GUI Studio]", m); } catch {} };
+  let toastTimer = 0;
+  const toast = (m) => {
+    try {
+      if (S.open && D && D.toast) { D.toast.textContent = String(m); D.toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => D.toast.classList.remove("show"), 2600); return; }
+      if (S.hooks && S.hooks.toast) S.hooks.toast(m); else console.log("[GUI Studio]", m);
+    } catch {}
+  };
   const diag = (e, d) => { try { S.hooks && S.hooks.diag && S.hooks.diag("gui." + e, d || {}); } catch {} };
   const round = (v, d = 4) => Math.round(v * 10 ** d) / 10 ** d;
 
@@ -305,8 +311,9 @@
     const op = n.text_t ? `opacity:${1 - tokenNum(n.text_t, 0)};` : "";
     return `font-family:${fam};font-weight:${BOLD_FONTS.has(font) ? 700 : 500};font-size:${size}px;color:${col};justify-content:${jc};align-items:${ai};text-align:${ax};${n.wrap ? "white-space:normal;" : "white-space:nowrap;"}${sh}${op}`;
   }
-  function renderNode(n) {
+  function renderNode(n, pb) {
     const box = geo.get(n.id); if (!box) return "";
+    pb = pb || { x: 0, y: 0 };
     const selected = S.sel.includes(n);
     const inner = [];
     if (n.class === "TextLabel" || n.class === "TextButton" || n.class === "TextBox") {
@@ -320,9 +327,9 @@
       else inner.push(`<div class="rsg-imgph" style="${tint ? "color:" + tint : ""}">${I.image}<span>${esc(img ? img.replace(/^rbxassetid:\/\//, "id ") : "image")}</span></div>`);
     }
     if (n.class === "ScrollingFrame") inner.push(`<div class="rsg-scrollbar" style="width:${tokenNum(n.scroll && n.scroll.thickness, 6)}px"></div>`);
-    const kids = (n.children || []).slice().sort((a, b) => (a.z || 1) - (b.z || 1)).map(renderNode).join("");
+    const kids = (n.children || []).slice().sort((a, b) => (a.z || 1) - (b.z || 1)).map((c) => renderNode(c, box)).join("");
     const handles = selected && S.sel.length === 1 && !inLayout(n) ? ["nw", "n", "ne", "e", "se", "s", "sw", "w"].map((h) => `<i class="rsg-h rsg-h-${h}" data-h="${h}"></i>`).join("") : "";
-    return `<div class="rsg-n${selected ? " sel" : ""}${inLayout(n) ? " inlayout" : ""}" data-id="${n.id}" style="left:${box.x}px;top:${box.y}px;width:${box.w}px;height:${box.h}px;z-index:${(n.z || 1)};${styleFor(n, box)}">${inner.join("")}${kids}${handles}${selected ? `<b class="rsg-tag">${esc(n.name)} · ${Math.round(box.w)}×${Math.round(box.h)}</b>` : ""}</div>`;
+    return `<div class="rsg-n${selected ? " sel" : ""}${inLayout(n) ? " inlayout" : ""}" data-id="${n.id}" style="left:${box.x - pb.x}px;top:${box.y - pb.y}px;width:${box.w}px;height:${box.h}px;z-index:${(n.z || 1)};${styleFor(n, box)}">${inner.join("")}${kids}${handles}${selected ? `<b class="rsg-tag">${esc(n.name)} · ${Math.round(box.w)}×${Math.round(box.h)}</b>` : ""}</div>`;
   }
   function renderStage() {
     if (!D) return;
@@ -330,11 +337,13 @@
     const d = S.device; const sb = screenBox();
     D.screen.style.width = d.w + "px"; D.screen.style.height = d.h + "px";
     D.screen.style.transform = `scale(${S.zoom})`;
+    D.screen.style.setProperty("--rsg-inv", String(round(1 / S.zoom, 3)));
     D.screen.classList.toggle("grid", S.grid);
     D.screen.style.setProperty("--rsg-bg", tokenColor("bg", "#0f1115"));
     const inset = S.screen.ignore_inset === false ? `<div class="rsg-inset" style="height:${d.inset}px"></div>` : `<div class="rsg-inset ghost" style="height:${d.inset}px"></div>`;
-    const roots = S.nodes.slice().sort((a, b) => (a.z || 1) - (b.z || 1)).map(renderNode).join("");
-    D.screen.innerHTML = inset + roots + `<div class="rsg-marquee" hidden></div><div class="rsg-guides"></div>`;
+    const roots = S.nodes.slice().sort((a, b) => (a.z || 1) - (b.z || 1)).map((r) => renderNode(r, null)).join("");
+    const empty = S.nodes.length ? "" : `<div class="rsg-empty-stage"><b>Empty screen</b><span>Pick an element on the left and drag it out here, click a component to drop it, or choose a template above.</span><span>V select · F frame · B button · T text · I image · Shift+drag multi-select · Del delete · Ctrl+Z undo</span></div>`;
+    D.screen.innerHTML = inset + roots + empty + `<div class="rsg-marquee" hidden></div><div class="rsg-guides"></div>`;
     D.marquee = D.screen.querySelector(".rsg-marquee"); D.guides = D.screen.querySelector(".rsg-guides");
     D.stageWrap.style.width = Math.round(d.w * S.zoom) + "px"; D.stageWrap.style.height = Math.round(d.h * S.zoom) + "px";
     void sb;
@@ -353,7 +362,10 @@
   function renderAll() { renderStage(); renderTree(); renderProps(); renderCode(); syncButtons(); syncTheme(); }
 
   // ───────────────────────── props panel ─────────────────────────
-  function field(label, html, hint) { return `<label class="rsg-f" ${hint ? `title="${esc(hint)}"` : ""}><span>${esc(label)}</span>${html}</label>`; }
+  // A <div>, not a <label>: several rows hold more than one control (and inner
+  // <label class="rsg-mini"> checkboxes), and a wrapping label would re-toggle
+  // the first checkbox on every click inside the row.
+  function field(label, html, hint) { return `<div class="rsg-f" ${hint ? `title="${esc(hint)}"` : ""}><span>${esc(label)}</span>${html}</div>`; }
   const inp = (k, v, type = "text", extra = "") => `<input data-k="${k}" type="${type}" value="${esc(v == null ? "" : v)}" ${extra}>`;
   const num = (k, v, extra = "") => inp(k, v, "number", `step="any" ${extra}`);
   const chk = (k, v) => `<input data-k="${k}" type="checkbox" ${v ? "checked" : ""}>`;
@@ -367,6 +379,14 @@
   function renderProps() {
     if (!D) return;
     if (S.sideTab !== "props") return;
+    const active = document.activeElement;
+    const keep = active && D.props.contains(active) && active.dataset && active.dataset.k ? { k: active.dataset.k, kind: active.dataset.kind || "" } : null;
+    const scroll = D.side ? D.side.scrollTop : 0;
+    renderPropsInner();
+    if (D.side) D.side.scrollTop = scroll;
+    if (keep) { const el = D.props.querySelector(`[data-k="${keep.k}"]${keep.kind ? `[data-kind="${keep.kind}"]` : ':not([data-kind])'}`); if (el) { try { el.focus({ preventScroll: true }); } catch {} } }
+  }
+  function renderPropsInner() {
     const n = S.sel.length === 1 ? S.sel[0] : null;
     if (!n) {
       D.props.innerHTML = S.sel.length > 1
@@ -603,6 +623,17 @@
   // ───────────────────────── pointer interaction ─────────────────────────
   function stagePoint(ev) { const r = D.screen.getBoundingClientRect(); return { x: (ev.clientX - r.left) / S.zoom, y: (ev.clientY - r.top) / S.zoom }; }
   function nodeAt(el) { while (el && el !== D.screen) { if (el.dataset && el.dataset.id) return byId.get(el.dataset.id); el = el.parentElement; } return null; }
+  // Figma-style picking: a plain click selects at the level you are "in" (top-level
+  // first, then siblings of the current selection); double-click drills one level
+  // down; Alt / Ctrl-click grabs the deepest element under the pointer directly.
+  function pickForClick(hit, deep) {
+    if (!hit || deep) return hit;
+    const chain = []; let c = hit; while (c) { chain.unshift(c); c = parentOf(c); }
+    const ctx = new Set();
+    for (const sN of S.sel) { let p = parentOf(sN); while (p) { ctx.add(p.id); p = parentOf(p); } }
+    for (const n of chain) { const p = parentOf(n); if (!p || ctx.has(p.id) || S.sel.includes(n)) return n; }
+    return chain[0];
+  }
   function snapV(v, lines) { if (!S.snap) return v; for (const l of lines) if (Math.abs(v - l) <= 6) return l; if (S.grid) return Math.round(v / GRID) * GRID; return v; }
   function snapLine(v, lines) { if (!S.snap) return v; for (const l of lines) if (Math.abs(v - l) <= 6) return l; return v; }
   function guideLines(exclude) {
@@ -621,7 +652,7 @@
   function onDown(ev) {
     if (ev.button !== 0) return;
     const pt = stagePoint(ev); const target = ev.target;
-    D.screen.setPointerCapture && D.screen.setPointerCapture(ev.pointerId);
+    try { if (D.screen.setPointerCapture && ev.pointerId != null) D.screen.setPointerCapture(ev.pointerId); } catch {}
     const tool = ELEMENT_TOOLS.find((t) => t.id === S.tool);
     if (target.classList && target.classList.contains("rsg-h") && S.sel.length === 1) { // resize
       const n = S.sel[0]; const b = Object.assign({}, geo.get(n.id));
@@ -631,7 +662,7 @@
       const parent = containerAt(pt, new Set());
       drag = { kind: "create", cls: tool.cls, start: pt, parent, pushed: false }; ev.preventDefault(); return;
     }
-    const hit = nodeAt(target);
+    const hit = pickForClick(nodeAt(target), ev.altKey || ev.ctrlKey || ev.metaKey);
     if (hit) {
       if (ev.shiftKey) { S.sel = S.sel.includes(hit) ? S.sel.filter((n) => n !== hit) : S.sel.concat(hit); renderAll(); return; }
       if (!S.sel.includes(hit)) { S.sel = [hit]; renderAll(); }
@@ -642,7 +673,7 @@
     drag = { kind: "marquee", start: pt }; D.marquee.hidden = false;
   }
   function onMove(ev) {
-    if (!drag || drag.kind === "none") { if (!drag) { const n = nodeAt(ev.target); D.status.textContent = n ? `${pathOf(n)} · ${n.class}` : ""; } return; }
+    if (!drag || drag.kind === "none") { if (!drag && D.screen.contains(ev.target)) { const n = nodeAt(ev.target); D.status.textContent = n ? `${pathOf(n)} · ${n.class} · ${Math.round((geo.get(n.id) || {}).w || 0)}×${Math.round((geo.get(n.id) || {}).h || 0)}` : ""; } return; }
     const pt = stagePoint(ev); const dx = pt.x - drag.start.x, dy = pt.y - drag.start.y;
     if (drag.kind === "move") {
       if (!drag.pushed && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) { pushHistory(); drag.pushed = true; }
@@ -840,6 +871,7 @@
     const logo = (window.chrome && chrome.runtime && chrome.runtime.getURL) ? chrome.runtime.getURL("assets/icon128.png") : "";
     host.innerHTML = `
       <div class="rsg-shell">
+        <div class="rsg-toast" role="status" aria-live="polite"></div>
         <div class="rsg-title">
           <span class="rsg-brand"><img class="rsg-logo" alt="" src="${esc(logo)}">ORscript GUI Studio</span>
           <span class="rsg-sub">Design it → build it in Studio</span>
@@ -904,7 +936,7 @@
       </div>`;
     document.documentElement.appendChild(host);
     D = {
-      host, stage: host.querySelector(".rsg-stage"), stageWrap: host.querySelector(".rsg-stage-wrap"), screen: host.querySelector(".rsg-screen"), props: host.querySelector(".rsg-props"), tree: host.querySelector(".rsg-tree"), theme: host.querySelector(".rsg-theme"), code: host.querySelector(".rsg-code"),
+      host, toast: host.querySelector(".rsg-toast"), side: host.querySelector(".rsg-side"), stage: host.querySelector(".rsg-stage"), stageWrap: host.querySelector(".rsg-stage-wrap"), screen: host.querySelector(".rsg-screen"), props: host.querySelector(".rsg-props"), tree: host.querySelector(".rsg-tree"), theme: host.querySelector(".rsg-theme"), code: host.querySelector(".rsg-code"),
       codeJson: host.querySelector(".rsg-code-json"), codeLua: host.querySelector(".rsg-code-lua"), hint: host.querySelector(".rsg-hint-tool"), status: host.querySelector(".rsg-status"), sendStatus: host.querySelector(".rsg-send-status"), zoomLbl: host.querySelector(".rsg-zoom"), countLbl: host.querySelector(".rsg-count"),
       presetSel: host.querySelector(".rsg-preset-sel"), templateSel: host.querySelector(".rsg-template-sel"), deviceSel: host.querySelector(".rsg-device"), screenName: host.querySelector(".rsg-screen-name"), intent: host.querySelector(".rsg-intent"), buildBtn: host.querySelector(".rsg-build"), sendBtn: host.querySelector(".rsg-send"), importBox: host.querySelector(".rsg-import"), importSel: host.querySelector(".rsg-import-sel"),
     };
@@ -941,12 +973,17 @@
       }
     });
     host.addEventListener("input", (e) => { const el = e.target; if (el.dataset.kind === "color" && S.sel.length === 1) { const n = S.sel[0]; setPath(n, el.dataset.k, el.value); renderStage(); } if (el.dataset.tok && el.type === "color") { S.tokens[el.dataset.tok] = el.value; renderStage(); } if (el.classList.contains("rsg-intent")) S.intent = el.value; });
-    D.stage.addEventListener("pointerdown", (e) => { if (e.target === D.stage || e.target === D.stageWrap) { S.sel = []; renderAll(); return; } onDown(e); });
-    D.screen.addEventListener("pointerdown", onDown);
+    D.stage.addEventListener("pointerdown", (e) => { if (e.target === D.stage || e.target === D.stageWrap) { if (S.sel.length) { S.sel = []; renderAll(); } return; } onDown(e); });
     window.addEventListener("pointermove", (e) => { if (S.open) onMove(e); });
     window.addEventListener("pointerup", (e) => { if (S.open) onUp(e); });
     D.stage.addEventListener("wheel", (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1.1 : 1 / 1.1); } }, { passive: false });
-    D.screen.addEventListener("dblclick", (e) => { const n = nodeAt(e.target); if (n && /^(TextLabel|TextButton|TextBox)$/.test(n.class)) { const t = prompt("Text", n.text || ""); if (t != null) { pushHistory(); n.text = t; renderAll(); } } });
+    D.screen.addEventListener("dblclick", (e) => {
+      const deep = nodeAt(e.target); if (!deep) return;
+      const cur = S.sel.length === 1 ? S.sel[0] : null;
+      if (cur && cur !== deep && isDescendant(deep, cur)) { let c = deep; while (parentOf(c) && parentOf(c) !== cur) c = parentOf(c); S.sel = [c]; renderAll(); return; } // drill one level
+      if (cur !== deep) { S.sel = [deep]; renderAll(); return; }
+      if (/^(TextLabel|TextButton|TextBox)$/.test(deep.class)) { const t = prompt("Text", deep.text || ""); if (t != null) { pushHistory(); deep.text = t; renderAll(); } }
+    });
     document.addEventListener("keydown", onKey, true);
     host.addEventListener("pointerdown", (e) => e.stopPropagation());
     host.addEventListener("keydown", (e) => e.stopPropagation());

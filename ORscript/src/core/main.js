@@ -5795,7 +5795,9 @@
   // send path as Paint (text only); "Build in Studio" runs ui_build_spec directly through the tool runner.
   async function guiStudioRunTool(name, args) {
     try { await ensureTools(); } catch {}
-    return runTool({ tool: name, arguments: args || {} });
+    // The user pressed the button themselves: that IS the approval, so the call
+    // must not wait on the bar's Allow prompt (hidden under the overlay).
+    return runTool({ tool: name, arguments: Object.assign({}, args || {}, { _orInternal: true }) });
   }
   function openGuiStudio() {
     if (typeof ORGuiStudio === "undefined") { ui.toast("GUI Studio module missing — reload the extension"); return; }

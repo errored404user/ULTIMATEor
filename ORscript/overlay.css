@@ -7177,6 +7177,10 @@ html.rs-paint-open #rs-root { visibility: hidden !important; }
 #rs-gui button, #rs-gui input, #rs-gui select, #rs-gui textarea { font: inherit; color: inherit; margin: 0; }
 #rs-gui button { cursor: pointer; }
 #rs-gui:focus { outline: none; }
+#rs-gui [hidden] { display: none !important; }
+.rsg-toast { position: absolute; left: 50%; top: 58px; transform: translate(-50%, -8px); z-index: 20; background: rgba(20,22,30,.96); color: #e8e8ec; border: 1px solid rgba(120,160,255,.45); border-radius: 10px; padding: 8px 14px; font-size: 12px; font-weight: 600; box-shadow: 0 10px 30px rgba(0,0,0,.5); opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; max-width: 70%; }
+.rsg-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.rsg-shell { position: relative; }
 html.rs-gui-open #rs-root { visibility: hidden !important; }
 .rsg-shell { width: min(1600px, calc(100vw - 20px)); height: min(960px, calc(100vh - 20px)); display: flex; flex-direction: column; background: #141418; border: 1px solid rgba(120,160,255,.38); border-radius: 14px;
   box-shadow: 0 30px 90px rgba(0,0,0,.65), 0 0 0 1px rgba(0,0,0,.6), 0 0 48px rgba(120,160,255,.12); overflow: hidden; }
@@ -7210,14 +7214,17 @@ html.rs-gui-open #rs-root { visibility: hidden !important; }
 .rsg-rf input { width: 140px; }
 .rsg-hint-tool { font-size: 10.5px; color: #8f8f9a; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rsg-count { font: 10.5px ui-monospace, Consolas, monospace; color: #8f8f9a; }
-.rsg-stage { flex: 1; position: relative; overflow: auto; min-height: 0; background: #0d0d10; background-image: radial-gradient(rgba(255,255,255,.06) 1px, transparent 1px); background-size: 18px 18px; display: grid; place-items: center; padding: 24px; cursor: default; }
+.rsg-stage { flex: 1; position: relative; overflow: auto; min-height: 0; background: #0d0d10; background-image: radial-gradient(rgba(255,255,255,.06) 1px, transparent 1px); background-size: 18px 18px; display: flex; padding: 24px; cursor: default; }
 .rsg-stage[data-tool]:not([data-tool="select"]) { cursor: crosshair; }
-.rsg-stage-wrap { position: relative; flex: none; }
-.rsg-screen { position: absolute; left: 0; top: 0; transform-origin: 0 0; background: var(--rsg-bg, #0f1115); box-shadow: 0 0 0 1px rgba(255,255,255,.18), 0 20px 60px rgba(0,0,0,.6); overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; }
+.rsg-stage-wrap { position: relative; flex: none; margin: auto; }
+.rsg-screen { position: absolute; left: 0; top: 0; transform-origin: 0 0; background: var(--rsg-bg, #0f1115); box-shadow: 0 0 0 1px rgba(255,255,255,.18), 0 20px 60px rgba(0,0,0,.6); overflow: visible; user-select: none; -webkit-user-select: none; touch-action: none; }
+.rsg-empty-stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; color: rgba(255,255,255,.55); font-size: 13px; padding: 24px; pointer-events: none; }
+.rsg-empty-stage b { font-size: 18px; color: rgba(255,255,255,.8); letter-spacing: .04em; }
+.rsg-empty-stage span:last-child { font: 11px ui-monospace, Consolas, monospace; color: rgba(255,255,255,.4); }
 .rsg-screen.grid { background-image: linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px); background-size: 8px 8px, 8px 8px; }
 .rsg-inset { position: absolute; left: 0; right: 0; top: 0; background: repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0 6px, transparent 6px 12px); border-bottom: 1px dashed rgba(255,255,255,.3); pointer-events: none; z-index: 0; }
 .rsg-inset.ghost { opacity: .35; }
-.rsg-n { position: absolute; border: 1px solid transparent; }
+.rsg-n { position: absolute; }
 .rsg-n:hover { outline: 1px solid rgba(120,160,255,.45); }
 .rsg-n.sel { outline: 2px solid #7da0ff; outline-offset: -1px; }
 .rsg-n.inlayout.sel { outline-style: dashed; }
@@ -7227,10 +7234,12 @@ html.rs-gui-open #rs-root { visibility: hidden !important; }
 .rsg-imgph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: rgba(255,255,255,.55); font-size: 10px; pointer-events: none; overflow: hidden; }
 .rsg-imgph svg { width: 22px; height: 22px; opacity: .7; }
 .rsg-scrollbar { position: absolute; right: 0; top: 0; bottom: 0; background: rgba(255,255,255,.18); pointer-events: none; }
-.rsg-h { position: absolute; width: 9px; height: 9px; background: #fff; border: 1.5px solid #4f7cff; border-radius: 2px; z-index: 9999; pointer-events: auto; }
+.rsg-h { position: absolute; width: 9px; height: 9px; background: #fff; border: 1.5px solid #4f7cff; border-radius: 2px; z-index: 9999; pointer-events: auto; transform: scale(var(--rsg-inv, 1)); transform-origin: center; }
+.rsg-h::after { content: ""; position: absolute; inset: -5px; }
 .rsg-h-nw { left: -5px; top: -5px; cursor: nwse-resize; } .rsg-h-n { left: calc(50% - 4px); top: -5px; cursor: ns-resize; } .rsg-h-ne { right: -5px; top: -5px; cursor: nesw-resize; } .rsg-h-e { right: -5px; top: calc(50% - 4px); cursor: ew-resize; }
 .rsg-h-se { right: -5px; bottom: -5px; cursor: nwse-resize; } .rsg-h-s { left: calc(50% - 4px); bottom: -5px; cursor: ns-resize; } .rsg-h-sw { left: -5px; bottom: -5px; cursor: nesw-resize; } .rsg-h-w { left: -5px; top: calc(50% - 4px); cursor: ew-resize; }
-.rsg-tag { position: absolute; left: -1px; bottom: 100%; margin-bottom: 3px; background: #4f7cff; color: #fff; font: 600 10px/1 Inter, system-ui, sans-serif; padding: 3px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; z-index: 9999; }
+.rsg-tag { position: absolute; left: 0; bottom: 100%; margin-bottom: 3px; background: #4f7cff; color: #fff; font: 600 10px/1 Inter, system-ui, sans-serif; padding: 3px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; z-index: 9999; transform: scale(var(--rsg-inv, 1)); transform-origin: left bottom; }
+.rsg-n.sel { outline-width: calc(2px * var(--rsg-inv, 1)); }
 .rsg-marquee { position: absolute; border: 1px dashed #7da0ff; background: rgba(125,160,255,.12); pointer-events: none; z-index: 9998; }
 .rsg-guides i { position: absolute; background: #ff4fa3; pointer-events: none; z-index: 9997; }
 .rsg-guides i.v { top: 0; bottom: 0; width: 1px; } .rsg-guides i.h { left: 0; right: 0; height: 1px; }

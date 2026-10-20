@@ -31,7 +31,7 @@ for (const s of [
   'if (typeof ORGuiStudio === "undefined") { ui.toast("GUI Studio module missing — reload the extension"); return; }',
   "send: (text, onStatus) => sendPainting(text, null, onStatus),",
   "runTool: guiStudioRunTool,",
-  "return runTool({ tool: name, arguments: args || {} });",
+  "return runTool({ tool: name, arguments: Object.assign({}, args || {}, { _orInternal: true }) });",
   "studioReady: () => { try { return currentEngineIsLive(); } catch { return false; } },",
   "window.__rsOpenGuiStudio = openGuiStudio;",
   'gui:{title:"GUI Studio (1.48 visual GUI builder)"',
@@ -46,6 +46,11 @@ ok("Paint shortcut still intact", main.includes('(e.key === "P" || e.key === "p"
 for (const s of ["#rs-gui {", "#rs-gui.open {", "html.rs-gui-open #rs-root { visibility: hidden !important; }", ".rsg-shell {", ".rsg-tools {", ".rsg-stage {", ".rsg-screen {", ".rsg-n.sel {", ".rsg-h-nw {", ".rsg-side {", ".rsg-tab.on {", ".rsg-btn.primary {", ".rsg-btn.accent {", ".rsg-preset {", ".rsg-tr.sel {", ".rsg-marquee {", ".rsg-guides i {", 'html[data-rs-hide~="paint"] #rs-gui-btn { display: none !important; }', ":is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn)"])
   ok("overlay.css has " + s, css.includes(s));
 ok("GUI Studio CSS sits after the Paint block", css.indexOf("#rs-gui {") > css.indexOf("#rs-paint {"));
+ok("[hidden] wins over the display rules inside the overlay (tabs / Build / Import really hide)", css.includes("#rs-gui [hidden] { display: none !important; }"));
+ok("overlay toast + empty-stage styles present", css.includes(".rsg-toast.show {") && css.includes(".rsg-empty-stage {"));
+ok("stage centres the device with margin:auto (no clipped top-left when zoomed in)", css.includes(".rsg-stage-wrap { position: relative; flex: none; margin: auto; }"));
+ok("screen does not clip handles / tags", css.includes("overflow: visible; user-select: none; -webkit-user-select: none; touch-action: none; }"));
+ok("nodes carry no inner border that would shift children", css.includes(".rsg-n { position: absolute; }"));
 ok("no bare paint-only bar selector left behind", !css.includes(":is(#rs-settings-btn, #rs-paint-btn)"));
 
 // ── pack (string level) ──────────────────────────────────────────────────────
@@ -75,12 +80,17 @@ for (const f of ["src/core/skills/studio_skills.js", "src/core/skills/studio_des
 ok("scripts load without window errors", errors.length === 0, errors);
 const G = w.ORGuiStudio;
 ok("window.ORGuiStudio exported", G && typeof G.open === "function" && typeof G.toLuau === "function");
+ok("only the stage binds pointerdown (the screen binding doubled every press)", !studio.includes('D.screen.addEventListener("pointerdown", onDown)') && studio.includes('D.stage.addEventListener("pointerdown", (e) => {'));
+ok("children render relative to the parent box", studio.includes("style=\"left:${box.x - pb.x}px;top:${box.y - pb.y}px;") && studio.includes("map((c) => renderNode(c, box))"));
+ok("prop rows are divs (no nested labels double-toggling checkboxes)", studio.includes('return `<div class="rsg-f" ${hint ? `title="${esc(hint)}"` : ""}><span>${esc(label)}</span>${html}</div>`;'));
+ok("props panel keeps focus + scroll across re-renders", studio.includes("function renderPropsInner()") && studio.includes("el.focus({ preventScroll: true })") && studio.includes("D.side.scrollTop = scroll;"));
 const ev = (src) => { const el = w.document.createElement("script"); el.textContent = "window.__t = (" + src + ");"; w.document.head.appendChild(el); return w.__t; };
 const SK = ev("RobloxScriptSkills");
 ok("hidden ops stay callable through SKILL_OPS", SK.SKILL_OPS.includes("ui_text_fit") && SK.SKILL_OPS.includes("ui_zorder_fix") && SK.hiddenCommandNames().has("ui_zorder_fix") && !SK.hiddenCommandNames().has("ui_build_spec"));
 ok("pack catalogue: 17 ops / 24 component kinds / 10 presets", SK.GUISTUDIO_VERSION === "1.48.0" && SK.GUI_COMPONENT_KINDS.length === 24 && Object.keys(SK.GUI_TOKEN_PRESETS).length === 10, [SK.GUI_COMPONENT_KINDS && SK.GUI_COMPONENT_KINDS.length, SK.GUI_TOKEN_PRESETS && Object.keys(SK.GUI_TOKEN_PRESETS).length]);
 
 const sent = [], calls = [], toasts = [], diags = [];
+const byPath = (g, p) => { let list = g._state.nodes, cur = null; for (const part of p.split(".")) { cur = list.find((n) => n.name === part); if (!cur) return null; list = cur.children; } return cur; };
 const studioSpec = { screen: { name: "Imported" }, preset: "ocean", children: [{ class: "Frame", name: "A", size: [0, 100, 0, 50], children: [{ class: "TextLabel", name: "L", text: "hi", size: [1, 0, 1, 0] }] }] };
 G.open({
   send: async (t, s) => { sent.push(t); s && s("status"); return true; },
@@ -136,7 +146,7 @@ setTimeout(async () => {
     // build in Studio
     host.querySelector('[data-act="build"]').click(); await new Promise((r) => setTimeout(r, 30));
     ok("Build runs ui_build_spec {spec, replace:true} through the hook", calls[0] && calls[0][0] === "ui_build_spec" && calls[0][1].replace === true && calls[0][1].spec.children.length === 4, calls[0] && calls[0][1]);
-    ok("Build success reported", host.querySelector(".rsg-send-status").textContent.includes("Built 7 object(s)") && toasts.includes("Built in Studio"), host.querySelector(".rsg-send-status").textContent);
+    ok("Build success reported in the overlay's own toast (the bar toasts are hidden under it)", host.querySelector(".rsg-send-status").textContent.includes("Built 7 object(s)") && host.querySelector(".rsg-toast").textContent === "Built in Studio" && host.querySelector(".rsg-toast").classList.contains("show") && !toasts.includes("Built in Studio"), host.querySelector(".rsg-toast").textContent);
     // import from Studio
     host.querySelector('[data-act="import"]').click(); await new Promise((r) => setTimeout(r, 30));
     const isel = host.querySelector(".rsg-import-sel");
@@ -155,7 +165,7 @@ setTimeout(async () => {
     ok("send diag recorded with the gui. prefix", diags.includes("gui.sent") && diags.includes("gui.built") && diags.includes("gui.open"), diags);
     // ── pointer interaction: clear, draw a Frame, draw a Button inside it, move, resize, marquee, nudge, dup, delete
     host.querySelector('[data-act="clear"]').click(); G._state.zoom = 1; G._computeGeometry();
-    ok("clear empties the design", G.getSpec().children.length === 0);
+    ok("clear empties the design and shows the empty-stage hint", G.getSpec().children.length === 0 && !!host.querySelector(".rsg-empty-stage"));
     const PE = w.PointerEvent || w.MouseEvent;
     const screen = host.querySelector(".rsg-screen");
     const pe = (type, x, y, extra) => new PE(type, Object.assign({ bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, pointerId: 1 }, extra || {}));
@@ -164,11 +174,14 @@ setTimeout(async () => {
     dragOn(screen, 96, 96, 400, 296);
     let roots = G.getSpec().children;
     ok("drag with the Frame tool creates a 304x200 Frame at 96,96 (grid-snapped)", roots.length === 1 && roots[0].class === "Frame" && roots[0].size[1] === 304 && roots[0].size[3] === 200 && roots[0].position[1] === 96 && roots[0].position[3] === 96, roots[0]);
+    ok("empty-stage hint gone once something exists", !host.querySelector(".rsg-empty-stage"));
     ok("tool returns to Select after a create", host.querySelector(".rsg-stage").dataset.tool === "select" && G._state.tool === "select");
     const frameEl = screen.querySelector(".rsg-n");
     Array.from(host.querySelectorAll(".rsg-tool")).find((b) => b.dataset.tool === "button").click();
     dragOn(frameEl, 120, 120, 280, 168);
     roots = G.getSpec().children;
+    { const fe = screen.querySelector(".rsg-n"), ce = fe.querySelector(".rsg-n");
+      ok("nested child DOM box is relative to its parent (no double offset)", fe.style.left === "96px" && fe.style.top === "96px" && ce && ce.style.left === "24px" && ce.style.top === "24px", [fe.style.left, fe.style.top, ce && ce.style.left, ce && ce.style.top]); }
     ok("button drawn inside the frame nests under it with a relative position", roots.length === 1 && roots[0].children.length === 1 && roots[0].children[0].class === "TextButton" && roots[0].children[0].position[1] === 24 && roots[0].children[0].position[3] === 24 && roots[0].children[0].size[1] === 160 && roots[0].children[0].size[3] === 48, roots[0].children[0]);
     // move the frame by +50,+30 (select tool: pointerdown on the frame element itself)
     G._state.sel = []; G._computeGeometry();
@@ -184,6 +197,23 @@ setTimeout(async () => {
     // marquee on empty space selects everything inside
     dragOn(screen, 20, 20, 700, 600);
     ok("marquee selects the frame (not its child twice)", G._state.sel.length === 1 && G._state.sel[0].class === "Frame", G._state.sel.map((x) => x.class));
+    // Shift+click toggles membership exactly once per press (pointerdown used to run twice)
+    { const fe = screen.querySelector(".rsg-n"); const ce = fe.querySelector(".rsg-n");
+      ce.dispatchEvent(pe("pointerdown", 200, 200, {})); w.dispatchEvent(pe("pointerup", 200, 200, {}));
+      ok("plain click on a nested child selects its top-level parent first (Figma-style)", G._state.sel.length === 1 && G._state.sel[0].class === "Frame", G._state.sel.map((x) => x.class));
+      screen.querySelector(".rsg-n .rsg-n").dispatchEvent(new w.MouseEvent("dblclick", { bubbles: true }));
+      ok("double-click drills into the child", G._state.sel.length === 1 && G._state.sel[0].class === "TextButton", G._state.sel.map((x) => x.class));
+      G._state.sel = []; G._computeGeometry(); screen.querySelector(".rsg-n .rsg-n") && null;
+      const ce1 = screen.querySelector(".rsg-n .rsg-n");
+      ce1.dispatchEvent(pe("pointerdown", 200, 200, { altKey: true })); w.dispatchEvent(pe("pointerup", 200, 200, { altKey: true }));
+      ok("Alt+click grabs the deepest element directly", G._state.sel.length === 1 && G._state.sel[0].class === "TextButton", G._state.sel.map((x) => x.class));
+      const fe2 = screen.querySelector(".rsg-n");
+      fe2.dispatchEvent(pe("pointerdown", 100, 100, { shiftKey: true })); w.dispatchEvent(pe("pointerup", 100, 100, { shiftKey: true }));
+      ok("Shift+click adds the frame to the selection (exactly once per press)", G._state.sel.length === 2, G._state.sel.map((x) => x.class));
+      screen.querySelector(".rsg-n").dispatchEvent(pe("pointerdown", 100, 100, { shiftKey: true })); w.dispatchEvent(pe("pointerup", 100, 100, { shiftKey: true }));
+      ok("Shift+click again removes it", G._state.sel.length === 1 && G._state.sel[0].class === "TextButton", G._state.sel.map((x) => x.class));
+      G._state.sel = [byPath(G, "MainPanel") || G._state.nodes[0]]; }
+    G._state.sel = [G._state.nodes[0]]; G._computeGeometry();
     // keyboard nudge
     host.dispatchEvent(new w.KeyboardEvent("keydown", { key: "ArrowRight", shiftKey: true, bubbles: true }));
     host.dispatchEvent(new w.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
