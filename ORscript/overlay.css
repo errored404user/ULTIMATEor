@@ -7221,6 +7221,28 @@ html.rs-gui-open #rs-root { visibility: hidden !important; }
 .rsg-empty-stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; color: rgba(255,255,255,.55); font-size: 13px; padding: 24px; pointer-events: none; }
 .rsg-empty-stage b { font-size: 18px; color: rgba(255,255,255,.8); letter-spacing: .04em; }
 .rsg-empty-stage span:last-child { font: 11px ui-monospace, Consolas, monospace; color: rgba(255,255,255,.4); }
+.rsg-empty-stage span b { color: rgba(255,255,255,.85); font-size: inherit; letter-spacing: 0; }
+.rsg-start { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 560px; margin: 4px 0 10px; pointer-events: auto; }
+.rsg-start button { padding: 10px 16px; border-radius: 10px; border: 1px solid rgba(120,160,255,.45); background: rgba(120,160,255,.14); color: #dfe8ff; font-weight: 700; font-size: 13px; cursor: pointer; }
+.rsg-start button:hover { background: rgba(120,160,255,.3); color: #fff; }
+/* Simple / Advanced */
+.rsg-mode { display: inline-flex; border: 1px solid rgba(255,255,255,.14); border-radius: 9px; overflow: hidden; margin-left: 6px; }
+.rsg-mode button { padding: 5px 11px; border: 0; background: transparent; color: #a9a9b4; font-weight: 700; font-size: 11px; letter-spacing: .04em; }
+.rsg-mode button.on { background: linear-gradient(180deg, rgba(120,160,255,.35), rgba(120,160,255,.18)); color: #fff; }
+#rs-gui.rsg-simple .rsg-adv { display: none !important; }
+#rs-gui.rsg-simple .rsg-tools-full { display: none !important; }
+#rs-gui:not(.rsg-simple) .rsg-tools-simple { display: none !important; }
+#rs-gui.rsg-simple .rsg-body { grid-template-columns: 168px minmax(0, 1fr) 320px; }
+.rsg-tools-simple, .rsg-tools-full { display: flex; flex-direction: column; gap: 3px; }
+.rsg-add { display: flex; align-items: center; gap: 9px; padding: 8px 9px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.05); color: #e8e8ec; text-align: left; }
+.rsg-add svg { width: 20px; height: 20px; flex: none; color: #9db5ff; }
+.rsg-add span { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.rsg-add b { font-size: 12px; } .rsg-add small { font-size: 9.5px; color: #8f8f9a; }
+.rsg-add:hover { background: rgba(120,160,255,.18); border-color: rgba(120,160,255,.5); }
+.rsg-comp.rsg-comp-lg { padding: 7px 9px; font-size: 11.5px; text-transform: none; }
+.rsg-steps { margin: 0; padding-left: 18px; font-size: 11.5px; line-height: 1.5; color: #c4c4cd; }
+.rsg-steps li { margin: 4px 0; } .rsg-steps b { color: #dfe8ff; }
+#rs-gui.rsg-simple .rsg-foot .rsg-intent { min-width: 160px; }
 .rsg-screen.grid { background-image: linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px); background-size: 8px 8px, 8px 8px; }
 .rsg-inset { position: absolute; left: 0; right: 0; top: 0; background: repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0 6px, transparent 6px 12px); border-bottom: 1px dashed rgba(255,255,255,.3); pointer-events: none; z-index: 0; }
 .rsg-inset.ghost { opacity: .35; }

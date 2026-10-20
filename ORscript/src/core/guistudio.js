@@ -85,6 +85,18 @@
     { id: "scroll", label: "Scroll", key: "S", cls: "ScrollingFrame", hint: "Drag out a ScrollingFrame." },
     { id: "canvas", label: "Canvas", key: "C", cls: "CanvasGroup", hint: "Drag out a CanvasGroup (group fades)." },
   ];
+  // Simple mode: click-to-add elements and a short list of components with plain names.
+  const SIMPLE_ELEMENTS = [
+    { cls: "TextButton", label: "Button", sub: "something to click", icon: "button" },
+    { cls: "TextLabel", label: "Text", sub: "a label or title", icon: "text" },
+    { cls: "Frame", label: "Panel", sub: "a box to hold things", icon: "frame" },
+    { cls: "ImageLabel", label: "Image", sub: "icon or picture", icon: "image" },
+    { cls: "TextBox", label: "Text input", sub: "the player types here", icon: "textbox" },
+    { cls: "ScrollingFrame", label: "Scrolling list", sub: "scrolls when full", icon: "scroll" },
+  ];
+  const SIMPLE_COMPONENTS = [["window", "Window"], ["modal", "Popup dialog"], ["toggle", "On / off switch"], ["slider", "Slider"], ["progress_bar", "Progress bar"], ["health_bar", "Health bar"], ["currency_hud", "Coins counter"], ["hotbar", "Hotbar"], ["card", "Shop card"], ["tabs", "Tabs"], ["toast", "Notification"], ["title", "Big title"]];
+  const FRIENDLY = { Frame: "Panel", TextLabel: "Text", TextButton: "Button", ImageLabel: "Image", ImageButton: "Image button", TextBox: "Text input", ScrollingFrame: "Scrolling list", CanvasGroup: "Group" };
+  const DEFAULT_SIZE = { Frame: [320, 200], TextLabel: [240, 40], TextButton: [200, 52], ImageLabel: [120, 120], ImageButton: [64, 64], TextBox: [260, 44], ScrollingFrame: [300, 240], CanvasGroup: [320, 200] };
   const CLASS_ICON = { Frame: "frame", TextLabel: "text", TextButton: "button", ImageLabel: "image", ImageButton: "ibutton", TextBox: "textbox", ScrollingFrame: "scroll", CanvasGroup: "canvas" };
   const CLASSES = Object.keys(CLASS_ICON);
   const FONTS = ["Gotham", "GothamMedium", "GothamBold", "GothamBlack", "SourceSans", "SourceSansBold", "Arial", "ArialBold", "Roboto", "RobotoMono", "FredokaOne", "Bangers", "Arcade", "PressStart2P", "Creepster", "Garamond", "Antique", "Merriweather", "Nunito", "Oswald", "Ubuntu", "Michroma", "Jura", "Fantasy", "Sarpanch", "Highway", "Bodoni", "SciFi", "Code", "Cartoon", "Legacy"];
@@ -110,6 +122,7 @@
     preset: "midnight", tokens: Object.assign({}, FALLBACK_PRESETS.midnight),
     nodes: [], sel: [], history: [], redo: [], clipboard: null, sideTab: "props", intent: "",
     studioScreens: [],
+    simple: (() => { try { return localStorage.getItem("rsg-mode") !== "advanced"; } catch { return true; } })(),
   };
   const byId = new Map();
   let D = null; // DOM refs
@@ -342,7 +355,7 @@
     D.screen.style.setProperty("--rsg-bg", tokenColor("bg", "#0f1115"));
     const inset = S.screen.ignore_inset === false ? `<div class="rsg-inset" style="height:${d.inset}px"></div>` : `<div class="rsg-inset ghost" style="height:${d.inset}px"></div>`;
     const roots = S.nodes.slice().sort((a, b) => (a.z || 1) - (b.z || 1)).map((r) => renderNode(r, null)).join("");
-    const empty = S.nodes.length ? "" : `<div class="rsg-empty-stage"><b>Empty screen</b><span>Pick an element on the left and drag it out here, click a component to drop it, or choose a template above.</span><span>V select · F frame · B button · T text · I image · Shift+drag multi-select · Del delete · Ctrl+Z undo</span></div>`;
+    const empty = S.nodes.length ? "" : `<div class="rsg-empty-stage"><b>Start with a ready screen</b><div class="rsg-start">${TEMPLATES.map((t) => `<button type="button" data-tpl="${t.id}">${esc(t.label)}</button>`).join("")}</div><span>…or add your own: ${S.simple ? "click <b>Button</b>, <b>Text</b> or <b>Panel</b> on the left" : "pick a tool on the left and drag it out here"}.</span>${S.simple ? "" : `<span>V select · F frame · B button · T text · I image · Shift+drag multi-select · Del delete · Ctrl+Z undo</span>`}</div>`;
     D.screen.innerHTML = inset + roots + empty + `<div class="rsg-marquee" hidden></div><div class="rsg-guides"></div>`;
     D.marquee = D.screen.querySelector(".rsg-marquee"); D.guides = D.screen.querySelector(".rsg-guides");
     D.stageWrap.style.width = Math.round(d.w * S.zoom) + "px"; D.stageWrap.style.height = Math.round(d.h * S.zoom) + "px";
@@ -386,8 +399,73 @@
     if (D.side) D.side.scrollTop = scroll;
     if (keep) { const el = D.props.querySelector(`[data-k="${keep.k}"]${keep.kind ? `[data-kind="${keep.kind}"]` : ':not([data-kind])'}`); if (el) { try { el.focus({ preventScroll: true }); } catch {} } }
   }
+  function targetOptions(n) {
+    const out = [];
+    const walk = (list) => { for (const x of list) { if (x !== n && !isDescendant(x, n)) out.push({ value: "gui." + pathOf(x), label: x.name + " (" + (FRIENDLY[x.class] || x.class) + ")" }); walk(x.children || []); } };
+    walk(S.nodes); return out;
+  }
+  function renderPropsSimple(n) {
+    const isText = /^(TextLabel|TextButton|TextBox)$/.test(n.class), isImg = /^(ImageLabel|ImageButton)$/.test(n.class), isBtn = /Button$/.test(n.class);
+    const box = geo.get(n.id) || { x: 0, y: 0, w: 0, h: 0 };
+    const pc = parentContent(n);
+    const bgHidden = n.bg_t != null ? tokenNum(n.bg_t, 0) >= 1 : (n.bg == null && n.class === "TextLabel");
+    const a0 = (n.actions || [])[0] || null;
+    const simpleDos = [["", "nothing"], ["open", "open something"], ["close", "close something"], ["toggle", "show / hide something"], ["destroy", "remove something"], ["pulse", "pulse (attention)"]];
+    const tOpts = targetOptions(n);
+    const sk = (k, v, type = "text", extra = "") => `<input data-sk="${k}" type="${type}" value="${esc(v == null ? "" : v)}" ${extra}>`;
+    D.props.innerHTML = `
+      <div class="rsg-sec"><h4>${esc(FRIENDLY[n.class] || n.class)} <small>${esc(pathOf(n))}</small></h4>
+        ${field("Name", sk("name", n.name), "How it is called in Studio")}
+        ${isText ? field("Text", `<textarea data-sk="text" rows="2">${esc(n.text || "")}</textarea>`) : ""}
+        ${isImg ? field("Image id", sk("image", n.image || "", "text", 'placeholder="rbxassetid://… or a number"')) : ""}
+      </div>
+      <div class="rsg-sec"><h4>Look</h4>
+        ${field("Fill colour", `<span class="rsg-color"><input data-sk="bg" type="color" value="${esc(tokenColor(n.bg, "#1f2430") || "#1f2430")}"><label class="rsg-mini"><input data-sk="bg_none" type="checkbox" ${bgHidden ? "checked" : ""}> no fill</label></span>`)}
+        ${isText ? field("Text colour", `<input data-sk="text_color" type="color" value="${esc(tokenColor(n.text_color || "text", "#ffffff"))}">`) : ""}
+        ${isText ? field("Text size", `<span class="rsg-inline">${sk("text_size", n.text_size != null ? n.text_size : "", "number", 'min="6" placeholder="auto"')}<span class="rsg-mini">px (empty = fit)</span></span>`) : ""}
+        ${field("Rounded corners", `<span class="rsg-inline">${sk("corner", n.corner != null ? (typeof n.corner === "number" ? n.corner : tokenNum(n.corner, 10)) : 0, "number", 'min="0"')}<span class="rsg-mini">px</span></span>`)}
+        ${field("Visible", `<input data-sk="visible" type="checkbox" ${n.visible === false ? "" : "checked"}>`)}
+      </div>
+      <div class="rsg-sec"><h4>Size &amp; place <small>or just drag it</small></h4>
+        ${field("Width × Height", `<span class="rsg-inline">${sk("w", Math.round(box.w), "number", 'min="1"')}${sk("h", Math.round(box.h), "number", 'min="1"')}</span>`)}
+        ${inLayout(n) ? `<p class="rsg-hint">Placed automatically by its parent's layout.</p>` : field("X · Y", `<span class="rsg-inline">${sk("x", Math.round(box.x - pc.x), "number")}${sk("y", Math.round(box.y - pc.y), "number")}</span>`, "Pixels from the top-left of the parent")}
+        <div class="rsg-row"><button type="button" class="rsg-btn sm" data-act="centerInParent">Centre it</button><button type="button" class="rsg-btn sm" data-act="fillParent">Fill the screen</button></div>
+      </div>
+      ${isBtn ? `<div class="rsg-sec"><h4>When clicked</h4>
+        ${field("Do", `<select data-sk="act_do">${simpleDos.map(([v, l]) => `<option value="${v}" ${(a0 ? a0.do : "") === v ? "selected" : ""}>${l}</option>`).join("")}</select>`)}
+        ${a0 && a0.do && a0.do !== "pulse" ? field("Which one", `<select data-sk="act_target"><option value="">pick an element…</option>${tOpts.map((o) => `<option value="${esc(o.value)}" ${a0.target === o.value ? "selected" : ""}>${esc(o.label)}</option>`).join("")}</select>`, "Add a Window or Panel first, then pick it here") : ""}
+        <p class="rsg-hint">Anything more (sounds, remotes, tweens) — ask the AI in the box below, or switch to Advanced.</p>
+      </div>` : ""}
+      <div class="rsg-sec">
+        <div class="rsg-row"><button type="button" class="rsg-btn sm" data-act="dup">${I.dup} Duplicate</button><button type="button" class="rsg-btn sm danger" data-act="delete">${I.trash} Delete</button><button type="button" class="rsg-btn sm" data-mode="advanced">More options…</button></div>
+      </div>`;
+  }
+  function applySimple(n, k, el) {
+    const v = el.value;
+    if (k === "name") { n.name = v.trim() || n.class; reindex(); return; }
+    if (k === "text") { n.text = v; return; }
+    if (k === "image") { n.image = v.trim(); return; }
+    if (k === "bg") { n.bg = v; if (n.bg_t != null && tokenNum(n.bg_t, 0) >= 1) delete n.bg_t; return; }
+    if (k === "bg_none") { if (el.checked) n.bg_t = 1; else { delete n.bg_t; if (n.bg == null) n.bg = "surface"; } return; }
+    if (k === "text_color") { n.text_color = v; return; }
+    if (k === "text_size") { if (v === "") { delete n.text_size; n.text_scaled = true; } else { n.text_size = Math.max(6, Number(v) || 16); delete n.text_scaled; } return; }
+    if (k === "corner") { const c = Number(v) || 0; if (c <= 0) delete n.corner; else n.corner = c; return; }
+    if (k === "visible") { if (el.checked) delete n.visible; else n.visible = false; return; }
+    if (k === "w" || k === "h" || k === "x" || k === "y") {
+      computeGeometry(); const b = Object.assign({}, geo.get(n.id)); const pc = parentContent(n); const num = Number(v) || 0;
+      if (k === "w") b.w = Math.max(1, num); if (k === "h") b.h = Math.max(1, num); if (k === "x") b.x = pc.x + num; if (k === "y") b.y = pc.y + num;
+      setBox(n, b); return;
+    }
+    if (k === "act_do") { if (!v) { delete n.actions; return; } n.actions = n.actions || []; const a = n.actions[0] || { on: "click" }; a.on = "click"; a.do = v; if (v === "pulse") { delete a.target; a.seconds = 3; } n.actions[0] = a; return; }
+    if (k === "act_target") { if (n.actions && n.actions[0]) { if (v) n.actions[0].target = v; else delete n.actions[0].target; } return; }
+  }
   function renderPropsInner() {
     const n = S.sel.length === 1 ? S.sel[0] : null;
+    if (S.simple && n) { renderPropsSimple(n); return; }
+    if (S.simple && !n && S.sel.length < 2) {
+      D.props.innerHTML = `<div class="rsg-sec"><h4>How it works</h4><ol class="rsg-steps"><li>Click <b>Button</b>, <b>Text</b>, <b>Panel</b>… on the left — it appears in the middle of the screen.</li><li>Drag it where you want; drag a corner to resize. Click it to edit text and colours here.</li><li>Pick a <b>Theme</b> above to recolour everything.</li><li>Press <b>Build in Studio</b> to see it in Roblox, or <b>Send to AI</b> to have it scripted.</li></ol><p class="rsg-hint">Double-click text to edit it · Delete removes · Ctrl+Z undoes · Shift+click selects several.</p><div class="rsg-row"><button type="button" class="rsg-btn sm" data-mode="advanced">Advanced mode</button></div></div>`;
+      return;
+    }
     if (!n) {
       D.props.innerHTML = S.sel.length > 1
         ? `<div class="rsg-sec"><h4>${S.sel.length} selected</h4><div class="rsg-row rsg-align"><button type="button" data-act="align:left" title="Align left">${I.align_l}</button><button type="button" data-act="align:center_x" title="Align centre X">${I.align_cx}</button><button type="button" data-act="align:right" title="Align right">${I.align_r}</button><button type="button" data-act="align:top" title="Align top">${I.align_t}</button><button type="button" data-act="align:center_y" title="Align centre Y">${I.align_cy}</button><button type="button" data-act="align:bottom" title="Align bottom">${I.align_b}</button><button type="button" data-act="dist:x" title="Distribute horizontally">${I.dist_x}</button><button type="button" data-act="dist:y" title="Distribute vertically">${I.dist_y}</button></div><div class="rsg-row"><button type="button" class="rsg-btn" data-act="group">Group into Frame</button><button type="button" class="rsg-btn" data-act="sameSize">Same size</button><button type="button" class="rsg-btn danger" data-act="delete">Delete</button></div></div>`
@@ -575,6 +653,22 @@
     reindex(); S.sel = [node]; renderAll();
     diag("component", { kind });
   }
+  function insertElement(cls) {
+    pushHistory();
+    const node = makeNode(cls, {});
+    const parent = S.sel.length === 1 && /^(Frame|ScrollingFrame|CanvasGroup)$/.test(S.sel[0].class) ? S.sel[0] : (S.sel.length === 1 ? parentOf(S.sel[0]) : null);
+    const list = parent ? parent.children : S.nodes;
+    const base = cls === "TextLabel" ? "Label" : cls === "TextButton" ? "Button" : cls === "ImageLabel" ? "Image" : cls === "ImageButton" ? "IconButton" : cls === "TextBox" ? "Input" : cls === "ScrollingFrame" ? "List" : cls === "CanvasGroup" ? "Group" : "Panel";
+    node.name = uniqueName(list, base);
+    const sz = DEFAULT_SIZE[cls] || [200, 50];
+    const pc = parent ? contentOf(geo.get(parent.id) || screenBox(), parent) : screenBox();
+    node.size = [0, sz[0], 0, sz[1]];
+    node.position = parent && parent.layout ? [0, 0, 0, 0] : [0, Math.round((pc.w - sz[0]) / 2), 0, Math.round((pc.h - sz[1]) / 2)];
+    list.push(node); node._parent = parent ? parent.id : null;
+    reindex(); S.sel = [node]; setTool("select"); renderAll();
+    toast(`${FRIENDLY[cls] || cls} added — drag it to move, drag a corner to resize`);
+    diag("create", { cls, nested: !!parent, click: true });
+  }
   function uniqueName(list, base) { let name = base, i = 2; while (list.some((n) => n.name === name)) name = base + i++; return name; }
 
   // ───────────────────────── editing ops ─────────────────────────
@@ -651,6 +745,7 @@
   }
   function onDown(ev) {
     if (ev.button !== 0) return;
+    if (ev.target.closest && ev.target.closest(".rsg-start")) return;
     const pt = stagePoint(ev); const target = ev.target;
     try { if (D.screen.setPointerCapture && ev.pointerId != null) D.screen.setPointerCapture(ev.pointerId); } catch {}
     const tool = ELEMENT_TOOLS.find((t) => t.id === S.tool);
@@ -745,7 +840,7 @@
     if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSel(); return; }
     if (/^Arrow/.test(e.key) && S.sel.length) { e.preventDefault(); const step = e.shiftKey ? 10 : 1; const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0, dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0; pushHistory(); for (const n of S.sel) { if (inLayout(n)) continue; const b = Object.assign({}, geo.get(n.id)); b.x += dx; b.y += dy; setBox(n, b); } renderAll(); return; }
     if (e.key === "+" || e.key === "=") { zoomBy(1.2); return; } if (e.key === "-") { zoomBy(1 / 1.2); return; } if (e.key === "0") { fitZoom(); return; }
-    const t = ELEMENT_TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase()); if (t && !mod) setTool(t.id);
+    const t = ELEMENT_TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase()); if (t && !mod) { if (S.simple && t.cls) insertElement(t.cls); else setTool(t.id); }
   }
 
   // ───────────────────────── luau export ─────────────────────────
@@ -856,7 +951,17 @@
   function setStatus(m) { if (D) D.sendStatus.textContent = m || ""; }
 
   // ───────────────────────── view helpers ─────────────────────────
-  function setTool(id) { S.tool = id; D.host.querySelectorAll(".rsg-tool").forEach((b) => b.classList.toggle("on", b.dataset.tool === id)); D.stage.dataset.tool = id; const t = ELEMENT_TOOLS.find((x) => x.id === id); D.hint.textContent = t ? t.hint : ""; }
+  function setMode(m) {
+    S.simple = m !== "advanced";
+    try { localStorage.setItem("rsg-mode", S.simple ? "simple" : "advanced"); } catch {}
+    if (!D) return;
+    D.host.classList.toggle("rsg-simple", S.simple);
+    D.host.querySelectorAll(".rsg-mode button").forEach((b) => b.classList.toggle("on", (b.dataset.mode === "advanced") !== S.simple));
+    if (S.simple && S.sideTab === "code") setSideTab("props");
+    setTool("select"); renderAll();
+    diag("mode", { simple: S.simple });
+  }
+  function setTool(id) { S.tool = id; D.host.querySelectorAll(".rsg-tool").forEach((b) => b.classList.toggle("on", b.dataset.tool === id)); D.stage.dataset.tool = id; const t = ELEMENT_TOOLS.find((x) => x.id === id); D.hint.textContent = S.simple ? (S.nodes.length ? "Click an element to edit it · drag to move · corners resize" : "Click something on the left to add it, or pick a template") : (t ? t.hint : ""); }
   function setDevice(id) { S.device = DEVICES.find((d) => d.id === id) || DEVICES[2]; fitZoom(); }
   function fitZoom() { const r = D.stage.getBoundingClientRect(); const z = Math.min((r.width - 48) / S.device.w, (r.height - 48) / S.device.h); S.zoom = clamp(z || 1, 0.15, 3); renderStage(); D.zoomLbl.textContent = Math.round(S.zoom * 100) + "%"; }
   function zoomBy(f) { S.zoom = clamp(S.zoom * f, 0.15, 4); renderStage(); D.zoomLbl.textContent = Math.round(S.zoom * 100) + "%"; }
@@ -868,13 +973,17 @@
     const host = document.createElement("div"); host.id = "rs-gui"; host.setAttribute("role", "dialog"); host.setAttribute("aria-label", "ORscript GUI Studio");
     const tools = ELEMENT_TOOLS.map((t) => `<button type="button" class="rsg-tool" data-tool="${t.id}" title="${esc(t.label)} (${t.key}) — ${esc(t.hint)}">${I[t.id]}<span>${esc(t.label)}</span></button>`).join("");
     const comps = componentKinds().map((k) => `<button type="button" class="rsg-comp" data-comp="${k}" title="Insert ${k.replace(/_/g, " ")}">${esc(k.replace(/_/g, " "))}</button>`).join("");
+    const kinds = componentKinds();
+    const simpleAdd = SIMPLE_ELEMENTS.map((t) => `<button type="button" class="rsg-add" data-add="${t.cls}" title="Add a ${esc(t.label)}">${I[t.icon]}<span><b>${esc(t.label)}</b><small>${esc(t.sub)}</small></span></button>`).join("");
+    const simpleComps = SIMPLE_COMPONENTS.filter(([k]) => !kinds.length || kinds.includes(k)).map(([k, l]) => `<button type="button" class="rsg-comp rsg-comp-lg" data-comp="${k}" title="Add a ${esc(l)}">${esc(l)}</button>`).join("");
     const logo = (window.chrome && chrome.runtime && chrome.runtime.getURL) ? chrome.runtime.getURL("assets/icon128.png") : "";
     host.innerHTML = `
       <div class="rsg-shell">
         <div class="rsg-toast" role="status" aria-live="polite"></div>
         <div class="rsg-title">
           <span class="rsg-brand"><img class="rsg-logo" alt="" src="${esc(logo)}">ORscript GUI Studio</span>
-          <span class="rsg-sub">Design it → build it in Studio</span>
+          <span class="rsg-mode" title="Simple: click to add, few options. Advanced: every property, drag-to-draw tools, code."><button type="button" data-mode="simple" class="${S.simple ? "on" : ""}">Simple</button><button type="button" data-mode="advanced" class="${S.simple ? "" : "on"}">Advanced</button></span>
+          <span class="rsg-sub rsg-adv">Design it → build it in Studio</span>
           <div class="rsg-title-actions">
             <button type="button" class="rsg-ib" data-act="undo" title="Undo (Ctrl+Z)">${I.undo}</button>
             <button type="button" class="rsg-ib" data-act="redo" title="Redo (Ctrl+Y)">${I.redo}</button>
@@ -885,13 +994,13 @@
             <button type="button" class="rsg-ib" data-act="zoomIn" title="Zoom in (+)">${I.zoomIn}</button>
             <span class="rsg-zoom">100%</span>
             <span class="rsg-sep"></span>
-            <button type="button" class="rsg-ib tgl on" data-act="grid" title="Grid (8 px)">${I.grid}</button>
-            <button type="button" class="rsg-ib tgl on" data-act="snap" title="Snap to grid + guides">${I.magnet}</button>
-            <span class="rsg-sep"></span>
-            <button type="button" class="rsg-ib" data-act="import" title="Import a ScreenGui from the open Studio place">${I.import}</button>
-            <button type="button" class="rsg-ib" data-act="open" title="Open a saved design (.orgui.json)">${I.open}</button>
-            <button type="button" class="rsg-ib" data-act="save" title="Save design as JSON (Ctrl+S)">${I.save}</button>
-            <button type="button" class="rsg-ib" data-act="copyLua" title="Copy a ready-to-paste Luau builder script">${I.code}</button>
+            <button type="button" class="rsg-ib tgl on rsg-adv" data-act="grid" title="Grid (8 px)">${I.grid}</button>
+            <button type="button" class="rsg-ib tgl on rsg-adv" data-act="snap" title="Snap to grid + guides">${I.magnet}</button>
+            <span class="rsg-sep rsg-adv"></span>
+            <button type="button" class="rsg-ib rsg-adv" data-act="import" title="Import a ScreenGui from the open Studio place">${I.import}</button>
+            <button type="button" class="rsg-ib rsg-adv" data-act="open" title="Open a saved design (.orgui.json)">${I.open}</button>
+            <button type="button" class="rsg-ib rsg-adv" data-act="save" title="Save design as JSON (Ctrl+S)">${I.save}</button>
+            <button type="button" class="rsg-ib rsg-adv" data-act="copyLua" title="Copy a ready-to-paste Luau builder script">${I.code}</button>
             <button type="button" class="rsg-ib" data-act="clear" title="Clear the design">${I.clear}</button>
             <span class="rsg-sep"></span>
             <button type="button" class="rsg-ib rsg-close" data-act="close" title="Close (Esc)">${I.close}</button>
@@ -899,12 +1008,18 @@
         </div>
         <div class="rsg-body">
           <div class="rsg-tools">
-            <div class="rsg-tools-h">Elements</div>${tools}
-            <div class="rsg-tools-h">Components</div><div class="rsg-comps">${comps || '<div class="rsg-empty">Component pack not loaded</div>'}</div>
+            <div class="rsg-tools-simple">
+              <div class="rsg-tools-h">Add</div>${simpleAdd}
+              <div class="rsg-tools-h">Ready-made</div><div class="rsg-comps">${simpleComps || '<div class="rsg-empty">Component pack not loaded</div>'}</div>
+            </div>
+            <div class="rsg-tools-full">
+              <div class="rsg-tools-h">Elements</div>${tools}
+              <div class="rsg-tools-h">Components</div><div class="rsg-comps">${comps || '<div class="rsg-empty">Component pack not loaded</div>'}</div>
+            </div>
           </div>
           <div class="rsg-main">
             <div class="rsg-ribbon">
-              <label class="rsg-rf"><span>Screen</span><input class="rsg-screen-name" value="${esc(S.screen.name)}" title="ScreenGui name"></label>
+              <label class="rsg-rf rsg-adv"><span>Screen</span><input class="rsg-screen-name" value="${esc(S.screen.name)}" title="ScreenGui name"></label>
               <label class="rsg-rf"><span>Theme</span><select class="rsg-preset-sel">${Object.keys(presets()).map((k) => `<option value="${k}" ${k === S.preset ? "selected" : ""}>${esc(k.replace(/_/g, " "))}</option>`).join("")}</select></label>
               <label class="rsg-rf"><span>Template</span><select class="rsg-template-sel"><option value="">Pick a screen…</option>${TEMPLATES.map((t) => `<option value="${t.id}">${esc(t.label)}</option>`).join("")}</select></label>
               <span class="rsg-hint-tool"></span>
@@ -921,7 +1036,7 @@
             </div>
           </div>
           <div class="rsg-side">
-            <div class="rsg-tabs"><button type="button" class="rsg-tab on" data-tab="props">Props</button><button type="button" class="rsg-tab" data-tab="tree">Tree</button><button type="button" class="rsg-tab" data-tab="theme">Theme</button><button type="button" class="rsg-tab" data-tab="code">Code</button></div>
+            <div class="rsg-tabs"><button type="button" class="rsg-tab on" data-tab="props">Props</button><button type="button" class="rsg-tab" data-tab="tree">Tree</button><button type="button" class="rsg-tab" data-tab="theme">Theme</button><button type="button" class="rsg-tab rsg-adv" data-tab="code">Code</button></div>
             <div class="rsg-props"></div>
             <div class="rsg-tree" hidden></div>
             <div class="rsg-theme" hidden></div>
@@ -934,6 +1049,7 @@
           </div>
         </div>
       </div>`;
+    host.classList.toggle("rsg-simple", S.simple);
     document.documentElement.appendChild(host);
     D = {
       host, toast: host.querySelector(".rsg-toast"), side: host.querySelector(".rsg-side"), stage: host.querySelector(".rsg-stage"), stageWrap: host.querySelector(".rsg-stage-wrap"), screen: host.querySelector(".rsg-screen"), props: host.querySelector(".rsg-props"), tree: host.querySelector(".rsg-tree"), theme: host.querySelector(".rsg-theme"), code: host.querySelector(".rsg-code"),
@@ -942,6 +1058,9 @@
     };
     // events
     host.addEventListener("click", (e) => {
+      const md = e.target.closest("[data-mode]"); if (md) { setMode(md.dataset.mode); return; }
+      const ad = e.target.closest("[data-add]"); if (ad) { insertElement(ad.dataset.add); return; }
+      const tp = e.target.closest("[data-tpl]"); if (tp) { if (!S.nodes.length || confirm("Replace the current design with this template?")) applyTemplate(tp.dataset.tpl); return; }
       const tb = e.target.closest("[data-tool]"); if (tb) { setTool(tb.dataset.tool); return; }
       const cb = e.target.closest("[data-comp]"); if (cb) { insertComponent(cb.dataset.comp); return; }
       const tab = e.target.closest(".rsg-tab"); if (tab) { setSideTab(tab.dataset.tab); return; }
@@ -961,6 +1080,7 @@
       if (el.classList.contains("rsg-intent")) { S.intent = el.value; return; }
       if (el.classList.contains("rsg-import-sel")) return;
       if (el.dataset.tok) { pushHistory(); const k = el.dataset.tok; S.tokens[k] = el.type === "number" ? Number(el.value) : el.value; if (el.type === "color" || el.dataset.kind === "raw") { const peer = D.theme.querySelector(`[data-tok="${k}"]${el.type === "color" ? '[data-kind="raw"]' : ':not([data-kind])'}`); if (peer) peer.value = el.value; } renderAll(); return; }
+      if (el.dataset.sk != null && S.sel.length === 1) { pushHistory(); applySimple(S.sel[0], el.dataset.sk, el); renderAll(); return; }
       if (el.dataset.ak != null && S.sel.length === 1) { pushHistory(); const i = Number(el.closest(".rsg-action").dataset.ai); const a = S.sel[0].actions[i]; const k = el.dataset.ak; if (k === "extra") { const v = el.value.trim(); delete a.effect; delete a.remote; delete a.message; delete a.seconds; if (v) { if (a.do === "remote") a.remote = v; else if (a.do === "print") a.message = v; else if (a.do === "auto_hide" || a.do === "pulse") a.seconds = Number(v) || 3; else a.effect = v; } } else if (k === "target") { if (el.value.trim()) a.target = el.value.trim(); else delete a.target; } else a[k] = el.value; renderAll(); return; }
       if (el.dataset.k != null) {
         if (el.dataset.k.startsWith("screen.")) { applyProp(null, el.dataset.k, el.value, el); renderAll(); return; }
@@ -972,7 +1092,7 @@
         renderAll();
       }
     });
-    host.addEventListener("input", (e) => { const el = e.target; if (el.dataset.kind === "color" && S.sel.length === 1) { const n = S.sel[0]; setPath(n, el.dataset.k, el.value); renderStage(); } if (el.dataset.tok && el.type === "color") { S.tokens[el.dataset.tok] = el.value; renderStage(); } if (el.classList.contains("rsg-intent")) S.intent = el.value; });
+    host.addEventListener("input", (e) => { const el = e.target; if ((el.dataset.sk === "bg" || el.dataset.sk === "text_color") && S.sel.length === 1) { const n = S.sel[0]; n[el.dataset.sk] = el.value; if (el.dataset.sk === "bg" && n.bg_t != null && tokenNum(n.bg_t, 0) >= 1) delete n.bg_t; renderStage(); } if (el.dataset.kind === "color" && S.sel.length === 1) { const n = S.sel[0]; setPath(n, el.dataset.k, el.value); renderStage(); } if (el.dataset.tok && el.type === "color") { S.tokens[el.dataset.tok] = el.value; renderStage(); } if (el.classList.contains("rsg-intent")) S.intent = el.value; });
     D.stage.addEventListener("pointerdown", (e) => { if (e.target === D.stage || e.target === D.stageWrap) { if (S.sel.length) { S.sel = []; renderAll(); } return; } onDown(e); });
     window.addEventListener("pointermove", (e) => { if (S.open) onMove(e); });
     window.addEventListener("pointerup", (e) => { if (S.open) onUp(e); });
@@ -1020,11 +1140,12 @@
     const canStudio = !!(S.hooks.runTool); D.buildBtn.hidden = !canStudio; D.host.querySelector('[data-act="import"]').hidden = !canStudio;
     const ready = S.hooks.studioReady ? !!S.hooks.studioReady() : true; D.buildBtn.title = ready ? "Run ui_build_spec in the connected Studio right now (no AI turn)" : "Studio is not connected yet — Build will try anyway, or use Send to AI";
     D.intent.value = S.intent; setStatus("");
-    requestAnimationFrame(() => { fitZoom(); renderAll(); D.host.focus(); });
+    renderAll();
+    requestAnimationFrame(() => { fitZoom(); D.host.focus(); });
     diag("open", { nodes: byId.size, engine: S.hooks.engine ? S.hooks.engine() : "" });
   }
   function close() { if (!S.open) return; S.open = false; D.host.classList.remove("open"); document.documentElement.classList.remove("rs-gui-open"); diag("close", { nodes: byId.size }); }
   function isOpen() { return S.open; }
 
-  window.ORGuiStudio = { open, close, isOpen, getSpec, loadSpec, toLuau, buildMessage, TEMPLATES, DEVICES, ELEMENT_TOOLS, _state: S, _geo: geo, _computeGeometry: computeGeometry, _setBox: setBox, _makeNode: makeNode, _adopt: adopt, _reindex: reindex };
+  window.ORGuiStudio = { open, close, isOpen, getSpec, loadSpec, toLuau, buildMessage, setMode, TEMPLATES, DEVICES, ELEMENT_TOOLS, SIMPLE_ELEMENTS, SIMPLE_COMPONENTS, _state: S, _geo: geo, _computeGeometry: computeGeometry, _setBox: setBox, _makeNode: makeNode, _adopt: adopt, _reindex: reindex };
 })();
