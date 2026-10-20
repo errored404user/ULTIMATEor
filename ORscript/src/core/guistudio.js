@@ -18,6 +18,9 @@
  *   }
  *   close(), isOpen(), getSpec(), loadSpec(spec), toLuau(spec), buildMessage(intent), check()
  *
+ * 1.50: template gallery - 100+ themed screens from guistudio_templates.js, a
+ * searchable gallery overlay with lazily rendered, memoised mini-previews,
+ * featured start cards, category-grouped dropdown, lazy tree rendering.
  * 1.49: accuracy + stability pass - canvas-measured TextScaled / AutomaticSize,
  * UIPadding on text, hidden children skip layouts, grid alignment, 58 px topbar
  * inset, name hygiene (unique siblings, no dots, renames follow into behaviour
@@ -130,7 +133,7 @@
     screen: { name: "OR_UI", ignore_inset: true, reset_on_spawn: false, display_order: 0 },
     preset: "midnight", tokens: Object.assign({}, FALLBACK_PRESETS.midnight),
     nodes: [], sel: [], history: [], redo: [], clipboard: null, sideTab: "props", intent: "",
-    studioScreens: [], issues: null, issuesOpen: false, pendingRestore: null,
+    studioScreens: [], issues: null, issuesOpen: false, pendingRestore: null, galleryOpen: false, galCat: "all", galQuery: "", thumb: false,
     simple: (() => { try { return localStorage.getItem("rsg-mode") !== "advanced"; } catch { return true; } })(),
   };
   const byId = new Map();
@@ -415,6 +418,7 @@
   }
   function renderNode(n, pb) {
     const box = geo.get(n.id); if (!box) return "";
+    if (S.thumb && n.visible === false) return "";
     pb = pb || { x: 0, y: 0 };
     const selected = S.sel.includes(n);
     const inner = [];
@@ -445,14 +449,15 @@
     const inset = S.screen.ignore_inset === false ? `<div class="rsg-inset" style="height:${d.inset}px"></div>` : `<div class="rsg-inset ghost" style="height:${d.inset}px"></div>`;
     const roots = S.nodes.slice().sort((a, b) => (a.z || 1) - (b.z || 1)).map((r) => renderNode(r, null)).join("");
     const restore = S.pendingRestore && !S.nodes.length ? `<div class="rsg-restore"><span>Your last design was kept — <b>${esc(S.pendingRestore.spec.screen && S.pendingRestore.spec.screen.name || "GUI")}</b>, ${S.pendingRestore.count} object${S.pendingRestore.count === 1 ? "" : "s"}, ${esc(ago(S.pendingRestore.t))}.</span><button type="button" class="rsg-btn sm primary" data-act="restore">Restore it</button><button type="button" class="rsg-btn sm" data-act="restoreDismiss">Start fresh</button></div>` : "";
-    const empty = S.nodes.length ? "" : `<div class="rsg-empty-stage">${restore}<b>Start with a ready screen</b><div class="rsg-start">${TEMPLATES.map((t) => `<button type="button" data-tpl="${t.id}">${esc(t.label)}</button>`).join("")}</div><span>…or add your own: ${S.simple ? "click <b>Button</b>, <b>Text</b> or <b>Panel</b> on the left" : "pick a tool on the left and drag it out here"}.</span>${S.simple ? "" : `<span>V select · F frame · B button · T text · I image · Shift+drag multi-select · Del delete · Ctrl+Z undo</span>`}</div>`;
+    const empty = S.nodes.length ? "" : `<div class="rsg-empty-stage">${restore}<b>Start with a ready screen</b><div class="rsg-start">${featuredTemplates(8).map((t) => templateCard(t, "rsg-start-card")).join("")}</div><button type="button" class="rsg-btn primary rsg-browse" data-act="gallery">Browse all ${templates().length} templates</button><span>…or add your own: ${S.simple ? "click <b>Button</b>, <b>Text</b> or <b>Panel</b> on the left" : "pick a tool on the left and drag it out here"}.</span>${S.simple ? "" : `<span>V select · F frame · B button · T text · I image · Shift+drag multi-select · Del delete · Ctrl+Z undo</span>`}</div>`;
     D.screen.innerHTML = inset + roots + empty + `<div class="rsg-marquee" hidden></div><div class="rsg-guides"></div>`;
     D.marquee = D.screen.querySelector(".rsg-marquee"); D.guides = D.screen.querySelector(".rsg-guides");
+    if (!S.nodes.length && !S.thumb) fillThumbs(D.screen);
     D.stageWrap.style.width = Math.round(d.w * S.zoom) + "px"; D.stageWrap.style.height = Math.round(d.h * S.zoom) + "px";
     void sb;
   }
   function renderTree() {
-    if (!D) return;
+    if (!D || S.sideTab !== "tree") return; // lazy: the tree is rebuilt only while its tab is visible
     const row = (n, depth) => `<div class="rsg-tr${S.sel.includes(n) ? " sel" : ""}" data-id="${n.id}" style="--d:${depth}"><span class="rsg-tr-ic">${I[CLASS_ICON[n.class]] || I.frame}</span><span class="rsg-tr-name" title="${esc(pathOf(n))}">${esc(n.name)}</span><span class="rsg-tr-cls">${esc(n.class)}${n.layout ? " · layout" : ""}${n.actions && n.actions.length ? " · ⚡" + n.actions.length : ""}</span><button type="button" class="rsg-tr-eye" data-eye="${n.id}" title="${n.visible === false ? "Hidden — click to show" : "Visible — click to hide"}">${n.visible === false ? I.eyeOff : I.eye}</button></div>` + (n.children || []).map((c) => row(c, depth + 1)).join("");
     D.tree.innerHTML = S.nodes.length ? S.nodes.map((n) => row(n, 0)).join("") : `<div class="rsg-empty">Nothing yet — pick a tool on the left and drag on the screen, or drop a component / template.</div>`;
   }
@@ -703,50 +708,33 @@
 
   // ───────────────────────── templates ─────────────────────────
   function comp(kind, args) { const sk = skills(); if (!sk || !sk.guiComponentNode) return makeNode("Frame", { name: kind }); const n = sk.guiComponentNode(kind, Object.assign({ preset: S.preset }, args || {})); return n || makeNode("Frame", { name: kind }); }
-  const TEMPLATES = [
-    { id: "hud", label: "Game HUD", screen: "HUD", build: () => [comp("currency_hud", { name: "Coins", label: "1,250", stat: "Coins" }), Object.assign(comp("currency_hud", { name: "Gems", label: "48", stat: "Gems", image: "rbxassetid://6031075931" }), { position: [1, -16, 0, 64] }), comp("health_bar", { name: "Health" }), comp("hotbar", { name: "Hotbar", slots: 6 }), Object.assign(comp("avatar", { name: "Avatar" }), { position: [0, 16, 0, 16] }), { class: "TextLabel", name: "PlayerName", text: "Player", size: [0, 160, 0, 24], position: [0, 72, 0, 20], bg_t: 1, text_color: "text", font: "title_font", text_size: 16, align_x: "Left", text_stroke: { color: "#000000", transparency: 0.5 } }, Object.assign(comp("button", { name: "ShopButton", label: "Shop", action: "toggle", target: "gui.Shop" }), { size: [0, 120, 0, 40], position: [0, 16, 0, 108] })] },
-    { id: "menu", label: "Main menu", screen: "MainMenu", build: () => [{ class: "Frame", name: "Backdrop", size: [1, 0, 1, 0], bg: "bg", gradient: { from: "bg", to: "surface2", rotation: 90 }, children: [
-      { class: "TextLabel", name: "Title", text: "MY GAME", size: [0, 520, 0, 90], position: [0.5, 0, 0.28, 0], anchor: [0.5, 0.5], bg_t: 1, text_color: "text", font: "title_font", text_size: 64, text_stroke: { color: "#000000", transparency: 0.4 } },
-      { class: "TextLabel", name: "Subtitle", text: "Season 1 · Update 1.0", size: [0, 400, 0, 28], position: [0.5, 0, 0.28, 56], anchor: [0.5, 0.5], bg_t: 1, text_color: "muted", font: "font", text_size: 18 },
-      { class: "Frame", name: "Buttons", size: [0, 260, 0, 220], position: [0.5, 0, 0.62, 0], anchor: [0.5, 0.5], bg_t: 1, layout: { kind: "list", gap: 12, h_align: "Center" }, children: [
-        Object.assign(comp("button", { name: "Play", label: "PLAY", action: "destroy", target: "gui.Backdrop" }), { size: [1, 0, 0, 52] }),
-        Object.assign(comp("button", { name: "Shop", label: "Shop", action: "toggle", target: "gui.ShopWindow" }), { size: [1, 0, 0, 44], bg: "surface2", text_color: "text" }),
-        Object.assign(comp("button", { name: "Settings", label: "Settings", action: "toggle", target: "gui.SettingsWindow" }), { size: [1, 0, 0, 44], bg: "surface2", text_color: "text" }),
-      ] },
-      { class: "TextLabel", name: "Version", text: "v1.0.0", size: [0, 100, 0, 20], position: [1, -12, 1, -10], anchor: [1, 1], bg_t: 1, text_color: "muted", font: "font", text_size: 12, align_x: "Right" },
-    ] }, Object.assign(comp("window", { name: "ShopWindow", label: "Shop" }), { visible: false }), Object.assign(comp("window", { name: "SettingsWindow", label: "Settings" }), { visible: false })] },
-    { id: "shop", label: "Shop", screen: "Shop", build: () => { const w = comp("window", { name: "ShopWindow", label: "Shop" }); w.size = [0, 640, 0, 420]; const body = w.children.find((c) => c.name === "Body"); body.layout = undefined; body.children = [Object.assign(comp("tabs", { name: "Categories", tabs: ["Weapons", "Pets", "Gamepasses"] }), { size: [1, 0, 1, 0], bg_t: 1 })]; const page = body.children[0].children[1].children[0]; page.layout = { kind: "grid", cell: [0, 150, 0, 200], gap: 10 }; page.children = ["Sword", "Bow", "Staff", "Dagger"].map((nm, i) => comp("card", { name: nm, label: nm, subtitle: ["Common", "Rare", "Epic", "Legendary"][i], price: 100 * (i + 1), remote: "BuyItem" })); return [w, Object.assign(comp("button", { name: "OpenShop", label: "Shop", action: "toggle", target: "gui.ShopWindow" }), { position: [0, 20, 1, -20], anchor: [0, 1] })]; } },
-    { id: "inventory", label: "Inventory", screen: "Inventory", build: () => { const w = comp("window", { name: "InventoryWindow", label: "Inventory" }); w.size = [0, 560, 0, 400]; const body = w.children.find((c) => c.name === "Body"); body.layout = undefined; body.children = [Object.assign(comp("grid", { name: "Slots", slots: 24 }), { size: [0.62, 0, 1, 0] }), { class: "Frame", name: "Detail", size: [0.36, 0, 1, 0], position: [1, 0, 0, 0], anchor: [1, 0], bg: "surface2", corner: 10, padding: 12, layout: { kind: "list", gap: 8 }, children: [{ class: "ImageLabel", name: "Preview", size: [1, 0, 0, 120], bg: "surface", corner: 8 }, { class: "TextLabel", name: "ItemName", text: "Select an item", size: [1, 0, 0, 24], bg_t: 1, text_color: "text", font: "title_font", text_size: 16 }, { class: "TextLabel", name: "Desc", text: "Details appear here.", size: [1, 0, 0, 60], bg_t: 1, text_color: "muted", font: "font", text_size: 13, wrap: true, align_y: "Top" }, Object.assign(comp("button", { name: "Equip", label: "Equip", action: "remote", remote: "EquipItem" }), { size: [1, 0, 0, 40] })] }]; return [w]; } },
-    { id: "settings", label: "Settings", screen: "Settings", build: () => { const w = comp("window", { name: "SettingsWindow", label: "Settings" }); w.size = [0, 440, 0, 380]; const body = w.children.find((c) => c.name === "Body"); body.children = [comp("checkbox", { name: "Music", label: "Music", on: true }), comp("checkbox", { name: "Sfx", label: "Sound effects", on: true }), { class: "TextLabel", name: "VolumeLabel", text: "Volume", size: [1, 0, 0, 20], bg_t: 1, text_color: "muted", font: "font", text_size: 13, align_x: "Left" }, Object.assign(comp("slider", { name: "Volume", value: 0.7 }), { size: [1, 0, 0, 24] }), { class: "TextLabel", name: "QualityLabel", text: "Graphics", size: [1, 0, 0, 20], bg_t: 1, text_color: "muted", font: "font", text_size: 13, align_x: "Left" }, comp("dropdown", { name: "Graphics", options: ["Low", "Medium", "High", "Ultra"] }), comp("toggle", { name: "Shadows", on: true })]; return [w]; } },
-    { id: "leaderboard", label: "Leaderboard", screen: "Leaderboard", build: () => [{ class: "Frame", name: "Board", size: [0, 300, 0, 360], position: [1, -16, 0, 16], anchor: [1, 0], bg: "surface", bg_t: 0.1, corner: "radius", stroke: { color: "stroke", thickness: 1, transparency: "stroke_t" }, padding: 10, children: [
-      { class: "TextLabel", name: "Title", text: "TOP PLAYERS", size: [1, 0, 0, 28], bg_t: 1, text_color: "text", font: "title_font", text_size: 18 },
-      Object.assign(comp("list", { name: "Rows", items: ["1. Builderman — 12,400", "2. Noob123 — 9,870", "3. xX_Pro_Xx — 8,120", "4. Guest — 5,000", "5. You — 4,210"] }), { size: [1, 0, 1, -36], position: [0, 0, 0, 36], bg_t: 1 }),
-    ] }] },
-    { id: "quests", label: "Quest log", screen: "Quests", build: () => [{ class: "Frame", name: "QuestPanel", size: [0, 320, 0, 260], position: [0, 16, 0.5, 0], anchor: [0, 0.5], bg: "surface", bg_t: 0.08, corner: "radius", stroke: { color: "stroke", thickness: 1, transparency: "stroke_t" }, padding: 12, layout: { kind: "list", gap: 10 }, children: [
-      { class: "TextLabel", name: "Title", text: "QUESTS", size: [1, 0, 0, 24], bg_t: 1, text_color: "text", font: "title_font", text_size: 18, align_x: "Left" },
-      ...["Collect 10 coins", "Defeat the slime king", "Reach level 5"].map((t, i) => ({ class: "Frame", name: "Quest" + (i + 1), size: [1, 0, 0, 58], bg: "surface2", corner: 8, padding: 8, children: [{ class: "TextLabel", name: "Text", text: t, size: [1, 0, 0, 20], bg_t: 1, text_color: "text", font: "font", text_size: 14, align_x: "Left" }, Object.assign(comp("progress_bar", { name: "Progress", value: [0.6, 0.1, 0.9][i], label: ["6 / 10", "0 / 1", "lv 4"][i] }), { size: [1, 0, 0, 14], position: [0, 0, 1, 0], anchor: [0, 1] })] })),
-    ] }] },
-    { id: "dialogue", label: "Dialogue box", screen: "Dialogue", build: () => [{ class: "Frame", name: "Dialogue", size: [0.6, 0, 0, 150], position: [0.5, 0, 1, -24], anchor: [0.5, 1], bg: "surface", bg_t: 0.05, corner: 14, stroke: { color: "primary", thickness: 2, transparency: 0.4 }, padding: 16, actions: [{ on: "enable", do: "tween_in", effect: "slide_up" }], children: [
-      Object.assign(comp("avatar", { name: "Portrait" }), { size: [0, 72, 0, 72], actions: [] }),
-      { class: "TextLabel", name: "Speaker", text: "Merchant", size: [1, -90, 0, 24], position: [0, 90, 0, 0], bg_t: 1, text_color: "primary", font: "title_font", text_size: 18, align_x: "Left" },
-      { class: "TextLabel", name: "Line", text: "Welcome, traveller! Looking for something sharp?", size: [1, -90, 0, 60], position: [0, 90, 0, 28], bg_t: 1, text_color: "text", font: "font", text_size: 16, align_x: "Left", align_y: "Top", wrap: true },
-      Object.assign(comp("button", { name: "Next", label: "Next ▸", action: "close", target: "parent" }), { size: [0, 110, 0, 34], position: [1, 0, 1, 0], anchor: [1, 1] }),
-    ] }] },
-    { id: "loading", label: "Loading screen", screen: "Loading", build: () => [{ class: "Frame", name: "Loading", size: [1, 0, 1, 0], bg: "bg", z: 100, children: [
-      { class: "TextLabel", name: "Logo", text: "MY GAME", size: [0, 500, 0, 80], position: [0.5, 0, 0.42, 0], anchor: [0.5, 0.5], bg_t: 1, text_color: "text", font: "title_font", text_size: 56 },
-      Object.assign(comp("progress_bar", { name: "Progress", value: 0.35, label: "Loading… 35%" }), { size: [0, 420, 0, 16], position: [0.5, 0, 0.58, 0], anchor: [0.5, 0.5] }),
-      { class: "TextLabel", name: "Tip", text: "Tip: press E to interact", size: [0, 400, 0, 20], position: [0.5, 0, 0.58, 30], anchor: [0.5, 0.5], bg_t: 1, text_color: "muted", font: "font", text_size: 13 },
-    ] }] },
-    { id: "rewards", label: "Daily rewards", screen: "DailyRewards", build: () => { const w = comp("window", { name: "RewardsWindow", label: "Daily rewards" }); w.size = [0, 600, 0, 300]; const body = w.children.find((c) => c.name === "Body"); body.layout = { kind: "grid", cell: [0, 76, 0, 100], gap: 8, h_align: "Center" }; body.children = Array.from({ length: 7 }, (_, i) => ({ class: "Frame", name: "Day" + (i + 1), bg: i === 0 ? "primary" : "surface2", corner: 10, stroke: { color: i === 0 ? "accent" : "stroke", thickness: i === 0 ? 2 : 1 }, children: [{ class: "TextLabel", name: "Day", text: "Day " + (i + 1), size: [1, 0, 0, 20], position: [0, 0, 0, 6], bg_t: 1, text_color: i === 0 ? "#ffffff" : "muted", font: "title_font", text_size: 12 }, { class: "ImageLabel", name: "Icon", size: [0, 36, 0, 36], position: [0.5, 0, 0.5, 2], anchor: [0.5, 0.5], bg_t: 1, image: "rbxassetid://6034973115", image_color: "accent" }, { class: "TextLabel", name: "Amount", text: String(50 * (i + 1)), size: [1, 0, 0, 18], position: [0, 0, 1, -6], anchor: [0, 1], bg_t: 1, text_color: "text", font: "title_font", text_size: 13 }] })); body.children.push(Object.assign(comp("button", { name: "Claim", label: "CLAIM", action: "remote", remote: "ClaimDaily" }), { size: [0, 160, 0, 40] })); return [w]; } },
+  // Templates live in src/core/guistudio_templates.js (100+ screens, 12 categories,
+  // each with its own preset). Built on demand; a tiny fallback keeps the designer
+  // usable if the library did not load.
+  const FALLBACK_TEMPLATES = [
+    { id: "hud", label: "Game HUD", cat: "hud", screen: "HUD", preset: "midnight", tags: [], featured: true, build: () => [comp("currency_hud", { name: "Coins", label: "1,250", stat: "Coins" }), comp("health_bar", { name: "Health" }), comp("hotbar", { name: "Hotbar", slots: 6 })] },
+    { id: "menu", label: "Main menu", cat: "menu", screen: "MainMenu", preset: "midnight", tags: [], featured: true, build: () => [{ class: "Frame", name: "Backdrop", size: [1, 0, 1, 0], bg: "bg", children: [{ class: "TextLabel", name: "Title", text: "MY GAME", size: [0, 520, 0, 90], position: [0.5, 0, 0.3, 0], anchor: [0.5, 0.5], bg_t: 1, text_color: "text", font: "title_font", text_size: 64 }, Object.assign(comp("button", { name: "Play", label: "PLAY", action: "destroy", target: "gui.Backdrop" }), { position: [0.5, 0, 0.6, 0], anchor: [0.5, 0.5] })] }] },
   ];
+  let templateCache = null;
+  function templates() {
+    if (templateCache) return templateCache;
+    const lib = window.ORGuiTemplates;
+    if (!lib || !Array.isArray(lib.list) || !lib.list.length) return FALLBACK_TEMPLATES;
+    templateCache = lib.list.map((t) => Object.assign({}, t, { build: () => lib.build(t.id, comp) || [] }));
+    return templateCache;
+  }
+  function templateCats() { const lib = window.ORGuiTemplates; return (lib && lib.categories) || [{ id: "hud", label: "HUD" }, { id: "menu", label: "Menus" }]; }
+  function featuredTemplates(n) { const all = templates(); const f = all.filter((t) => t.featured); return (f.length ? f : all).slice(0, n || 8); }
   function applyTemplate(id) {
-    const t = TEMPLATES.find((x) => x.id === id); if (!t) return;
+    const t = templates().find((x) => x.id === id); if (!t) return;
     pushHistory();
+    if (t.preset && presets()[t.preset]) { S.preset = t.preset; S.tokens = Object.assign({}, presets()[t.preset]); }
     const nodes = t.build();
     S.screen.name = t.screen;
     S.nodes = nodes.map((n) => adopt(n, null));
-    S.sel = []; reindex(); renderAll();
-    toast(`Template "${t.label}" loaded`);
+    { const seen = new Set(); for (const c of S.nodes) { if (seen.has(c.name)) c.name = uniqueName(S.nodes.filter((x) => x !== c), c.name); seen.add(c.name); } }
+    S.sel = []; S.issues = null; closeGallery(); reindex(); renderAll(); renderTheme();
+    toast(`Template "${t.label}" loaded${t.preset ? " · theme " + t.preset.replace(/_/g, " ") : ""}`);
     diag("template", { id, nodes: byId.size });
   }
   function insertComponent(kind) {
@@ -802,7 +790,9 @@
     }
     return cur;
   }
-  const NEEDS_TARGET = new Set(["toggle", "open", "close", "destroy", "switch", "tab", "select_slot", "show_while_hover"]);
+  // Only behaviours that act on ANOTHER element need a target. switch / tab / select_slot /
+  // show_while_hover act on the element itself in OR_UIBehaviours (1.50 accuracy fix).
+  const NEEDS_TARGET = new Set(["toggle", "open", "close", "destroy"]);
   function check() {
     // Pre-flight: what would look or behave differently in Studio than you expect.
     computeGeometry();
@@ -849,6 +839,72 @@
   function autosave() { clearTimeout(saveTimer); saveTimer = setTimeout(autosaveNow, 600); }
   function loadAutosave() { try { const j = localStorage.getItem(AUTOSAVE_KEY); if (!j) return null; const d = JSON.parse(j); return d && d.spec && Array.isArray(d.spec.children) && d.spec.children.length ? d : null; } catch { return null; } }
   function ago(t) { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " d ago"; }
+
+  // ───────────────────────── template thumbnails + gallery ─────────────────────────
+  // Thumbnails reuse the stage renderer on a temporary design (1366×768, the
+  // template's own preset), scaled down with CSS. Each one is rendered once,
+  // cached, and drawn in small animation-frame batches so 100+ cards never jank.
+  const THUMB_W = 232, THUMB_DEV = DEVICES[2];
+  const thumbCache = new Map();
+  function renderThumbHtml(t) {
+    if (thumbCache.has(t.id)) return thumbCache.get(t.id);
+    const saved = { nodes: S.nodes, tokens: S.tokens, preset: S.preset, sel: S.sel, device: S.device, screen: S.screen };
+    let html;
+    try {
+      S.sel = []; S.device = THUMB_DEV; S.screen = Object.assign({}, S.screen, { ignore_inset: true });
+      if (t.preset && presets()[t.preset]) { S.preset = t.preset; S.tokens = Object.assign({}, presets()[t.preset]); }
+      S.nodes = (t.build() || []).map((n) => adopt(n, null)); reindex(); computeGeometry(); S.thumb = true;
+      const body = S.nodes.slice().sort((a, b) => (a.z || 1) - (b.z || 1)).map((r) => renderNode(r, null)).join("");
+      html = `<div class="rsg-gal-shot" style="width:${THUMB_DEV.w}px;height:${THUMB_DEV.h}px;--s:${round(THUMB_W / THUMB_DEV.w, 4)};background:${tokenColor("bg", "#0f1115")}">${body}</div>`;
+    } catch (e) { diag("thumbError", { id: t.id, err: String(e && e.message || e).slice(0, 120) }); html = `<div class="rsg-gal-shot bad"></div>`; }
+    finally { S.thumb = false; Object.assign(S, saved); reindex(); computeGeometry(); }
+    thumbCache.set(t.id, html);
+    return html;
+  }
+  let thumbQueue = [], thumbRaf = 0;
+  function fillThumbs(root) {
+    if (!root) return;
+    const pending = [...root.querySelectorAll(".rsg-gal-thumb[data-thumb]:not(.done)")];
+    for (const el of pending) if (!thumbQueue.includes(el)) thumbQueue.push(el);
+    pumpThumbs();
+  }
+  function pumpThumbs() {
+    if (thumbRaf || !thumbQueue.length) return;
+    const run = () => {
+      thumbRaf = 0; const t0 = Date.now(); let n = 0;
+      while (thumbQueue.length && (n < 4 || Date.now() - t0 < 8)) {
+        const el = thumbQueue.shift(); if (!el || !el.isConnected) continue;
+        const t = templates().find((x) => x.id === el.dataset.thumb); if (!t) { el.classList.add("done"); continue; }
+        el.innerHTML = renderThumbHtml(t); el.classList.add("done"); n++;
+      }
+      if (thumbQueue.length) pumpThumbs();
+    };
+    if (typeof requestAnimationFrame === "function") thumbRaf = requestAnimationFrame(run); else run();
+  }
+  function templateCard(t, cls) {
+    const cat = templateCats().find((c) => c.id === t.cat); const P = presets()[t.preset] || FALLBACK_PRESETS.midnight;
+    return `<button type="button" class="${cls || "rsg-gal-card"}" data-tpl="${esc(t.id)}" title="${esc(t.label)} — ${esc((cat && cat.label) || t.cat)} · theme ${esc(t.preset || "")}${t.tags && t.tags.length ? " · " + esc(t.tags.join(", ")) : ""}"><span class="rsg-gal-thumb" data-thumb="${esc(t.id)}"><i class="rsg-gal-ph"></i></span><span class="rsg-gal-meta"><b>${esc(t.label)}</b><small>${esc((cat && cat.label) || t.cat)}</small><i class="rsg-gal-dot" style="--a:${esc(P.primary)};--b:${esc(P.accent)}" title="theme ${esc(t.preset || "")}"></i></span></button>`;
+  }
+  function openGallery(cat) {
+    if (!D) return; S.galleryOpen = true; S.galCat = cat || S.galCat || "all"; S.galQuery = "";
+    D.gallery.hidden = false; D.galSearch.value = ""; renderGallery(); try { D.galSearch.focus({ preventScroll: true }); } catch {}
+    diag("gallery", { open: true });
+  }
+  function closeGallery() { if (!D || !S.galleryOpen) return; S.galleryOpen = false; D.gallery.hidden = true; thumbQueue = thumbQueue.filter((el) => !D.gallery.contains(el)); }
+  function galleryFiltered() {
+    const q = String(S.galQuery || "").trim().toLowerCase(); const cat = S.galCat || "all";
+    return templates().filter((t) => (cat === "all" || (cat === "featured" ? t.featured : t.cat === cat)) && (!q || (t.label + " " + t.screen + " " + t.cat + " " + (t.tags || []).join(" ") + " " + (t.preset || "")).toLowerCase().includes(q)));
+  }
+  function renderGallery() {
+    if (!D || !S.galleryOpen) return;
+    const all = templates(); const list = galleryFiltered(); const cats = templateCats();
+    const count = (id) => id === "all" ? all.length : id === "featured" ? all.filter((t) => t.featured).length : all.filter((t) => t.cat === id).length;
+    D.galCats.innerHTML = [{ id: "all", label: "All" }, { id: "featured", label: "★ Featured" }].concat(cats).map((c) => `<button type="button" class="rsg-gal-cat${(S.galCat || "all") === c.id ? " on" : ""}" data-galcat="${esc(c.id)}">${esc(c.label)}<small>${count(c.id)}</small></button>`).join("");
+    D.galCount.textContent = `${list.length} of ${all.length}`;
+    D.galGrid.innerHTML = list.length ? list.map((t) => templateCard(t)).join("") : `<div class="rsg-empty rsg-gal-none">No template matches “${esc(S.galQuery)}”. Try “shop”, “hud”, “popup”, “mobile”…</div>`;
+    D.galGrid.scrollTop = 0;
+    fillThumbs(D.galGrid);
+  }
 
   // ───────────────────────── editing ops ─────────────────────────
   function deleteSel() { if (!S.sel.length) return; pushHistory(); for (const n of S.sel) { const list = siblingsOf(n); const i = list.indexOf(n); if (i >= 0) list.splice(i, 1); } S.sel = []; reindex(); renderAll(); }
@@ -1033,7 +1089,7 @@
   function onKey(e) {
     if (!S.open) return;
     const tag = (e.target && e.target.tagName || "").toLowerCase(); const typing = tag === "input" || tag === "textarea" || tag === "select" || !!(e.target && (e.target.isContentEditable || (e.target.getAttribute && e.target.getAttribute("contenteditable") === "true")));
-    if (e.key === "Escape") { if (inlineEdit) { e.preventDefault(); e.stopPropagation(); endInlineEdit(false); return; } if (drag && drag.kind !== "none") { e.preventDefault(); cancelDrag(); return; } if (typing) { e.target.blur(); return; } e.preventDefault(); close(); return; }
+    if (e.key === "Escape") { if (inlineEdit) { e.preventDefault(); e.stopPropagation(); endInlineEdit(false); return; } if (S.galleryOpen) { e.preventDefault(); closeGallery(); return; } if (drag && drag.kind !== "none") { e.preventDefault(); cancelDrag(); return; } if (typing) { e.target.blur(); return; } e.preventDefault(); close(); return; }
     if (typing) return;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && !e.shiftKey && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); return; }
@@ -1047,6 +1103,7 @@
     if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSel(); return; }
     if (/^Arrow/.test(e.key) && S.sel.length) { e.preventDefault(); const step = e.shiftKey ? 10 : 1; const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0, dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0; pushHistory(); for (const n of S.sel) { if (inLayout(n)) continue; const b = Object.assign({}, geo.get(n.id)); b.x += dx; b.y += dy; setBox(n, b); } renderAll(); return; }
     if (e.key === "+" || e.key === "=") { zoomBy(1.2); return; } if (e.key === "-") { zoomBy(1 / 1.2); return; } if (e.key === "0") { fitZoom(); return; }
+    if (S.galleryOpen) return;
     const t = ELEMENT_TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase()); if (t && !mod) { if (S.simple && t.cls) insertElement(t.cls); else setTool(t.id); }
   }
 
@@ -1202,7 +1259,7 @@
   function fitZoom() { const r = D.stage.getBoundingClientRect(); if (!(r.width > 80 && r.height > 80)) { renderStage(); D.zoomLbl.textContent = Math.round(S.zoom * 100) + "%"; return; } const z = Math.min((r.width - 48) / S.device.w, (r.height - 48) / S.device.h); S.zoom = clamp(Number.isFinite(z) && z > 0 ? z : 1, 0.15, 3); renderStage(); D.zoomLbl.textContent = Math.round(S.zoom * 100) + "%"; }
   function zoomBy(f) { S.zoom = clamp(S.zoom * f, 0.15, 4); renderStage(); D.zoomLbl.textContent = Math.round(S.zoom * 100) + "%"; }
   function syncButtons() { if (!D) return; const u = D.host.querySelector('[data-act="undo"]'), r = D.host.querySelector('[data-act="redo"]'); if (u) u.disabled = !S.history.length; if (r) r.disabled = !S.redo.length; D.countLbl.textContent = `${byId.size} object${byId.size === 1 ? "" : "s"}`; }
-  function setSideTab(t) { S.sideTab = t; D.host.querySelectorAll(".rsg-tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === t)); D.props.hidden = t !== "props"; D.tree.hidden = t !== "tree"; D.theme.hidden = t !== "theme"; D.code.hidden = t !== "code"; renderProps(); renderTheme(); renderCode(); }
+  function setSideTab(t) { S.sideTab = t; D.host.querySelectorAll(".rsg-tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === t)); D.props.hidden = t !== "props"; D.tree.hidden = t !== "tree"; D.theme.hidden = t !== "theme"; D.code.hidden = t !== "code"; renderProps(); renderTree(); renderTheme(); renderCode(); }
 
   // ───────────────────────── build DOM ─────────────────────────
   function build() {
@@ -1242,6 +1299,12 @@
             <button type="button" class="rsg-ib rsg-close" data-act="close" title="Close (Esc)">${I.close}</button>
           </div>
         </div>
+        <div class="rsg-gallery" hidden role="dialog" aria-label="Templates">
+          <div class="rsg-gal-head"><b>Templates</b><span class="rsg-gal-count"></span><input class="rsg-gal-search" type="search" placeholder="Search by name, category, tag or theme…" spellcheck="false"><button type="button" class="rsg-ib" data-act="galleryClose" title="Close (Esc)">${I.close}</button></div>
+          <div class="rsg-gal-cats"></div>
+          <div class="rsg-gal-grid"></div>
+          <div class="rsg-gal-foot">Click a card to load it (your current design is replaced — Ctrl+Z brings it back). Every template comes with its own theme; change it any time with the Theme dropdown.</div>
+        </div>
         <div class="rsg-body">
           <div class="rsg-tools">
             <div class="rsg-tools-simple">
@@ -1257,7 +1320,8 @@
             <div class="rsg-ribbon">
               <label class="rsg-rf rsg-adv"><span>Screen</span><input class="rsg-screen-name" value="${esc(S.screen.name)}" title="ScreenGui name"></label>
               <label class="rsg-rf"><span>Theme</span><select class="rsg-preset-sel">${Object.keys(presets()).map((k) => `<option value="${k}" ${k === S.preset ? "selected" : ""}>${esc(k.replace(/_/g, " "))}</option>`).join("")}</select></label>
-              <label class="rsg-rf"><span>Template</span><select class="rsg-template-sel"><option value="">Pick a screen…</option>${TEMPLATES.map((t) => `<option value="${t.id}">${esc(t.label)}</option>`).join("")}</select></label>
+              <button type="button" class="rsg-btn sm rsg-templates" data-act="gallery" title="Browse ${templates().length} ready screens in ${templateCats().length} categories">${I.grid} Templates <small>${templates().length}</small></button>
+              <label class="rsg-rf rsg-adv"><span>Template</span><select class="rsg-template-sel"><option value="">Pick a screen…</option>${templateCats().map((c) => `<optgroup label="${esc(c.label)}">${templates().filter((t) => t.cat === c.id).map((t) => `<option value="${t.id}">${esc(t.label)}</option>`).join("")}</optgroup>`).join("")}${templates().filter((t) => !templateCats().some((c) => c.id === t.cat)).map((t) => `<option value="${t.id}">${esc(t.label)}</option>`).join("")}</select></label>
               <span class="rsg-hint-tool"></span>
               <span class="rsg-count"></span>
             </div>
@@ -1292,6 +1356,7 @@
       host, toast: host.querySelector(".rsg-toast"), side: host.querySelector(".rsg-side"), stage: host.querySelector(".rsg-stage"), stageWrap: host.querySelector(".rsg-stage-wrap"), screen: host.querySelector(".rsg-screen"), props: host.querySelector(".rsg-props"), tree: host.querySelector(".rsg-tree"), theme: host.querySelector(".rsg-theme"), code: host.querySelector(".rsg-code"),
       codeJson: host.querySelector(".rsg-code-json"), codeLua: host.querySelector(".rsg-code-lua"), hint: host.querySelector(".rsg-hint-tool"), status: host.querySelector(".rsg-status"), sendStatus: host.querySelector(".rsg-send-status"), zoomLbl: host.querySelector(".rsg-zoom"), countLbl: host.querySelector(".rsg-count"),
       presetSel: host.querySelector(".rsg-preset-sel"), templateSel: host.querySelector(".rsg-template-sel"), deviceSel: host.querySelector(".rsg-device"), screenName: host.querySelector(".rsg-screen-name"), intent: host.querySelector(".rsg-intent"), buildBtn: host.querySelector(".rsg-build"), sendBtn: host.querySelector(".rsg-send"), importBox: host.querySelector(".rsg-import"), importSel: host.querySelector(".rsg-import-sel"),
+      gallery: host.querySelector(".rsg-gallery"), galSearch: host.querySelector(".rsg-gal-search"), galCats: host.querySelector(".rsg-gal-cats"), galGrid: host.querySelector(".rsg-gal-grid"), galCount: host.querySelector(".rsg-gal-count"),
     };
     // events
     let liveKey = null; // colour input currently being dragged — history was pushed at its first "input"
@@ -1299,6 +1364,7 @@
     host.addEventListener("click", (e) => {
       const md = e.target.closest("[data-mode]"); if (md) { setMode(md.dataset.mode); return; }
       const ad = e.target.closest("[data-add]"); if (ad) { insertElement(ad.dataset.add); return; }
+      const gc = e.target.closest("[data-galcat]"); if (gc) { S.galCat = gc.dataset.galcat; renderGallery(); return; }
       const tp = e.target.closest("[data-tpl]"); if (tp) { if (!S.nodes.length || confirm("Replace the current design with this template?")) applyTemplate(tp.dataset.tpl); return; }
       const iss = e.target.closest("[data-issue]"); if (iss) { const n = byId.get(iss.dataset.issue); if (n) { S.sel = [n]; renderAll(); } return; }
       const tb = e.target.closest("[data-tool]"); if (tb) { setTool(tb.dataset.tool); return; }
@@ -1331,7 +1397,7 @@
         renderAll();
       }
     });
-    host.addEventListener("input", (e) => { const el = e.target; const live = (k) => { if (liveKey !== k) { pushHistory(); liveKey = k; } }; if ((el.dataset.sk === "bg" || el.dataset.sk === "text_color") && S.sel.length === 1) { live("sk:" + el.dataset.sk); const n = S.sel[0]; n[el.dataset.sk] = el.value; if (el.dataset.sk === "bg" && n.bg_t != null && tokenNum(n.bg_t, 0) >= 1) delete n.bg_t; renderStage(); } if (el.dataset.kind === "color" && S.sel.length === 1) { live("k:" + el.dataset.k); const n = S.sel[0]; setPath(n, el.dataset.k, el.value); renderStage(); } if (el.dataset.tok && el.type === "color") { live("tok:" + el.dataset.tok); S.tokens[el.dataset.tok] = el.value; renderStage(); } if (el.classList.contains("rsg-intent")) S.intent = el.value; });
+    host.addEventListener("input", (e) => { const el = e.target; if (el === D.galSearch) { S.galQuery = el.value; renderGallery(); return; } const live = (k) => { if (liveKey !== k) { pushHistory(); liveKey = k; } }; if ((el.dataset.sk === "bg" || el.dataset.sk === "text_color") && S.sel.length === 1) { live("sk:" + el.dataset.sk); const n = S.sel[0]; n[el.dataset.sk] = el.value; if (el.dataset.sk === "bg" && n.bg_t != null && tokenNum(n.bg_t, 0) >= 1) delete n.bg_t; renderStage(); } if (el.dataset.kind === "color" && S.sel.length === 1) { live("k:" + el.dataset.k); const n = S.sel[0]; setPath(n, el.dataset.k, el.value); renderStage(); } if (el.dataset.tok && el.type === "color") { live("tok:" + el.dataset.tok); S.tokens[el.dataset.tok] = el.value; renderStage(); } if (el.classList.contains("rsg-intent")) S.intent = el.value; });
     D.stage.addEventListener("pointerdown", guarded((e) => { if (e.target === D.stage || e.target === D.stageWrap) { if (inlineEdit) endInlineEdit(true); if (S.sel.length) { S.sel = []; renderAll(); } return; } onDown(e); }));
     window.addEventListener("pointermove", guarded((e) => { if (S.open) onMove(e); }));
     window.addEventListener("pointerup", guarded((e) => { if (S.open) onUp(e); }));
@@ -1362,6 +1428,7 @@
       case "open": return openJson(); case "save": return downloadJson(); case "copyLua": return copyText(toLuau(getSpec()), "Luau"); case "copyJson": return copyText(JSON.stringify(getSpec(), null, 2), "JSON");
       case "applyJson": if (loadSpec(D.codeJson.value)) toast("Applied"); return;
       case "clear": if (S.nodes.length && !confirm("Clear the whole design?")) return; pushHistory(); S.nodes = []; S.sel = []; S.issues = null; reindex(); try { localStorage.removeItem(AUTOSAVE_KEY); } catch {} return renderAll();
+      case "gallery": return openGallery(); case "galleryClose": return closeGallery();
       case "check": return runCheck(false); case "issuesClose": S.issuesOpen = false; return renderProps();
       case "restore": if (S.pendingRestore) { const d = S.pendingRestore; S.pendingRestore = null; if (loadSpec(d.spec, { silent: true })) toast("Design restored"); } return;
       case "restoreDismiss": S.pendingRestore = null; try { localStorage.removeItem(AUTOSAVE_KEY); } catch {} return renderStage();
@@ -1390,8 +1457,8 @@
     requestAnimationFrame(() => { fitZoom(); D.host.focus(); });
     diag("open", { nodes: byId.size, engine: S.hooks.engine ? S.hooks.engine() : "" });
   }
-  function close() { if (!S.open) return; S.open = false; D.host.classList.remove("open"); document.documentElement.classList.remove("rs-gui-open"); diag("close", { nodes: byId.size }); }
+  function close() { if (!S.open) return; closeGallery(); S.open = false; D.host.classList.remove("open"); document.documentElement.classList.remove("rs-gui-open"); diag("close", { nodes: byId.size }); }
   function isOpen() { return S.open; }
 
-  window.ORGuiStudio = { open, close, isOpen, getSpec, loadSpec, toLuau, buildMessage, setMode, check, TEMPLATES, DEVICES, ELEMENT_TOOLS, SIMPLE_ELEMENTS, SIMPLE_COMPONENTS, _state: S, _geo: geo, _computeGeometry: computeGeometry, _setBox: setBox, _makeNode: makeNode, _adopt: adopt, _reindex: reindex, _rename: renameNode, _resolveTarget: resolveTarget, _fitTextSize: fitTextSize, _autosaveNow: autosaveNow, _loadAutosave: loadAutosave, _startInlineEdit: startInlineEdit, _endInlineEdit: endInlineEdit };
+  window.ORGuiStudio = { open, close, isOpen, getSpec, loadSpec, toLuau, buildMessage, setMode, check, openGallery, closeGallery, get TEMPLATES() { return templates(); }, get TEMPLATE_CATEGORIES() { return templateCats(); }, DEVICES, ELEMENT_TOOLS, SIMPLE_ELEMENTS, SIMPLE_COMPONENTS, _state: S, _geo: geo, _computeGeometry: computeGeometry, _setBox: setBox, _makeNode: makeNode, _adopt: adopt, _reindex: reindex, _rename: renameNode, _resolveTarget: resolveTarget, _fitTextSize: fitTextSize, _autosaveNow: autosaveNow, _loadAutosave: loadAutosave, _startInlineEdit: startInlineEdit, _endInlineEdit: endInlineEdit, _renderThumbHtml: renderThumbHtml, _thumbCache: thumbCache, _galleryFiltered: galleryFiltered };
 })();

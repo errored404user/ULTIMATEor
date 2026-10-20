@@ -1,11 +1,11 @@
-// 1.48.0 — GUI Studio: the Paint-style visual GUI builder (src/core/guistudio.js) + the
+// 1.48.0 → 1.50.0 — GUI Studio: the Paint-style visual GUI builder (src/core/guistudio.js), the 1.50 template library (src/core/guistudio_templates.js) + the
 // extra GUI command pack (src/core/skills/studio_guistudio.js) and their wiring.
 // Run: NODE_PATH=/tmp/harness/node_modules node tests/test-gui-studio.js
 const fs = require("fs"), path = require("path"), assert = require("assert");
 const R = path.join(__dirname, "..");
 const read = (f) => fs.readFileSync(path.join(R, f), "utf8");
 const main = read("src/core/main.js"), css = read("overlay.css"), manifest = read("manifest.json"), codecraft = read("codecraft.html");
-const studio = read("src/core/guistudio.js"), pack = read("src/core/skills/studio_guistudio.js");
+const studio = read("src/core/guistudio.js"), pack = read("src/core/skills/studio_guistudio.js"), tplLib = read("src/core/guistudio_templates.js");
 let n = 0; const ok = (name, cond, detail) => { n++; if (!cond) { console.error("FAIL " + name + (detail !== undefined ? " — " + JSON.stringify(detail).slice(0, 300) : "")); process.exit(1); } };
 
 // ── registration ─────────────────────────────────────────────────────────────
@@ -17,6 +17,7 @@ for (const js of lists) {
   ok("guistudio.js loads after paint.js and before main.js in every list", p >= 0 && g > p && mn > g, js);
   ok("studio_guistudio.js pack loads right after studio_quality.js and before main.js", sk === q + 1 && mn > sk, js);
 }
+ok("1.50: guistudio_templates.js loads right before guistudio.js in every list + codecraft.html", lists.every((js) => js.indexOf("src/core/guistudio_templates.js") >= 0 && js.indexOf("src/core/guistudio.js") === js.indexOf("src/core/guistudio_templates.js") + 1) && codecraft.indexOf('<script src="src/core/guistudio_templates.js"></script>') > 0 && codecraft.indexOf('<script src="src/core/guistudio_templates.js"></script>') < codecraft.indexOf('<script src="src/core/guistudio.js"></script>'));
 ok("every provider list (16) carries both new files", lists.length === 16 && lists.every((js) => js.includes("src/core/guistudio.js") && js.includes("src/core/skills/studio_guistudio.js")), lists.length);
 ok("codecraft.html loads the pack and the designer in order", codecraft.indexOf('<script src="src/core/skills/studio_guistudio.js"></script>') > codecraft.indexOf('<script src="src/core/skills/studio_quality.js"></script>') && codecraft.indexOf('<script src="src/core/guistudio.js"></script>') > codecraft.indexOf('<script src="src/core/paint.js"></script>') && codecraft.indexOf('<script src="src/core/guistudio.js"></script>') < codecraft.indexOf('<script src="src/core/main.js"></script>'));
 
@@ -76,7 +77,15 @@ Object.defineProperty(w.HTMLElement.prototype, "clientWidth", { get() { return 9
 Object.defineProperty(w.HTMLElement.prototype, "clientHeight", { get() { return 600; } });
 const errors = []; w.addEventListener("error", (e) => errors.push(String(e.message)));
 const load = (f) => { const el = w.document.createElement("script"); el.textContent = read(f); w.document.head.appendChild(el); };
-for (const f of ["src/core/skills/studio_skills.js", "src/core/skills/studio_design.js", "src/core/skills/studio_gui.js", "src/core/skills/studio_guistudio.js", "src/core/guistudio.js"]) load(f);
+for (const f of ["src/core/skills/studio_skills.js", "src/core/skills/studio_design.js", "src/core/skills/studio_gui.js", "src/core/skills/studio_guistudio.js", "src/core/guistudio_templates.js", "src/core/guistudio.js"]) load(f);
+// ── 1.50 template library ───────────────────────────────────────────────────
+{ const L = w.ORGuiTemplates;
+  ok("1.50: ORGuiTemplates library exposes 100+ templates in 12 categories", L && L.count >= 100 && L.list.length === L.count && L.categories.length === 12, L && L.count);
+  ok("1.50: every category has at least 6 templates and every template belongs to a category", L.categories.every((c) => L.list.filter((t) => t.cat === c.id).length >= 6) && L.list.every((t) => L.categories.some((c) => c.id === t.cat)));
+  ok("1.50: template ids are unique, labelled, tagged and carry a known preset", new Set(L.list.map((t) => t.id)).size === L.list.length && L.list.every((t) => t.label && t.screen && Array.isArray(t.tags) && t.tags.length && ["midnight", "clean_light", "candy", "neon", "royal_gold", "forest", "horror", "ocean", "sakura", "retro"].includes(t.preset)));
+  ok("1.50: at least 8 featured templates, original 10 ids preserved", L.list.filter((t) => t.featured).length >= 8 && ["hud", "menu", "shop", "inventory", "settings", "leaderboard", "quests", "dialogue", "loading", "rewards"].every((id) => L.get(id)));
+  ok("1.50: presets are spread across the library (≥6 distinct) — templates look different, not all midnight", new Set(L.list.map((t) => t.preset)).size >= 6);
+}
 ok("scripts load without window errors", errors.length === 0, errors);
 const G = w.ORGuiStudio;
 ok("window.ORGuiStudio exported", G && typeof G.open === "function" && typeof G.toLuau === "function");
@@ -108,7 +117,8 @@ const host = w.document.getElementById("rs-gui");
 ok("Simple mode is the default and marks the host", G._state.simple === true && host.classList.contains("rsg-simple") && host.querySelector('.rsg-mode [data-mode="simple"]').classList.contains("on"));
 ok("Simple: 6 click-to-add elements + plain-named ready-made components", host.querySelectorAll(".rsg-tools-simple .rsg-add").length === 6 && host.querySelectorAll(".rsg-tools-simple .rsg-comp").length === 12 && G.SIMPLE_ELEMENTS.length === 6);
 ok("Simple: advanced-only controls carry rsg-adv (grid, snap, import, open, save, copyLua, screen name, Code tab)", ["grid", "snap", "import", "open", "save", "copyLua"].every((a) => host.querySelector(`[data-act="${a}"]`).classList.contains("rsg-adv")) && host.querySelector(".rsg-screen-name").closest(".rsg-rf").classList.contains("rsg-adv") && host.querySelector('.rsg-tab[data-tab="code"]').classList.contains("rsg-adv"));
-ok("Simple: empty screen offers the 10 templates as start cards", host.querySelectorAll(".rsg-empty-stage .rsg-start [data-tpl]").length === 10);
+ok("Simple: empty screen offers 8 featured templates as thumbnail start cards + a browse-all button", host.querySelectorAll(".rsg-empty-stage .rsg-start [data-tpl]").length === 8 && host.querySelectorAll(".rsg-empty-stage .rsg-start .rsg-start-card .rsg-gal-thumb[data-thumb]").length === 8 && /Browse all 1\d\d templates/.test(host.querySelector('.rsg-empty-stage [data-act="gallery"]').textContent));
+ok("Simple: ribbon has a Templates button that shows the count", host.querySelector('.rsg-ribbon [data-act="gallery"]') && !host.querySelector('.rsg-ribbon [data-act="gallery"]').classList.contains("rsg-adv") && /1\d\d/.test(host.querySelector('.rsg-ribbon [data-act="gallery"]').textContent));
 ok("Simple: Props shows the how-it-works steps when nothing is selected", host.querySelector(".rsg-props .rsg-steps") && host.querySelectorAll(".rsg-props .rsg-steps li").length === 4);
 host.querySelector('.rsg-add[data-add="TextButton"]').click();
 ok("Simple: clicking Add → Button drops a centred default-size button and selects it", G.getSpec().children.length === 1 && G.getSpec().children[0].class === "TextButton" && G.getSpec().children[0].size[1] === 200 && G.getSpec().children[0].position[1] === Math.round((1366 - 200) / 2) && G._state.sel.length === 1 && G._state.tool === "select", G.getSpec().children[0]);
@@ -133,11 +143,52 @@ ok("Simple inspector: Name / Text / colours / size / When clicked, no UDim field
 host.querySelector('.rsg-props [data-mode="advanced"]').click();
 ok("'More options…' switches to Advanced mode and shows the full inspector", !host.classList.contains("rsg-simple") && G._state.simple === false && host.querySelector('.rsg-props input[data-k="name"]'));
 host.querySelector('[data-act="clear"]').click();
-ok("start cards also appear in Advanced when empty", host.querySelectorAll(".rsg-start [data-tpl]").length === 10);
+ok("start cards also appear in Advanced when empty", host.querySelectorAll(".rsg-start [data-tpl]").length === 8);
 host.querySelector('.rsg-start [data-tpl="hud"]').click();
 ok("clicking a start card loads that template", G.getSpec().screen.name === "HUD" && G.getSpec().children.length > 0);
 G._state.history.length = 0; G._state.redo.length = 0;
-ok("catalogues: 10 templates / 4 devices / 9 element tools", G.TEMPLATES.length === 10 && G.DEVICES.length === 4 && G.ELEMENT_TOOLS.length === 9);
+ok("1.50: polish — most templates use gradients or glass (bg_t) panels, and every one builds without throwing", G.TEMPLATES.filter((t) => /"gradient"|"bg_t"/.test(JSON.stringify(t.build()))).length >= G.TEMPLATES.length * 0.8);
+ok("catalogues: 100+ templates / 12 categories / 4 devices / 9 element tools", G.TEMPLATES.length >= 100 && G.TEMPLATES.length === w.ORGuiTemplates.count && G.TEMPLATE_CATEGORIES.length === 12 && G.DEVICES.length === 4 && G.ELEMENT_TOOLS.length === 9, G.TEMPLATES.length);
+{ const errs = []; let warnTotal = 0; const saved = G.getSpec();
+  for (const t of G.TEMPLATES) { G.loadSpec({ screen: { name: t.screen }, preset: t.preset, children: t.build() }); const is = G.check(); warnTotal += is.length; for (const i of is) if (i.level === "error") errs.push(t.id + " " + i.path + ": " + i.msg); }
+  G.loadSpec(saved);
+  ok("1.50: every template passes the pre-flight Check with zero errors", errs.length === 0, errs.slice(0, 5));
+  ok("1.50: self-acting behaviours (switch / tab / select_slot / show_while_hover) are not flagged as missing a target, toggle still is", (G.loadSpec({ children: [{ class: "TextButton", name: "Sw", text: "", size: [0, 56, 0, 30], actions: [{ on: "click", do: "switch" }] }, { class: "TextButton", name: "Tb", text: "T", size: [0, 56, 0, 30], actions: [{ on: "click", do: "tab" }] }, { class: "TextButton", name: "Sl", text: "", size: [0, 56, 0, 30], actions: [{ on: "click", do: "select_slot" }] }, { class: "TextLabel", name: "Tip", text: "x", size: [0, 56, 0, 30], actions: [{ on: "parent_hover", do: "show_while_hover" }] }, { class: "TextButton", name: "Go", text: "Go", size: [0, 56, 0, 30], actions: [{ on: "click", do: "toggle" }] }] }), G.check().filter((i) => i.level === "error").map((i) => i.path).join(",") === "Go"), G.check().filter((i) => i.level === "error"));
+  G.loadSpec(saved); void warnTotal; }
+ok("template select groups the library by category", host.querySelectorAll(".rsg-template-sel optgroup").length === 12 && host.querySelectorAll(".rsg-template-sel option[value]:not([value=''])").length === G.TEMPLATES.length);
+// ── 1.50 gallery ────────────────────────────────────────────────────────────
+{ const gal = host.querySelector(".rsg-gallery");
+  ok("gallery is hidden until opened", gal && gal.hidden === true);
+  host.querySelector('.rsg-ribbon [data-act="gallery"]').click();
+  ok("Templates button opens the gallery with every card + category chips", gal.hidden === false && G._state.galleryOpen && host.querySelectorAll(".rsg-gal-grid .rsg-gal-card[data-tpl]").length === G.TEMPLATES.length && host.querySelectorAll(".rsg-gal-cats [data-galcat]").length === 14, host.querySelectorAll(".rsg-gal-grid .rsg-gal-card").length);
+  ok("gallery cards carry a lazy thumbnail slot, label, category and theme dot", Array.from(host.querySelectorAll(".rsg-gal-card")).every((c) => c.querySelector(".rsg-gal-thumb[data-thumb]") && c.querySelector(".rsg-gal-meta b").textContent && c.querySelector(".rsg-gal-meta small").textContent && c.querySelector(".rsg-gal-dot")));
+  host.querySelector('.rsg-gal-cats [data-galcat="shop"]').click();
+  ok("category chip filters the grid", host.querySelectorAll(".rsg-gal-grid .rsg-gal-card").length === G.TEMPLATES.filter((t) => t.cat === "shop").length && host.querySelector('.rsg-gal-cats [data-galcat="shop"]').classList.contains("on"));
+  host.querySelector('.rsg-gal-cats [data-galcat="all"]').click();
+  const search = host.querySelector(".rsg-gal-search"); search.value = "timer"; search.dispatchEvent(new w.Event("input", { bubbles: true }));
+  ok("search filters by name / tags", G._galleryFiltered().length > 0 && G._galleryFiltered().length < G.TEMPLATES.length && G._galleryFiltered().every((t) => /timer/i.test(t.label + " " + t.tags.join(" ") + " " + t.screen)) && host.querySelectorAll(".rsg-gal-grid .rsg-gal-card").length === G._galleryFiltered().length);
+  search.value = "zzzz-nothing"; search.dispatchEvent(new w.Event("input", { bubbles: true }));
+  ok("no-match search shows a friendly hint", host.querySelector(".rsg-gal-none") && host.querySelectorAll(".rsg-gal-card").length === 0);
+  search.value = ""; search.dispatchEvent(new w.Event("input", { bubbles: true }));
+  const before = G.getSpec();
+  const card = host.querySelector('.rsg-gal-card[data-tpl="shop_pass"]') || host.querySelectorAll(".rsg-gal-card")[20];
+  const picked = G.TEMPLATES.find((t) => t.id === card.dataset.tpl);
+  card.click();
+  ok("clicking a gallery card loads the template, switches to its theme preset and closes the gallery", gal.hidden === true && !G._state.galleryOpen && G.getSpec().screen.name === picked.screen && G._state.preset === picked.preset && G._state.tokens.primary === G._state.tokens.primary && host.querySelector(".rsg-preset-sel").value === picked.preset, [G.getSpec().screen.name, G._state.preset]);
+  ok("the previous design is on the undo stack", G._state.history.length > 0);
+  G.openGallery("featured");
+  ok("openGallery('featured') shows only featured cards", host.querySelectorAll(".rsg-gal-card").length === G.TEMPLATES.filter((t) => t.featured).length);
+  host.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  ok("Escape closes the gallery", gal.hidden === true && !G._state.galleryOpen);
+  // thumbnails: rendered once from the template's own preset, cached, state restored
+  const t0 = G.TEMPLATES.find((t) => t.id === "hud");
+  const savedNodes = G._state.nodes, savedPreset = G._state.preset;
+  const html = G._renderThumbHtml(t0);
+  ok("thumbnail renders the template at 1366×768 scaled into the card and restores designer state", /class="rsg-gal-shot" style="width:1366px;height:768px;--s:0\.1698/.test(html) && html.includes("rsg-n") && G._state.nodes === savedNodes && G._state.preset === savedPreset && G._thumbCache.get("hud") === html && G._renderThumbHtml(t0) === html);
+  const menuThumb = G._renderThumbHtml(G.TEMPLATES.find((t) => t.id === "menu"));
+  { const menuT = G.TEMPLATES.find((t) => t.id === "menu"); const roots = menuT.build(); const hiddenRoots = roots.filter((r) => r.visible === false);
+    ok("thumbnails skip hidden windows (menu: 2 hidden roots not drawn, visible root drawn)", hiddenRoots.length === 2 && hiddenRoots.every((r) => !new RegExp('data-id="[^"]*"[^>]*>[^<]*' + r.name).test(menuThumb) && !menuThumb.includes(`>${r.name}<`)) && (menuThumb.match(/class="rsg-n/g) || []).length > 3 && (menuThumb.match(/class="rsg-n/g) || []).length < roots.reduce(function cnt(acc, n) { return acc + 1 + (n.children || []).reduce(cnt, 0); }, 0)); }
+  void before; }
 ok("24 component buttons rendered (advanced list)", host.querySelectorAll(".rsg-tools-full .rsg-comp").length === 24, host.querySelectorAll(".rsg-tools-full .rsg-comp").length);
 Array.from(host.querySelectorAll(".rsg-tab")).find((b) => b.dataset.tab === "theme").click();
 ok("10 theme presets rendered on the Theme tab", host.querySelectorAll(".rsg-preset").length === 10, host.querySelectorAll(".rsg-preset").length);
@@ -318,6 +369,7 @@ setTimeout(async () => {
       const ed2 = screen.querySelector(".rsg-txt.editing"); ed2.textContent = "Discarded"; ed2.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       ok("Escape cancels the edit without touching the text or history", G.getSpec().children[0].text === "New label" && G._state.history.length === before, G.getSpec().children[0].text); void el; }
     // live colour undo: the input stream pushes history once, change does not push again
+    G._state.history.length = 0; // (the 1.50 gallery checks above filled the 120-entry history cap)
     { const n0 = G._state.nodes[0]; G._state.sel = [n0]; host.querySelector('.rsg-tab[data-tab="props"]').click();
       const col = host.querySelector('.rsg-props input[data-sk="bg"], .rsg-props input[data-k="bg"][data-kind="color"]'); const h0 = G._state.history.length; const was = n0.bg;
       col.value = "#112233"; col.dispatchEvent(new w.Event("input", { bubbles: true })); col.value = "#445566"; col.dispatchEvent(new w.Event("input", { bubbles: true })); col.dispatchEvent(new w.Event("change", { bubbles: true }));
