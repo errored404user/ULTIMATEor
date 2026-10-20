@@ -80,7 +80,7 @@ for (const f of ["src/core/skills/studio_skills.js", "src/core/skills/studio_des
 ok("scripts load without window errors", errors.length === 0, errors);
 const G = w.ORGuiStudio;
 ok("window.ORGuiStudio exported", G && typeof G.open === "function" && typeof G.toLuau === "function");
-ok("only the stage binds pointerdown (the screen binding doubled every press)", !studio.includes('D.screen.addEventListener("pointerdown", onDown)') && studio.includes('D.stage.addEventListener("pointerdown", (e) => {'));
+ok("only the stage binds pointerdown (the screen binding doubled every press)", !studio.includes('D.screen.addEventListener("pointerdown", onDown)') && studio.includes('D.stage.addEventListener("pointerdown", guarded((e) => {'));
 ok("children render relative to the parent box", studio.includes("style=\"left:${box.x - pb.x}px;top:${box.y - pb.y}px;") && studio.includes("map((c) => renderNode(c, box))"));
 ok("prop rows are divs (no nested labels double-toggling checkboxes)", studio.includes('return `<div class="rsg-f" ${hint ? `title="${esc(hint)}"` : ""}><span>${esc(label)}</span>${html}</div>`;'));
 ok("props panel keeps focus + scroll across re-renders", studio.includes("function renderPropsInner()") && studio.includes("el.focus({ preventScroll: true })") && studio.includes("D.side.scrollTop = scroll;"));
@@ -183,9 +183,10 @@ setTimeout(async () => {
     // import from Studio
     host.querySelector('[data-act="import"]').click(); await new Promise((r) => setTimeout(r, 30));
     const isel = host.querySelector(".rsg-import-sel");
-    ok("Import lists the ScreenGuis", calls[1][0] === "ui_export_spec" && isel && isel.options.length === 1 && isel.options[0].value === "StarterGui.Imported", calls[1]);
+    ok("Build verifies against Studio's real viewport afterwards (ui_layout_report on the built screen)", calls[1] && calls[1][0] === "ui_layout_report" && calls[1][1].path === "StarterGui.X", calls[1]);
+    ok("Import lists the ScreenGuis", calls[2][0] === "ui_export_spec" && isel && isel.options.length === 1 && isel.options[0].value === "StarterGui.Imported", calls[1]);
     host.querySelector('[data-act="importGo"]').click(); await new Promise((r) => setTimeout(r, 30));
-    ok("Import loads the exported spec", calls[2][0] === "ui_export_spec" && calls[2][1].path === "StarterGui.Imported" && G.getSpec().screen.name === "Imported" && G.getSpec().preset === "ocean" && G.getSpec().children.length === 1 && G.getSpec().children[0].children[0].name === "L", G.getSpec());
+    ok("Import loads the exported spec", calls[3][0] === "ui_export_spec" && calls[3][1].path === "StarterGui.Imported" && G.getSpec().screen.name === "Imported" && G.getSpec().preset === "ocean" && G.getSpec().children.length === 1 && G.getSpec().children[0].children[0].name === "L", G.getSpec());
     // undo back to the pre-import design
     host.dispatchEvent(new w.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
     ok("Ctrl+Z undoes the import", G.getSpec().screen.name === "MainMenu" && G.getSpec().children.length === 4, G.getSpec().screen);
@@ -261,6 +262,68 @@ setTimeout(async () => {
     ok("duplicate creates a second root with a unique name", G.getSpec().children.length === 2 && G.getSpec().children[0].name !== G.getSpec().children[1].name, G.getSpec().children.map((c) => c.name));
     host.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
     ok("Delete removes the duplicate", G.getSpec().children.length === 1);
+    // ── 1.49 accuracy + stability ─────────────────────────────────────────
+    ok("source: 58 px topbar inset on every device (GuiService:GetGuiInset after the 2024 topbar)", G.DEVICES.every((d) => d.inset === 58) && studio.includes("58 px with the current Roblox topbar"));
+    ok("source: Luau exporter is hardened (finite UDim2s, validated fonts, bracketed raw-prop keys, tokens restored in finally)", studio.includes("function luaFont(v) { const f = tokenFont(v); return FONTS.includes(f) ? f : \"GothamMedium\"; }") && studio.includes("const luaKey = (k) => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(k) ? \".\" + k : `[${luaStr(k)}]`);") && studio.includes("} finally { S.tokens = saveTokens; }"));
+    ok("source: pointer handlers are guarded and a drag is cancelled on pointercancel / window blur / Escape", studio.includes('window.addEventListener("pointercancel", () => { if (S.open && drag) cancelDrag(); });') && studio.includes('window.addEventListener("blur", () => { if (S.open && drag) cancelDrag(); });') && studio.includes("if (drag && drag.kind !== \"none\") { e.preventDefault(); cancelDrag(); return; }"));
+    ok("source: renderAll has an error boundary that undoes the last change", studio.includes('toast("Something went wrong while drawing — the last change was undone")'));
+    ok("source: stage re-renders during drags are coalesced into animation frames", studio.includes("function renderStageSoon()") && studio.includes("renderStageSoon(); showGuides(gx, gy);"));
+    ok("source: live colour drags push history once (undo reverts the colour)", studio.includes("const pushUnlessLive = (k) => { if (liveKey === k) { liveKey = null; return; } liveKey = null; pushHistory(); };"));
+    ok("source: autosave is saved before unload and before every build", studio.includes('window.addEventListener("beforeunload", () => { if (S.nodes.length) autosaveNow(); });') && studio.includes("autosaveNow();\n    try {\n      const fb = await S.hooks.runTool(\"ui_build_spec\""));
+    ok("source: an autosaved design is offered back on an empty open (Restore it / Start fresh) and never wiped by an empty render", studio.includes('<button type="button" class="rsg-btn sm primary" data-act="restore">Restore it</button><button type="button" class="rsg-btn sm" data-act="restoreDismiss">Start fresh</button>') && studio.includes("function autosaveNow() { if (!S.nodes.length) return;") && studio.includes("const saved = loadAutosave(); if (saved) {"));
+    ok("css: text is no longer padded or clipped (Roblox draws text edge to edge and lets it overflow) + inline edit + restore + issues styles", css.includes(".rsg-txt { position: absolute; inset: 0; display: flex; padding: 0; overflow: visible;") && css.includes(".rsg-txt.editing {") && css.includes(".rsg-restore { pointer-events: auto;") && css.includes(".rsg-issue.error i { background: #ff5c5c; }"));
+    // adopt() sanitises hostile specs
+    G.loadSpec({ children: [{ class: "Frame", name: "Bad.Name", size: ["x", null, 0, "50"], position: [NaN, 10, 0, 0], anchor: [2, -1], children: [{ class: "ViewportFrame", name: "Dup" }, { class: "TextLabel", name: "Dup", text: 42 }, null, "nope"] }, { class: "Frame", name: "Bad_Name" }] });
+    { const r = G.getSpec().children; const k = r[0].children;
+      ok("adopt: dots leave names, duplicate siblings are renamed, non-objects dropped, unknown classes become Frame, text is a string", r[0].name === "Bad_Name" && r[1].name === "Bad_Name2" && k.length === 2 && k[0].class === "Frame" && k[0].name === "Dup" && k[1].name === "Dup2" && k[1].text === "42", [r.map((x) => x.name), k.map((x) => x.name + ":" + x.class)]);
+      ok("adopt: non-finite UDim numbers become 0, anchors are clamped to 0..1", r[0].size.join() === "0,0,0,50" && r[0].position.join() === "0,10,0,0" && r[0].anchor.join() === "1,0", [r[0].size, r[0].position, r[0].anchor]); }
+    // renames follow into behaviour targets
+    G.loadSpec({ children: [{ class: "Frame", name: "Shop", size: [0, 300, 0, 200], visible: false, children: [{ class: "TextButton", name: "Close", text: "x", actions: [{ on: "click", do: "close", target: "parent" }] }] }, { class: "TextButton", name: "Open", text: "Shop", size: [0, 100, 0, 40], actions: [{ on: "click", do: "toggle", target: "gui.Shop" }] }, { class: "TextButton", name: "Sib", text: "s", size: [0, 100, 0, 40], actions: [{ on: "click", do: "open", target: "Shop" }] }] });
+    G._rename(G._state.nodes[0], "Store.Window");
+    { const r = G.getSpec().children;
+      ok("rename: the dot is replaced and gui.Shop / bare sibling 'Shop' targets become the new name", r[0].name === "Store_Window" && r[1].actions[0].target === "gui.Store_Window" && r[2].actions[0].target === "Store_Window", [r[0].name, r[1].actions[0].target, r[2].actions[0].target]);
+      ok("rename: a clash with a sibling gets a numbered name instead of a duplicate", (G._rename(G._state.nodes[2], "Open"), G._state.nodes[2].name === "Open2"), G._state.nodes[2].name);
+      ok("resolveTarget mirrors OR_UIBehaviours byPath (parent / gui.Path / bare name anywhere)", G._resolveTarget(G._state.nodes[0].children[0], "parent") === G._state.nodes[0] && G._resolveTarget(G._state.nodes[1], "gui.Store_Window") === G._state.nodes[0] && G._resolveTarget(G._state.nodes[1], "Close") === G._state.nodes[0].children[0] && G._resolveTarget(G._state.nodes[1], "gui.Nope") === null); }
+    // the checker
+    G.loadSpec({ children: [{ class: "TextButton", name: "Buy", text: "Buy", size: [0, 100, 0, 40], actions: [{ on: "click", do: "open", target: "gui.Missing" }] }, { class: "TextButton", name: "Go", text: "Go", size: [0, 100, 0, 40], position: [0, 0, 0, 60], actions: [{ on: "click", do: "toggle" }] }, { class: "ImageLabel", name: "Icon", size: [0, 40, 0, 40], position: [0, 0, 0, 120] }, { class: "Frame", name: "Far", size: [0, 50, 0, 50], position: [0, 5000, 0, 0] }, { class: "TextLabel", name: "Long", text: "This is a very long caption that will not fit", text_size: 24, size: [0, 60, 0, 30], position: [0, 0, 0, 200] }] });
+    { const issues = G.check(); const msgs = issues.map((i) => i.path + ": " + i.msg);
+      ok("check(): missing target, dangling gui.Path, image without id, off-screen, overflowing text are all reported", msgs.some((m) => m.startsWith("Buy: target \"gui.Missing\" does not exist")) && msgs.some((m) => m.startsWith("Go: \"toggle\" needs a target")) && msgs.some((m) => m.startsWith("Icon: has no image id")) && msgs.some((m) => m.startsWith("Far: is completely off-screen")) && msgs.some((m) => m.startsWith("Long: text \"This is a very long cap") && m.includes("wider than the box")), msgs);
+      ok("check(): unresolved targets are errors, the rest warnings", issues.filter((i) => i.level === "error").length === 2 && issues.filter((i) => i.level === "warn").length >= 3, issues.map((i) => i.level));
+      calls.length = 0; host.querySelector('[data-act="build"]').click();
+      ok("Build refuses to run with unresolved behaviour targets and opens the Check list instead of calling Studio", calls.length === 0 && host.querySelector(".rsg-issues") && host.querySelectorAll(".rsg-issue.error").length === 2 && host.querySelector(".rsg-send-status").textContent.includes("gui.Missing"), [calls.length, host.querySelector(".rsg-send-status").textContent]);
+      host.querySelector(".rsg-issue.error").click();
+      ok("clicking an issue selects the offending element", G._state.sel.length === 1 && G._state.sel[0].name === "Buy", G._state.sel.map((x) => x.name));
+      host.querySelector('[data-act="check"]').click();
+      ok("footer Check button re-runs the checker and summarises it in the overlay toast", /2 problems, \d+ warnings?/.test(host.querySelector(".rsg-toast").textContent), host.querySelector(".rsg-toast").textContent); }
+    // layout accuracy: hidden children take no slot, grid alignment, automatic size
+    G.loadSpec({ children: [{ class: "Frame", name: "L", size: [0, 200, 0, 300], layout: { kind: "list", gap: 10 }, children: [{ class: "Frame", name: "A", size: [1, 0, 0, 40] }, { class: "Frame", name: "H", size: [1, 0, 0, 40], visible: false }, { class: "Frame", name: "B", size: [1, 0, 0, 40] }] }, { class: "Frame", name: "Gr", size: [0, 200, 0, 100], position: [0, 300, 0, 0], layout: { kind: "grid", cell: [0, 40, 0, 40], gap: 0, h_align: "Center" }, children: [{ class: "Frame", name: "c1" }, { class: "Frame", name: "c2" }] }, { class: "TextLabel", name: "Auto", text: "Hello world", text_size: 20, size: [0, 10, 0, 10], position: [0, 0, 0, 400], automatic_size: "XY" }] });
+    G._computeGeometry();
+    { const bp = (nm) => G._geo.get(byPath(G, nm).id);
+      ok("list layout skips invisible children like UIListLayout (B sits right after A)", bp("L.B").y === bp("L.A").y + 50, [bp("L.A"), bp("L.B")]);
+      ok("grid layout honours HorizontalAlignment Center", bp("Gr.c1").x === 300 + (200 - 80) / 2 && bp("Gr.c2").x === bp("Gr.c1").x + 40, [bp("Gr.c1"), bp("Gr.c2")]);
+      ok("AutomaticSize XY grows a text label to its text (canvas-less fallback: 0.55 em per glyph)", bp("Auto").w > 100 && bp("Auto").h >= 23 && bp("Auto").h <= 24, bp("Auto")); }
+    // TextScaled fit: the preview font size is the largest that fits the box (<= 100)
+    { const big = G._fitTextSize({ text: "Hi", font: "GothamBold" }, { w: 1000, h: 400 }); const small = G._fitTextSize({ text: "A fairly long sentence in here", font: "Gotham" }, { w: 120, h: 30 }); const fit = G._fitTextSize({ text: "Hi", font: "Gotham", text_fit: { min: 10, max: 32 } }, { w: 1000, h: 400 });
+      ok("fitTextSize caps at 100 (Roblox limit), shrinks long text into small boxes, and obeys text_fit max", big === 100 && small >= 6 && small <= 16 && fit === 32, [big, small, fit]); }
+    // inline text editing replaces prompt()
+    G.loadSpec({ children: [{ class: "TextButton", name: "Btn", text: "Old", size: [0, 200, 0, 50], position: [0, 100, 0, 100] }] });
+    G._state.sel = [G._state.nodes[0]]; G._computeGeometry(); host.querySelector('.rsg-tab[data-tab="props"]').click();
+    { const el = screen.querySelector('.rsg-n[data-id="' + G._state.nodes[0].id + '"] > .rsg-txt');
+      screen.querySelector(".rsg-n").dispatchEvent(new w.MouseEvent("dblclick", { bubbles: true }));
+      const ed = screen.querySelector(".rsg-txt.editing");
+      ok("double-click on the selected button starts inline editing (contenteditable, no prompt)", !!ed && ed.getAttribute("contenteditable") === "true", !!ed);
+      ed.textContent = "New label"; ed.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      ok("Enter commits the new text (one undo step) and leaves edit mode", G.getSpec().children[0].text === "New label" && !screen.querySelector(".rsg-txt.editing") && G._state.history.length > 0, G.getSpec().children[0].text);
+      const before = G._state.history.length; screen.querySelector(".rsg-n").dispatchEvent(new w.MouseEvent("dblclick", { bubbles: true }));
+      const ed2 = screen.querySelector(".rsg-txt.editing"); ed2.textContent = "Discarded"; ed2.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      ok("Escape cancels the edit without touching the text or history", G.getSpec().children[0].text === "New label" && G._state.history.length === before, G.getSpec().children[0].text); void el; }
+    // live colour undo: the input stream pushes history once, change does not push again
+    { const n0 = G._state.nodes[0]; G._state.sel = [n0]; host.querySelector('.rsg-tab[data-tab="props"]').click();
+      const col = host.querySelector('.rsg-props input[data-sk="bg"], .rsg-props input[data-k="bg"][data-kind="color"]'); const h0 = G._state.history.length; const was = n0.bg;
+      col.value = "#112233"; col.dispatchEvent(new w.Event("input", { bubbles: true })); col.value = "#445566"; col.dispatchEvent(new w.Event("input", { bubbles: true })); col.dispatchEvent(new w.Event("change", { bubbles: true }));
+      ok("colour drag = one history entry, Ctrl+Z restores the original colour", G._state.history.length === h0 + 1 && n0.bg === "#445566" && (host.dispatchEvent(new w.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true })), G.getSpec().children[0].bg === was), [G._state.history.length - h0, G.getSpec().children[0].bg, was]); }
+    ok("Fill button names its real target in Simple mode", studio.includes('${parentOf(n) ? "Fill its panel" : "Fill the screen"}'));
+    ok("Luau: text_fit forces TextScaled, raw prop keys are bracketed when not identifiers", (() => { const lua = G.toLuau({ children: [{ class: "TextLabel", name: "T", text: "x", text_size: 18, text_fit: { min: 8, max: 20 }, props: { "Weird Key": 1, ClearTextOnFocus: false } }] }); return lua.includes("o1.TextScaled = true") && !lua.includes("o1.TextSize = 18") && lua.includes('o1["Weird Key"] = 1') && lua.includes("o1.ClearTextOnFocus = false"); })());
     // escape closes
     host.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     ok("Escape closes the studio", !G.isOpen() && !w.document.documentElement.classList.contains("rs-gui-open"));

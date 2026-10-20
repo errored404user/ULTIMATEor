@@ -16,7 +16,15 @@
  *     runTool(name, args) -> Promise<string>           // main.js: run a Studio command now, returns feedback text
  *     studioReady() -> boolean, engine() -> string, toast(msg), diag(event, data)
  *   }
- *   close(), isOpen(), getSpec(), loadSpec(spec), toLuau(spec), buildMessage(intent)
+ *   close(), isOpen(), getSpec(), loadSpec(spec), toLuau(spec), buildMessage(intent), check()
+ *
+ * 1.49: accuracy + stability pass - canvas-measured TextScaled / AutomaticSize,
+ * UIPadding on text, hidden children skip layouts, grid alignment, 58 px topbar
+ * inset, name hygiene (unique siblings, no dots, renames follow into behaviour
+ * targets), a pre-build checker, post-build verification against Studio's
+ * real viewport (ui_layout_report), autosave + restore, inline text editing,
+ * error boundaries around rendering and pointer work, and correct undo for
+ * live colour edits.
  */
 (() => {
   "use strict";
@@ -68,11 +76,12 @@
     dist_y: SVG('<path d="M4 4h16M4 20h16"/><rect x="8" y="9" width="8" height="6"/>'),
   };
 
+  // inset = GuiService:GetGuiInset().Y: 58 px with the current Roblox topbar (36 px before 2024).
   const DEVICES = [
-    { id: "phone", label: "Phone 812×375", w: 812, h: 375, inset: 36 },
-    { id: "tablet", label: "Tablet 1024×768", w: 1024, h: 768, inset: 36 },
-    { id: "desktop", label: "Desktop 1366×768", w: 1366, h: 768, inset: 36 },
-    { id: "studio", label: "Studio 1920×1080", w: 1920, h: 1080, inset: 36 },
+    { id: "phone", label: "Phone 812×375", w: 812, h: 375, inset: 58 },
+    { id: "tablet", label: "Tablet 1024×768", w: 1024, h: 768, inset: 58 },
+    { id: "desktop", label: "Desktop 1366×768", w: 1366, h: 768, inset: 58 },
+    { id: "studio", label: "Studio 1920×1080", w: 1920, h: 1080, inset: 58 },
   ];
   const ELEMENT_TOOLS = [
     { id: "select", label: "Select", key: "V", cls: null, hint: "Click to select, drag to move, handles to resize. Drag on empty space for a marquee." },
@@ -121,7 +130,7 @@
     screen: { name: "OR_UI", ignore_inset: true, reset_on_spawn: false, display_order: 0 },
     preset: "midnight", tokens: Object.assign({}, FALLBACK_PRESETS.midnight),
     nodes: [], sel: [], history: [], redo: [], clipboard: null, sideTab: "props", intent: "",
-    studioScreens: [],
+    studioScreens: [], issues: null, issuesOpen: false, pendingRestore: null,
     simple: (() => { try { return localStorage.getItem("rsg-mode") !== "advanced"; } catch { return true; } })(),
   };
   const byId = new Map();
@@ -150,6 +159,45 @@
   }
   function tokenNum(v, fallback) { if (v == null || v === "") return fallback; if (typeof v === "number") return v; const t = S.tokens[String(v)]; if (typeof t === "number") return t; const n = Number(v); return Number.isFinite(n) ? n : fallback; }
   function tokenFont(v) { if (v == null || v === "") return S.tokens.font || "GothamMedium"; const t = S.tokens[String(v)]; return typeof t === "string" ? t : String(v); }
+  const fin = (v, d = 0) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
+  function cleanName(v, fallback) { let s = String(v == null ? "" : v).replace(/\./g, "_").replace(/[\r\n\t]+/g, " ").trim().slice(0, 100); return s || fallback || "Frame"; }
+
+  // ───────────────────────── text metrics ─────────────────────────
+  // Roblox TextScaled picks the largest TextSize (<= 100) whose wrapped text fits
+  // the label; AutomaticSize grows the label to its text. We measure with a 2D
+  // canvas (falls back to a 0.55 em average when canvas is unavailable).
+  let measureCtxCache = null;
+  function measureCtx() { if (measureCtxCache !== null) return measureCtxCache || null; try { if (typeof CanvasRenderingContext2D === "undefined") { measureCtxCache = false; return null; } const c = document.createElement("canvas"); measureCtxCache = (c.getContext && c.getContext("2d")) || false; } catch { measureCtxCache = false; } return measureCtxCache || null; }
+  function textWidth(text, fam, size, bold) { const ctx = measureCtx(); const t = String(text == null ? "" : text); if (!ctx) return t.length * size * 0.55; try { ctx.font = `${bold ? 700 : 500} ${size}px ${fam}`; return ctx.measureText(t).width; } catch { return t.length * size * 0.55; } }
+  const LINE_H = 1.15;
+  function wrapLines(text, fam, size, bold, maxW) {
+    // returns { lines, fits } like Roblox TextWrapped (words first, then hard breaks)
+    const paras = String(text == null ? "" : text).split(/\r?\n/); let lines = 0, fits = true;
+    for (const para of paras) {
+      const words = para.split(/(\s+)/).filter((w) => w.length); if (!words.length) { lines++; continue; }
+      let cur = ""; lines++;
+      for (const w of words) { if (/^\s+$/.test(w)) { cur += w; continue; } if (textWidth(w, fam, size, bold) > maxW + 0.5) fits = false; const next = cur + w; if (cur && textWidth(next, fam, size, bold) > maxW + 0.5) { lines++; cur = w; } else cur = next; }
+    }
+    return { lines: Math.max(1, lines), fits };
+  }
+  function fontOf(n) { const font = tokenFont(n.font); return { font, fam: FONT_CSS[font] || FONT_CSS.Gotham, bold: BOLD_FONTS.has(font) }; }
+  function fitTextSize(n, inner) {
+    const text = String(n.text == null ? "" : n.text); const f = fontOf(n);
+    let lo = 1, hi = clamp(Math.floor(inner.h / LINE_H), 1, 100);
+    if (!text.trim()) return hi;
+    while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); const r = wrapLines(text, f.fam, mid, f.bold, inner.w); if (r.fits && r.lines * mid * LINE_H <= inner.h + 0.5) lo = mid; else hi = mid - 1; }
+    let size = lo;
+    if (n.text_fit) { size = clamp(size, tokenNum(n.text_fit.min, 1), tokenNum(n.text_fit.max, 100)); }
+    return size;
+  }
+  function textSizeFor(n, inner) { return n.text_scaled || n.text_size == null ? fitTextSize(n, inner) : tokenNum(n.text_size, 14); }
+  function naturalTextSize(n, inner) {
+    // AutomaticSize for text objects: width of the longest line, height of the wrapped lines
+    const f = fontOf(n); const size = n.text_size != null && !n.text_scaled ? tokenNum(n.text_size, 14) : 14; const text = String(n.text == null ? "" : n.text);
+    const lines = text.split(/\r?\n/); const w = Math.max(...lines.map((l) => textWidth(l, f.fam, size, f.bold)), 0);
+    const r = n.wrap && inner.w > 0 ? wrapLines(text, f.fam, size, f.bold, inner.w) : { lines: lines.length };
+    return { w: Math.ceil(w), h: Math.ceil(r.lines * size * LINE_H) };
+  }
 
   // ───────────────────────── model ─────────────────────────
   function makeNode(cls, props = {}) {
@@ -167,14 +215,20 @@
   }
   function adopt(node, parent) {
     // import a spec node (recursively) → model node with ids
-    const n = Object.assign({}, node);
-    n.id = n.id || uid();
-    if (!CLASSES.includes(n.class)) n.class = "Frame";
-    n.name = String(n.name || n.class);
+    const n = Object.assign({}, node && typeof node === "object" ? node : {});
+    n.id = uid(); // always fresh: pasted / imported JSON may repeat ids
+    if (!CLASSES.includes(n.class)) n.class = n.class === "ViewportFrame" || n.class === "VideoFrame" ? "Frame" : (typeof n.class === "string" && /Button$/.test(n.class) ? "TextButton" : "Frame");
+    n.name = cleanName(n.name, n.class);
     if (!Array.isArray(n.size) || n.size.length !== 4) n.size = [0, 200, 0, 50];
     if (!Array.isArray(n.position) || n.position.length !== 4) n.position = [0, 0, 0, 0];
-    n.size = n.size.map(Number); n.position = n.position.map(Number);
-    n.children = Array.isArray(node.children) ? node.children.map((c) => adopt(c, n)) : [];
+    n.size = n.size.map((v) => clamp(fin(v), -1e5, 1e5)); n.position = n.position.map((v) => clamp(fin(v), -1e5, 1e5));
+    if (n.anchor != null) { if (Array.isArray(n.anchor) && n.anchor.length >= 2) n.anchor = [clamp(fin(n.anchor[0]), 0, 1), clamp(fin(n.anchor[1]), 0, 1)]; else delete n.anchor; }
+    if (n.text != null && typeof n.text !== "string") n.text = String(n.text);
+    if (n.z != null) n.z = Math.round(fin(n.z, 1));
+    if (n.actions != null && !Array.isArray(n.actions)) delete n.actions;
+    if (Array.isArray(n.actions)) n.actions = n.actions.filter((a) => a && typeof a === "object" && a.do);
+    n.children = Array.isArray(node.children) ? node.children.filter((c) => c && typeof c === "object").map((c) => adopt(c, n)) : [];
+    const seen = new Set(); for (const c of n.children) { if (seen.has(c.name)) c.name = uniqueName(n.children.filter((x) => x !== c), c.name); seen.add(c.name); }
     n._parent = parent ? parent.id : null;
     return n;
   }
@@ -203,7 +257,8 @@
     else if (spec.name) S.screen.name = String(spec.name);
     if (spec.preset && presets()[spec.preset]) { S.preset = spec.preset; S.tokens = Object.assign({}, presets()[spec.preset]); }
     if (spec.tokens && typeof spec.tokens === "object") Object.assign(S.tokens, spec.tokens);
-    S.nodes = roots.map((r) => adopt(r, null));
+    S.nodes = roots.filter((r) => r && typeof r === "object").map((r) => adopt(r, null));
+    { const seen = new Set(); for (const c of S.nodes) { if (seen.has(c.name)) c.name = uniqueName(S.nodes.filter((x) => x !== c), c.name); seen.add(c.name); } }
     S.sel = [];
     reindex(); renderAll();
     diag("load", { nodes: byId.size });
@@ -240,16 +295,25 @@
     const gap = tokenNum(ly.gap != null ? ly.gap : ly.padding, kind === "grid" ? 6 : 8);
     const horiz = String(ly.direction || (kind === "grid" ? "Horizontal" : "Vertical")).toLowerCase().startsWith("h");
     const hA = String(ly.h_align || "Left").toLowerCase(), vA = String(ly.v_align || "Top").toLowerCase();
-    const sorted = kids.slice().sort((a, b) => (a.layout_order || 0) - (b.layout_order || 0));
+    // Roblox layouts skip invisible children entirely (they take no slot)
+    const all = kids.slice().sort((a, b) => (a.layout_order || 0) - (b.layout_order || 0));
+    const sorted = all.filter((c) => c.visible !== false);
+    const hidden = all.filter((c) => c.visible === false);
     if (kind === "grid") {
       const cell = Array.isArray(ly.cell) && ly.cell.length === 4 ? ly.cell : [0, 80, 0, 80];
-      const cw = cell[0] * content.w + cell[1], ch = cell[2] * content.h + cell[3];
-      const perRow = Math.max(1, Math.floor((content.w + gap) / (cw + gap)));
-      sorted.forEach((c, i) => { const col = i % perRow, row = Math.floor(i / perRow); const x = content.x + col * (cw + gap), y = content.y + row * (ch + gap); place(c, { x, y, w: cw, h: ch }); });
+      const cw = Math.max(0, cell[0] * content.w + cell[1]), ch = Math.max(0, cell[2] * content.h + cell[3]);
+      const perLine = Math.max(1, Math.floor(((horiz ? content.w : content.h) + gap) / ((horiz ? cw : ch) + gap)));
+      const lines = Math.max(1, Math.ceil(sorted.length / perLine));
+      const used = Math.min(perLine, sorted.length);
+      const gridW = horiz ? used * (cw + gap) - gap : lines * (cw + gap) - gap, gridH = horiz ? lines * (ch + gap) - gap : used * (ch + gap) - gap;
+      const ox = hA === "center" ? (content.w - gridW) / 2 : hA === "right" ? content.w - gridW : 0;
+      const oy = vA === "center" ? (content.h - gridH) / 2 : vA === "bottom" ? content.h - gridH : 0;
+      sorted.forEach((c, i) => { const a = i % perLine, b = Math.floor(i / perLine); const col = horiz ? a : b, row = horiz ? b : a; place(c, { x: content.x + ox + col * (cw + gap), y: content.y + oy + row * (ch + gap), w: cw, h: ch }); });
+      for (const c of hidden) place(c, { x: content.x + ox, y: content.y + oy, w: cw, h: ch });
       return;
     }
     // list
-    let sizes = sorted.map((c) => { const s = udim(c.size, content.w, content.h); return { w: Math.max(0, s.x), h: Math.max(0, s.y) }; });
+    let sizes = sorted.map((c) => { const s = udim(c.size, content.w, content.h); const a = autoSize(c, { w: Math.max(0, s.x), h: Math.max(0, s.y) }, content); return { w: a.w, h: a.h }; });
     const total = sizes.reduce((a, s) => a + (horiz ? s.w : s.h), 0) + gap * Math.max(0, sorted.length - 1);
     let cursor = horiz ? content.x : content.y;
     if (horiz && hA === "center") cursor = content.x + (content.w - total) / 2; else if (horiz && hA === "right") cursor = content.x + content.w - total;
@@ -261,13 +325,35 @@
       else { y = cursor; x = hA === "center" ? content.x + (content.w - s.w) / 2 : hA === "right" ? content.x + content.w - s.w : content.x; cursor += s.h + gap; }
       place(c, { x, y, w: s.w, h: s.h });
     });
+    for (const c of hidden) { const s = udim(c.size, content.w, content.h); place(c, { x: content.x, y: content.y, w: Math.max(0, s.x), h: Math.max(0, s.y) }); }
   }
   function place(n, box) { geo.set(n.id, box); layoutChildren(n, contentOf(box, n)); }
+  function autoSize(n, size, content) {
+    // AutomaticSize emulation: text objects grow to their text; list containers to their children.
+    const mode = n.automatic_size ? String(n.automatic_size).toUpperCase() : (n.hug ? "XY" : "");
+    if (!mode) return size;
+    const p = padOf(n); let w = size.w, h = size.h;
+    if (/^(TextLabel|TextButton|TextBox)$/.test(n.class)) {
+      const nat = naturalTextSize(n, { w: Math.max(0, size.w - p.l - p.r), h: Math.max(0, size.h - p.t - p.b) });
+      if (mode.includes("X")) w = Math.max(w, nat.w + p.l + p.r); if (mode.includes("Y")) h = Math.max(h, nat.h + p.t + p.b);
+      return { w, h };
+    }
+    const ly = n.layout && (typeof n.layout === "object" ? n.layout : { kind: n.layout });
+    if (ly && String(ly.kind || "list").toLowerCase() === "list") {
+      const horiz = String(ly.direction || "Vertical").toLowerCase().startsWith("h"); const gap = tokenNum(ly.gap != null ? ly.gap : ly.padding, 8);
+      const kids = (n.children || []).filter((c) => c.visible !== false); const inner = { w: Math.max(0, size.w - p.l - p.r), h: Math.max(0, size.h - p.t - p.b) };
+      let sw = 0, sh = 0; for (const c of kids) { const s = udim(c.size, inner.w, inner.h); const a = autoSize(c, { w: Math.max(0, s.x), h: Math.max(0, s.y) }, inner); if (horiz) { sw += a.w; sh = Math.max(sh, a.h); } else { sh += a.h; sw = Math.max(sw, a.w); } }
+      if (kids.length > 1) { if (horiz) sw += gap * (kids.length - 1); else sh += gap * (kids.length - 1); }
+      if (mode.includes("X")) w = Math.max(w, sw + p.l + p.r); if (mode.includes("Y")) h = Math.max(h, sh + p.t + p.b);
+    }
+    return { w, h };
+  }
   function measure(n, content) {
     const s = udim(n.size, content.w, content.h), p = udim(n.position, content.w, content.h);
     const ax = n.anchor ? Number(n.anchor[0]) || 0 : 0, ay = n.anchor ? Number(n.anchor[1]) || 0 : 0;
     let w = Math.max(0, s.x), h = Math.max(0, s.y);
     if (n.aspect) { const r = tokenNum(n.aspect, 1); h = w / r; }
+    if (n.automatic_size || n.hug) { const a = autoSize(n, { w, h }, content); w = a.w; h = a.h; }
     place(n, { x: content.x + p.x - ax * w, y: content.y + p.y - ay * h, w, h });
   }
   function computeGeometry() { geo.clear(); const sb = screenBox(); for (const n of S.nodes) measure(n, sb); }
@@ -314,15 +400,18 @@
   }
   function hexA(hex, a) { if (!hex || hex[0] !== "#" || hex.length < 7) return hex || "transparent"; const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16); return a >= 1 ? hex : `rgba(${r},${g},${b},${clamp(a, 0, 1)})`; }
   function textStyle(n, box) {
-    const font = tokenFont(n.font); const fam = FONT_CSS[font] || FONT_CSS.Gotham;
-    const size = n.text_scaled || n.text_size == null ? Math.max(8, Math.min(box.h * 0.7, box.w / Math.max(3, String(n.text || "").length * 0.6))) : tokenNum(n.text_size, 14);
+    const { font, fam } = fontOf(n); const pad = padOf(n);
+    const inner = { w: Math.max(0, box.w - pad.l - pad.r), h: Math.max(0, box.h - pad.t - pad.b) };
+    const scaled = !!(n.text_scaled || n.text_size == null);
+    const size = textSizeFor(n, inner);
     const col = tokenColor(n.text_color || "text", "#ffffff");
     const ax = String(n.align_x || "Center").toLowerCase(), ay = String(n.align_y || "Center").toLowerCase();
     const jc = ax === "left" ? "flex-start" : ax === "right" ? "flex-end" : "center";
     const ai = ay === "top" ? "flex-start" : ay === "bottom" ? "flex-end" : "center";
     const sh = n.text_stroke ? `text-shadow:0 0 1px ${tokenColor(typeof n.text_stroke === "object" ? n.text_stroke.color : "#000000", "#000")},0 0 2px ${tokenColor(typeof n.text_stroke === "object" ? n.text_stroke.color : "#000000", "#000")};` : "";
     const op = n.text_t ? `opacity:${1 - tokenNum(n.text_t, 0)};` : "";
-    return `font-family:${fam};font-weight:${BOLD_FONTS.has(font) ? 700 : 500};font-size:${size}px;color:${col};justify-content:${jc};align-items:${ai};text-align:${ax};${n.wrap ? "white-space:normal;" : "white-space:nowrap;"}${sh}${op}`;
+    const ins = n.padding != null ? `left:${pad.l}px;top:${pad.t}px;right:${pad.r}px;bottom:${pad.b}px;` : "";
+    return `font-family:${fam};font-weight:${BOLD_FONTS.has(font) ? 700 : 500};font-size:${size}px;line-height:${LINE_H};color:${col};justify-content:${jc};align-items:${ai};text-align:${ax};${n.wrap || scaled ? "white-space:pre-wrap;" : "white-space:pre;"}${ins}${sh}${op}`;
   }
   function renderNode(n, pb) {
     const box = geo.get(n.id); if (!box) return "";
@@ -355,7 +444,8 @@
     D.screen.style.setProperty("--rsg-bg", tokenColor("bg", "#0f1115"));
     const inset = S.screen.ignore_inset === false ? `<div class="rsg-inset" style="height:${d.inset}px"></div>` : `<div class="rsg-inset ghost" style="height:${d.inset}px"></div>`;
     const roots = S.nodes.slice().sort((a, b) => (a.z || 1) - (b.z || 1)).map((r) => renderNode(r, null)).join("");
-    const empty = S.nodes.length ? "" : `<div class="rsg-empty-stage"><b>Start with a ready screen</b><div class="rsg-start">${TEMPLATES.map((t) => `<button type="button" data-tpl="${t.id}">${esc(t.label)}</button>`).join("")}</div><span>…or add your own: ${S.simple ? "click <b>Button</b>, <b>Text</b> or <b>Panel</b> on the left" : "pick a tool on the left and drag it out here"}.</span>${S.simple ? "" : `<span>V select · F frame · B button · T text · I image · Shift+drag multi-select · Del delete · Ctrl+Z undo</span>`}</div>`;
+    const restore = S.pendingRestore && !S.nodes.length ? `<div class="rsg-restore"><span>Your last design was kept — <b>${esc(S.pendingRestore.spec.screen && S.pendingRestore.spec.screen.name || "GUI")}</b>, ${S.pendingRestore.count} object${S.pendingRestore.count === 1 ? "" : "s"}, ${esc(ago(S.pendingRestore.t))}.</span><button type="button" class="rsg-btn sm primary" data-act="restore">Restore it</button><button type="button" class="rsg-btn sm" data-act="restoreDismiss">Start fresh</button></div>` : "";
+    const empty = S.nodes.length ? "" : `<div class="rsg-empty-stage">${restore}<b>Start with a ready screen</b><div class="rsg-start">${TEMPLATES.map((t) => `<button type="button" data-tpl="${t.id}">${esc(t.label)}</button>`).join("")}</div><span>…or add your own: ${S.simple ? "click <b>Button</b>, <b>Text</b> or <b>Panel</b> on the left" : "pick a tool on the left and drag it out here"}.</span>${S.simple ? "" : `<span>V select · F frame · B button · T text · I image · Shift+drag multi-select · Del delete · Ctrl+Z undo</span>`}</div>`;
     D.screen.innerHTML = inset + roots + empty + `<div class="rsg-marquee" hidden></div><div class="rsg-guides"></div>`;
     D.marquee = D.screen.querySelector(".rsg-marquee"); D.guides = D.screen.querySelector(".rsg-guides");
     D.stageWrap.style.width = Math.round(d.w * S.zoom) + "px"; D.stageWrap.style.height = Math.round(d.h * S.zoom) + "px";
@@ -372,7 +462,19 @@
     D.codeJson.value = JSON.stringify(spec, null, 2);
     D.codeLua.value = toLuau(spec);
   }
-  function renderAll() { renderStage(); renderTree(); renderProps(); renderCode(); syncButtons(); syncTheme(); }
+  let renderGuard = false;
+  function renderAll() {
+    try { renderStage(); renderTree(); renderProps(); renderCode(); syncButtons(); syncTheme(); autosave(); }
+    catch (e) {
+      diag("renderError", { err: String(e && e.message || e).slice(0, 160) });
+      if (renderGuard) { try { console.error("[GUI Studio] render failed twice", e); } catch {} return; }
+      renderGuard = true;
+      try { if (S.history.length) { restore(S.history.pop()); toast("Something went wrong while drawing — the last change was undone"); } else { S.nodes = []; S.sel = []; reindex(); renderStage(); renderTree(); renderProps(); toast("Something went wrong while drawing — the screen was reset"); } }
+      catch {} finally { renderGuard = false; }
+    }
+  }
+  let stageRaf = 0;
+  function renderStageSoon() { if (typeof requestAnimationFrame !== "function") { renderStage(); return; } if (stageRaf) return; stageRaf = requestAnimationFrame(() => { stageRaf = 0; if (S.open) renderStage(); }); }
 
   // ───────────────────────── props panel ─────────────────────────
   // A <div>, not a <label>: several rows hold more than one control (and inner
@@ -429,7 +531,7 @@
       <div class="rsg-sec"><h4>Size &amp; place <small>or just drag it</small></h4>
         ${field("Width × Height", `<span class="rsg-inline">${sk("w", Math.round(box.w), "number", 'min="1"')}${sk("h", Math.round(box.h), "number", 'min="1"')}</span>`)}
         ${inLayout(n) ? `<p class="rsg-hint">Placed automatically by its parent's layout.</p>` : field("X · Y", `<span class="rsg-inline">${sk("x", Math.round(box.x - pc.x), "number")}${sk("y", Math.round(box.y - pc.y), "number")}</span>`, "Pixels from the top-left of the parent")}
-        <div class="rsg-row"><button type="button" class="rsg-btn sm" data-act="centerInParent">Centre it</button><button type="button" class="rsg-btn sm" data-act="fillParent">Fill the screen</button></div>
+        <div class="rsg-row"><button type="button" class="rsg-btn sm" data-act="centerInParent">Centre it</button><button type="button" class="rsg-btn sm" data-act="fillParent">${parentOf(n) ? "Fill its panel" : "Fill the screen"}</button></div>
       </div>
       ${isBtn ? `<div class="rsg-sec"><h4>When clicked</h4>
         ${field("Do", `<select data-sk="act_do">${simpleDos.map(([v, l]) => `<option value="${v}" ${(a0 ? a0.do : "") === v ? "selected" : ""}>${l}</option>`).join("")}</select>`)}
@@ -442,7 +544,7 @@
   }
   function applySimple(n, k, el) {
     const v = el.value;
-    if (k === "name") { n.name = v.trim() || n.class; reindex(); return; }
+    if (k === "name") { renameNode(n, v); return; }
     if (k === "text") { n.text = v; return; }
     if (k === "image") { n.image = v.trim(); return; }
     if (k === "bg") { n.bg = v; if (n.bg_t != null && tokenNum(n.bg_t, 0) >= 1) delete n.bg_t; return; }
@@ -459,17 +561,22 @@
     if (k === "act_do") { if (!v) { delete n.actions; return; } n.actions = n.actions || []; const a = n.actions[0] || { on: "click" }; a.on = "click"; a.do = v; if (v === "pulse") { delete a.target; a.seconds = 3; } n.actions[0] = a; return; }
     if (k === "act_target") { if (n.actions && n.actions[0]) { if (v) n.actions[0].target = v; else delete n.actions[0].target; } return; }
   }
+  function issuesHtml() {
+    if (!S.issuesOpen || !S.issues) return "";
+    const ic = { error: "✕", warn: "!", info: "i" };
+    return `<div class="rsg-sec rsg-issues"><h4>Check <small>${esc(describeIssues(S.issues))}</small><button type="button" class="rsg-ib" data-act="issuesClose" title="Hide">${I.close}</button></h4>${S.issues.length ? `<div class="rsg-issue-list">${S.issues.slice(0, 60).map((i) => `<button type="button" class="rsg-issue ${i.level}" data-issue="${esc(i.id)}"><i>${ic[i.level] || "i"}</i><span><b>${esc(i.path || "Screen")}</b> ${esc(i.msg)}</span></button>`).join("")}</div>` : `<p class="rsg-hint">Everything resolves: names are unique, every behaviour has a real target, nothing is off-screen on this device.</p>`}<div class="rsg-row"><button type="button" class="rsg-btn sm" data-act="check">Check again</button></div></div>`;
+  }
   function renderPropsInner() {
     const n = S.sel.length === 1 ? S.sel[0] : null;
     if (S.simple && n) { renderPropsSimple(n); return; }
     if (S.simple && !n && S.sel.length < 2) {
-      D.props.innerHTML = `<div class="rsg-sec"><h4>How it works</h4><ol class="rsg-steps"><li>Click <b>Button</b>, <b>Text</b>, <b>Panel</b>… on the left — it appears in the middle of the screen.</li><li>Drag it where you want; drag a corner to resize. Click it to edit text and colours here.</li><li>Pick a <b>Theme</b> above to recolour everything.</li><li>Press <b>Build in Studio</b> to see it in Roblox, or <b>Send to AI</b> to have it scripted.</li></ol><p class="rsg-hint">Double-click text to edit it · Delete removes · Ctrl+Z undoes · Shift+click selects several.</p><div class="rsg-row"><button type="button" class="rsg-btn sm" data-mode="advanced">Advanced mode</button></div></div>`;
+      D.props.innerHTML = issuesHtml() + `<div class="rsg-sec"><h4>How it works</h4><ol class="rsg-steps"><li>Click <b>Button</b>, <b>Text</b>, <b>Panel</b>… on the left — it appears in the middle of the screen.</li><li>Drag it where you want; drag a corner to resize. Click it to edit text and colours here.</li><li>Pick a <b>Theme</b> above to recolour everything.</li><li>Press <b>Build in Studio</b> to see it in Roblox, or <b>Send to AI</b> to have it scripted.</li></ol><p class="rsg-hint">Double-click text to edit it · Delete removes · Ctrl+Z undoes · Shift+click selects several.</p><div class="rsg-row"><button type="button" class="rsg-btn sm" data-mode="advanced">Advanced mode</button></div></div>`;
       return;
     }
     if (!n) {
       D.props.innerHTML = S.sel.length > 1
         ? `<div class="rsg-sec"><h4>${S.sel.length} selected</h4><div class="rsg-row rsg-align"><button type="button" data-act="align:left" title="Align left">${I.align_l}</button><button type="button" data-act="align:center_x" title="Align centre X">${I.align_cx}</button><button type="button" data-act="align:right" title="Align right">${I.align_r}</button><button type="button" data-act="align:top" title="Align top">${I.align_t}</button><button type="button" data-act="align:center_y" title="Align centre Y">${I.align_cy}</button><button type="button" data-act="align:bottom" title="Align bottom">${I.align_b}</button><button type="button" data-act="dist:x" title="Distribute horizontally">${I.dist_x}</button><button type="button" data-act="dist:y" title="Distribute vertically">${I.dist_y}</button></div><div class="rsg-row"><button type="button" class="rsg-btn" data-act="group">Group into Frame</button><button type="button" class="rsg-btn" data-act="sameSize">Same size</button><button type="button" class="rsg-btn danger" data-act="delete">Delete</button></div></div>`
-        : `<div class="rsg-sec"><h4>Screen</h4>${field("ScreenGui name", inp("screen.name", S.screen.name))}${field("IgnoreGuiInset", chk("screen.ignore_inset", S.screen.ignore_inset !== false), "Draw under the top bar (full screen)")}${field("ResetOnSpawn", chk("screen.reset_on_spawn", !!S.screen.reset_on_spawn))}${field("DisplayOrder", num("screen.display_order", S.screen.display_order || 0))}<p class="rsg-hint">Select an element to edit it. Drag on the screen with a tool to create one. Multi-select with Shift-click or a marquee for align / distribute.</p></div>`;
+        : issuesHtml() + `<div class="rsg-sec"><h4>Screen</h4>${field("ScreenGui name", inp("screen.name", S.screen.name))}${field("IgnoreGuiInset", chk("screen.ignore_inset", S.screen.ignore_inset !== false), "Draw under the top bar (full screen)")}${field("ResetOnSpawn", chk("screen.reset_on_spawn", !!S.screen.reset_on_spawn))}${field("DisplayOrder", num("screen.display_order", S.screen.display_order || 0))}<p class="rsg-hint">Select an element to edit it. Drag on the screen with a tool to create one. Multi-select with Shift-click or a marquee for align / distribute.</p></div>`;
       return;
     }
     const isText = /^(TextLabel|TextButton|TextBox)$/.test(n.class), isImg = /^(ImageLabel|ImageButton)$/.test(n.class);
@@ -575,7 +682,7 @@
     if (key === "layout.kind") { if (!raw) delete n.layout; else { n.layout = Object.assign({ kind: raw }, typeof n.layout === "object" ? n.layout : {}); n.layout.kind = raw; if (raw === "grid" && !n.layout.cell) n.layout.cell = [0, 80, 0, 80]; } return; }
     if (key === "class") { n.class = raw; if (/^(TextLabel|TextButton|TextBox)$/.test(raw) && n.text == null) n.text = n.name; return; }
     if (el.type === "number" || key === "text_size" || key === "aspect" || key === "scale" || key === "z" || key === "bg_t") { if (raw === "") { setPath(n, key, undefined); if (key === "text_size") n.text_scaled = true; } else { setPath(n, key, Number(raw)); if (key === "text_size") delete n.text_scaled; } return; }
-    if (key === "name") { n.name = raw.trim() || n.class; return; }
+    if (key === "name") { renameNode(n, raw); return; }
     setPath(n, key, raw === "" ? undefined : raw);
   }
 
@@ -671,6 +778,78 @@
   }
   function uniqueName(list, base) { let name = base, i = 2; while (list.some((n) => n.name === name)) name = base + i++; return name; }
 
+  // ───────────────────────── names, targets, checker ─────────────────────────
+  function renameNode(n, raw) {
+    const list = siblingsOf(n).filter((x) => x !== n);
+    const name = uniqueName(list, cleanName(raw, n.class));
+    if (name === n.name) return;
+    const oldPath = pathOf(n), oldName = n.name;
+    n.name = name; reindex();
+    const newPath = pathOf(n);
+    // behaviour targets follow the rename: gui.Old.Path → gui.New.Path, bare sibling names too
+    const walk = (l) => { for (const x of l) { for (const a of x.actions || []) { if (typeof a.target !== "string") continue; if (a.target === "gui." + oldPath) a.target = "gui." + newPath; else if (a.target.startsWith("gui." + oldPath + ".")) a.target = "gui." + newPath + a.target.slice(oldPath.length + 4); else if (a.target === oldName && parentOf(x) === parentOf(n)) a.target = name; else if (a.target.startsWith("parent.") && a.target.split(".").pop() === oldName && a.target.split(".").length === 2 && parentOf(x) === parentOf(n)) a.target = "parent." + name; } walk(x.children || []); } };
+    walk(S.nodes);
+  }
+  function resolveTarget(owner, target) {
+    // mirrors byPath() in OR_UIBehaviours: self | parent | gui | child name | any descendant of the ScreenGui
+    if (target == null || target === "") return null; if (target === "self") return owner;
+    let cur = owner; const all = [...byId.values()];
+    for (const seg of String(target).split(".").filter(Boolean)) {
+      if (seg === "parent") { cur = cur ? parentOf(cur) || "gui" : null; }
+      else if (seg === "gui") cur = "gui";
+      else { const list = cur === "gui" ? S.nodes : cur ? cur.children || [] : []; cur = list.find((c) => c.name === seg) || all.find((c) => c.name === seg) || null; }
+      if (!cur) return null;
+    }
+    return cur;
+  }
+  const NEEDS_TARGET = new Set(["toggle", "open", "close", "destroy", "switch", "tab", "select_slot", "show_while_hover"]);
+  function check() {
+    // Pre-flight: what would look or behave differently in Studio than you expect.
+    computeGeometry();
+    const issues = []; const sb = screenBox();
+    const add = (level, n, msg) => issues.push({ level, path: n ? pathOf(n) : "", id: n ? n.id : "", msg });
+    const dup = (list, where) => { const seen = new Map(); for (const c of list) { if (seen.has(c.name)) add("error", c, `two elements named "${c.name}" in ${where} — behaviours and paths become ambiguous`); seen.set(c.name, 1); } };
+    dup(S.nodes, "the screen");
+    const walk = (list) => {
+      for (const n of list) {
+        const b = geo.get(n.id) || { x: 0, y: 0, w: 0, h: 0 }; const p = parentOf(n);
+        if (b.w < 1 || b.h < 1) add("warn", n, "has no size on this device (0 px wide or tall)");
+        else if (n.visible !== false && (b.x + b.w <= sb.x || b.y + b.h <= sb.y || b.x >= sb.x + sb.w || b.y >= sb.y + sb.h)) add("warn", n, "is completely off-screen on this device");
+        else if (n.visible !== false && (b.x < sb.x - 0.5 || b.y < sb.y - 0.5 || b.x + b.w > sb.x + sb.w + 0.5 || b.y + b.h > sb.y + sb.h + 0.5)) add("info", n, "sticks out of the screen edge");
+        if (p && p.clips && p.class !== "ScrollingFrame") { const pb = geo.get(p.id); if (pb && (b.x < pb.x - 0.5 || b.y < pb.y - 0.5 || b.x + b.w > pb.x + pb.w + 0.5 || b.y + b.h > pb.y + pb.h + 0.5)) add("warn", n, `is cut off by ${p.name} (ClipsDescendants)`); }
+        if (/^(ImageLabel|ImageButton)$/.test(n.class) && !n.image) add("warn", n, "has no image id yet (shows as a plain box in Roblox)");
+        if (/^(ImageLabel|ImageButton)$/.test(n.class) && n.image && !/^(rbxassetid:\/\/\d+|rbxasset:\/\/|https?:\/\/|rbxthumb:\/\/|\d+$)/.test(String(n.image))) add("warn", n, `image "${String(n.image).slice(0, 40)}" is not an rbxassetid:// id`);
+        if (/^(TextLabel|TextButton|TextBox)$/.test(n.class) && n.text && n.text_size != null && !n.text_scaled && b.w > 0) { const pad = padOf(n); const f = fontOf(n); const r = wrapLines(n.text, f.fam, tokenNum(n.text_size, 14), f.bold, Math.max(0, b.w - pad.l - pad.r)); const needH = r.lines * tokenNum(n.text_size, 14) * LINE_H; if (!n.wrap && !r.fits) add("warn", n, `text "${String(n.text).slice(0, 24)}" is wider than the box — enable scaled / wrap or widen it`); else if (needH > b.h - pad.t - pad.b + 0.5) add("warn", n, "text is taller than the box — reduce the size or enlarge it"); }
+        if (/^(TextLabel|TextButton|TextBox)$/.test(n.class) && (n.text_scaled || n.text_size == null) && !n.text_fit && b.h > 48) add("info", n, "scaled text without a max size can get huge on big screens (set Text fit)");
+        if (n.size[0] === 0 && n.size[2] === 0 && !p && b.w > 400) add("info", n, "pixel-only size — it will not shrink on phones (→ Scale)");
+        for (const a of n.actions || []) {
+          if (NEEDS_TARGET.has(a.do)) { if (!a.target) add("error", n, `"${a.do}" needs a target — pick which element it should ${a.do}`); else if (!resolveTarget(n, a.target)) add("error", n, `target "${a.target}" does not exist (renamed or deleted?)`); }
+          if (a.do === "remote" && !a.remote) add("warn", n, "remote action without a RemoteEvent name");
+          if (a.do === "sound" && !a.sound && !a.effect) add("warn", n, "sound action without a sound id");
+          if (!/Button$/.test(n.class) && n.class !== "TextBox" && a.on === "click") add("warn", n, `"click" behaviour on a ${FRIENDLY[n.class] || n.class} — only buttons receive clicks (use a Button)`);
+        }
+        dup(n.children || [], n.name);
+        walk(n.children || []);
+      }
+    };
+    walk(S.nodes);
+    return issues;
+  }
+  function describeIssues(issues) { const e = issues.filter((i) => i.level === "error").length, w = issues.filter((i) => i.level === "warn").length; return !issues.length ? "No problems found" : `${e ? e + " problem" + (e === 1 ? "" : "s") : ""}${e && w ? ", " : ""}${w ? w + " warning" + (w === 1 ? "" : "s") : ""}${!e && !w ? issues.length + " note" + (issues.length === 1 ? "" : "s") : ""}`; }
+  function runCheck(quiet) {
+    const issues = check(); S.issues = issues; S.issuesOpen = true;
+    if (!quiet) { setSideTab("props"); S.sel = []; renderAll(); toast(describeIssues(issues)); }
+    diag("check", { errors: issues.filter((i) => i.level === "error").length, warnings: issues.filter((i) => i.level === "warn").length });
+    return issues;
+  }
+
+  // ───────────────────────── autosave ─────────────────────────
+  const AUTOSAVE_KEY = "rsg-autosave"; let saveTimer = 0;
+  function autosaveNow() { if (!S.nodes.length) return; try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ t: Date.now(), spec: getSpec() })); } catch {} }
+  function autosave() { clearTimeout(saveTimer); saveTimer = setTimeout(autosaveNow, 600); }
+  function loadAutosave() { try { const j = localStorage.getItem(AUTOSAVE_KEY); if (!j) return null; const d = JSON.parse(j); return d && d.spec && Array.isArray(d.spec.children) && d.spec.children.length ? d : null; } catch { return null; } }
+  function ago(t) { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " d ago"; }
+
   // ───────────────────────── editing ops ─────────────────────────
   function deleteSel() { if (!S.sel.length) return; pushHistory(); for (const n of S.sel) { const list = siblingsOf(n); const i = list.indexOf(n); if (i >= 0) list.splice(i, 1); } S.sel = []; reindex(); renderAll(); }
   function duplicateSel() { if (!S.sel.length) return; pushHistory(); const made = []; for (const n of S.sel) { const list = siblingsOf(n); const copy = adopt(JSON.parse(JSON.stringify(strip(n))), parentOf(n)); copy.name = uniqueName(list, n.name); copy.position = n.position.slice(); copy.position[1] += 16; copy.position[3] += 16; list.splice(list.indexOf(n) + 1, 0, copy); made.push(copy); } reindex(); S.sel = made; renderAll(); }
@@ -745,7 +924,8 @@
   }
   function onDown(ev) {
     if (ev.button !== 0) return;
-    if (ev.target.closest && ev.target.closest(".rsg-start")) return;
+    if (ev.target.closest && ev.target.closest(".rsg-start, .rsg-restore")) return;
+    if (inlineEdit) { if (ev.target === inlineEdit.el) return; endInlineEdit(true); }
     const pt = stagePoint(ev); const target = ev.target;
     try { if (D.screen.setPointerCapture && ev.pointerId != null) D.screen.setPointerCapture(ev.pointerId); } catch {}
     const tool = ELEMENT_TOOLS.find((t) => t.id === S.tool);
@@ -780,7 +960,7 @@
         if (i === 0) { const cands = [[nx, 0], [nx + it.box.w / 2, it.box.w / 2], [nx + it.box.w, it.box.w]]; for (const [v, off] of cands) { const s = snapLine(v, gl.xs); if (s !== v) { nx = s - off; gx = s; break; } } const candsY = [[ny, 0], [ny + it.box.h / 2, it.box.h / 2], [ny + it.box.h, it.box.h]]; for (const [v, off] of candsY) { const s = snapLine(v, gl.ys); if (s !== v) { ny = s - off; gy = s; break; } } if (gx == null && S.grid && S.snap) nx = Math.round(nx / GRID) * GRID; if (gy == null && S.grid && S.snap) ny = Math.round(ny / GRID) * GRID; drag.snapDx = nx - (it.box.x + dx); drag.snapDy = ny - (it.box.y + dy); } else { nx += drag.snapDx || 0; ny += drag.snapDy || 0; }
         setBox(it.n, { x: nx, y: ny, w: it.box.w, h: it.box.h });
       });
-      renderStage(); showGuides(gx, gy);
+      renderStageSoon(); showGuides(gx, gy);
       const host = containerAt(pt, new Set(drag.items.map((it) => it.n.id))); drag.host = host; D.status.textContent = host && host !== parentOf(drag.items[0].n) ? `Drop into ${pathOf(host)} (hold Alt to keep parent)` : `${Math.round(drag.items[0].box.x + dx)}, ${Math.round(drag.items[0].box.y + dy)}`;
       return;
     }
@@ -792,7 +972,7 @@
       if (h.includes("w")) { const nx = Math.min(snapV(b.x + dx, gl.xs), b.x + b.w - 4); b.w = b.x + b.w - nx; b.x = nx; }
       if (h.includes("n")) { const ny = Math.min(snapV(b.y + dy, gl.ys), b.y + b.h - 4); b.h = b.y + b.h - ny; b.y = ny; }
       if (ev.shiftKey && drag.box.h > 0) { const r = drag.box.w / drag.box.h; if (h === "e" || h === "w") b.h = b.w / r; else b.w = b.h * r; }
-      setBox(drag.n, b); renderStage(); D.status.textContent = `${Math.round(b.w)} × ${Math.round(b.h)}`; return;
+      setBox(drag.n, b); renderStageSoon(); D.status.textContent = `${Math.round(b.w)} × ${Math.round(b.h)}`; return;
     }
     if (drag.kind === "create" || drag.kind === "marquee") {
       const x = Math.min(pt.x, drag.start.x), y = Math.min(pt.y, drag.start.y), w = Math.abs(dx), hgt = Math.abs(dy);
@@ -823,10 +1003,37 @@
       diag("create", { cls: d.cls, nested: !!parent });
     }
   }
+  function cancelDrag() {
+    const d = drag; drag = null; showGuides(null, null); if (D && D.marquee) D.marquee.hidden = true;
+    if (d && d.pushed && S.history.length) { restore(S.history.pop()); toast("Cancelled"); } else renderAll();
+  }
+  const guarded = (fn) => (ev) => { try { fn(ev); } catch (e) { diag("pointerError", { err: String(e && e.message || e).slice(0, 160) }); try { cancelDrag(); } catch {} } };
+  // Inline text editing: double-click a selected label / button / box and type.
+  let inlineEdit = null;
+  function startInlineEdit(n) {
+    if (!D || !/^(TextLabel|TextButton|TextBox)$/.test(n.class)) return false;
+    const host = D.screen.querySelector(`.rsg-n[data-id="${n.id}"]`); const el = host && host.querySelector(":scope > .rsg-txt"); if (!el) return false;
+    endInlineEdit(true);
+    el.textContent = n.text || ""; el.classList.remove("ph"); el.setAttribute("contenteditable", "true"); el.classList.add("editing"); el.spellcheck = false;
+    inlineEdit = { n, el, before: n.text || "" };
+    const onKeyEd = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); endInlineEdit(true); } else if (e.key === "Escape") { e.preventDefault(); endInlineEdit(false); } e.stopPropagation(); };
+    const onBlur = () => endInlineEdit(true);
+    el.addEventListener("keydown", onKeyEd); el.addEventListener("blur", onBlur); inlineEdit.off = () => { el.removeEventListener("keydown", onKeyEd); el.removeEventListener("blur", onBlur); };
+    try { el.focus(); const r = document.createRange(); r.selectNodeContents(el); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); } catch {}
+    return true;
+  }
+  function endInlineEdit(commit) {
+    const ed = inlineEdit; if (!ed) return; inlineEdit = null;
+    try { ed.off && ed.off(); } catch {}
+    const text = String(ed.el.textContent || "").replace(/\u00a0/g, " ");
+    try { ed.el.removeAttribute("contenteditable"); ed.el.classList.remove("editing"); } catch {}
+    if (commit && text !== ed.before) { pushHistory(); ed.n.text = text; }
+    renderAll();
+  }
   function onKey(e) {
     if (!S.open) return;
-    const tag = (e.target && e.target.tagName || "").toLowerCase(); const typing = tag === "input" || tag === "textarea" || tag === "select";
-    if (e.key === "Escape") { if (typing) { e.target.blur(); return; } e.preventDefault(); close(); return; }
+    const tag = (e.target && e.target.tagName || "").toLowerCase(); const typing = tag === "input" || tag === "textarea" || tag === "select" || !!(e.target && (e.target.isContentEditable || (e.target.getAttribute && e.target.getAttribute("contenteditable") === "true")));
+    if (e.key === "Escape") { if (inlineEdit) { e.preventDefault(); e.stopPropagation(); endInlineEdit(false); return; } if (drag && drag.kind !== "none") { e.preventDefault(); cancelDrag(); return; } if (typing) { e.target.blur(); return; } e.preventDefault(); close(); return; }
     if (typing) return;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && !e.shiftKey && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); return; }
@@ -846,11 +1053,14 @@
   // ───────────────────────── luau export ─────────────────────────
   function luaStr(s) { return '"' + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, "\\n") + '"'; }
   function luaColor(v) { const h = tokenColor(v, "#ffffff"); return `Color3.fromRGB(${parseInt(h.slice(1, 3), 16)}, ${parseInt(h.slice(3, 5), 16)}, ${parseInt(h.slice(5, 7), 16)})`; }
-  function luaU2(a) { return `UDim2.new(${a[0]}, ${a[1]}, ${a[2]}, ${a[3]})`; }
+  function luaU2(a) { a = Array.isArray(a) ? a : [0, 0, 0, 0]; return `UDim2.new(${fin(a[0])}, ${fin(a[1])}, ${fin(a[2])}, ${fin(a[3])})`; }
+  function luaFont(v) { const f = tokenFont(v); return FONTS.includes(f) ? f : "GothamMedium"; }
+  const luaKey = (k) => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(k) ? "." + k : `[${luaStr(k)}]`);
   function toLuau(spec) {
     spec = spec || getSpec();
     const out = []; let k = 0; const bindings = [];
     const saveTokens = S.tokens; if (spec.tokens) S.tokens = Object.assign({}, presets()[spec.preset] || FALLBACK_PRESETS.midnight, spec.tokens);
+    try {
     const emit = (n, parentVar, path) => {
       const v = "o" + (++k); const isText = /^(TextLabel|TextButton|TextBox)$/.test(n.class), isImg = /^(ImageLabel|ImageButton)$/.test(n.class);
       out.push(`local ${v} = Instance.new(${luaStr(n.class)})`, `${v}.Name = ${luaStr(n.name)}`, `${v}.Size = ${luaU2(n.size)}`, `${v}.Position = ${luaU2(n.position)}`, `${v}.BorderSizePixel = 0`);
@@ -859,11 +1069,11 @@
       if (n.bg != null) out.push(`${v}.BackgroundColor3 = ${luaColor(n.bg)}`);
       const bt = n.bg_t != null ? tokenNum(n.bg_t, 0) : (n.bg == null && (n.class === "TextLabel" || n.class === "ImageLabel") ? 1 : null); if (bt != null) out.push(`${v}.BackgroundTransparency = ${bt}`);
       if (n.rotation) out.push(`${v}.Rotation = ${n.rotation}`); if (n.clips) out.push(`${v}.ClipsDescendants = true`); if (n.automatic_size) out.push(`${v}.AutomaticSize = Enum.AutomaticSize.${n.automatic_size}`);
-      if (isText) { out.push(`${v}.Text = ${luaStr(n.text != null ? n.text : "")}`, `${v}.Font = Enum.Font.${tokenFont(n.font)}`, `${v}.TextColor3 = ${luaColor(n.text_color || "text")}`); if (n.text_size != null && !n.text_scaled) out.push(`${v}.TextSize = ${tokenNum(n.text_size, 14)}`, `${v}.TextScaled = false`); else out.push(`${v}.TextScaled = true`); if (n.align_x) out.push(`${v}.TextXAlignment = Enum.TextXAlignment.${n.align_x}`); if (n.align_y) out.push(`${v}.TextYAlignment = Enum.TextYAlignment.${n.align_y}`); if (n.wrap) out.push(`${v}.TextWrapped = true`); if (n.rich) out.push(`${v}.RichText = true`); if (n.text_t) out.push(`${v}.TextTransparency = ${n.text_t}`); if (n.text_stroke) out.push(`${v}.TextStrokeTransparency = ${typeof n.text_stroke === "object" && n.text_stroke.transparency != null ? n.text_stroke.transparency : 0.5}`, `${v}.TextStrokeColor3 = ${luaColor(typeof n.text_stroke === "object" ? n.text_stroke.color : "#000000")}`); if (n.class === "TextBox") { if (n.placeholder) out.push(`${v}.PlaceholderText = ${luaStr(n.placeholder)}`); if (n.placeholder_color) out.push(`${v}.PlaceholderColor3 = ${luaColor(n.placeholder_color)}`); out.push(`${v}.ClearTextOnFocus = false`); } }
+      if (isText) { out.push(`${v}.Text = ${luaStr(n.text != null ? n.text : "")}`, `${v}.Font = Enum.Font.${luaFont(n.font)}`, `${v}.TextColor3 = ${luaColor(n.text_color || "text")}`); if (n.text_size != null && !n.text_scaled && !n.text_fit) out.push(`${v}.TextSize = ${fin(tokenNum(n.text_size, 14), 14)}`, `${v}.TextScaled = false`); else out.push(`${v}.TextScaled = true`); if (n.align_x) out.push(`${v}.TextXAlignment = Enum.TextXAlignment.${n.align_x}`); if (n.align_y) out.push(`${v}.TextYAlignment = Enum.TextYAlignment.${n.align_y}`); if (n.wrap) out.push(`${v}.TextWrapped = true`); if (n.rich) out.push(`${v}.RichText = true`); if (n.text_t) out.push(`${v}.TextTransparency = ${n.text_t}`); if (n.text_stroke) out.push(`${v}.TextStrokeTransparency = ${typeof n.text_stroke === "object" && n.text_stroke.transparency != null ? n.text_stroke.transparency : 0.5}`, `${v}.TextStrokeColor3 = ${luaColor(typeof n.text_stroke === "object" ? n.text_stroke.color : "#000000")}`); if (n.class === "TextBox") { if (n.placeholder) out.push(`${v}.PlaceholderText = ${luaStr(n.placeholder)}`); if (n.placeholder_color) out.push(`${v}.PlaceholderColor3 = ${luaColor(n.placeholder_color)}`); out.push(`${v}.ClearTextOnFocus = false`); } }
       if (isImg) { if (n.image) out.push(`${v}.Image = ${luaStr(/^\d+$/.test(String(n.image)) ? "rbxassetid://" + n.image : n.image)}`); if (n.image_color) out.push(`${v}.ImageColor3 = ${luaColor(n.image_color)}`); if (n.image_t) out.push(`${v}.ImageTransparency = ${n.image_t}`); if (n.scale_type) out.push(`${v}.ScaleType = Enum.ScaleType.${n.scale_type}`); if (n.slice) out.push(`${v}.SliceCenter = Rect.new(${n.slice.join(", ")})`); }
       if (n.class === "ScrollingFrame") { const sc = n.scroll || {}; out.push(`${v}.ScrollBarThickness = ${tokenNum(sc.thickness, 6)}`, `${v}.AutomaticCanvasSize = Enum.AutomaticSize.${sc.auto || "Y"}`, `${v}.CanvasSize = UDim2.new(0, 0, 0, 0)`); }
       if (n.attrs) for (const [ak, av] of Object.entries(n.attrs)) out.push(`${v}:SetAttribute(${luaStr(ak)}, ${typeof av === "string" ? luaStr(av) : av})`);
-      if (n.props) for (const [pk, pv] of Object.entries(n.props)) out.push(`pcall(function() ${v}.${pk} = ${typeof pv === "string" ? (pv.startsWith("Enum.") ? pv : luaStr(pv)) : Array.isArray(pv) ? (pv.length === 4 ? luaU2(pv) : pv.length === 3 ? luaColor(pv) : `Vector2.new(${pv[0]}, ${pv[1]})`) : pv} end)`);
+      if (n.props) for (const [pk, pv] of Object.entries(n.props)) out.push(`pcall(function() ${v}${luaKey(pk)} = ${typeof pv === "string" ? (/^Enum\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/.test(pv) ? pv : luaStr(pv)) : typeof pv === "boolean" ? pv : typeof pv === "number" ? fin(pv) : Array.isArray(pv) ? (pv.length === 4 ? luaU2(pv) : pv.length === 3 ? luaColor(pv) : `Vector2.new(${fin(pv[0])}, ${fin(pv[1])})`) : luaStr(JSON.stringify(pv))} end)`);
       out.push(`${v}.Parent = ${parentVar}`);
       if (n.corner != null) out.push(`do local c = Instance.new("UICorner") c.CornerRadius = UDim.new(${typeof n.corner === "object" ? `${tokenNum(n.corner.scale, 0)}, ${tokenNum(n.corner.offset, 8)}` : `0, ${tokenNum(n.corner, 8)}`}) c.Parent = ${v} end`);
       if (n.stroke != null) { const s = typeof n.stroke === "object" ? n.stroke : { color: n.stroke }; out.push(`do local s = Instance.new("UIStroke") s.Color = ${luaColor(s.color || "stroke")} s.Thickness = ${tokenNum(s.thickness, 1)} s.Transparency = ${tokenNum(s.transparency, 0)} s.Parent = ${v} end`); }
@@ -886,7 +1096,7 @@
       out.push(`do local b = Instance.new("StringValue") b.Name = "OR_UIBindings" b.Value = ${luaStr(JSON.stringify(bindings))} b.Parent = gui end`, `do local ls = Instance.new("LocalScript") ls.Name = "OR_UIBehaviours" ls.Source = [==[\n${src}\n]==] ls.Parent = gui end`);
     }
     out.push(`gui.Parent = StarterGui`, `print("GUI Studio: built " .. gui.Name)`);
-    S.tokens = saveTokens;
+    } finally { S.tokens = saveTokens; }
     return out.join("\n");
   }
 
@@ -917,14 +1127,40 @@
   async function buildInStudio() {
     if (!S.hooks || !S.hooks.runTool) { toast("Direct build is not available here — use Send to AI"); return; }
     if (!S.nodes.length) { toast("Design something first"); return; }
+    const issues = check(); S.issues = issues; const errors = issues.filter((i) => i.level === "error");
+    if (errors.length) { S.issuesOpen = true; S.sel = []; setSideTab("props"); renderAll(); toast(`${errors.length} problem${errors.length === 1 ? "" : "s"} to fix first — see Check on the right`); setStatus(errors[0].path + ": " + errors[0].msg); return; }
     setStatus("Building in Roblox Studio…"); D.buildBtn.disabled = true;
+    autosaveNow();
     try {
       const fb = await S.hooks.runTool("ui_build_spec", { spec: getSpec(), replace: true });
       const r = parseFeedback(fb);
-      if (r && r.ok) { setStatus(`Built ${r.data && r.data.count} object(s) in ${r.data && r.data.screen}${r.data && r.data.behaviours ? " · " + r.data.behaviours + " behaviours" : ""}`); toast("Built in Studio"); diag("built", { count: r.data && r.data.count }); }
+      if (r && r.ok) {
+        const warns = issues.filter((i) => i.level === "warn").length;
+        let msg = `Built ${r.data && r.data.count} object(s) in ${r.data && r.data.screen}${r.data && r.data.behaviours ? " · " + r.data.behaviours + " behaviours" : ""}${warns ? " · " + warns + " warning" + (warns === 1 ? "" : "s") + " (Check)" : ""}`;
+        setStatus(msg); toast("Built in Studio"); diag("built", { count: r.data && r.data.count, warnings: warns });
+        const v = await verifyInStudio(r.data && r.data.screen); if (v) setStatus(msg + " · " + v);
+      }
       else { const err = (r && r.error) || String(fb || "").replace(/^Output of '[^']+':\s*/, "").slice(0, 240); setStatus("Studio said: " + err); toast("Build failed — " + err.slice(0, 80)); diag("buildFail", { err: err.slice(0, 120) }); }
     } catch (e) { setStatus("Build failed: " + (e && e.message || e)); }
     finally { D.buildBtn.disabled = false; }
+  }
+  async function verifyInStudio(screenPath) {
+    // Read Studio's real pixel boxes back (ui_layout_report) and compare with the preview.
+    if (!S.hooks || !S.hooks.runTool) return "";
+    try {
+      const path = screenPath || ("StarterGui." + S.screen.name);
+      const fb = await S.hooks.runTool("ui_layout_report", { path, max_nodes: 300 }); const r = parseFeedback(fb);
+      if (!r || !r.ok || !r.data) return "";
+      const vp = Array.isArray(r.data.viewport) ? r.data.viewport : null; const off = Number(r.data.off_screen || 0); const ov = Array.isArray(r.data.overlaps) ? r.data.overlaps.length : 0;
+      S.studioViewport = vp; S.studioReport = r.data;
+      const parts = [];
+      if (vp) { parts.push(`Studio viewport ${vp[0]}×${vp[1]}`); const d = S.device; if (Math.abs(vp[0] - d.w) / d.w > 0.12 || Math.abs(vp[1] - d.h) / d.h > 0.12) { const best = DEVICES.slice().sort((a, b) => Math.abs(a.w / a.h - vp[0] / vp[1]) - Math.abs(b.w / b.h - vp[0] / vp[1]))[0]; if (best && best.id !== d.id) parts.push(`preview is ${d.w}×${d.h} — "${best.label}" is closer`); } }
+      if (off) parts.push(`${off} off-screen in Studio`);
+      if (ov) parts.push(`${ov} overlapping sibling${ov === 1 ? "" : "s"}`);
+      if (!off && !ov) parts.push("everything on screen");
+      diag("verified", { viewport: vp, off, overlaps: ov });
+      return parts.join(" · ");
+    } catch { return ""; }
   }
   async function importFromStudio() {
     if (!S.hooks || !S.hooks.runTool) { toast("Import needs the Studio bridge"); return; }
@@ -963,7 +1199,7 @@
   }
   function setTool(id) { S.tool = id; D.host.querySelectorAll(".rsg-tool").forEach((b) => b.classList.toggle("on", b.dataset.tool === id)); D.stage.dataset.tool = id; const t = ELEMENT_TOOLS.find((x) => x.id === id); D.hint.textContent = S.simple ? (S.nodes.length ? "Click an element to edit it · drag to move · corners resize" : "Click something on the left to add it, or pick a template") : (t ? t.hint : ""); }
   function setDevice(id) { S.device = DEVICES.find((d) => d.id === id) || DEVICES[2]; fitZoom(); }
-  function fitZoom() { const r = D.stage.getBoundingClientRect(); const z = Math.min((r.width - 48) / S.device.w, (r.height - 48) / S.device.h); S.zoom = clamp(z || 1, 0.15, 3); renderStage(); D.zoomLbl.textContent = Math.round(S.zoom * 100) + "%"; }
+  function fitZoom() { const r = D.stage.getBoundingClientRect(); if (!(r.width > 80 && r.height > 80)) { renderStage(); D.zoomLbl.textContent = Math.round(S.zoom * 100) + "%"; return; } const z = Math.min((r.width - 48) / S.device.w, (r.height - 48) / S.device.h); S.zoom = clamp(Number.isFinite(z) && z > 0 ? z : 1, 0.15, 3); renderStage(); D.zoomLbl.textContent = Math.round(S.zoom * 100) + "%"; }
   function zoomBy(f) { S.zoom = clamp(S.zoom * f, 0.15, 4); renderStage(); D.zoomLbl.textContent = Math.round(S.zoom * 100) + "%"; }
   function syncButtons() { if (!D) return; const u = D.host.querySelector('[data-act="undo"]'), r = D.host.querySelector('[data-act="redo"]'); if (u) u.disabled = !S.history.length; if (r) r.disabled = !S.redo.length; D.countLbl.textContent = `${byId.size} object${byId.size === 1 ? "" : "s"}`; }
   function setSideTab(t) { S.sideTab = t; D.host.querySelectorAll(".rsg-tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === t)); D.props.hidden = t !== "props"; D.tree.hidden = t !== "tree"; D.theme.hidden = t !== "theme"; D.code.hidden = t !== "code"; renderProps(); renderTheme(); renderCode(); }
@@ -1030,6 +1266,7 @@
               <span class="rsg-status"></span>
               <div class="rsg-import" hidden><select class="rsg-import-sel"></select><button type="button" class="rsg-btn sm" data-act="importGo">Import</button><button type="button" class="rsg-btn sm" data-act="importCancel">Cancel</button></div>
               <input class="rsg-intent" placeholder="Optional for the AI: what should happen next? e.g. wire the Buy buttons to a shop system with DataStore">
+              <button type="button" class="rsg-btn rsg-check" data-act="check" title="Find problems before building: duplicate names, behaviours without a real target, off-screen or clipped elements, text that does not fit">Check</button>
               <button type="button" class="rsg-btn primary rsg-build" data-act="build" title="Run ui_build_spec in the connected Studio right now (no AI turn)">${I.build} Build in Studio</button>
               <button type="button" class="rsg-btn accent rsg-send" data-act="send" title="Send the exact spec to the AI with your instructions">${I.send} Send to AI</button>
               <span class="rsg-send-status"></span>
@@ -1057,10 +1294,13 @@
       presetSel: host.querySelector(".rsg-preset-sel"), templateSel: host.querySelector(".rsg-template-sel"), deviceSel: host.querySelector(".rsg-device"), screenName: host.querySelector(".rsg-screen-name"), intent: host.querySelector(".rsg-intent"), buildBtn: host.querySelector(".rsg-build"), sendBtn: host.querySelector(".rsg-send"), importBox: host.querySelector(".rsg-import"), importSel: host.querySelector(".rsg-import-sel"),
     };
     // events
+    let liveKey = null; // colour input currently being dragged — history was pushed at its first "input"
+    const pushUnlessLive = (k) => { if (liveKey === k) { liveKey = null; return; } liveKey = null; pushHistory(); };
     host.addEventListener("click", (e) => {
       const md = e.target.closest("[data-mode]"); if (md) { setMode(md.dataset.mode); return; }
       const ad = e.target.closest("[data-add]"); if (ad) { insertElement(ad.dataset.add); return; }
       const tp = e.target.closest("[data-tpl]"); if (tp) { if (!S.nodes.length || confirm("Replace the current design with this template?")) applyTemplate(tp.dataset.tpl); return; }
+      const iss = e.target.closest("[data-issue]"); if (iss) { const n = byId.get(iss.dataset.issue); if (n) { S.sel = [n]; renderAll(); } return; }
       const tb = e.target.closest("[data-tool]"); if (tb) { setTool(tb.dataset.tool); return; }
       const cb = e.target.closest("[data-comp]"); if (cb) { insertComponent(cb.dataset.comp); return; }
       const tab = e.target.closest(".rsg-tab"); if (tab) { setSideTab(tab.dataset.tab); return; }
@@ -1079,30 +1319,32 @@
       if (el.classList.contains("rsg-screen-name")) { S.screen.name = el.value.trim() || "OR_UI"; renderCode(); return; }
       if (el.classList.contains("rsg-intent")) { S.intent = el.value; return; }
       if (el.classList.contains("rsg-import-sel")) return;
-      if (el.dataset.tok) { pushHistory(); const k = el.dataset.tok; S.tokens[k] = el.type === "number" ? Number(el.value) : el.value; if (el.type === "color" || el.dataset.kind === "raw") { const peer = D.theme.querySelector(`[data-tok="${k}"]${el.type === "color" ? '[data-kind="raw"]' : ':not([data-kind])'}`); if (peer) peer.value = el.value; } renderAll(); return; }
-      if (el.dataset.sk != null && S.sel.length === 1) { pushHistory(); applySimple(S.sel[0], el.dataset.sk, el); renderAll(); return; }
+      if (el.dataset.tok) { pushUnlessLive("tok:" + el.dataset.tok); const k = el.dataset.tok; S.tokens[k] = el.type === "number" ? Number(el.value) : el.value; if (el.type === "color" || el.dataset.kind === "raw") { const peer = D.theme.querySelector(`[data-tok="${k}"]${el.type === "color" ? '[data-kind="raw"]' : ':not([data-kind])'}`); if (peer) peer.value = el.value; } renderAll(); return; }
+      if (el.dataset.sk != null && S.sel.length === 1) { pushUnlessLive("sk:" + el.dataset.sk); applySimple(S.sel[0], el.dataset.sk, el); renderAll(); return; }
       if (el.dataset.ak != null && S.sel.length === 1) { pushHistory(); const i = Number(el.closest(".rsg-action").dataset.ai); const a = S.sel[0].actions[i]; const k = el.dataset.ak; if (k === "extra") { const v = el.value.trim(); delete a.effect; delete a.remote; delete a.message; delete a.seconds; if (v) { if (a.do === "remote") a.remote = v; else if (a.do === "print") a.message = v; else if (a.do === "auto_hide" || a.do === "pulse") a.seconds = Number(v) || 3; else a.effect = v; } } else if (k === "target") { if (el.value.trim()) a.target = el.value.trim(); else delete a.target; } else a[k] = el.value; renderAll(); return; }
       if (el.dataset.k != null) {
         if (el.dataset.k.startsWith("screen.")) { applyProp(null, el.dataset.k, el.value, el); renderAll(); return; }
         if (S.sel.length !== 1) return;
-        pushHistory(); const n = S.sel[0]; const key = el.dataset.k;
+        const n = S.sel[0]; const key = el.dataset.k; pushUnlessLive("k:" + key);
         if (el.dataset.kind === "color") { const raw = D.props.querySelector(`[data-k="${key}"][data-kind="raw"]`); if (raw) raw.value = el.value; const tok = D.props.querySelector(`[data-k="${key}@tok"]`); if (tok) tok.value = ""; }
         applyProp(n, key, el.value, el);
-        if (key === "name") { reindex(); }
         renderAll();
       }
     });
-    host.addEventListener("input", (e) => { const el = e.target; if ((el.dataset.sk === "bg" || el.dataset.sk === "text_color") && S.sel.length === 1) { const n = S.sel[0]; n[el.dataset.sk] = el.value; if (el.dataset.sk === "bg" && n.bg_t != null && tokenNum(n.bg_t, 0) >= 1) delete n.bg_t; renderStage(); } if (el.dataset.kind === "color" && S.sel.length === 1) { const n = S.sel[0]; setPath(n, el.dataset.k, el.value); renderStage(); } if (el.dataset.tok && el.type === "color") { S.tokens[el.dataset.tok] = el.value; renderStage(); } if (el.classList.contains("rsg-intent")) S.intent = el.value; });
-    D.stage.addEventListener("pointerdown", (e) => { if (e.target === D.stage || e.target === D.stageWrap) { if (S.sel.length) { S.sel = []; renderAll(); } return; } onDown(e); });
-    window.addEventListener("pointermove", (e) => { if (S.open) onMove(e); });
-    window.addEventListener("pointerup", (e) => { if (S.open) onUp(e); });
+    host.addEventListener("input", (e) => { const el = e.target; const live = (k) => { if (liveKey !== k) { pushHistory(); liveKey = k; } }; if ((el.dataset.sk === "bg" || el.dataset.sk === "text_color") && S.sel.length === 1) { live("sk:" + el.dataset.sk); const n = S.sel[0]; n[el.dataset.sk] = el.value; if (el.dataset.sk === "bg" && n.bg_t != null && tokenNum(n.bg_t, 0) >= 1) delete n.bg_t; renderStage(); } if (el.dataset.kind === "color" && S.sel.length === 1) { live("k:" + el.dataset.k); const n = S.sel[0]; setPath(n, el.dataset.k, el.value); renderStage(); } if (el.dataset.tok && el.type === "color") { live("tok:" + el.dataset.tok); S.tokens[el.dataset.tok] = el.value; renderStage(); } if (el.classList.contains("rsg-intent")) S.intent = el.value; });
+    D.stage.addEventListener("pointerdown", guarded((e) => { if (e.target === D.stage || e.target === D.stageWrap) { if (inlineEdit) endInlineEdit(true); if (S.sel.length) { S.sel = []; renderAll(); } return; } onDown(e); }));
+    window.addEventListener("pointermove", guarded((e) => { if (S.open) onMove(e); }));
+    window.addEventListener("pointerup", guarded((e) => { if (S.open) onUp(e); }));
+    window.addEventListener("pointercancel", () => { if (S.open && drag) cancelDrag(); });
+    window.addEventListener("blur", () => { if (S.open && drag) cancelDrag(); });
+    window.addEventListener("beforeunload", () => { if (S.nodes.length) autosaveNow(); });
     D.stage.addEventListener("wheel", (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1.1 : 1 / 1.1); } }, { passive: false });
     D.screen.addEventListener("dblclick", (e) => {
       const deep = nodeAt(e.target); if (!deep) return;
       const cur = S.sel.length === 1 ? S.sel[0] : null;
       if (cur && cur !== deep && isDescendant(deep, cur)) { let c = deep; while (parentOf(c) && parentOf(c) !== cur) c = parentOf(c); S.sel = [c]; renderAll(); return; } // drill one level
       if (cur !== deep) { S.sel = [deep]; renderAll(); return; }
-      if (/^(TextLabel|TextButton|TextBox)$/.test(deep.class)) { const t = prompt("Text", deep.text || ""); if (t != null) { pushHistory(); deep.text = t; renderAll(); } }
+      if (/^(TextLabel|TextButton|TextBox)$/.test(deep.class)) { if (!startInlineEdit(deep)) { const t = prompt("Text", deep.text || ""); if (t != null) { pushHistory(); deep.text = t; renderAll(); } } }
     });
     document.addEventListener("keydown", onKey, true);
     host.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -1119,7 +1361,10 @@
       case "import": return importFromStudio(); case "importGo": return importPath(D.importSel.value); case "importCancel": D.importBox.hidden = true; return;
       case "open": return openJson(); case "save": return downloadJson(); case "copyLua": return copyText(toLuau(getSpec()), "Luau"); case "copyJson": return copyText(JSON.stringify(getSpec(), null, 2), "JSON");
       case "applyJson": if (loadSpec(D.codeJson.value)) toast("Applied"); return;
-      case "clear": if (S.nodes.length && !confirm("Clear the whole design?")) return; pushHistory(); S.nodes = []; S.sel = []; reindex(); return renderAll();
+      case "clear": if (S.nodes.length && !confirm("Clear the whole design?")) return; pushHistory(); S.nodes = []; S.sel = []; S.issues = null; reindex(); try { localStorage.removeItem(AUTOSAVE_KEY); } catch {} return renderAll();
+      case "check": return runCheck(false); case "issuesClose": S.issuesOpen = false; return renderProps();
+      case "restore": if (S.pendingRestore) { const d = S.pendingRestore; S.pendingRestore = null; if (loadSpec(d.spec, { silent: true })) toast("Design restored"); } return;
+      case "restoreDismiss": S.pendingRestore = null; try { localStorage.removeItem(AUTOSAVE_KEY); } catch {} return renderStage();
       case "close": return close(); case "build": return buildInStudio(); case "send": return sendToAI();
       case "delete": return deleteSel(); case "dup": return duplicateSel(); case "group": return groupSel();
       case "sameSize": if (S.sel.length > 1) { pushHistory(); const b0 = geo.get(S.sel[0].id); for (const x of S.sel.slice(1)) { const b = Object.assign({}, geo.get(x.id)); b.w = b0.w; b.h = b0.h; setBox(x, b); } renderAll(); } return;
@@ -1140,6 +1385,7 @@
     const canStudio = !!(S.hooks.runTool); D.buildBtn.hidden = !canStudio; D.host.querySelector('[data-act="import"]').hidden = !canStudio;
     const ready = S.hooks.studioReady ? !!S.hooks.studioReady() : true; D.buildBtn.title = ready ? "Run ui_build_spec in the connected Studio right now (no AI turn)" : "Studio is not connected yet — Build will try anyway, or use Send to AI";
     D.intent.value = S.intent; setStatus("");
+    if (!S.nodes.length && !S.pendingRestore) { const saved = loadAutosave(); if (saved) { let c = 0; const walk = (l) => { for (const x of l) { c++; walk(x.children || []); } }; walk(saved.spec.children); S.pendingRestore = { t: saved.t, spec: saved.spec, count: c }; } }
     renderAll();
     requestAnimationFrame(() => { fitZoom(); D.host.focus(); });
     diag("open", { nodes: byId.size, engine: S.hooks.engine ? S.hooks.engine() : "" });
@@ -1147,5 +1393,5 @@
   function close() { if (!S.open) return; S.open = false; D.host.classList.remove("open"); document.documentElement.classList.remove("rs-gui-open"); diag("close", { nodes: byId.size }); }
   function isOpen() { return S.open; }
 
-  window.ORGuiStudio = { open, close, isOpen, getSpec, loadSpec, toLuau, buildMessage, setMode, TEMPLATES, DEVICES, ELEMENT_TOOLS, SIMPLE_ELEMENTS, SIMPLE_COMPONENTS, _state: S, _geo: geo, _computeGeometry: computeGeometry, _setBox: setBox, _makeNode: makeNode, _adopt: adopt, _reindex: reindex };
+  window.ORGuiStudio = { open, close, isOpen, getSpec, loadSpec, toLuau, buildMessage, setMode, check, TEMPLATES, DEVICES, ELEMENT_TOOLS, SIMPLE_ELEMENTS, SIMPLE_COMPONENTS, _state: S, _geo: geo, _computeGeometry: computeGeometry, _setBox: setBox, _makeNode: makeNode, _adopt: adopt, _reindex: reindex, _rename: renameNode, _resolveTarget: resolveTarget, _fitTextSize: fitTextSize, _autosaveNow: autosaveNow, _loadAutosave: loadAutosave, _startInlineEdit: startInlineEdit, _endInlineEdit: endInlineEdit };
 })();

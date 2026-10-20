@@ -7243,6 +7243,17 @@ html.rs-gui-open #rs-root { visibility: hidden !important; }
 .rsg-steps { margin: 0; padding-left: 18px; font-size: 11.5px; line-height: 1.5; color: #c4c4cd; }
 .rsg-steps li { margin: 4px 0; } .rsg-steps b { color: #dfe8ff; }
 #rs-gui.rsg-simple .rsg-foot .rsg-intent { min-width: 160px; }
+/* 1.49 accuracy + stability: restore banner, checker, inline edit */
+.rsg-restore { pointer-events: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 0 auto 14px; padding: 10px 14px; max-width: 560px; border-radius: 12px; background: rgba(79,124,255,.16); border: 1px solid rgba(125,160,255,.45); color: #e6ecff; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+.rsg-restore b { color: #fff; }
+.rsg-issues h4 { display: flex; align-items: center; gap: 6px; } .rsg-issues h4 .rsg-ib { margin-left: auto; width: 22px; height: 22px; }
+.rsg-issue-list { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow: auto; }
+.rsg-issue { display: flex; align-items: flex-start; gap: 8px; width: 100%; text-align: left; padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.04); color: #d6d6de; font: inherit; font-size: 11.5px; line-height: 1.35; cursor: pointer; }
+.rsg-issue:hover { background: rgba(120,160,255,.14); border-color: rgba(120,160,255,.4); }
+.rsg-issue i { flex: 0 0 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-size: 10px; font-weight: 700; margin-top: 1px; background: rgba(255,255,255,.15); color: #fff; }
+.rsg-issue.error i { background: #ff5c5c; } .rsg-issue.warn i { background: #f5b942; color: #1a1a1a; } .rsg-issue.info i { background: rgba(125,160,255,.6); }
+.rsg-issue b { color: #fff; font-weight: 600; margin-right: 4px; }
+.rsg-foot .rsg-check { flex: 0 0 auto; }
 .rsg-screen.grid { background-image: linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px); background-size: 8px 8px, 8px 8px; }
 .rsg-inset { position: absolute; left: 0; right: 0; top: 0; background: repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0 6px, transparent 6px 12px); border-bottom: 1px dashed rgba(255,255,255,.3); pointer-events: none; z-index: 0; }
 .rsg-inset.ghost { opacity: .35; }
@@ -7250,7 +7261,8 @@ html.rs-gui-open #rs-root { visibility: hidden !important; }
 .rsg-n:hover { outline: 1px solid rgba(120,160,255,.45); }
 .rsg-n.sel { outline: 2px solid #7da0ff; outline-offset: -1px; }
 .rsg-n.inlayout.sel { outline-style: dashed; }
-.rsg-txt { position: absolute; inset: 0; display: flex; padding: 0 4px; overflow: hidden; pointer-events: none; line-height: 1.15; }
+.rsg-txt { position: absolute; inset: 0; display: flex; padding: 0; overflow: visible; pointer-events: none; line-height: 1.15; }
+.rsg-txt.editing { pointer-events: auto; outline: 1px dashed rgba(125,160,255,.9); outline-offset: -1px; background: rgba(0,0,0,.18); cursor: text; user-select: text; -webkit-user-select: text; white-space: pre-wrap !important; }
 .rsg-txt.ph { opacity: .55; }
 .rsg-img { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .rsg-imgph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: rgba(255,255,255,.55); font-size: 10px; pointer-events: none; overflow: hidden; }
