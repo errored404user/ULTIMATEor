@@ -1,4 +1,4 @@
-// 1.48.0 → 1.50.0 — GUI Studio: the Paint-style visual GUI builder (src/core/guistudio.js), the 1.50 template library (src/core/guistudio_templates.js) + the
+// 1.48.0 → 1.50.1 — GUI Studio: the Paint-style visual GUI builder (src/core/guistudio.js), the 1.50 template library (src/core/guistudio_templates.js) + the
 // extra GUI command pack (src/core/skills/studio_guistudio.js) and their wiring.
 // Run: NODE_PATH=/tmp/harness/node_modules node tests/test-gui-studio.js
 const fs = require("fs"), path = require("path"), assert = require("assert");
@@ -193,6 +193,19 @@ ok("24 component buttons rendered (advanced list)", host.querySelectorAll(".rsg-
 Array.from(host.querySelectorAll(".rsg-tab")).find((b) => b.dataset.tab === "theme").click();
 ok("10 theme presets rendered on the Theme tab", host.querySelectorAll(".rsg-preset").length === 10, host.querySelectorAll(".rsg-preset").length);
 ok("4 side tabs (Props / Tree / Theme / Code)", host.querySelectorAll(".rsg-tab").length === 4);
+// ── 1.50.1 GUI Studio logo ──────────────────────────────────────────────────
+{ const sz = (f) => fs.statSync(path.join(R, f)).size;
+  ok("1.50.1: the GUI Studio mark + wordmark assets ship and stay lean (< 100 KB each)", sz("assets/gui-studio-mark.png") > 2000 && sz("assets/gui-studio-mark.png") < 100000 && sz("assets/gui-studio-wordmark.png") > 5000 && sz("assets/gui-studio-wordmark.png") < 100000, [sz("assets/gui-studio-mark.png"), sz("assets/gui-studio-wordmark.png")]);
+  ok("1.50.1: manifest exposes both logo assets in every web_accessible_resources block", JSON.parse(manifest).web_accessible_resources.length >= 2 && JSON.parse(manifest).web_accessible_resources.every((w) => w.resources.includes("assets/gui-studio-mark.png") && w.resources.includes("assets/gui-studio-wordmark.png")));
+  const brandImg = host.querySelector(".rsg-title .rsg-brand img.rsg-logo");
+  ok("1.50.1: title bar shows the GUI Studio mark + 'GUI Studio by ORscript'", brandImg && /assets\/gui-studio-mark\.png$/.test(brandImg.getAttribute("src")) && /GUI Studio/.test(host.querySelector(".rsg-brand").textContent) && host.querySelector(".rsg-brand small").textContent === "by ORscript", brandImg && brandImg.getAttribute("src"));
+  ok("1.50.1: gallery header carries the mark", /gui-studio-mark\.png$/.test(host.querySelector(".rsg-gal-head img.rsg-gal-logo").getAttribute("src")));
+  const spec0 = G.getSpec(); host.querySelector('[data-act="clear"]').click();
+  ok("1.50.1: empty screen shows the full wordmark lockup above the start cards", /gui-studio-wordmark\.png$/.test(host.querySelector(".rsg-empty-stage img.rsg-empty-logo").getAttribute("src")) && host.querySelector(".rsg-empty-stage .rsg-empty-logo").compareDocumentPosition(host.querySelector(".rsg-empty-stage .rsg-start")) & 4);
+  G.loadSpec(spec0);
+  ok("1.50.1: bar button uses the mark (window + sidebar + solid pill + cursor) as inline SVG", main.includes('id="rs-gui-btn"') && main.includes('<rect x="10" y="12" width="7" height="3.5" rx="1.75" fill="currentColor" stroke="none"/><path d="M15 14.5l6.5 2.6-2.6 1 1.6 2.6-1.5.9-1.6-2.6-1.8 2.1z" fill="currentColor" stroke="none"/>'));
+  ok("1.50.1: assetUrl falls back to a relative path on the hosted chat page", studio.includes('const assetUrl = (p) => { try { if (window.chrome && chrome.runtime && chrome.runtime.getURL) return chrome.runtime.getURL(p); } catch {} return p; };'));
+  for (const c of [".rsg-logo {", ".rsg-brand small {", ".rsg-gal-logo {", ".rsg-empty-logo {"]) ok("css: " + c, css.includes(c)); }
 
 setTimeout(async () => {
   try {

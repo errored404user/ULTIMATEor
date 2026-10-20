@@ -139,6 +139,8 @@
   const byId = new Map();
   let D = null; // DOM refs
   let drag = null; // active pointer op
+  // Extension-packaged asset (brand mark / wordmark). Falls back to a relative path on the hosted chat page.
+  const assetUrl = (p) => { try { if (window.chrome && chrome.runtime && chrome.runtime.getURL) return chrome.runtime.getURL(p); } catch {} return p; };
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   let toastTimer = 0;
@@ -449,7 +451,7 @@
     const inset = S.screen.ignore_inset === false ? `<div class="rsg-inset" style="height:${d.inset}px"></div>` : `<div class="rsg-inset ghost" style="height:${d.inset}px"></div>`;
     const roots = S.nodes.slice().sort((a, b) => (a.z || 1) - (b.z || 1)).map((r) => renderNode(r, null)).join("");
     const restore = S.pendingRestore && !S.nodes.length ? `<div class="rsg-restore"><span>Your last design was kept — <b>${esc(S.pendingRestore.spec.screen && S.pendingRestore.spec.screen.name || "GUI")}</b>, ${S.pendingRestore.count} object${S.pendingRestore.count === 1 ? "" : "s"}, ${esc(ago(S.pendingRestore.t))}.</span><button type="button" class="rsg-btn sm primary" data-act="restore">Restore it</button><button type="button" class="rsg-btn sm" data-act="restoreDismiss">Start fresh</button></div>` : "";
-    const empty = S.nodes.length ? "" : `<div class="rsg-empty-stage">${restore}<b>Start with a ready screen</b><div class="rsg-start">${featuredTemplates(8).map((t) => templateCard(t, "rsg-start-card")).join("")}</div><button type="button" class="rsg-btn primary rsg-browse" data-act="gallery">Browse all ${templates().length} templates</button><span>…or add your own: ${S.simple ? "click <b>Button</b>, <b>Text</b> or <b>Panel</b> on the left" : "pick a tool on the left and drag it out here"}.</span>${S.simple ? "" : `<span>V select · F frame · B button · T text · I image · Shift+drag multi-select · Del delete · Ctrl+Z undo</span>`}</div>`;
+    const empty = S.nodes.length ? "" : `<div class="rsg-empty-stage">${restore}<img class="rsg-empty-logo" alt="GUI Studio by ORscript" src="${esc(assetUrl("assets/gui-studio-wordmark.png"))}" draggable="false"><b>Start with a ready screen</b><div class="rsg-start">${featuredTemplates(8).map((t) => templateCard(t, "rsg-start-card")).join("")}</div><button type="button" class="rsg-btn primary rsg-browse" data-act="gallery">Browse all ${templates().length} templates</button><span>…or add your own: ${S.simple ? "click <b>Button</b>, <b>Text</b> or <b>Panel</b> on the left" : "pick a tool on the left and drag it out here"}.</span>${S.simple ? "" : `<span>V select · F frame · B button · T text · I image · Shift+drag multi-select · Del delete · Ctrl+Z undo</span>`}</div>`;
     D.screen.innerHTML = inset + roots + empty + `<div class="rsg-marquee" hidden></div><div class="rsg-guides"></div>`;
     D.marquee = D.screen.querySelector(".rsg-marquee"); D.guides = D.screen.querySelector(".rsg-guides");
     if (!S.nodes.length && !S.thumb) fillThumbs(D.screen);
@@ -1269,12 +1271,12 @@
     const kinds = componentKinds();
     const simpleAdd = SIMPLE_ELEMENTS.map((t) => `<button type="button" class="rsg-add" data-add="${t.cls}" title="Add a ${esc(t.label)}">${I[t.icon]}<span><b>${esc(t.label)}</b><small>${esc(t.sub)}</small></span></button>`).join("");
     const simpleComps = SIMPLE_COMPONENTS.filter(([k]) => !kinds.length || kinds.includes(k)).map(([k, l]) => `<button type="button" class="rsg-comp rsg-comp-lg" data-comp="${k}" title="Add a ${esc(l)}">${esc(l)}</button>`).join("");
-    const logo = (window.chrome && chrome.runtime && chrome.runtime.getURL) ? chrome.runtime.getURL("assets/icon128.png") : "";
+    const logo = assetUrl("assets/gui-studio-mark.png");
     host.innerHTML = `
       <div class="rsg-shell">
         <div class="rsg-toast" role="status" aria-live="polite"></div>
         <div class="rsg-title">
-          <span class="rsg-brand"><img class="rsg-logo" alt="" src="${esc(logo)}">ORscript GUI Studio</span>
+          <span class="rsg-brand" title="GUI Studio by ORscript"><img class="rsg-logo" alt="GUI Studio" src="${esc(logo)}">GUI Studio<small>by ORscript</small></span>
           <span class="rsg-mode" title="Simple: click to add, few options. Advanced: every property, drag-to-draw tools, code."><button type="button" data-mode="simple" class="${S.simple ? "on" : ""}">Simple</button><button type="button" data-mode="advanced" class="${S.simple ? "" : "on"}">Advanced</button></span>
           <span class="rsg-sub rsg-adv">Design it → build it in Studio</span>
           <div class="rsg-title-actions">
@@ -1300,7 +1302,7 @@
           </div>
         </div>
         <div class="rsg-gallery" hidden role="dialog" aria-label="Templates">
-          <div class="rsg-gal-head"><b>Templates</b><span class="rsg-gal-count"></span><input class="rsg-gal-search" type="search" placeholder="Search by name, category, tag or theme…" spellcheck="false"><button type="button" class="rsg-ib" data-act="galleryClose" title="Close (Esc)">${I.close}</button></div>
+          <div class="rsg-gal-head"><img class="rsg-gal-logo" alt="" src="${esc(logo)}"><b>Templates</b><span class="rsg-gal-count"></span><input class="rsg-gal-search" type="search" placeholder="Search by name, category, tag or theme…" spellcheck="false"><button type="button" class="rsg-ib" data-act="galleryClose" title="Close (Esc)">${I.close}</button></div>
           <div class="rsg-gal-cats"></div>
           <div class="rsg-gal-grid"></div>
           <div class="rsg-gal-foot">Click a card to load it (your current design is replaced — Ctrl+Z brings it back). Every template comes with its own theme; change it any time with the Theme dropdown.</div>
