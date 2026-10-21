@@ -8753,12 +8753,16 @@ html.rs-anim-open #rs-root { visibility: hidden !important; }
 /* 1.54.0 - viewport tools, dope sheet / graph editor, pose tools, pose library, layering */
 .rsa-canvas { touch-action: none; cursor: move; }
 .rsa-viewsel .rsa-ib { width: 24px; height: 24px; }
-.rsa-tools { position: absolute; left: 10px; top: 8px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; max-width: calc(100% - 330px); }
-.rsa-tools .rsa-btn.mini { margin-left: 0; background: rgba(20,20,26,.78); backdrop-filter: blur(4px); }
-.rsa-tools .rsa-ib { width: 24px; height: 24px; background: rgba(20,20,26,.78); }
+.rsa-tools { display: flex; flex-direction: column; gap: 4px; }
+.rsa-tools .rsa-btn.mini { margin-left: 0; flex: none; min-width: 92px; justify-content: center; padding: 4px 8px; }
+.rsa-tools .rsa-btn.mini.on { background: rgba(255,159,110,.2); border-color: rgba(255,159,110,.55); color: #ffe3d4; }
+.rsa-toolrow { display: flex; align-items: center; gap: 8px; }
+.rsa-toolrow small { color: #8f8f9a; font-size: 10px; line-height: 1.25; }
+.rsa-vtools { position: absolute; left: 10px; top: 8px; flex-direction: row; gap: 4px; }
+.rsa-vtools .rsa-ib { width: 26px; height: 26px; background: rgba(20,20,26,.78); backdrop-filter: blur(4px); }
 .rsa-edtabs { flex: none; display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-top: 1px solid rgba(255,255,255,.07); background: #121216; }
 .rsa-edtabs .rsa-muted { margin-left: auto; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rsa-editor { flex: none; height: 196px; width: 100%; display: block; border-top: 1px solid rgba(255,255,255,.07); cursor: crosshair; touch-action: none; }
+.rsa-editor { flex: none; height: 168px; width: 100%; display: block; border-top: 1px solid rgba(255,255,255,.07); cursor: crosshair; touch-action: none; }
 .rsa-posetools { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .rsa-posetools .rsa-btn.mini { margin-left: 0; display: inline-flex; align-items: center; gap: 5px; justify-content: center; padding: 5px 6px; }
 .rsa-posetools .rsa-btn.mini svg { width: 13px; height: 13px; }
@@ -8777,5 +8781,25 @@ html.rs-anim-open #rs-root { visibility: hidden !important; }
 .rsa-smooth { margin-left: auto; font: 9.5px ui-monospace, Consolas, monospace; color: #8f8f9a; text-transform: none; letter-spacing: 0; }
 .rsa-smooth b { color: #c4c4cd; }
 .rsa-h .rsa-btn.mini { margin-left: 6px; }
+/* 1.55.0 - tidy layout: numbered cards on the left, a quiet viewport, tabbed Pose / Clip / Check panel on the right */
+.rsa-card { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.06); }
+.rsa-card .rsa-h { padding-top: 0; }
+.rsa-card-tips { background: transparent; border-style: dashed; }
+.rsa-h b { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: rgba(255,159,110,.22); color: #ffe3d4; font-size: 9.5px; letter-spacing: 0; }
+.rsa-h .rsa-hr { margin-left: auto; font-size: 9.5px; letter-spacing: 0; text-transform: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rsa-examples summary { cursor: pointer; font-size: 10.5px; color: #a9a9b4; list-style: none; display: flex; align-items: center; gap: 6px; user-select: none; }
+.rsa-examples summary::before { content: "▸"; font-size: 9px; color: #8f8f9a; }
+.rsa-examples[open] summary::before { content: "▾"; }
+.rsa-examples .rsa-chips { margin-top: 6px; max-height: 96px; overflow: auto; scrollbar-width: thin; }
+#rs-anim kbd { display: inline-block; padding: 0 4px; border-radius: 4px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); font: 9.5px ui-monospace, Consolas, monospace; color: #d8d8de; }
+.rsa-rtabs { display: flex; gap: 4px; padding-bottom: 2px; border-bottom: 1px solid rgba(255,255,255,.07); }
+.rsa-rtabs .rsa-chip { flex: 1; justify-content: center; display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; font-size: 11px; }
+.rsa-rtabs .rsa-score { font-size: 9.5px; padding: 0 5px; }
+.rsa-rpanel { display: flex; flex-direction: column; gap: 8px; }
+.rsa-edtabs .rsa-ib.mini { margin-left: auto; }
+.rsa-edtabs .rsa-ib.mini.on svg { transform: rotate(180deg); }
+.rsa-foot .rsa-btn svg { width: 13px; height: 13px; }
+.rsa-foot input { flex: 1; min-width: 80px; max-width: 260px; }
+.rsa-row .rsa-btn.mini { flex: 0 0 auto; }
 @media (max-width: 1180px) { .rsa-body { grid-template-columns: 260px minmax(0, 1fr) 250px; } }
 @media (max-width: 920px) { .rsa-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) auto; } .rsa-left, .rsa-right { max-height: 32vh; } .rsa-left { border-right: 0; border-bottom: 1px solid rgba(255,255,255,.07); } .rsa-right { border-left: 0; border-top: 1px solid rgba(255,255,255,.07); } }

@@ -28,7 +28,7 @@
   if (window.ORAnimStudio) return;
   const E = () => window.ORAnimEngine;
   const SVG = (d) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
-  const I = {
+  const I = { collapse: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
     play: SVG('<path d="M7 5v14l12-7z" fill="currentColor" stroke="none"/>'), pause: SVG('<path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor" stroke="none"/>'), stop: SVG('<rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" stroke="none"/>'),
     loop: SVG('<path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>'),
     undo: SVG('<path d="M9 14H4V9"/><path d="M4 14a8 8 0 1 1 3 6"/>'), redo: SVG('<path d="M15 14h5V9"/><path d="M20 14a8 8 0 1 0-3 6"/>'), close: SVG('<path d="M6 6l12 12M18 6L6 18"/>'),
@@ -48,7 +48,7 @@
   ];
   const STORAGE_KEY = "rsAnimProject";
 
-  const S = { open: false, hooks: {}, clip: null, prev: null, history: [], future: [], sel: -1, selJoint: "r_shoulder", t: 0, playing: false, speed: 1, ghost: false, rigInfo: null, built: null, drag: null, raf: 0, lastTs: 0, busy: false, view: "3d", cam: { yaw: 35, pitch: 18, zoom: 1, pan: [0, 0] }, onion: true, autoKey: false, editor: "dope", clipboard: null, handles: [], cams: [], library: {}, ikDrag: null, orbit: null, gdrag: null };
+  const S = { rtab: "pose", editorOpen: true, open: false, hooks: {}, clip: null, prev: null, history: [], future: [], sel: -1, selJoint: "r_shoulder", t: 0, playing: false, speed: 1, ghost: false, rigInfo: null, built: null, drag: null, raf: 0, lastTs: 0, busy: false, view: "3d", cam: { yaw: 35, pitch: 18, zoom: 1, pan: [0, 0] }, onion: true, autoKey: false, editor: "dope", clipboard: null, handles: [], cams: [], library: {}, ikDrag: null, orbit: null, gdrag: null };
   let D = null;
   let toastTimer = 0;
   const toast = (m) => { if (!D) return; D.toast.textContent = m; D.toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => D.toast.classList.remove("show"), 2600); try { S.hooks.diag && S.hooks.diag("anim.toast", { m }); } catch {} };
@@ -93,8 +93,11 @@
     setClip(clip);
     D.prompt.value = text;
     D.loopAuto = false; D.loop.checked = !!clip.loop; D.duration.value = clip.duration; D.fps.value = clip.fps; D.rig.value = clip.rigType; D.quality.value = clip.quality;
-    toast(`Generated ${clip.name}: ${clip.keys.length} keys, score ${clip.report.score}/100`);
-    diag("generate", { prompt: text.slice(0, 80), keys: clip.keys.length, score: clip.report.score, quality: clip.quality, rig: clip.rigType });
+    const cat = clip.intent && clip.intent.category;
+    const what = cat === "sequence" ? `${(clip.parts || []).length} motions in a row` : cat === "act" ? (clip.intent.acts || []).join(" + ") : cat === "improv" ? "improvised " + (clip.intent.improv || []).join(" → ") : cat === "gesture" ? "gesture: " + ((clip.intent.gesture || {}).hits || []).join(", ") : clip.layered ? `${clip.layered.base} + ${clip.layered.upper}` : cat;
+    toast(`Generated ${clip.name} (${what}${clip.intent && clip.intent.mood ? ", mood " + clip.intent.mood : ""}): ${clip.keys.length} keys, ${clip.duration}s, score ${clip.report.score}/100`);
+    if (cat === "improv" || clip.report.errors) setRightTab("check");
+    diag("generate", { prompt: text.slice(0, 80), keys: clip.keys.length, score: clip.report.score, quality: clip.quality, rig: clip.rigType, category: cat });
     return clip;
   }
   function refine(feedback) {
@@ -233,7 +236,7 @@
   }
 
   // ───────────────────────── rendering ─────────────────────────
-  function renderAll() { if (!D) return; renderPreview(); renderTransport(); renderTimeline(); renderEditor(); renderJoints(); renderInspector(); renderReport(); renderStages(); renderStatus(); renderTools(); }
+  function renderAll() { if (!D) return; renderPanels(); renderPreview(); renderTransport(); renderTimeline(); renderEditor(); renderJoints(); renderInspector(); renderReport(); renderStages(); renderStatus(); renderTools(); }
   function setStatus(m) { if (D) D.status.textContent = m || ""; }
   function renderStatus() {
     if (!D) return;
@@ -616,6 +619,14 @@
     if (v === "__file") { S.fileFor = "layer"; D.file.click(); return; }
     const up = libraryClips()[v]; if (!up) return toast("That clip is gone - generate it again"); layerWith(up);
   }
+  function setRightTab(name) { S.rtab = /^(pose|clip|check)$/.test(name) ? name : "pose"; renderPanels(); }
+  function renderPanels() {
+    if (!D) return;
+    for (const b of D.host.querySelectorAll("[data-rtab]")) b.classList.toggle("on", b.getAttribute("data-rtab") === S.rtab);
+    for (const p of D.host.querySelectorAll("[data-rpanel]")) p.hidden = p.getAttribute("data-rpanel") !== S.rtab;
+    D.editor.hidden = !S.editorOpen; D.editorToggle.classList.toggle("on", !S.editorOpen); D.editorToggle.title = S.editorOpen ? "Hide the editor panel (more room for the viewport)" : "Show the dope sheet / graph editor";
+    if (D.edhint) D.edhint.textContent = S.editorOpen ? (S.editor === "graph" ? "drag a point to retune the key · G toggles" : "Shift-click = multi-select · drag = retime · G toggles") : "";
+  }
   function renderTools() { if (!D) return; D.onionBtn.classList.toggle("on", !!S.onion); D.autoKeyBtn.classList.toggle("on", !!S.autoKey); D.pasteBtn.disabled = !S.clipboard || !S.clip; D.pasteFlipBtn.disabled = !S.clipboard || !S.clip; for (const b of D.host.querySelectorAll("[data-tool]")) b.disabled = !S.clip; if (D.interpBtn) { const sp = !!(S.clip && S.clip.interp === "spline"); D.interpBtn.textContent = sp ? "Spline" : "Eased"; D.interpBtn.classList.toggle("on", sp); } D.lockBtn.classList.toggle("on", !!(S.clip && S.clip.keys[S.sel] && S.clip.keys[S.sel].locked)); if (D.smoothVal) { const r = S.clip && S.clip.report; D.smoothVal.textContent = r && Number.isFinite(r.smoothness) ? `${r.smoothness}` : "–"; D.smoothVal.title = r && r.roughestJoint ? `motion smoothness (100 = silky). Roughest joint: ${r.roughestJoint}` : "motion smoothness (100 = silky)"; } }
   function renderJoints() {
     if (!D) return;
@@ -681,46 +692,41 @@
         </div>
         <div class="rsa-body">
           <aside class="rsa-left">
-            <div class="rsa-h">Describe the animation</div>
-            <textarea data-ref="prompt" rows="4" placeholder="e.g. extremely fluid anime sword combo with anticipation, rapid strikes, a spinning finisher and a dramatic landing"></textarea>
-            <div class="rsa-chips">${PRESETS.map((p) => `<button type="button" class="rsa-chip" data-preset="${esc(p[1])}">${esc(p[0])}</button>`).join("")}</div>
-            <div class="rsa-grid">
-              <label>Quality<select data-ref="quality"><option value="fast">Fast</option><option value="balanced" selected>Balanced</option><option value="high">High Quality</option><option value="cinematic">Cinematic</option></select></label>
-              <label>Rig<select data-ref="rig"><option value="R15" selected>R15</option><option value="R6">R6</option></select></label>
-              <label>Duration (s)<input data-ref="duration" type="number" min="0.1" max="60" step="0.1" placeholder="auto"></label>
-              <label>FPS<input data-ref="fps" type="number" min="10" max="120" step="1" placeholder="auto"></label>
-              <label class="rsa-check"><input data-ref="loop" type="checkbox"> Loop</label>
-            </div>
-            <button type="button" class="rsa-btn primary big" data-act="generate">Generate</button>
-            <div class="rsa-row"><button type="button" class="rsa-btn" data-act="regen" data-ref="regenBtn" title="Regenerate from the same prompt (discards manual edits)">Regenerate</button><button type="button" class="rsa-btn" data-act="variation" data-ref="varBtn" title="New take: same prompt, a different persona and choreography (fingerprint guaranteed to differ)">New take</button><button type="button" class="rsa-btn" data-act="mirror" data-ref="mirrorBtn" title="Swap left and right (left-handed version)">Mirror</button></div>
-            <div class="rsa-persona" data-ref="persona" title="Who this clip is: the seeded persona behind its asymmetry, fidget, easing and tempo"></div>
-            <div class="rsa-h">Refine with feedback</div>
-            <div class="rsa-row"><input data-ref="feedback" type="text" placeholder="faster attacks, more anticipation, heavier landing"><button type="button" class="rsa-btn" data-act="refine" data-ref="refineBtn">Refine</button></div>
-            <div class="rsa-h">Layer (NLA)</div>
-            <div class="rsa-row rsa-layer"><select data-ref="layerPick" title="The clip whose upper body goes on top of the current clip's legs and root"></select></div>
-            <div class="rsa-row rsa-layer"><select data-ref="layerFit" title="stretch: upper clip retimed to this clip's duration · loop: upper clip repeats at its own period"><option value="stretch">stretch to fit</option><option value="loop">loop at own period</option></select><input data-ref="layerWeight" type="number" min="0" max="1" step="0.1" value="1" title="Blend weight of the upper body (1 = fully replaced)"><button type="button" class="rsa-btn" data-act="layer" title="Combine: legs + root from this clip, upper body from the picked clip">Layer</button></div>
-            <div class="rsa-h">Stages</div>
-            <div class="rsa-stages" data-ref="stages"></div>
-            <div class="rsa-h">Validation <span class="rsa-score" data-ref="score">–</span><span class="rsa-smooth" title="motion smoothness (100 = silky)">smooth <b data-ref="smoothVal">–</b></span><button type="button" class="rsa-btn mini" data-act="fix" data-ref="fixBtn" title="Clamp limits, bridge jumps, close the loop">Auto-fix</button></div>
-            <div class="rsa-report" data-ref="report"></div>
+            <section class="rsa-card">
+              <div class="rsa-h"><b>1</b> Describe the motion</div>
+              <textarea data-ref="prompt" rows="4" placeholder="Anything: 'drink a potion', 'open a heavy door', 'tired old man walk', 'wave while walking', 'salute then bow', 'raise the left arm', '8 hit anime sword combo with a spinning finisher'"></textarea>
+              <details class="rsa-examples"><summary>Examples</summary><div class="rsa-chips">${PRESETS.map((p) => `<button type="button" class="rsa-chip" data-preset="${esc(p[1])}">${esc(p[0])}</button>`).join("")}</div></details>
+              <div class="rsa-grid">
+                <label>Quality<select data-ref="quality"><option value="fast">Fast</option><option value="balanced" selected>Balanced</option><option value="high">High Quality</option><option value="cinematic">Cinematic</option></select></label>
+                <label>Rig<select data-ref="rig"><option value="R15" selected>R15</option><option value="R6">R6</option></select></label>
+                <label>Duration (s)<input data-ref="duration" type="number" min="0.1" max="60" step="0.1" placeholder="auto"></label>
+                <label>FPS<input data-ref="fps" type="number" min="10" max="120" step="1" placeholder="auto"></label>
+                <label class="rsa-check"><input data-ref="loop" type="checkbox"> Loop</label>
+              </div>
+              <button type="button" class="rsa-btn primary big" data-act="generate">Generate</button>
+              <div class="rsa-row"><button type="button" class="rsa-btn" data-act="regen" data-ref="regenBtn" title="Regenerate from the same prompt (discards manual edits)">Regenerate</button><button type="button" class="rsa-btn" data-act="variation" data-ref="varBtn" title="New take: same prompt, a different persona and choreography (fingerprint guaranteed to differ)">New take</button><button type="button" class="rsa-btn" data-act="mirror" data-ref="mirrorBtn" title="Swap left and right (left-handed version)">Mirror</button></div>
+              <div class="rsa-persona" data-ref="persona" title="Who this clip is: the seeded persona behind its asymmetry, fidget, easing and tempo"></div>
+            </section>
+            <section class="rsa-card">
+              <div class="rsa-h"><b>2</b> Refine with feedback</div>
+              <div class="rsa-row"><input data-ref="feedback" type="text" placeholder="faster · heavier landing · more anticipation · tired · drunk · then wave"><button type="button" class="rsa-btn" data-act="refine" data-ref="refineBtn">Refine</button></div>
+              <div class="rsa-muted">Understands speed, weight, anticipation, exaggerate / subtle, smoother, longer / shorter, loop, new take, mirror, root motion, moods (tired, proud, drunk, scared…), "then …" to append a motion, plant feet, simplify, reverse.</div>
+            </section>
+            <section class="rsa-card rsa-card-tips">
+              <div class="rsa-h"><b>3</b> Edit &amp; deliver</div>
+              <div class="rsa-muted">Drag the figure to orbit · drag a hand / foot to pose with IK · click a joint, then type angles on the right · <kbd>I</kbd> insert key · <kbd>Shift+D</kbd> duplicate · <kbd>X</kbd> delete · <kbd>G</kbd> graph editor · <kbd>Ctrl+Z</kbd> undo. Build in Studio writes the KeyframeSequence; Export saves an .rbxmx.</div>
+            </section>
           </aside>
           <main class="rsa-main">
             <div class="rsa-stagewrap">
               <canvas class="rsa-canvas" data-ref="canvas"></canvas>
-              <div class="rsa-empty" data-ref="empty"><b>Describe an animation, then Generate</b><span>Idle loops, walk / run cycles, jumps, combat combos, dodges, blocks, spell casts, emotes. Pick a preset on the left to start.</span><span>Preview is a schematic skeleton - use Preview in Studio for the real rig.</span></div>
-              <div class="rsa-viewsel"><button type="button" class="rsa-chip on" data-view="3d" title="Orbit view (5)">3D</button><button type="button" class="rsa-chip" data-view="front" title="Front (1)">Front</button><button type="button" class="rsa-chip" data-view="side" title="Side (3)">Side</button><button type="button" class="rsa-chip" data-view="top" title="Top (7)">Top</button><button type="button" class="rsa-chip" data-view="both" title="Front + Side (2)">Front + Side</button><button type="button" class="rsa-ib" data-act="resetCam" title="Reset camera (double-click the viewport)">${I.cam}</button></div>
-              <div class="rsa-tools">
-                <button type="button" class="rsa-btn mini" data-tool="smooth" title="Smooth: switch the clip to spline (C1) curves and relax every non-anchor key toward its neighbours (impacts, holds and locked keys stay)">Smooth</button>
-                <button type="button" class="rsa-btn mini" data-tool="interp" data-ref="interpBtn" title="Interpolation: Eased = Roblox easing per key (velocity resets at every key); Spline = C1 F-curves through the keys like Blender (exported to Studio baked per frame)">Eased</button>
-                <button type="button" class="rsa-btn mini" data-tool="plant" title="Plant feet: put the lowest foot on the ground at every key (root re-based) and flatten planted soles">Plant feet</button>
-                <button type="button" class="rsa-btn mini" data-tool="simplify" title="Clean keys: remove keys the interpolation already reproduces within 2°">Simplify</button>
-                <button type="button" class="rsa-btn mini" data-tool="reverse" title="Reverse the clip in time">Reverse</button>
-                <button type="button" class="rsa-btn mini" data-tool="bake" title="Bake: one key per frame (what Studio plays)">Bake</button>
-                <button type="button" class="rsa-btn mini" data-tool="offset" title="Cycle offset: move where a looping clip starts">Cycle offset</button>
-                <span class="rsa-sep"></span>
+              <div class="rsa-empty" data-ref="empty"><b>Describe an animation, then Generate</b><span>Idles, cycles, jumps, combat combos, emotes - and anything else you can phrase: "drink a potion", "open a heavy door", "tired old man walk", "wave while walking", "salute then bow", "raise the left arm".</span><span>Preview is a schematic skeleton - use Preview in Studio for the real rig.</span></div>
+              <div class="rsa-tools rsa-vtools">
                 <button type="button" class="rsa-ib tgl" data-act="onion" data-ref="onionBtn" title="Onion skin: previous key (blue) and next key (orange) as ghosts (O)">${I.onion}</button>
                 <button type="button" class="rsa-ib tgl" data-act="autoKey" data-ref="autoKeyBtn" title="Auto-key: editing at a time with no key inserts one there (K)">${I.key}</button>
+                <button type="button" class="rsa-ib tgl" data-act="ghost" data-ref="ghostBtn" title="Before / after: show the previous version as a ghost">${I.ghost}</button>
               </div>
+              <div class="rsa-viewsel"><button type="button" class="rsa-chip on" data-view="3d" title="Orbit view (5)">3D</button><button type="button" class="rsa-chip" data-view="front" title="Front (1)">Front</button><button type="button" class="rsa-chip" data-view="side" title="Side (3)">Side</button><button type="button" class="rsa-chip" data-view="top" title="Top (7)">Top</button><button type="button" class="rsa-chip" data-view="both" title="Front + Side (2)">Front + Side</button><button type="button" class="rsa-ib" data-act="resetCam" title="Reset camera (double-click the viewport)">${I.cam}</button></div>
             </div>
             <div class="rsa-transport">
               <button type="button" class="rsa-ib" data-act="play" data-ref="playBtn" title="Play (Space)">${I.play}</button>
@@ -729,35 +735,64 @@
               <select data-ref="speed" title="Playback speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
               <input data-ref="scrub" type="range" min="0" max="1" step="0.01" value="0" title="Scrub">
               <span class="rsa-time" data-ref="time">0.00 / 0.00 s</span>
-              <button type="button" class="rsa-ib tgl" data-act="ghost" data-ref="ghostBtn" title="Before / after: show the previous version as a ghost">${I.ghost}</button>
             </div>
             <canvas class="rsa-timeline" data-ref="timeline" title="Click to scrub · drag a key to retime it · click a key to edit it"></canvas>
-            <div class="rsa-edtabs"><button type="button" class="rsa-chip on" data-editor="dope" title="Dope sheet: joint rows × key diamonds (G toggles)">Dope sheet</button><button type="button" class="rsa-chip" data-editor="graph" title="Graph editor: X / Y / Z curves of the selected joint, draggable points (G toggles)">Graph editor</button><span class="rsa-muted">I insert key · X delete · Shift+D duplicate · ←/→ frame · ↑/↓ key · Ctrl+C/V pose · 1/3/7/5 views</span></div>
+            <div class="rsa-edtabs"><button type="button" class="rsa-chip on" data-editor="dope" title="Dope sheet: joint rows × key diamonds (G toggles)">Dope sheet</button><button type="button" class="rsa-chip" data-editor="graph" title="Graph editor: X / Y / Z curves of the selected joint, draggable points (G toggles)">Graph editor</button><span class="rsa-muted" data-ref="edhint"></span><button type="button" class="rsa-ib mini" data-act="toggleEditor" data-ref="editorToggle" title="Show / hide the editor panel">${I.collapse}</button></div>
             <canvas class="rsa-editor" data-ref="editor"></canvas>
             <div class="rsa-foot">
               <span class="rsa-status" data-ref="status"></span>
-              <input data-ref="intent" type="text" placeholder="Notes for the AI (optional)">
+              <input data-ref="intent" type="text" placeholder="Note for the AI (optional)">
               <button type="button" class="rsa-btn" data-act="send" data-ref="sendBtn" title="Hand the clip to the AI in the chat">Send to AI</button>
+              <button type="button" class="rsa-btn" data-act="export" data-ref="exportBtn" title="Export a Roblox KeyframeSequence (.rbxmx) - drag it into Studio or import it">${I.export} Export .rbxmx</button>
               <button type="button" class="rsa-btn" data-act="previewStudio" data-ref="previewBtn" title="Build if needed, then play it on the rig in Studio">Preview in Studio</button>
               <button type="button" class="rsa-btn primary" data-act="build" data-ref="buildBtn" title="Write the KeyframeSequence into Studio now (animation_build)">Build in Studio</button>
             </div>
           </main>
           <aside class="rsa-right">
-            <div class="rsa-h">Joints</div>
-            <div class="rsa-joints" data-ref="joints"></div>
-            <div class="rsa-h">Selected key</div>
-            <div class="rsa-inspector" data-ref="inspector"></div>
-            <div class="rsa-h">Pose tools</div>
-            <div class="rsa-posetools">
-              <button type="button" class="rsa-btn mini" data-act="insertKey" title="Insert a key at the playhead holding the interpolated pose (I)">${I.key} Insert key</button>
-              <button type="button" class="rsa-btn mini" data-act="copyPose" title="Copy the selected key's pose (Ctrl+C)">${I.copy} Copy</button>
-              <button type="button" class="rsa-btn mini" data-act="pastePose" data-ref="pasteBtn" title="Paste the copied pose onto the selected key (Ctrl+V)">${I.paste} Paste</button>
-              <button type="button" class="rsa-btn mini" data-act="pasteFlip" data-ref="pasteFlipBtn" title="Paste X-flipped: left ↔ right (Ctrl+Shift+V)">${I.flip} Paste flipped</button>
-              <button type="button" class="rsa-btn mini tgl" data-act="lockKey" data-ref="lockBtn" title="Lock this key: Smooth and Simplify leave it untouched">${I.lock} Lock key</button>
+            <div class="rsa-rtabs">
+              <button type="button" class="rsa-chip on" data-rtab="pose" title="Joints, selected key, pose tools, pose library">Pose</button>
+              <button type="button" class="rsa-chip" data-rtab="clip" title="Curves, cleanup, layering, stages">Clip</button>
+              <button type="button" class="rsa-chip" data-rtab="check" title="Validation report, smoothness, auto-fix">Check <span class="rsa-score" data-ref="score">–</span></button>
             </div>
-            <div class="rsa-h">Pose library</div>
-            <div class="rsa-row"><input data-ref="poseName" type="text" placeholder="pose name"><button type="button" class="rsa-btn mini" data-act="savePose" title="Save the selected key's pose to the library (kept in this browser)">Save pose</button></div>
-            <div class="rsa-poses" data-ref="poses"></div>
+            <div class="rsa-rpanel" data-rpanel="pose">
+              <div class="rsa-h">Joints <span class="rsa-muted rsa-hr">click one, or click a handle in the viewport</span></div>
+              <div class="rsa-joints" data-ref="joints"></div>
+              <div class="rsa-h">Selected key</div>
+              <div class="rsa-inspector" data-ref="inspector"></div>
+              <div class="rsa-h">Pose tools</div>
+              <div class="rsa-posetools">
+                <button type="button" class="rsa-btn mini" data-act="insertKey" title="Insert a key at the playhead holding the interpolated pose (I)">${I.key} Insert key</button>
+                <button type="button" class="rsa-btn mini" data-act="copyPose" title="Copy the selected key's pose (Ctrl+C)">${I.copy} Copy</button>
+                <button type="button" class="rsa-btn mini" data-act="pastePose" data-ref="pasteBtn" title="Paste the copied pose onto the selected key (Ctrl+V)">${I.paste} Paste</button>
+                <button type="button" class="rsa-btn mini" data-act="pasteFlip" data-ref="pasteFlipBtn" title="Paste X-flipped: left ↔ right (Ctrl+Shift+V)">${I.flip} Paste flipped</button>
+                <button type="button" class="rsa-btn mini tgl" data-act="lockKey" data-ref="lockBtn" title="Lock this key: Smooth and Simplify leave it untouched">${I.lock} Lock key</button>
+              </div>
+              <div class="rsa-h">Pose library <span class="rsa-muted rsa-hr">Shift-click = X-flipped</span></div>
+              <div class="rsa-row"><input data-ref="poseName" type="text" placeholder="pose name"><button type="button" class="rsa-btn mini" data-act="savePose" title="Save the selected key's pose to the library (kept in this browser)">Save pose</button></div>
+              <div class="rsa-poses" data-ref="poses"></div>
+            </div>
+            <div class="rsa-rpanel" data-rpanel="clip" hidden>
+              <div class="rsa-h">Curves &amp; cleanup</div>
+              <div class="rsa-tools">
+                <div class="rsa-toolrow"><button type="button" class="rsa-btn mini" data-tool="smooth" title="Smooth: switch the clip to spline (C1) curves and relax every non-anchor key toward its neighbours (impacts, holds and locked keys stay)">Smooth</button><small>spline curves + relaxed keys; impacts stay sharp</small></div>
+                <div class="rsa-toolrow"><button type="button" class="rsa-btn mini" data-tool="interp" data-ref="interpBtn" title="Interpolation: Eased = Roblox easing per key (velocity resets at every key); Spline = C1 F-curves through the keys like Blender (exported to Studio baked per frame)">Eased</button><small>interpolation: eased per key ↔ C1 spline (click to switch)</small></div>
+                <div class="rsa-toolrow"><button type="button" class="rsa-btn mini" data-tool="plant" title="Plant feet: put the lowest foot on the ground at every key (root re-based) and flatten planted soles">Plant feet</button><small>no floating / sliding: lowest foot on the ground at every key</small></div>
+                <div class="rsa-toolrow"><button type="button" class="rsa-btn mini" data-tool="simplify" title="Clean keys: remove keys the interpolation already reproduces within 2°">Simplify</button><small>drop keys the curve already reproduces (2°)</small></div>
+                <div class="rsa-toolrow"><button type="button" class="rsa-btn mini" data-tool="reverse" title="Reverse the clip in time">Reverse</button><small>play it backwards</small></div>
+                <div class="rsa-toolrow"><button type="button" class="rsa-btn mini" data-tool="bake" title="Bake: one key per frame (what Studio plays)">Bake</button><small>one key per frame (Simplify undoes the density)</small></div>
+                <div class="rsa-toolrow"><button type="button" class="rsa-btn mini" data-tool="offset" title="Cycle offset: move where a looping clip starts">Cycle offset</button><small>move where a looping clip starts</small></div>
+              </div>
+              <div class="rsa-h">Layer upper body (NLA)</div>
+              <div class="rsa-row rsa-layer"><select data-ref="layerPick" title="The clip whose upper body goes on top of the current clip's legs and root"></select></div>
+              <div class="rsa-row rsa-layer"><select data-ref="layerFit" title="stretch: upper clip retimed to this clip's duration · loop: upper clip repeats at its own period"><option value="stretch">stretch to fit</option><option value="loop">loop at own period</option></select><input data-ref="layerWeight" type="number" min="0" max="1" step="0.1" value="1" title="Blend weight of the upper body (1 = fully replaced)"><button type="button" class="rsa-btn" data-act="layer" title="Combine: legs + root from this clip, upper body from the picked clip">Layer</button></div>
+              <div class="rsa-muted">Legs + root stay from this clip; waist, head and arms come from the picked clip (walk + wave, run + aim). Or just type "wave while walking".</div>
+              <div class="rsa-h">Stages <span class="rsa-muted rsa-hr">click to jump</span></div>
+              <div class="rsa-stages" data-ref="stages"></div>
+            </div>
+            <div class="rsa-rpanel" data-rpanel="check" hidden>
+              <div class="rsa-h">Validation <span class="rsa-smooth" title="motion smoothness (100 = silky)">smooth <b data-ref="smoothVal">–</b></span><button type="button" class="rsa-btn mini" data-act="fix" data-ref="fixBtn" title="Clamp limits, bridge jumps, close the loop">Auto-fix</button></div>
+              <div class="rsa-report" data-ref="report"></div>
+            </div>
           </aside>
         </div>
         <input type="file" accept=".json,application/json" data-ref="file" hidden>
@@ -773,7 +808,8 @@
       const joint = e.target.closest("[data-joint]"); if (joint) { S.selJoint = joint.getAttribute("data-joint"); renderJoints(); renderInspector(); return; }
       const view = e.target.closest("[data-view]"); if (view) { setView(view.getAttribute("data-view")); return; }
       const tool = e.target.closest("[data-tool]"); if (tool) { clipTool(tool.getAttribute("data-tool")); return; }
-      const ed = e.target.closest("[data-editor]"); if (ed) { S.editor = ed.getAttribute("data-editor"); renderEditor(); return; }
+      const ed = e.target.closest("[data-editor]"); if (ed) { S.editor = ed.getAttribute("data-editor"); if (!S.editorOpen) { S.editorOpen = true; renderPanels(); } renderEditor(); return; }
+      const rt = e.target.closest("[data-rtab]"); if (rt) { setRightTab(rt.getAttribute("data-rtab")); return; }
       const pd = e.target.closest("[data-pose-del]"); if (pd) { deleteLibraryPose(pd.getAttribute("data-pose-del")); return; }
       const pa = e.target.closest("[data-pose]"); if (pa) { applyLibraryPose(pa.getAttribute("data-pose"), e.shiftKey); return; }
       const st = e.target.closest("[data-t0]"); if (st) { scrub(parseFloat(st.getAttribute("data-t0"))); S.sel = nearestKey(S.t); renderAll(); return; }
@@ -855,6 +891,7 @@
       case "onion": S.onion = !S.onion; renderPreview(); renderTools(); return;
       case "autoKey": S.autoKey = !S.autoKey; renderTools(); toast(S.autoKey ? "Auto-key ON: edits off a key insert one at the playhead" : "Auto-key OFF: edits land on the selected key"); return;
       case "resetCam": return resetCamera();
+      case "toggleEditor": S.editorOpen = !S.editorOpen; renderPanels(); if (S.editorOpen) renderEditor(); return;
       case "insertKey": return insertKeyHere();
       case "copyPose": return copyPose();
       case "pastePose": return pastePose(false);
