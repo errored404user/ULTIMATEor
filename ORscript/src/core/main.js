@@ -1257,6 +1257,31 @@
   // user message, bootstrap). Providers without lastAssistantId fall back to count.
   function captureSendToken() {
     A.sendToken = P.lastAssistantId ?  P.lastAssistantId() : undefined;
+    // 1.59: also remember WHAT the last assistant turn said before this send. A
+    // reply is only this send's answer if it is a NEW node (identity / count) OR
+    // the same node with DIFFERENT text. The watcher used to finalize on the
+    // previous turn whenever the new one was slow to render or the provider's
+    // selectors missed it (Arena reskins, virtualised lists) - and re-ran its
+    // commands: the "it executed the previous answer again" bug.
+    try {
+      const it = P.lastAssistant();
+      const txt = it ? String(P.itemText(it) || "") : "";
+      let rep = ""; try { const rd = P.readAssistant(); rep = rd && rd.reply ? String(rd.reply) : ""; } catch {}
+      A.sendSnapshot = { tok: A.sendToken, count: P.assistantCount(), text: txt.replace(/\s+/g, " ").trim(), reply: rep.replace(/\s+/g, " ").trim(), at: Date.now() };
+    } catch { A.sendSnapshot = null; }
+  }
+  // True when the reply the watcher is looking at is provably the turn that was
+  // ALREADY there before the send: same node (or no new node on count-only
+  // providers) AND byte-identical text. Never parse / execute such a reply.
+  function isStaleReply(curTok, replyText) {
+    const snap = A.sendSnapshot;
+    if (!snap || A.sendToken === null) return false; // autoResume: the turn IS the target
+    const sameNode = (curTok !== undefined && curTok !== null) ? curTok === snap.tok : P.assistantCount() <= snap.count;
+    // A re-rendered node (React re-keyed the same turn → fresh identity) with the
+    // count flat and the text byte-identical is the old turn too.
+    if (!sameNode && P.assistantCount() > snap.count) return false;
+    const txt = String(replyText || "").replace(/\s+/g, " ").trim();
+    return txt.length > 0 && (txt === snap.text || txt === snap.reply);
   }
 
   async function submitAndGetBase(text, images) {
@@ -1631,6 +1656,20 @@
       // premature loop.end rescued only by autoResume 30-45s later (diag
       // showed `response kind:text` ~2.4s after loop.start with rp unchanged).
       // Bounded so a genuinely dead send still ends the turn.
+      // 1.59 stale-turn gate (every provider): the text under the cursor is the
+      // PREVIOUS reply, unchanged, on the same node - this send's answer has not
+      // rendered (or the provider's selectors do not see it). Wait for it like a
+      // missing turn; after the grace window end "empty" (the loop nudges once)
+      // instead of re-executing the old commands.
+      const stale = isStaleReply(curTok, d.reply || lastGoodReply);
+      if (stale) {
+        if (!noTurnSince) noTurnSince = Date.now();
+        const _w = Date.now() - noTurnSince;
+        if (_w > 800 && (!A._staleLoggedAt || Date.now() - A._staleLoggedAt > 3000)) { A._staleLoggedAt = Date.now(); diag("staleTurn.wait", { waitedMs: _w, curTok, sendToken: A.sendToken, assistantCount: P.assistantCount(), base, gen, replyLen: (d.reply || "").length }); }
+        if (_w < NO_TURN_GRACE_MS) { await sleep(120); continue; }
+        diag("empty.why", { branch: "staleTurn", rep: (d.reply || "").length });
+        return { kind: "empty", stale: true };
+      }
       if (P.reliableCounts && !newReply) {
         if (!noTurnSince) noTurnSince = Date.now();
         // [TRACE] This is the 30s NO_TURN_GRACE gate. If a Qwen tool turn sits here
@@ -5180,7 +5219,7 @@
           diag("loop.visibleAgain");
         }
         if (!A.steeringQueue.length) ui.steeringProgress("waiting", "Waiting for the model's next action", toolTurns);
-        const res = await waitForResponse(base);
+        let res = await waitForResponse(base);
         diag("response", { kind: res.kind });
         if (A.stop || res.kind === "stopped") break;
         ui.steeringProgress("reviewing", `Checking ${res.kind === "tool" ? "the proposed command" : "the reply"}`, toolTurns);
@@ -5227,7 +5266,8 @@
         // explanation anywhere. Say what happened - and since v1.12, retry ONCE
         // first (same rationale as the timeout retry above).
         if (res.kind === "empty") {
-          diag("empty.end");
+          diag("empty.end", { stale: !!res.stale });
+          if (res.stale) ui.toast(P.displayName + " showed the previous reply again - it was NOT re-run");
           if (deadRetries < 1 && !A.stop && A.started) {
             deadRetries++;
             diag("loop.deadRetry", { kind: "empty", n: deadRetries });
@@ -5396,6 +5436,12 @@
           break;
         }
 
+        if (res.kind === "tool" && res.item && !res.native && isRememberedExecuted(res.item, P.itemText(res.item))) {
+          // 1.59: this exact turn (conversation + index + text prefix) was already
+          // dispatched. Re-running it is never right - treat as "no new reply".
+          diag("tool.alreadyRan", { requestId: A.activeRequestId });
+          res = { kind: "empty", stale: true };
+        }
         if (res.kind === "tool") {
           parseRetries = 0;
           // 1.34: identical repeats in one reply (a model "showing" the command

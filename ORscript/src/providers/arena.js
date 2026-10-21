@@ -136,10 +136,38 @@ const RSProvider = (() => {
   // A turn = a direct child of the message <ol> that carries `mx-auto` and a
   // .prose body (the trailing .h-0 spacer has neither). User turns are right-
   // aligned (`justify-end`); everything else is an assistant turn.
-  const listEl = () =>
-    document.querySelector(S.list) ||
-    [...document.querySelectorAll("ol")].find((o) => o.querySelector(S.box)) ||
-    null;
+  // 1.59 reskin-proof list lookup. Order of trust: the validated `ol.flex-col-
+  // reverse`; any <ol>/<ul> holding markdown bodies; finally the element with the
+  // MOST direct children that each contain a markdown body (the message column,
+  // whatever Tailwind classes it carries this month). Never OR's own root.
+  const bodySel = () => S.box + ", .markdown, [class*='markdown-body'], [class*='message-content'], [data-message-content]";
+  const bodies = () => [...document.querySelectorAll(bodySel())].filter((b) => !b.closest("#rs-root"));
+  const listEl = () => {
+    const direct = document.querySelector(S.list);
+    if (direct && !direct.closest("#rs-root")) return direct;
+    const ol = [...document.querySelectorAll("ol, ul")].find((o) => !o.closest("#rs-root") && o.querySelector(S.box));
+    if (ol) return ol;
+    const score = new Map();
+    for (const b of bodies().slice(0, 300)) {
+      let n = b;
+      for (let i = 0; i < 14 && n && n.parentElement && n.parentElement !== document.body; i++) {
+        const parent = n.parentElement;
+        let set = score.get(parent); if (!set) { set = new Set(); score.set(parent, set); }
+        set.add(n); n = parent;
+      }
+    }
+    let best = null, bestN = 1;
+    for (const [el, kids] of score) if (kids.size > bestN) { best = el; bestN = kids.size; }
+    return best;
+  };
+  // Newest-first lists (flex-col-reverse) are reversed by allItems(); detect the
+  // direction from the class OR the computed style so a renamed class cannot
+  // silently flip the order (which made lastAssistant() the OLDEST reply).
+  const listReversed = (ol) => {
+    if (!ol) return false;
+    if (ol.classList && ol.classList.contains("flex-col-reverse")) return true;
+    try { return /column-reverse/.test(getComputedStyle(ol).flexDirection || ""); } catch { return false; }
+  };
 
   // True when a turn is an A/B comparison carousel (two candidate slides). Such a
   // turn carries no `mx-auto` but holds the carousel region, so we must accept it
@@ -149,11 +177,12 @@ const RSProvider = (() => {
   function domTurns() {
     const ol = listEl();
     if (!ol) return [];
-    return [...ol.children].filter(
-      (c) =>
-        (c.classList.contains("mx-auto") || isCarouselItem(c)) &&
-        c.querySelector(S.box)
-    );
+    // A turn = a direct child holding a markdown body (or an A/B carousel). The
+    // `mx-auto` class is NOT required any more (1.59): when Arena dropped /
+    // renamed it, no turn was recognised, lastAssistant() froze on nothing or on
+    // a stale node and the core finalised the previous reply.
+    const kids = [...ol.children].filter((c) => c.nodeType === 1 && !c.closest("#rs-root") && (isCarouselItem(c) || c.matches(bodySel()) || c.querySelector(bodySel())));
+    return listReversed(ol) ? kids.reverse() : kids;
   }
 
   // The markdown body we read for a turn. For a comparison carousel we ALWAYS read
@@ -164,7 +193,9 @@ const RSProvider = (() => {
   function proseOf(item) {
     if (!item) return null;
     const slide = item.querySelector(S.slide);
-    return slide ? slide.querySelector(S.box) : item.querySelector(S.box);
+    if (slide) return slide.querySelector(S.box) || slide.querySelector(bodySel());
+    if (item.matches && item.matches(bodySel())) return item;
+    return item.querySelector(S.box) || item.querySelector(bodySel());
   }
 
   // A carousel container is never right-aligned, so it classifies as assistant.
@@ -218,8 +249,30 @@ const RSProvider = (() => {
       if (/assistant|agent|ai|model|system/.test(r)) return false;
       return item.classList.contains("justify-end") || /\bml-auto\b|justify-end/.test(String(item.className || ""));
     }
-    return item.classList.contains("justify-end");
+    return directIsUser(item);
   };
+  // Direct-chat role detection (1.59): the validated `justify-end` on the turn
+  // root, then the same alignment classes on any wrapper between the root and
+  // the markdown body, then data attributes, then the "Response provided by …"
+  // header that only assistant turns carry. Unknown → assistant (a reply we
+  // might miss is worse than a user turn we might count).
+  const USER_CLS = /\b(justify-end|self-end|ml-auto|items-end|from-user|user-message|user-turn)\b/;
+  const AST_CLS = /\b(from-assistant|assistant-message|assistant-turn|model-response)\b/;
+  function directIsUser(item) {
+    if (item.classList.contains("justify-end")) return true;
+    const attr = ((item.getAttribute("data-message-role") || item.getAttribute("data-role") || item.getAttribute("data-author") || item.getAttribute("data-message-author-role") || "") + "").toLowerCase();
+    if (attr) return /user|human/.test(attr);
+    const inner = item.querySelector("[data-message-role],[data-role],[data-message-author-role]");
+    if (inner) { const a = ((inner.getAttribute("data-message-role") || inner.getAttribute("data-role") || inner.getAttribute("data-message-author-role") || "") + "").toLowerCase(); if (a) return /user|human/.test(a); }
+    const cls = String(item.className || "");
+    if (AST_CLS.test(cls)) return false;
+    if (USER_CLS.test(cls)) return true;
+    const body = proseOf(item);
+    let n = body ? body.parentElement : null;
+    for (let i = 0; i < 6 && n && n !== item; i++) { const c = String(n.className || ""); if (AST_CLS.test(c)) return false; if (USER_CLS.test(c)) return true; n = n.parentElement; }
+    if (body && /response provided by|provided by|réponse fournie/i.test(textWithout(item).replace(textWithout(body), "").slice(0, 160))) return false;
+    return false;
+  }
   const isAssistantItem = (item) => {
     if (!item) return false;
     if (isAgentRoute()) {
@@ -335,7 +388,7 @@ const RSProvider = (() => {
   // ── DOM primitives ──────────────────────────────────────────────────────
   // The list is flex-col-reverse (newest-first in the DOM); reverse so the core
   // sees the usual chronological order and lastAssistant() = the latest reply.
-  const allItems = () => isAgentRoute() ? agentTurns() : domTurns().reverse();
+  const allItems = () => isAgentRoute() ? agentTurns() : domTurns(); // domTurns() already returns chronological order (1.59: direction detected, not assumed)
   const assistantItems = () => allItems().filter(isAssistantItem);
   const assistantCount = () => assistantItems().length;
   const userCount = () => allItems().filter(isUserItem).length;
@@ -452,7 +505,7 @@ const RSProvider = (() => {
     return allButtons().find((b) => b.type === "submit" && visibleBtn(b)) || null;
   };
   const stopButton = () =>
-    allButtons().find((b) => S.stopAria.test(ariaOf(b)) && visibleBtn(b)) || null;
+    allButtons().find((b) => (S.stopAria.test(ariaOf(b)) || /stop/i.test(b.getAttribute("data-testid") || "")) && visibleBtn(b)) || null;
 
   // ── Generation detection ──────────────────────────────────────────────────
   // The stop button is present for the entire generation (validated). Growth
