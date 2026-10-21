@@ -140,7 +140,21 @@ function CFrame:PointToWorldSpace(v) return self * v end
 function CFrame:PointToObjectSpace(v) return self:Inverse() * v end
 function CFrame:VectorToWorldSpace(v) return mvec(self.__R, v) end
 function CFrame:VectorToObjectSpace(v) return mvec(mT(self.__R), v) end
-function CFrame:Lerp(o,t) return cfMake(self.__p:Lerp(o.__p,t), t < 0.5 and self.__R or o.__R) end
+function CFrame:Lerp(o,t)
+  -- real rotational slerp (axis-angle of the relative rotation), like Roblox - needed for the animation sampler checks
+  local Ra, Rb = self.__R, o.__R
+  local Rrel = mmul(mT(Ra), Rb)
+  local c = math.max(-1, math.min(1, (Rrel[1] + Rrel[5] + Rrel[9] - 1) / 2))
+  local ang = math.acos(c)
+  local R
+  if ang < 1e-7 then R = Ra
+  else
+    local s2 = 2 * math.sin(ang)
+    local axis = Vector3.new((Rrel[8] - Rrel[6]) / s2, (Rrel[3] - Rrel[7]) / s2, (Rrel[4] - Rrel[2]) / s2)
+    R = mmul(Ra, CFrame.fromAxisAngle(axis, ang * t).__R)
+  end
+  return cfMake(self.__p:Lerp(o.__p,t), R)
+end
 function CFrame:GetComponents() local R=self.__R return self.__p.X,self.__p.Y,self.__p.Z,R[1],R[2],R[3],R[4],R[5],R[6],R[7],R[8],R[9] end
 function CFrame:ToEulerAnglesYXZ() local R=self.__R local rx=math.asin(math.max(-1,math.min(1,-R[6]))) local ry=math.atan(R[3],R[9]) local rz=math.atan(R[4],R[5]) return rx,ry,rz end
 function CFrame:ToOrientation() return self:ToEulerAnglesYXZ() end
@@ -360,6 +374,28 @@ function methods:Get() return M.selection or {} end
 function methods:GetService(name) return M.services[name] or error("unknown service "..tostring(name)) end
 function methods:JSONEncode(v) return M.jsonEncode(v) end
 function methods:JSONDecode(s) return M.jsonDecode(s) end
+-- TweenService:GetValue with TweenService's own direction semantics (In = the style curve forward: slow start)
+function methods:GetValue(alpha, style, direction)
+  local a = math.max(0, math.min(1, tonumber(alpha) or 0))
+  local sn = style and style.Name or "Linear"
+  local function fwd(x)
+    if sn == "Linear" then return x
+    elseif sn == "Quad" then return x * x
+    elseif sn == "Cubic" then return x * x * x
+    elseif sn == "Quart" then return x * x * x * x
+    elseif sn == "Quint" then return x * x * x * x * x
+    elseif sn == "Sine" then return 1 - math.cos(x * math.pi / 2)
+    elseif sn == "Back" then local c1 = 1.70158 return (c1 + 1) * x * x * x - c1 * x * x
+    elseif sn == "Elastic" then if x == 0 or x == 1 then return x end return -math.pow(2, 10 * x - 10) * math.sin((x * 10 - 10.75) * (2 * math.pi) / 3)
+    elseif sn == "Bounce" then local y = 1 - x local n1, d1 = 7.5625, 2.75 local r if y < 1 / d1 then r = n1 * y * y elseif y < 2 / d1 then y = y - 1.5 / d1 r = n1 * y * y + 0.75 elseif y < 2.5 / d1 then y = y - 2.25 / d1 r = n1 * y * y + 0.9375 else y = y - 2.625 / d1 r = n1 * y * y + 0.984375 end return 1 - r
+    end
+    return x
+  end
+  local dn = direction and direction.Name or "In"
+  if dn == "Out" then return 1 - fwd(1 - a) end
+  if dn == "InOut" then if a < 0.5 then return fwd(a * 2) / 2 end return 1 - fwd((1 - a) * 2) / 2 end
+  return fwd(a)
+end
 function methods:Create(inst, info, props)
   -- tweens finish instantly; Completed is sticky so handlers connected after Play() still run (as they would a few frames later in Roblox)
   local sig = Signal.new() local done = false

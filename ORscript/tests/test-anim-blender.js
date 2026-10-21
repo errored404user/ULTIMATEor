@@ -11,7 +11,7 @@ const E = require(path.join(ROOT, "src/core/animengine.js"));
 
 // ── engine: smoothing ──
 const walk = E.generate("natural walk cycle, loop", { quality: "balanced" });
-ok("engine VERSION is 1.55.0 and the report carries a smoothness metric", E.VERSION === "1.55.0" && Number.isFinite(walk.report.smoothness) && walk.report.smoothness >= 0 && walk.report.smoothness <= 100, [E.VERSION, walk.report.smoothness]);
+ok("engine VERSION is 1.56.0 and the report carries a smoothness metric", E.VERSION === "1.56.0" && Number.isFinite(walk.report.smoothness) && walk.report.smoothness >= 0 && walk.report.smoothness <= 100, [E.VERSION, walk.report.smoothness]);
 const sm = E.smooth(walk, { strength: 1 });
 ok("smooth() keeps the clip valid, keeps first/last/impact keys and reports what it did", sm.report.ok && sm.keys[0].t === 0 && Math.abs(sm.keys[sm.keys.length - 1].t - sm.duration) < 1e-6 && /smoothed \(strength 1/.test(sm.fixes[sm.fixes.length - 1]), sm.fixes);
 ok("smooth() does not lower smoothness and is deterministic", sm.report.smoothness >= walk.report.smoothness && JSON.stringify(E.smooth(walk, { strength: 1 }).keys) === JSON.stringify(sm.keys), [walk.report.smoothness, sm.report.smoothness]);
@@ -26,10 +26,13 @@ ok("'smoother' feedback runs the spline pass on top of the regeneration", /splin
 
 // ── engine: foot planting ──
 const idleFast = E.generate("calm looping idle", { quality: "fast" }); // fast = no auto grounding
-const floatBefore = Math.max(...idleFast.keys.map((k) => E.metrics(k.poses).footMin));
-const planted = E.groundFeet(idleFast, { force: true });
+const restFloat = Math.max(...idleFast.keys.map((k) => Math.abs(E.metrics(k.poses).footMin)));
+ok("1.56: a standing pose already stands ON the ground (ROOT_HEIGHT = leg length) - no systematic 0.5-stud float left for planting to 'fix' by sinking the root", restFloat < 0.08, restFloat);
+const lifted = Object.assign({}, idleFast, { keys: idleFast.keys.map((k) => Object.assign({}, k, { poses: Object.assign({}, k.poses, { root: { rot: k.poses.root.rot.slice(), pos: [0, 0.3, 0] } }) })) });
+const floatBefore = Math.max(...lifted.keys.map((k) => E.metrics(k.poses).footMin));
+const planted = E.groundFeet(lifted, { force: true });
 const floatAfter = Math.max(...planted.keys.map((k) => Math.abs(E.metrics(k.poses).footMin)));
-ok("groundFeet() puts the lowest foot on the ground at every key", floatBefore > 0.1 && floatAfter < 0.05 && planted.grounded && /planted feet/.test(planted.fixes.slice(-1)[0]), [floatBefore, floatAfter]);
+ok("groundFeet() puts the lowest foot on the ground at every key", floatBefore > 0.25 && floatAfter < 0.05 && planted.grounded && /planted feet/.test(planted.fixes.slice(-1)[0]), [floatBefore, floatAfter]);
 ok("balanced idle / walk clips are grounded automatically; runs and jumps are not (flight phases)", /planted feet/.test((walk.fixes || []).join(" ")) && !/planted feet/.test((E.generate("fast run cycle, loop").fixes || []).join(" ")) && !/planted feet/.test((E.generate("jump with a solid landing").fixes || []).join(" ")));
 ok("planted loop clips still close their loop seam", planted.report.ok && !planted.report.issues.some((i) => i.kind === "loop" && i.level !== "info"));
 ok("'plant the feet' feedback is recognised", /planted the feet/.test(E.applyFeedback(E.generate("fast run cycle, loop"), "plant the feet").feedback.slice(-1)[0].applied.join(" ")));

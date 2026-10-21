@@ -3845,7 +3845,7 @@
   // exact per-joint CFrames (C0-conjugated, so R6/R15/custom rigs are right).
   // Studio offline → the clip is still generated + validated and handed to the
   // Animation Studio overlay (export .rbxmx there); nothing is pretended built.
-  const ANIM_ENGINE_OPS = new Set(["generate", "refine", "sequence", "validate", "export_rbxmx", "build", "polish", "layer"]);
+  const ANIM_ENGINE_OPS = new Set(["generate", "refine", "sequence", "validate", "export_rbxmx", "build", "set", "compatibility", "polish", "layer"]);
   A.animClips = A.animClips || {};
   A.animLast = A.animLast || "";
   function animParse(text) {
@@ -3864,6 +3864,33 @@
   function animRemember(clip, meta) {
     A.animClips[clip.name] = clip; A.animLast = clip.name;
     try { if (typeof ORAnimStudio !== "undefined") ORAnimStudio.loadClip(clip, meta || {}); } catch {}
+  }
+  // 1.56: one character per session. The first clip fixes the persona seed (lead side, arm rest, tempo, easing flavour);
+  // every later clip reuses it so idle / walk / jump / attack made in separate requests still look like the same person
+  // and blend cleanly. {new_character:true} (or an explicit take / variations) starts a fresh one.
+  function animPersonaSeed(args) {
+    if (args && (args.new_character === true || args.fresh_character === true)) { A.animPersonaSeed = null; }
+    if (Number.isFinite(A.animPersonaSeed)) return A.animPersonaSeed;
+    return undefined;
+  }
+  function animAdoptSeed(clip) { if (clip && Number.isFinite(clip.personaSeed) && !Number.isFinite(A.animPersonaSeed)) A.animPersonaSeed = clip.personaSeed; }
+  // Build every clip of a set separately (one KeyframeSequence each) and report compatibility + a blend plan.
+  async function animBuildSet(set, rigInfo, offlineNote) {
+    const built = [], failed = [];
+    for (const c of set.clips) {
+      if (A.stop) { failed.push(`${c.name}: cancelled by the user before it was built`); animRemember(c, { rigInfo }); continue; }
+      if (!rigInfo) { animRemember(c, {}); continue; }
+      const b = await animBuild(c, rigInfo);
+      if (b.ok) { built.push(c.name); animRemember(c, { built: true, rigInfo }); } else { failed.push(`${c.name}: ${b.error}`); animRemember(c, { rigInfo }); if (b.transport) break; }
+    }
+    animAdoptSeed(set.clips[0]);
+    const lines = [ORAnimEngine.describeSet(set)];
+    if (!rigInfo) lines.push(offlineNote.replace("%NAME%", set.clips[0].name));
+    else lines.push(built.length === set.clips.length ? `BUILT in Studio: all ${built.length} as separate KeyframeSequences (${built.join(", ")}) - each also saved to the rig's AnimSaves; the active one is the last built.` : `BUILT in Studio: ${built.length}/${set.clips.length} (${built.join(", ") || "none"}).`);
+    if (failed.length) lines.push((A.stop ? "CANCELLED - not built: " : "FAILED: ") + failed.join(" | "));
+    lines.push("They are SEPARATE animations (not one combined clip): play each from its own AnimationTrack with the fade times above; idle on priority Idle, cycles on Movement, actions on Action. animation_refine {name, feedback} adjusts one; animation_compatibility re-checks the whole set after edits.");
+    try { if (typeof ORAnimStudio !== "undefined" && ORAnimStudio.loadSet) ORAnimStudio.loadSet(set, { built, rigInfo }); } catch {}
+    return lines.join("\n");
   }
   function animReport(clip, extra) {
     const lines = [ORAnimEngine.summary(clip)];
@@ -3943,7 +3970,14 @@
       if (rigInfo && rigInfo.rigType === "Custom") notes.push(`Custom rig '${rigInfo.name}': bones were matched by R15 names; unmatched semantic joints are skipped.`);
       // 1.53: every clip is unique - never repeat a fingerprint already produced this session (same prompt twice → a new take)
       const avoid = Object.keys(A.animClips).map((n) => A.animClips[n] && A.animClips[n].fingerprint).filter(Boolean);
-      const opts = { quality, duration, loop, fps, name: nameOf(), rigType, avoid, mirror: args.mirror === true, travel: args.root_motion === true || args.travel === true, take: Number(args.take) > 0 ? Math.floor(Number(args.take)) : 0 };
+      const personaSeed = animPersonaSeed(args);
+      const opts = { quality, duration, loop, fps, name: nameOf(), rigType, avoid, mirror: args.mirror === true, travel: args.root_motion === true || args.travel === true, take: Number(args.take) > 0 ? Math.floor(Number(args.take)) : 0, personaSeed };
+      // 1.56: "idle, walk, run and jump animations" is a SET of separate clips, never one combined clip
+      const setPrompts = op === "generate" && !(Number(args.variations || args.takes) > 1) ? (Array.isArray(args.prompts) && args.prompts.length ? args.prompts.map(String) : E.splitSet(prompt)) : null;
+      if (setPrompts && setPrompts.length > 1) {
+        let set; try { set = E.generateSet(setPrompts, Object.assign({}, opts, { name: undefined, prefix: args.prefix != null ? String(args.prefix).replace(/[^A-Za-z0-9_]/g, "") : undefined })); } catch (e) { return "ERROR calling 'animation_generate': " + String(e && e.message || e); }
+        return await animBuildSet(set, rigInfo, offlineNote);
+      }
       if (op === "generate") {
         const variations = Math.max(1, Math.min(6, Math.floor(Number(args.variations || args.takes || 1)) || 1));
         if (variations > 1) {
@@ -3967,6 +4001,8 @@
           return lines.join("\n");
         }
         let clip; try { clip = E.generate(prompt, opts); } catch (e) { return "ERROR calling 'animation_generate': " + String(e && e.message || e); }
+        animAdoptSeed(clip);
+        if (Number.isFinite(personaSeed) && Object.keys(A.animClips).length) notes.push(`Same character as ${Object.keys(A.animClips).slice(-3).join(", ")} (shared persona seed ${personaSeed}; pass new_character:true for a different one). animation_compatibility checks how the session's clips blend.`);
         if (!rigInfo) { animRemember(clip, {}); return animReport(clip, offlineNote.replace("%NAME%", clip.name) + (notes.length ? "\n" + notes.join("\n") : "")); }
         const b = await animBuild(clip, rigInfo);
         if (!b.ok) { animRemember(clip, { rigInfo }); return `ERROR calling 'animation_generate': generated + validated '${clip.name}' (${clip.keys.length} keys, score ${clip.report.score}) but Studio refused the build: ${b.error}`; }
@@ -3990,6 +4026,34 @@
       else { lines.push(`BUILT in Studio: ${builtNames.length}/${all.length} clips (${builtNames.join(", ")}); the active animation is the last built one - animation_open {name} switches.`); if (failed.length) lines.push((A.stop ? "CANCELLED - not built: " : "FAILED: ") + failed.join(" | ")); }
       if (notes.length) lines.push(notes.join("\n"));
       lines.push("Play the combined clip for a cutscene; play the per-stage clips from a combat controller (AnimationTrack:Play(0.1) on each input, cancel windows after the 'hit' KeyframeMarker via AnimationTrack:GetMarkerReachedSignal(\"hit\")).");
+      return lines.join("\n");
+    }
+    if (op === "set") {
+      const list = Array.isArray(args.prompts) ? args.prompts.map((x) => String(x || "").trim()).filter(Boolean) : Array.isArray(args.clips) ? args.clips.map((x) => String(x || "").trim()).filter(Boolean) : null;
+      const prompt = String(args.prompt || args.text || "").trim();
+      if ((!list || !list.length) && !prompt) return "ERROR calling 'animation_set': pass prompts:[\"idle\", \"walk\", \"jump\"] (one entry per animation) or prompt:\"idle, walk and jump animations for my knight\".";
+      const prompts = list && list.length ? list : (E.splitSet(prompt) || E.splitClauses(prompt));
+      const quality = ["fast", "balanced", "high", "cinematic"].includes(String(args.quality || "").toLowerCase()) ? String(args.quality).toLowerCase() : undefined;
+      const info = await animStudioCall("rig_info", {});
+      const rigInfo = info.ok ? animRigFromInfo(info.data) : null;
+      const rigType = rigInfo ? rigInfo.rigType : (String(args.rig || "").toUpperCase() === "R6" ? "R6" : "R15");
+      const offlineNote = info.ok ? "" : `Studio was not available (${info.error}) - the set was generated and validated but NOT built; reconnect Studio and run animation_build {name} per clip, or export each from the Animation Studio.`;
+      const avoid = Object.keys(A.animClips).map((n) => A.animClips[n] && A.animClips[n].fingerprint).filter(Boolean);
+      let set; try { set = E.generateSet(prompts, { quality, rigType, avoid, fps: Number(args.fps) > 0 ? Number(args.fps) : undefined, personaSeed: animPersonaSeed(args), prefix: args.prefix != null ? String(args.prefix).replace(/[^A-Za-z0-9_]/g, "") : undefined, take: Number(args.take) > 0 ? Math.floor(Number(args.take)) : 0 }); } catch (e) { return "ERROR calling 'animation_set': " + String(e && e.message || e); }
+      return await animBuildSet(set, rigInfo, offlineNote);
+    }
+    if (op === "compatibility") {
+      const names = Array.isArray(args.names) ? args.names.map(String) : Object.keys(A.animClips);
+      const clips = names.map((n) => A.animClips[n]).filter(Boolean);
+      if (!clips.length) return "ERROR calling 'animation_compatibility': no clips in this session - animation_generate / animation_set first.";
+      const missing = names.filter((n) => !A.animClips[n]);
+      const r = E.compatibility(clips);
+      const lines = [`compatibility of ${clips.length} clip${clips.length === 1 ? "" : "s"} (${clips.map((c) => c.name).join(", ")}): ${r.score}/100 - ${r.ok ? "OK" : "ERRORS"}`];
+      for (const i of r.issues) lines.push(`- [${i.level}] ${i.msg}`);
+      if (r.pairs.length) lines.push("stance distance from " + r.idle + ": " + r.pairs.map((p) => `${p.to} ${p.deg}° (${p.joint}), root Δ${p.height} studs → Play(${p.fade})`).join(" · "));
+      lines.push("priorities: " + r.priorities.map((p) => `${p.name}=${p.priority}${p.loop ? " loop" : ""}`).join(", "));
+      if (missing.length) lines.push("not in this session: " + missing.join(", "));
+      if (r.warnings && r.issues.some((i) => /personas/.test(i.msg))) lines.push("Fix: regenerate the odd ones out with animation_generate (the session now reuses one character seed) or the whole group with animation_set.");
       return lines.join("\n");
     }
     if (op === "refine") {

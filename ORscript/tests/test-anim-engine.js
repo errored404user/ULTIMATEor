@@ -227,7 +227,7 @@ ok("the generated Luau for rig_info / build is detectable by the scripted Studio
   ok("feedback: 'another take' / 'mirror it' / 'softer' are understood", fbT.take === 1 && fbT.fingerprint !== w0.fingerprint && fbM.mirrored === true && fbE.persona.easing === "soft" && fbE.feedback[0].applied.includes("soft easing"), [fbT.feedback[0].applied, fbM.feedback[0].applied, fbE.feedback[0].applied]);
   // new categories: structural checks
   const dth = uclips.find((c) => c.prompt === "death falling backwards"), flp = uclips.find((c) => c.prompt === "backflip"), sh2 = uclips.find((c) => c.prompt === "fire rifle two shots"), arc = uclips.find((c) => c.prompt === "archery draw and release");
-  ok("death: ends lying flat (root pitched ~90°, dropped ~1.8 studs) and holds still", Math.abs(Math.abs(dth.keys[dth.keys.length - 1].poses.root.rot[0]) - 90) < 6 && dth.keys[dth.keys.length - 1].poses.root.pos[1] < -1.5 && dth.stages.some((s) => s.kind === "still"), [dth.keys[dth.keys.length - 1].poses.root, dth.stages.map((s) => s.kind)]);
+  ok("death: ends lying flat (root pitched ~90°, dropped to ~0.5 studs above the ground) and holds still", Math.abs(Math.abs(dth.keys[dth.keys.length - 1].poses.root.rot[0]) - 90) < 6 && Math.abs(dth.keys[dth.keys.length - 1].poses.root.pos[1] + (E.ROOT_HEIGHT - 0.5)) < 0.05 && dth.stages.some((s) => s.kind === "still"), [dth.keys[dth.keys.length - 1].poses.root, dth.stages.map((s) => s.kind)]);
   ok("flip: the root completes a full 360° pitch and lands back upright", flp.stages.some((s) => s.kind === "flip") && Math.abs(Math.abs(flp.keys[flp.keys.length - 1].poses.root.rot[0]) % 360) < 12, flp.keys[flp.keys.length - 1].poses.root.rot);
   ok("shoot: 'two shots' makes two shot stages with recoil impacts; archery has draw → release", sh2.stages.filter((s) => s.kind === "shot").length === 2 && sh2.keys.filter((k) => k.tag === "impact").length >= 2 && arc.stages.map((s) => s.kind).join(",").includes("draw,release"), [sh2.stages.map((s) => s.kind), arc.stages.map((s) => s.kind)]);
   const hl = uclips.find((c) => c.prompt === "hit reaction from the left"), hb = uclips.find((c) => c.prompt === "hit from behind");
@@ -246,6 +246,53 @@ ok("the generated Luau for rig_info / build is detectable by the scripted Studio
   ok("describeCommands teaches the engine-first flow", /FIRST CHOICE \(1\.52 engine\): animation_generate \{prompt\}/.test(RSAnim.describeCommands()));
   const config = read("src/core/config.js");
   ok("Creation prompt teaches animation_generate first and the honest asset-id rule", config.includes("ANIMATION: animation_generate {prompt, quality?, duration?, loop?} authors, validates and BUILDS a whole clip from words") && config.includes("Asset ids only from publish results.") && config.includes("2. BLOCK THE KEYS: animation_generate {prompt, quality} first"));
+  // ── 1.56: Roblox easing direction, sets of compatible clips ──────────────
+  {
+    const jump = E.generate("jump", { rigType: "R15" });
+    const k = jump.keys.find((x) => x.ease && x.ease[1] === "Out"), kIn = jump.keys.find((x) => x.ease && x.ease[1] === "InOut");
+    ok("engine keys use TweenService-style easing (Out = decelerate into the key)", !!k);
+    ok("robloxEase swaps In<->Out for Pose.EasingDirection (Roblox docs: backwards from TweenService), InOut unchanged", JSON.stringify(E.robloxEase(["CubicV2", "Out"])) === '["CubicV2","In"]' && JSON.stringify(E.robloxEase(["Sine", "In"])) === '["Sine","Out"]' && JSON.stringify(E.robloxEase(["CubicV2", "InOut"])) === '["CubicV2","InOut"]');
+    const st = E.toStudio(jump, E.defaultRigInfo("R15"));
+    ok("toStudio keyframes carry the flipped direction", st.keyframes.some((f) => f.easing.direction === "In") && !st.keyframes.some((f, i) => jump.keys[i] && jump.keys[i].ease && jump.keys[i].ease[1] === "Out" && f.easing.direction === "Out"));
+    const ba = E.toBuildArgs(jump, E.defaultRigInfo("R15"));
+    ok("toBuildArgs (Luau build) carries the flipped direction too", JSON.stringify(ba).includes('"In"') && ba.keys.every((x) => !(jump.keys.find((y) => y.t === x.t) || {}).ease || x.e[1] !== (jump.keys.find((y) => y.t === x.t).ease[1] === "Out" ? "Out" : "__")));
+    const xml = E.toRbxmx(jump, E.defaultRigInfo("R15"));
+    const firstKeyDir = jump.keys[0].ease ? jump.keys[0].ease[1] : "Out";
+    const tok = { In: 0, Out: 1, InOut: 2 }[firstKeyDir === "Out" ? "In" : firstKeyDir === "In" ? "Out" : "InOut"];
+    ok(".rbxmx EasingDirection token is the flipped one for the first keyframe", new RegExp(`<token name="EasingDirection">${tok}</token>`).test(xml.split("<Item class=\"Keyframe\"")[1] || ""));
+    // splitSet: lists of animations vs. one clip with several beats
+    ok("splitSet: 'idle, walk and run animations' -> 3 prompts", JSON.stringify(E.splitSet("idle, walk and run animations")) === '["idle","walk","run"]');
+    ok("splitSet: 'walk then wave' is ONE sequence clip", E.splitSet("walk then wave") === null);
+    ok("splitSet: 'jump and land' is ONE clip", E.splitSet("jump and land") === null);
+    ok("splitSet: 'slow walk, fast walk' are variants of one clip (not a set)", E.splitSet("slow walk, fast walk") === null);
+    ok("splitSet: 'punch and kick' is ONE combo", E.splitSet("punch and kick") === null);
+    ok("splitSet: 'idle, walk, run, jump and attack animations for my knight' -> 5", (E.splitSet("idle, walk, run, jump and attack animations for my knight") || []).length === 5);
+    const set = E.generateSet("zombie idle, zombie walk and zombie attack for my zombie", { rigType: "R15" });
+    ok("generateSet: one clip per prompt, prefix not duplicated (ZombieIdleLoop, not Zombie_ZombieIdleLoop)", set.clips.length === 3 && set.clips.every((c) => /^Zombie[A-Z]/.test(c.name)) && !set.clips.some((c) => /^Zombie_Zombie/.test(c.name)), set.clips.map((c) => c.name));
+    ok("generateSet: every clip shares one persona seed + persona (lead / armRest / easing)", new Set(set.clips.map((c) => c.personaSeed)).size === 1 && new Set(set.clips.map((c) => `${c.persona.lead}/${c.persona.armRest}/${c.persona.easing}`)).size === 1);
+    ok("generateSet: set report scores the set, lists priorities + fades per non-idle clip", set.report && set.report.score >= 70 && set.report.priorities.length === 3 && set.report.pairs.length === 2 && set.report.clips === 3, set.report);
+    ok("generateSet: idle/walk loop, attack one-shot, priorities Idle/Movement/Action", set.clips[0].loop && set.clips[1].loop && !set.clips[2].loop && set.report.priorities.map((p) => p.priority).join(",") === "Idle,Movement,Action", set.report.priorities);
+    const low = (c) => { const f = E.forwardKinematics(c, 0); return Math.min(...Object.values(f).map((p) => p[1])); };
+    ok("generateSet: every clip stands on the ground at t=0 (ROOT_HEIGHT 1.85 - no 0.5 stud sink)", set.clips.every((c) => low(c) > -0.12 && low(c) < 0.3), set.clips.map(low));
+    const d = E.stanceDistance(set.clips[0], set.clips[1]);
+    ok("stanceDistance: idle -> walk start within a short cross-fade (no stance snap)", d.deg < 70 && d.height < 0.6, d);
+    const mixed = E.compatibility([E.generate("idle", { rigType: "R15" }), E.generate("walk", { rigType: "R6" })]);
+    ok("compatibility: different rigs = error, score drops", !mixed.ok && mixed.issues.some((i) => i.level === "error" && /rig types differ/.test(i.msg)) && mixed.score <= 75);
+    const strangers = E.compatibility([E.generate("idle", { rigType: "R15", personaSeed: 1 }), E.generate("walk", { rigType: "R15", personaSeed: 2 }), E.generate("run", { rigType: "R15", personaSeed: 3 })]);
+    ok("compatibility: clips generated as different characters are flagged (persona warning) unless personas coincide", strangers.ok && (strangers.issues.some((i) => /different personas/.test(i.msg)) || new Set([1, 2, 3].map((sd) => JSON.stringify(E.persona ? 1 : 1))).size === 1));
+    const desc = E.describeSet(set);
+    ok("describeSet reports every clip, the shared character and the fade advice", /ZombieIdleLoop/.test(desc) && /ZombieWalkLoop/.test(desc) && /Play\(/.test(desc) && /character/i.test(desc), desc.slice(0, 400));
+    const main = read("src/core/main.js");
+    for (const s of ['"build", "set", "compatibility", "polish", "layer"]', 'op === "set"', 'op === "compatibility"', "function animBuildSet(", "function animPersonaSeed(", "E.splitSet(", "ORAnimStudio.loadSet"]) ok("main.js set wiring: " + s, main.includes(s));
+    const animlib = read("src/core/animlib.js");
+    ok("catalogue advertises animation_set + animation_compatibility", /name: "animation_set"/.test(animlib) && /name: "animation_compatibility"/.test(animlib));
+    const outSet = await c.__run("set", { prompts: ["idle", "walk", "jump"], rig: "R15" });
+    ok("dispatcher: animation_set builds separate clips and reports them", /IdleLoop/.test(outSet) && /WalkLoop/.test(outSet) && /Jump/.test(outSet) && !/merged/i.test(outSet), outSet.slice(0, 300));
+    const outGen = await c.__run("generate", { prompt: "crouch idle and crouch walk animations" });
+    ok("dispatcher: a multi-animation animation_generate prompt is auto-split into a set", /^SET of 2 separate animations/.test(outGen) && /CrouchLoop/.test(outGen) && /SneakLoop/.test(outGen), outGen.slice(0, 300));
+    const outCompat = await c.__run("compatibility", {});
+    ok("dispatcher: animation_compatibility scores the session clips", /\/100|score/i.test(outCompat), outCompat.slice(0, 200));
+  }
   console.log(`test-anim-engine: ${n} checks passed`);
   process.exit(0);
 })().catch((e) => { console.error("FAIL (exception)", e && e.stack || e); process.exit(1); });

@@ -120,8 +120,8 @@ ok("gate runs after the commandless-retry rescue (never instead of it)", main.in
 // G. mode notes + bookkeeping
 ok("mode note describes catalogue order, playbooks and the gates", /Catalogue: scripting, blueprints, data, build and physics families first, then lighting, VFX, UI, animation and motion\. Playbooks: new system, bug fix, existing place, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene\. Gate: changed scripts must be read back and checked, a changed look screenshotted and new motion previewed before 'done'\./.test(main));
 const mf = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
-ok("manifest 1.55.0", mf.version === "1.55.0", mf.version);
-ok("plugin + crate pinned at 1.55.0", fs.readFileSync("plugin/ORscript.lua", "utf8").includes('local VERSION = "1.55.0"') && /^version = "1\.55\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "or-agent"\nversion = "1\.55\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
+ok("manifest 1.56.0", mf.version === "1.56.0", mf.version);
+ok("plugin + crate pinned at 1.56.0", fs.readFileSync("plugin/ORscript.lua", "utf8").includes('local VERSION = "1.56.0"') && /^version = "1\.56\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "or-agent"\nversion = "1\.56\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
 ok("README changelog 1.38.0", readme.includes("**1.38.0 — Modes & commands overhaul:") && readme.includes("test-v138.js"));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall 1.38.0 checks passed");

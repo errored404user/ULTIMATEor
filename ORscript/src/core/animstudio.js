@@ -48,7 +48,7 @@
   ];
   const STORAGE_KEY = "rsAnimProject";
 
-  const S = { rtab: "pose", editorOpen: true, open: false, hooks: {}, clip: null, prev: null, history: [], future: [], sel: -1, selJoint: "r_shoulder", t: 0, playing: false, speed: 1, ghost: false, rigInfo: null, built: null, drag: null, raf: 0, lastTs: 0, busy: false, view: "3d", cam: { yaw: 35, pitch: 18, zoom: 1, pan: [0, 0] }, onion: true, autoKey: false, editor: "dope", clipboard: null, handles: [], cams: [], library: {}, ikDrag: null, orbit: null, gdrag: null };
+  const S = { rtab: "pose", editorOpen: true, personaSeed: null, builtNames: {}, compat: null, open: false, hooks: {}, clip: null, prev: null, history: [], future: [], sel: -1, selJoint: "r_shoulder", t: 0, playing: false, speed: 1, ghost: false, rigInfo: null, built: null, drag: null, raf: 0, lastTs: 0, busy: false, view: "3d", cam: { yaw: 35, pitch: 18, zoom: 1, pan: [0, 0] }, onion: true, autoKey: false, editor: "dope", clipboard: null, handles: [], cams: [], library: {}, ikDrag: null, orbit: null, gdrag: null };
   let D = null;
   let toastTimer = 0;
   const toast = (m) => { if (!D) return; D.toast.textContent = m; D.toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => D.toast.classList.remove("show"), 2600); try { S.hooks.diag && S.hooks.diag("anim.toast", { m }); } catch {} };
@@ -86,8 +86,13 @@
     if (!text) { toast("Describe the animation first"); D.prompt.focus(); return null; }
     const o = Object.assign(readOpts(), opts || {});
     if (D.loopAuto) delete o.loop;
+    if (D.sameChar && D.sameChar.checked && Number.isFinite(S.personaSeed) && !Number.isFinite(o.personaSeed)) o.personaSeed = S.personaSeed;
+    // 1.56: "idle, walk, run and jump animations" → a SET of separate clips (one character), never one merged clip
+    const setPrompts = !(opts && opts.take) && E().splitSet ? E().splitSet(text) : null;
+    if (setPrompts && setPrompts.length > 1) return generateSetHere(text, setPrompts, o);
     let clip;
     try { clip = E().generate(text, o); } catch (e) { toast("Generation failed: " + (e && e.message || e)); diag("generateError", { error: String(e) }); return null; }
+    if (!Number.isFinite(S.personaSeed) && Number.isFinite(clip.personaSeed)) S.personaSeed = clip.personaSeed;
     pushHistory();
     S.sel = 0; S.selJoint = clip.intent && clip.intent.category === "attack" ? "r_shoulder" : "root";
     setClip(clip);
@@ -168,6 +173,86 @@
   function scrub(t) { S.t = clamp(t, 0, S.clip ? S.clip.duration : 0); renderPreview(); renderTransport(); renderTimeline(); }
 
   // ───────────────────────── Studio / AI / files ─────────────────────────
+  function generateSetHere(text, prompts, o) {
+    let set;
+    const avoid = Object.values(libraryClips()).map((c) => c.fingerprint).filter(Boolean);
+    try { set = E().generateSet(text, Object.assign({}, o, { duration: undefined, loop: undefined, avoid })); } catch (e) { toast("Set generation failed: " + (e && e.message || e)); diag("generateError", { error: String(e), set: true }); return null; }
+    if (!Number.isFinite(S.personaSeed)) S.personaSeed = set.personaSeed;
+    pushHistory();
+    for (const c of set.clips) remember(c);
+    S.compat = set.report; S.sel = 0; S.selJoint = "root";
+    setClip(set.clips[0]);
+    D.prompt.value = text; D.loopAuto = false; D.loop.checked = !!set.clips[0].loop; D.duration.value = set.clips[0].duration; D.fps.value = set.clips[0].fps; D.rig.value = set.clips[0].rigType; D.quality.value = set.clips[0].quality;
+    toast(`${set.clips.length} separate clips, one character: ${set.clips.map((c) => c.name).join(", ")} - compatibility ${set.report.score}/100`);
+    setRightTab("clips");
+    diag("generateSet", { prompts, names: set.clips.map((c) => c.name), score: set.report.score });
+    return set.clips[0];
+  }
+  function switchClip(name) {
+    const lib = libraryClips(); const c = lib[name]; if (!c) return toast("That clip is gone");
+    if (S.clip && S.clip.name === name) return;
+    if (S.clip) remember(S.clip);
+    pushHistory(); S.sel = 0;
+    setClip(c, { noPrev: true });
+    D.prompt.value = c.prompt || ""; D.quality.value = c.quality || "balanced"; D.rig.value = c.rigType || "R15"; D.loop.checked = !!c.loop; D.loopAuto = false; D.duration.value = c.duration; D.fps.value = c.fps;
+    if (S.builtNames[name]) S.built = { name, at: S.builtNames[name] };
+    toast("Opened " + name);
+  }
+  function forgetClip(name) { if (S.library) delete S.library[name]; delete S.builtNames[name]; if (S.clip && S.clip.name === name) { /* keep it open, it just leaves the list */ } renderClipList(); renderLayerPick(); toast("Removed " + name + " from the list"); }
+  function checkSet() {
+    const clips = Object.values(libraryClips()); if (S.clip && !clips.some((c) => c.name === S.clip.name)) clips.push(S.clip);
+    if (clips.length < 2) { toast("Generate at least two clips (or type several at once) to check compatibility"); return null; }
+    S.compat = E().compatibility(clips); renderCompat(); setRightTab("check");
+    toast(`Compatibility ${S.compat.score}/100 - ${S.compat.issues.length} note${S.compat.issues.length === 1 ? "" : "s"}`);
+    diag("checkSet", { n: clips.length, score: S.compat.score });
+    return S.compat;
+  }
+  async function buildAll() {
+    if (!S.hooks.runTool) return toast("Studio actions are unavailable here");
+    if (S.busy) return;
+    const clips = Object.values(libraryClips()); if (S.clip && !clips.some((c) => c.name === S.clip.name)) clips.unshift(S.clip);
+    if (!clips.length) return toast("Nothing to build yet");
+    S.busy = true; D.buildAllBtn.disabled = true; const okNames = [], bad = [];
+    try {
+      for (let i = 0; i < clips.length; i++) {
+        const c = clips[i]; setStatus(`Building ${i + 1}/${clips.length}: ${c.name}…`);
+        const r = c.report || E().validate(c); if (!r.ok) { bad.push(c.name + " (validation errors)"); continue; }
+        let text = ""; try { text = String(await S.hooks.runTool("animation_build", { clip: c }) || ""); } catch (e) { text = "ERROR " + (e && e.message || e); }
+        if (!/^ERROR/i.test(text) && !/"ok"\s*:\s*false/.test(text)) { okNames.push(c.name); S.builtNames[c.name] = Date.now(); if (S.clip && S.clip.name === c.name) S.built = { name: c.name, at: Date.now() }; }
+        else bad.push(c.name + ": " + text.slice(0, 120));
+      }
+    } finally { S.busy = false; D.buildAllBtn.disabled = false; }
+    setStatus(`Built ${okNames.length}/${clips.length} in Studio${bad.length ? " - failed: " + bad.join("; ") : ""}`);
+    toast(bad.length ? `Built ${okNames.length}/${clips.length} - see the status line` : `Built all ${okNames.length} clips in Studio (one KeyframeSequence each)`);
+    renderClipList(); renderStatus(); diag("buildAll", { ok: okNames, bad });
+  }
+  function exportAll() {
+    const clips = Object.values(libraryClips()); if (S.clip && !clips.some((c) => c.name === S.clip.name)) clips.unshift(S.clip);
+    if (!clips.length) return toast("Nothing to export yet");
+    let n = 0, skipped = 0;
+    clips.forEach((c, i) => { const r = c.report || E().validate(c); if (!r.ok) { skipped++; return; } const info = S.rigInfo && S.rigInfo.rigType === c.rigType ? S.rigInfo : E().defaultRigInfo(c.rigType); setTimeout(() => download(c.name + ".rbxmx", E().toRbxmx(c, info), "application/xml"), i * 350); n++; });
+    toast(`Exporting ${n} .rbxmx file${n === 1 ? "" : "s"}${skipped ? ` (${skipped} skipped: validation errors)` : ""} - allow multiple downloads if the browser asks`);
+    diag("exportAll", { n, skipped });
+  }
+  function renderClipList() {
+    if (!D) return;
+    const lib = libraryClips(); const names = Object.keys(lib); const cur = S.clip && S.clip.name;
+    if (cur && !lib[cur] && S.clip) names.unshift(cur);
+    D.clipCount.textContent = String(names.length);
+    const cat = (c) => c.intent && c.intent.category === "sequence" ? "sequence" : c.layered ? "layered" : c.intent && c.intent.category || "clip";
+    const pri = (c) => c.priority || (E().setPriority ? E().setPriority(c) : "Action");
+    D.clipList.innerHTML = names.length ? names.map((n) => { const c = lib[n] || S.clip; const same = Number.isFinite(S.personaSeed) && c.personaSeed === S.personaSeed; return `<div class="rsa-clipitem${n === cur ? " on" : ""}" data-clip="${esc(n)}" title="${esc(c.prompt || "")}"><b>${esc(n)}</b><span>${esc(cat(c))} · ${c.duration}s · ${c.loop ? "loop" : "one-shot"} · ${esc(pri(c))}${c.intent && c.intent.mood ? " · " + esc(c.intent.mood) : ""}</span><em>${S.builtNames[n] ? `<i class="rsa-badge ok">built</i>` : ""}${same ? `<i class="rsa-badge">same char</i>` : Number.isFinite(S.personaSeed) ? `<i class="rsa-badge warn" title="generated with a different character seed - Check set shows how it blends">other char</i>` : ""}<button type="button" class="rsa-ib mini" data-delclip="${esc(n)}" title="Remove from the list (does not delete anything in Studio)">×</button></em></div>`; }).join("") : `<div class="rsa-muted">No clips yet. Generate one, or several at once.</div>`;
+  }
+  function renderCompat() {
+    if (!D) return;
+    const r = S.compat;
+    if (!r) { D.compatScore.textContent = "–"; D.compatScore.className = "rsa-score"; D.compat.innerHTML = `<div class="rsa-muted">Two or more clips → Check set (or type several animations at once) to see whether they blend as one character.</div>`; return; }
+    D.compatScore.textContent = r.score + "/100"; D.compatScore.className = "rsa-score " + (r.score >= 90 ? "good" : r.score >= 70 ? "mid" : "bad");
+    const rows = [r.issues.length ? `<ul class="rsa-issues">${r.issues.map((i) => `<li class="rsa-issue ${esc(i.level)}">${esc(i.msg)}</li>`).join("")}</ul>` : `<div class="rsa-ok">${r.clips || ""} clips fit together: same rig, fps and character, no root pops.</div>`];
+    if (r.pairs && r.pairs.length) rows.push(`<div class="rsa-muted">From ${esc(r.idle)}: ` + r.pairs.map((p) => `${esc(p.to)} ${p.deg}° (${esc(p.joint)})${p.height > 0.05 ? `, root Δ${p.height}` : ""} → Play(${p.fade})`).join(" · ") + `</div>`);
+    if (r.priorities) rows.push(`<div class="rsa-muted">Priorities: ` + r.priorities.map((p) => `${esc(p.name)} = ${p.priority}${p.loop ? " (loop)" : ""}`).join(", ") + `</div>`);
+    D.compat.innerHTML = rows.join("");
+  }
   async function buildInStudio() {
     if (!S.clip) return toast("Generate a clip first");
     if (!S.hooks.runTool) return toast("Studio actions are unavailable here");
@@ -177,7 +262,7 @@
       const res = await S.hooks.runTool("animation_build", { clip: S.clip });
       const text = String(res || "");
       const okRes = !/^ERROR/i.test(text) && !/"ok"\s*:\s*false/.test(text);
-      if (okRes) { S.built = { name: S.clip.name, at: Date.now() }; setStatus("Built in Studio: " + S.clip.name); toast("Built in Studio — " + S.clip.name); }
+      if (okRes) { S.built = { name: S.clip.name, at: Date.now() }; S.builtNames[S.clip.name] = Date.now(); renderClipList(); setStatus("Built in Studio: " + S.clip.name); toast("Built in Studio — " + S.clip.name); }
       else { setStatus(text.slice(0, 220)); toast("Build failed — see the status line"); }
       diag("build", { ok: okRes, res: text.slice(0, 200) });
     } catch (e) { setStatus("Build error: " + (e && e.message || e)); toast("Build error"); }
@@ -236,7 +321,7 @@
   }
 
   // ───────────────────────── rendering ─────────────────────────
-  function renderAll() { if (!D) return; renderPanels(); renderPreview(); renderTransport(); renderTimeline(); renderEditor(); renderJoints(); renderInspector(); renderReport(); renderStages(); renderStatus(); renderTools(); }
+  function renderAll() { if (!D) return; renderPanels(); renderPreview(); renderTransport(); renderTimeline(); renderEditor(); renderJoints(); renderInspector(); renderReport(); renderStages(); renderStatus(); renderTools(); renderClipList(); renderCompat(); }
   function setStatus(m) { if (D) D.status.textContent = m || ""; }
   function renderStatus() {
     if (!D) return;
@@ -605,7 +690,7 @@
     try { const ext = S.hooks.clips ? S.hooks.clips() : null; if (ext) for (const [n, c] of Object.entries(ext)) if (c && Array.isArray(c.keys)) map[n] = c; } catch {}
     return map;
   }
-  function remember(clip) { if (!clip || !clip.name) return; S.library = S.library || {}; S.library[clip.name] = clip; const names = Object.keys(S.library); if (names.length > 16) delete S.library[names[0]]; renderLayerPick(); }
+  function remember(clip) { if (!clip || !clip.name) return; S.library = S.library || {}; S.library[clip.name] = clip; const names = Object.keys(S.library); if (names.length > 24) delete S.library[names[0]]; renderLayerPick(); renderClipList(); }
   function renderLayerPick() { if (!D) return; const cur = D.layerPick.value; const names = Object.keys(libraryClips()).filter((n) => !S.clip || n !== S.clip.name); D.layerPick.innerHTML = `<option value="">upper body from…</option>` + names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("") + `<option value="__file">a saved project file…</option>`; if (names.includes(cur)) D.layerPick.value = cur; }
   function layerWith(upper) {
     if (!S.clip) return toast("Generate the base clip (legs + root) first");
@@ -619,7 +704,7 @@
     if (v === "__file") { S.fileFor = "layer"; D.file.click(); return; }
     const up = libraryClips()[v]; if (!up) return toast("That clip is gone - generate it again"); layerWith(up);
   }
-  function setRightTab(name) { S.rtab = /^(pose|clip|check)$/.test(name) ? name : "pose"; renderPanels(); }
+  function setRightTab(name) { S.rtab = /^(pose|clip|check|clips)$/.test(name) ? name : "pose"; renderPanels(); }
   function renderPanels() {
     if (!D) return;
     for (const b of D.host.querySelectorAll("[data-rtab]")) b.classList.toggle("on", b.getAttribute("data-rtab") === S.rtab);
@@ -694,7 +779,7 @@
           <aside class="rsa-left">
             <section class="rsa-card">
               <div class="rsa-h"><b>1</b> Describe the motion</div>
-              <textarea data-ref="prompt" rows="4" placeholder="Anything: 'drink a potion', 'open a heavy door', 'tired old man walk', 'wave while walking', 'salute then bow', 'raise the left arm', '8 hit anime sword combo with a spinning finisher'"></textarea>
+              <textarea data-ref="prompt" rows="4" placeholder="Anything: 'drink a potion', 'tired old man walk', 'wave while walking', 'salute then bow', '8 hit anime sword combo'. Several at once: 'idle, walk, run and jump animations for my knight' → one clip each, same character"></textarea>
               <details class="rsa-examples"><summary>Examples</summary><div class="rsa-chips">${PRESETS.map((p) => `<button type="button" class="rsa-chip" data-preset="${esc(p[1])}">${esc(p[0])}</button>`).join("")}</div></details>
               <div class="rsa-grid">
                 <label>Quality<select data-ref="quality"><option value="fast">Fast</option><option value="balanced" selected>Balanced</option><option value="high">High Quality</option><option value="cinematic">Cinematic</option></select></label>
@@ -702,6 +787,7 @@
                 <label>Duration (s)<input data-ref="duration" type="number" min="0.1" max="60" step="0.1" placeholder="auto"></label>
                 <label>FPS<input data-ref="fps" type="number" min="10" max="120" step="1" placeholder="auto"></label>
                 <label class="rsa-check"><input data-ref="loop" type="checkbox"> Loop</label>
+                <label class="rsa-check" title="Reuse the character seed of the clips already in this session (lead side, arm rest, tempo, easing) so idle / walk / jump / attack blend as one person. Untick for a different character."><input data-ref="sameChar" type="checkbox" checked> Same character as my other clips</label>
               </div>
               <button type="button" class="rsa-btn primary big" data-act="generate">Generate</button>
               <div class="rsa-row"><button type="button" class="rsa-btn" data-act="regen" data-ref="regenBtn" title="Regenerate from the same prompt (discards manual edits)">Regenerate</button><button type="button" class="rsa-btn" data-act="variation" data-ref="varBtn" title="New take: same prompt, a different persona and choreography (fingerprint guaranteed to differ)">New take</button><button type="button" class="rsa-btn" data-act="mirror" data-ref="mirrorBtn" title="Swap left and right (left-handed version)">Mirror</button></div>
@@ -752,7 +838,14 @@
             <div class="rsa-rtabs">
               <button type="button" class="rsa-chip on" data-rtab="pose" title="Joints, selected key, pose tools, pose library">Pose</button>
               <button type="button" class="rsa-chip" data-rtab="clip" title="Curves, cleanup, layering, stages">Clip</button>
-              <button type="button" class="rsa-chip" data-rtab="check" title="Validation report, smoothness, auto-fix">Check <span class="rsa-score" data-ref="score">–</span></button>
+              <button type="button" class="rsa-chip" data-rtab="check" title="Validation report, smoothness, auto-fix, set compatibility">Check <span class="rsa-score" data-ref="score">–</span></button>
+              <button type="button" class="rsa-chip" data-rtab="clips" title="Every clip of this session: switch, build all, export all, check they fit together">Clips <span class="rsa-count" data-ref="clipCount">0</span></button>
+            </div>
+            <div class="rsa-rpanel" data-rpanel="clips" hidden>
+              <div class="rsa-h">Session clips <span class="rsa-muted rsa-hr">click = open · one character</span></div>
+              <div class="rsa-cliplist" data-ref="clipList"></div>
+              <div class="rsa-row"><button type="button" class="rsa-btn mini" data-act="buildAll" data-ref="buildAllBtn" title="Build every clip in Studio, one KeyframeSequence each (animation_build per clip)">Build all in Studio</button><button type="button" class="rsa-btn mini" data-act="exportAll" title="Download one .rbxmx per clip">Export all</button><button type="button" class="rsa-btn mini" data-act="checkSet" title="Compatibility: same character / rig / fps, stance distance + root pop between clips, fade times">Check set</button></div>
+              <div class="rsa-muted">Type several animations at once ("idle, walk, run and jump for my knight") and each becomes its own clip here - never one merged clip. Clips made in separate requests share the character seed while "Same character" is ticked.</div>
             </div>
             <div class="rsa-rpanel" data-rpanel="pose">
               <div class="rsa-h">Joints <span class="rsa-muted rsa-hr">click one, or click a handle in the viewport</span></div>
@@ -792,6 +885,8 @@
             <div class="rsa-rpanel" data-rpanel="check" hidden>
               <div class="rsa-h">Validation <span class="rsa-smooth" title="motion smoothness (100 = silky)">smooth <b data-ref="smoothVal">–</b></span><button type="button" class="rsa-btn mini" data-act="fix" data-ref="fixBtn" title="Clamp limits, bridge jumps, close the loop">Auto-fix</button></div>
               <div class="rsa-report" data-ref="report"></div>
+              <div class="rsa-h">Set compatibility <span class="rsa-score" data-ref="compatScore">–</span><button type="button" class="rsa-btn mini" data-act="checkSet" title="Re-check how the session's clips fit together">Re-check</button></div>
+              <div class="rsa-report" data-ref="compat"></div>
             </div>
           </aside>
         </div>
@@ -810,6 +905,8 @@
       const tool = e.target.closest("[data-tool]"); if (tool) { clipTool(tool.getAttribute("data-tool")); return; }
       const ed = e.target.closest("[data-editor]"); if (ed) { S.editor = ed.getAttribute("data-editor"); if (!S.editorOpen) { S.editorOpen = true; renderPanels(); } renderEditor(); return; }
       const rt = e.target.closest("[data-rtab]"); if (rt) { setRightTab(rt.getAttribute("data-rtab")); return; }
+      const dc = e.target.closest("[data-delclip]"); if (dc) { forgetClip(dc.getAttribute("data-delclip")); return; }
+      const ci = e.target.closest("[data-clip]"); if (ci) { switchClip(ci.getAttribute("data-clip")); return; }
       const pd = e.target.closest("[data-pose-del]"); if (pd) { deleteLibraryPose(pd.getAttribute("data-pose-del")); return; }
       const pa = e.target.closest("[data-pose]"); if (pa) { applyLibraryPose(pa.getAttribute("data-pose"), e.shiftKey); return; }
       const st = e.target.closest("[data-t0]"); if (st) { scrub(parseFloat(st.getAttribute("data-t0"))); S.sel = nearestKey(S.t); renderAll(); return; }
@@ -892,6 +989,9 @@
       case "autoKey": S.autoKey = !S.autoKey; renderTools(); toast(S.autoKey ? "Auto-key ON: edits off a key insert one at the playhead" : "Auto-key OFF: edits land on the selected key"); return;
       case "resetCam": return resetCamera();
       case "toggleEditor": S.editorOpen = !S.editorOpen; renderPanels(); if (S.editorOpen) renderEditor(); return;
+      case "buildAll": return buildAll();
+      case "exportAll": return exportAll();
+      case "checkSet": return checkSet();
       case "insertKey": return insertKeyHere();
       case "copyPose": return copyPose();
       case "pastePose": return pastePose(false);
@@ -931,10 +1031,21 @@
     S.sel = 0;
     if (D) { setClip(clip); D.prompt.value = clip.prompt || ""; D.quality.value = clip.quality || "balanced"; D.rig.value = clip.rigType || "R15"; D.loop.checked = !!clip.loop; D.loopAuto = false; D.duration.value = clip.duration; D.fps.value = clip.fps; }
     else { S.clip = clip; autosave(); }
-    if (meta && meta.built) S.built = { name: clip.name, at: Date.now() };
+    if (meta && meta.built) { S.built = { name: clip.name, at: Date.now() }; S.builtNames[clip.name] = Date.now(); }
+    if (!Number.isFinite(S.personaSeed) && Number.isFinite(clip.personaSeed)) S.personaSeed = clip.personaSeed;
+    remember(clip);
     if (meta && meta.rigInfo) S.rigInfo = meta.rigInfo;
     return true;
   }
   function setRigInfo(info) { S.rigInfo = info || null; }
-  window.ORAnimStudio = { open, close, isOpen, getClip, loadClip, setRigInfo, clipTool, layerWith, insertKey: insertKeyHere, copyPose, pastePose, setView, resetCamera, _viewport: { down: viewportDown, move: viewportMove, up: viewportUp, wheel: viewportWheel }, _editor: { down: editorDown, move: editorMove, up: editorUp }, generate: (p, o) => { if (!D) build(); return generate(p, o); }, buildMessage, PRESETS, _state: S, _refine: refine, _variation: variation, _selectKey: selectKey, _setJointValue: setJointValue, _retime: retime, _play: play, _pause: pause, _stop: stop, _scrub: scrub, _undo: undo, _redo: redo, _exportRbxmx: exportRbxmx, _timelineHit: timelineHit };
+  function loadSet(set, meta) {
+    if (!set || !Array.isArray(set.clips) || !set.clips.length) return false;
+    for (const c of set.clips) { remember(c); if (meta && Array.isArray(meta.built) && meta.built.includes(c.name)) S.builtNames[c.name] = Date.now(); }
+    S.compat = set.report || null;
+    if (!Number.isFinite(S.personaSeed) && Number.isFinite(set.personaSeed)) S.personaSeed = set.personaSeed;
+    const ok = loadClip(set.clips[0], { built: !!(meta && meta.built && meta.built.includes(set.clips[0].name)), rigInfo: meta && meta.rigInfo });
+    if (D) { renderClipList(); renderCompat(); setRightTab("clips"); }
+    return ok;
+  }
+  window.ORAnimStudio = { open, close, isOpen, getClip, loadClip, loadSet, switchClip, checkSet, buildAll, exportAll, setRigInfo, clipTool, layerWith, insertKey: insertKeyHere, copyPose, pastePose, setView, resetCamera, _viewport: { down: viewportDown, move: viewportMove, up: viewportUp, wheel: viewportWheel }, _editor: { down: editorDown, move: editorMove, up: editorUp }, generate: (p, o) => { if (!D) build(); return generate(p, o); }, buildMessage, PRESETS, _state: S, _refine: refine, _variation: variation, _selectKey: selectKey, _setJointValue: setJointValue, _retime: retime, _play: play, _pause: pause, _stop: stop, _scrub: scrub, _undo: undo, _redo: redo, _exportRbxmx: exportRbxmx, _timelineHit: timelineHit };
 })();

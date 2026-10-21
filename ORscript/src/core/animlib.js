@@ -173,7 +173,7 @@ local function buildBones(rig, root)
 					visited[other] = true
 					joints[#joints + 1] = {
 						index = #joints + 1, parentIdx = parentIdx, name = other.Name, part1 = other,
-						jointPath = pathOf(joint), kind = "Motor6D", c0 = joint.C0, c1 = joint.C1,
+						jointPath = pathOf(joint), kind = "Motor6D", c0 = joint.C0, c1 = joint.C1, joint = joint,
 					}
 					walk(other, #joints)
 				end
@@ -184,7 +184,7 @@ local function buildBones(rig, root)
 				visited[c.b] = true
 				joints[#joints + 1] = {
 					index = #joints + 1, parentIdx = parentIdx, name = c.b.Name, part1 = c.b,
-					jointPath = c.path, kind = c.kind, c0 = c.j.Attachment0.CFrame, c1 = c.j.Attachment1.CFrame,
+					jointPath = c.path, kind = c.kind, c0 = c.j.Attachment0.CFrame, c1 = c.j.Attachment1.CFrame, joint = c.j,
 				}
 				walk(c.b, #joints)
 			end
@@ -393,6 +393,71 @@ local function computeWorldPoses(rig, root, anim, t)
 	return bones, map
 end
 
+-- 1.56: one sampler per preview run. The old per-frame path re-sorted the keyframes and re-scanned the pose tree for
+-- EVERY bone on EVERY frame (twice) and resolved joints by string path - with 15 bones x 60 baked keys that was a slide
+-- show, and because t advanced by a fixed 1/30 regardless of the real frame time the clip also played in slow motion.
+-- The sampler reads the KeyframeSequence once (times + per-bone CFrame tracks + easing poses), binary-searches the
+-- segment and writes Transform / child CFrames directly on the cached joint instances.
+local function buildSampler(anim, rig, root)
+	local kfs = sortedKeyframes(anim)
+	local bones = buildBones(rig, root)
+	local times, tracks = {}, {}
+	for i, kf in ipairs(kfs) do times[i] = kf.Time end
+	local maps = {}
+	for i, kf in ipairs(kfs) do
+		local m = {}
+		local function scan(p) m[p.Name] = p; for _, sub in ipairs(p:GetSubPoses()) do scan(sub) end end
+		for _, p in ipairs(kf:GetPoses()) do scan(p) end
+		maps[i] = m
+	end
+	for _, b in ipairs(bones) do
+		local cfs, poses = {}, {}
+		for i = 1, #kfs do
+			local p = maps[i][b.name]
+			cfs[i] = p and p.CFrame or CFrame.new()
+			poses[i] = p
+		end
+		tracks[b.name] = { cfs = cfs, poses = poses }
+	end
+	local n = #times
+	local function segment(t)
+		if n == 0 then return 1, 1, 0 end
+		if t <= times[1] then return 1, 1, 0 end
+		if t >= times[n] then return n, n, 0 end
+		local lo, hi = 1, n
+		while hi - lo > 1 do
+			local mid = math.floor((lo + hi) / 2)
+			if times[mid] <= t then lo = mid else hi = mid end
+		end
+		local span = times[hi] - times[lo]
+		return lo, hi, span > 0 and (t - times[lo]) / span or 0
+	end
+	local sampler = { bones = bones, times = times, count = n }
+	function sampler.localPose(name, t)
+		local tr = tracks[name]
+		if not tr or n == 0 then return CFrame.new() end
+		local i, j, alpha = segment(t)
+		if i == j then return tr.cfs[i] end
+		return tr.cfs[i]:Lerp(tr.cfs[j], easedAlpha(tr.poses[i], alpha))
+	end
+	function sampler.apply(t)
+		local rootCF = root.CFrame
+		local map = {}
+		for _, b in ipairs(bones) do
+			local pose = sampler.localPose(b.name, t)
+			local parentWorld = (b.parentIdx == 0) and rootCF or map[b.parentIdx]
+			map[b.index] = parentWorld * b.c0 * pose * b.c1:Inverse()
+			local joint = b.joint
+			if joint and joint.Parent then
+				if b.kind == "Motor6D" or b.kind == "AnimationConstraint" then joint.Transform = pose end
+				if b.kind ~= "Motor6D" then b.part1.CFrame = map[b.index] end
+			end
+		end
+		return map
+	end
+	return sampler
+end
+
 local function applyPoseAt(t)
 	local anim = activeAnim()
 	if not anim then return fail("no active animation - create or open one first") end
@@ -400,20 +465,9 @@ local function applyPoseAt(t)
 	if not rig then return fail("no rig found in workspace (need a Model with a Humanoid + roots)") end
 	local root = rigRoot(rig)
 	if not root then return fail("no root part found on the rig") end
-	local bones, map = computeWorldPoses(rig, root, anim, t)
-	if #bones == 0 then return fail("no joints found on the rig") end
-	for _, b in ipairs(bones) do
-		local joint = resolvePath(b.jointPath)
-		if joint then
-			local pose = samplePoseLocal(anim, t, b.name)
-			if b.kind == "Motor6D" or b.kind == "AnimationConstraint" then joint.Transform = pose end
-			if b.kind ~= "Motor6D" then
-				-- BallSocketConstraint exposes attachments, not Part1. The child
-				-- part was captured while building the chain and works for both.
-				b.part1.CFrame = map[b.index]
-			end
-		end
-	end
+	local sampler = buildSampler(anim, rig, root)
+	if #sampler.bones == 0 then return fail("no joints found on the rig") end
+	sampler.apply(t)
 	return nil
 end
 
@@ -1008,22 +1062,36 @@ function api.preview(a)
 		if err then return err end
 		return okdata({}, "only one keyframe - posed at t=0 (add more keyframes for a moving preview)")
 	end
+	local speed = tonumber(a.speed) or 1
+	if speed <= 0 then speed = 1 end
+	local loops = a.loop
+	if loops == nil then loops = anim.Loop end
+	local cycles = loops and math.max(1, math.min(20, math.floor(tonumber(a.cycles) or 3))) or 1
+	local total = dur * cycles
+	local sampler = buildSampler(anim, rig, root)
+	if #sampler.bones == 0 then return fail("no joints found on the rig") end
 	task.spawn(function()
-		local t = 0
-		local dt = 1 / 30
-		while PREVIEW_TOKEN.Value == token and t <= dur do
-			applyPoseAt(t)
-			task.wait(dt)
-			t = t + dt
+		-- real elapsed time drives the clip (Studio's frame time varies - a fixed step played slow motion)
+		local t0 = os.clock()
+		local frames = 0
+		while PREVIEW_TOKEN.Value == token do
+			local el = (os.clock() - t0) * speed
+			if el >= total then break end
+			local t = el - dur * math.floor(el / dur)
+			sampler.apply(t)
+			frames = frames + 1
+			task.wait()
 		end
 		if PREVIEW_TOKEN.Value == token then
+			sampler.apply(loops and 0 or dur)
 			PREVIEW_TOKEN.Value = token + 1
 			PREVIEW_RIG.Value = ""
-			task.wait(0.25)
+			task.wait(0.35)
 			resetTransforms(rig, root)
 		end
 	end)
-	return okdata({}, ("preview loop playing %.2fs at ~30fps (stops automatically; call animation_stop_preview to stop early)"):format(dur))
+	return okdata({ duration = dur, cycles = cycles, speed = speed, keyframes = sampler.count, bones = #sampler.bones },
+		("preview playing %.2fs%s at %.2fx, real-time (frame-rate independent, %d keyframes on %d bones); stops automatically - animation_stop_preview stops early"):format(dur, cycles > 1 and (" x " .. cycles .. " loops") or "", speed, sampler.count, #sampler.bones))
 end
 
 -- Probe the rig's rotation-sign convention PURELY MATHEMATICALLY: apply +95
@@ -1398,6 +1466,16 @@ const ANIM_COMMANDS = [
     params: { name: { type: "string", req: false, desc: "clip (default: the last generated)" }, smooth: { type: "boolean", req: false }, plant_feet: { type: "boolean", req: false }, simplify: { type: "boolean", req: false }, reverse: { type: "boolean", req: false }, bake: { type: "boolean", req: false }, cycle_offset: { type: "number", req: false, desc: "seconds" } },
   },
   {
+    name: "animation_set",
+    description: "1.56 SEVERAL DIFFERENT animations in one go (idle + walk + run + jump + attack + death...) as SEPARATE KeyframeSequences that belong to ONE character: shared persona (lead side, arm rest, tempo, easing), same rig / fps / quality, idle on priority Idle, cycles on Movement, actions on Action, plus a compatibility report (stance distance between clips, root pops, loop flags) and a blend plan (fade time per transition). NEVER merge different animations into one clip - use this (or one animation_generate per animation; the session keeps the same character automatically). animation_sequence is only for ONE chained move (combo, 'A then B').",
+    params: { prompts: { type: "array", req: false, desc: "one entry per animation, e.g. [\"idle\", \"walk\", \"run\", \"jump\"] (each may carry style / mood words)" }, prompt: { type: "string", req: false, desc: "alternative: 'idle, walk, run and jump animations for my zombie npc' (split automatically; a trailing 'for my X' becomes the name prefix and style)" }, prefix: { type: "string", req: false, desc: "name prefix, e.g. Knight" }, quality: { type: "string", req: false, desc: "fast | balanced | high | cinematic" }, new_character: { type: "boolean", req: false, desc: "true = do not reuse the session's character seed" } },
+  },
+  {
+    name: "animation_compatibility",
+    description: "1.56 check how the session's clips fit together as one character: shared persona, rig, fps, priorities, loop flags, stance distance + root height pop between the idle and every other clip, with the AnimationTrack:Play(fade) to use per transition. Run after refining clips of a set.",
+    params: { names: { type: "array", req: false, desc: "clip names (default: every clip of this session)" } },
+  },
+  {
     name: "animation_layer",
     description: "1.54 NLA-style layering: legs + root from {base} (default: last clip), upper body (waist, head, arms) from {upper} - walk + wave, run + aim, idle + talk. fit 'stretch' retimes the upper clip to the base duration, 'loop' repeats it at its own period; weight 0-1 blends. Both clips must exist in this session (animation_generate each first). Builds the combined clip in Studio.",
     params: { upper: { type: "string", req: true, desc: "clip name whose upper body goes on top" }, base: { type: "string", req: false, desc: "clip name for legs + root (default: last)" }, fit: { type: "string", req: false, desc: "stretch | loop" }, weight: { type: "number", req: false, desc: "0-1, default 1" }, name: { type: "string", req: false } },
@@ -1529,8 +1607,8 @@ const ANIM_COMMANDS = [
   },
   {
     name: "animation_preview",
-    description: "Play the active animation directly on its pinned rig in the Studio viewport (Motor6D rigs via joint transforms; AnimationConstraint/BallSocketConstraint rigs by writing the joint chain onto the parts). Stops at the end and honours native pose easing.",
-    params: { duration: { type: "number", req: false, desc: "preview length in seconds (default = animation length)" } }
+    description: "Play the active animation directly on its pinned rig in the Studio viewport (Motor6D rigs via joint transforms; AnimationConstraint/BallSocketConstraint rigs by writing the joint chain onto the parts). Real-time and frame-rate independent (1.56), honours native pose easing, looping clips play 3 cycles by default; stops automatically.",
+    params: { duration: { type: "number", req: false, desc: "clip length in seconds (default = animation length)" }, loop: { type: "boolean", req: false, desc: "repeat (default = the clip's Loop flag)" }, cycles: { type: "number", req: false, desc: "how many loops to play when looping (default 3, max 20)" }, speed: { type: "number", req: false, desc: "playback speed multiplier (default 1)" } }
   },
   {
     name: "animation_simulate",
@@ -1681,6 +1759,9 @@ function buildLuau(op, args) {
     const dur = Number(args.duration);
     if (args.duration !== undefined && !positiveTime(args.duration)) return { err: "ERROR calling 'animation_preview': 'duration' must be a positive finite number." };
     if (dur > 0) base.duration = dur;
+    if (typeof args.loop === "boolean") base.loop = args.loop;
+    if (Number(args.cycles) > 0) base.cycles = Math.floor(Number(args.cycles));
+    if (Number(args.speed) > 0) base.speed = Number(args.speed);
   } else if (op === "apply") {
     const t = Number(args.t);
     if (args.t === undefined || !nonNegativeTime(args.t)) return { err: "ERROR: 't' (seconds) is required and must be a finite value >= 0." };
@@ -1743,7 +1824,7 @@ function describeCommands() {
   lines.push(
     "— RobloxScript animation tools: build REAL Roblox animation keyframe data (KeyframeSequence/Pose) in Studio and " +
     "review it visually. FIRST CHOICE (1.52 engine): animation_generate {prompt} authors, validates and builds a whole clip from words " +
-    "(animation_sequence for multi-stage combos, animation_refine {feedback} to adjust; 1.53: {variations:N} for N distinct takes, {mirror:true} for left-handed, 'new take' / 'mirror' / 'root motion' feedback; 1.54: animation_polish {smooth, plant_feet, simplify, reverse, bake, cycle_offset} on the existing keys, animation_layer {base, upper} for walk+wave style upper-body layering, 'smoother' / 'plant the feet' feedback; 1.55: ANY prompt works - 70+ everyday / sport / work / social acts, 'A then B then C' chains, 'X while walking' layering, 'raise the left arm' pose grammar, moods (tired, drunk, proud, scared, old, injured…) also as feedback ('make it drunk', 'then bow'); " +
+    "(animation_sequence for multi-stage combos, animation_refine {feedback} to adjust; 1.53: {variations:N} for N distinct takes, {mirror:true} for left-handed, 'new take' / 'mirror' / 'root motion' feedback; 1.54: animation_polish {smooth, plant_feet, simplify, reverse, bake, cycle_offset} on the existing keys, animation_layer {base, upper} for walk+wave style upper-body layering, 'smoother' / 'plant the feet' feedback; 1.55: ANY prompt works - 70+ everyday / sport / work / social acts, 'A then B then C' chains, 'X while walking' layering, 'raise the left arm' pose grammar, moods (tired, drunk, proud, scared, old, injured…) also as feedback ('make it drunk', 'then bow'); 1.56: SEVERAL animations (idle + walk + jump…) = animation_set {prompts:[...]} → separate clips of ONE character + compatibility + blend plan - never one merged clip; the session reuses one character seed so later animation_generate calls match; animation_compatibility re-checks; animation_preview is real-time now (loop/cycles/speed); " +
     "idles, walks, runs, sneak, strafe, crawl, swim, climb, fly, sleep, hit reactions, knockback, death, dash, slide, flips, throws, shooting, archery, pickups and 20+ emotes all have their own choreography and a per-prompt persona, so no two prompts move alike); hand-key only what the engine cannot express. " +
     "Manual flow: animation_create → animation_open → animation_set_pose + animation_add_keyframe / " +
     "animation_update_keyframe per keyframe time → animation_preview to check → refine. " +

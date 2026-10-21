@@ -32,7 +32,7 @@ for (const s of [
   "runTool: guiStudioRunTool,",
   "studioReady: () => { try { return currentEngineIsLive(); } catch { return false; } },",
   "window.__rsOpenAnimStudio = openAnimStudio;",
-  'const ANIM_ENGINE_OPS = new Set(["generate", "refine", "sequence", "validate", "export_rbxmx", "build", "polish", "layer"]);',
+  'const ANIM_ENGINE_OPS = new Set(["generate", "refine", "sequence", "validate", "export_rbxmx", "build", "set", "compatibility", "polish", "layer"]);',
   'if (op === "polish") {', 'if (op === "layer") {', 'clips: () => A.animClips,',
   'if (name.startsWith("animation_") && typeof ORAnimEngine !== "undefined" && ANIM_ENGINE_OPS.has(name.slice("animation_".length))) {',
   "return await runAnimEngine(name.slice(\"animation_\".length), args);",
@@ -228,6 +228,45 @@ ok("export XML is a KeyframeSequence with Pose tree rooted at HumanoidRootPart",
   ok("reopen keeps the clip; Studio buttons hidden when no tool runner", AS.isOpen() && AS.getClip() && ref("buildBtn").hidden && ref("previewBtn").hidden);
   const ext = E.generate("looping idle with calm breathing", { quality: "balanced", rigType: "R6" });
   ok("loadClip (used by animation_generate) swaps the clip and the form", AS.loadClip(ext, { built: true, rigInfo: E.defaultRigInfo("R6") }) && AS.getClip().name === ext.name && ref("rig").value === "R6" && ref("loop").checked && AS._state.built.name === ext.name);
+  // ── 1.56: sets of separate clips, one character ──────────────────────────
+  AS.open({ send: async () => true, runTool: async (name, args) => { calls.push([name, args]); return "Built (ok)"; }, studioReady: () => true, engine: () => "chatgpt", toast: (x) => toasts.push(x), diag: (e, d) => diags.push([e, d]) });
+  ok("Clips tab + Check set / Build all / Export all controls + same-character checkbox exist", q('[data-rtab="clips"]') && q('[data-rpanel="clips"]') && act("buildAll") && act("exportAll") && act("checkSet") && ref("sameChar") && ref("sameChar").checked && ref("compat") && ref("clipList"));
+  for (const s of ["case \"buildAll\":", "case \"exportAll\":", "case \"checkSet\":", "function generateSetHere(", "E().splitSet(text)", "E().generateSet(text", "function loadSet(set, meta)", "loadSet, switchClip, checkSet, buildAll, exportAll"]) ok("studio: " + s, studio.includes(s));
+  for (const s of [".rsa-cliplist {", ".rsa-clipitem.on {", ".rsa-badge.ok {", ".rsa-count {"]) ok("overlay.css 1.56: " + s, css.includes(s));
+  const before = Object.keys(AS._state.library || {}).length;
+  ref("prompt").value = "idle, walk and jump animations for my knight"; ref("rig").value = "R15";
+  click(act("generate")); await new Promise((r) => setTimeout(r, 5));
+  const lib = AS._state.library || {};
+  const setNames = Object.keys(lib).filter((k) => /Knight/i.test(k) || /Idle|Walk|Jump/.test(k));
+  ok("a multi-animation prompt makes SEPARATE clips (not one merged clip)", Object.keys(lib).length >= before + 2 && setNames.length >= 3 && /Idle/.test(AS.getClip().name), Object.keys(lib));
+  ok("the first clip of the set is open and the Clips tab is shown", AS.getClip() && lib[AS.getClip().name] && AS._state.rtab === "clips" && !q('[data-rpanel="clips"]').hidden, AS._state.rtab);
+  ok("clip list rows rendered, current clip highlighted, count badge updated", host.querySelectorAll(".rsa-clipitem").length >= 3 && q(".rsa-clipitem.on") && parseInt(ref("clipCount").textContent, 10) >= 3);
+  ok("set clips share one persona seed and the session adopted it", Number.isFinite(AS._state.personaSeed) && Object.values(lib).filter((c) => c.personaSeed === AS._state.personaSeed).length >= 3);
+  ok("compatibility report rendered in the Check tab", AS._state.compat && /\/100/.test(ref("compatScore").textContent) && ref("compat").innerHTML.length > 20, ref("compatScore").textContent);
+  ok("set clips stand on the ground (no 0.5 stud sink)", Object.values(lib).filter((c) => c.personaSeed === AS._state.personaSeed).every((c) => { const f = E.forwardKinematics(c, 0); const low = Math.min(...Object.values(f).map((p) => p[1])); return low > -0.12 && low < 0.3; }));
+  // switching clips
+  const other = Object.keys(lib).find((k) => k !== AS.getClip().name && lib[k].personaSeed === AS._state.personaSeed);
+  const row = host.querySelector(`.rsa-clipitem[data-clip="${other}"]`);
+  click(row);
+  ok("clicking a row opens that clip and the form follows", AS.getClip().name === other && q(".rsa-clipitem.on").getAttribute("data-clip") === other && ref("duration").value == String(lib[other].duration), AS.getClip().name);
+  // a later single prompt keeps the same character while the box is ticked
+  ref("prompt").value = "sword slash attack"; click(act("generate")); await new Promise((r) => setTimeout(r, 5));
+  ok("a later single clip reuses the session character seed (Same character ticked)", AS.getClip().personaSeed === AS._state.personaSeed, [AS.getClip().personaSeed, AS._state.personaSeed]);
+  // check set + build all + export all
+  const compat = AS.checkSet();
+  ok("Check set runs compatibility over the session clips and switches to the Check tab", compat && Number.isFinite(compat.score) && compat.clips >= 4 && AS._state.rtab === "check", compat && compat.score);
+  const callsBefore = calls.length, dlBefore = downloads.length;
+  await act("buildAll").click(); await new Promise((r) => setTimeout(r, 10));
+  const builtCalls = calls.slice(callsBefore).filter((c) => c[0] === "animation_build");
+  ok("Build all = one animation_build per clip, each marked built", builtCalls.length >= 4 && Object.keys(AS._state.builtNames).length >= 4 && host.querySelectorAll(".rsa-badge.ok").length >= 4, builtCalls.length);
+  click(act("exportAll")); await new Promise((r) => setTimeout(r, 2000));
+  ok("Export all downloads one .rbxmx per clip", downloads.length - dlBefore >= 4, downloads.length - dlBefore);
+  // loadSet from the chat path
+  const chatSet = E.generateSet(["crouch idle", "crouch walk"], { rigType: "R6" });
+  ok("loadSet (chat animation_set) registers every clip, opens the first, keeps the report", AS.loadSet(chatSet, { built: ["CrouchIdle"] }) && AS.getClip().name === chatSet.clips[0].name && AS._state.library[chatSet.clips[1].name] && AS._state.compat === chatSet.report && AS._state.rtab === "clips");
+  // remove from list
+  click(host.querySelector(`[data-delclip="${chatSet.clips[1].name}"]`));
+  ok("× removes a clip from the session list", !AS._state.library[chatSet.clips[1].name]);
   ok("Esc closes", (host.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true })), !AS.isOpen()));
   ok("no window errors during the whole session", errors.length === 0, errors);
   console.log(`test-anim-studio: ${n} checks passed`);

@@ -43,6 +43,14 @@ out.programs.build_r6_real=RSAnim.buildLuau("build",Object.assign(E.toBuildArgs(
 out.programs.build_wrong_bones=RSAnim.buildLuau("build",Object.assign(E.toBuildArgs(clip,r6),{name:"Wrong"})).code; // R6 bone names on an R15 rig
 const unit={name:"Unit",duration:1,loop:false,priority:"Action",fps:30,quality:"fast",params:{},prompt:"unit",rigType:"R6",stages:[],keys:[{t:0,poses:{r_shoulder:{rot:[90,0,0]},l_shoulder:{rot:[90,0,0]},root:{rot:[0,0,0],pos:[0,0.5,0]}},ease:["Linear","Out"],tag:"start"},{t:1,poses:{r_shoulder:{rot:[0,0,90]}},ease:["Linear","Out"],tag:"end"}]};
 out.programs.build_unit=RSAnim.buildLuau("build",E.toBuildArgs(unit,r6)).code;
+// 1.56: easing direction round trip. Engine "CubicV2/Out" = decelerate into the next key (standard tools). Roblox's
+// PoseEasingDirection is documented as backwards, so the export swaps it; the Luau sampler (which mirrors Roblox) must
+// then land on the engine's own sampleAt() value - not on the mirrored curve.
+const easeClip={name:"EaseProbe",duration:1,loop:false,priority:"Action",fps:30,quality:"fast",params:{},prompt:"ease probe",rigType:"R15",stages:[],interp:"eased",keys:[{t:0,poses:{r_shoulder:{rot:[0,0,0]}},ease:["CubicV2","Out"],tag:"start"},{t:1,poses:{r_shoulder:{rot:[90,0,0]}},ease:["CubicV2","Out"],tag:"end"}]};
+out.programs.build_ease=RSAnim.buildLuau("build",E.toBuildArgs(easeClip,r15)).code;
+out.programs.apply_ease=RSAnim.buildLuau("apply",{t:0.25}).code;
+out.programs.preview_ease=RSAnim.buildLuau("preview",{duration:1}).code;
+out.expect.easeAt25=E.sampleAt(easeClip,0.25).r_shoulder.rot[0]; out.expect.easeExportDir=E.toBuildArgs(easeClip,r15).keys[0].e[1];
 out.programs.build_empty=RSAnim.buildLuau("build",{name:"Empty",duration:1,bones:["Head"],keys:[]}).err||"--ERR none";
 // 1.54: chunked build (spline clips bake to the frame grid and arrive in several calls)
 const full=E.toBuildArgs(clip,r15); const half=Math.ceil(full.keys.length/2);
@@ -166,6 +174,18 @@ seqC = find(lib, "Chunked")
 ok("chunk 2 (append=true) completes it: all keyframes present, chunk flag cleared, AnimSaves copy made", res["ok"] and res["data"]["keyframes"] == data["expect"]["keys"] and len(seqC.GetKeyframes(seqC)) == data["expect"]["keys"] and seqC.GetAttribute(seqC, "OR_Chunked") is None and res["data"]["animSaves"], res)
 res = run("build_append_bad")
 ok("append onto a finished (non-chunked) animation is refused", not res["ok"] and "not an open chunked build" in res["error"], res)
+
+# ───────────────────────── easing direction (1.56) ─────────────────────────
+res = run("build_ease")
+ok("2-key easing probe builds on R15", res["ok"] and res["data"]["keyframes"] == 2, res)
+ok("export swaps the engine's standard 'Out' to Roblox Pose 'In' (PoseEasingDirection is documented backwards)", data["expect"]["easeExportDir"] == "In", data["expect"]["easeExportDir"])
+res = run("apply_ease")
+rig15 = find(WS, "R15Dummy")
+shoulder = find(rig15, "RightShoulder", True)
+rx = math.degrees(shoulder.Transform.ToEulerAnglesYXZ(shoulder.Transform)[0]) if shoulder is not None and shoulder.Transform is not None else None
+ok("Luau sampler at t=0.25 lands on the engine's own eased value (%.1f°, decelerating into the key) - not the mirrored curve (1.4°)" % data["expect"]["easeAt25"], res["ok"] and rx is not None and abs(rx - data["expect"]["easeAt25"]) < 0.5, [rx, data["expect"]["easeAt25"]])
+res = run("preview_ease")
+ok("preview reports a real-time, frame-rate independent run with keyframe + bone counts", res["ok"] and res["data"]["keyframes"] == 2 and res["data"]["bones"] == 15 and "real-time" in res["text"], res)
 
 # ───────────────────────── R6 rig ─────────────────────────
 L.execute("local M=...; local ws=M.game:GetService('Workspace'); ws:FindFirstChild('R15Dummy'):Destroy(); local rig=M.buildRig(Enum.HumanoidRigType.R6, 'R6Dummy'); rig.Parent=ws", M)

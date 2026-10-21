@@ -8801,5 +8801,21 @@ html.rs-anim-open #rs-root { visibility: hidden !important; }
 .rsa-foot .rsa-btn svg { width: 13px; height: 13px; }
 .rsa-foot input { flex: 1; min-width: 80px; max-width: 260px; }
 .rsa-row .rsa-btn.mini { flex: 0 0 auto; }
+/* 1.56.0 - Animation Studio: Clips tab (session set), compatibility, same-character */
+.rsa-count { font: 700 9.5px ui-monospace, Consolas, monospace; padding: 0 5px; border-radius: 999px; background: rgba(255,255,255,.1); color: #e8e8ec; }
+.rsa-cliplist { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow: auto; margin: 4px 0 8px; }
+.rsa-clipitem { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; gap: 1px 8px; padding: 6px 8px; border-radius: 10px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); cursor: pointer; }
+.rsa-clipitem:hover { background: rgba(255,255,255,.09); }
+.rsa-clipitem.on { border-color: rgba(120,160,255,.65); background: rgba(90,130,255,.14); box-shadow: 0 0 0 1px rgba(120,160,255,.25) inset; }
+.rsa-clipitem b { font-size: 12px; color: #f2f2f6; grid-column: 1; }
+.rsa-clipitem span { font-size: 10.5px; color: #a9adbd; grid-column: 1; grid-row: 2; }
+.rsa-clipitem em { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; gap: 4px; font-style: normal; }
+.rsa-badge { font: 700 9px/1 ui-monospace, Consolas, monospace; padding: 3px 6px; border-radius: 999px; background: rgba(255,255,255,.1); color: #d7d9e2; font-style: normal; white-space: nowrap; }
+.rsa-badge.ok { background: rgba(74,222,128,.18); color: #b9f5cf; }
+.rsa-badge.warn { background: rgba(255,200,80,.18); color: #ffe3a3; }
+.rsa-clipitem .rsa-ib.mini { width: 20px; height: 20px; font-size: 13px; line-height: 18px; opacity: .6; }
+.rsa-clipitem .rsa-ib.mini:hover { opacity: 1; }
+.rsa-check[title] { cursor: help; }
+
 @media (max-width: 1180px) { .rsa-body { grid-template-columns: 260px minmax(0, 1fr) 250px; } }
 @media (max-width: 920px) { .rsa-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) auto; } .rsa-left, .rsa-right { max-height: 32vh; } .rsa-left { border-right: 0; border-bottom: 1px solid rgba(255,255,255,.07); } .rsa-right { border-left: 0; border-top: 1px solid rgba(255,255,255,.07); } }

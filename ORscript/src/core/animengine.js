@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/core/animengine.js - ORscript ANIMATION ENGINE (1.52.0; 1.53.0 persona / choreography / uniqueness / mirror / travel; 1.55.0 freeform choreography; 1.54.0 smoothing / foot planting / IK / layering / Blender-style key tools)
+// src/core/animengine.js - ORscript ANIMATION ENGINE (1.52.0; 1.53.0 persona / choreography / uniqueness / mirror / travel; 1.56.0 freeform choreography; 1.54.0 smoothing / foot planting / IK / layering / Blender-style key tools)
 //
 // Natural language → structured, validated Roblox animation data.
 //
@@ -28,7 +28,7 @@
 // rest. Nothing is faked: unsupported requests return explicit limitations.
 (function (root) {
   "use strict";
-  const VERSION = "1.55.0";
+  const VERSION = "1.56.0";
   const DEG = Math.PI / 180;
 
   // ───────────────────────── rotation math ─────────────────────────
@@ -59,7 +59,13 @@
   // Pivot offsets (studs, semantic frame) from the parent pivot - R15 proportions; used by the schematic preview + QA metrics.
   const PIVOT = { root: [0, 0, 0], waist: [0, 0.2, 0], neck: [0, 1.2, 0], l_shoulder: [-1.0, 1.0, 0], l_elbow: [0, -0.6, 0], l_wrist: [0, -0.6, 0], r_shoulder: [1.0, 1.0, 0], r_elbow: [0, -0.6, 0], r_wrist: [0, -0.6, 0], l_hip: [-0.5, -0.2, 0], l_knee: [0, -0.75, 0], l_ankle: [0, -0.75, 0], r_hip: [0.5, -0.2, 0], r_knee: [0, -0.75, 0], r_ankle: [0, -0.75, 0] };
   const TIP = { neck: [0, 0.7, 0], l_wrist: [0, -0.35, 0], r_wrist: [0, -0.35, 0], l_ankle: [0, -0.15, -0.45], r_ankle: [0, -0.15, -0.45] };
-  const ROOT_HEIGHT = 2.35; // root pivot above the ground, studs (R15 default HipHeight 2 + lower torso)
+  // Root pivot above the ground = the schematic leg (hip 0.2 + thigh 0.75 + shin 0.75 + sole 0.15 = 1.85) so a straight
+  // standing leg touches y = 0. 1.52–1.55 had 2.35 here: every standing pose "floated" 0.5 studs in the model, so the
+  // 1.54 plant-feet pass sank the ROOT of every grounded clip by 0.5 studs - exported 1:1 to Studio, where the character
+  // then stood knee-deep in the floor while airborne clips (which skip planting) did not. That was the single biggest
+  // "looks wrong in Studio" cause (1.56 fix). Lying / sitting poses are expressed relative to this constant, so they keep
+  // their absolute height.
+  const ROOT_HEIGHT = 1.85;
   // Joint limits (degrees, semantic frame). x: flex (+ = forward swing for limbs, + = lean back for torso), y: twist, z: roll/abduction.
   const LIMITS = {
     root: { x: [-1800, 1800], y: [-1800, 1800], z: [-45, 45] }, /* root pitch is free too (flips, lying down) */ waist: { x: [-50, 50], y: [-70, 70], z: [-35, 35] }, neck: { x: [-50, 50], y: [-85, 85], z: [-35, 35] },
@@ -302,6 +308,7 @@
     if (intent.variantHints) { if (intent.variantHints.both) p.emoteVariant = 1; if (intent.variantHints.small) p.emoteVariant = 2; if (intent.variantHints.big || intent.variantHints.fistpump) p.emoteVariant = 1; if (intent.variantHints.sky) p.emoteVariant = 1; if (intent.variantHints.side) p.emoteVariant = 2; }
     if (styles.includes("robotic")) { p.tilt = 0; p.shoulderDrop = 0; p.weightSide = 0; p.fidget = "none"; }
     if (params && params.easingFlavor) p.easing = params.easingFlavor; // explicit feedback beats the seeded pick
+    if (params && params.armRest) p.armRest = params.armRest; // sets: a folded/behind-the-back idle cannot blend into a walk
     p.traits = [`${p.lead === "l" ? "left" : "right"}-leading`, p.fidget !== "none" ? `fidget: ${p.fidget}` : "still", `arms: ${p.armRest}`, `easing: ${p.easing}`, `tempo ${p.tempo}`];
     return p;
   }
@@ -1055,7 +1062,7 @@
     let keys = [], stages = [];
     const take = (opts.take || intent.take || 0) | 0;
     const seed = (intent.seed ^ Math.round(params.variation * 1000) ^ Math.imul(take, 2246822519)) >>> 0;
-    const P = persona(intent, params, take); P.text = intent.text; P.strafeDir = intent.strafeDir; PERSONA = P;
+    const P = persona(Number.isFinite(opts.personaSeed) ? Object.assign({}, intent, { seed: opts.personaSeed >>> 0 }) : intent, params, take); P.text = intent.text; P.strafeDir = intent.strafeDir; PERSONA = P;
     const kP = clamp(k * P.amp, 0.4, 1.8);
     const jitter = params.variation || take ? rng(seed) : null;
     const vj = (v, pct) => jitter ? v * (1 + (jitter() * 2 - 1) * pct) : v;
@@ -1145,7 +1152,7 @@
     keys = snapToFps(dedupeKeys(keys), fps, duration);
     let clip = {
       version: 1, engine: VERSION, name: opts.name || suggestName(intent) + (take ? "_take" + (take + 1) : "") + (mirrored ? "_Mirror" : ""), prompt: intent.text, intent, params, quality, rigType, fps, duration, loop, priority: opts.priority || intent.priority,
-      stages, keys, created: opts.now || 0, edited: false, limitations: intent.unsupported.slice(), take, interp: opts.interp === "spline" || opts.interp === "eased" ? opts.interp : (q.spline && opts.smooth !== false && params.smooth !== false ? "spline" : "eased"), persona: { traits: P.traits, lead: P.lead, fidget: P.fidget, armRest: P.armRest, easing: P.easing, emoteVariant: P.emoteVariant }, mirrored, travel,
+      stages, keys, created: opts.now || 0, edited: false, limitations: intent.unsupported.slice(), take, personaSeed: Number.isFinite(opts.personaSeed) ? opts.personaSeed >>> 0 : intent.seed, interp: opts.interp === "spline" || opts.interp === "eased" ? opts.interp : (q.spline && opts.smooth !== false && params.smooth !== false ? "spline" : "eased"), persona: { traits: P.traits, lead: P.lead, fidget: P.fidget, armRest: P.armRest, easing: P.easing, emoteVariant: P.emoteVariant }, mirrored, travel,
     };
     if (travel) clip.limitations.push("root motion: the HumanoidRootPart offset travels inside the clip - play it on a rig that is NOT also being moved by a controller, or strip the root track.");
     if (rigType === "R6") clip.limitations.push("R6 rig: no elbow / knee / wrist / ankle / waist joints - elbow and knee bends are folded into the shoulders and hips, waist into the torso.");
@@ -1377,6 +1384,105 @@
 
   // ───────────────────────── multi-stage sequences ─────────────────────────
   // Combined clip + one clip per stage group (retimed to start at 0, with the next stage's first key as a settle).
+  // ───────────────────────── 1.56 animation SETS (several different animations, one character) ─────────────────────────
+  // "idle, walk, run and jump animations" is NOT one clip and NOT a chain: it is a set of separate KeyframeSequences that
+  // must feel like the same character and blend into each other. splitSet() recognises the request, generateSet() builds
+  // every clip with ONE shared persona (lead side, arm rest, tempo, easing flavour) and compatibility() measures how well
+  // they fit (stance distance, priorities, loop flags, fps / rig) and proposes fade times.
+  const SET_CHAIN = /\b(then|after that|followed by|into an?|into the|combo|finisher|chain|sequence|while|during|transition)\b|->|→/i;
+  const SET_FILLER = /\b(please|can you|could you|i need|i want|i'd like|give me|make|create|generate|build|author|design|produce|do|me|us|an?|the|my|our|some|few|set of|pack of|separate|individual|different|distinct|each|all|of|for|to|game|character|npc|player|rig|r15|r6|avatar|animations?|anims?|clips?|loops?|cycles?)\b/gi;
+  const SET_WORDS = /^(idle|walk|run|sprint|jog|jump|fall|land|climb|swim|crouch|sneak|sit|sleep|dance|wave|attack|punch|kick|block|dodge|roll|death|die|hit|cheer|laugh|point|clap|salute|bow|swing|slash|cast|fly|tread|aim|strafe|crawl|emote|celebrate|taunt)s?$/i;
+  function splitSet(text) {
+    const raw = String(text || "").trim(); if (!raw || SET_CHAIN.test(raw)) return null;
+    const hasListWords = /\b(animations|anims|clips|set|pack|separate|each|both|all)\b/i.test(raw) || /\d+\s*(?:animations|anims|clips)/i.test(raw);
+    let parts = raw.split(/\n+|;|\s*,\s*|\s+and\s+|\s*&\s*|\s*\+\s*|\s*\/\s*|\s+or\s+|\s*(?:^|\s)\d+[.)]\s*/i).map((p) => p.replace(/^\s*(?:and|,|-|\*|•)\s*/i, "").trim()).filter(Boolean);
+    if (parts.length < 2) {
+      // "idle walk run jump" - bare category words in a row
+      const toks = raw.replace(SET_FILLER, " ").split(/\s+/).filter(Boolean);
+      if (toks.length >= 2 && toks.every((w) => SET_WORDS.test(w)) && new Set(toks.map((w) => w.toLowerCase())).size === toks.length) parts = toks; else return null;
+    }
+    // context shared by every part: "… for my zombie npc" → prefix + a style word carried into each prompt
+    let ctx = ""; const last = parts[parts.length - 1]; const cm = last.match(/\s+for\s+(?:my|the|an?|our|this)?\s*([a-z][a-z0-9 ]{1,30})$/i);
+    if (cm) { ctx = cm[1]; parts[parts.length - 1] = last.slice(0, cm.index); }
+    const styleWord = (ctx.match(/\b(zombie|robot(?:ic)?|anime|cartoon(?:y)?|heavy|ninja|knight|fluid|realistic|military|soldier|old|drunk|injured|tired|scared|proud|happy|sad|angry|sneaky|boss|giant|tiny|cute|creepy|elegant|clumsy)\b/i) || [])[1] || "";
+    const clean = parts.map((p) => p.replace(/\b(animations?|anims?|clips?|loops?|cycles?)\b/gi, " ").replace(/^(?:\s*(?:please|can you|could you|i need|i want|i'd like|give me|make|create|generate|build|author|me|us|an?|the|my|our|some|one|separate|different)\b)+/i, "").replace(/\s+/g, " ").trim()).filter(Boolean)
+      .map((p) => (styleWord && !new RegExp("\\b" + styleWord, "i").test(p) ? styleWord + " " + p : p));
+    if (clean.length < 2) return null;
+    const intents = clean.map((p) => parseIntent(p));
+    const cats = intents.map((i) => (i.layerOn ? "layer:" + i.upperText : i.category === "act" ? "act:" + i.acts.join("+") : i.category));
+    if (intents.some((i) => i.category === "improv" || i.category === "sequence")) return null;
+    if (new Set(cats).size < 2) return null; // "slow walk, fast walk" is variations - not a set
+    if (clean.length === 2) {
+      const pair = cats.slice().sort().join("|");
+      if (/^jump\|land$/.test(pair) || /^(attack|block|dodge)\|(attack|block|dodge)$/.test(pair) && !hasListWords) return null;
+      if (!hasListWords && !cats.every((c) => /^(idle|walk|run|swim|climb|sneak|strafe|walk_back|crawl|jump|fall|land|crouch|sit|dance|emote|act:|death|hit_react)/.test(c))) return null;
+    }
+    return clean;
+  }
+  function setPriority(c) { return c.priority || (/^(idle|sit|crouch|kneel|sleep|fly|tread|aim)$/.test(c.intent.category) ? "Idle" : /^(walk|run|swim|climb|sneak|strafe|walk_back|crawl|pushup)$/.test(c.intent.category) ? "Movement" : "Action"); }
+  function stanceDistance(a, b, joints) { // max joint-angle gap between a's first key and b's first key (upper body by default)
+    const A = a.keys[0].poses, B = b.keys[0].poses; let d = 0, worst = null;
+    for (const j of joints || ["waist", "neck", "l_shoulder", "r_shoulder", "l_elbow", "r_elbow", "root"]) { const p = A[j] || J(0, 0, 0), q = B[j] || J(0, 0, 0); for (let x = 0; x < 3; x++) { const g = Math.abs(p.rot[x] - q.rot[x]); if (g > d) { d = g; worst = j; } } }
+    const ha = (A.root && A.root.pos ? A.root.pos[1] : 0), hb = (B.root && B.root.pos ? B.root.pos[1] : 0);
+    return { deg: r3(d), joint: worst, height: r3(Math.abs(ha - hb)) };
+  }
+  function compatibility(clips) {
+    const issues = [], list = (clips || []).filter((c) => c && c.keys && c.keys.length);
+    if (list.length < 2) return { ok: true, score: 100, issues: [{ level: "info", msg: "one clip - nothing to compare" }], pairs: [], priorities: list.map((c) => ({ name: c.name, priority: setPriority(c) })), fades: [] };
+    const rigs = new Set(list.map((c) => c.rigType)), fps = new Set(list.map((c) => c.fps));
+    if (rigs.size > 1) issues.push({ level: "error", msg: `rig types differ (${[...rigs].join(", ")}) - every clip of a set must target the same rig` });
+    if (fps.size > 1) issues.push({ level: "warning", msg: `frame rates differ (${[...fps].join(", ")} fps) - fine for Roblox, but retiming feels uneven; regenerate with one quality preset` });
+    const personas = new Set(list.map((c) => c.persona ? `${c.persona.lead}/${c.persona.armRest}/${c.persona.easing}` : "?"));
+    if (personas.size > 1) issues.push({ level: "warning", msg: `${personas.size} different personas (lead side / arm rest / easing) - clips were not generated as one character; regenerate them together (animation_set) or with the same character seed` });
+    const idle = list.find((c) => c.intent && c.intent.category === "idle") || list.find((c) => c.loop) || list[0];
+    const pairs = [], fades = [];
+    for (const c of list) {
+      if (c === idle) continue;
+      const d = stanceDistance(idle, c);
+      const fade = d.deg < 18 ? 0.1 : d.deg < 40 ? 0.2 : d.deg < 70 ? 0.3 : 0.4;
+      pairs.push({ from: idle.name, to: c.name, deg: d.deg, joint: d.joint, height: d.height, fade });
+      fades.push({ from: idle.name, to: c.name, fade });
+      if (d.deg >= 70) issues.push({ level: "warning", msg: `${c.name} starts ${d.deg}° (${d.joint}) away from ${idle.name}'s stance - use AnimationTrack:Play(${fade}) so the blend hides the jump` });
+      if (d.height > 0.6) issues.push({ level: "warning", msg: `${c.name} starts ${d.height} studs ${(c.keys[0].poses.root.pos || [0, 0, 0])[1] < (idle.keys[0].poses.root.pos || [0, 0, 0])[1] ? "lower" : "higher"} than ${idle.name} - the root will pop on transition` });
+    }
+    const pri = list.map((c) => ({ name: c.name, priority: setPriority(c), loop: !!c.loop }));
+    const cycles = list.filter((c) => /^(walk|run|swim|climb|sneak|strafe|walk_back|crawl)$/.test(c.intent && c.intent.category));
+    for (const c of cycles) if (!c.loop) issues.push({ level: "warning", msg: `${c.name} is a locomotion cycle but not looping - set loop so it does not stop after one stride` });
+    const idles = list.filter((c) => c.intent && c.intent.category === "idle"); for (const c of idles) if (!c.loop) issues.push({ level: "warning", msg: `${c.name} (idle) should loop` });
+    const byPri = {}; for (const p of pri) (byPri[p.priority] = byPri[p.priority] || []).push(p.name);
+    const errors = issues.filter((i) => i.level === "error").length, warnings = issues.filter((i) => i.level === "warning").length;
+    if (!issues.length) issues.push({ level: "info", msg: `${list.length} clips share one character (${[...personas][0]}), one rig (${[...rigs][0]}), ${[...fps][0]} fps; priorities ${Object.keys(byPri).map((k) => k + ": " + byPri[k].length).join(", ")}` });
+    return { ok: errors === 0, score: Math.max(0, 100 - 25 * errors - 6 * warnings), errors, warnings, issues, pairs, priorities: pri, byPriority: byPri, fades, idle: idle.name, clips: list.length };
+  }
+  function setPrefix(text) { const m = String(text || "").match(/\bfor (?:my |the |an? )?([a-z][a-z0-9 ]{2,24}?)(?: (?:game|npc|character|boss|enemy|rig))?\s*$/i); if (!m) return ""; return m[1].split(/\s+/).map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join("").slice(0, 20); }
+  function generateSet(textOrList, opts) {
+    opts = opts || {};
+    const prompts = Array.isArray(textOrList) ? textOrList.map((s) => String(s || "").trim()).filter(Boolean) : (splitSet(textOrList) || splitClauses(textOrList));
+    if (!prompts || prompts.length < 1) throw new Error("animation set: give at least one prompt (e.g. ['idle', 'walk', 'jump'] or 'idle, walk and jump animations')");
+    const text = Array.isArray(textOrList) ? prompts.join(", ") : String(textOrList);
+    const personaSeed = Number.isFinite(opts.personaSeed) ? opts.personaSeed >>> 0 : hashStr("set:" + prompts.join("|") + ":" + (opts.take || 0));
+    const prefix = opts.prefix != null ? String(opts.prefix) : setPrefix(text);
+    const avoid = (opts.avoid || []).slice(); const clips = [];
+    prompts.forEach((p, i) => {
+      const sub = Object.assign({}, opts, { personaSeed, avoid: avoid.slice(), name: undefined, duration: undefined, loop: undefined, prefix: undefined, params: Object.assign({ armRest: "loose" }, opts.params || {}) });
+      const c = generate(p, sub);
+      if (prefix && c.name.toLowerCase().indexOf(prefix.toLowerCase()) !== 0) c.name = prefix + "_" + c.name.replace(/^[^A-Za-z]+/, "");
+      c.set = { id: personaSeed, index: i, size: prompts.length, prompt: text };
+      avoid.push(c.fingerprint); clips.push(c);
+    });
+    const names = new Set(); for (const c of clips) { let n = c.name, k = 2; while (names.has(n)) n = c.name + "_" + k++; names.add(n); c.name = n; }
+    for (const c of clips) c.set.members = clips.map((x) => x.name);
+    const report = compatibility(clips);
+    return { clips, report, personaSeed, prompts, prefix };
+  }
+  function describeSet(set) {
+    const r = set.report;
+    const lines = [`SET of ${set.clips.length} separate animations, one character (persona seed ${set.personaSeed}; ${set.clips[0].persona ? set.clips[0].persona.traits.join(", ") : ""}):`];
+    for (const c of set.clips) lines.push(`- ${c.name}: ${c.intent.category}${c.intent.mood ? " (" + c.intent.mood + ")" : ""}, ${c.duration}s, ${c.keys.length} keys, ${c.loop ? "loop" : "one-shot"}, priority ${setPriority(c)}, score ${c.report.score}`);
+    lines.push(`compatibility ${r.score}/100: ` + r.issues.map((i) => (i.level === "info" ? "" : "[" + i.level + "] ") + i.msg).join("; "));
+    if (r.fades.length) lines.push("blend plan (AnimationTrack:Play(fadeTime)): " + r.fades.map((f) => `${f.from} → ${f.to} ${f.fade}s`).join(" · "));
+    return lines.join("\n");
+  }
   function generateSequence(text, opts) {
     const combined = generate(text, opts);
     const groups = []; // merge ready+anticipation into the first strike, transition into the preceding strike
@@ -1452,6 +1558,11 @@
   }
   // Keys as Studio / rbxmx should receive them: eased clips export their keys verbatim; spline clips are baked to the frame grid
   // (plus every authored key time, so impacts and markers stay exact) with Linear easing - that is how a C1 curve reaches Roblox.
+  // Roblox's Pose easing directions are "backwards from how these terms are used by most other animation tools and by
+  // TweenService" (PoseEasingDirection docs): Pose.Out = the curve applied forward (accelerate towards the next key),
+  // Pose.In = reversed (decelerate into it). The engine authors and previews in the standard sense (Out = decelerate),
+  // so every Studio-bound key swaps In <-> Out here - otherwise anticipation floats and landings accelerate (1.56 fix).
+  function robloxEase(ease) { const e = ease || ["CubicV2", "Out"]; return [e[0], e[1] === "Out" ? "In" : e[1] === "In" ? "Out" : e[1] || "In"]; }
   function exportKeys(clip) {
     if (clip.interp !== "spline" || !clip.keys || clip.keys.length < 2) return clip.keys;
     const fps = clip.fps || 30; let step = 1 / fps; const frames = Math.round(clip.duration * fps);
@@ -1509,7 +1620,8 @@
       const markers = []; const st = (clip.stages || []).find((s) => Math.abs(s.t0 - key.t) < 1e-6 && s.marker);
       if (st) markers.push({ name: st.marker, value: st.name });
       if (key.tag === "impact") markers.push({ name: "impact", value: key.stage || "" });
-      return { t: key.t, easing: { style: (key.ease || ["CubicV2", "Out"])[0], direction: (key.ease || ["CubicV2", "Out"])[1] }, markers, poses };
+      const re = robloxEase(key.ease);
+      return { t: key.t, easing: { style: re[0], direction: re[1] }, markers, poses };
     });
     return { rigType: type, keyframes: out, bones: JOINTS.filter((j) => map[j]).map((j) => map[j]), dropped, rootBone: rigInfo.bones.find((b) => !rigInfo.bones.some((x) => x.name === b.parent)) ? (rigInfo.bones.find((b) => !rigInfo.bones.some((x) => x.name === b.parent)) || {}).parent || "HumanoidRootPart" : "HumanoidRootPart" };
   }
@@ -1525,7 +1637,7 @@
       const sem = foldForRig(key.poses, type);
       const p = joints.map((j) => { const q = sem[j] || J(0, 0, 0); const arr = [r2(q.rot[0]), r2(q.rot[1]), r2(q.rot[2])]; if (q.pos && (q.pos[0] || q.pos[1] || q.pos[2])) arr.push(r3(q.pos[0]), r3(q.pos[1]), r3(q.pos[2])); return arr; });
       const m = []; const st = (clip.stages || []).find((s) => Math.abs(s.t0 - key.t) < 1e-6 && s.marker); if (st) m.push([st.marker, st.name]); if (key.tag === "impact") m.push(["impact", key.stage || ""]);
-      return { t: key.t, e: key.ease || ["CubicV2", "Out"], m, p };
+      return { t: key.t, e: robloxEase(key.ease), m, p };
     });
     return { name: clip.name, duration: clip.duration, loop: !!clip.loop, priority: clip.priority || "Action", fps: clip.fps, prompt: clip.prompt || "", quality: clip.quality || "balanced", params: JSON.stringify(clip.params || {}), engine: VERSION, overwrite: opts.overwrite !== false, anim_saves: opts.animSaves !== false, bones: joints.map((j) => map[j]), keys, rigType: type, dropped: JOINTS.filter((j) => !map[j]) };
   }
@@ -1874,7 +1986,7 @@
     return lines.join("\n");
   }
 
-  const api = { VERSION, JOINTS, PARENT, PIVOT, LIMITS, QUALITY, R15_BONES, R6_BONES, R6_C0, PRIORITY_TOKEN, EASING_TOKEN, parseIntent, generate, generateSequence, validate, refine, applyFeedback, variation, toStudio, toBuildArgs, toRbxmx, defaultRigInfo, detectRigType, boneMap, sampleAt, forwardKinematics, fkFull, metrics, serializeProject, parseProject, retime, moveKey, setJoint, duplicateKey, deleteKey, smooth, smoothness, simplify, reverse, bake, cycleOffset, insertKey, layer, ikSolve, groundFeet, copyPose, pastePose, channels, mirrorPose, easeAlpha, exportKeys, setInterp, ACTS, MOODS, findActs, findMood, posePhrase, splitClauses, concatClips, applyMood, UPPER_JOINTS, LOWER_JOINTS, EFFECTORS, TIP, ROOT_HEIGHT, compare, summary, mirror, fingerprint, similarity, persona, choreograph, STRIKE_POOL, math: { eulerYXZ, toEulerYXZ, mul, transpose, mulV, flat, from9 } };
+  const api = { VERSION, JOINTS, PARENT, PIVOT, LIMITS, QUALITY, R15_BONES, R6_BONES, R6_C0, PRIORITY_TOKEN, EASING_TOKEN, parseIntent, generate, generateSequence, generateSet, splitSet, compatibility, describeSet, stanceDistance, setPriority, validate, refine, applyFeedback, variation, toStudio, toBuildArgs, toRbxmx, defaultRigInfo, detectRigType, boneMap, sampleAt, forwardKinematics, fkFull, metrics, serializeProject, parseProject, retime, moveKey, setJoint, duplicateKey, deleteKey, smooth, smoothness, simplify, reverse, bake, cycleOffset, insertKey, layer, ikSolve, groundFeet, copyPose, pastePose, channels, mirrorPose, easeAlpha, exportKeys, robloxEase, setInterp, ACTS, MOODS, findActs, findMood, posePhrase, splitClauses, concatClips, applyMood, UPPER_JOINTS, LOWER_JOINTS, EFFECTORS, TIP, ROOT_HEIGHT, compare, summary, mirror, fingerprint, similarity, persona, choreograph, STRIKE_POOL, math: { eulerYXZ, toEulerYXZ, mul, transpose, mulV, flat, from9 } };
   root.ORAnimEngine = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);
