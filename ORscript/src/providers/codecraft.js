@@ -1415,6 +1415,16 @@ const RSProvider = (() => {
     id: "codecraft",
     displayName: "CodeCraft API",
     supportsVision: true,
+    // 1.60: Reasoning effort hook - ORReasoning maps the effort level to an
+    // OpenAI-style reasoning_effort ("" | low | medium | high) and calls this.
+    async setReasoningMode(modeId, rule) {
+      const v = rule && typeof rule.value === "string" ? rule.value : (modeId === "default" ? "" : String(modeId || ""));
+      if (!/^(|low|medium|high)$/.test(v)) return { ok: false, how: "hook", reason: "unknown reasoning_effort " + v };
+      if ((settings.reasoning || "") === v) return { ok: true, how: "already" };
+      await saveSettings({ reasoning: v });
+      try { if (ui.reasoning) ui.reasoning.value = v; } catch {}
+      return { ok: true, how: "hook", verified: true };
+    },
     reliableCounts: true,
     commandsMayAppearInThinking: false,
     // Every token is billed against the user's plan: ship the compact command

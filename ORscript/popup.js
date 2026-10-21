@@ -156,9 +156,10 @@ async function setWorkMode(id) {
   settings.extra = p.extra;
   renderSettings();
   try {
+    // 1.60: the reasoning effort is its own setting (Settings → Reasoning
+    // effort, rsThinkingLevel) - picking a work mode no longer overwrites it.
     await chrome.storage.local.set({
       rsWorkMode: id,
-      rsThinkingLevel: p.thinking,
       rsExtraThinking: p.extra,
     });
   } catch {}

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ORscript",
-  "version": "1.59.0",
+  "version": "1.60.0",
   "minimum_chrome_version": "111",
   "description": "Turn ChatGPT, Claude, DeepSeek, Gemini, Kimi, NVIDIA NIM Kimi K3, GLM, Qwen, Arena, Meta AI, Crax GPT, Notion AI or Ox Alpha into a Roblox Studio / AgentScript agent. Two engines (RS/AS), work modes, image-to-model, auto-fix playtest errors, and Extra Thinking.",
   "permissions": [
@@ -165,6 +165,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -229,6 +230,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -284,6 +286,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -336,6 +339,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -391,6 +395,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -453,6 +458,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -505,6 +511,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -557,6 +564,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -610,6 +618,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -672,6 +681,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -734,6 +744,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -789,6 +800,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -841,6 +853,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -893,6 +906,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -957,6 +971,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
@@ -1013,6 +1028,7 @@
         "src/core/guistudio_templates.js",
         "src/core/guistudio.js",
         "src/core/animstudio.js",
+        "src/core/reasoning.js",
         "src/core/public_skills.js",
         "src/core/tasklist.js",
         "src/core/main.js"
