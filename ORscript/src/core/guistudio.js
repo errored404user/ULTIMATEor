@@ -111,11 +111,11 @@
   const DEFAULT_SIZE = { Frame: [320, 200], TextLabel: [240, 40], TextButton: [200, 52], ImageLabel: [120, 120], ImageButton: [64, 64], TextBox: [260, 44], ScrollingFrame: [300, 240], CanvasGroup: [320, 200] };
   const CLASS_ICON = { Frame: "frame", TextLabel: "text", TextButton: "button", ImageLabel: "image", ImageButton: "ibutton", TextBox: "textbox", ScrollingFrame: "scroll", CanvasGroup: "canvas" };
   const CLASSES = Object.keys(CLASS_ICON);
-  const FONTS = ["Gotham", "GothamMedium", "GothamBold", "GothamBlack", "SourceSans", "SourceSansBold", "Arial", "ArialBold", "Roboto", "RobotoMono", "FredokaOne", "Bangers", "Arcade", "PressStart2P", "Creepster", "Garamond", "Antique", "Merriweather", "Nunito", "Oswald", "Ubuntu", "Michroma", "Jura", "Fantasy", "Sarpanch", "Highway", "Bodoni", "SciFi", "Code", "Cartoon", "Legacy"];
-  const FONT_CSS = { Gotham: "Montserrat, 'Segoe UI', Arial, sans-serif", GothamMedium: "Montserrat, 'Segoe UI', Arial, sans-serif", GothamBold: "Montserrat, 'Segoe UI', Arial, sans-serif", GothamBlack: "Montserrat, 'Segoe UI', Arial, sans-serif", SourceSans: "'Source Sans Pro', 'Segoe UI', Arial, sans-serif", SourceSansBold: "'Source Sans Pro', 'Segoe UI', Arial, sans-serif", Arial: "Arial, sans-serif", ArialBold: "Arial, sans-serif", Roboto: "Roboto, Arial, sans-serif", RobotoMono: "'Roboto Mono', Consolas, monospace", Code: "Consolas, monospace", FredokaOne: "'Fredoka One', 'Comic Sans MS', cursive", Bangers: "Bangers, Impact, sans-serif", Arcade: "'Press Start 2P', monospace", PressStart2P: "'Press Start 2P', monospace", Creepster: "Creepster, 'Chiller', fantasy", Garamond: "Garamond, 'Times New Roman', serif", Antique: "'Bookman Old Style', serif", Merriweather: "Merriweather, Georgia, serif", Nunito: "Nunito, 'Segoe UI', sans-serif", Oswald: "Oswald, Impact, sans-serif", Michroma: "Michroma, 'Arial Black', sans-serif", Fantasy: "fantasy", Cartoon: "'Comic Sans MS', cursive", Legacy: "Arial, sans-serif", Bodoni: "'Bodoni MT', Didot, serif", Highway: "'Arial Narrow', sans-serif", SciFi: "Orbitron, 'Arial Black', sans-serif" };
+  const FONTS = ["Gotham", "GothamMedium", "GothamBold", "GothamBlack", "SourceSans", "SourceSansBold", "Arial", "ArialBold", "Roboto", "RobotoMono", "FredokaOne", "Bangers", "Arcade", "SpecialElite", "Creepster", "Garamond", "Antique", "Merriweather", "Nunito", "Oswald", "Ubuntu", "Michroma", "Jura", "Fantasy", "Sarpanch", "Highway", "Bodoni", "SciFi", "Code", "Cartoon", "Legacy"];
+  const FONT_CSS = { Gotham: "Montserrat, 'Segoe UI', Arial, sans-serif", GothamMedium: "Montserrat, 'Segoe UI', Arial, sans-serif", GothamBold: "Montserrat, 'Segoe UI', Arial, sans-serif", GothamBlack: "Montserrat, 'Segoe UI', Arial, sans-serif", SourceSans: "'Source Sans Pro', 'Segoe UI', Arial, sans-serif", SourceSansBold: "'Source Sans Pro', 'Segoe UI', Arial, sans-serif", Arial: "Arial, sans-serif", ArialBold: "Arial, sans-serif", Roboto: "Roboto, Arial, sans-serif", RobotoMono: "'Roboto Mono', Consolas, monospace", Code: "Consolas, monospace", FredokaOne: "'Fredoka One', 'Comic Sans MS', cursive", Bangers: "Bangers, Impact, sans-serif", Arcade: "'Press Start 2P', monospace", SpecialElite: "'Special Elite', 'Courier New', monospace", Creepster: "Creepster, 'Chiller', fantasy", Garamond: "Garamond, 'Times New Roman', serif", Antique: "'Bookman Old Style', serif", Merriweather: "Merriweather, Georgia, serif", Nunito: "Nunito, 'Segoe UI', sans-serif", Oswald: "Oswald, Impact, sans-serif", Michroma: "Michroma, 'Arial Black', sans-serif", Fantasy: "fantasy", Cartoon: "'Comic Sans MS', cursive", Legacy: "Arial, sans-serif", Bodoni: "'Bodoni MT', Didot, serif", Highway: "'Arial Narrow', sans-serif", SciFi: "Orbitron, 'Arial Black', sans-serif" };
   const BOLD_FONTS = new Set(["GothamBold", "GothamBlack", "SourceSansBold", "ArialBold", "Bangers", "FredokaOne", "Oswald", "Michroma"]);
   const TOKEN_KEYS = ["bg", "surface", "surface2", "primary", "accent", "text", "muted", "danger", "success", "stroke"];
-  const FALLBACK_PRESETS = { midnight: { bg: "#0f1115", surface: "#171a21", surface2: "#1f2430", primary: "#4f7cff", accent: "#7c5cff", text: "#f2f4f8", muted: "#9aa3b2", danger: "#ff5c5c", success: "#3ddc84", font: "GothamMedium", title_font: "GothamBold", radius: 10, stroke: "#2a3140", stroke_t: 0.2 } };
+  const FALLBACK_PRESETS = { midnight: { bg: "#0f1115", surface: "#171a21", surface2: "#1f2430", primary: "#4f7cff", accent: "#7c5cff", text: "#f2f4f8", muted: "#9aa3b2", danger: "#ff5c5c", success: "#2fbf72", font: "GothamMedium", title_font: "GothamBold", radius: 10, stroke: "#2a3140", stroke_t: 0.2 } };
   const ACTION_DOS = ["toggle", "open", "close", "destroy", "print", "sound", "remote", "tween_in", "auto_hide", "pulse", "hover_grow", "hover_tint", "switch", "check", "tab", "pick_option", "select_slot", "slider", "bind_health", "bind_avatar", "show_while_hover", "focus_ring"];
   const ACTION_ONS = ["click", "hover", "enable", "focus", "drag", "parent_hover"];
   const SCALE_TYPES = ["Stretch", "Fit", "Crop", "Tile", "Slice"];
@@ -163,6 +163,27 @@
     return fallback || null;
   }
   function tokenNum(v, fallback) { if (v == null || v === "") return fallback; if (typeof v === "number") return v; const t = S.tokens[String(v)]; if (typeof t === "number") return t; const n = Number(v); return Number.isFinite(n) ? n : fallback; }
+  // 1.57: what is actually behind an element (its own fill, else the nearest painted ancestor, else null = the 3D world)
+  function nodeFill(n) {
+    const bgT = n.bg_t != null ? tokenNum(n.bg_t, 0) : (n.bg == null && (n.class === "TextLabel" || n.class === "ImageLabel") ? 1 : 0);
+    if (bgT >= 0.6) return null;
+    if (n.gradient) { const g = typeof n.gradient === "object" ? n.gradient : {}; const a = tokenColor(g.from || g[0], tokenColor("primary", "#4f7cff")), b = tokenColor(g.to || g[1], tokenColor("accent", "#7c5cff")); return mixHex(a, b, 0.5); }
+    return tokenColor(n.bg, n.class === "TextLabel" ? null : "#1f2430");
+  }
+  function effectiveBg(n) { let c = n; while (c) { const f = nodeFill(c); if (f) return f; c = parentOf(c); } return null; }
+  function hexRgb(hex) { const h = String(hex || "").replace("#", ""); if (!/^[0-9a-f]{6}$/i.test(h)) return [0, 0, 0]; return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+  function mixHex(a, b, t) { const A = hexRgb(a), B = hexRgb(b); return "#" + A.map((v, i) => clamp(Math.round(v * (1 - t) + B[i] * t), 0, 255).toString(16).padStart(2, "0")).join(""); }
+  function luminance(hex) { const [r, g, b] = hexRgb(hex).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+  function contrastRatio(a, b) { const la = luminance(a), lb = luminance(b); const hi = Math.max(la, lb), lo = Math.min(la, lb); return (hi + 0.05) / (lo + 0.05); }
+  // text_color "auto" (1.57): white-ish on dark fills, near-black on light fills - the theme's `text` token when it already fits
+  function autoTextColor(n) {
+    const bg = effectiveBg(n); const text = tokenColor("text", "#f2f4f8");
+    if (!bg) return luminance(text) >= 0.4 ? text : "#ffffff"; // floating over the world: assume dark-ish scenery, add a stroke in check()
+    // white when it reads at AA-large (>= 3:1) on this fill, otherwise near-black (gold, cyan, mint and pastel fills)
+    if (contrastRatio("#ffffff", bg) >= 3) return luminance(text) >= 0.5 && contrastRatio(text, bg) >= 3 ? text : "#ffffff";
+    return luminance(text) < 0.3 && contrastRatio(text, bg) >= 4 ? text : "#15171c";
+  }
+  function resolveTextColor(n) { const v = n.text_color; if (v === "auto") return autoTextColor(n); return tokenColor(v || "text", "#ffffff"); }
   function tokenFont(v) { if (v == null || v === "") return S.tokens.font || "GothamMedium"; const t = S.tokens[String(v)]; return typeof t === "string" ? t : String(v); }
   const fin = (v, d = 0) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
   function cleanName(v, fallback) { let s = String(v == null ? "" : v).replace(/\./g, "_").replace(/[\r\n\t]+/g, " ").trim().slice(0, 100); return s || fallback || "Frame"; }
@@ -409,7 +430,7 @@
     const inner = { w: Math.max(0, box.w - pad.l - pad.r), h: Math.max(0, box.h - pad.t - pad.b) };
     const scaled = !!(n.text_scaled || n.text_size == null);
     const size = textSizeFor(n, inner);
-    const col = tokenColor(n.text_color || "text", "#ffffff");
+    const col = resolveTextColor(n);
     const ax = String(n.align_x || "Center").toLowerCase(), ay = String(n.align_y || "Center").toLowerCase();
     const jc = ax === "left" ? "flex-start" : ax === "right" ? "flex-end" : "center";
     const ai = ay === "top" ? "flex-start" : ay === "bottom" ? "flex-end" : "center";
@@ -494,8 +515,8 @@
   const sel = (k, v, opts, allowEmpty) => `<select data-k="${k}">${allowEmpty ? `<option value="">—</option>` : ""}${opts.map((o) => `<option value="${esc(o)}" ${String(v) === String(o) ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
   function colorField(k, v, allowToken) {
     const hex = tokenColor(v, "#000000");
-    const isTok = typeof v === "string" && v[0] !== "#" && S.tokens[v] != null;
-    return `<span class="rsg-color"><input data-k="${k}" data-kind="color" type="color" value="${esc(hex)}">${allowToken !== false ? sel(k + "@tok", isTok ? v : "", TOKEN_KEYS, true) : ""}<input data-k="${k}" data-kind="raw" type="text" value="${esc(v == null ? "" : typeof v === "object" ? JSON.stringify(v) : v)}" placeholder="#hex / token"></span>`;
+    const isTok = typeof v === "string" && v[0] !== "#" && (S.tokens[v] != null || v === "auto");
+    return `<span class="rsg-color"><input data-k="${k}" data-kind="color" type="color" value="${esc(hex)}">${allowToken !== false ? sel(k + "@tok", isTok ? v : "", k === "text_color" ? ["auto"].concat(TOKEN_KEYS) : TOKEN_KEYS, true) : ""}<input data-k="${k}" data-kind="raw" type="text" value="${esc(v == null ? "" : typeof v === "object" ? JSON.stringify(v) : v)}" placeholder="#hex / token"></span>`;
   }
   function udimField(k, arr) { return `<span class="rsg-udim"><input data-k="${k}.0" type="number" step="0.01" value="${arr[0]}" title="Scale X"><input data-k="${k}.1" type="number" step="1" value="${arr[1]}" title="Offset X"><input data-k="${k}.2" type="number" step="0.01" value="${arr[2]}" title="Scale Y"><input data-k="${k}.3" type="number" step="1" value="${arr[3]}" title="Offset Y"></span>`; }
   function renderProps() {
@@ -530,7 +551,7 @@
       </div>
       <div class="rsg-sec"><h4>Look</h4>
         ${field("Fill colour", `<span class="rsg-color"><input data-sk="bg" type="color" value="${esc(tokenColor(n.bg, "#1f2430") || "#1f2430")}"><label class="rsg-mini"><input data-sk="bg_none" type="checkbox" ${bgHidden ? "checked" : ""}> no fill</label></span>`)}
-        ${isText ? field("Text colour", `<input data-sk="text_color" type="color" value="${esc(tokenColor(n.text_color || "text", "#ffffff"))}">`) : ""}
+        ${isText ? field("Text colour", `<span class="rsg-inline"><input data-sk="text_color" type="color" value="${esc(resolveTextColor(n))}"><label class="rsg-mini"><input data-sk="text_auto" type="checkbox" ${n.text_color === "auto" ? "checked" : ""}> auto</label></span>`, "auto = readable on the fill behind it (white on dark, near-black on light) - the right choice for buttons and pills") : ""}
         ${isText ? field("Text size", `<span class="rsg-inline">${sk("text_size", n.text_size != null ? n.text_size : "", "number", 'min="6" placeholder="auto"')}<span class="rsg-mini">px (empty = fit)</span></span>`) : ""}
         ${field("Rounded corners", `<span class="rsg-inline">${sk("corner", n.corner != null ? (typeof n.corner === "number" ? n.corner : tokenNum(n.corner, 10)) : 0, "number", 'min="0"')}<span class="rsg-mini">px</span></span>`)}
         ${field("Visible", `<input data-sk="visible" type="checkbox" ${n.visible === false ? "" : "checked"}>`)}
@@ -557,6 +578,7 @@
     if (k === "bg") { n.bg = v; if (n.bg_t != null && tokenNum(n.bg_t, 0) >= 1) delete n.bg_t; return; }
     if (k === "bg_none") { if (el.checked) n.bg_t = 1; else { delete n.bg_t; if (n.bg == null) n.bg = "surface"; } return; }
     if (k === "text_color") { n.text_color = v; return; }
+    if (k === "text_auto") { n.text_color = el.checked ? "auto" : resolveTextColor(n); return; }
     if (k === "text_size") { if (v === "") { delete n.text_size; n.text_scaled = true; } else { n.text_size = Math.max(6, Number(v) || 16); delete n.text_scaled; } return; }
     if (k === "corner") { const c = Number(v) || 0; if (c <= 0) delete n.corner; else n.corner = c; return; }
     if (k === "visible") { if (el.checked) delete n.visible; else n.visible = false; return; }
@@ -697,7 +719,8 @@
   function renderTheme() {
     if (!D || S.sideTab !== "theme") return;
     const P = presets();
-    D.theme.innerHTML = `<div class="rsg-sec"><h4>Preset</h4><div class="rsg-presets">${Object.keys(P).map((k) => `<button type="button" class="rsg-preset${S.preset === k ? " on" : ""}" data-preset="${k}" style="--a:${P[k].primary};--b:${P[k].accent};--s:${P[k].surface}"><i></i>${esc(k.replace(/_/g, " "))}</button>`).join("")}</div></div>
+    D.theme.innerHTML = `<div class="rsg-sec"><h4>Preset</h4><div class="rsg-presets">${Object.keys(P).map((k) => `<button type="button" class="rsg-preset${S.preset === k ? " on" : ""}" data-preset="${k}" style="--a:${P[k].primary};--b:${P[k].accent};--s:${P[k].surface};--t:${P[k].text};--bg:${P[k].bg}" title="${esc(k.replace(/_/g, " "))} · ${luminance(P[k].bg) > 0.5 ? "light theme (bright on screen - good for menus over a dim scene)" : "dark theme"} · ${P[k].font} / ${P[k].title_font}"><i><em>Aa</em></i>${esc(k.replace(/_/g, " "))}<small>${luminance(P[k].bg) > 0.5 ? "light" : "dark"}</small></button>`).join("")}</div>
+      <p class="rsg-hint">Light themes are bright by design - use them for menus over a dimmed scene. Text set to <code>auto</code> stays readable on every fill.</p></div>
       <div class="rsg-sec"><h4>Tokens</h4>${TOKEN_KEYS.map((k) => field(k, `<span class="rsg-color"><input data-tok="${k}" type="color" value="${esc(tokenColor(S.tokens[k], "#000000"))}"><input data-tok="${k}" data-kind="raw" type="text" value="${esc(S.tokens[k] || "")}"></span>`)).join("")}
         ${field("stroke_t", `<input data-tok="stroke_t" type="number" min="0" max="1" step="0.05" value="${esc(S.tokens.stroke_t != null ? S.tokens.stroke_t : 0.2)}">`)}
         ${field("radius", `<input data-tok="radius" type="number" min="0" step="1" value="${esc(S.tokens.radius != null ? S.tokens.radius : 10)}">`)}
@@ -734,6 +757,13 @@
     const nodes = t.build();
     S.screen.name = t.screen;
     S.nodes = nodes.map((n) => adopt(n, null));
+    // 1.57: HUD-style screens (nothing covering the whole screen) sit BELOW the Roblox top bar; full-screen menus keep ignoring the inset
+    const fullscreen = S.nodes.some((n) => Array.isArray(n.size) && n.size[0] >= 0.98 && n.size[2] >= 0.98 && n.visible !== false);
+    S.screen.ignore_inset = fullscreen;
+    reindex(); computeGeometry();
+    const strokeFloating = (list) => { for (const n of list) { if (/^(TextLabel)$/.test(n.class) && n.text && !n.text_stroke && !effectiveBg(n)) n.text_stroke = { color: "#000000", transparency: 0.35 }; strokeFloating(n.children || []); } };
+    strokeFloating(S.nodes);
+    S.lastTemplate = t.id;
     { const seen = new Set(); for (const c of S.nodes) { if (seen.has(c.name)) c.name = uniqueName(S.nodes.filter((x) => x !== c), c.name); seen.add(c.name); } }
     S.sel = []; S.issues = null; closeGallery(); reindex(); renderAll(); renderTheme();
     toast(`Template "${t.label}" loaded${t.preset ? " · theme " + t.preset.replace(/_/g, " ") : ""}`);
@@ -809,6 +839,13 @@
         else if (n.visible !== false && (b.x + b.w <= sb.x || b.y + b.h <= sb.y || b.x >= sb.x + sb.w || b.y >= sb.y + sb.h)) add("warn", n, "is completely off-screen on this device");
         else if (n.visible !== false && (b.x < sb.x - 0.5 || b.y < sb.y - 0.5 || b.x + b.w > sb.x + sb.w + 0.5 || b.y + b.h > sb.y + sb.h + 0.5)) add("info", n, "sticks out of the screen edge");
         if (p && p.clips && p.class !== "ScrollingFrame") { const pb = geo.get(p.id); if (pb && (b.x < pb.x - 0.5 || b.y < pb.y - 0.5 || b.x + b.w > pb.x + pb.w + 0.5 || b.y + b.h > pb.y + pb.h + 0.5)) add("warn", n, `is cut off by ${p.name} (ClipsDescendants)`); }
+        if (n.visible !== false && S.screen.ignore_inset !== false && sb.y === 0 && b.y < S.device.inset && b.h < sb.h * 0.8 && b.w < sb.w * 0.8 && b.x < 420 && !p) add("warn", n, `sits under the Roblox top bar (menu / chat buttons, ${S.device.inset} px) — move it below y=${S.device.inset} or turn off "Ignore top inset" so the whole screen shifts down`);
+        if (/^(TextLabel|TextButton|TextBox)$/.test(n.class) && n.text && n.visible !== false) {
+          const bg = effectiveBg(n); const col = resolveTextColor(n);
+          if (bg && col) { const cr = contrastRatio(col, bg); if (cr < 2.2) add("warn", n, `text is hard to read (${cr.toFixed(1)}:1 ${col} on ${bg}) — set Text colour to auto, or pick a darker / lighter fill`); }
+          if (!bg && !n.text_stroke && !/Button$/.test(n.class)) add("info", n, "floats over the 3D world without a backdrop — add a text stroke (Props → Text stroke) so it stays readable on bright scenes");
+        }
+        if (p && !p.clips && p.class !== "ScrollingFrame" && n.visible !== false && inLayout(n)) { const pb = geo.get(p.id); if (pb && (b.x + b.w > pb.x + pb.w + 8 || b.y + b.h > pb.y + pb.h + 8)) add("warn", n, `overflows ${p.name} by ${Math.round(Math.max(b.x + b.w - pb.x - pb.w, b.y + b.h - pb.y - pb.h))} px (list / grid content bigger than the box) — enlarge ${p.name}, make it a ScrollingFrame, or shrink the items`); }
         if (/^(ImageLabel|ImageButton)$/.test(n.class) && !n.image) add("warn", n, "has no image id yet (shows as a plain box in Roblox)");
         if (/^(ImageLabel|ImageButton)$/.test(n.class) && n.image && !/^(rbxassetid:\/\/\d+|rbxasset:\/\/|https?:\/\/|rbxthumb:\/\/|\d+$)/.test(String(n.image))) add("warn", n, `image "${String(n.image).slice(0, 40)}" is not an rbxassetid:// id`);
         if (/^(TextLabel|TextButton|TextBox)$/.test(n.class) && n.text && n.text_size != null && !n.text_scaled && b.w > 0) { const pad = padOf(n); const f = fontOf(n); const r = wrapLines(n.text, f.fam, tokenNum(n.text_size, 14), f.bold, Math.max(0, b.w - pad.l - pad.r)); const needH = r.lines * tokenNum(n.text_size, 14) * LINE_H; if (!n.wrap && !r.fits) add("warn", n, `text "${String(n.text).slice(0, 24)}" is wider than the box — enable scaled / wrap or widen it`); else if (needH > b.h - pad.t - pad.b + 0.5) add("warn", n, "text is taller than the box — reduce the size or enlarge it"); }
@@ -1128,7 +1165,7 @@
       if (n.bg != null) out.push(`${v}.BackgroundColor3 = ${luaColor(n.bg)}`);
       const bt = n.bg_t != null ? tokenNum(n.bg_t, 0) : (n.bg == null && (n.class === "TextLabel" || n.class === "ImageLabel") ? 1 : null); if (bt != null) out.push(`${v}.BackgroundTransparency = ${bt}`);
       if (n.rotation) out.push(`${v}.Rotation = ${n.rotation}`); if (n.clips) out.push(`${v}.ClipsDescendants = true`); if (n.automatic_size) out.push(`${v}.AutomaticSize = Enum.AutomaticSize.${n.automatic_size}`);
-      if (isText) { out.push(`${v}.Text = ${luaStr(n.text != null ? n.text : "")}`, `${v}.Font = Enum.Font.${luaFont(n.font)}`, `${v}.TextColor3 = ${luaColor(n.text_color || "text")}`); if (n.text_size != null && !n.text_scaled && !n.text_fit) out.push(`${v}.TextSize = ${fin(tokenNum(n.text_size, 14), 14)}`, `${v}.TextScaled = false`); else out.push(`${v}.TextScaled = true`); if (n.align_x) out.push(`${v}.TextXAlignment = Enum.TextXAlignment.${n.align_x}`); if (n.align_y) out.push(`${v}.TextYAlignment = Enum.TextYAlignment.${n.align_y}`); if (n.wrap) out.push(`${v}.TextWrapped = true`); if (n.rich) out.push(`${v}.RichText = true`); if (n.text_t) out.push(`${v}.TextTransparency = ${n.text_t}`); if (n.text_stroke) out.push(`${v}.TextStrokeTransparency = ${typeof n.text_stroke === "object" && n.text_stroke.transparency != null ? n.text_stroke.transparency : 0.5}`, `${v}.TextStrokeColor3 = ${luaColor(typeof n.text_stroke === "object" ? n.text_stroke.color : "#000000")}`); if (n.class === "TextBox") { if (n.placeholder) out.push(`${v}.PlaceholderText = ${luaStr(n.placeholder)}`); if (n.placeholder_color) out.push(`${v}.PlaceholderColor3 = ${luaColor(n.placeholder_color)}`); out.push(`${v}.ClearTextOnFocus = false`); } }
+      if (isText) { out.push(`${v}.Text = ${luaStr(n.text != null ? n.text : "")}`, `${v}.Font = Enum.Font.${luaFont(n.font)}`, `${v}.TextColor3 = ${luaColor(resolveTextColor(n))}`); if (n.text_size != null && !n.text_scaled && !n.text_fit) out.push(`${v}.TextSize = ${fin(tokenNum(n.text_size, 14), 14)}`, `${v}.TextScaled = false`); else out.push(`${v}.TextScaled = true`); if (n.align_x) out.push(`${v}.TextXAlignment = Enum.TextXAlignment.${n.align_x}`); if (n.align_y) out.push(`${v}.TextYAlignment = Enum.TextYAlignment.${n.align_y}`); if (n.wrap) out.push(`${v}.TextWrapped = true`); if (n.rich) out.push(`${v}.RichText = true`); if (n.text_t) out.push(`${v}.TextTransparency = ${n.text_t}`); if (n.text_stroke) out.push(`${v}.TextStrokeTransparency = ${typeof n.text_stroke === "object" && n.text_stroke.transparency != null ? n.text_stroke.transparency : 0.5}`, `${v}.TextStrokeColor3 = ${luaColor(typeof n.text_stroke === "object" ? n.text_stroke.color : "#000000")}`); if (n.class === "TextBox") { if (n.placeholder) out.push(`${v}.PlaceholderText = ${luaStr(n.placeholder)}`); if (n.placeholder_color) out.push(`${v}.PlaceholderColor3 = ${luaColor(n.placeholder_color)}`); out.push(`${v}.ClearTextOnFocus = false`); } }
       if (isImg) { if (n.image) out.push(`${v}.Image = ${luaStr(/^\d+$/.test(String(n.image)) ? "rbxassetid://" + n.image : n.image)}`); if (n.image_color) out.push(`${v}.ImageColor3 = ${luaColor(n.image_color)}`); if (n.image_t) out.push(`${v}.ImageTransparency = ${n.image_t}`); if (n.scale_type) out.push(`${v}.ScaleType = Enum.ScaleType.${n.scale_type}`); if (n.slice) out.push(`${v}.SliceCenter = Rect.new(${n.slice.join(", ")})`); }
       if (n.class === "ScrollingFrame") { const sc = n.scroll || {}; out.push(`${v}.ScrollBarThickness = ${tokenNum(sc.thickness, 6)}`, `${v}.AutomaticCanvasSize = Enum.AutomaticSize.${sc.auto || "Y"}`, `${v}.CanvasSize = UDim2.new(0, 0, 0, 0)`); }
       if (n.attrs) for (const [ak, av] of Object.entries(n.attrs)) out.push(`${v}:SetAttribute(${luaStr(ak)}, ${typeof av === "string" ? luaStr(av) : av})`);
@@ -1191,11 +1228,19 @@
     setStatus("Building in Roblox Studio…"); D.buildBtn.disabled = true;
     autosaveNow();
     try {
+      // 1.57: templates build under different ScreenGui names (HUD, Shop, Settings…) - stop them piling up in StarterGui
+      S.builtScreens = S.builtScreens || [];
+      const stale = S.builtScreens.filter((nm) => nm !== S.screen.name);
+      if (stale.length && confirm(`You already built ${stale.map((x) => '"' + x + '"').join(", ")} from GUI Studio in this session.\n\nOK = remove ${stale.length === 1 ? "it" : "them"} from StarterGui and keep only "${S.screen.name}"\nCancel = keep every screen`)) {
+        for (const nm of stale) { try { await S.hooks.runTool("instance_destroy", { path: "StarterGui." + nm }); } catch {} }
+        S.builtScreens = S.builtScreens.filter((nm) => !stale.includes(nm)); diag("removedStale", { screens: stale });
+      }
       const fb = await S.hooks.runTool("ui_build_spec", { spec: getSpec(), replace: true });
       const r = parseFeedback(fb);
       if (r && r.ok) {
         const warns = issues.filter((i) => i.level === "warn").length;
         let msg = `Built ${r.data && r.data.count} object(s) in ${r.data && r.data.screen}${r.data && r.data.behaviours ? " · " + r.data.behaviours + " behaviours" : ""}${warns ? " · " + warns + " warning" + (warns === 1 ? "" : "s") + " (Check)" : ""}`;
+        if (!S.builtScreens.includes(S.screen.name)) S.builtScreens.push(S.screen.name);
         setStatus(msg); toast("Built in Studio"); diag("built", { count: r.data && r.data.count, warnings: warns });
         const v = await verifyInStudio(r.data && r.data.screen); if (v) setStatus(msg + " · " + v);
       }

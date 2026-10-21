@@ -333,7 +333,7 @@ setTimeout(async () => {
     ok("source: renderAll has an error boundary that undoes the last change", studio.includes('toast("Something went wrong while drawing — the last change was undone")'));
     ok("source: stage re-renders during drags are coalesced into animation frames", studio.includes("function renderStageSoon()") && studio.includes("renderStageSoon(); showGuides(gx, gy);"));
     ok("source: live colour drags push history once (undo reverts the colour)", studio.includes("const pushUnlessLive = (k) => { if (liveKey === k) { liveKey = null; return; } liveKey = null; pushHistory(); };"));
-    ok("source: autosave is saved before unload and before every build", studio.includes('window.addEventListener("beforeunload", () => { if (S.nodes.length) autosaveNow(); });') && studio.includes("autosaveNow();\n    try {\n      const fb = await S.hooks.runTool(\"ui_build_spec\""));
+    ok("source: autosave is saved before unload and before every build", studio.includes('window.addEventListener("beforeunload", () => { if (S.nodes.length) autosaveNow(); });') && studio.includes("autosaveNow();\n    try {\n      // 1.57: templates build under different ScreenGui names") && studio.includes('const fb = await S.hooks.runTool("ui_build_spec", { spec: getSpec(), replace: true });'));
     ok("source: an autosaved design is offered back on an empty open (Restore it / Start fresh) and never wiped by an empty render", studio.includes('<button type="button" class="rsg-btn sm primary" data-act="restore">Restore it</button><button type="button" class="rsg-btn sm" data-act="restoreDismiss">Start fresh</button>') && studio.includes("function autosaveNow() { if (!S.nodes.length) return;") && studio.includes("const saved = loadAutosave(); if (saved) {"));
     ok("css: text is no longer padded or clipped (Roblox draws text edge to edge and lets it overflow) + inline edit + restore + issues styles", css.includes(".rsg-txt { position: absolute; inset: 0; display: flex; padding: 0; overflow: visible;") && css.includes(".rsg-txt.editing {") && css.includes(".rsg-restore { pointer-events: auto;") && css.includes(".rsg-issue.error i { background: #ff5c5c; }"));
     // adopt() sanitises hostile specs
@@ -393,6 +393,56 @@ setTimeout(async () => {
     host.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     ok("Escape closes the studio", !G.isOpen() && !w.document.documentElement.classList.contains("rs-gui-open"));
     G.open({}); ok("re-open without hooks hides Build / Import", G.isOpen() && host.querySelector('[data-act="build"]').hidden && host.querySelector('[data-act="import"]').hidden); G.close();
+    // ── 1.57: readable themes, templates that fit, tidy Studio builds ─────────
+    {
+      const presets = SK.GUI_TOKEN_PRESETS; const fonts = G._state && studio.match(/const FONTS = \[([^\]]+)\]/)[1];
+      ok("1.57: every preset font is a real Enum.Font name from the Studio font list (PressStart2P was not one - retro fell back silently)", Object.values(presets).every((P) => fonts.includes(`"${P.font}"`) && fonts.includes(`"${P.title_font}"`)) && !/PressStart2P/.test(pack) && !/PressStart2P/.test(studio), Object.values(presets).map((P) => P.font + "/" + P.title_font));
+      ok("1.57: light presets are softer (no pure-white surfaces / near-white backdrops) and horror's primary is a usable red", presets.clean_light.surface !== "#ffffff" && presets.candy.surface !== "#ffffff" && presets.sakura.surface !== "#ffffff" && presets.horror.primary !== "#8b0000" && presets.neon.stroke_t > 0.4);
+      ok("1.57: templates and components never hard-code white / near-black text on a token fill (text_color auto)", !/text_color: "#ffffff"/.test(tplLib) && !/text_color: "#1a1206"/.test(tplLib) && !/text_color: "#ffffff"/.test(pack) && /text_color: "auto"/.test(tplLib) && /text_color: "auto"/.test(pack));
+      ok("1.57: pills / badges / tags are opaque again (txt() made them bg_t 1 → white text floating on white cards)", tplLib.includes('const pill = (name, text, o) => txt(name, text, A({ size: [0, 72, 0, 22], bg: "primary", bg_t: 0, text_color: "auto"'));
+      // auto text colour in the preview
+      G.setMode("advanced");
+      G.loadSpec({ screen: { name: "Auto", ignore_inset: true }, preset: "clean_light", children: [{ class: "Frame", name: "Card", size: [0, 300, 0, 200], position: [0, 40, 0, 120], bg: "surface", children: [
+        { class: "TextLabel", name: "OnLight", text: "dark", size: [1, 0, 0, 30], bg_t: 1, text_color: "auto" },
+        { class: "TextButton", name: "Blue", text: "white", size: [0, 120, 0, 40], position: [0, 0, 0, 40], bg: "primary", text_color: "auto" },
+        { class: "TextButton", name: "Mint", text: "dark", size: [0, 120, 0, 40], position: [0, 0, 0, 90], bg: "#2fbf72", text_color: "auto" },
+        { class: "TextLabel", name: "Bad", text: "unreadable", size: [1, 0, 0, 30], position: [0, 0, 0, 140], bg_t: 1, text_color: "#f0f0f0" }] },
+        { class: "TextLabel", name: "Floating", text: "over the world", size: [0, 200, 0, 30], position: [0, 40, 0, 20], bg_t: 1 },
+        { class: "Frame", name: "Row", size: [0, 200, 0, 40], position: [0, 400, 0, 200], bg: "surface2", layout: { kind: "list", direction: "Horizontal", gap: 4 }, children: [1, 2, 3, 4].map((i) => ({ class: "Frame", name: "C" + i, size: [0, 80, 0, 30], bg: "primary" })) }] });
+      const colOf = (nm) => { const el = [...host.querySelectorAll(".rsg-n")].find((x) => G._state && byPath(G, nm) && x.dataset.id === byPath(G, nm).id); const t = el && el.querySelector(":scope > .rsg-txt"); const m = t && /color:(#[0-9a-f]{6})/i.exec(t.getAttribute("style")); return m ? m[1].toLowerCase() : null; };
+      ok("1.57: preview resolves text_color auto - near-black on the light card, white on the blue button, near-black on mint", colOf("Card.OnLight") === "#16181d" && colOf("Card.Blue") === "#ffffff" && colOf("Card.Mint") === "#16181d", [colOf("Card.OnLight"), colOf("Card.Blue"), colOf("Card.Mint")]);
+      const issues = G.check();
+      ok("1.57: Check flags unreadable text (contrast) with a fix hint", issues.some((i) => i.level === "warn" && i.path === "Card.Bad" && /hard to read .* on #fafbfd/.test(i.msg)), issues.filter((i) => i.path === "Card.Bad"));
+      ok("1.57: Check flags elements under the Roblox top bar when the screen ignores the inset", issues.some((i) => i.level === "warn" && i.path === "Floating" && /under the Roblox top bar/.test(i.msg)), issues.filter((i) => i.path === "Floating").map((i) => i.msg));
+      ok("1.57: Check flags floating text without a stroke (info) and list content overflowing its box (warn)", issues.some((i) => i.level === "info" && i.path === "Floating" && /floats over the 3D world/.test(i.msg)) && issues.some((i) => i.level === "warn" && /^Row\.C/.test(i.path) && /overflows Row by \d+ px/.test(i.msg)), issues.filter((i) => /^Row/.test(i.path)).map((i) => i.msg));
+      ok("1.57: 'Text colour: auto' is offered in the advanced colour token picker", studio.includes('k === "text_color" ? ["auto"].concat(TOKEN_KEYS) : TOKEN_KEYS') && studio.includes('data-sk="text_auto"'));
+      ok("1.57: generated Luau resolves auto too", /TextColor3 = Color3\.fromRGB\(22, 24, 29\)/.test(G.toLuau(G.getSpec())) && /TextColor3 = Color3\.fromRGB\(255, 255, 255\)/.test(G.toLuau(G.getSpec())));
+      // templates: HUDs sit below the top bar, menus with a backdrop keep ignoring it, floating labels get a stroke
+      const L = w.ORGuiTemplates;
+      G.openGallery("hud"); host.querySelector('[data-tpl="hud_fps"]').click();
+      ok("1.57: a HUD template turns 'Ignore top inset' OFF (Roblox shifts the whole screen below its top bar - nothing collides with the menu / chat buttons)", G._state.screen.ignore_inset === false && G.getSpec().screen.ignore_inset === false && !G.check().some((i) => /under the Roblox top bar/.test(i.msg)));
+      G.openGallery("menu"); host.querySelector('[data-tpl="menu"]').click();
+      ok("1.57: a full-screen menu template keeps ignoring the inset (its backdrop must cover the whole screen)", G._state.screen.ignore_inset === true);
+      G.openGallery("popup"); host.querySelector('[data-tpl="pop_countdown"]').click();
+      const floating = []; (function walk(list) { for (const nd of list) { if (nd.class === "TextLabel" && nd.text && !nd.text_stroke) { let c = nd, painted = false; while (c) { if (c.bg != null && !(c.bg_t >= 0.6)) painted = true; c = c._parent ? G._state.nodes.flatMap(function f(x) { return [x].concat((x.children || []).flatMap(f)); }).find((x) => x.id === c._parent) : null; } if (!painted) floating.push(nd.name); } walk(nd.children || []); } })(G._state.nodes);
+      ok("1.57: template text that floats over the 3D world gets a text stroke automatically", floating.length === 0 && (function any(list) { return list.some((nd) => (nd.class === "TextLabel" && nd.text_stroke) || any(nd.children || [])); })(G._state.nodes), floating);
+      // every template: no unreadable text, no overflow warnings
+      const bad = [];
+      for (const t of L.list) { G.openGallery(t.cat); const card = host.querySelector(`[data-tpl="${t.id}"]`); if (!card) { bad.push(t.id + ": no card"); continue; } card.click(); const is = G.check().filter((i) => i.level === "warn" && /hard to read|under the Roblox top bar/.test(i.msg)); if (is.length) bad.push(t.id + ": " + is[0].path + " " + is[0].msg.slice(0, 60)); }
+      ok("1.57: all " + L.list.length + " templates pass Check for contrast + top-bar collisions on every theme", bad.length === 0, bad.slice(0, 8));
+      // Studio: session screens do not pile up
+      G.close(); G.open({ send: async () => true, runTool: async (name, args) => { calls.push([name, args]); if (name === "ui_build_spec") return "Output of 'ui_build_spec':\n" + JSON.stringify({ ok: true, data: { count: 7, screen: "StarterGui." + args.spec.screen.name, behaviours: 2 } }); return "Output:\n" + JSON.stringify({ ok: true, data: {} }); }, studioReady: () => true, engine: () => "roblox", toast: (m) => toasts.push(m), diag: (e) => diags.push(e) });
+      G.openGallery("hud"); host.querySelector('[data-tpl="hud"]').click(); G.closeGallery();
+      calls.length = 0; const confirms = []; w.confirm = (m) => { confirms.push(m); return true; }; G._state.builtScreens = [];
+      await host.querySelector('[data-act="build"]').click(); await new Promise((r) => setTimeout(r, 20));
+      ok("1.57: first build of the session asks nothing and records the screen", confirms.length === 0 && G.check().filter((i) => i.level === "error").length === 0 && calls[0] && calls[0][0] === "ui_build_spec" && calls[0][1].spec.screen.name === "HUD" && calls[0][1].spec.screen.ignore_inset === false && G._state.builtScreens.includes("HUD"), [confirms, calls.map((c) => c[0])]);
+      G.openGallery("shop"); host.querySelector('[data-tpl="shop"]').click(); G.closeGallery(); calls.length = 0;
+      await host.querySelector('[data-act="build"]').click(); await new Promise((r) => setTimeout(r, 20));
+      ok("1.57: building a second template offers to remove the earlier screen (OK → instance_destroy StarterGui.HUD before ui_build_spec)", confirms.filter((m) => /already built "HUD"/.test(m)).length === 1 && calls[0] && calls[0][0] === "instance_destroy" && calls[0][1].path === "StarterGui.HUD" && calls[1] && calls[1][0] === "ui_build_spec" && !G._state.builtScreens.includes("HUD") && G._state.builtScreens.includes("Shop"), [confirms, calls.map((c) => c[0] + ":" + (c[1].path || "")), G._state.builtScreens]);
+      w.confirm = () => true;
+      ok("1.57: Theme tab explains light vs dark presets", studio.includes('<small>${luminance(P[k].bg) > 0.5 ? "light" : "dark"}</small>') && css.includes(".rsg-preset small {"));
+      ok("1.57: ui_build_spec teaches the AI the three rules (auto text, opaque pills, HUD inset off)", /RULES: text on a primary\/accent\/success\/danger fill → text_color:'auto'; pills\/badges need bg_t:0; HUD screens \(no full-screen backdrop\) → screen.ignore_inset:false/.test(pack));
+    }
     ok("no window errors during the run", errors.length === 0, errors);
     console.log(`test-gui-studio: ${n} checks passed`);
     process.exit(0);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/core/animengine.js - ORscript ANIMATION ENGINE (1.52.0; 1.53.0 persona / choreography / uniqueness / mirror / travel; 1.56.0 freeform choreography; 1.54.0 smoothing / foot planting / IK / layering / Blender-style key tools)
+// src/core/animengine.js - ORscript ANIMATION ENGINE (1.52.0; 1.53.0 persona / choreography / uniqueness / mirror / travel; 1.55.0 freeform choreography; 1.54.0 smoothing / foot planting / IK / layering / Blender-style key tools)
 //
 // Natural language → structured, validated Roblox animation data.
 //
@@ -28,7 +28,7 @@
 // rest. Nothing is faked: unsupported requests return explicit limitations.
 (function (root) {
   "use strict";
-  const VERSION = "1.56.0";
+  const VERSION = "1.57.0";
   const DEG = Math.PI / 180;
 
   // ───────────────────────── rotation math ─────────────────────────

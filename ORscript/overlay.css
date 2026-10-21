@@ -7346,6 +7346,9 @@ html.rs-gui-open #rs-root { visibility: hidden !important; }
 .rsg-presets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
 .rsg-preset { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); color: #c4c4cd; font-size: 10.5px; text-transform: capitalize; }
 .rsg-preset i { width: 22px; height: 14px; border-radius: 4px; background: linear-gradient(90deg, var(--s) 0 34%, var(--a) 34% 67%, var(--b) 67%); box-shadow: 0 0 0 1px rgba(255,255,255,.15); flex: none; }
+.rsg-preset i { position: relative; width: 30px; height: 18px; background: linear-gradient(90deg, var(--bg) 0 30%, var(--s) 30% 55%, var(--a) 55% 80%, var(--b) 80%); }
+.rsg-preset i em { position: absolute; left: 3px; top: 1px; font: 700 10px/16px Montserrat, 'Segoe UI', Arial, sans-serif; font-style: normal; color: var(--t); }
+.rsg-preset small { margin-left: auto; font-size: 8.5px; letter-spacing: .4px; text-transform: uppercase; opacity: .55; }
 .rsg-preset:hover { background: rgba(255,255,255,.1); color: #fff; }
 .rsg-preset.on { border-color: rgba(120,160,255,.6); background: rgba(120,160,255,.14); color: #dfe8ff; }
 .rsg-code textarea { width: 100%; min-height: 220px; resize: vertical; background: #0f0f12; color: #c4c4cd; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 8px; font: 10.5px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; white-space: pre; }

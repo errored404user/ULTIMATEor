@@ -109,6 +109,13 @@ for kind in ["button", "icon_button", "toggle", "slider", "progress_bar", "windo
     PROGRAMS["comp_" + kind] = ["ui_component", {"kind": kind, "screen": "Comps", "label": "Hello", "tabs": ["A", "B"], "options": ["x", "y"], "items": ["1", "2"], "slots": 4, "action": "toggle", "target": "gui.Window"}]
 PROGRAMS["comp_in_parent"] = ["ui_component", {"kind": "button", "parent": "StarterGui.Shop.Window", "label": "Buy", "action": "remote", "remote": "BuyItem"}]
 PROGRAMS["export_comps"] = ["ui_export_spec", {"path": "StarterGui.Comps"}]
+# 1.57: text_color "auto" + light preset + HUD below the top bar
+PROGRAMS["build_auto"] = ["ui_build_spec", {"spec": {"screen": {"name": "AutoText", "ignore_inset": False}, "preset": "clean_light", "children": [
+    {"class": "Frame", "name": "Card", "size": [0, 300, 0, 200], "bg": "surface", "children": [
+        {"class": "TextLabel", "name": "OnLight", "text": "dark text", "size": [1, 0, 0, 30], "bg_t": 1, "text_color": "auto"},
+        {"class": "TextButton", "name": "Blue", "text": "white", "size": [0, 120, 0, 40], "bg": "primary", "text_color": "auto"},
+        {"class": "TextButton", "name": "Mint", "text": "dark", "size": [0, 120, 0, 40], "bg": "#2fbf72", "text_color": "auto"},
+        {"class": "TextLabel", "name": "Pill", "text": "pill", "size": [0, 72, 0, 22], "bg": "accent", "bg_t": 0, "text_color": "auto", "font": "title_font", "text_size": 11, "corner": 11}]}]}}]
 
 data = json.loads(subprocess.check_output(["node", "-e", GEN, json.dumps(PROGRAMS)], text=True))
 L, M, run_program = make_runtime()
@@ -209,7 +216,7 @@ r = run("zorder")
 ok("ui_zorder_fix renumbers depth-first", r.get("ok") and r["data"]["count"] >= 9 and lua("local w=game.StarterGui.Shop.Window return w.ZIndex==1 and w.Title.ZIndex==2 and game.StarterGui.Shop.OpenShop.ZIndex>w.Items.Shield.ZIndex"), r)
 
 r = run("tokens")
-ok("ui_tokens_apply re-skins with the neon preset", r.get("ok") and r["data"]["tokens"]["primary"] == "#00e5ff" and lua("local w=game.StarterGui.Shop.Window return math.floor(w.BackgroundColor3.R*255+0.5)==14 and game.StarterGui.Shop.OpenShop.Font.Name=='Arcade' and typeof(game.StarterGui.Shop:GetAttribute('OR_Primary'))=='Color3'"), (r, lua("local w=game.StarterGui.Shop.Window return math.floor(w.BackgroundColor3.R*255+0.5)")))
+ok("ui_tokens_apply re-skins with the neon preset", r.get("ok") and r["data"]["tokens"]["primary"] == "#00d4ee" and lua("local w=game.StarterGui.Shop.Window return math.floor(w.BackgroundColor3.R*255+0.5)==14 and game.StarterGui.Shop.OpenShop.Font.Name=='Arcade' and typeof(game.StarterGui.Shop:GetAttribute('OR_Primary'))=='Color3'"), (r, lua("local w=game.StarterGui.Shop.Window return math.floor(w.BackgroundColor3.R*255+0.5)")))
 
 r = run("tween")
 ok("ui_tween attaches a compiling LocalScript", r.get("ok") and lua("local s=game.StarterGui.Shop.Window:FindFirstChild('OR_Tween_slide_up') return s~=nil and load(s.Source,'=t','t',{})~=nil"), r)
@@ -241,6 +248,9 @@ ok("ui_component rejects unknown kinds", not run("comp_bad").get("ok"))
 r = run("comp_in_parent")
 ok("ui_component under a parent frame with a remote action", r.get("ok") and lua("local b=game.StarterGui.Shop.Window:FindFirstChild('Button') local bl=game:GetService('HttpService'):JSONDecode(game.StarterGui.Shop.OR_UIBindings.Value) local hit=false for _,x in ipairs(bl) do if x.path=='Window.Button' and x['do']=='remote' and x.remote=='BuyItem' then hit=true end end return b~=nil and hit"), r)
 ok("component behaviours all compile", lua("local f=load(game.StarterGui.Comps.OR_UIBehaviours.Source,'=c','t',{}) return f~=nil"))
+r = run("build_auto")
+ok("1.57: ui_build_spec builds a clean_light screen below the top bar (IgnoreGuiInset false)", r.get("ok") and lua("game.StarterGui.AutoText.IgnoreGuiInset == false"), r)
+ok("1.57: text_color auto → near-black on a light card, white on the blue primary, dark on mint, readable on the accent pill", lua("local c=game.StarterGui.AutoText.Card local function lum(x) return 0.2126*x.R+0.7152*x.G+0.0722*x.B end return lum(c.OnLight.TextColor3)<0.2 and lum(c.Blue.TextColor3)>0.9 and lum(c.Mint.TextColor3)<0.2 and c.Pill.BackgroundTransparency==0 and (lum(c.Pill.TextColor3)<0.2 or lum(c.Pill.TextColor3)>0.9)"), lua("local c=game.StarterGui.AutoText.Card local function h(x) return math.floor(x.R*255+0.5)..','..math.floor(x.G*255+0.5)..','..math.floor(x.B*255+0.5) end return h(c.OnLight.TextColor3)..' '..h(c.Blue.TextColor3)..' '..h(c.Mint.TextColor3)..' '..h(c.Pill.TextColor3)"))
 r = run("export_comps")
 ok("ui_export_spec on the component screen (hotbar / tabs / grid round-trip)", r.get("ok") and r["data"]["nodes"] > 40 and any(c.get("name") == "Hotbar" and len(c.get("children", [])) == 4 for c in r["data"]["spec"]["children"]), (r.get("data", {}).get("nodes"), [c.get("name") for c in r.get("data", {}).get("spec", {}).get("children", [])]))
 
