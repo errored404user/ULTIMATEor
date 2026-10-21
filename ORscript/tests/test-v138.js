@@ -90,7 +90,7 @@ ok("alias tools hidden", main.includes('server:"roblox",aliasTarget:target,hidde
 ok("screen_capture hidden after the tool fetch", main.includes('if (t && bareToolName(t.name) === "screen_capture") t.hidden = true;'));
 ok("both catalogue call sites pass modeId", main.includes("focusBlock, focusNames, compact, limit, lineLimit, modeId: focusMode,") && main.includes("lineLimit: Math.max(120, Number(P.embedCatalogueLines) || 420), modeId: focusMode,"));
 ok("focus header no longer claims every focus command is listed with a signature", !main.includes("all listed with their signatures below") && main.includes("which come FIRST in SIGNATURES BY FAMILY below"));
-ok("slow skill programs get a 90 s budget via _orTimeout (stripped from the wire)", main.includes("const SLOW_SKILL_RE = /^(project_index_(build|changes|summary|search|graph)|project_health_report|blueprint_(install|verify|remove|configure|status)") && main.includes("const slowBudget = SLOW_SKILL_RE.test(name) ? 90000 : 0;") && main.includes("_orInternal: true, _orTimeout: slowBudget || undefined }") && main.includes("const timeout = Math.min(115000, Number(args && args._orTimeout) || 0) || (name === \"execute_luau\" ? 20000") && main.includes("if (!/^_or/.test(k)) o[k] = args[k];"));
+ok("slow skill programs get a 90 s budget via _orTimeout (stripped from the wire)", main.includes("const SLOW_SKILL_RE = /^(project_index_(build|changes|summary|search|graph)|project_health_report|blueprint_(install|verify|remove|configure|status)") && main.includes("const slowBudget = SLOW_SKILL_RE.test(name) ? 90000 : 0;") && main.includes("let res = await runSkillLuau(built, slowBudget);") && main.includes("_orInternal: true, _orTimeout: budget || undefined }") && main.includes("const timeout = Math.min(115000, Number(args && args._orTimeout) || 0) || (name === \"execute_luau\" ? 20000") && main.includes("if (!/^_or/.test(k)) o[k] = args[k];"));
 
 // E. playbooks
 vm.runInThisContext(config + ";globalThis.__RS=RS;", { filename: "config.js" });
@@ -120,8 +120,8 @@ ok("gate runs after the commandless-retry rescue (never instead of it)", main.in
 // G. mode notes + bookkeeping
 ok("mode note describes catalogue order, playbooks and the gates", /Catalogue: scripting, blueprints, data, build and physics families first, then lighting, VFX, UI, animation and motion\. Playbooks: new system, bug fix, existing place, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene\. Gate: changed scripts must be read back and checked, a changed look screenshotted and new motion previewed before 'done'\./.test(main));
 const mf = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
-ok("manifest 1.51.1", mf.version === "1.51.1", mf.version);
-ok("plugin + crate pinned at 1.51.1", fs.readFileSync("plugin/ORscript.lua", "utf8").includes('local VERSION = "1.51.1"') && /^version = "1\.51\.1"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "or-agent"\nversion = "1\.51\.1"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
+ok("manifest 1.51.2", mf.version === "1.51.2", mf.version);
+ok("plugin + crate pinned at 1.51.2", fs.readFileSync("plugin/ORscript.lua", "utf8").includes('local VERSION = "1.51.2"') && /^version = "1\.51\.2"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "or-agent"\nversion = "1\.51\.2"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
 ok("README changelog 1.38.0", readme.includes("**1.38.0 — Modes & commands overhaul:") && readme.includes("test-v138.js"));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall 1.38.0 checks passed");

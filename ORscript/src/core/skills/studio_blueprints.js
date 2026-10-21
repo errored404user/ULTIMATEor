@@ -279,7 +279,7 @@ local function statusReport() local list=installedSystems() local out={version=B
       const res = fn(args || {});
       const body = typeof res === "string" ? res : res.body;
       const defs = typeof res === "object" && res.core ? CORE_DEFS : CORE_STUBS;
-      return { code: defs + HEAD + "\nlocal okRun,resRun=pcall(function()\n" + body + "\nend)\nif okRun then return resRun end\nreturn fail((tostring(resRun):gsub('^.-:%d+:%s*','')))" };
+      const tailLuau = "\nlocal okRun,resRun=pcall(function()\n" + body + "\nend)\nif okRun then return resRun end\nreturn fail((tostring(resRun):gsub('^.-:%d+:%s*','')))"; return { code: defs + HEAD + "\n" + tailLuau, lib: defs + HEAD, body: tailLuau };
     } catch (e) {
       return { err: "ERROR building command " + op + ": " + (e && e.message ? e.message : e) };
     }

@@ -341,6 +341,7 @@ local function wpDone(rec) if rec then pcall(function() ChangeHistoryService:Fin
 local function short(i) local okN,n=pcall(function() return i:GetFullName() end) n=okN and n or tostring(i) return (n:gsub('^StarterGui%.','SG.')) end
 local function getp(i,k) local okP,v=pcall(function() return i[k] end) if okP then return v end return nil end
 local function setp(i,k,v) return pcall(function() i[k]=v end) end
+local function en(v) if v==nil then return nil end local okE,nm=pcall(function() return v.Name end) if okE and nm~=nil then return tostring(nm) end return nil end
 local function hexToC3(h) h=tostring(h or ''):gsub('#','') if #h==3 then h=h:sub(1,1):rep(2)..h:sub(2,2):rep(2)..h:sub(3,3):rep(2) end if #h<6 then return nil end local r,g,b=tonumber(h:sub(1,2),16),tonumber(h:sub(3,4),16),tonumber(h:sub(5,6),16) if not (r and g and b) then return nil end return Color3.fromRGB(r,g,b) end
 local function c3hex(c) if typeof(c)~='Color3' then return nil end return string.format('#%02x%02x%02x',math.floor(c.R*255+0.5),math.floor(c.G*255+0.5),math.floor(c.B*255+0.5)) end
 local TOKENS={}
@@ -467,18 +468,18 @@ local function exportNode(inst,depth,maxDepth,counter)
    if inst.TextStrokeTransparency<1 then n.text_stroke={color=c3hex(inst.TextStrokeColor3),transparency=inst.TextStrokeTransparency} end
    if inst:IsA('TextBox') then n.placeholder=inst.PlaceholderText end
   end
-  if inst:IsA('ImageLabel') or inst:IsA('ImageButton') then n.image=inst.Image if inst.ImageTransparency~=0 then n.image_t=inst.ImageTransparency end local ic=c3hex(inst.ImageColor3) if ic~='#ffffff' then n.image_color=ic end if inst.ScaleType~=Enum.ScaleType.Stretch then n.scale_type=inst.ScaleType.Name end if inst.ScaleType==Enum.ScaleType.Slice then local r=inst.SliceCenter n.slice={r.Min.X,r.Min.Y,r.Max.X,r.Max.Y} end end
-  if inst:IsA('ScrollingFrame') then n.scroll={thickness=inst.ScrollBarThickness} local acs=getp(inst,'AutomaticCanvasSize') if acs and acs~=Enum.AutomaticSize.None then n.scroll.auto=acs.Name else n.scroll.canvas=udimArr(inst.CanvasSize) end end
+  if inst:IsA('ImageLabel') or inst:IsA('ImageButton') then n.image=inst.Image if inst.ImageTransparency~=0 then n.image_t=inst.ImageTransparency end local ic=c3hex(inst.ImageColor3) if ic~='#ffffff' then n.image_color=ic end if inst.ScaleType~=Enum.ScaleType.Stretch then n.scale_type=en(inst.ScaleType) end if inst.ScaleType==Enum.ScaleType.Slice then local r=inst.SliceCenter n.slice={r.Min.X,r.Min.Y,r.Max.X,r.Max.Y} end end
+  if inst:IsA('ScrollingFrame') then n.scroll={thickness=inst.ScrollBarThickness} local acs=getp(inst,'AutomaticCanvasSize') if acs and acs~=Enum.AutomaticSize.None then n.scroll.auto=en(acs) else n.scroll.canvas=udimArr(inst.CanvasSize) end end
  end
  local kids={}
  for _,c in ipairs(inst:GetChildren()) do
   local cn=c.ClassName
   if cn=='UICorner' then n.corner=c.CornerRadius.Scale>0 and {scale=c.CornerRadius.Scale,offset=c.CornerRadius.Offset} or c.CornerRadius.Offset
-  elseif cn=='UIStroke' then n.stroke={color=c3hex(c.Color),thickness=c.Thickness,transparency=c.Transparency,mode=c.ApplyStrokeMode.Name}
+  elseif cn=='UIStroke' then n.stroke={color=c3hex(c.Color),thickness=c.Thickness,transparency=c.Transparency,mode=en(c.ApplyStrokeMode)}
   elseif cn=='UIGradient' then local okK,kp=pcall(function() return c.Color.Keypoints end) n.gradient={rotation=c.Rotation} if okK and type(kp)=='table' and #kp>0 then n.gradient.from=c3hex(kp[1].Value) n.gradient.to=c3hex(kp[#kp].Value) end local okT,tk=pcall(function() return c.Transparency.Keypoints end) if okT and type(tk)=='table' and #tk>=2 and (tk[1].Value~=0 or tk[#tk].Value~=0) then n.gradient.transparency={tk[1].Value,tk[#tk].Value} end
   elseif cn=='UIPadding' then n.padding={left=c.PaddingLeft.Offset,right=c.PaddingRight.Offset,top=c.PaddingTop.Offset,bottom=c.PaddingBottom.Offset}
-  elseif cn=='UIListLayout' then n.layout={kind='list',direction=c.FillDirection.Name,gap=c.Padding.Offset,h_align=c.HorizontalAlignment.Name,v_align=c.VerticalAlignment.Name,sort=c.SortOrder.Name}
-  elseif cn=='UIGridLayout' then n.layout={kind='grid',cell=udimArr(c.CellSize),cell_padding=udimArr(c.CellPadding),direction=c.FillDirection.Name,h_align=c.HorizontalAlignment.Name,v_align=c.VerticalAlignment.Name,sort=c.SortOrder.Name}
+  elseif cn=='UIListLayout' then n.layout={kind='list',direction=en(c.FillDirection),gap=c.Padding.Offset,h_align=en(c.HorizontalAlignment),v_align=en(c.VerticalAlignment),sort=en(c.SortOrder)}
+  elseif cn=='UIGridLayout' then n.layout={kind='grid',cell=udimArr(c.CellSize),cell_padding=udimArr(c.CellPadding),direction=en(c.FillDirection),h_align=en(c.HorizontalAlignment),v_align=en(c.VerticalAlignment),sort=en(c.SortOrder)}
   elseif cn=='UIPageLayout' then n.layout={kind='page'}
   elseif cn=='UIAspectRatioConstraint' then n.aspect=c.AspectRatio
   elseif cn=='UISizeConstraint' then n.min_size={c.MinSize.X,c.MinSize.Y} if c.MaxSize.X<math.huge or c.MaxSize.Y<math.huge then n.max_size={c.MaxSize.X<math.huge and c.MaxSize.X or 0,c.MaxSize.Y<math.huge and c.MaxSize.Y or 0} end
@@ -850,7 +851,7 @@ end)
     if (!fn) return null;
     try {
       const body = fn(args || {});
-      return { code: HEAD + "\nlocal okRun,resRun=pcall(function()\n" + body + "\nend)\nif okRun then return resRun end\nreturn fail((tostring(resRun):gsub('^.-:%d+:%s*','')))" };
+      const tailLuau = "\nlocal okRun,resRun=pcall(function()\n" + body + "\nend)\nif okRun then return resRun end\nreturn fail((tostring(resRun):gsub('^.-:%d+:%s*','')))"; return { code: HEAD + "\n" + tailLuau, lib: HEAD, body: tailLuau };
     } catch (e) {
       return { err: "ERROR building command " + op + ": " + (e && e.message ? e.message : e) };
     }

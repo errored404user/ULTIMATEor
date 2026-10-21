@@ -32,7 +32,7 @@
   ].join("\n");
 
   function wrap(body) {
-    return { code: HEAD + "\n" + body };
+    return { code: HEAD + "\n" + (body), lib: HEAD, body: (body) };
   }
 
   function buildPlus(op, a) {

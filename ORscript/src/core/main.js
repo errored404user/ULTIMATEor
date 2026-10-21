@@ -2335,6 +2335,103 @@
     ].join(nl);
   }
 
+  // 1.51.2 LUAU LIBRARY CACHE. Every skill pack program is "library + body":
+  // the GUI Studio / design / quality packs carry a 30-75 KB Luau library in
+  // front of a 1-15 KB body, so EVERY GUI command used to be split into 2-5
+  // execute_luau round trips (chunk buffer in ServerStorage + loadstring). Each
+  // extra trip was one more chance for a bridge timeout / dropped socket /
+  // "chunk buffer missing" error, and the model read those as command failures
+  // and looped. Now the library is uploaded ONCE per place/session into a
+  // non-archivable StringValue (ServerStorage._ORLuauLib.<hash>, never saved
+  // with the place) and each command ships only its body: the program probes
+  // for the library and runs loadstring(lib .. body) in ONE trip; a missing
+  // library is uploaded (chunked) and the command re-run - all transparent to
+  // the model, which only ever sees the command's own result.
+  const LUAU_LIB_FOLDER = "_ORLuauLib";
+  const LUAU_LIB_KEEP = 12; // libraries kept per place (several packs share a session)
+  function luauByteLen(s) { try { return new TextEncoder().encode(s).length; } catch { return String(s).length; } }
+  function luauLibHash(lib) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < lib.length; i++) { h ^= lib.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return "lib_" + h.toString(16).padStart(8, "0") + "_" + luauByteLen(lib);
+  }
+  function luauLibExecCode(id, body) {
+    const bytes = Number(id.split("_").pop()) || 0;
+    return [
+      "local ss=game:GetService(\"ServerStorage\")",
+      "local f=ss:FindFirstChild(\"" + LUAU_LIB_FOLDER + "\")",
+      "local m=f and f:FindFirstChild(\"" + id + "\")",
+      "if not (m and m:IsA(\"StringValue\") and #m.Value==" + bytes + ") then return \"OR_LIB_MISSING " + id + "\" end",
+      "pcall(function() m:SetAttribute(\"used\", os.time()) end)",
+      "local fn,err=loadstring(m.Value..\"\\n\".." + luauLongStr(body) + ",\"=ORscript\")",
+      "if not fn then error(\"luau parse: \"..tostring(err)) end",
+      "return fn()",
+    ].join("\n");
+  }
+  function luauLibUploadCode(id, piece, i, n) {
+    const lit = luauLongStr(piece);
+    if (i === 0) {
+      return [
+        "local ss=game:GetService(\"ServerStorage\")",
+        "local f=ss:FindFirstChild(\"" + LUAU_LIB_FOLDER + "\")",
+        "if not f then f=Instance.new(\"Folder\") f.Name=\"" + LUAU_LIB_FOLDER + "\" f.Archivable=false f.Parent=ss end",
+        "local kids=f:GetChildren()",
+        "if #kids>=" + LUAU_LIB_KEEP + " then table.sort(kids,function(a,b) return (a:GetAttribute(\"used\") or 0)<(b:GetAttribute(\"used\") or 0) end) for k=1,#kids-" + (LUAU_LIB_KEEP - 1) + " do if kids[k].Name~=\"" + id + "\" then kids[k]:Destroy() end end end",
+        "local m=f:FindFirstChild(\"" + id + "\") or Instance.new(\"StringValue\")",
+        "m.Name=\"" + id + "\" m.Archivable=false m.Parent=f",
+        "pcall(function() m:SetAttribute(\"used\", os.time()) end)",
+        "m.Value=" + lit,
+        "return \"OR_LIB_PART 1/" + n + "\"",
+      ].join("\n");
+    }
+    return [
+      "local f=game:GetService(\"ServerStorage\"):FindFirstChild(\"" + LUAU_LIB_FOLDER + "\")",
+      "local m=f and f:FindFirstChild(\"" + id + "\")",
+      "if not m then error(\"OR library buffer missing\") end",
+      "m.Value=m.Value.." + lit,
+      "return \"OR_LIB_PART " + (i + 1) + "/" + n + "\"",
+    ].join("\n");
+  }
+  function splitLuauPieces(src, max) {
+    // Library pieces: cut at line ends only (never inside a line), so each
+    // piece is a plain byte range - the Luau side concatenates them verbatim.
+    const out = []; let buf = "";
+    for (const line of src.split("\n")) {
+      const next = buf ? buf + "\n" + line : line;
+      if (buf && next.length > max) { out.push(buf + "\n"); buf = line; } else buf = next;
+    }
+    if (buf || !out.length) out.push(buf);
+    return out;
+  }
+  // Run a built skill program ({code, lib, body}) with the library cache when
+  // that saves round trips; otherwise exactly the old single execute_luau.
+  async function runSkillLuau(built, budget) {
+    const plain = () => runTool({ tool: "execute_luau", arguments: { code: built.code, datamodel_type: "Edit", _orInternal: true, _orTimeout: budget || undefined } });
+    const lib = built && typeof built.lib === "string" ? built.lib : "";
+    const body = built && typeof built.body === "string" ? built.body : "";
+    if (!lib || !body || !built.code || built.code.length <= LUAU_CHUNK_MAX || lib.length < 4000) return plain();
+    const exec0 = luauLibExecCode(luauLibHash(lib), body);
+    if (exec0.length > LUAU_CHUNK_MAX) return plain(); // a huge body still goes the chunked way
+    const id = luauLibHash(lib);
+    const run = () => runTool({ tool: "execute_luau", arguments: { code: exec0, datamodel_type: "Edit", _orInternal: true, _orChunk: true, _orTimeout: budget || undefined } });
+    let res = await run();
+    if (!/^Output of '[^']*':\n?OR_LIB_MISSING\b/.test(String(res || ""))) return res;
+    // Upload the library once, then run the command for real.
+    const pieces = splitLuauPieces(lib, LUAU_CHUNK_MAX - 700);
+    diag("luauLib.upload", { id, pieces: pieces.length, bytes: luauByteLen(lib) });
+    try { ui.toast("Installing the command library in Studio (once)…"); } catch {}
+    for (let i = 0; i < pieces.length; i++) {
+      const up = await runTool({ tool: "execute_luau", arguments: { code: luauLibUploadCode(id, pieces[i], i, pieces.length), datamodel_type: "Edit", _orInternal: true, _orChunk: true } });
+      if (!/^Output of '[^']*':\n?OR_LIB_PART\b/.test(String(up || ""))) {
+        diag("luauLib.uploadFailed", { id, piece: i, res: String(up || "").slice(0, 160) });
+        return plain(); // transport trouble: fall back to the classic path for this call
+      }
+    }
+    res = await run();
+    if (/^Output of '[^']*':\n?OR_LIB_MISSING\b/.test(String(res || ""))) { diag("luauLib.stillMissing", { id }); return plain(); }
+    return res;
+  }
+
   function syncCommandRegistry() {
     const reg=typeof ORCommandRegistry!=="undefined"?ORCommandRegistry:null;if(!reg)return;
     const envFor=(tool)=>tool&&tool.server==="blender"?"BLENDER":tool&&tool.server==="web"?"WEB":tool&&tool.server==="orscript"?"GENERAL":activeEngine()==="local"?"GENERAL":"ROBLOX_STUDIO";
@@ -4358,7 +4455,7 @@
       const built = RobloxScriptSkills.buildLuau(name, args);
       if (built.err) return built.err;
       const slowBudget = SLOW_SKILL_RE.test(name) ? 90000 : 0;
-      let res = await runTool({ tool: "execute_luau", arguments: { code: built.code, datamodel_type: "Edit", _orInternal: true, _orTimeout: slowBudget || undefined } });
+      let res = await runSkillLuau(built, slowBudget);
       // A big place can push project_index_build past the transport budget on
       // its first pass. Retry ONCE with a smaller scan instead of surfacing a
       // timeout the model cannot act on.
@@ -4986,6 +5083,16 @@
             ui.steeringProgress("sending", "Sending the GUI brief", toolTurns);
             const state = asStateTag();
             base = await submitAndGetBase(A.guiBrief.text + (state ? "\n" + state : ""));
+            continue;
+          }
+          // 1.51.2: brief delivered, model still only talking (no command yet)
+          // → ONE nudge to act; a real one-line question is allowed through.
+          if (A.guiBrief && A.guiBrief.sent && !A.guiBrief.nudged && !A.stop && toolTurns === 0 && !/\?\s*$/.test(body.trim())) {
+            A.guiBrief.nudged = true;
+            diag("guiBrief.nudge", {});
+            ui.steeringProgress("correcting", "GUI brief — asking the model to start with a command", toolTurns);
+            const state = asStateTag();
+            base = await submitAndGetBase(RS.FEEDBACK.guiBriefAct + (state ? "\n" + state : ""));
             continue;
           }
           // 1.38.0: MODE EVIDENCE GATE - a run that mutated (scripts / visuals /

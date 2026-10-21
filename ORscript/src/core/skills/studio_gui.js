@@ -53,7 +53,7 @@
   ].join("\n");
 
   function wrap(body) {
-    return { code: HEAD + "\n" + body };
+    return { code: HEAD + "\n" + (body), lib: HEAD, body: (body) };
   }
   function need(a, k) {
     if (a[k] === undefined || a[k] === null || a[k] === "") return { err: "ERROR: missing required param '" + k + "'" };

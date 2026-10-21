@@ -573,7 +573,16 @@ local function eachDesc(roots,fn,limit) local n=0 for _,r in ipairs(roots) do if
     if (!fn) return null;
     try {
       const body = fn(args || {});
-      return { code: HEAD + "\nlocal okRun,resRun=pcall(function()\n" + body + "\nend)\nif okRun then return resRun end\nreturn fail((tostring(resRun):gsub('^.-:%d+:%s*','')))" };
+      // 1.51.2: the audit / fix programs are 15-18 KB of STATIC Luau behind a
+      // one-line config. Keep the static part in the cached library (see
+      // main.js runSkillLuau) so each call ships only its config line.
+      const m = body.match(/^local A=HttpService:JSONDecode\(('(?:[^'\\]|\\.)*')\)\n/);
+      if (m) {
+        const lib = HEAD + "\nlocal function OR_RUN_" + op + "(A)\n" + body.slice(m[0].length) + "\nend";
+        const tailLuau = "\nlocal okRun,resRun=pcall(function()\nlocal A=HttpService:JSONDecode(" + m[1] + ")\nreturn OR_RUN_" + op + "(A)\nend)\nif okRun then return resRun end\nreturn fail((tostring(resRun):gsub('^.-:%d+:%s*','')))";
+        return { code: lib + "\n" + tailLuau, lib, body: tailLuau };
+      }
+      const tailLuau = "\nlocal okRun,resRun=pcall(function()\n" + body + "\nend)\nif okRun then return resRun end\nreturn fail((tostring(resRun):gsub('^.-:%d+:%s*','')))"; return { code: HEAD + "\n" + tailLuau, lib: HEAD, body: tailLuau };
     } catch (e) {
       return { err: "ERROR building command " + op + ": " + (e && e.message ? e.message : e) };
     }
@@ -582,7 +591,7 @@ local function eachDesc(roots,fn,limit) local n=0 for _,r in ipairs(roots) do if
   const prevBuild = RobloxScriptSkills.buildLuau;
   RobloxScriptSkills.buildLuau = function (op, args) {
     if (B[op]) return buildQuality(op, args);
-    if (op === "style_guide") { const r = styleGuideLocal(args || {}); return { code: HEAD + "\nlocal okRun,resRun=pcall(function()\nreturn ok(HttpService:JSONDecode(" + jj(r.data) + ")," + q(r.text) + ")\nend)\nif okRun then return resRun end\nreturn fail(tostring(resRun))" }; }
+    if (op === "style_guide") { const r = styleGuideLocal(args || {}); const tailLuau = "\nlocal okRun,resRun=pcall(function()\nreturn ok(HttpService:JSONDecode(" + jj(r.data) + ")," + q(r.text) + ")\nend)\nif okRun then return resRun end\nreturn fail(tostring(resRun))"; return { code: HEAD + "\n" + tailLuau, lib: HEAD, body: tailLuau }; }
     return prevBuild.call(RobloxScriptSkills, op, args);
   };
   const names = new Set(RobloxScriptSkills.SKILL_COMMANDS.map((c) => c.name));

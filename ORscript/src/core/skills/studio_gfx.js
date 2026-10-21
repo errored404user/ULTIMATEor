@@ -485,7 +485,7 @@ local function overlaySetGuides(visible) local g=overlayGui() local gd=g and g:F
     if (!fn) return null;
     try {
       const body = fn(args || {});
-      return { code: HEAD + "\nlocal okRun,resRun=pcall(function()\n" + body + "\nend)\nif okRun then return resRun end\nreturn fail((tostring(resRun):gsub('^.-:%d+:%s*','')))" };
+      const tailLuau = "\nlocal okRun,resRun=pcall(function()\n" + body + "\nend)\nif okRun then return resRun end\nreturn fail((tostring(resRun):gsub('^.-:%d+:%s*','')))"; return { code: HEAD + "\n" + tailLuau, lib: HEAD, body: tailLuau };
     } catch (e) {
       return { err: "ERROR building command " + op + ": " + (e && e.message ? e.message : e) };
     }

@@ -1692,7 +1692,8 @@
     const fn = B[op];
     if (!fn) return null;
     try {
-      return { code: HEAD + "\n" + fn(args || {}) };
+      const body200 = fn(args || {});
+      return { code: HEAD + "\n" + body200, lib: HEAD, body: body200 };
     } catch (e) {
       return { err: "ERROR building command " + op + ": " + e };
     }

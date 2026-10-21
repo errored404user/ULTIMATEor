@@ -238,7 +238,16 @@ ok("ui_component_place rejects an unknown kind cleanly", r.get("ok") is False an
 
 # ───────────────────────── 5. export / audit on generated UI ─────────────────────────
 r = run("export")
-ok("ui_export_spec round-trips the shop into a spec tree", r.get("ok") and r["data"]["spec"]["name"] == "Shop" and r["data"]["spec"]["children"][0]["kind"] == "Window" and r["data"]["nodes"] > 20, r if not r.get("ok") else r["data"]["nodes"])
+# Since 1.48.0 ui_export_spec is the GUI Studio exporter ({screen:{name}, children:[{class,name,…}]}); 1.51.2 made its
+# enum reads tolerant (a UIListLayout without a readable HorizontalAlignment used to abort the WHOLE export).
+_spec = r.get("data", {}).get("spec", {}) if r.get("ok") else {}
+_names = set()
+def _walk(n):
+    if isinstance(n, dict):
+        if n.get("name"): _names.add(n["name"])
+        for c in n.get("children", []) or []: _walk(c)
+_walk(_spec)
+ok("ui_export_spec round-trips the shop into a spec tree", r.get("ok") and _spec.get("screen", {}).get("name") == "Shop" and _spec.get("children") and _spec["children"][0].get("class") == "Frame" and "Title" in _names and len(_names) > 20, r if not r.get("ok") else sorted(_names)[:12])
 r = run("audit")
 if r.get("ok") and r["data"]["score"] < 70:
     for i in r["data"]["issues"]:
