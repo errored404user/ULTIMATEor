@@ -1167,6 +1167,150 @@ function api.map_axes(a)
 		("AXIS MAP of %d/%d joints on rig '%s' (+%.0f deg per axis; root frame X=left/right Y=up/down Z=forward/back, WORLD-measured): %s"):format(#cards, #bones, ev.name, math.deg(angle), table.concat(summaries, " | ")))
 end
 
+-- ───────── 1.52.0 ANIMATION ENGINE ops ─────────
+-- rig_info: what the engine needs to map its semantic skeleton onto THIS rig
+-- (rig type, bone names + parents, stored engine attributes of a clip).
+function api.rig_info(a)
+	local rig = findRig()
+	if not rig then return fail("no rig found in workspace (need a Model with a Humanoid + HumanoidRootPart; use animation_select_rig {path} to pick one)") end
+	local root = rigRoot(rig)
+	if not root then return fail("the rig has no root part (HumanoidRootPart/Torso/UpperTorso)") end
+	local bones = buildBones(rig, root)
+	if #bones == 0 then return fail(("rig '%s' has no connected Motor6D or supported constraint joints"):format(rig.Name)) end
+	local hum = rig:FindFirstChildOfClass("Humanoid")
+	local rigType = "Custom"
+	if hum then
+		local okT, rt = pcall(function() return hum.RigType end)
+		if okT and rt and rt.Name then rigType = rt.Name end
+	end
+	local list = {}
+	for _, b in ipairs(bones) do
+		local parent = b.parentIdx == 0 and root.Name or bones[b.parentIdx].name
+		list[#list + 1] = { name = b.name, parent = parent, kind = b.kind }
+	end
+	local names = {}
+	local stored = nil
+	for _, c in ipairs(getAnims()) do
+		if c:IsA("KeyframeSequence") then
+			names[#names + 1] = c.Name
+			if (a.name and c.Name == tostring(a.name)) or ((not a.name) and ACTIVE.Value == c.Name) then
+				local lenV = c:FindFirstChild("Duration")
+				stored = {
+					name = c.Name, prompt = c:GetAttribute("OR_Prompt"), quality = c:GetAttribute("OR_Quality"),
+					params = c:GetAttribute("OR_Params"), engine = c:GetAttribute("OR_Engine"), fps = c:GetAttribute("OR_Fps"),
+					loop = c.Loop, priority = c.Priority.Name, duration = lenV and lenV.Value or nil, keyframes = #sortedKeyframes(c),
+				}
+			end
+		end
+	end
+	return okdata({ rigType = rigType, path = pathOf(rig), name = rig.Name, root = root.Name, bones = list, clip = stored, animations = names },
+		("rig '%s' (%s, %d bones) root %s"):format(rig.Name, rigType, #bones, root.Name))
+end
+
+-- build: write a whole engine clip into a KeyframeSequence in ONE call.
+-- a.bones = ordered bone names; a.keys = { {t=, e={style,dir}, m={{name,value}}, p={ {rx,ry,rz[,px,py,pz]}, ... } } }
+-- Rotations are DEGREES in the PARENT (torso-frame) convention Ry*Rx*Rz; the
+-- real joint-local transform is C0rot^-1 * R * C0rot, which is exact for R15
+-- (identity C0 rotations), R6 (rotated shoulder/hip frames) and custom rigs.
+function api.build(a)
+	local name = tostring(a.name or "")
+	if name == "" then return fail("animation name is required") end
+	local rig = findRig()
+	if not rig then return fail("no rig found in workspace (need a Model with a Humanoid + HumanoidRootPart)") end
+	local root = rigRoot(rig)
+	if not root then return fail("the rig has no root part (HumanoidRootPart/Torso/UpperTorso)") end
+	local bones = buildBones(rig, root)
+	if #bones == 0 then return fail(("rig '%s' has no connected Motor6D or supported constraint joints"):format(rig.Name)) end
+	local byName = {}
+	for _, b in ipairs(bones) do byName[b.name] = b end
+	local names = a.bones or {}
+	local missing, present = {}, 0
+	for _, n in ipairs(names) do if byName[n] then present = present + 1 else missing[#missing + 1] = n end end
+	if present == 0 or present * 2 < #names then
+		local have = {}
+		for _, b in ipairs(bones) do have[#have + 1] = b.name end
+		return fail(("only %d of the clip's %d bones exist on rig '%s' (wrong rig type?) - clip bones: %s; rig bones: %s"):format(present, #names, rig.Name, table.concat(names, ", "), table.concat(have, ", ")))
+	end
+	local keys = a.keys or {}
+	if #keys == 0 then return fail("the clip has no keyframes") end
+	local duration = tonumber(a.duration) or 0
+	if duration <= 0 then return fail("duration must be > 0") end
+	local existing = findAnim(name)
+	if existing and not a.overwrite then return fail(("an animation named '%s' ALREADY EXISTS - nothing was changed. Pass overwrite=true to replace it, or pick another name"):format(name)) end
+	if existing then existing:Destroy() end
+	local anim = Instance.new("KeyframeSequence")
+	anim.Name = name
+	anim.Loop = a.loop == true
+	anim.Priority = Enum.AnimationPriority[tostring(a.priority or "Action")] or Enum.AnimationPriority.Action
+	local durV = Instance.new("NumberValue")
+	durV.Name = "Duration"
+	durV.Value = duration
+	durV.Parent = anim
+	anim.Parent = LIB
+	anim:SetAttribute("RS_RigPath", pathOf(rig))
+	anim:SetAttribute("OR_Prompt", tostring(a.prompt or ""))
+	anim:SetAttribute("OR_Quality", tostring(a.quality or "balanced"))
+	anim:SetAttribute("OR_Params", tostring(a.params or "{}"))
+	anim:SetAttribute("OR_Engine", tostring(a.engine or ""))
+	anim:SetAttribute("OR_Fps", tonumber(a.fps) or 30)
+	local written, markers = 0, 0
+	for _, key in ipairs(keys) do
+		local t = tonumber(key.t) or 0
+		local kf = newKeyframe(anim, t)
+		buildPoseTree(kf, rig, root)
+		local style = Enum.PoseEasingStyle[tostring(key.e and key.e[1] or "CubicV2")] or Enum.PoseEasingStyle.CubicV2
+		local dir = Enum.PoseEasingDirection[tostring(key.e and key.e[2] or "Out")] or Enum.PoseEasingDirection.Out
+		local function visit(p)
+			p.EasingStyle = style
+			p.EasingDirection = dir
+			for _, sub in ipairs(p:GetSubPoses()) do visit(sub) end
+		end
+		for _, pose in ipairs(kf:GetPoses()) do visit(pose) end
+		for i, n in ipairs(names) do
+			local b, v = byName[n], key.p and key.p[i]
+			if b and v then
+				local pose = findPose(kf, n)
+				if pose then
+					local R = CFrame.fromEulerAnglesYXZ(math.rad(tonumber(v[1]) or 0), math.rad(tonumber(v[2]) or 0), math.rad(tonumber(v[3]) or 0))
+					local M = b.c0.Rotation
+					local T = M:Inverse() * R * M
+					local pos = Vector3.new(tonumber(v[4]) or 0, tonumber(v[5]) or 0, tonumber(v[6]) or 0)
+					pose.CFrame = CFrame.new(M:VectorToObjectSpace(pos)) * T
+					written = written + 1
+				end
+			end
+		end
+		for _, m in ipairs(key.m or {}) do
+			local marker = Instance.new("KeyframeMarker")
+			marker.Name = tostring(m[1] or "marker")
+			marker.Value = tostring(m[2] or "")
+			marker.Parent = kf
+			markers = markers + 1
+		end
+	end
+	ACTIVE.Value = name
+	LENGTH.Value = duration
+	RIGREF.Value = pathOf(rig)
+	local savedPath = nil
+	if a.anim_saves ~= false then
+		local okS, errS = pcall(function()
+			local folder = rig:FindFirstChild("AnimSaves")
+			if not folder then folder = Instance.new("Folder"); folder.Name = "AnimSaves"; folder.Parent = rig end
+			local old = folder:FindFirstChild(name)
+			if old then old:Destroy() end
+			local copy = anim:Clone()
+			copy.Parent = folder
+			savedPath = pathOf(copy)
+		end)
+		if not okS then savedPath = nil end
+	end
+	local d = inspectAnim(anim)
+	return okdata({ name = name, keyframes = #keys, posesWritten = written, markers = markers, bones = present, missingBones = missing, rig = rigEvidence(rig), animSaves = savedPath, inspect = d },
+		("built '%s': %d keyframes, %d poses on %d/%d bones%s, %.2fs%s, pinned to rig '%s'%s"):format(
+			name, #keys, written, present, #names, #missing > 0 and (" (not on this rig: " .. table.concat(missing, ", ") .. ")") or "", duration,
+			anim.Loop and " looping" or "", rig.Name, savedPath and (" - also saved to " .. savedPath .. " for the Animation Editor") or ""))
+end
+
 local dispatch = {
 	select_rig = api.select_rig, clear_rig_selection = api.clear_rig_selection,
 	create = api.create, open = api.open, list = api.list,
@@ -1181,6 +1325,7 @@ local dispatch = {
 	reset = api.resets, stop_preview = api.resets, close = api.resets, apply = api.apply,
 	preview = api.preview, simulate = api.simulate, test = api.test,
 	map_axes = api.map_axes,
+	rig_info = api.rig_info, build = api.build,
 }
 
 local args = jdec([==[__ARGS_JSON__]==])
@@ -1196,6 +1341,39 @@ return res
 
 // Virtual animation command definitions shown to the model via list_commands.
 const ANIM_COMMANDS = [
+  // ── 1.52.0 ANIMATION ENGINE (src/core/animengine.js): prompt → validated clip → built in ONE call ──
+  {
+    name: "animation_generate",
+    description: "FASTEST PATH for any animation: describe the motion in words and the engine plans the stages (anticipation → action → follow-through → recovery), authors every keyframe on the real rig (R6 / R15 / custom Motor6D rigs detected in Studio), applies arcs, impact holds, secondary motion, weight and loop closure, validates joint limits / discontinuities / loop seams, BUILDS the KeyframeSequence in ServerStorage.RobloxScript.AnimLib (also copied to rig.AnimSaves for the Animation Editor) and returns a quality report. Idle / walk / run / swim / climb / jump / land / crouch / sit, sword / punch / kick / thrust combos with spins and finishers, dodge, block, spell cast, transformation, emotes (wave, cheer, dance, point, clap, laugh, bow). Then animation_preview; adjust with animation_refine.",
+    params: {
+      prompt: { type: "string", req: true, desc: "the motion in words, e.g. 'extremely fluid anime sword combo with anticipation, rapid strikes, a spinning finisher and a dramatic landing' (style, intensity, duration, loop, 'R6' all understood)" },
+      name: { type: "string", req: false, desc: "clip name (default derived from the prompt)" },
+      quality: { type: "string", req: false, desc: "fast | balanced (default) | high | cinematic - key density, breakdowns, follow-through, fps" },
+      duration: { type: "number", req: false, desc: "seconds (default chosen from the motion)" },
+      loop: { type: "boolean", req: false, desc: "force looping on/off (cycles and idles loop by default)" },
+      fps: { type: "number", req: false, desc: "key grid (24 / 30 / 60; default from quality)" },
+    },
+  },
+  {
+    name: "animation_refine",
+    description: "Adjust the last generated clip (or {name}) from plain feedback and rebuild it: 'faster attacks', 'slower', 'more / less anticipation', 'heavier / lighter landing', 'exaggerate', 'subtle', 'smoother', 'longer', 'shorter', 'loop', 'variation', 'add a spin', 'add a landing', '2.5 seconds'. Returns before → after numbers and the new validation.",
+    params: { feedback: { type: "string", req: true, desc: "what to change, in words" }, name: { type: "string", req: false, desc: "clip to refine (default: the last generated)" } },
+  },
+  {
+    name: "animation_sequence",
+    description: "Multi-stage combat / cinematic sequences: one combined clip with stage markers PLUS one clip per stage (ready, each strike, spin, air, landing...) retimed to start at 0, all built in Studio, with blend / cancel-window guidance for a combat controller. Use for '8 stage sword combo' style requests.",
+    params: { prompt: { type: "string", req: true, desc: "the whole sequence in words" }, name: { type: "string", req: false }, quality: { type: "string", req: false, desc: "fast | balanced | high | cinematic" }, duration: { type: "number", req: false } },
+  },
+  {
+    name: "animation_validate",
+    description: "Objective checks on a generated clip without touching Studio: joint limits, abrupt transitions, root speed, timing gaps, loop seam, invalid numbers - with a 0-100 score. Not a visual review: still animation_preview / animation_simulate {all:true}.",
+    params: { name: { type: "string", req: false, desc: "clip (default: the last generated)" } },
+  },
+  {
+    name: "animation_export_rbxmx",
+    description: "Save a generated clip as a Roblox .rbxmx file (KeyframeSequence + nested Pose tree, exact CFrames) to the user's downloads - works WITHOUT Studio. For a Studio-side export of any KeyframeSequence use animation_export; publishing is animation_publish (asks the user).",
+    params: { name: { type: "string", req: false, desc: "clip (default: the last generated)" } },
+  },
   {
     name: "animation_select_rig",
     description: "Explicitly choose the rig that new animations should use. Use this in places with multiple dummies or characters; it also pins an already-open animation to the selected rig.",
@@ -1500,6 +1678,14 @@ function buildLuau(op, args) {
     base.t = Number(args.t);
     base.name = String(args.name).trim();
     if (op === "set_marker" && args.value !== undefined) base.value = String(args.value);
+  } else if (op === "rig_info" || op === "build") {
+    // 1.52.0 engine ops: the JS engine already validated the payload.
+    for (const k of Object.keys(args)) if (!/^_or/.test(k) && k !== "op") base[k] = args[k];
+    if (op === "build") {
+      if (!base.name || !String(base.name).trim()) return { err: "ERROR calling 'animation_build': 'name' is required." };
+      if (!Array.isArray(base.keys) || !base.keys.length) return { err: "ERROR calling 'animation_build': the clip has no keyframes." };
+      if (!Array.isArray(base.bones) || !base.bones.length) return { err: "ERROR calling 'animation_build': no bones to write." };
+    }
   } else if (op === "map_axes") {
     if (args.filter) {
       const list = Array.isArray(args.filter) ? args.filter : [args.filter];
@@ -1512,7 +1698,12 @@ function buildLuau(op, args) {
   try {
     const json = JSON.stringify(base);
     if (json.includes("]==]")) return { err: "ERROR: internal serialization conflict." };
-    return { code: ANIM_LIB_LUA.replace("__ARGS_JSON__", json) };
+    const code = ANIM_LIB_LUA.replace("__ARGS_JSON__", json);
+    // {code, lib, body}: the 1.51.2 library cache ships the 50 KB library once per
+    // session and each command only carries its own args + dispatch.
+    const cut = code.indexOf("\nlocal args = jdec(");
+    if (cut > 0) return { code, lib: code.slice(0, cut + 1), body: code.slice(cut + 1) };
+    return { code };
   } catch (e) {
     return { err: `ERROR building animation command: ${e}` };
   }
@@ -1523,7 +1714,9 @@ function describeCommands() {
   const lines = [];
   lines.push(
     "— RobloxScript animation tools: build REAL Roblox animation keyframe data (KeyframeSequence/Pose) in Studio and " +
-    "review it visually. Flow: animation_create → animation_open → animation_set_pose + animation_add_keyframe / " +
+    "review it visually. FIRST CHOICE (1.52 engine): animation_generate {prompt} authors, validates and builds a whole clip from words " +
+    "(animation_sequence for multi-stage combos, animation_refine {feedback} to adjust); hand-key only what the engine cannot express. " +
+    "Manual flow: animation_create → animation_open → animation_set_pose + animation_add_keyframe / " +
     "animation_update_keyframe per keyframe time → animation_preview to check → refine. " +
     "All rotations are DEGREES, order YXZ; bones are the character's joint-connected part names (e.g. RootJoint or HumanoidRootPart, LeftUpperArm, " +
     "RightLowerLeg); both Motor6D (R6/R15) and AnimationConstraint (Avatar Joint Upgrade) rigs are supported; times in seconds from 0 to duration. " +

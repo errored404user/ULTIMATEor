@@ -3837,6 +3837,146 @@
   // 1.42.0: harness hook so tests can drive the real dispatcher (permission
   // gates, bridge message shapes) without a provider page.
   try { window.__rsRunTool = (call) => runTool(call); } catch {}
+  // ── 1.52.0 ANIMATION ENGINE (src/core/animengine.js) ──────────────────────
+  // animation_generate / refine / sequence / validate / export_rbxmx / build:
+  // the engine turns a prompt into a structured, validated clip in the
+  // extension (no model keyframing), then ONE `rig_info` trip reads the real
+  // rig (type + bones) and ONE `build` trip writes the KeyframeSequence with
+  // exact per-joint CFrames (C0-conjugated, so R6/R15/custom rigs are right).
+  // Studio offline → the clip is still generated + validated and handed to the
+  // Animation Studio overlay (export .rbxmx there); nothing is pretended built.
+  const ANIM_ENGINE_OPS = new Set(["generate", "refine", "sequence", "validate", "export_rbxmx", "build"]);
+  A.animClips = A.animClips || {};
+  A.animLast = A.animLast || "";
+  function animParse(text) {
+    const s = String(text || "");
+    if (/^ERROR/.test(s)) return { ok: false, error: s.slice(0, 400), transport: true };
+    const i = s.indexOf("{");
+    if (i < 0) return { ok: false, error: s.slice(0, 400) || "empty result", transport: true };
+    try { const j = JSON.parse(s.slice(i)); return j && typeof j === "object" ? j : { ok: false, error: s.slice(0, 400) }; } catch { return { ok: false, error: s.slice(0, 400), transport: true }; }
+  }
+  async function animStudioCall(op, payload, budget) {
+    const built = RSAnim.buildLuau(op, payload || {});
+    if (built.err) return { ok: false, error: built.err };
+    try { return animParse(await runSkillLuau(built, budget || 0)); } catch (e) { return { ok: false, error: String(e && e.message || e), transport: true }; }
+  }
+  function animRigFromInfo(data) { return data && Array.isArray(data.bones) ? { rigType: data.rigType === "R6" || data.rigType === "R15" ? data.rigType : ORAnimEngine.detectRigType({ bones: data.bones }), path: data.path, name: data.name, root: data.root, bones: data.bones.map((b) => ({ name: b.name, parent: b.parent })) } : null; }
+  function animRemember(clip, meta) {
+    A.animClips[clip.name] = clip; A.animLast = clip.name;
+    try { if (typeof ORAnimStudio !== "undefined") ORAnimStudio.loadClip(clip, meta || {}); } catch {}
+  }
+  function animReport(clip, extra) {
+    const lines = [ORAnimEngine.summary(clip)];
+    if (extra) lines.push(extra);
+    return lines.join("\n");
+  }
+  async function animBuild(clip, rigInfo) {
+    const payload = ORAnimEngine.toBuildArgs(clip, rigInfo, { overwrite: true });
+    const res = await animStudioCall("build", payload, 45000);
+    if (!res.ok) return { ok: false, error: res.error, transport: !!res.transport };
+    return { ok: true, text: res.text || "", data: res.data || {}, dropped: payload.dropped };
+  }
+  async function runAnimEngine(op, args) {
+    args = args || {};
+    const E = ORAnimEngine;
+    const nameOf = (c) => String(args.name || c && c.name || "").replace(/[^A-Za-z0-9_]/g, "") || undefined;
+    const pickClip = async () => {
+      const key = String(args.name || A.animLast || "");
+      if (key && A.animClips[key]) return { clip: A.animClips[key] };
+      // Not in this session: regenerate from the attributes the build op stored on the KeyframeSequence.
+      const info = await animStudioCall("rig_info", key ? { name: key } : {});
+      if (!info.ok) return { error: `No clip named '${key || "(last)"}' in this session and Studio could not be asked (${info.error}). Run animation_generate first.` };
+      const st = info.data && info.data.clip;
+      if (!st || !st.prompt) return { error: `No engine clip named '${key || "(last)"}' - Studio lists: ${(info.data && info.data.animations || []).join(", ") || "(none)"}. Run animation_generate {prompt} first.` };
+      let params = {}; try { params = JSON.parse(st.params || "{}"); } catch {}
+      const clip = E.generate(st.prompt, { quality: st.quality || "balanced", rigType: animRigFromInfo(info.data).rigType, name: st.name, fps: Number(st.fps) || undefined, loop: !!st.loop, params, duration: Number(st.duration) || undefined, priority: st.priority });
+      return { clip, rigInfo: animRigFromInfo(info.data) };
+    };
+    if (op === "validate") {
+      const got = await pickClip(); if (got.error) return "ERROR calling 'animation_validate': " + got.error;
+      const r = E.validate(got.clip);
+      return animReport(got.clip, `issues (${r.issues.length}): ` + (r.issues.map((i) => `[${i.level}] ${i.msg}`).join("; ") || "none") + (r.ok ? "\nVerdict: clean data - still PREVIEW it (animation_preview / animation_simulate {all:true}) before calling it done." : "\nVerdict: fix the errors (animation_refine or regenerate) before exporting."));
+    }
+    if (op === "export_rbxmx") {
+      const got = await pickClip(); if (got.error) return "ERROR calling 'animation_export_rbxmx': " + got.error;
+      const r = E.validate(got.clip); if (!r.ok) return `ERROR calling 'animation_export_rbxmx': the clip has ${r.errors} validation error(s) - fix them first:\n` + r.issues.filter((i) => i.level === "error").map((i) => "- " + i.msg).join("\n");
+      const xml = E.toRbxmx(got.clip, got.rigInfo || E.defaultRigInfo(got.clip.rigType));
+      try { const blob = new Blob([xml], { type: "application/xml" }), a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = got.clip.name + ".rbxmx"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); } catch (e) { return "ERROR calling 'animation_export_rbxmx': the browser refused the download: " + String(e && e.message || e); }
+      return `Saved ${got.clip.name}.rbxmx to the browser downloads (${xml.length} bytes, KeyframeSequence with ${got.clip.keys.length} keyframes, ${got.clip.rigType} bone names). Import it in Studio: drag the file into the Explorer or right-click → Insert from File, then load it in the Animation Editor or publish it from Studio. This is a file on the user's machine - no asset id exists until it is published.`;
+    }
+    if (op === "build") {
+      const clip = args.clip && typeof args.clip === "object" ? args.clip : (args.name && A.animClips[args.name]) || null;
+      if (!clip || !Array.isArray(clip.keys)) return "ERROR calling 'animation_build': pass {clip} (an engine clip object) or the name of a clip generated this session.";
+      const r = E.validate(clip); if (!r.ok) return `ERROR calling 'animation_build': the clip has ${r.errors} validation error(s): ` + r.issues.filter((i) => i.level === "error").map((i) => i.msg).join("; ");
+      const info = await animStudioCall("rig_info", {});
+      if (!info.ok) return `ERROR calling 'animation_build': Studio rig unavailable - ${info.error}`;
+      const rigInfo = animRigFromInfo(info.data);
+      const b = await animBuild(clip, rigInfo);
+      if (!b.ok) return `ERROR calling 'animation_build': ${b.error}`;
+      animRemember(clip, { built: true, rigInfo });
+      return `Built '${clip.name}' in Studio (${b.text}). It is the active animation in ServerStorage.RobloxScript.AnimLib - animation_preview plays it, animation_simulate {all:true} runs the QA sweep.`;
+    }
+    if (op === "generate" || op === "sequence") {
+      const prompt = String(args.prompt || args.text || args.description || "").trim();
+      if (!prompt) return `ERROR calling 'animation_${op}': 'prompt' is required - describe the motion (e.g. "looping idle with calm breathing", "3 hit sword combo with a spinning finisher and a landing").`;
+      const quality = ["fast", "balanced", "high", "cinematic"].includes(String(args.quality || "").toLowerCase()) ? String(args.quality).toLowerCase() : undefined;
+      const duration = Number(args.duration) > 0 ? Number(args.duration) : undefined;
+      const loop = typeof args.loop === "boolean" ? args.loop : undefined;
+      const fps = Number(args.fps) > 0 ? Number(args.fps) : undefined;
+      // 1 trip: the real rig (type + bones). Offline → generate anyway, say so.
+      const info = await animStudioCall("rig_info", {});
+      const rigInfo = info.ok ? animRigFromInfo(info.data) : null;
+      const wanted = String(args.rig || args.rig_type || "").toUpperCase();
+      const rigType = rigInfo ? rigInfo.rigType : (wanted === "R6" ? "R6" : "R15");
+      const offlineNote = info.ok ? "" : `Studio was not available (${info.error}) - the clip was generated and validated but NOT built. Open the Animation Studio (bar button / Ctrl+Shift+K) to export it as .rbxmx, or reconnect Studio and run animation_build {name: "${"%NAME%"}"}.`;
+      const notes = [];
+      if (rigInfo && wanted && wanted !== rigInfo.rigType && (wanted === "R6" || wanted === "R15")) notes.push(`You asked for ${wanted} but the rig in Studio ('${rigInfo.name}') is ${rigInfo.rigType} - built for ${rigInfo.rigType}; animation_select_rig {path} picks another rig.`);
+      if (rigInfo && rigInfo.rigType === "Custom") notes.push(`Custom rig '${rigInfo.name}': bones were matched by R15 names; unmatched semantic joints are skipped.`);
+      const opts = { quality, duration, loop, fps, name: nameOf(), rigType };
+      if (op === "generate") {
+        let clip; try { clip = E.generate(prompt, opts); } catch (e) { return "ERROR calling 'animation_generate': " + String(e && e.message || e); }
+        if (!rigInfo) { animRemember(clip, {}); return animReport(clip, offlineNote.replace("%NAME%", clip.name) + (notes.length ? "\n" + notes.join("\n") : "")); }
+        const b = await animBuild(clip, rigInfo);
+        if (!b.ok) { animRemember(clip, { rigInfo }); return `ERROR calling 'animation_generate': generated + validated '${clip.name}' (${clip.keys.length} keys, score ${clip.report.score}) but Studio refused the build: ${b.error}`; }
+        animRemember(clip, { built: true, rigInfo });
+        const r = clip.report;
+        return animReport(clip, `BUILT in Studio: ${b.text}${b.dropped && b.dropped.length ? ` (joints not on this rig, folded into parents: ${b.dropped.join(", ")})` : ""}.` + (notes.length ? "\n" + notes.join("\n") : "") + `\nNext: animation_preview to watch it on the rig, animation_simulate {all:true} for the QA sweep; animation_refine {feedback: "..."} to adjust (faster / slower / more anticipation / heavier landing / exaggerate / subtle / smoother / longer / shorter / loop / variation); animation_export (plugin) or animation_publish only when the user asks. The user can edit it in the Animation Studio overlay or Studio's Animation Editor (rig.AnimSaves.${clip.name}).` + (r.ok ? "" : "\nValidation has ERRORS - do not publish before refining."));
+      }
+      // sequence: combined clip + one clip per stage group
+      let seq; try { seq = E.generateSequence(prompt, opts); } catch (e) { return "ERROR calling 'animation_sequence': " + String(e && e.message || e); }
+      const all = [seq.combined].concat(seq.clips);
+      const builtNames = [], failed = [];
+      for (const c of all) {
+        if (!rigInfo) { animRemember(c, {}); continue; }
+        const b = await animBuild(c, rigInfo);
+        if (b.ok) { builtNames.push(c.name); animRemember(c, { built: true, rigInfo }); } else { failed.push(`${c.name}: ${b.error}`); animRemember(c, { rigInfo }); if (b.transport) break; }
+      }
+      A.animLast = seq.combined.name; try { if (typeof ORAnimStudio !== "undefined") ORAnimStudio.loadClip(seq.combined, { built: builtNames.includes(seq.combined.name), rigInfo }); } catch {}
+      const lines = [ORAnimEngine.summary(seq.combined), `Per-stage clips (${seq.clips.length}): ` + seq.clips.map((c) => `${c.name} ${c.duration}s/${c.keys.length} keys/score ${c.report.score}`).join(" · "), "Transitions: " + seq.transitions.map((t) => `${t.clip}: ${t.blend}; ${t.gameplayWindow}`).join(" | ")];
+      if (!rigInfo) lines.push(offlineNote.replace("%NAME%", seq.combined.name));
+      else { lines.push(`BUILT in Studio: ${builtNames.length}/${all.length} clips (${builtNames.join(", ")}); the active animation is the last built one - animation_open {name} switches.`); if (failed.length) lines.push("FAILED: " + failed.join(" | ")); }
+      if (notes.length) lines.push(notes.join("\n"));
+      lines.push("Play the combined clip for a cutscene; play the per-stage clips from a combat controller (AnimationTrack:Play(0.1) on each input, cancel windows after the 'hit' KeyframeMarker via AnimationTrack:GetMarkerReachedSignal(\"hit\")).");
+      return lines.join("\n");
+    }
+    if (op === "refine") {
+      const feedback = String(args.feedback || args.prompt || args.text || "").trim();
+      if (!feedback) return "ERROR calling 'animation_refine': 'feedback' is required (e.g. \"make the attacks faster, more anticipation, heavier landing\").";
+      const got = await pickClip(); if (got.error) return "ERROR calling 'animation_refine': " + got.error;
+      let out; try { out = E.applyFeedback(got.clip, feedback); } catch (e) { return "ERROR calling 'animation_refine': " + String(e && e.message || e); }
+      const applied = out.feedback[out.feedback.length - 1].applied;
+      const cmp = E.compare(got.clip, out);
+      const info = await animStudioCall("rig_info", {});
+      const rigInfo = info.ok ? animRigFromInfo(info.data) : got.rigInfo || null;
+      if (!rigInfo) { animRemember(out, {}); return animReport(out, `Applied: ${applied.join(", ")}. Before → after: ${cmp.durationBefore}s → ${cmp.durationAfter}s, ${cmp.keysBefore} → ${cmp.keysAfter} keys, score ${cmp.scoreBefore} → ${cmp.scoreAfter}, largest change ${cmp.largestChange.joint} ${cmp.largestChange.degrees}°.\nStudio was not available (${info.error}) - NOT rebuilt.`); }
+      const b = await animBuild(out, rigInfo);
+      if (!b.ok) { animRemember(out, { rigInfo }); return `ERROR calling 'animation_refine': refined '${out.name}' (${applied.join(", ")}) but Studio refused the rebuild: ${b.error}`; }
+      animRemember(out, { built: true, rigInfo });
+      return animReport(out, `Applied: ${applied.join(", ")}. Before → after: ${cmp.durationBefore}s → ${cmp.durationAfter}s, ${cmp.keysBefore} → ${cmp.keysAfter} keys, score ${cmp.scoreBefore} → ${cmp.scoreAfter}, largest change ${cmp.largestChange.joint} ${cmp.largestChange.degrees}°.\nREBUILT in Studio: ${b.text}. Preview again (animation_preview) before judging.`);
+    }
+    return `ERROR: unknown animation engine op '${op}'.`;
+  }
+
   async function runTool(call) {
     let name = call.tool;
     let args = call.arguments || {};
@@ -4372,6 +4512,10 @@
     // The catalogue above (list_commands) advertises them; the Roblox MCP
     // itself has no such tools, so they are resolved here instead of sent
     // through as real tool names.
+    // ── 1.52.0 ANIMATION ENGINE: natural language → validated KeyframeSequence (engine in animengine.js) ──
+    if (name.startsWith("animation_") && typeof ORAnimEngine !== "undefined" && ANIM_ENGINE_OPS.has(name.slice("animation_".length))) {
+      return await runAnimEngine(name.slice("animation_".length), args);
+    }
     if (name.startsWith("animation_")) {
       const op = name.slice("animation_".length);
       if (!RSAnim.ANIM_OPS.includes(op)) {
@@ -5938,6 +6082,20 @@
     });
   }
   window.__rsOpenGuiStudio = openGuiStudio;
+  // 1.52.0 — Animation Studio: prompt → engine clip → schematic preview / timeline / joint editor; Build + Preview run
+  // animation_build / animation_preview directly through the tool runner (the click is the approval), Send hands off text.
+  function openAnimStudio() {
+    if (typeof ORAnimStudio === "undefined" || typeof ORAnimEngine === "undefined") { ui.toast("Animation Studio module missing — reload the extension"); return; }
+    ORAnimStudio.open({
+      send: (text, onStatus) => sendPainting(text, null, onStatus),
+      runTool: guiStudioRunTool,
+      studioReady: () => { try { return currentEngineIsLive(); } catch { return false; } },
+      engine: () => activeEngine(),
+      toast: (m) => ui.toast(m),
+      diag,
+    });
+  }
+  window.__rsOpenAnimStudio = openAnimStudio;
 
   async function startSession(opts = {}) {
     const isRestart = !!(opts && opts.restart);
@@ -6812,6 +6970,7 @@
           <button id="rs-undo" hidden title="Undo last Studio change the agent made">Undo</button>
           <button id="rs-discord" aria-label="Discord" title="OR Discord"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.8 19.8 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg></button>
           <button id="rs-paint-btn" aria-label="Paint" title="Paint — draw it, the AI builds it (Ctrl+Shift+P)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 4c-3 1-8 6-10 9l2 2c3-2 8-7 9-10z"/><path d="M8 15c-2 0-4 1-4 4 0 1-1 1-1 1s4 1 6-1c1-1 1-2 1-2z"/></svg></button>
+          <button id="rs-anim-btn" aria-label="Animation Studio" title="Animation Studio — describe a motion, preview the keys, build the KeyframeSequence in Studio (Ctrl+Shift+K)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="4.5" r="2"/><path d="M12 7v6"/><path d="M12 9l-4 3M12 9l4-2"/><path d="M12 13l-3 7M12 13l3 6"/></svg></button>
           <button id="rs-gui-btn" aria-label="GUI Studio" title="GUI Studio — design a Roblox GUI visually, build it in Studio (Ctrl+Shift+G)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="17" height="15" rx="2"/><path d="M2.5 7.5h17M7.5 18.5v-11"/><rect x="10" y="12" width="7" height="3.5" rx="1.75" fill="currentColor" stroke="none"/><path d="M15 14.5l6.5 2.6-2.6 1 1.6 2.6-1.5.9-1.6-2.6-1.8 2.1z" fill="currentColor" stroke="none"/></svg></button>
           <button id="rs-settings-btn" aria-label="Settings" title="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
           </div>
@@ -7136,6 +7295,9 @@
       if (paintBtn) paintBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenPaint) window.__rsOpenPaint(); });
       const guiBtn = root.querySelector("#rs-gui-btn");
       if (guiBtn) guiBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenGuiStudio) window.__rsOpenGuiStudio(); });
+      const animBtn = root.querySelector("#rs-anim-btn");
+      if (animBtn) animBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenAnimStudio) window.__rsOpenAnimStudio(); });
+      document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "K" || e.key === "k") && !e.altKey) { if (typeof ORAnimStudio !== "undefined" && ORAnimStudio.isOpen()) return; if (typeof ORGuiStudio !== "undefined" && ORGuiStudio.isOpen()) return; if (typeof ORPaint !== "undefined" && ORPaint.isOpen()) return; e.preventDefault(); if (window.__rsOpenAnimStudio) window.__rsOpenAnimStudio(); } }, true);
       document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "G" || e.key === "g") && !e.altKey) { if (typeof ORGuiStudio !== "undefined" && ORGuiStudio.isOpen()) return; if (typeof ORPaint !== "undefined" && ORPaint.isOpen()) return; e.preventDefault(); if (window.__rsOpenGuiStudio) window.__rsOpenGuiStudio(); } }, true);
       document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "P" || e.key === "p") && !e.altKey) { if (typeof ORPaint !== "undefined" && ORPaint.isOpen()) return; e.preventDefault(); if (window.__rsOpenPaint) window.__rsOpenPaint(); } }, true);
       // Engine toggle (Roblox ↔ AgentScript ↔ Animation)

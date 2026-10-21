@@ -23,6 +23,7 @@ local CLASSES = {
   RemoteEvent={"Instance"}, RemoteFunction={"Instance"}, BindableEvent={"Instance"}, BindableFunction={"Instance"}, ValueBase={"Instance"}, IntValue={"ValueBase"}, NumberValue={"ValueBase"}, StringValue={"ValueBase"}, Color3Value={"ValueBase"},
   Sound={"Instance"}, Camera={"Instance"}, Humanoid={"Instance"}, Player={"Instance"}, PlayerGui={"Instance"},
   PVInstance={"Instance"}, Model={"PVInstance"}, Tool={"Model"}, Accessory={"Model"}, BasePart={"PVInstance"}, Part={"BasePart"}, MeshPart={"BasePart"}, WedgePart={"BasePart"}, UnionOperation={"BasePart"}, TrussPart={"BasePart"},
+  KeyframeSequence={"Instance"}, Keyframe={"Instance"}, Pose={"Instance"}, KeyframeMarker={"Instance"}, Animation={"Instance"},
   Attachment={"Instance"}, Decal={"Instance"}, Texture={"Decal"}, JointInstance={"Instance"}, Motor6D={"JointInstance"}, Weld={"JointInstance"}, WeldConstraint={"Instance"}, HumanoidDescription={"Instance"}, FaceControls={"Instance"},
   ParticleEmitter={"Instance"}, Beam={"Instance"}, Trail={"Instance"}, Highlight={"Instance"}, Light={"Instance"}, SpotLight={"Light"}, PointLight={"Light"}, SurfaceLight={"Light"},
   PostEffect={"Instance"}, BloomEffect={"PostEffect"}, ColorCorrectionEffect={"PostEffect"}, DepthOfFieldEffect={"PostEffect"}, SunRaysEffect={"PostEffect"}, BlurEffect={"PostEffect"}, Atmosphere={"Instance"}, Sky={"Instance"}, Clouds={"Instance"},
@@ -195,6 +196,8 @@ local DEFAULTS = {Size=function() return UDim2.new(0,100,0,100) end, Position=fu
   ClockTime=14, FogEnd=100000, FogStart=0, ExposureCompensation=0, GlobalShadows=true, EnvironmentDiffuseScale=0, EnvironmentSpecularScale=0, ShadowSoftness=0.2, Ambient=function() return Color3.fromRGB(70,70,70) end, OutdoorAmbient=function() return Color3.fromRGB(70,70,70) end, FogColor=function() return Color3.fromRGB(192,192,192) end,
   HipHeight=2, WalkSpeed=16, JumpPower=50, RigType=function() return Enum.HumanoidRigType.R15 end, DisplayDistanceType=function() return Enum.HumanoidDisplayDistanceType.Viewer end, HealthDisplayType=function() return Enum.HumanoidHealthDisplayType.DisplayWhenDamaged end, NameDisplayDistance=100,
   Texture="", Face=function() return Enum.NormalId.Front end, Archivable=true, Locked=false, Enabled=true,
+  -- animation data (KeyframeSequence / Keyframe / Pose)
+  Loop=false, Priority=function() return Enum.AnimationPriority.Core end, Time=0, Weight=1, EasingStyle=function() return Enum.PoseEasingStyle.Linear end, EasingDirection=function() return Enum.PoseEasingDirection.In end,
 }
 local PART_DEFAULTS = {Size=function() return Vector3.new(4,1,2) end, CFrame=function() return CFrame.new() end}
 M.created = 0
@@ -237,6 +240,20 @@ function methods:IsDescendantOf(a) local p=self.__props.Parent while p do if p==
 function methods:GetFullName() local parts={} local n=self while n and n.__class~="DataModel" do table.insert(parts,1,n.__props.Name) n=n.__props.Parent end return table.concat(parts,".") end
 function methods:Destroy() self.Parent=nil self.__destroyed=true end
 function methods:ClearAllChildren() for _,c in ipairs(self:GetChildren()) do c:Destroy() end end
+-- Animation data API (1.52.0): KeyframeSequence/Keyframe/Pose hierarchies + BasePart:GetJoints
+function methods:GetKeyframes() local out={} for _,c in ipairs(self.__children) do if c.__class=="Keyframe" then out[#out+1]=c end end return out end
+function methods:GetPoses() local out={} for _,c in ipairs(self.__children) do if c.__class=="Pose" then out[#out+1]=c end end return out end
+function methods:GetSubPoses() return self:GetPoses() end
+function methods:AddPose(p) p.Parent=self end
+function methods:AddSubPose(p) p.Parent=self end
+function methods:RemovePose(p) p.Parent=nil end
+function methods:GetMarkers() local out={} for _,c in ipairs(self.__children) do if c.__class=="KeyframeMarker" then out[#out+1]=c end end return out end
+function methods:AddMarker(m) m.Parent=self end
+function methods:GetJoints()
+  local out={} local root=self while root.__props.Parent do root=root.__props.Parent end
+  for _,d in ipairs(root:GetDescendants()) do if isa(d.__class,"JointInstance") and (d.__props.Part0==self or d.__props.Part1==self) then out[#out+1]=d end end
+  return out
+end
 local function cloneTree(self, map)
   local c=new(self.__class) map[self]=c
   for k,v in pairs(self.__props) do if k~="Parent" then c.__props[k]=v end end
@@ -427,6 +444,7 @@ Inst.__index = function(o, k)
   if k == "AbsoluteSize" then return absSize(o) end
   if k == "AbsolutePosition" then return absPos(o) end
   if k == "AbsoluteWindowSize" then return absSize(o) end
+  if o.__class == "Pose" and k == "CFrame" then return CFrame.new() end
   if isa(o.__class, "BasePart") then
     if k == "Size" then return PART_DEFAULTS.Size() end
     if k == "CFrame" then return PART_DEFAULTS.CFrame() end
@@ -581,6 +599,7 @@ _G.RaycastParams = {new = function() return {FilterDescendantsInstances = {}} en
 _G.utf8 = utf8
 string.split = function(s, sep) local out={} for piece in (s..sep):gmatch("(.-)"..sep:gsub("%p","%%%0")) do out[#out+1]=piece end return out end
 math.clamp = function(v,a,b) return math.max(a, math.min(b, v)) end
+math.round = math.round or function(x) if x >= 0 then return math.floor(x + 0.5) end return math.ceil(x - 0.5) end
 _G.warn = function(...) M.warnings[#M.warnings+1]=table.concat({...}," ") end
 M.warnings = {}
 _G.print = function(...) M.prints[#M.prints+1]=table.concat({...}," ") end
