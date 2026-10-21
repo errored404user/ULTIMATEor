@@ -286,9 +286,11 @@
       const leg = variant === "kick_l" ? "l" : "r", st = leg === "l" ? "r" : "l", sgn = leg === "l" ? -1 : 1;
       const w = {}; w[leg + "_hip"] = J(-35 * k, 0, 6 * sgn); w[leg + "_knee"] = J(-100 * k, 0, 0); w.waist = J(-8, 20 * sgn * k, 0); w.root = { rot: [-6, 15 * sgn * k, 0], pos: [0, -0.1, 0.1] }; w[st + "_knee"] = J(-30 * k, 0, 0);
       B.push({ at: 0.0, tag: "windup", ease: ["CubicV2", "In"], pose: withOverrides(prev, w) });
-      const o = {}; o[leg + "_hip"] = J(100 * k, 0, 10 * sgn); o[leg + "_knee"] = J(-5, 0, 0); o[leg + "_ankle"] = J(20, 0, 0); o.waist = J(15 * k, -20 * sgn * k, -5 * sgn); o.neck = J(-5, 15 * sgn, 0); o.root = { rot: [12 * k, variant === "kick_spin" ? 170 * sgn : -20 * sgn * k, 8 * sgn], pos: [0, 0.05, 0.1] }; o[st + "_knee"] = J(-20 * k, 0, 0); o[st + "_ankle"] = J(8, 0, 0); o[leg + "_shoulder"] = J(-40 * k, 0, 30 * sgn); o[st + "_shoulder"] = J(60 * k, 0, -30 * sgn); o[st + "_elbow"] = J(80, 0, 0);
+      const o = {}; o[leg + "_hip"] = J(100 * k, 0, 10 * sgn); o[leg + "_knee"] = J(-5, 0, 0); o[leg + "_ankle"] = J(20, 0, 0); o.waist = J(15 * k, -20 * sgn * k, -5 * sgn); o.neck = J(-5, 15 * sgn, 0); o.root = { rot: [12 * k, variant === "kick_spin" ? 200 * sgn : -20 * sgn * k, 8 * sgn], pos: [0, 0.05, 0.1] }; o[st + "_knee"] = J(-20 * k, 0, 0); o[st + "_ankle"] = J(8, 0, 0); o[leg + "_shoulder"] = J(-40 * k, 0, 30 * sgn); o[st + "_shoulder"] = J(60 * k, 0, -30 * sgn); o[st + "_elbow"] = J(80, 0, 0);
       B.push({ at: 0.5, tag: "impact", ease: ["Linear", "Out"], pose: withOverrides(prev, o) });
-      B.push({ at: 1.0, tag: "follow", ease: ["CubicV2", "Out"], pose: withOverrides(prev, Object.assign({}, o, { [leg + "_hip"]: J(85 * k, 0, 12 * sgn), [leg + "_knee"]: J(-25 * k, 0, 0) })) });
+      // a spin kick carries the body through a full turn: the follow lands at 360° (minus a little coil) so the next stage continues from +360 instead of snapping back
+      B.push({ at: 1.0, tag: "follow", ease: ["CubicV2", "Out"], pose: withOverrides(prev, Object.assign({}, o, { [leg + "_hip"]: J(85 * k, 0, 12 * sgn), [leg + "_knee"]: J(-25 * k, 0, 0), root: variant === "kick_spin" ? { rot: [6 * k, 360 * sgn - 10 * sgn, 4 * sgn], pos: [0, 0, 0.1] } : o.root })) });
+      if (variant === "kick_spin") B.spinTurn = 360 * sgn;
     }
     return B;
   }
@@ -448,9 +450,11 @@
   function stageDurations(stages, total, params) {
     const w = stageWeights(stages, params), w0 = stageWeights(stages, DEFAULT_PARAMS);
     const sum = w.reduce((a, b) => a + b, 0), sum0 = w0.reduce((a, b) => a + b, 0);
-    return w.map((v) => total * v / sum0 * (sum0 / sum) * (sum / sum0));
+    return w.map((v) => total * v / sum); // distribute the (already speed-scaled) total exactly - stages always end at `duration`
   }
   function generate(intentOrText, opts) {
+    if (typeof intentOrText === "string" && !intentOrText.trim()) throw new Error("describe the motion first (empty prompt)");
+    if (intentOrText == null || (typeof intentOrText !== "string" && typeof intentOrText !== "object")) throw new Error("generate() needs a prompt string or a parsed intent");
     const intent = typeof intentOrText === "string" ? parseIntent(intentOrText) : JSON.parse(JSON.stringify(intentOrText));
     opts = opts || {};
     const quality = QUALITY[opts.quality || intent.quality || "balanced"] ? (opts.quality || intent.quality || "balanced") : "balanced";
@@ -469,11 +473,12 @@
     const jitter = params.variation ? rng(seed) : null;
     const vj = (v, pct) => jitter ? v * (1 + (jitter() * 2 - 1) * pct) : v;
     if (intent.stages && intent.stages.length) {
-      const durs = stageDurations(intent.stages, duration, params);
+      let durs = stageDurations(intent.stages, duration, params);
+      if (jitter) { durs = durs.map((d) => vj(d, 0.08)); const sum = durs.reduce((a, b) => a + b, 0); durs = durs.map((d) => d * duration / sum); } // variation jitters stage timing but stages still end exactly at `duration`
       let t0 = 0, prev = stance(k, style), yawOffset = 0;
       const weapon = intent.weapon || "punch", hands = intent.hands || 1;
       intent.stages.forEach((s, idx) => {
-        const d = vj(durs[idx], 0.08);
+        const d = durs[idx];
         let beats = [];
         if (s.kind === "ready") { const rp = intent.category === "attack" || intent.category === "dodge" || intent.category === "block" ? readyPose(k, style, weapon, hands) : stance(k, style); beats = [{ at: 0, tag: "start", ease: ["CubicV2", "Out"], pose: idx === 0 && !(intent.category === "attack") ? stance(k, style) : rp }, { at: 1, tag: "ready", ease: ["CubicV2", "InOut"], pose: rp }]; }
         else if (s.kind === "anticipation") beats = anticipationBeats(k, params.anticipation, prev, weapon, hands);
@@ -487,12 +492,18 @@
         else if (s.kind === "block") beats = blockBeats(k, prev);
         else if (s.kind === "cast") beats = castBeats(k, prev, intent.category === "transform");
         else if (s.kind === "recover") { const end = intent.category === "attack" ? readyPose(k * 0.9, style, weapon, hands) : stance(k, style); beats = [{ at: 0.55, tag: "settle", ease: ["CubicV2", "InOut"], pose: mix(prev, end, 0.6) }, { at: 1, tag: "end", ease: ["CubicV2", "Out"], pose: end }]; }
+        const lastLocal = beats.length ? clonePose(beats[beats.length - 1].pose) : null; // before the offset is baked in - the next stage builds on the LOCAL frame
         if (yawOffset) for (const b of beats) { const rp = b.pose.root || { rot: [0, 0, 0] }; b.pose.root = Object.assign({}, rp, { rot: [rp.rot[0], rp.rot[1] + yawOffset, rp.rot[2]] }); }
         const stageKeys = beats.map((b) => ({ t: r3(t0 + b.at * d), poses: b.pose, ease: b.ease, tag: b.tag, stage: s.kind + (s.index != null ? "_" + (s.index + 1) : "") }));
-        if (s.kind === "spin") yawOffset += 360 * (intent.text && /double spin|two spins|720/i.test(intent.text) ? 2 : 1);
+        let turned = 0;
+        if (s.kind === "spin") turned += 360 * (intent.text && /double spin|two spins|720/i.test(intent.text) ? 2 : 1);
+        if (beats.spinTurn) turned += beats.spinTurn; // spin kick: the next stage starts one full turn later
+        yawOffset += turned;
         stages.push({ name: s.kind + (s.index != null ? "_" + (s.index + 1) : "") + (s.variant ? ":" + s.variant : ""), kind: s.kind, t0: r3(t0), t1: r3(t0 + d), marker: s.kind === "strike" || s.kind === "finisher" || s.kind === "spin" ? "hit" : s.kind === "land" ? "land" : s.kind });
         keys.push(...stageKeys);
-        if (beats.length) prev = beats[beats.length - 1].pose;
+        if (lastLocal) prev = lastLocal;
+        // `prev` lives in the next stage's local frame: after a full turn the local yaw drops by what the offset gained (otherwise a recover that mixes prev with the ready pose wobbles 140° back).
+        if (turned && prev.root) prev = withOverrides(prev, { root: { rot: [prev.root.rot[0], prev.root.rot[1] - turned, prev.root.rot[2]], pos: prev.root.pos } });
         t0 += d;
       });
     } else if (intent.category === "walk" || intent.category === "run" || intent.category === "swim" || intent.category === "climb") {
@@ -507,7 +518,7 @@
     // principles
     if (q.holdFrames) keys = addImpactHolds(keys, fps, q.holdFrames, duration);
     if (q.followThrough) keys = addFollowThrough(keys, fps, k, duration);
-    if (q.arcs) keys = addArcs(keys, duration);
+    if (q.arcs) keys = addArcs(keys, duration, fps);
     if (q.secondary) keys = addSecondaryLag(keys, k);
     if (intent.upperOnly) for (const key of keys) for (const j of ["l_hip", "l_knee", "l_ankle", "r_hip", "r_knee", "r_ankle"]) key.poses[j] = J(0, 0, 0);
     if (loop) keys = closeLoop(keys, duration);
@@ -563,12 +574,12 @@
     return out;
   }
   // Arcs: between windup and impact, lift the striking arm so the hand travels an arc instead of a chord.
-  function addArcs(keys, duration) {
+  function addArcs(keys, duration, fps) {
     const out = [];
     for (let i = 0; i < keys.length; i++) {
       out.push(keys[i]);
       const a = keys[i], b = keys[i + 1];
-      if (!b || a.tag !== "windup" || b.tag !== "impact") continue;
+      if (!b || a.tag !== "windup" || b.tag !== "impact" || b.t - a.t < 3 / (fps || 30)) continue; // no breakdown inside a 2-frame gap (it would spike the velocity check)
       const t = r3((a.t + b.t) / 2); const poses = mix(a.poses, b.poses, 0.5);
       for (const j of ["l_shoulder", "r_shoulder"]) { const d = Math.abs((b.poses[j] || J(0, 0, 0)).rot[0] - (a.poses[j] || J(0, 0, 0)).rot[0]) + Math.abs((b.poses[j] || J(0, 0, 0)).rot[2] - (a.poses[j] || J(0, 0, 0)).rot[2]); if (d > 40) poses[j].rot[0] += Math.min(35, d * 0.25); }
       out.push({ t, poses, ease: ["CubicV2", "InOut"], tag: "arc", stage: a.stage, synthetic: true });
@@ -632,7 +643,7 @@
       const a = keys[0], b = keys[keys.length - 1];
       let worst = 0, wj = null;
       for (const j of JOINTS) { const pa = a.poses[j], pb = b.poses[j]; if (!pa || !pb) continue; const d = Math.max(...[0, 1, 2].map((i) => Math.abs(pa.rot[i] - pb.rot[i]))); if (d > worst) { worst = d; wj = j; } }
-      if (worst > 2) add("warn", "loop", `loop seam: ${wj} differs by ${Math.round(worst)}° between the last and first keyframe`, { joint: wj, delta: worst });
+      if (worst > 2) add(worst > 15 ? "error" : "warn", "loop", `loop seam: ${wj} differs by ${Math.round(worst)}° between the last and first keyframe${worst > 15 ? " (visible pop)" : ""}`, { joint: wj, delta: worst });
       if (Math.abs(b.t - clip.duration) > 1e-6) add("warn", "loop", `looping clip should end with a keyframe at ${clip.duration}s (last is ${b.t}s)`);
     }
     // timing sanity: too-dense / too-sparse
@@ -695,6 +706,11 @@
     const intent = JSON.parse(JSON.stringify(clip.intent)); intent.duration = duration;
     if (has(/\badd (?:a )?spin/)) { if (!intent.stages.some((s) => s.kind === "spin")) { const at = Math.max(0, intent.stages.findIndex((s) => s.kind === "land" || s.kind === "recover")); intent.stages.splice(at < 0 ? intent.stages.length : at, 0, { kind: "spin" }); notes.push("added a spin"); } }
     if (has(/\badd (?:a )?(?:landing|land)/) && !intent.stages.some((s) => s.kind === "land")) { const at = intent.stages.findIndex((s) => s.kind === "recover"); intent.stages.splice(at < 0 ? intent.stages.length : at, 0, { kind: "air" }, { kind: "land" }); notes.push("added a landing"); }
+    // added stages extend the clip (by their default weight) instead of squeezing the existing beats - unless the user pinned a duration
+    if (intent.stages && intent.stages.length && clip.intent.stages && intent.stages.length > clip.intent.stages.length && !dm) {
+      const w1 = stageWeights(intent.stages, DEFAULT_PARAMS).reduce((a, b) => a + b, 0), w0 = stageWeights(clip.intent.stages, DEFAULT_PARAMS).reduce((a, b) => a + b, 0);
+      if (w0 > 0 && w1 > w0) { duration = r3(clamp((duration || clip.duration) * w1 / w0, 0.2, 60)); intent.duration = duration; }
+    }
     if (!notes.length) notes.push("no recognised adjustment - regenerated with the same settings (try: faster, slower, more anticipation, heavier landing, exaggerate, subtle, smoother, longer, shorter, loop, variation)");
     const out = generate(intent, { quality, rigType: clip.rigType, name: clip.name, fps, loop, params: p, duration, priority: clip.priority });
     out.feedback = (clip.feedback || []).concat([{ text: feedback, applied: notes }]);

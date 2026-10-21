@@ -3947,6 +3947,7 @@
       const all = [seq.combined].concat(seq.clips);
       const builtNames = [], failed = [];
       for (const c of all) {
+        if (A.stop) { failed.push(`${c.name}: cancelled by the user before it was built`); animRemember(c, { rigInfo }); continue; }
         if (!rigInfo) { animRemember(c, {}); continue; }
         const b = await animBuild(c, rigInfo);
         if (b.ok) { builtNames.push(c.name); animRemember(c, { built: true, rigInfo }); } else { failed.push(`${c.name}: ${b.error}`); animRemember(c, { rigInfo }); if (b.transport) break; }
@@ -3954,7 +3955,7 @@
       A.animLast = seq.combined.name; try { if (typeof ORAnimStudio !== "undefined") ORAnimStudio.loadClip(seq.combined, { built: builtNames.includes(seq.combined.name), rigInfo }); } catch {}
       const lines = [ORAnimEngine.summary(seq.combined), `Per-stage clips (${seq.clips.length}): ` + seq.clips.map((c) => `${c.name} ${c.duration}s/${c.keys.length} keys/score ${c.report.score}`).join(" · "), "Transitions: " + seq.transitions.map((t) => `${t.clip}: ${t.blend}; ${t.gameplayWindow}`).join(" | ")];
       if (!rigInfo) lines.push(offlineNote.replace("%NAME%", seq.combined.name));
-      else { lines.push(`BUILT in Studio: ${builtNames.length}/${all.length} clips (${builtNames.join(", ")}); the active animation is the last built one - animation_open {name} switches.`); if (failed.length) lines.push("FAILED: " + failed.join(" | ")); }
+      else { lines.push(`BUILT in Studio: ${builtNames.length}/${all.length} clips (${builtNames.join(", ")}); the active animation is the last built one - animation_open {name} switches.`); if (failed.length) lines.push((A.stop ? "CANCELLED - not built: " : "FAILED: ") + failed.join(" | ")); }
       if (notes.length) lines.push(notes.join("\n"));
       lines.push("Play the combined clip for a cutscene; play the per-stage clips from a combat controller (AnimationTrack:Play(0.1) on each input, cancel windows after the 'hit' KeyframeMarker via AnimationTrack:GetMarkerReachedSignal(\"hit\")).");
       return lines.join("\n");

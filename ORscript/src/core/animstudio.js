@@ -444,7 +444,7 @@
     D.timeline.addEventListener("pointerdown", (e) => {
       if (!S.clip) return; const { t, hit } = timelineHit(e);
       if (S.playing) pause();
-      if (hit >= 0) { S.sel = hit; S.drag = { index: hit, t: S.clip.keys[hit].t, moved: false }; D.timeline.setPointerCapture(e.pointerId); S.t = S.clip.keys[hit].t; renderAll(); }
+      if (hit >= 0) { S.sel = hit; S.drag = { index: hit, t: S.clip.keys[hit].t, moved: false }; try { D.timeline.setPointerCapture(e.pointerId); } catch {} S.t = S.clip.keys[hit].t; renderAll(); }
       else { scrub(t); }
     });
     D.timeline.addEventListener("pointermove", (e) => { if (!S.drag || !S.clip) return; const { t } = timelineHit(e); const step = 1 / S.clip.fps; S.drag.t = Math.round(t / step) * step; S.drag.moved = true; S.t = S.drag.t; renderTimeline(); renderPreview(); renderTransport(); });
