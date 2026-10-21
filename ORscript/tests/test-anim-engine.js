@@ -23,9 +23,11 @@ ok("A: every pose rotation respects the per-joint limits", idle.keys.every((k) =
 const fk = E.forwardKinematics(E.sampleAt(idle, 0.3), "R15");
 ok("A: forward kinematics yields a full skeleton (feet below hips, head above torso)", fk.l_ankle_tip[1] < fk.l_hip[1] && fk.neck_tip[1] > fk.waist[1] && Object.keys(fk).length >= 20);
 const idleXml = E.toRbxmx(idle, E.defaultRigInfo("R15"));
-ok("A: .rbxmx export is a looping KeyframeSequence with one Keyframe per key and Pose nodes for the R15 bones", idleXml.includes('class="KeyframeSequence"') && /<bool name="Loop">true<\/bool>/.test(idleXml) && (idleXml.match(/class="Keyframe"/g) || []).length === idle.keys.length && idleXml.includes(">LowerTorso<") && idleXml.includes(">RightHand<") && !idleXml.includes("NaN"));
+const idleExport = E.exportKeys(idle); // 1.54: high-quality clips are spline clips and export baked frames (every authored key kept exact)
+ok("A: spline clip exports the frame grid plus every authored key time", idle.interp === "spline" && idleExport.length > idle.keys.length && idle.keys.every((k) => idleExport.some((e) => Math.abs(e.t - k.t) < 1e-6 && e.poses === k.poses)), [idle.keys.length, idleExport.length]);
+ok("A: .rbxmx export is a looping KeyframeSequence with one Keyframe per exported key and Pose nodes for the R15 bones", idleXml.includes('class="KeyframeSequence"') && /<bool name="Loop">true<\/bool>/.test(idleXml) && (idleXml.match(/class="Keyframe"/g) || []).length === idleExport.length && idleXml.includes(">LowerTorso<") && idleXml.includes(">RightHand<") && !idleXml.includes("NaN"));
 const idleBuild = E.toBuildArgs(idle, E.defaultRigInfo("R15"), { overwrite: true });
-ok("A: Studio build payload carries the same keys, loop flag, R15 bone list and overwrite", idleBuild.keys.length === idle.keys.length && idleBuild.loop === true && idleBuild.bones.includes("UpperTorso") && idleBuild.overwrite === true && idleBuild.rigType === "R15" && idleBuild.name === idle.name);
+ok("A: Studio build payload carries the same keys, loop flag, R15 bone list and overwrite", idleBuild.keys.length === idleExport.length && idleBuild.loop === true && idleBuild.bones.includes("UpperTorso") && idleBuild.overwrite === true && idleBuild.rigType === "R15" && idleBuild.name === idle.name);
 
 // ── B. multi-stage sword combo ──
 const combo = E.generate("extremely fluid anime sword combo: anticipation, three rapid strikes, a spinning finisher and a dramatic landing", { quality: "cinematic" });
@@ -83,7 +85,7 @@ ok("F: rbxmx XML is balanced (every <Item> is closed)", items === closes && item
 const cfs = idleXml.match(/<CoordinateFrame name="CFrame">[\s\S]*?<\/CoordinateFrame>/g) || [];
 ok("F: every Pose CFrame has 12 finite components", cfs.length > 0 && cfs.every((c) => (c.match(/<(X|Y|Z|R\d\d)>-?\d/g) || []).length === 12 && !/NaN|Infinity/.test(c)), cfs.length);
 ok("F: Poses nest HumanoidRootPart → LowerTorso → UpperTorso → … per Roblox's KeyframeSequence format", idleXml.indexOf(">HumanoidRootPart<") < idleXml.indexOf(">LowerTorso<") && idleXml.indexOf(">LowerTorso<") < idleXml.indexOf(">UpperTorso<") && idleXml.indexOf(">UpperTorso<") < idleXml.indexOf(">Head<"));
-ok("F: easing is written as enum tokens and keyframe times are ascending", /<token name="EasingStyle">\d<\/token>/.test(idleXml) && /<token name="EasingDirection">\d<\/token>/.test(idleXml) && (() => { const ts = [...idleXml.matchAll(/<float name="Time">([\d.e-]+)<\/float>/g)].map((m) => +m[1]); return ts.length === idle.keys.length && ts.every((t, i) => i === 0 || t > ts[i - 1]); })());
+ok("F: easing is written as enum tokens and keyframe times are ascending", /<token name="EasingStyle">\d<\/token>/.test(idleXml) && /<token name="EasingDirection">\d<\/token>/.test(idleXml) && (() => { const ts = [...idleXml.matchAll(/<float name="Time">([\d.e-]+)<\/float>/g)].map((m) => +m[1]); return ts.length === idleExport.length && ts.every((t, i) => i === 0 || t > ts[i - 1]); })());
 const round = E.parseProject(E.serializeProject(combo));
 ok("F: project JSON round-trips losslessly (keys, stages, feedback, report)", JSON.stringify(round.keys) === JSON.stringify(combo.keys) && JSON.stringify(round.stages) === JSON.stringify(combo.stages) && round.name === combo.name && round.report && round.report.score === combo.report.score);
 let threw = false; try { E.parseProject("{\"nope\":1}"); } catch { threw = true; }

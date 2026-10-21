@@ -109,8 +109,8 @@ ok("feature help has a 'gfx' topic with the workflow + alias triggers", /gfx:\{t
 ok("mandates teach the gfx workflow (brief -> stage -> subject -> overlay -> camera -> capture -> teardown)", configSrc.includes("THUMBNAIL & ICON STUDIO (1.30 gfx pack)") && configSrc.includes("THUMBNAILS / ICONS: never say you cannot make images") && ["gfx_brief", "gfx_stage_create", "gfx_subject_add", "gfx_overlay", "gfx_camera", "gfx_capture", "gfx_teardown"].every((k) => configSrc.includes(k)));
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README documents the gfx pack", readme.includes("gfx_capture") && readme.includes("gfx_stage_create") && readme.includes("1.30.0") && readme.includes("gfx-sim.py"));
-ok("manifest version is 1.53.0", manifest.version === "1.53.0", manifest.version);
-ok("plugin / crate pinned at 1.53.0", /ORscript\s+1\.53\.0|1\.53\.0/.test(fs.readFileSync("plugin/ORscript.lua", "utf8")) && /^version = "1\.53\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
+ok("manifest version is 1.54.0", manifest.version === "1.54.0", manifest.version);
+ok("plugin / crate pinned at 1.54.0", /ORscript\s+1\.54\.0|1\.54\.0/.test(fs.readFileSync("plugin/ORscript.lua", "utf8")) && /^version = "1\.54\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
 
 // ── shared simulator module ───────────────────────────────────────────────────
 const sim = fs.readFileSync("tests/roblox_sim.py", "utf8");

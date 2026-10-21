@@ -1236,23 +1236,31 @@ function api.build(a)
 	local duration = tonumber(a.duration) or 0
 	if duration <= 0 then return fail("duration must be > 0") end
 	local existing = findAnim(name)
-	if existing and not a.overwrite then return fail(("an animation named '%s' ALREADY EXISTS - nothing was changed. Pass overwrite=true to replace it, or pick another name"):format(name)) end
-	if existing then existing:Destroy() end
-	local anim = Instance.new("KeyframeSequence")
-	anim.Name = name
-	anim.Loop = a.loop == true
-	anim.Priority = Enum.AnimationPriority[tostring(a.priority or "Action")] or Enum.AnimationPriority.Action
-	local durV = Instance.new("NumberValue")
-	durV.Name = "Duration"
-	durV.Value = duration
-	durV.Parent = anim
-	anim.Parent = LIB
-	anim:SetAttribute("RS_RigPath", pathOf(rig))
-	anim:SetAttribute("OR_Prompt", tostring(a.prompt or ""))
-	anim:SetAttribute("OR_Quality", tostring(a.quality or "balanced"))
-	anim:SetAttribute("OR_Params", tostring(a.params or "{}"))
-	anim:SetAttribute("OR_Engine", tostring(a.engine or ""))
-	anim:SetAttribute("OR_Fps", tonumber(a.fps) or 30)
+	local anim
+	if a.append then
+		-- 1.54: long (spline-baked) clips arrive in several chunks; chunks 2..n append to the sequence chunk 1 created
+		if not existing then return fail(("append: no animation named '%s' to append to - send the first chunk without append"):format(name)) end
+		if existing:GetAttribute("OR_Chunked") ~= true then return fail(("append: '%s' is not an open chunked build (it was finished or built in one call)"):format(name)) end
+		anim = existing
+	else
+		if existing and not a.overwrite then return fail(("an animation named '%s' ALREADY EXISTS - nothing was changed. Pass overwrite=true to replace it, or pick another name"):format(name)) end
+		if existing then existing:Destroy() end
+		anim = Instance.new("KeyframeSequence")
+		anim.Name = name
+		anim.Loop = a.loop == true
+		anim.Priority = Enum.AnimationPriority[tostring(a.priority or "Action")] or Enum.AnimationPriority.Action
+		local durV = Instance.new("NumberValue")
+		durV.Name = "Duration"
+		durV.Value = duration
+		durV.Parent = anim
+		anim.Parent = LIB
+		anim:SetAttribute("RS_RigPath", pathOf(rig))
+		anim:SetAttribute("OR_Prompt", tostring(a.prompt or ""))
+		anim:SetAttribute("OR_Quality", tostring(a.quality or "balanced"))
+		anim:SetAttribute("OR_Params", tostring(a.params or "{}"))
+		anim:SetAttribute("OR_Engine", tostring(a.engine or ""))
+		anim:SetAttribute("OR_Fps", tonumber(a.fps) or 30)
+	end
 	local written, markers = 0, 0
 	for _, key in ipairs(keys) do
 		local t = tonumber(key.t) or 0
@@ -1288,6 +1296,13 @@ function api.build(a)
 			markers = markers + 1
 		end
 	end
+	local total = #anim:GetKeyframes()
+	if a.more then
+		anim:SetAttribute("OR_Chunked", true)
+		return okdata({ name = name, keyframes = #keys, total = total, posesWritten = written, markers = markers, chunk = true },
+			("chunk written: %d keyframes (%d so far) - more to come"):format(#keys, total))
+	end
+	anim:SetAttribute("OR_Chunked", nil)
 	ACTIVE.Value = name
 	LENGTH.Value = duration
 	RIGREF.Value = pathOf(rig)
@@ -1305,9 +1320,9 @@ function api.build(a)
 		if not okS then savedPath = nil end
 	end
 	local d = inspectAnim(anim)
-	return okdata({ name = name, keyframes = #keys, posesWritten = written, markers = markers, bones = present, missingBones = missing, rig = rigEvidence(rig), animSaves = savedPath, inspect = d },
+	return okdata({ name = name, keyframes = total, posesWritten = written, markers = markers, bones = present, missingBones = missing, rig = rigEvidence(rig), animSaves = savedPath, inspect = d },
 		("built '%s': %d keyframes, %d poses on %d/%d bones%s, %.2fs%s, pinned to rig '%s'%s"):format(
-			name, #keys, written, present, #names, #missing > 0 and (" (not on this rig: " .. table.concat(missing, ", ") .. ")") or "", duration,
+			name, total, written, present, #names, #missing > 0 and (" (not on this rig: " .. table.concat(missing, ", ") .. ")") or "", duration,
 			anim.Loop and " looping" or "", rig.Name, savedPath and (" - also saved to " .. savedPath .. " for the Animation Editor") or ""))
 end
 
@@ -1376,6 +1391,16 @@ const ANIM_COMMANDS = [
     name: "animation_export_rbxmx",
     description: "Save a generated clip as a Roblox .rbxmx file (KeyframeSequence + nested Pose tree, exact CFrames) to the user's downloads - works WITHOUT Studio. For a Studio-side export of any KeyframeSequence use animation_export; publishing is animation_publish (asks the user).",
     params: { name: { type: "string", req: false, desc: "clip (default: the last generated)" } },
+  },
+  {
+    name: "animation_polish",
+    description: "1.54 post passes on an existing clip WITHOUT regenerating (manual edits survive): smooth:true (switches the clip to C1 spline curves + relaxes the keys, impacts/holds kept; spline clips reach Studio baked per frame), plant_feet:true (lowest foot on the ground at every key, soles flattened - fixes floating / sliding), simplify:true (drop redundant keys), reverse:true, bake:true (one key per frame), cycle_offset:<s> (move a loop's start). Rebuilds in Studio.",
+    params: { name: { type: "string", req: false, desc: "clip (default: the last generated)" }, smooth: { type: "boolean", req: false }, plant_feet: { type: "boolean", req: false }, simplify: { type: "boolean", req: false }, reverse: { type: "boolean", req: false }, bake: { type: "boolean", req: false }, cycle_offset: { type: "number", req: false, desc: "seconds" } },
+  },
+  {
+    name: "animation_layer",
+    description: "1.54 NLA-style layering: legs + root from {base} (default: last clip), upper body (waist, head, arms) from {upper} - walk + wave, run + aim, idle + talk. fit 'stretch' retimes the upper clip to the base duration, 'loop' repeats it at its own period; weight 0-1 blends. Both clips must exist in this session (animation_generate each first). Builds the combined clip in Studio.",
+    params: { upper: { type: "string", req: true, desc: "clip name whose upper body goes on top" }, base: { type: "string", req: false, desc: "clip name for legs + root (default: last)" }, fit: { type: "string", req: false, desc: "stretch | loop" }, weight: { type: "number", req: false, desc: "0-1, default 1" }, name: { type: "string", req: false } },
   },
   {
     name: "animation_select_rig",
@@ -1718,7 +1743,7 @@ function describeCommands() {
   lines.push(
     "— RobloxScript animation tools: build REAL Roblox animation keyframe data (KeyframeSequence/Pose) in Studio and " +
     "review it visually. FIRST CHOICE (1.52 engine): animation_generate {prompt} authors, validates and builds a whole clip from words " +
-    "(animation_sequence for multi-stage combos, animation_refine {feedback} to adjust; 1.53: {variations:N} for N distinct takes, {mirror:true} for left-handed, 'new take' / 'mirror' / 'root motion' feedback; " +
+    "(animation_sequence for multi-stage combos, animation_refine {feedback} to adjust; 1.53: {variations:N} for N distinct takes, {mirror:true} for left-handed, 'new take' / 'mirror' / 'root motion' feedback; 1.54: animation_polish {smooth, plant_feet, simplify, reverse, bake, cycle_offset} on the existing keys, animation_layer {base, upper} for walk+wave style upper-body layering, 'smoother' / 'plant the feet' feedback; " +
     "idles, walks, runs, sneak, strafe, crawl, swim, climb, fly, sleep, hit reactions, knockback, death, dash, slide, flips, throws, shooting, archery, pickups and 20+ emotes all have their own choreography and a per-prompt persona, so no two prompts move alike); hand-key only what the engine cannot express. " +
     "Manual flow: animation_create → animation_open → animation_set_pose + animation_add_keyframe / " +
     "animation_update_keyframe per keyframe time → animation_preview to check → refine. " +

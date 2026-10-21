@@ -3845,7 +3845,7 @@
   // exact per-joint CFrames (C0-conjugated, so R6/R15/custom rigs are right).
   // Studio offline → the clip is still generated + validated and handed to the
   // Animation Studio overlay (export .rbxmx there); nothing is pretended built.
-  const ANIM_ENGINE_OPS = new Set(["generate", "refine", "sequence", "validate", "export_rbxmx", "build"]);
+  const ANIM_ENGINE_OPS = new Set(["generate", "refine", "sequence", "validate", "export_rbxmx", "build", "polish", "layer"]);
   A.animClips = A.animClips || {};
   A.animLast = A.animLast || "";
   function animParse(text) {
@@ -3870,11 +3870,20 @@
     if (extra) lines.push(extra);
     return lines.join("\n");
   }
+  const ANIM_BUILD_CHUNK_CHARS = 11000; // keys JSON per bridge call - the Luau body must stay well under LUAU_CHUNK_MAX
   async function animBuild(clip, rigInfo) {
     const payload = ORAnimEngine.toBuildArgs(clip, rigInfo, { overwrite: true });
-    const res = await animStudioCall("build", payload, 45000);
-    if (!res.ok) return { ok: false, error: res.error, transport: !!res.transport };
-    return { ok: true, text: res.text || "", data: res.data || {}, dropped: payload.dropped };
+    // 1.54: spline clips bake to the frame grid, so long clips are written in chunks (first: create, rest: append, last: finish)
+    const chunks = []; let cur = [], size = 0;
+    for (const k of payload.keys) { const n = JSON.stringify(k).length + 1; if (cur.length && size + n > ANIM_BUILD_CHUNK_CHARS) { chunks.push(cur); cur = []; size = 0; } cur.push(k); size += n; }
+    if (cur.length) chunks.push(cur);
+    let res = null;
+    for (let i = 0; i < chunks.length; i++) {
+      const part = Object.assign({}, payload, { keys: chunks[i], append: i > 0, more: i < chunks.length - 1 });
+      res = await animStudioCall("build", part, 45000);
+      if (!res.ok) return { ok: false, error: (chunks.length > 1 ? `chunk ${i + 1}/${chunks.length}: ` : "") + res.error, transport: !!res.transport };
+    }
+    return { ok: true, text: res.text || "", data: res.data || {}, dropped: payload.dropped, chunks: chunks.length };
   }
   async function runAnimEngine(op, args) {
     args = args || {};
@@ -3997,6 +4006,45 @@
       if (!b.ok) { animRemember(out, { rigInfo }); return `ERROR calling 'animation_refine': refined '${out.name}' (${applied.join(", ")}) but Studio refused the rebuild: ${b.error}`; }
       animRemember(out, { built: true, rigInfo });
       return animReport(out, `Applied: ${applied.join(", ")}. Before → after: ${cmp.durationBefore}s → ${cmp.durationAfter}s, ${cmp.keysBefore} → ${cmp.keysAfter} keys, score ${cmp.scoreBefore} → ${cmp.scoreAfter}, largest change ${cmp.largestChange.joint} ${cmp.largestChange.degrees}°.\nREBUILT in Studio: ${b.text}. Preview again (animation_preview) before judging.`);
+    }
+    if (op === "polish") { // 1.54.0 - Blender-style post passes on an existing clip (no regeneration, manual edits survive)
+      const got = await pickClip(); if (got.error) return "ERROR calling 'animation_polish': " + got.error;
+      let out = got.clip; const did = [];
+      try {
+        const want = (k) => args[k] === true || args[k] === "true" || (typeof args[k] === "number" && args[k] > 0);
+        if (want("smooth")) { out = E.smooth(out, { strength: typeof args.smooth === "number" ? Math.min(1, args.smooth) : 1 }); did.push(out.fixes[out.fixes.length - 1]); }
+        if (want("plant_feet") || want("ground")) { const g = E.groundFeet(out, { force: true }); if (g.fixes && g.fixes.length > (out.fixes || []).length) did.push(g.fixes[g.fixes.length - 1]); else did.push("feet already planted"); out = g; }
+        if (want("simplify")) { const before = out.keys.length; out = E.simplify(out, typeof args.simplify === "number" ? args.simplify : 2); did.push(`simplified ${before} → ${out.keys.length} keys`); }
+        if (want("reverse")) { out = E.reverse(out); did.push("reversed"); }
+        if (want("bake")) { out = E.bake(out, Number(args.fps) || undefined); did.push(out.fixes[out.fixes.length - 1]); }
+        if (Number.isFinite(Number(args.cycle_offset)) && Number(args.cycle_offset) !== 0) { if (!out.loop) did.push("cycle_offset ignored: the clip does not loop"); else { out = E.cycleOffset(out, Number(args.cycle_offset)); did.push(`cycle offset ${args.cycle_offset}s`); } }
+      } catch (e) { return "ERROR calling 'animation_polish': " + String(e && e.message || e); }
+      if (!did.length) return "ERROR calling 'animation_polish': nothing requested - pass one or more of smooth:true, plant_feet:true, simplify:true, reverse:true, bake:true, cycle_offset:<seconds>.";
+      const cmp = E.compare(got.clip, out);
+      const info = await animStudioCall("rig_info", {});
+      const rigInfo = info.ok ? animRigFromInfo(info.data) : got.rigInfo || null;
+      const summary = `Polish: ${did.join("; ")}. Before → after: ${cmp.keysBefore} → ${cmp.keysAfter} keys, score ${cmp.scoreBefore} → ${cmp.scoreAfter}, smoothness ${got.clip.report && got.clip.report.smoothness} → ${out.report.smoothness}.`;
+      if (!rigInfo) { animRemember(out, {}); return animReport(out, summary + "\nNot rebuilt: Studio is not connected (animation_build when it is)."); }
+      const b = await animBuild(out, rigInfo);
+      if (!b.ok) { animRemember(out, { rigInfo }); return `ERROR calling 'animation_polish': polished '${out.name}' (${did.join("; ")}) but Studio refused the rebuild: ${b.error}`; }
+      animRemember(out, { built: true, rigInfo });
+      return animReport(out, summary + "\nREBUILT in Studio: " + b.text + "\nNext: animation_preview to watch it.");
+    }
+    if (op === "layer") { // 1.54.0 - NLA-style layering: legs + root from {base}, upper body from {upper}
+      const baseName = String(args.base || A.animLast || ""), upperName = String(args.upper || "");
+      if (!upperName) return "ERROR calling 'animation_layer': 'upper' (clip name whose upper body goes on top) is required.";
+      const base = A.animClips[baseName], upper = A.animClips[upperName];
+      if (!base) return `ERROR calling 'animation_layer': no clip named '${baseName || "(last)"}' in this session for 'base' - animation_generate it first. Session clips: ${Object.keys(A.animClips).join(", ") || "(none)"}.`;
+      if (!upper) return `ERROR calling 'animation_layer': no clip named '${upperName}' in this session for 'upper' - animation_generate it first. Session clips: ${Object.keys(A.animClips).join(", ") || "(none)"}.`;
+      let out; try { out = E.layer(base, upper, { fit: args.fit === "loop" ? "loop" : "stretch", weight: Number.isFinite(Number(args.weight)) ? Number(args.weight) : 1, name: nameOf(null) }); } catch (e) { return "ERROR calling 'animation_layer': " + String(e && e.message || e); }
+      const info = await animStudioCall("rig_info", {});
+      const rigInfo = info.ok ? animRigFromInfo(info.data) : null;
+      const summary = `Layered: upper body of '${upper.name}' over '${base.name}' (${out.layered.fit}, weight ${out.layered.weight}) → '${out.name}', ${out.keys.length} keys, score ${out.report.score}.`;
+      if (!rigInfo) { animRemember(out, {}); return animReport(out, summary + "\nNot built: Studio is not connected (animation_build when it is)."); }
+      const b = await animBuild(out, rigInfo);
+      if (!b.ok) { animRemember(out, { rigInfo }); return `ERROR calling 'animation_layer': layered '${out.name}' but Studio refused the build: ${b.error}`; }
+      animRemember(out, { built: true, rigInfo });
+      return animReport(out, summary + "\nBUILT in Studio: " + b.text + "\nNext: animation_preview; check the shoulder / hip balance at the seam.");
     }
     return `ERROR: unknown animation engine op '${op}'.`;
   }
@@ -6113,6 +6161,7 @@
     ORAnimStudio.open({
       send: (text, onStatus) => sendPainting(text, null, onStatus),
       runTool: guiStudioRunTool,
+      clips: () => A.animClips, // 1.54: session clips for the Layer (NLA) picker
       studioReady: () => { try { return currentEngineIsLive(); } catch { return false; } },
       engine: () => activeEngine(),
       toast: (m) => ui.toast(m),

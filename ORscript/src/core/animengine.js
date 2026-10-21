@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/core/animengine.js - ORscript ANIMATION ENGINE (1.52.0; 1.53.0 persona / choreography / uniqueness / mirror / travel)
+// src/core/animengine.js - ORscript ANIMATION ENGINE (1.52.0; 1.53.0 persona / choreography / uniqueness / mirror / travel; 1.54.0 smoothing / foot planting / IK / layering / Blender-style key tools)
 //
 // Natural language → structured, validated Roblox animation data.
 //
@@ -28,7 +28,7 @@
 // rest. Nothing is faked: unsupported requests return explicit limitations.
 (function (root) {
   "use strict";
-  const VERSION = "1.53.0";
+  const VERSION = "1.54.0";
   const DEG = Math.PI / 180;
 
   // ───────────────────────── rotation math ─────────────────────────
@@ -323,10 +323,10 @@
 
   // ───────────────────────── pose helpers ─────────────────────────
   const QUALITY = {
-    fast: { fps: 24, breakdowns: 0, followThrough: false, arcs: false, secondary: false, passes: 1, holdFrames: 1 },
-    balanced: { fps: 30, breakdowns: 1, followThrough: true, arcs: false, secondary: true, passes: 1, holdFrames: 2 },
-    high: { fps: 30, breakdowns: 2, followThrough: true, arcs: true, secondary: true, passes: 2, holdFrames: 2 },
-    cinematic: { fps: 60, breakdowns: 3, followThrough: true, arcs: true, secondary: true, passes: 3, holdFrames: 3 },
+    fast: { fps: 24, breakdowns: 0, followThrough: false, arcs: false, secondary: false, passes: 1, holdFrames: 1, spline: 0, ground: false },
+    balanced: { fps: 30, breakdowns: 1, followThrough: true, arcs: false, secondary: true, passes: 1, holdFrames: 2, spline: 0, ground: true },
+    high: { fps: 30, breakdowns: 2, followThrough: true, arcs: true, secondary: true, passes: 2, holdFrames: 2, spline: 0.6, ground: true },
+    cinematic: { fps: 60, breakdowns: 3, followThrough: true, arcs: true, secondary: true, passes: 3, holdFrames: 3, spline: 1, ground: true },
   };
   const J = (x, y, z) => ({ rot: [x, y, z] });
   // Base standing pose (neutral, slightly alive) scaled by style.
@@ -883,11 +883,14 @@
     keys = snapToFps(dedupeKeys(keys), fps, duration);
     let clip = {
       version: 1, engine: VERSION, name: opts.name || suggestName(intent) + (take ? "_take" + (take + 1) : "") + (mirrored ? "_Mirror" : ""), prompt: intent.text, intent, params, quality, rigType, fps, duration, loop, priority: opts.priority || intent.priority,
-      stages, keys, created: opts.now || 0, edited: false, limitations: intent.unsupported.slice(), take, persona: { traits: P.traits, lead: P.lead, fidget: P.fidget, armRest: P.armRest, easing: P.easing, emoteVariant: P.emoteVariant }, mirrored, travel,
+      stages, keys, created: opts.now || 0, edited: false, limitations: intent.unsupported.slice(), take, interp: opts.interp === "spline" || opts.interp === "eased" ? opts.interp : (q.spline && opts.smooth !== false && params.smooth !== false ? "spline" : "eased"), persona: { traits: P.traits, lead: P.lead, fidget: P.fidget, armRest: P.armRest, easing: P.easing, emoteVariant: P.emoteVariant }, mirrored, travel,
     };
     if (travel) clip.limitations.push("root motion: the HumanoidRootPart offset travels inside the clip - play it on a rig that is NOT also being moved by a controller, or strip the root track.");
     if (rigType === "R6") clip.limitations.push("R6 rig: no elbow / knee / wrist / ankle / waist joints - elbow and knee bends are folded into the shoulders and hips, waist into the torso.");
     for (let pass = 0; pass < q.passes; pass++) { const r = refine(clip); clip = r.clip; if (!r.changed) break; }
+    // 1.54.0 polish: planted feet on grounded clips, spline smoothing on the high presets (both skippable per call)
+    if (q.ground && opts.ground !== false && params.ground !== false) { const g = groundFeet(clip); if (g.grounded) clip = g; }
+    if (q.spline && opts.smooth !== false && params.smooth !== false) clip = smooth(clip, { strength: q.spline });
     clip.report = validate(clip);
     clip.fingerprint = fingerprint(clip);
     PERSONA = null;
@@ -1023,7 +1026,8 @@
     }
     const errors = issues.filter((i) => i.level === "error").length, warns = issues.filter((i) => i.level === "warn").length;
     const score = Math.max(0, 100 - errors * 25 - warns * 4 - issues.filter((i) => i.level === "info").length);
-    return { ok: errors === 0, score, errors, warnings: warns, issues, keys: keys.length, duration: clip.duration, fps: clip.fps, loop: !!clip.loop, rigType: clip.rigType, stages: (clip.stages || []).map((s) => s.name), limitations: clip.limitations || [] };
+    const sm = errors === 0 && keys.length >= 2 ? smoothness(clip) : { smoothness: 0, roughness: 0 };
+    return { ok: errors === 0, score, errors, warnings: warns, issues, keys: keys.length, duration: clip.duration, fps: clip.fps, loop: !!clip.loop, rigType: clip.rigType, stages: (clip.stages || []).map((s) => s.name), limitations: clip.limitations || [], smoothness: sm.smoothness, roughness: sm.roughness, roughestJoint: sm.peakJoint || null };
   }
   // Fix what can be fixed objectively: clamp limits, bridge discontinuities with breakdowns, close loops, sort/dedupe.
   function refine(clipIn) {
@@ -1044,7 +1048,7 @@
       if (worst / dt > (impact ? SPEED_LIMIT.impact : SPEED_LIMIT.normal) && !impact) added.push({ t: r3((a.t + b.t) / 2), poses: mix(a.poses, b.poses, 0.5), ease: ["CubicV2", "InOut"], tag: "breakdown", stage: a.stage, synthetic: true });
     }
     if (added.length) { clip.keys = dedupeKeys(clip.keys.concat(added)); fixes.push(`inserted ${added.length} breakdown key(s) to smooth abrupt transitions`); }
-    if (clip.loop) { const before = JSON.stringify(clip.keys[clip.keys.length - 1].poses); clip.keys = closeLoop(clip.keys, clip.duration, clip.travel); if (JSON.stringify(clip.keys[clip.keys.length - 1].poses) !== before || clip.keys[clip.keys.length - 1].synthetic) fixes.push("closed the loop (last keyframe = first pose at the clip end)"); }
+    if (clip.loop) { const before = JSON.stringify(clip.keys[clip.keys.length - 1].poses), nBefore = clip.keys.length; clip.keys = closeLoop(clip.keys, clip.duration, clip.travel); if (JSON.stringify(clip.keys[clip.keys.length - 1].poses) !== before || clip.keys.length !== nBefore) fixes.push("closed the loop (last keyframe = first pose at the clip end)"); }
     clip.keys = snapToFps(clip.keys, clip.fps, clip.duration);
     clip.fixes = (clipIn.fixes || []).concat(fixes);
     return { clip, changed: fixes.length > 0 };
@@ -1087,8 +1091,13 @@
       const w1 = stageWeights(intent.stages, DEFAULT_PARAMS).reduce((a, b) => a + b, 0), w0 = stageWeights(clip.intent.stages, DEFAULT_PARAMS).reduce((a, b) => a + b, 0);
       if (w0 > 0 && w1 > w0) { duration = r3(clamp((duration || clip.duration) * w1 / w0, 0.2, 60)); intent.duration = duration; }
     }
-    if (!notes.length) notes.push("no recognised adjustment - regenerated with the same settings (try: faster, slower, more anticipation, heavier landing, exaggerate, subtle, smoother, longer, shorter, loop, new take, mirror, root motion, snappier, softer)");
-    const out = generate(intent, { quality, rigType: clip.rigType, name: clip.name, fps, loop, params: p, duration, priority: clip.priority, take, mirror, travel });
+    const polish = has(/\b(smooth|smoother|fluid|flowing|silky|butter|plant|ground|glue|stick|slid|float|simplif|fewer keys|clean|less keys|revers|backwards|rewind)/);
+    if (!notes.length && !polish) notes.push("no recognised adjustment - regenerated with the same settings (try: faster, slower, more anticipation, heavier landing, exaggerate, subtle, smoother, longer, shorter, loop, new take, mirror, root motion, snappier, softer)");
+    let out = generate(intent, { quality, rigType: clip.rigType, name: clip.name, fps, loop, params: p, duration, priority: clip.priority, take, mirror, travel });
+    if (has(/\b(smooth|smoother|fluid|flowing|silky|butter)/)) { out = smooth(out, { strength: 1 }); notes.push("spline smoothing pass"); }
+    if (has(/\b(plant|ground(?:ed)?|glue|stick)\b.*\b(feet|foot|soles?)|\b(feet|foot)\b.*\b(plant|ground|slid|float)/)) { out = groundFeet(out, { force: true }); notes.push("planted the feet"); }
+    if (has(/\b(simplif|fewer keys|clean(?: up)? keys|less keys)/)) { out = simplify(out, 2); notes.push("cleaned redundant keys"); }
+    if (has(/\b(revers|backwards|rewind)/)) { out = reverse(out); notes.push("reversed"); }
     out.feedback = (clip.feedback || []).concat([{ text: feedback, applied: notes }]);
     out.previous = { keys: clip.keys.length, duration: clip.duration, score: clip.report && clip.report.score };
     return out;
@@ -1135,12 +1144,57 @@
     if (t <= keys[0].t) return keys[0].poses;
     if (t >= keys[keys.length - 1].t) return keys[keys.length - 1].poses;
     for (let i = 1; i < keys.length; i++) {
-      if (t <= keys[i].t) { const a = keys[i - 1], b = keys[i]; const alpha = easeAlpha((t - a.t) / Math.max(1e-6, b.t - a.t), a.ease); return mix(a.poses, b.poses, alpha); }
+      if (t <= keys[i].t) {
+        const a = keys[i - 1], b = keys[i];
+        if (clip.interp === "spline" && (a.ease || [])[0] !== "Constant" && b.tag !== "impact") return splineMix(clip, i - 1, t);
+        const alpha = easeAlpha((t - a.t) / Math.max(1e-6, b.t - a.t), a.ease); return mix(a.poses, b.poses, alpha);
+      }
     }
     return keys[keys.length - 1].poses;
   }
+  // 1.54 spline interpolation (Blender F-curve style): C1 Hermite through the keys with auto-clamped Catmull-Rom tangents, so the
+  // velocity no longer resets at every key. Loops take their end tangents from the other side of the seam; holds stay flat;
+  // impact segments keep their eased snap (see sampleAt); Constant easing still steps.
+  function splineMix(clip, i, t) {
+    const keys = clip.keys, n = keys.length, a = keys[i], b = keys[i + 1], D = clip.duration;
+    const h = Math.max(1e-6, b.t - a.t), u = clamp((t - a.t) / h, 0, 1);
+    const loop = clip.loop && n > 2 && Math.abs(keys[n - 1].t - D) < 1e-6;
+    const prev = i > 0 ? { k: keys[i - 1], t: keys[i - 1].t } : loop ? { k: keys[n - 2], t: keys[n - 2].t - D } : null;
+    const next = i + 2 < n ? { k: keys[i + 2], t: keys[i + 2].t } : loop ? { k: keys[1], t: keys[1].t + D } : null;
+    const h00 = 2 * u * u * u - 3 * u * u + 1, h10 = u * u * u - 2 * u * u + u, h01 = -2 * u * u * u + 3 * u * u, h11 = u * u * u - u * u;
+    const tangent = (pPrev, tPrev, p0, t0, p1, t1) => { // auto-clamped finite difference: zero at extrema and into holds
+      if (pPrev == null) return 0;
+      const d0 = (p0 - pPrev) / Math.max(1e-6, t0 - tPrev), d1 = (p1 - p0) / Math.max(1e-6, t1 - t0);
+      if (d0 * d1 <= 0) return 0;
+      const m = (d0 + d1) / 2, lim = 3 * Math.min(Math.abs(d0), Math.abs(d1));
+      return Math.sign(m) * Math.min(Math.abs(m), lim);
+    };
+    const herm = (pPrev, tPrev, p0, p1, pNext, tNext) => { const m0 = tangent(pPrev, tPrev, p0, a.t, p1, b.t), m1 = pNext == null ? 0 : tangent(p0, a.t, p1, b.t, pNext, tNext); return h00 * p0 + h10 * h * m0 + h01 * p1 + h11 * h * m1; };
+    const out = {};
+    for (const j of JOINTS) {
+      const A = a.poses[j] || J(0, 0, 0), B = b.poses[j] || J(0, 0, 0), P = prev && (prev.k.poses[j] || J(0, 0, 0)), N = next && (next.k.poses[j] || J(0, 0, 0));
+      const o = { rot: [0, 1, 2].map((ax) => herm(P ? P.rot[ax] : null, prev && prev.t, A.rot[ax], B.rot[ax], N ? N.rot[ax] : null, next && next.t)) };
+      if (A.pos || B.pos) { const pa = A.pos || [0, 0, 0], pb = B.pos || [0, 0, 0], pp = P ? P.pos || [0, 0, 0] : null, pn = N ? N.pos || [0, 0, 0] : null; o.pos = [0, 1, 2].map((ax) => herm(pp ? pp[ax] : null, prev && prev.t, pa[ax], pb[ax], pn ? pn[ax] : null, next && next.t)); }
+      out[j] = o;
+    }
+    return out;
+  }
+  // Keys as Studio / rbxmx should receive them: eased clips export their keys verbatim; spline clips are baked to the frame grid
+  // (plus every authored key time, so impacts and markers stay exact) with Linear easing - that is how a C1 curve reaches Roblox.
+  function exportKeys(clip) {
+    if (clip.interp !== "spline" || !clip.keys || clip.keys.length < 2) return clip.keys;
+    const fps = clip.fps || 30; let step = 1 / fps; const frames = Math.round(clip.duration * fps);
+    if (frames > 240) step *= Math.ceil(frames / 240); // very long clips: thin the bake, authored keys are still exact
+    const times = new Set(clip.keys.map((k) => r3(k.t)));
+    for (let t = 0; t < clip.duration - 1e-6; t += step) times.add(r3(t));
+    times.add(r3(clip.duration));
+    const byT = new Map(clip.keys.map((k) => [r3(k.t), k]));
+    return Array.from(times).sort((x, y) => x - y).map((t) => { const k = byT.get(t); return k ? { t, poses: k.poses, ease: ["Linear", "Out"], tag: k.tag, stage: k.stage } : { t, poses: sampleAt(clip, t), ease: ["Linear", "Out"], tag: "baked", synthetic: true }; });
+  }
+  function setInterp(clipIn, mode) { const c = cloneClip(clipIn); c.interp = mode === "spline" ? "spline" : "eased"; c.edited = true; c.report = validate(c); c.fingerprint = fingerprint(c); return c; }
   // World positions of every pivot + tips in the semantic frame (studs), root pivot at ROOT_HEIGHT.
-  function forwardKinematics(poses) {
+  function forwardKinematics(poses) { return fkFull(poses).pts; }
+  function fkFull(poses) {
     const world = {}; const pts = {};
     const walk = (j, parentR, parentP) => {
       const p = poses[j] || J(0, 0, 0);
@@ -1154,7 +1208,7 @@
       for (const c of JOINTS) if (PARENT[c] === j) walk(c, R, pivot);
     };
     walk("root", I3(), [0, ROOT_HEIGHT, 0]);
-    return pts;
+    return { pts, world };
   }
   function metrics(poses) {
     const pts = forwardKinematics(poses);
@@ -1169,7 +1223,7 @@
     const { type, map } = boneMap(rigInfo);
     const c0 = {}; for (const b of rigInfo.bones) c0[b.name] = b.c0 && b.c0.length === 9 ? from9(b.c0) : (type === "R6" && R6_C0[b.name] ? from9(R6_C0[b.name]) : I3());
     const dropped = JOINTS.filter((j) => !map[j]);
-    const out = clip.keys.map((key) => {
+    const out = exportKeys(clip).map((key) => {
       const poses = [];
       const sem = foldForRig(key.poses, type);
       for (const j of JOINTS) {
@@ -1196,7 +1250,7 @@
     const { type, map } = boneMap(rigInfo);
     const joints = JOINTS.filter((j) => map[j]);
     const r2 = (n) => Math.round(n * 100) / 100;
-    const keys = clip.keys.map((key) => {
+    const keys = exportKeys(clip).map((key) => {
       const sem = foldForRig(key.poses, type);
       const p = joints.map((j) => { const q = sem[j] || J(0, 0, 0); const arr = [r2(q.rot[0]), r2(q.rot[1]), r2(q.rot[2])]; if (q.pos && (q.pos[0] || q.pos[1] || q.pos[2])) arr.push(r3(q.pos[0]), r3(q.pos[1]), r3(q.pos[2])); return arr; });
       const m = []; const st = (clip.stages || []).find((s) => Math.abs(s.t0 - key.t) < 1e-6 && s.marker); if (st) m.push([st.marker, st.name]); if (key.tag === "impact") m.push(["impact", key.stage || ""]);
@@ -1258,10 +1312,280 @@
   }
   // Timing edits used by the editor
   function retime(clip, newDuration) { const s = newDuration / clip.duration; const c = JSON.parse(JSON.stringify(clip)); c.duration = r3(newDuration); c.keys = c.keys.map((k) => Object.assign({}, k, { t: r3(k.t * s) })); c.stages = (c.stages || []).map((st) => Object.assign({}, st, { t0: r3(st.t0 * s), t1: r3(st.t1 * s) })); c.edited = true; c.report = validate(c); return c; }
-  function moveKey(clip, index, t) { const c = JSON.parse(JSON.stringify(clip)); if (!c.keys[index]) return c; c.keys[index].t = r3(clamp(t, 0, c.duration)); c.keys = dedupeKeys(c.keys); c.edited = true; c.report = validate(c); return c; }
+  // Keys never pass or swallow their neighbours while dragging: the move is clamped to the free frames between them.
+  function moveKey(clip, index, t) {
+    const c = JSON.parse(JSON.stringify(clip)); if (!c.keys[index]) return c; const step = 1 / (c.fps || 30);
+    const lo = index > 0 ? c.keys[index - 1].t + step : 0, hi = index < c.keys.length - 1 ? c.keys[index + 1].t - step : c.duration;
+    if (hi < lo - 1e-6) return c;
+    c.keys[index].t = r3(clamp(clamp(t, 0, c.duration), lo, hi)); c.keys = dedupeKeys(c.keys); c.edited = true; c.report = validate(c); return c;
+  }
   function setJoint(clip, index, joint, rot, pos) { const c = JSON.parse(JSON.stringify(clip)); const k = c.keys[index]; if (!k || !JOINTS.includes(joint)) return c; k.poses[joint] = Object.assign({}, k.poses[joint] || {}, rot ? { rot: rot.map(Number) } : {}, pos ? { pos: pos.map(Number) } : {}); c.edited = true; c.report = validate(c); return c; }
   function duplicateKey(clip, index) { const c = JSON.parse(JSON.stringify(clip)); const k = c.keys[index]; if (!k) return c; const step = 1 / c.fps; const t = r3(Math.min(c.duration, k.t + step)); c.keys.push({ t, poses: clonePose(k.poses), ease: k.ease, tag: "copy" }); c.keys = dedupeKeys(c.keys); c.edited = true; c.report = validate(c); return c; }
   function deleteKey(clip, index) { const c = JSON.parse(JSON.stringify(clip)); if (c.keys.length <= 2) return c; c.keys.splice(index, 1); c.edited = true; c.report = validate(c); return c; }
+  // ───────────────────────── 1.54.0 polish + Blender-style tools ─────────────────────────
+  // Anchors never move under smoothing / cleaning: the first + last key, impacts, holds, contacts and anything the user locked.
+  const ANCHOR_TAG = /^(impact|hold|loop_end|contact|launch|start|end)$/;
+  const UPPER_JOINTS = ["waist", "neck", "l_shoulder", "l_elbow", "l_wrist", "r_shoulder", "r_elbow", "r_wrist"];
+  const LOWER_JOINTS = ["root", "l_hip", "l_knee", "l_ankle", "r_hip", "r_knee", "r_ankle"];
+  const GROUND_AUTO = /^(idle|walk|sneak|strafe|walk_back|crouch|emote|block|cast|aim|shoot|archery|pickup|hit_react|talk|stance)$/;
+  const EFFECTORS = { l_hand: { tip: "l_wrist_tip", chain: [["l_shoulder", 0], ["l_shoulder", 2], ["l_shoulder", 1], ["l_elbow", 0]] }, r_hand: { tip: "r_wrist_tip", chain: [["r_shoulder", 0], ["r_shoulder", 2], ["r_shoulder", 1], ["r_elbow", 0]] }, l_foot: { tip: "l_ankle_tip", chain: [["l_hip", 0], ["l_hip", 2], ["l_hip", 1], ["l_knee", 0]] }, r_foot: { tip: "r_ankle_tip", chain: [["r_hip", 0], ["r_hip", 2], ["r_hip", 1], ["r_knee", 0]] } };
+  const isAnchor = (key, i, n) => i === 0 || i === n - 1 || !!key.locked || ANCHOR_TAG.test(key.tag || "");
+  const cloneClip = (clip) => JSON.parse(JSON.stringify(clip));
+  const noteFix = (c, msg) => { c.fixes = (c.fixes || []).concat([msg]); c.edited = true; };
+  function finish(c) { c.keys = snapToFps(dedupeKeys(c.keys), c.fps, c.duration); c.report = validate(c); c.fingerprint = fingerprint(c); return c; }
+  // Per-channel view of a clip (graph editor / dope sheet): { joint: { x:[[t,v]..], y:[..], z:[..], px?, py?, pz? } }
+  function channels(clip) {
+    const out = {};
+    for (const j of JOINTS) {
+      const ch = { x: [], y: [], z: [] }; let hasPos = false;
+      clip.keys.forEach((k, i) => { const p = k.poses[j] || J(0, 0, 0); ch.x.push([k.t, p.rot[0], i]); ch.y.push([k.t, p.rot[1], i]); ch.z.push([k.t, p.rot[2], i]); if (p.pos) hasPos = true; });
+      if (hasPos) { ch.px = []; ch.py = []; ch.pz = []; clip.keys.forEach((k, i) => { const q = (k.poses[j] && k.poses[j].pos) || [0, 0, 0]; ch.px.push([k.t, q[0], i]); ch.py.push([k.t, q[1], i]); ch.pz.push([k.t, q[2], i]); }); }
+      out[j] = ch;
+    }
+    return out;
+  }
+  // Roughness = mean |angular acceleration| (deg/s^2, fps-independent) of every joint channel sampled on the fps grid, skipping
+  // the frames around impacts / holds (those are meant to snap); smoothness maps it to 0..100 (100 = silky).
+  function smoothness(clip) {
+    const fps = clip.fps || 30, n = Math.max(3, Math.round(clip.duration * fps) + 1), dt = clip.duration / (n - 1);
+    if (!clip.keys || clip.keys.length < 2 || !(dt > 0)) return { roughness: 0, smoothness: 100, samples: 0 };
+    const snap = (clip.keys || []).filter((k) => k.tag === "impact" || k.tag === "hold").map((k) => k.t);
+    const S = []; for (let i = 0; i < n; i++) S.push(sampleAt(clip, i * dt));
+    let sum = 0, cnt = 0, worst = 0, worstJ = null;
+    for (let i = 1; i < n - 1; i++) {
+      const t = i * dt; if (snap.some((ts) => Math.abs(ts - t) <= dt * 1.5)) continue;
+      for (const j of JOINTS) for (let ax = 0; ax < 3; ax++) {
+        const a = (S[i - 1][j] || J(0, 0, 0)).rot[ax], b = (S[i][j] || J(0, 0, 0)).rot[ax], c = (S[i + 1][j] || J(0, 0, 0)).rot[ax];
+        const d2 = Math.abs(c - 2 * b + a) / (dt * dt); sum += d2; cnt++; if (d2 > worst) { worst = d2; worstJ = j; }
+      }
+    }
+    const rough = cnt ? sum / cnt : 0; // deg/s^2
+    return { roughness: Math.round(rough), smoothness: Math.round(clamp(100 - rough / 16, 0, 100)), peak: Math.round(worst), peakJoint: worstJ, samples: n };
+  }
+  // Blender "Smooth Keys" + spline breakdowns: non-anchor keys relax toward their time-weighted neighbours, then a Catmull-Rom
+  // midpoint is inserted into every wide gap so the eased interpolation follows an arc instead of a straight line.
+  function smooth(clipIn, opts) {
+    opts = opts || {}; const strength = clamp(Number.isFinite(opts.strength) ? opts.strength : 1, 0, 1), passes = clamp(opts.passes || 1, 1, 4);
+    const c = cloneClip(clipIn); const keys = c.keys; const n = keys.length; if (n < 3) return c;
+    const before = smoothness(c);
+    if (opts.spline !== false) c.interp = "spline"; // C1 curves between the keys - the main reason motion stops stuttering at every key
+    if (opts.breakdowns === undefined) opts.breakdowns = c.interp !== "spline"; // spline curves do not need breakdown keys
+    const chan = (k, j) => k.poses[j] || J(0, 0, 0);
+    for (let pass = 0; pass < passes; pass++) {
+      const snap = keys.map((k) => clonePose(k.poses));
+      for (let i = 1; i < n - 1; i++) {
+        if (isAnchor(keys[i], i, n)) continue;
+        const a = keys[i - 1], b = keys[i + 1], u = clamp((keys[i].t - a.t) / Math.max(1e-6, b.t - a.t), 0, 1);
+        for (const j of JOINTS) {
+          const P = snap[i - 1][j] || J(0, 0, 0), Q = snap[i + 1][j] || J(0, 0, 0), cur = chan(keys[i], j);
+          const rot = cur.rot.map((v, ax) => v + (lerp(P.rot[ax], Q.rot[ax], u) - v) * strength * 0.5);
+          const o = { rot }; if (cur.pos) { const pa = P.pos || [0, 0, 0], pb = Q.pos || [0, 0, 0]; o.pos = cur.pos.map((v, ax) => v + (lerp(pa[ax], pb[ax], u) - v) * strength * 0.5); }
+          keys[i].poses[j] = o;
+        }
+      }
+    }
+    let added = 0;
+    if (opts.breakdowns !== false) {
+      const out = []; const minGap = 4 / (c.fps || 30);
+      for (let i = 0; i < n; i++) {
+        out.push(keys[i]); const a = keys[i], b = keys[i + 1]; if (!b) break;
+        if (b.t - a.t < minGap || (a.ease || [])[0] === "Constant" || a.tag === "hold" || b.tag === "hold") continue;
+        const p0 = keys[Math.max(0, i - 1)], p3 = keys[Math.min(n - 1, i + 2)];
+        const poses = {}; let dev = 0;
+        for (const j of JOINTS) {
+          const A = chan(p0, j).rot, B = chan(a, j).rot, C = chan(b, j).rot, D = chan(p3, j).rot;
+          const rot = [0, 1, 2].map((ax) => { const cr = 0.5 * (2 * B[ax] + (-A[ax] + C[ax]) * 0.5 + (2 * A[ax] - 5 * B[ax] + 4 * C[ax] - D[ax]) * 0.25 + (-A[ax] + 3 * B[ax] - 3 * C[ax] + D[ax]) * 0.125); const lin = (B[ax] + C[ax]) / 2; const v = lin + (cr - lin) * strength; dev = Math.max(dev, Math.abs(v - lin)); return clamp(v, LIMITS[j][["x", "y", "z"][ax]][0], LIMITS[j][["x", "y", "z"][ax]][1]); });
+          const o = { rot }; const ap = chan(a, j).pos, bp = chan(b, j).pos; if (ap || bp) { const pa = ap || [0, 0, 0], pb = bp || [0, 0, 0]; o.pos = [0, 1, 2].map((ax) => (pa[ax] + pb[ax]) / 2); }
+          poses[j] = o;
+        }
+        if (dev < 1.5) continue; // the straight line was already right - no breakdown needed
+        const t = r3((a.t + b.t) / 2), half = Math.max(1e-3, t - a.t);
+        let fast = false; for (const j of JOINTS) { const B = chan(a, j).rot, M = poses[j].rot, C = chan(b, j).rot; for (let ax = 0; ax < 3; ax++) if (Math.abs(M[ax] - B[ax]) / half > SPEED_LIMIT.normal || Math.abs(C[ax] - M[ax]) / half > SPEED_LIMIT.normal) fast = true; }
+        if (fast) continue;
+        out.push({ t, poses, ease: ["CubicV2", "InOut"], tag: "breakdown", stage: a.stage, synthetic: true }); added++;
+      }
+      c.keys = out;
+    }
+    finish(c);
+    const after = smoothness(c);
+    noteFix(c, `smoothed (strength ${strength}, ${passes} pass${passes > 1 ? "es" : ""}, ${c.interp === "spline" ? "spline interpolation" : added + " spline breakdown" + (added === 1 ? "" : "s")}; smoothness ${before.smoothness} → ${after.smoothness})`);
+    c.report = validate(c);
+    return c;
+  }
+  // Blender "Clean Keyframes": drop keys that the interpolation between their neighbours already reproduces within `tol` degrees.
+  function simplify(clipIn, tol) {
+    tol = Number.isFinite(tol) ? Math.max(0.1, tol) : 2; const c = cloneClip(clipIn); const before = c.keys.length;
+    let removed = true;
+    while (removed && c.keys.length > 2) {
+      removed = false; const n = c.keys.length;
+      for (let i = 1; i < n - 1; i++) {
+        const k = c.keys[i]; if (isAnchor(k, i, n)) continue;
+        const a = c.keys[i - 1], b = c.keys[i + 1], u = (k.t - a.t) / Math.max(1e-6, b.t - a.t); let maxD = 0;
+        for (const j of JOINTS) { const P = a.poses[j] || J(0, 0, 0), Q = b.poses[j] || J(0, 0, 0), K = k.poses[j] || J(0, 0, 0); for (let ax = 0; ax < 3; ax++) maxD = Math.max(maxD, Math.abs(K.rot[ax] - lerp(P.rot[ax], Q.rot[ax], u))); if (K.pos) { const pa = P.pos || [0, 0, 0], pb = Q.pos || [0, 0, 0]; for (let ax = 0; ax < 3; ax++) maxD = Math.max(maxD, Math.abs(K.pos[ax] - lerp(pa[ax], pb[ax], u)) * 40); } }
+        if (maxD <= tol) { c.keys.splice(i, 1); removed = true; break; }
+      }
+    }
+    finish(c); noteFix(c, `simplified: ${before} → ${c.keys.length} keys (tolerance ${tol}°)`); c.report = validate(c);
+    return c;
+  }
+  function reverse(clipIn) {
+    const c = cloneClip(clipIn); const D = c.duration, old = c.keys, n = old.length;
+    const flipDir = (e) => { const [s, d] = e || ["CubicV2", "Out"]; return [s, d === "In" ? "Out" : d === "Out" ? "In" : d]; };
+    c.keys = old.map((_, i) => { const src = old[n - 1 - i]; const segSrc = old[n - 2 - i] || src; return { t: r3(D - src.t), poses: clonePose(src.poses), ease: flipDir(segSrc.ease), tag: src.tag === "loop_end" ? "start" : src.tag === "start" ? (c.loop ? "loop_end" : "end") : src.tag, stage: src.stage, synthetic: src.synthetic }; });
+    c.stages = (c.stages || []).slice().reverse().map((s) => Object.assign({}, s, { t0: r3(D - s.t1), t1: r3(D - s.t0) }));
+    c.name = /_Reversed$/.test(c.name) ? c.name.replace(/_Reversed$/, "") : c.name + "_Reversed";
+    finish(c); noteFix(c, "reversed in time"); c.report = validate(c);
+    return c;
+  }
+  // Blender "Bake Action": one key per frame on the fps grid, linear between (what Studio will play anyway).
+  function bake(clipIn, fps) {
+    const c = cloneClip(clipIn); if (fps) c.fps = clamp(Math.round(fps), 10, 120);
+    const n = Math.max(2, Math.round(c.duration * c.fps) + 1); const keys = [];
+    for (let i = 0; i < n; i++) { const t = r3(Math.min(c.duration, i / c.fps)); const near = clipIn.keys.find((k) => Math.abs(k.t - t) < 0.5 / c.fps); keys.push({ t, poses: clonePose(sampleAt(clipIn, t)), ease: ["Linear", "Out"], tag: near ? near.tag : "baked", stage: near && near.stage, synthetic: !near }); }
+    c.keys = keys; c.baked = true; c.interp = "eased"; // dense linear keys ARE the curve now
+    finish(c); noteFix(c, `baked ${c.keys.length} frames @ ${c.fps} fps`); c.report = validate(c);
+    return c;
+  }
+  // Blender "Cycle offset": rotate where a loop starts (sync a walk's contact to frame 0, etc.). Non-looping clips are returned untouched.
+  function cycleOffset(clipIn, seconds) {
+    const c = cloneClip(clipIn); if (!c.loop || !(c.duration > 0)) return c;
+    const D = c.duration, off = ((seconds % D) + D) % D; if (off < 1e-6) return c;
+    const src = c.keys.slice(); if (src.length >= 2 && Math.abs(src[src.length - 1].t - D) < 1e-6) src.pop();
+    const keys = src.map((k) => Object.assign({}, k, { t: r3((((k.t - off) % D) + D) % D) }));
+    if (!keys.some((k) => Math.abs(k.t) < 1e-6)) keys.push({ t: 0, poses: clonePose(sampleAt(clipIn, off)), ease: ["CubicV2", "InOut"], tag: "start", synthetic: true });
+    keys.sort((a, b) => a.t - b.t);
+    c.keys = closeLoop(keys, D, c.travel);
+    c.stages = (c.stages || []).map((s) => Object.assign({}, s, { t0: r3((((s.t0 - off) % D) + D) % D), t1: r3((((s.t1 - off) % D) + D) % D || D) }));
+    finish(c); noteFix(c, `cycle offset ${r3(off)}s`); c.report = validate(c);
+    return c;
+  }
+  // Blender "I": insert a key at the playhead holding the pose the interpolation already shows there.
+  function insertKey(clipIn, t) {
+    const c = cloneClip(clipIn); const step = 1 / c.fps; t = r3(clamp(Math.round(t * c.fps) / c.fps, 0, c.duration)); // frame-aligned like every other key
+    const existing = c.keys.findIndex((k) => Math.abs(k.t - t) < step / 2); if (existing >= 0) return { clip: c, index: existing, inserted: false };
+    const prev = c.keys.filter((k) => k.t < t).pop();
+    c.keys.push({ t, poses: clonePose(sampleAt(clipIn, t)), ease: prev ? prev.ease : ["CubicV2", "Out"], tag: "key", stage: prev && prev.stage });
+    finish(c); c.edited = true; c.report = validate(c);
+    return { clip: c, index: c.keys.findIndex((k) => Math.abs(k.t - t) < 1e-6), inserted: true };
+  }
+  // Blender NLA-style layering: lower body + root from `base`, upper body from `upper` (stretched to the base duration or looped
+  // at its own period), blended by `weight`. walk + wave, run + aim, idle + talk ...
+  function layer(base, upper, opts) {
+    opts = opts || {}; const weight = clamp(Number.isFinite(opts.weight) ? opts.weight : 1, 0, 1), fit = opts.fit === "loop" ? "loop" : "stretch";
+    const joints = Array.isArray(opts.joints) && opts.joints.length ? opts.joints.filter((j) => JOINTS.includes(j)) : UPPER_JOINTS;
+    const D = base.duration, U = upper.duration || D;
+    const tu = (t) => fit === "loop" ? ((t % U) + U) % U : (t / D) * U;
+    const times = new Set(base.keys.map((k) => r3(k.t)));
+    if (fit === "loop") { for (let n = 0; n * U < D + 1e-6; n++) for (const k of upper.keys) { const t = r3(n * U + k.t); if (t <= D + 1e-6) times.add(Math.min(D, t)); } }
+    else for (const k of upper.keys) times.add(r3((k.t / U) * D));
+    const keys = Array.from(times).sort((a, b) => a - b).map((t) => {
+      const poses = clonePose(sampleAt(base, t)), up = sampleAt(upper, tu(t));
+      for (const j of joints) { const A = poses[j] || J(0, 0, 0), B = up[j] || J(0, 0, 0); const o = { rot: [0, 1, 2].map((ax) => lerp(A.rot[ax], B.rot[ax], weight)) }; if (j !== "root" && (A.pos || B.pos)) { const pa = A.pos || [0, 0, 0], pb = B.pos || [0, 0, 0]; o.pos = [0, 1, 2].map((ax) => lerp(pa[ax], pb[ax], weight)); } if (j === "root" && A.pos) o.pos = A.pos.slice(); poses[j] = o; }
+      const bk = base.keys.find((k) => Math.abs(k.t - t) < 1e-6), uk = upper.keys.find((k) => Math.abs(r3(fit === "loop" ? k.t : (k.t / U) * D) - t) < 1e-6 || (fit === "loop" && Math.abs(((t % U) + U) % U - k.t) < 1e-6));
+      return { t, poses, ease: (bk && bk.ease) || (uk && uk.ease) || ["CubicV2", "InOut"], tag: bk ? bk.tag : uk ? "layer" : "layer", stage: bk && bk.stage };
+    });
+    const c = cloneClip(base);
+    c.keys = keys; c.name = opts.name || `${base.name}+${upper.name}`; c.prompt = `${base.prompt || base.name} + ${upper.prompt || upper.name} (upper body)`;
+    c.layered = { base: base.name, upper: upper.name, weight, fit, joints };
+    c.stages = (base.stages || []).concat((upper.stages || []).map((s) => Object.assign({}, s, { name: "upper:" + s.name, t0: r3(fit === "loop" ? Math.min(D, s.t0) : (s.t0 / U) * D), t1: r3(fit === "loop" ? Math.min(D, s.t1) : (s.t1 / U) * D) })));
+    c.limitations = (base.limitations || []).concat([`layered clip: ${joints.length === UPPER_JOINTS.length ? "upper body" : joints.join(", ")} comes from "${upper.name}" (${fit}, weight ${weight}) - the two were not authored together, check the seam and shoulder/hip balance in the preview.`]);
+    if (c.loop) c.keys = closeLoop(c.keys, D, c.travel);
+    finish(c); noteFix(c, `layered ${upper.name} over ${base.name}`); c.report = validate(c); c.edited = true;
+    return c;
+  }
+  // 2-bone IK (analytic, Blender-style pole): hands reach a world target through shoulder (x,y,z) + elbow (x), feet through
+  // hip (x,y,z) + knee (x). The limb's natural bend is the pole (elbows back/out, knees forward), joint limits are respected,
+  // the wrist/ankle tip offset is iterated in, and a short bounded coordinate-descent polish absorbs what the clamps cost.
+  function ikSolve(posesIn, effector, target, opts) {
+    const E = EFFECTORS[effector]; if (!E || !target || target.length !== 3) return { poses: posesIn, distance: Infinity, reached: false, joints: [] };
+    opts = opts || {}; const poses = clonePose(posesIn);
+    const upper = E.chain[0][0], lower = E.chain[3][0], end = lower === "l_elbow" ? "l_wrist" : lower === "r_elbow" ? "r_wrist" : lower === "l_knee" ? "l_ankle" : "r_ankle", tip = E.tip;
+    const leg = /hip$/.test(upper), side = upper.startsWith("l_") ? -1 : 1;
+    const L1 = Math.hypot(...PIVOT[lower]), L2 = Math.hypot(...PIVOT[end]);
+    for (const j of [upper, lower, end]) if (!poses[j]) poses[j] = J(0, 0, 0);
+    const norm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const dotv = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const dist = () => { const pt = forwardKinematics(poses)[tip]; return Math.hypot(pt[0] - target[0], pt[1] - target[1], pt[2] - target[2]); };
+    const Lu = LIMITS[upper], Ll = LIMITS[lower];
+    const solveWith = (poleIn) => {
+      const P = clonePose(poses);
+      for (let it = 0; it < 3; it++) {
+        const { pts, world } = fkFull(P);
+        const S = pts[upper], Rp = world[PARENT[upper]].R, Rend = world[end].R;
+        const tipOff = mulV(Rend, TIP[end] || [0, 0, 0]);
+        const T = [target[0] - tipOff[0], target[1] - tipOff[1], target[2] - tipOff[2]];
+        const d = mulV(transpose(Rp), [T[0] - S[0], T[1] - S[1], T[2] - S[2]]);
+        const D = clamp(Math.hypot(d[0], d[1], d[2]), Math.abs(L1 - L2) + 0.02, L1 + L2 - 0.005);
+        const cosPhi = clamp((L1 * L1 + L2 * L2 - D * D) / (2 * L1 * L2), -1, 1);
+        let e = (180 - Math.acos(cosPhi) / DEG) * (leg ? -1 : 1); e = clamp(e, Ll.x[0], Ll.x[1]);
+        const er = e * DEG; const alpha = Math.atan2(L2 * Math.sin(er), L1 + L2 * Math.cos(er)); // signed bend of the reach vector in the upper-limb Y-Z plane
+        const dn = norm(d); const yAx = [-dn[0], -dn[1], -dn[2]];
+        let pole = poleIn;
+        let zAx = [pole[0] - dotv(pole, yAx) * yAx[0], pole[1] - dotv(pole, yAx) * yAx[1], pole[2] - dotv(pole, yAx) * yAx[2]];
+        if (Math.hypot(zAx[0], zAx[1], zAx[2]) < 1e-3) { pole = [side, 0, 0]; zAx = [pole[0] - dotv(pole, yAx) * yAx[0], pole[1] - dotv(pole, yAx) * yAx[1], pole[2] - dotv(pole, yAx) * yAx[2]]; }
+        zAx = norm(zAx); const xAx = cross(yAx, zAx);
+        const Q = [[xAx[0], yAx[0], zAx[0]], [xAx[1], yAx[1], zAx[1]], [xAx[2], yAx[2], zAx[2]]];
+        const eu = toEulerYXZ(mul(Q, rotX(-alpha)));
+        P[upper] = Object.assign({}, P[upper], { rot: [clamp(eu[0], Lu.x[0], Lu.x[1]), clamp(eu[1], Lu.y[0], Lu.y[1]), clamp(eu[2], Lu.z[0], Lu.z[1])] });
+        P[lower] = Object.assign({}, P[lower], { rot: [e, 0, 0] });
+      }
+      const pt = forwardKinematics(P)[tip];
+      return { P, d: Math.hypot(pt[0] - target[0], pt[1] - target[1], pt[2] - target[2]) };
+    };
+    // natural pole first (elbows back/down/out, knees forward - the sign rides on alpha); other poles only if limits clamped it
+    const poles = leg ? [[side * 0.15, -0.25, 1], [side * 0.6, 0, 1], [0, 1, 0.3], [side, 0, 0]] : [[side * 0.45, -0.55, 1], [side, -0.2, 0.3], [0, -1, 0.2], [-side * 0.5, 0.6, 1], [0, 1, 0]];
+    let bestSolve = null;
+    for (const pole of poles) { const r = solveWith(pole); if (!bestSolve || r.d < bestSolve.d) bestSolve = r; if (bestSolve.d < (opts.tolerance || 0.08) * 0.5) break; }
+    for (const j of [upper, lower]) poses[j] = bestSolve.P[j];
+    // polish: bounded coordinate descent from the analytic answer (helps when a limit clamped the exact solution)
+    let best = dist(); const tol = opts.tolerance || 0.08;
+    if (best > tol * 0.5) {
+      const params = E.chain.map(([j, ax]) => ({ j, ax, L: LIMITS[j][["x", "y", "z"][ax]] })); let step = 12;
+      for (let it = 0; it < (opts.iterations || 40) && best > tol * 0.25; it++) {
+        let improved = false;
+        for (const p of params) { const cur = poses[p.j].rot[p.ax]; for (const dir of [1, -1]) { const v = clamp(cur + dir * step, p.L[0], p.L[1]); if (v === cur) continue; poses[p.j].rot[p.ax] = v; const dd = dist(); if (dd < best - 1e-9) { best = dd; improved = true; break; } poses[p.j].rot[p.ax] = cur; } }
+        if (!improved) { step *= 0.5; if (step < 0.05) break; }
+      }
+    }
+    for (const j of [upper, lower]) poses[j].rot = poses[j].rot.map(r3);
+    return { poses, distance: r3(best), reached: best < tol, joints: [upper, lower] };
+  }
+  // Foot planting (Blender floor constraint + foot IK, lite): on grounded poses the lowest foot sits on the ground (root shifted
+  // down/up accordingly) and planted soles are flattened, which removes the "floating" contact warnings and most foot sliding.
+  function groundFeet(clipIn, opts) {
+    opts = opts || {}; const c = cloneClip(clipIn); const cat = (c.intent && c.intent.category) || ""; let n = 0, maxShift = 0, flat = 0;
+    // auto mode plants only clips that stay on the ground by nature (runs have flight phases, combos spin and lunge) - the
+    // Plant-feet action / "plant the feet" feedback forces it on anything.
+    if (!opts.force && (!GROUND_AUTO.test(cat) || (c.intent && c.intent.upperOnly))) { c.grounded = false; return c; }
+    for (const key of c.keys) {
+      if (/^(apex|launch|fall)$/.test(key.tag || "")) continue;
+      // 1) flatten the planted sole(s) - the lowest foot and any foot within 0.12 studs of it
+      let pts = forwardKinematics(key.poses); let lf = pts.l_ankle_tip[1], rf = pts.r_ankle_tip[1], lo = Math.min(lf, rf);
+      for (const side of ["l", "r"]) {
+        const fy = side === "l" ? lf : rf; if (fy - lo > 0.12) continue;
+        const hip = key.poses[side + "_hip"] || J(0, 0, 0), knee = key.poses[side + "_knee"] || J(0, 0, 0), ank = key.poses[side + "_ankle"] || J(0, 0, 0), rootR = key.poses.root || J(0, 0, 0);
+        const want = clamp(-(hip.rot[0] + knee.rot[0] + rootR.rot[0]), LIMITS[side + "_ankle"].x[0], LIMITS[side + "_ankle"].x[1]);
+        if (Math.abs(want - ank.rot[0]) > 0.5) { key.poses[side + "_ankle"] = { rot: [r3(want), ank.rot[1], ank.rot[2]] }; flat++; }
+      }
+      // 2) re-base the root so the lowest foot sits on the ground
+      pts = forwardKinematics(key.poses); lf = pts.l_ankle_tip[1]; rf = pts.r_ankle_tip[1]; lo = Math.min(lf, rf);
+      const root = key.poses.root || (key.poses.root = J(0, 0, 0)); const pos = root.pos ? root.pos.slice() : [0, 0, 0];
+      if (Math.abs(lo) > 0.02) { const ny = clamp(pos[1] - lo, -2.2, 2.2); maxShift = Math.max(maxShift, Math.abs(ny - pos[1])); pos[1] = Math.round(ny * 10000) / 10000; root.pos = pos; n++; }
+    }
+    c.grounded = true;
+    if (n || flat) { finish(c); noteFix(c, `planted feet: root re-based on ${n} key${n === 1 ? "" : "s"} (max ${r3(maxShift)} studs), ${flat} sole${flat === 1 ? "" : "s"} flattened`); c.report = validate(c); }
+    return c;
+  }
+  function copyPose(clip, index, joints) { const k = clip.keys[index]; if (!k) return null; const p = clonePose(k.poses); if (Array.isArray(joints) && joints.length) for (const j of Object.keys(p)) if (!joints.includes(j)) delete p[j]; return p; }
+  function pastePose(clipIn, index, pose, opts) {
+    opts = opts || {}; const c = cloneClip(clipIn); const k = c.keys[index]; if (!k || !pose) return c;
+    const PAIR = { l_shoulder: "r_shoulder", l_elbow: "r_elbow", l_wrist: "r_wrist", l_hip: "r_hip", l_knee: "r_knee", l_ankle: "r_ankle", r_shoulder: "l_shoulder", r_elbow: "l_elbow", r_wrist: "l_wrist", r_hip: "l_hip", r_knee: "l_knee", r_ankle: "l_ankle" };
+    const src = opts.flipped ? mirrorPose(Object.assign(clonePose(k.poses), pose)) : pose;
+    const joints = Object.keys(pose).filter((j) => JOINTS.includes(j)).map((j) => (opts.flipped ? PAIR[j] || j : j));
+    for (const j of joints) if (src[j]) k.poses[j] = clonePose(src[j]);
+    c.edited = true; c.report = validate(c); c.fingerprint = fingerprint(c); return c;
+  }
   function compare(a, b) { // before/after summary
     const n = Math.min(a.keys.length, b.keys.length); let maxD = 0, joint = null;
     for (let i = 0; i < 40; i++) { const t = (i / 39) * Math.min(a.duration, b.duration); const pa = sampleAt(a, t), pb = sampleAt(b, t); for (const j of JOINTS) { const d = Math.max(...[0, 1, 2].map((x) => Math.abs((pa[j] || J(0, 0, 0)).rot[x] - (pb[j] || J(0, 0, 0)).rot[x]))); if (d > maxD) { maxD = d; joint = j; } } }
@@ -1277,7 +1601,7 @@
     return lines.join("\n");
   }
 
-  const api = { VERSION, JOINTS, PARENT, PIVOT, LIMITS, QUALITY, R15_BONES, R6_BONES, R6_C0, PRIORITY_TOKEN, EASING_TOKEN, parseIntent, generate, generateSequence, validate, refine, applyFeedback, variation, toStudio, toBuildArgs, toRbxmx, defaultRigInfo, detectRigType, boneMap, sampleAt, forwardKinematics, metrics, serializeProject, parseProject, retime, moveKey, setJoint, duplicateKey, deleteKey, compare, summary, mirror, fingerprint, similarity, persona, choreograph, STRIKE_POOL, math: { eulerYXZ, toEulerYXZ, mul, transpose, mulV, flat, from9 } };
+  const api = { VERSION, JOINTS, PARENT, PIVOT, LIMITS, QUALITY, R15_BONES, R6_BONES, R6_C0, PRIORITY_TOKEN, EASING_TOKEN, parseIntent, generate, generateSequence, validate, refine, applyFeedback, variation, toStudio, toBuildArgs, toRbxmx, defaultRigInfo, detectRigType, boneMap, sampleAt, forwardKinematics, fkFull, metrics, serializeProject, parseProject, retime, moveKey, setJoint, duplicateKey, deleteKey, smooth, smoothness, simplify, reverse, bake, cycleOffset, insertKey, layer, ikSolve, groundFeet, copyPose, pastePose, channels, mirrorPose, easeAlpha, exportKeys, setInterp, UPPER_JOINTS, LOWER_JOINTS, EFFECTORS, TIP, ROOT_HEIGHT, compare, summary, mirror, fingerprint, similarity, persona, choreograph, STRIKE_POOL, math: { eulerYXZ, toEulerYXZ, mul, transpose, mulV, flat, from9 } };
   root.ORAnimEngine = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -1,9 +1,15 @@
 /* ORscript Animation Studio — describe it, preview it, build it in Studio.
  *
  * The visual front-end of the animation engine (animengine.js): a prompt box
- * with quality / rig / duration / loop controls, a schematic skeleton preview
- * (front + side orthographic views of the engine's semantic skeleton; NOT the
- * Roblox renderer), a timeline with draggable keyframes and stage bands, a
+ * with quality / rig / duration / loop controls, a schematic rig preview
+ * (1.54: orbitable 3D viewport with ground grid, shadow, onion skin and IK
+ * handles on hands / feet, plus fixed front / side / top views; still the
+ * engine's semantic skeleton, NOT the Roblox renderer), a timeline with
+ * draggable keyframes and stage bands, a dope sheet (joint rows x keys) and a
+ * graph editor (per-joint X / Y / Z curves with draggable points), Blender-style
+ * key tools (insert / copy / paste / paste flipped / lock, auto-key, pose
+ * library) and clip tools (Smooth, Plant feet, Simplify, Reverse, Bake, Cycle
+ * offset, Layer = NLA-style upper-body layering), a
  * joint editor (X/Y/Z degrees + root offset per selected key), transport
  * controls (play / pause / stop / loop / scrub / speed / fps / duration),
  * refine-by-feedback, variation, regenerate, undo / redo, before/after ghost,
@@ -28,6 +34,7 @@
     undo: SVG('<path d="M9 14H4V9"/><path d="M4 14a8 8 0 1 1 3 6"/>'), redo: SVG('<path d="M15 14h5V9"/><path d="M20 14a8 8 0 1 0-3 6"/>'), close: SVG('<path d="M6 6l12 12M18 6L6 18"/>'),
     save: SVG('<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4"/><path d="M8 20v-6h8v6"/>'), open: SVG('<path d="M4 7h5l2 2h9v10H4z"/>'), export: SVG('<path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 19h14"/>'),
     dup: SVG('<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>'), trash: SVG('<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>'),
+    key: SVG('<path d="M12 3l8 9-8 9-8-9z"/>'), copy: SVG('<rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M15 9V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h4"/>'), paste: SVG('<rect x="5" y="5" width="14" height="16" rx="1.5"/><path d="M9 5V3h6v2"/><path d="M9 12h6M9 16h6"/>'), flip: SVG('<path d="M12 3v18"/><path d="M8 7L3 12l5 5"/><path d="M16 7l5 5-5 5"/>'), lock: SVG('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'), onion: SVG('<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/>'), cam: SVG('<path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="13" r="3.5"/>'),
     ghost: SVG('<path d="M12 3a7 7 0 0 0-7 7v10l3-2 2 2 2-2 2 2 2-2 3 2V10a7 7 0 0 0-7-7z"/><circle cx="9.5" cy="10" r="1" fill="currentColor"/><circle cx="14.5" cy="10" r="1" fill="currentColor"/>'),
   };
   const assetUrl = (p) => { try { if (window.chrome && chrome.runtime && chrome.runtime.getURL) return chrome.runtime.getURL(p); } catch {} return p; };
@@ -41,7 +48,7 @@
   ];
   const STORAGE_KEY = "rsAnimProject";
 
-  const S = { open: false, hooks: {}, clip: null, prev: null, history: [], future: [], sel: -1, selJoint: "r_shoulder", t: 0, playing: false, speed: 1, ghost: false, rigInfo: null, built: null, drag: null, raf: 0, lastTs: 0, busy: false, view: "both" };
+  const S = { open: false, hooks: {}, clip: null, prev: null, history: [], future: [], sel: -1, selJoint: "r_shoulder", t: 0, playing: false, speed: 1, ghost: false, rigInfo: null, built: null, drag: null, raf: 0, lastTs: 0, busy: false, view: "3d", cam: { yaw: 35, pitch: 18, zoom: 1, pan: [0, 0] }, onion: true, autoKey: false, editor: "dope", clipboard: null, handles: [], cams: [], library: {}, ikDrag: null, orbit: null, gdrag: null };
   let D = null;
   let toastTimer = 0;
   const toast = (m) => { if (!D) return; D.toast.textContent = m; D.toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => D.toast.classList.remove("show"), 2600); try { S.hooks.diag && S.hooks.diag("anim.toast", { m }); } catch {} };
@@ -63,6 +70,7 @@
     if (S.sel < 0 && clip.keys.length) S.sel = 0;
     S.built = null;
     autosave();
+    if (D && clip.name) remember(clip);
     renderAll();
   }
   function autosave() { try { if (S.clip) localStorage.setItem(STORAGE_KEY, JSON.stringify({ t: Date.now(), clip: S.clip })); } catch {} }
@@ -225,7 +233,7 @@
   }
 
   // ───────────────────────── rendering ─────────────────────────
-  function renderAll() { if (!D) return; renderPreview(); renderTransport(); renderTimeline(); renderJoints(); renderInspector(); renderReport(); renderStages(); renderStatus(); }
+  function renderAll() { if (!D) return; renderPreview(); renderTransport(); renderTimeline(); renderEditor(); renderJoints(); renderInspector(); renderReport(); renderStages(); renderStatus(); renderTools(); }
   function setStatus(m) { if (D) D.status.textContent = m || ""; }
   function renderStatus() {
     if (!D) return;
@@ -236,26 +244,80 @@
     D.undoBtn.disabled = !S.history.length; D.redoBtn.disabled = !S.future.length;
     D.empty.hidden = !!c;
   }
-  function project(pt, view, box) { // semantic (x right, y up, z back) → canvas
-    const sx = view === "front" ? pt[0] : -pt[2];
-    return [box.x + box.w / 2 + sx * box.s, box.y + box.h - (pt[1]) * box.s - box.pad];
-  }
+  // ───────────────────────── viewport: orbitable 3D schematic rig ─────────────────────────
+  // Semantic frame: x right, y up, z back. Fixed views keep the 1.52 conventions (front: x →, side: forward →); "3d" orbits.
+  const VIEW_CAM = { front: { yaw: 0, pitch: 0 }, side: { yaw: 90, pitch: 0 }, top: { yaw: 0, pitch: 89 }, back: { yaw: 180, pitch: 0 } };
   const BONES = [["root", "waist"], ["waist", "neck"], ["neck", "neck_tip"], ["waist", "l_shoulder"], ["l_shoulder", "l_elbow"], ["l_elbow", "l_wrist"], ["l_wrist", "l_wrist_tip"], ["waist", "r_shoulder"], ["r_shoulder", "r_elbow"], ["r_elbow", "r_wrist"], ["r_wrist", "r_wrist_tip"], ["root", "l_hip"], ["l_hip", "l_knee"], ["l_knee", "l_ankle"], ["l_ankle", "l_ankle_tip"], ["root", "r_hip"], ["r_hip", "r_knee"], ["r_knee", "r_ankle"], ["r_ankle", "r_ankle_tip"]];
-  function drawSkeleton(ctx, pts, view, box, style) {
-    ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
-    for (const [a, b] of BONES) {
-      const A = project(pts[a], view, box), B = project(pts[b], view, box);
-      const left = a.startsWith("l_"), right = a.startsWith("r_");
-      ctx.strokeStyle = style.ghost ? "rgba(255,255,255,.22)" : left ? "#7fb2ff" : right ? "#ff9f6e" : "#e8e8ec";
-      ctx.lineWidth = style.ghost ? 2 : (a === "root" || a === "waist" ? 5 : 3.5);
+  const EFFECTOR_OF = { l_wrist_tip: "l_hand", r_wrist_tip: "r_hand", l_ankle_tip: "l_foot", r_ankle_tip: "r_foot" };
+  function makeCamera(view, box, focus) {
+    const base = view === "3d" ? S.cam : Object.assign({}, VIEW_CAM[view] || VIEW_CAM.front, { zoom: S.cam.zoom, pan: S.cam.pan });
+    const yaw = (base.yaw || 0) * Math.PI / 180, pitch = (base.pitch || 0) * Math.PI / 180;
+    const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const right = [cy, 0, -sy], depth0 = [sy, 0, cy];
+    const up = [sp * depth0[0], cp, sp * depth0[2]], depth = [cp * depth0[0], -sp, cp * depth0[2]];
+    const s = Math.min(box.w / 8.2, box.h / 7.2) * (base.zoom || 1);
+    const target = [focus[0], 2.55 + (base.pan ? base.pan[1] : 0), focus[2]], cx = box.x + box.w / 2 + (base.pan ? base.pan[0] : 0) * s, cz = box.y + box.h / 2 + 6;
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const persp = view === "3d";
+    const project = (p) => { const d = [p[0] - target[0], p[1] - target[1], p[2] - target[2]]; const z = dot(d, depth); const k = persp ? 16 / (16 + z) : 1; return [cx + dot(d, right) * s * k, cz - dot(d, up) * s * k, z, k]; };
+    return { project, right, up, depth, s, target, persp, yaw: base.yaw || 0, pitch: base.pitch || 0 };
+  }
+  function drawGrid(ctx, cam, box) {
+    const t = cam.target; const N = 4;
+    ctx.save(); ctx.lineWidth = 1;
+    for (let i = -N; i <= N; i++) {
+      const a = cam.project([t[0] + i, 0, t[2] - N]), b = cam.project([t[0] + i, 0, t[2] + N]), c = cam.project([t[0] - N, 0, t[2] + i]), d = cam.project([t[0] + N, 0, t[2] + i]);
+      ctx.strokeStyle = i === 0 ? "rgba(255,255,255,.28)" : "rgba(255,255,255,.09)";
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(c[0], c[1]); ctx.lineTo(d[0], d[1]); ctx.stroke();
+    }
+    // forward arrow (-z) so the facing direction is never ambiguous
+    const o = cam.project([t[0], 0, t[2]]), f = cam.project([t[0], 0, t[2] - 1.6]);
+    ctx.strokeStyle = "rgba(126,178,255,.6)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(o[0], o[1]); ctx.lineTo(f[0], f[1]); ctx.stroke();
+    ctx.fillStyle = "rgba(126,178,255,.7)"; ctx.font = "9px ui-monospace, Consolas, monospace"; ctx.fillText("fwd", f[0] + 3, f[1] - 3);
+    ctx.restore();
+  }
+  function drawRig(ctx, pts, cam, style) {
+    const r6 = style.rigType === "R6"; const ghost = !!style.ghost;
+    const P = {}; for (const k of Object.keys(pts)) P[k] = cam.project(pts[k]);
+    ctx.save(); ctx.lineCap = r6 ? "square" : "round"; ctx.lineJoin = "round";
+    if (!ghost && style.shadow !== false) { // flattened contact shadow on the ground plane
+      ctx.strokeStyle = "rgba(0,0,0,.42)"; ctx.lineWidth = 7;
+      for (const [a, b] of BONES) { const A = cam.project([pts[a][0], 0, pts[a][2]]), B = cam.project([pts[b][0], 0, pts[b][2]]); ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke(); }
+    }
+    const segs = BONES.map(([a, b]) => ({ a, b, z: (P[a][2] + P[b][2]) / 2 })).sort((u, v) => v.z - u.z); // far → near
+    const torsoZ = (P.waist[2] + P.root[2]) / 2;
+    const drawTorso = () => {
+      const poly = [P.l_shoulder, P.r_shoulder, P.r_hip, P.l_hip];
+      ctx.beginPath(); ctx.moveTo(poly[0][0], poly[0][1]); for (const q of poly.slice(1)) ctx.lineTo(q[0], q[1]); ctx.closePath();
+      ctx.fillStyle = ghost ? (style.tint || "rgba(255,255,255,.08)") : "rgba(232,232,236,.16)"; ctx.fill();
+      ctx.strokeStyle = ghost ? (style.tint || "rgba(255,255,255,.22)") : "rgba(232,232,236,.7)"; ctx.lineWidth = 1.2; ctx.stroke();
+    };
+    let torsoDone = false;
+    for (const sgm of segs) {
+      if (!torsoDone && sgm.z <= torsoZ) { drawTorso(); torsoDone = true; }
+      const A = P[sgm.a], B = P[sgm.b]; const k = (A[3] + B[3]) / 2;
+      const left = sgm.a.startsWith("l_"), right = sgm.a.startsWith("r_"), foot = /ankle$/.test(sgm.a), spine = sgm.a === "root" || sgm.a === "waist";
+      const base = spine ? 5 : foot ? 5 : /wrist$/.test(sgm.a) ? 2.5 : 3.6;
+      ctx.lineWidth = Math.max(1, base * (r6 ? 1.7 : 1) * k * (ghost ? 0.6 : 1));
+      ctx.strokeStyle = ghost ? (style.tint || "rgba(255,255,255,.22)") : left ? "#7fb2ff" : right ? "#ff9f6e" : "#e8e8ec";
+      if (!ghost && style.selJoint && (sgm.a === style.selJoint || sgm.b === style.selJoint)) ctx.strokeStyle = "#ffd166";
       ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke();
     }
-    const head = project(pts.neck_tip, view, box), neck = project(pts.neck, view, box);
-    const r = Math.max(4, Math.hypot(head[0] - neck[0], head[1] - neck[1]) * 0.55);
-    ctx.beginPath(); ctx.arc(head[0], head[1], r, 0, Math.PI * 2); ctx.fillStyle = style.ghost ? "rgba(255,255,255,.12)" : "rgba(232,232,236,.9)"; ctx.fill();
-    if (style.weapon === "sword" && !style.ghost) { const w = project(pts.r_wrist, view, box), t = project(pts.r_wrist_tip, view, box); const dx = t[0] - w[0], dy = t[1] - w[1]; ctx.strokeStyle = "#c9d6ff"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(t[0], t[1]); ctx.lineTo(t[0] + dx * 3.2, t[1] + dy * 3.2); ctx.stroke(); }
-    if (!style.ghost) { ctx.fillStyle = "#ffd166"; for (const j of ["l_wrist_tip", "r_wrist_tip", "l_ankle_tip", "r_ankle_tip"]) { const p = project(pts[j], view, box); ctx.beginPath(); ctx.arc(p[0], p[1], 2.5, 0, Math.PI * 2); ctx.fill(); } }
+    if (!torsoDone) drawTorso();
+    // head
+    const head = P.neck_tip, neck = P.neck; const r = Math.max(4, Math.hypot(head[0] - neck[0], head[1] - neck[1]) * (r6 ? 0.62 : 0.55));
+    ctx.beginPath(); ctx.arc(head[0], head[1], r, 0, Math.PI * 2); ctx.fillStyle = ghost ? (style.tint || "rgba(255,255,255,.1)") : "rgba(232,232,236,.92)"; ctx.fill();
+    if (!ghost) { // eyes side = facing: a small dark dot toward -z
+      const nose = cam.project([pts.neck_tip[0], pts.neck_tip[1], pts.neck_tip[2] - 0.32]); ctx.fillStyle = "rgba(20,20,26,.9)"; ctx.beginPath(); ctx.arc(nose[0], nose[1], Math.max(1.5, r * 0.22), 0, Math.PI * 2); ctx.fill(); }
+    if (style.weapon === "sword" && !ghost) { const w = P.r_wrist, t = P.r_wrist_tip; const dx = t[0] - w[0], dy = t[1] - w[1]; ctx.strokeStyle = "#c9d6ff"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(t[0], t[1]); ctx.lineTo(t[0] + dx * 2.6, t[1] + dy * 2.6); ctx.stroke(); }
     ctx.restore();
+    return P;
+  }
+  function drawHandles(ctx, P) {
+    S.handles = [];
+    for (const j of E().JOINTS) { const p = P[j]; if (!p) continue; const sel = j === S.selJoint; ctx.beginPath(); ctx.arc(p[0], p[1], sel ? 5 : 3.2, 0, Math.PI * 2); ctx.fillStyle = sel ? "#ffd166" : "rgba(255,255,255,.55)"; ctx.fill(); if (sel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke(); } S.handles.push({ j, x: p[0], y: p[1], kind: "joint" }); }
+    for (const tip of Object.keys(EFFECTOR_OF)) { const p = P[tip]; if (!p) continue; ctx.beginPath(); ctx.arc(p[0], p[1], 5.5, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,209,102,.9)"; ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.lineWidth = 1; ctx.stroke(); S.handles.push({ j: tip, eff: EFFECTOR_OF[tip], x: p[0], y: p[1], kind: "effector" }); }
   }
   function renderPreview() {
     if (!D) return;
@@ -268,19 +330,89 @@
     const vw = W / views.length;
     const poses = S.clip ? E().sampleAt(S.clip, S.t) : null;
     const ghost = S.ghost && S.prev ? E().sampleAt(S.prev, clamp(S.t, 0, S.prev.duration)) : null;
+    const rootPos = poses && poses.root && poses.root.pos ? poses.root.pos : [0, 0, 0];
+    const focus = [rootPos[0], 0, rootPos[2]];
+    let onion = null;
+    if (S.onion && S.clip && !S.playing && S.clip.keys.length > 1) { const keys = S.clip.keys; const prev = keys.filter((k) => k.t < S.t - 1e-4).pop(), next = keys.find((k) => k.t > S.t + 1e-4); onion = { prev: prev && prev.poses, next: next && next.poses }; }
+    S.cams = [];
     views.forEach((view, i) => {
-      const box = { x: i * vw, y: 0, w: vw, h: H, pad: 24, s: Math.min(vw / 7.5, (H - 48) / 6.4) };
-      const gy = box.y + box.h - box.pad;
-      ctx.strokeStyle = "rgba(255,255,255,.18)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(box.x + 12, gy); ctx.lineTo(box.x + box.w - 12, gy); ctx.stroke();
-      ctx.fillStyle = "rgba(255,255,255,.45)"; ctx.font = "10px ui-monospace, Consolas, monospace"; ctx.fillText(view === "front" ? "FRONT  (x →)" : "SIDE  (forward →)", box.x + 12, 14);
+      const box = { x: i * vw, y: 0, w: vw, h: H };
+      const cam = makeCamera(view, box, focus); S.cams.push({ view, box, cam });
+      drawGrid(ctx, cam, box);
+      ctx.fillStyle = "rgba(255,255,255,.45)"; ctx.font = "10px ui-monospace, Consolas, monospace";
+      ctx.fillText(view === "front" ? "FRONT  (x →)" : view === "side" ? "SIDE  (forward →)" : view === "top" ? "TOP" : view === "back" ? "BACK" : `3D  yaw ${Math.round(cam.yaw)}° pitch ${Math.round(cam.pitch)}°`, box.x + 12, 14);
       if (i) { ctx.strokeStyle = "rgba(255,255,255,.08)"; ctx.beginPath(); ctx.moveTo(box.x, 0); ctx.lineTo(box.x, H); ctx.stroke(); }
       if (!poses) return;
-      const weapon = S.clip.intent && S.clip.intent.weapon;
-      if (ghost) drawSkeleton(ctx, E().forwardKinematics(ghost), view, box, { ghost: true });
-      drawSkeleton(ctx, E().forwardKinematics(poses), view, box, { weapon });
+      const weapon = S.clip.intent && S.clip.intent.weapon, rigType = S.clip.rigType;
+      if (ghost) drawRig(ctx, E().forwardKinematics(ghost), cam, { ghost: true, rigType });
+      if (onion && onion.prev) drawRig(ctx, E().forwardKinematics(onion.prev), cam, { ghost: true, rigType, tint: "rgba(126,178,255,.3)" });
+      if (onion && onion.next) drawRig(ctx, E().forwardKinematics(onion.next), cam, { ghost: true, rigType, tint: "rgba(255,159,110,.3)" });
+      const P = drawRig(ctx, E().forwardKinematics(poses), cam, { weapon, rigType, selJoint: S.selJoint });
+      if (i === views.length - 1 && !S.playing) drawHandles(ctx, P);
     });
-    if (S.clip) { ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.font = "10px ui-monospace, Consolas, monospace"; ctx.fillText(`schematic skeleton preview · t=${fmt(S.t, 2)}s${S.ghost && S.prev ? " · ghost = previous version" : ""}`, 12, H - 8); }
+    if (S.clip) {
+      ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.font = "10px ui-monospace, Consolas, monospace";
+      const hint = S.view === "3d" ? "drag: orbit · wheel: zoom · shift-drag: pan · double-click: reset" : "drag: pan · wheel: zoom";
+      ctx.fillText(`schematic rig preview (${S.clip.rigType}) · t=${fmt(S.t, 2)}s · ${hint} · drag a yellow hand/foot: IK${S.ghost && S.prev ? " · white ghost = previous version" : ""}${S.onion ? " · blue/orange = previous/next key" : ""}`, 12, H - 8);
+      if (S.ikDrag) { ctx.fillStyle = "#ffd166"; ctx.fillText(`IK ${S.ikDrag.eff}: target ${S.ikDrag.target.map((v) => v.toFixed(2)).join(", ")} · ${S.ikDrag.reached ? "reached" : "out of reach by " + fmt(S.ikDrag.distance, 2) + " studs"}`, 12, H - 22); }
+    }
   }
+  // viewport input: orbit / pan / zoom, joint picking, IK dragging of hands + feet
+  function canvasPoint(ev) { const r = D.canvas.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; }
+  function hitHandle(pt) { let best = null, bd = 10; for (const h of S.handles || []) { const d = Math.hypot(h.x - pt[0], h.y - pt[1]) - (h.kind === "effector" ? 2 : 0); if (d < bd) { bd = d; best = h; } } return best; }
+  function camAt(pt) { const cs = S.cams || []; return cs.find((c) => pt[0] >= c.box.x && pt[0] <= c.box.x + c.box.w) || cs[cs.length - 1] || null; }
+  function ensureKeyAtPlayhead() { // auto-key: edits at a time with no key create one there first; otherwise edits land on the selected key
+    if (!S.clip) return false;
+    const step = 1 / S.clip.fps; const at = S.clip.keys.findIndex((k) => Math.abs(k.t - S.t) < step / 2);
+    if (at >= 0) { S.sel = at; return true; }
+    if (!S.autoKey) { if (S.sel >= 0 && S.clip.keys[S.sel]) S.t = S.clip.keys[S.sel].t; return S.sel >= 0; }
+    const r = E().insertKey(S.clip, S.t); S.clip = r.clip; S.sel = r.index; S.t = S.clip.keys[S.sel].t; return true;
+  }
+  function viewportDown(ev) {
+    if (!D || ev.button !== 0) return; const pt = canvasPoint(ev); const cell = camAt(pt); if (!cell) return;
+    if (S.playing) pause();
+    const h = S.clip ? hitHandle(pt) : null;
+    if (h && h.kind === "effector" && S.sel >= 0) {
+      pushHistory(); S.clip = JSON.parse(JSON.stringify(S.clip)); ensureKeyAtPlayhead();
+      const key = S.clip.keys[S.sel]; const pts = E().forwardKinematics(key.poses);
+      S.ikDrag = { eff: h.eff, tip: h.j, start: pt, target0: pts[h.j].slice(), target: pts[h.j].slice(), poses0: JSON.parse(JSON.stringify(key.poses)), cam: cell.cam, reached: true, distance: 0 };
+      try { D.canvas.setPointerCapture(ev.pointerId); } catch {}
+      renderAll(); return;
+    }
+    if (h && h.kind === "joint") { S.selJoint = h.j; renderJoints(); renderInspector(); renderPreview(); renderEditor(); return; }
+    S.orbit = { start: pt, yaw0: S.cam.yaw, pitch0: S.cam.pitch, pan0: S.cam.pan.slice(), mode: ev.shiftKey || cell.view !== "3d" ? "pan" : "orbit", s: cell.cam.s };
+    try { D.canvas.setPointerCapture(ev.pointerId); } catch {}
+  }
+  function viewportMove(ev) {
+    if (!D) return; const pt = canvasPoint(ev);
+    if (S.ikDrag) {
+      const d = S.ikDrag, cam = d.cam; const dx = (pt[0] - d.start[0]) / cam.s, dy = -(pt[1] - d.start[1]) / cam.s;
+      d.target = [0, 1, 2].map((i) => d.target0[i] + cam.right[i] * dx + cam.up[i] * dy);
+      const res = E().ikSolve(d.poses0, d.eff, d.target); d.reached = res.reached; d.distance = res.distance;
+      const key = S.clip.keys[S.sel]; for (const j of res.joints) key.poses[j] = res.poses[j];
+      renderPreview(); renderInspector(); renderEditor(); return;
+    }
+    if (S.orbit) {
+      const o = S.orbit, dx = pt[0] - o.start[0], dy = pt[1] - o.start[1];
+      if (o.mode === "orbit") { S.cam.yaw = (o.yaw0 + dx * 0.5) % 360; S.cam.pitch = clamp(o.pitch0 - dy * 0.4, -89, 89); }
+      else S.cam.pan = [o.pan0[0] + dx / o.s, o.pan0[1] - dy / o.s];
+      renderPreview(); return;
+    }
+    const h = S.clip && !S.playing ? hitHandle(pt) : null; D.canvas.style.cursor = h ? (h.kind === "effector" ? "grab" : "pointer") : (S.view === "3d" ? "move" : "default");
+  }
+  function viewportUp(ev) {
+    if (!D) return;
+    try { D.canvas.releasePointerCapture(ev.pointerId); } catch {}
+    if (S.ikDrag) {
+      const d = S.ikDrag; S.ikDrag = null; const c = S.clip; c.edited = true; c.report = E().validate(c); c.fingerprint = E().fingerprint(c);
+      setClip(c, { keepT: true, noPrev: true }); toast(`IK ${d.eff.replace("_", " ")}: ${d.reached ? "target reached" : "out of reach by " + fmt(d.distance, 2) + " studs"}`); diag("ik", { eff: d.eff, reached: d.reached });
+      return;
+    }
+    S.orbit = null;
+  }
+  function viewportWheel(ev) { if (!D) return; ev.preventDefault(); S.cam.zoom = clamp(S.cam.zoom * Math.exp(-ev.deltaY * 0.0012), 0.35, 4); renderPreview(); }
+  function resetCamera() { S.cam = { yaw: 35, pitch: 18, zoom: 1, pan: [0, 0] }; renderPreview(); }
+  function setView(view) { S.view = view; if (D) D.host.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-view") === view)); renderPreview(); }
   function renderTransport() {
     if (!D) return;
     D.playBtn.innerHTML = S.playing ? I.pause : I.play; D.playBtn.title = S.playing ? "Pause (Space)" : "Play (Space)";
@@ -318,6 +450,173 @@
     ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x(S.t), 16); ctx.lineTo(x(S.t), H - 14); ctx.stroke();
   }
   function timelineHit(ev) { const r = D.timeline.getBoundingClientRect(); const W = r.width, L = 10, span = W - 20; const t = clamp(((ev.clientX - r.left) - L) / span, 0, 1) * (S.clip ? S.clip.duration : 1); let hit = -1; if (S.clip) S.clip.keys.forEach((k, i) => { const kx = L + (k.t / S.clip.duration) * span; if (Math.abs(kx - (ev.clientX - r.left)) <= 8) hit = i; }); return { t, hit }; }
+  // ───────────────────────── dope sheet + graph editor ─────────────────────────
+  const AXIS_COLOR = ["#ff6b6b", "#7bd88f", "#6ea8ff"], AXIS_NAME = ["X", "Y", "Z"], POS_COLOR = ["rgba(255,107,107,.55)", "rgba(123,216,143,.55)", "rgba(110,168,255,.55)"];
+  const SHORT = { root: "root", waist: "waist", neck: "neck", l_shoulder: "L shoulder", l_elbow: "L elbow", l_wrist: "L wrist", r_shoulder: "R shoulder", r_elbow: "R elbow", r_wrist: "R wrist", l_hip: "L hip", l_knee: "L knee", l_ankle: "L ankle", r_hip: "R hip", r_knee: "R knee", r_ankle: "R ankle" };
+  const GUTTER = 92;
+  function editorGeom(W, H) { const L = GUTTER + 6, R = W - 10; return { L, R, span: R - L, x: (t) => L + (t / (S.clip ? S.clip.duration : 1)) * (R - L), t: (px) => clamp((px - L) / (R - L), 0, 1) * (S.clip ? S.clip.duration : 1), top: 16, H }; }
+  function graphRange() {
+    const c = S.clip; const j = S.selJoint; let lo = Infinity, hi = -Infinity;
+    for (const k of c.keys) { const p = k.poses[j] || { rot: [0, 0, 0] }; for (const v of p.rot) { lo = Math.min(lo, v); hi = Math.max(hi, v); } if (j === "root" && p.pos) for (const v of p.pos) { lo = Math.min(lo, v * 30); hi = Math.max(hi, v * 30); } }
+    if (!Number.isFinite(lo)) { lo = -30; hi = 30; }
+    const mid = (lo + hi) / 2, half = Math.max(20, (hi - lo) / 2 * 1.25);
+    return { lo: mid - half, hi: mid + half };
+  }
+  function renderEditor() {
+    if (!D) return;
+    const cv = D.editor; const W = cv.clientWidth || 600, H = cv.clientHeight || 190; const dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    const ctx = cv.getContext("2d"); if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#0f0f13"; ctx.fillRect(0, 0, W, H);
+    D.host.querySelectorAll("[data-editor]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-editor") === S.editor));
+    if (!S.clip) { ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.font = "10px ui-monospace, Consolas, monospace"; ctx.fillText(S.editor === "graph" ? "Graph editor: per-joint X / Y / Z curves appear here once a clip exists." : "Dope sheet: one row per joint, a diamond per key.", 12, 20); return; }
+    const g = editorGeom(W, H); const c = S.clip; S.edGeom = { W, H };
+    // time ruler
+    ctx.strokeStyle = "rgba(255,255,255,.1)"; ctx.lineWidth = 1; const step = c.duration > 4 ? 1 : c.duration > 1.5 ? 0.5 : 0.1;
+    ctx.font = "9px ui-monospace, Consolas, monospace";
+    for (let t = 0; t <= c.duration + 1e-9; t += step) { ctx.beginPath(); ctx.moveTo(g.x(t), g.top); ctx.lineTo(g.x(t), H); ctx.stroke(); ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillText(fmt(t, 1), g.x(t) + 2, 10); }
+    if (S.editor === "graph") renderGraph(ctx, g, W, H); else renderDope(ctx, g, W, H);
+    // playhead
+    ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(g.x(S.t), g.top); ctx.lineTo(g.x(S.t), H); ctx.stroke();
+  }
+  function renderDope(ctx, g, W, H) {
+    const c = S.clip; const J = E().JOINTS; const rh = (H - g.top - 2) / J.length;
+    S.dopeRows = [];
+    J.forEach((j, r) => {
+      const y = g.top + r * rh + rh / 2; S.dopeRows.push({ j, y0: g.top + r * rh, y1: g.top + (r + 1) * rh });
+      ctx.fillStyle = r % 2 ? "rgba(255,255,255,.025)" : "transparent"; ctx.fillRect(0, g.top + r * rh, W, rh);
+      if (j === S.selJoint) { ctx.fillStyle = "rgba(255,209,102,.07)"; ctx.fillRect(0, g.top + r * rh, W, rh); }
+      ctx.fillStyle = j === S.selJoint ? "#ffd166" : "rgba(255,255,255,.6)"; ctx.font = "9.5px ui-monospace, Consolas, monospace"; ctx.fillText(SHORT[j], 8, y + 3.5);
+      c.keys.forEach((k, i) => {
+        const prev = c.keys[i - 1]; const p = k.poses[j] || { rot: [0, 0, 0] }, q = prev ? prev.poses[j] || { rot: [0, 0, 0] } : null;
+        const changed = !q || p.rot.some((v, ax) => Math.abs(v - q.rot[ax]) > 0.5) || (j === "root" && JSON.stringify(p.pos || 0) !== JSON.stringify(q.pos || 0));
+        const kx = S.drag && S.drag.index === i ? g.x(S.drag.t) : g.x(k.t); const sel = i === S.sel; const r2 = sel ? 4.5 : 3.5;
+        ctx.beginPath(); ctx.moveTo(kx, y - r2); ctx.lineTo(kx + r2, y); ctx.lineTo(kx, y + r2); ctx.lineTo(kx - r2, y); ctx.closePath();
+        ctx.fillStyle = sel ? "#ffd166" : changed ? (k.tag === "impact" ? "#ff7b6b" : k.locked ? "#c7a0ff" : "#9ec1ff") : "rgba(255,255,255,.14)"; ctx.fill();
+        if (sel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; ctx.stroke(); }
+      });
+    });
+    // hold bars: consecutive unchanged keys on the selected joint
+    ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.font = "9px ui-monospace, Consolas, monospace"; ctx.fillText(`${c.keys.length} keys · bright = joint changes at that key · dim = held`, g.L, H - 4);
+  }
+  function renderGraph(ctx, g, W, H) {
+    const c = S.clip; const j = S.selJoint; const { lo, hi } = graphRange(); const y = (v) => g.top + 6 + (1 - (v - lo) / (hi - lo)) * (H - g.top - 24);
+    // value grid
+    const vstep = (hi - lo) > 240 ? 90 : (hi - lo) > 120 ? 45 : (hi - lo) > 60 ? 15 : 10;
+    ctx.font = "9px ui-monospace, Consolas, monospace";
+    for (let v = Math.ceil(lo / vstep) * vstep; v <= hi; v += vstep) { ctx.strokeStyle = v === 0 ? "rgba(255,255,255,.25)" : "rgba(255,255,255,.07)"; ctx.beginPath(); ctx.moveTo(g.L, y(v)); ctx.lineTo(g.R, y(v)); ctx.stroke(); ctx.fillStyle = "rgba(255,255,255,.45)"; ctx.fillText(`${v}°`, 8, y(v) + 3); }
+    // curves (what the easing really produces, sampled every 2 px)
+    const n = Math.max(2, Math.floor(g.span / 2)); const samples = []; for (let i = 0; i <= n; i++) { const t = (i / n) * c.duration; samples.push([t, E().sampleAt(c, t)[j] || { rot: [0, 0, 0] }]); }
+    const draw = (get, color, dashed) => { ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.setLineDash(dashed ? [4, 3] : []); ctx.beginPath(); samples.forEach(([t, p], i) => { const px = g.x(t), py = y(get(p)); if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); }); ctx.stroke(); ctx.setLineDash([]); };
+    [0, 1, 2].forEach((ax) => draw((p) => p.rot[ax], AXIS_COLOR[ax], false));
+    const showPos = j === "root"; if (showPos) [0, 1, 2].forEach((ax) => draw((p) => (p.pos || [0, 0, 0])[ax] * 30, POS_COLOR[ax], true));
+    // key points
+    S.graphPts = [];
+    c.keys.forEach((k, i) => {
+      const p = k.poses[j] || { rot: [0, 0, 0] }; const kx = g.x(k.t);
+      [0, 1, 2].forEach((ax) => { const py = y(p.rot[ax]); const sel = i === S.sel; ctx.beginPath(); ctx.arc(kx, py, sel ? 4.5 : 3, 0, Math.PI * 2); ctx.fillStyle = AXIS_COLOR[ax]; ctx.fill(); if (sel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.2; ctx.stroke(); } S.graphPts.push({ index: i, axis: ax, x: kx, y: py, v: p.rot[ax] }); });
+      if (showPos) [0, 1, 2].forEach((ax) => { const v = (p.pos || [0, 0, 0])[ax]; const py = y(v * 30); ctx.beginPath(); ctx.rect(kx - 2.5, py - 2.5, 5, 5); ctx.fillStyle = POS_COLOR[ax]; ctx.fill(); S.graphPts.push({ index: i, axis: 3 + ax, x: kx, y: py, v }); });
+    });
+    // legend
+    ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.font = "9.5px ui-monospace, Consolas, monospace";
+    ctx.fillText(`${JOINT_LABEL[j]} · `, 8, H - 4); let lx = 8 + ctx.measureText(`${JOINT_LABEL[j]} · `).width;
+    [0, 1, 2].forEach((ax) => { ctx.fillStyle = AXIS_COLOR[ax]; ctx.fillText(AXIS_NAME[ax], lx, H - 4); lx += 12; });
+    ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillText(showPos ? " dashed = root offset ×30 (studs)  · drag a point: value ↕ / time ↔" : " · drag a point: value ↕ / time ↔ · Shift+drag: snap 5°", lx + 4, H - 4);
+    S.graphY = { lo, hi, pxPerDeg: (H - g.top - 24) / (hi - lo) };
+  }
+  function editorDown(ev) {
+    if (!S.clip || ev.button !== 0) return; const r = D.editor.getBoundingClientRect(); const pt = [ev.clientX - r.left, ev.clientY - r.top]; const W = (S.edGeom && S.edGeom.W) || r.width, H = (S.edGeom && S.edGeom.H) || r.height; const g = editorGeom(W, H);
+    if (S.playing) pause();
+    if (S.editor === "graph") {
+      let best = null, bd = 8; for (const p of S.graphPts || []) { const d = Math.hypot(p.x - pt[0], p.y - pt[1]); if (d < bd) { bd = d; best = p; } }
+      if (best) { S.sel = best.index; S.t = S.clip.keys[S.sel].t; pushHistory(); S.gdrag = { index: best.index, axis: best.axis, v0: best.v, t0: S.clip.keys[best.index].t, start: pt, g, moved: false, shift: ev.shiftKey }; try { D.editor.setPointerCapture(ev.pointerId); } catch {} renderAll(); return; }
+      scrub(g.t(pt[0])); return;
+    }
+    // dope sheet: row → joint, diamond → key (drag retimes it)
+    const row = (S.dopeRows || []).find((rw) => pt[1] >= rw.y0 && pt[1] < rw.y1); if (row) S.selJoint = row.j;
+    let hit = -1; S.clip.keys.forEach((k, i) => { if (Math.abs(g.x(k.t) - pt[0]) <= 6) hit = i; });
+    if (hit >= 0) { S.sel = hit; S.t = S.clip.keys[hit].t; S.drag = { index: hit, t: S.clip.keys[hit].t, moved: false, from: "dope", g }; try { D.editor.setPointerCapture(ev.pointerId); } catch {} renderAll(); }
+    else { renderJoints(); renderInspector(); scrub(g.t(pt[0])); }
+  }
+  function editorMove(ev) {
+    if (!S.clip) return; const r = D.editor.getBoundingClientRect(); const pt = [ev.clientX - r.left, ev.clientY - r.top];
+    if (S.gdrag) {
+      const d = S.gdrag; const dx = pt[0] - d.start[0], dy = pt[1] - d.start[1]; d.moved = true;
+      let v = d.v0 + (d.axis < 3 ? -dy / S.graphY.pxPerDeg : -dy / S.graphY.pxPerDeg / 30); if (d.shift) v = Math.round(v / (d.axis < 3 ? 5 : 0.1)) * (d.axis < 3 ? 5 : 0.1);
+      const k = S.clip.keys[d.index]; const p = k.poses[S.selJoint] || (k.poses[S.selJoint] = { rot: [0, 0, 0] });
+      if (d.axis < 3) p.rot[d.axis] = Math.round(v * 10) / 10; else { p.pos = p.pos || [0, 0, 0]; p.pos[d.axis - 3] = Math.round(clamp(v, -5, 5) * 100) / 100; }
+      const nt = d.t0 + dx / (d.g.span / S.clip.duration); const stepT = 1 / S.clip.fps; const snapped = Math.round(nt / stepT) * stepT;
+      if (Math.abs(snapped - k.t) > 1e-6) { const moved = E().moveKey(S.clip, d.index, snapped); k.t = moved.keys[d.index].t; }
+      S.t = k.t; renderPreview(); renderEditor(); renderTimeline(); renderInspector(); renderTransport(); return;
+    }
+    if (S.drag && S.drag.from === "dope") { const stepT = 1 / S.clip.fps; S.drag.t = Math.round(S.drag.g.t(pt[0]) / stepT) * stepT; S.drag.moved = true; S.t = S.drag.t; renderEditor(); renderTimeline(); renderPreview(); renderTransport(); }
+  }
+  function editorUp(ev) {
+    try { D.editor.releasePointerCapture(ev.pointerId); } catch {}
+    if (S.gdrag) { const d = S.gdrag; S.gdrag = null; const c = S.clip; if (d.moved) { c.edited = true; c.report = E().validate(c); c.fingerprint = E().fingerprint(c); setClip(c, { keepT: true, noPrev: true }); } else { S.history.pop(); renderAll(); } return; }
+    if (S.drag && S.drag.from === "dope") { const d = S.drag; S.drag = null; if (d.moved && Math.abs(d.t - S.clip.keys[d.index].t) > 1e-6) { pushHistory(); const c = E().moveKey(S.clip, d.index, d.t); setClip(c, { keepT: true, noPrev: true }); S.sel = nearestKey(d.t); S.t = S.clip.keys[S.sel].t; } renderAll(); }
+  }
+
+  // ───────────────────────── pose tools, clip tools, pose library, layering ─────────────────────────
+  const POSES_KEY = "rsAnimPoses";
+  function loadPoses() { try { const j = JSON.parse(localStorage.getItem(POSES_KEY) || "[]"); return Array.isArray(j) ? j : []; } catch { return []; } }
+  function savePoses(list) { try { localStorage.setItem(POSES_KEY, JSON.stringify(list.slice(0, 60))); } catch {} }
+  function applyEdited(c, msg) { c.edited = true; c.report = E().validate(c); c.fingerprint = E().fingerprint(c); setClip(c, { keepT: true, noPrev: true }); if (msg) toast(msg); }
+  function insertKeyHere() { if (!S.clip) return toast("Generate a clip first"); pushHistory(); const r = E().insertKey(S.clip, S.t); S.sel = r.index; S.t = r.clip.keys[r.index].t; setClip(r.clip, { keepT: true, noPrev: true }); toast(r.inserted ? `Key inserted at ${fmt(r.clip.keys[r.index].t, 3)}s` : "A key already sits on this frame - it is selected"); }
+  function copyPose() { if (!S.clip || S.sel < 0) return; S.clipboard = E().copyPose(S.clip, S.sel); toast("Pose copied (Ctrl+V paste · Ctrl+Shift+V paste flipped)"); renderTools(); }
+  function pastePose(flipped) {
+    if (!S.clip) return; if (!S.clipboard) return toast("Copy a pose first (Ctrl+C on a key)");
+    pushHistory(); S.clip = JSON.parse(JSON.stringify(S.clip)); if (!ensureKeyAtPlayhead()) return;
+    applyEdited(E().pastePose(S.clip, S.sel, S.clipboard, { flipped: !!flipped }), flipped ? "Pasted X-flipped (left ↔ right)" : "Pose pasted");
+  }
+  function toggleLock() { if (!S.clip || S.sel < 0) return; pushHistory(); const c = JSON.parse(JSON.stringify(S.clip)); c.keys[S.sel].locked = !c.keys[S.sel].locked; applyEdited(c, c.keys[S.sel].locked ? "Key locked: Smooth / Simplify will keep it" : "Key unlocked"); }
+  function savePoseToLibrary() {
+    if (!S.clip || S.sel < 0) return toast("Select a key to save its pose");
+    const name = String(D.poseName.value || "").trim() || `${S.clip.name} @${fmt(S.clip.keys[S.sel].t, 2)}s`;
+    const list = loadPoses().filter((p) => p.name !== name); list.unshift({ name, pose: E().copyPose(S.clip, S.sel), rigType: S.clip.rigType, at: Date.now() }); savePoses(list);
+    D.poseName.value = ""; renderPoses(); toast(`Pose "${name}" saved`);
+  }
+  function applyLibraryPose(name, flipped) {
+    const p = loadPoses().find((q) => q.name === name); if (!p || !S.clip) return;
+    pushHistory(); S.clip = JSON.parse(JSON.stringify(S.clip)); if (!ensureKeyAtPlayhead()) return;
+    applyEdited(E().pastePose(S.clip, S.sel, p.pose, { flipped: !!flipped }), `Applied pose "${name}"${flipped ? " (flipped)" : ""}`);
+  }
+  function deleteLibraryPose(name) { savePoses(loadPoses().filter((p) => p.name !== name)); renderPoses(); }
+  function renderPoses() { if (!D) return; const list = loadPoses(); D.poses.innerHTML = list.length ? list.map((p) => `<div class="rsa-pose"><button type="button" class="rsa-pose-apply" data-pose="${esc(p.name)}" title="Apply to the selected key (Shift+click: X-flipped)">${esc(p.name)}<small>${esc(p.rigType || "")}</small></button><button type="button" class="rsa-ib mini" data-pose-del="${esc(p.name)}" title="Delete pose">${I.close}</button></div>`).join("") : `<div class="rsa-muted">No saved poses yet - select a key and press Save pose.</div>`; }
+  function clipTool(kind) {
+    if (!S.clip) return toast("Generate a clip first");
+    const En = E(); let out, msg;
+    if (kind === "smooth") { out = En.smooth(S.clip, { strength: 1 }); msg = out.fixes[out.fixes.length - 1]; }
+    else if (kind === "plant") { out = En.groundFeet(S.clip, { force: true }); msg = out.fixes && out.fixes.length && /planted/.test(out.fixes[out.fixes.length - 1]) ? out.fixes[out.fixes.length - 1] : "Feet already planted - nothing to change"; if (!/planted/.test(msg)) return toast(msg); }
+    else if (kind === "simplify") { out = En.simplify(S.clip, 2); msg = out.fixes[out.fixes.length - 1]; if (out.keys.length === S.clip.keys.length) return toast("No redundant keys - every key changes the motion by more than 2°"); }
+    else if (kind === "interp") { const to = S.clip.interp === "spline" ? "eased" : "spline"; out = En.setInterp(S.clip, to); msg = to === "spline" ? `Spline curves: C1 motion through the keys (smoothness ${S.clip.report.smoothness} → ${out.report.smoothness}); Studio receives it baked per frame` : `Eased segments: Roblox easing per key (smoothness ${S.clip.report.smoothness} → ${out.report.smoothness})`; }
+    else if (kind === "reverse") { out = En.reverse(S.clip); msg = "Reversed in time"; }
+    else if (kind === "bake") { out = En.bake(S.clip); msg = out.fixes[out.fixes.length - 1] + " - every frame is now a key (Simplify undoes the density)"; }
+    else if (kind === "offset") { const v = prompt("Cycle offset in seconds (positive = the loop starts later; negative allowed)", "0.25"); if (v == null) return; const sec = parseFloat(v); if (!Number.isFinite(sec)) return toast("Enter a number of seconds"); if (!S.clip.loop) return toast("Cycle offset only applies to looping clips (tick Loop first)"); out = En.cycleOffset(S.clip, sec); msg = `Loop start moved by ${fmt(sec, 2)}s`; }
+    else return;
+    pushHistory(); setClip(out, { keepT: true }); toast(msg); diag("tool", { kind, keys: out.keys.length, score: out.report.score });
+  }
+  function libraryClips() { // session clips (this studio + the AI's clips) for layering
+    const map = {}; for (const [n, c] of Object.entries(S.library || {})) map[n] = c;
+    try { const ext = S.hooks.clips ? S.hooks.clips() : null; if (ext) for (const [n, c] of Object.entries(ext)) if (c && Array.isArray(c.keys)) map[n] = c; } catch {}
+    return map;
+  }
+  function remember(clip) { if (!clip || !clip.name) return; S.library = S.library || {}; S.library[clip.name] = clip; const names = Object.keys(S.library); if (names.length > 16) delete S.library[names[0]]; renderLayerPick(); }
+  function renderLayerPick() { if (!D) return; const cur = D.layerPick.value; const names = Object.keys(libraryClips()).filter((n) => !S.clip || n !== S.clip.name); D.layerPick.innerHTML = `<option value="">upper body from…</option>` + names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("") + `<option value="__file">a saved project file…</option>`; if (names.includes(cur)) D.layerPick.value = cur; }
+  function layerWith(upper) {
+    if (!S.clip) return toast("Generate the base clip (legs + root) first");
+    const fit = D.layerFit.value === "loop" ? "loop" : "stretch", weight = clamp(parseFloat(D.layerWeight.value) || 1, 0, 1);
+    const out = E().layer(S.clip, upper, { fit, weight });
+    pushHistory(); remember(S.clip); setClip(out, { keepT: true }); toast(`Layered "${upper.name}" (upper body) over "${S.clip.layered.base}" - score ${out.report.score}`); diag("layer", { base: out.layered.base, upper: upper.name, fit, weight });
+  }
+  function layerFromPick() {
+    if (!S.clip) return toast("Generate the base clip first");
+    const v = D.layerPick.value; if (!v) return toast("Pick the clip whose upper body you want (generate it first, it is remembered)");
+    if (v === "__file") { S.fileFor = "layer"; D.file.click(); return; }
+    const up = libraryClips()[v]; if (!up) return toast("That clip is gone - generate it again"); layerWith(up);
+  }
+  function renderTools() { if (!D) return; D.onionBtn.classList.toggle("on", !!S.onion); D.autoKeyBtn.classList.toggle("on", !!S.autoKey); D.pasteBtn.disabled = !S.clipboard || !S.clip; D.pasteFlipBtn.disabled = !S.clipboard || !S.clip; for (const b of D.host.querySelectorAll("[data-tool]")) b.disabled = !S.clip; if (D.interpBtn) { const sp = !!(S.clip && S.clip.interp === "spline"); D.interpBtn.textContent = sp ? "Spline" : "Eased"; D.interpBtn.classList.toggle("on", sp); } D.lockBtn.classList.toggle("on", !!(S.clip && S.clip.keys[S.sel] && S.clip.keys[S.sel].locked)); if (D.smoothVal) { const r = S.clip && S.clip.report; D.smoothVal.textContent = r && Number.isFinite(r.smoothness) ? `${r.smoothness}` : "–"; D.smoothVal.title = r && r.roughestJoint ? `motion smoothness (100 = silky). Roughest joint: ${r.roughestJoint}` : "motion smoothness (100 = silky)"; } }
   function renderJoints() {
     if (!D) return;
     const type = S.clip ? S.clip.rigType : "R15"; const map = E().boneMap(E().defaultRigInfo(type)).map;
@@ -348,7 +647,8 @@
     const fixes = S.clip.fixes && S.clip.fixes.length ? `<div class="rsa-fixes">Auto-fixes: ${esc(S.clip.fixes.join("; "))}</div>` : "";
     const lim = S.clip.limitations && S.clip.limitations.length ? `<div class="rsa-fixes">Limits: ${esc(S.clip.limitations.join(" | "))}</div>` : "";
     const fb = S.clip.feedback && S.clip.feedback.length ? `<div class="rsa-fixes">Feedback: ${esc(S.clip.feedback.map((f) => f.text + " → " + f.applied.join(", ")).join(" | "))}</div>` : "";
-    D.report.innerHTML = (items ? `<ul class="rsa-issues">${items}</ul>` : `<div class="rsa-ok">No issues - joint limits, continuity, timing and loop seam all pass.</div>`) + fixes + lim + fb;
+    const interp = S.clip.interp === "spline" ? `<div class="rsa-fixes">Curves: spline (C1) - ${S.clip.keys.length} authored keys, exported to Studio / .rbxmx as ${E().exportKeys(S.clip).length} baked frames.</div>` : "";
+    D.report.innerHTML = (items ? `<ul class="rsa-issues">${items}</ul>` : `<div class="rsa-ok">No issues - joint limits, continuity, timing and loop seam all pass.</div>`) + interp + fixes + lim + fb;
     if (D.persona) { const P = S.clip.persona; D.persona.textContent = P && P.traits ? `Persona: ${P.traits.join(" · ")}${S.clip.take ? ` · take ${S.clip.take + 1}` : ""}${S.clip.mirrored ? " · mirrored" : ""}${S.clip.travel ? " · root motion" : ""} · id ${S.clip.fingerprint || "?"}` : ""; }
   }
   function renderStages() {
@@ -396,16 +696,31 @@
             <div class="rsa-persona" data-ref="persona" title="Who this clip is: the seeded persona behind its asymmetry, fidget, easing and tempo"></div>
             <div class="rsa-h">Refine with feedback</div>
             <div class="rsa-row"><input data-ref="feedback" type="text" placeholder="faster attacks, more anticipation, heavier landing"><button type="button" class="rsa-btn" data-act="refine" data-ref="refineBtn">Refine</button></div>
+            <div class="rsa-h">Layer (NLA)</div>
+            <div class="rsa-row rsa-layer"><select data-ref="layerPick" title="The clip whose upper body goes on top of the current clip's legs and root"></select></div>
+            <div class="rsa-row rsa-layer"><select data-ref="layerFit" title="stretch: upper clip retimed to this clip's duration · loop: upper clip repeats at its own period"><option value="stretch">stretch to fit</option><option value="loop">loop at own period</option></select><input data-ref="layerWeight" type="number" min="0" max="1" step="0.1" value="1" title="Blend weight of the upper body (1 = fully replaced)"><button type="button" class="rsa-btn" data-act="layer" title="Combine: legs + root from this clip, upper body from the picked clip">Layer</button></div>
             <div class="rsa-h">Stages</div>
             <div class="rsa-stages" data-ref="stages"></div>
-            <div class="rsa-h">Validation <span class="rsa-score" data-ref="score">–</span><button type="button" class="rsa-btn mini" data-act="fix" data-ref="fixBtn" title="Clamp limits, bridge jumps, close the loop">Auto-fix</button></div>
+            <div class="rsa-h">Validation <span class="rsa-score" data-ref="score">–</span><span class="rsa-smooth" title="motion smoothness (100 = silky)">smooth <b data-ref="smoothVal">–</b></span><button type="button" class="rsa-btn mini" data-act="fix" data-ref="fixBtn" title="Clamp limits, bridge jumps, close the loop">Auto-fix</button></div>
             <div class="rsa-report" data-ref="report"></div>
           </aside>
           <main class="rsa-main">
             <div class="rsa-stagewrap">
               <canvas class="rsa-canvas" data-ref="canvas"></canvas>
               <div class="rsa-empty" data-ref="empty"><b>Describe an animation, then Generate</b><span>Idle loops, walk / run cycles, jumps, combat combos, dodges, blocks, spell casts, emotes. Pick a preset on the left to start.</span><span>Preview is a schematic skeleton - use Preview in Studio for the real rig.</span></div>
-              <div class="rsa-viewsel"><button type="button" class="rsa-chip on" data-view="both">Front + Side</button><button type="button" class="rsa-chip" data-view="front">Front</button><button type="button" class="rsa-chip" data-view="side">Side</button></div>
+              <div class="rsa-viewsel"><button type="button" class="rsa-chip on" data-view="3d" title="Orbit view (5)">3D</button><button type="button" class="rsa-chip" data-view="front" title="Front (1)">Front</button><button type="button" class="rsa-chip" data-view="side" title="Side (3)">Side</button><button type="button" class="rsa-chip" data-view="top" title="Top (7)">Top</button><button type="button" class="rsa-chip" data-view="both" title="Front + Side (2)">Front + Side</button><button type="button" class="rsa-ib" data-act="resetCam" title="Reset camera (double-click the viewport)">${I.cam}</button></div>
+              <div class="rsa-tools">
+                <button type="button" class="rsa-btn mini" data-tool="smooth" title="Smooth: switch the clip to spline (C1) curves and relax every non-anchor key toward its neighbours (impacts, holds and locked keys stay)">Smooth</button>
+                <button type="button" class="rsa-btn mini" data-tool="interp" data-ref="interpBtn" title="Interpolation: Eased = Roblox easing per key (velocity resets at every key); Spline = C1 F-curves through the keys like Blender (exported to Studio baked per frame)">Eased</button>
+                <button type="button" class="rsa-btn mini" data-tool="plant" title="Plant feet: put the lowest foot on the ground at every key (root re-based) and flatten planted soles">Plant feet</button>
+                <button type="button" class="rsa-btn mini" data-tool="simplify" title="Clean keys: remove keys the interpolation already reproduces within 2°">Simplify</button>
+                <button type="button" class="rsa-btn mini" data-tool="reverse" title="Reverse the clip in time">Reverse</button>
+                <button type="button" class="rsa-btn mini" data-tool="bake" title="Bake: one key per frame (what Studio plays)">Bake</button>
+                <button type="button" class="rsa-btn mini" data-tool="offset" title="Cycle offset: move where a looping clip starts">Cycle offset</button>
+                <span class="rsa-sep"></span>
+                <button type="button" class="rsa-ib tgl" data-act="onion" data-ref="onionBtn" title="Onion skin: previous key (blue) and next key (orange) as ghosts (O)">${I.onion}</button>
+                <button type="button" class="rsa-ib tgl" data-act="autoKey" data-ref="autoKeyBtn" title="Auto-key: editing at a time with no key inserts one there (K)">${I.key}</button>
+              </div>
             </div>
             <div class="rsa-transport">
               <button type="button" class="rsa-ib" data-act="play" data-ref="playBtn" title="Play (Space)">${I.play}</button>
@@ -417,6 +732,8 @@
               <button type="button" class="rsa-ib tgl" data-act="ghost" data-ref="ghostBtn" title="Before / after: show the previous version as a ghost">${I.ghost}</button>
             </div>
             <canvas class="rsa-timeline" data-ref="timeline" title="Click to scrub · drag a key to retime it · click a key to edit it"></canvas>
+            <div class="rsa-edtabs"><button type="button" class="rsa-chip on" data-editor="dope" title="Dope sheet: joint rows × key diamonds (G toggles)">Dope sheet</button><button type="button" class="rsa-chip" data-editor="graph" title="Graph editor: X / Y / Z curves of the selected joint, draggable points (G toggles)">Graph editor</button><span class="rsa-muted">I insert key · X delete · Shift+D duplicate · ←/→ frame · ↑/↓ key · Ctrl+C/V pose · 1/3/7/5 views</span></div>
+            <canvas class="rsa-editor" data-ref="editor"></canvas>
             <div class="rsa-foot">
               <span class="rsa-status" data-ref="status"></span>
               <input data-ref="intent" type="text" placeholder="Notes for the AI (optional)">
@@ -430,6 +747,17 @@
             <div class="rsa-joints" data-ref="joints"></div>
             <div class="rsa-h">Selected key</div>
             <div class="rsa-inspector" data-ref="inspector"></div>
+            <div class="rsa-h">Pose tools</div>
+            <div class="rsa-posetools">
+              <button type="button" class="rsa-btn mini" data-act="insertKey" title="Insert a key at the playhead holding the interpolated pose (I)">${I.key} Insert key</button>
+              <button type="button" class="rsa-btn mini" data-act="copyPose" title="Copy the selected key's pose (Ctrl+C)">${I.copy} Copy</button>
+              <button type="button" class="rsa-btn mini" data-act="pastePose" data-ref="pasteBtn" title="Paste the copied pose onto the selected key (Ctrl+V)">${I.paste} Paste</button>
+              <button type="button" class="rsa-btn mini" data-act="pasteFlip" data-ref="pasteFlipBtn" title="Paste X-flipped: left ↔ right (Ctrl+Shift+V)">${I.flip} Paste flipped</button>
+              <button type="button" class="rsa-btn mini tgl" data-act="lockKey" data-ref="lockBtn" title="Lock this key: Smooth and Simplify leave it untouched">${I.lock} Lock key</button>
+            </div>
+            <div class="rsa-h">Pose library</div>
+            <div class="rsa-row"><input data-ref="poseName" type="text" placeholder="pose name"><button type="button" class="rsa-btn mini" data-act="savePose" title="Save the selected key's pose to the library (kept in this browser)">Save pose</button></div>
+            <div class="rsa-poses" data-ref="poses"></div>
           </aside>
         </div>
         <input type="file" accept=".json,application/json" data-ref="file" hidden>
@@ -443,7 +771,11 @@
       const act = e.target.closest("[data-act]"); if (act) { e.preventDefault(); return doAction(act.getAttribute("data-act")); }
       const preset = e.target.closest("[data-preset]"); if (preset) { D.prompt.value = preset.getAttribute("data-preset"); D.loopAuto = true; D.duration.value = ""; generate(); return; }
       const joint = e.target.closest("[data-joint]"); if (joint) { S.selJoint = joint.getAttribute("data-joint"); renderJoints(); renderInspector(); return; }
-      const view = e.target.closest("[data-view]"); if (view) { S.view = view.getAttribute("data-view"); host.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("on", b === view)); renderPreview(); return; }
+      const view = e.target.closest("[data-view]"); if (view) { setView(view.getAttribute("data-view")); return; }
+      const tool = e.target.closest("[data-tool]"); if (tool) { clipTool(tool.getAttribute("data-tool")); return; }
+      const ed = e.target.closest("[data-editor]"); if (ed) { S.editor = ed.getAttribute("data-editor"); renderEditor(); return; }
+      const pd = e.target.closest("[data-pose-del]"); if (pd) { deleteLibraryPose(pd.getAttribute("data-pose-del")); return; }
+      const pa = e.target.closest("[data-pose]"); if (pa) { applyLibraryPose(pa.getAttribute("data-pose"), e.shiftKey); return; }
       const st = e.target.closest("[data-t0]"); if (st) { scrub(parseFloat(st.getAttribute("data-t0"))); S.sel = nearestKey(S.t); renderAll(); return; }
       const iss = e.target.closest("[data-issue]"); if (iss && iss.hasAttribute("data-t")) { scrub(parseFloat(iss.getAttribute("data-t"))); S.sel = nearestKey(S.t); renderAll(); }
     });
@@ -455,9 +787,16 @@
       if (t === D.duration && S.clip) { retime(t.value); return; }
       if (t.hasAttribute && t.hasAttribute("data-axis")) { setJointValue(parseInt(t.getAttribute("data-axis"), 10), t.value); return; }
       if (t.hasAttribute && t.hasAttribute("data-ease")) { const k = S.clip.keys[S.sel]; const style = D.inspector.querySelector('[data-ease="style"]').value, dir = D.inspector.querySelector('[data-ease="dir"]').value; if (k) setEasing(style, dir); return; }
-      if (t === D.file && t.files && t.files[0]) { openProject(t.files[0]); t.value = ""; }
+      if (t === D.file && t.files && t.files[0]) { const f = t.files[0]; t.value = ""; if (S.fileFor === "layer") { S.fileFor = null; const rd = new FileReader(); rd.onload = () => { try { layerWith(E().parseProject(String(rd.result))); } catch (e) { toast("Could not read that project: " + (e && e.message || e)); } }; rd.readAsText(f); return; } openProject(f); return; }
+      if (t === D.layerPick && t.value === "__file") { layerFromPick(); return; }
     });
     D.scrub.addEventListener("input", () => { if (S.playing) pause(); scrub(parseFloat(D.scrub.value) || 0); });
+    // viewport: orbit / pan / zoom / pick / IK
+    D.canvas.addEventListener("pointerdown", viewportDown); D.canvas.addEventListener("pointermove", viewportMove); D.canvas.addEventListener("pointerup", viewportUp); D.canvas.addEventListener("pointercancel", viewportUp);
+    D.canvas.addEventListener("wheel", viewportWheel, { passive: false }); D.canvas.addEventListener("dblclick", resetCamera);
+    // dope sheet / graph editor
+    D.editor.addEventListener("pointerdown", editorDown); D.editor.addEventListener("pointermove", editorMove); D.editor.addEventListener("pointerup", editorUp); D.editor.addEventListener("pointercancel", editorUp);
+    D.poseName.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); savePoseToLibrary(); } });
     D.prompt.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); generate(); } });
     D.feedback.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); refine(); } });
     // timeline interaction
@@ -475,14 +814,24 @@
       if (e.key === "Escape") { e.preventDefault(); close(); return; }
       if ((e.ctrlKey || e.metaKey) && !typing && (e.key === "z" || e.key === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if ((e.ctrlKey || e.metaKey) && !typing && (e.key === "y" || e.key === "Y")) { e.preventDefault(); redo(); return; }
+      if ((e.ctrlKey || e.metaKey) && !typing && (e.key === "c" || e.key === "C")) { e.preventDefault(); copyPose(); return; }
+      if ((e.ctrlKey || e.metaKey) && !typing && (e.key === "v" || e.key === "V")) { e.preventDefault(); pastePose(e.shiftKey); return; }
       if (typing) return;
       if (e.key === " ") { e.preventDefault(); if (S.playing) pause(); else play(); }
       else if (e.key === "ArrowRight" && S.clip) { e.preventDefault(); if (e.shiftKey) selectKey(S.sel + 1); else scrub(S.t + 1 / S.clip.fps); }
       else if (e.key === "ArrowLeft" && S.clip) { e.preventDefault(); if (e.shiftKey) selectKey(S.sel - 1); else scrub(S.t - 1 / S.clip.fps); }
-      else if (e.key === "Delete" && S.clip) { e.preventDefault(); deleteKey(); }
+      else if ((e.key === "Delete" || e.key === "x" || e.key === "X") && S.clip) { e.preventDefault(); deleteKey(); }
+      else if ((e.key === "i" || e.key === "I") && S.clip) { e.preventDefault(); insertKeyHere(); }
+      else if ((e.key === "d" || e.key === "D") && e.shiftKey && S.clip) { e.preventDefault(); duplicateKey(); }
+      else if (e.key === "ArrowUp" && S.clip) { e.preventDefault(); selectKey(S.sel + 1); }
+      else if (e.key === "ArrowDown" && S.clip) { e.preventDefault(); selectKey(S.sel - 1); }
+      else if (e.key === "1") { e.preventDefault(); setView("front"); } else if (e.key === "3") { e.preventDefault(); setView("side"); } else if (e.key === "7") { e.preventDefault(); setView("top"); } else if (e.key === "5") { e.preventDefault(); setView("3d"); } else if (e.key === "2") { e.preventDefault(); setView("both"); }
+      else if (e.key === "o" || e.key === "O") { e.preventDefault(); S.onion = !S.onion; renderPreview(); renderTools(); }
+      else if (e.key === "k" || e.key === "K") { e.preventDefault(); S.autoKey = !S.autoKey; renderTools(); toast(S.autoKey ? "Auto-key ON: edits off a key insert one at the playhead" : "Auto-key OFF: edits land on the selected key"); }
+      else if ((e.key === "g" || e.key === "G") && S.clip) { e.preventDefault(); S.editor = S.editor === "graph" ? "dope" : "graph"; renderEditor(); }
       else if (e.key === "Home") { e.preventDefault(); scrub(0); } else if (e.key === "End" && S.clip) { e.preventDefault(); scrub(S.clip.duration); }
     });
-    window.addEventListener("resize", () => { if (S.open) { renderPreview(); renderTimeline(); } });
+    window.addEventListener("resize", () => { if (S.open) { renderPreview(); renderTimeline(); renderEditor(); } });
     renderAll();
   }
   function doAction(name) {
@@ -503,6 +852,16 @@
       case "stop": return stop();
       case "loopPlay": D.loopPlay.classList.toggle("on"); return;
       case "ghost": S.ghost = !S.ghost; renderPreview(); renderTransport(); return;
+      case "onion": S.onion = !S.onion; renderPreview(); renderTools(); return;
+      case "autoKey": S.autoKey = !S.autoKey; renderTools(); toast(S.autoKey ? "Auto-key ON: edits off a key insert one at the playhead" : "Auto-key OFF: edits land on the selected key"); return;
+      case "resetCam": return resetCamera();
+      case "insertKey": return insertKeyHere();
+      case "copyPose": return copyPose();
+      case "pastePose": return pastePose(false);
+      case "pasteFlip": return pastePose(true);
+      case "lockKey": return toggleLock();
+      case "savePose": return savePoseToLibrary();
+      case "layer": return layerFromPick();
       case "resetJoint": return resetJoint();
       case "dupKey": return duplicateKey();
       case "delKey": return deleteKey();
@@ -521,8 +880,9 @@
     S.open = true; D.host.classList.add("open"); document.documentElement.classList.add("rs-anim-open");
     const canStudio = !!S.hooks.runTool; D.buildBtn.hidden = !canStudio; D.previewBtn.hidden = !canStudio; D.sendBtn.hidden = !S.hooks.send;
     if (!S.clip) { const saved = loadAutosave(); if (saved) { try { saved.report = E().validate(saved); S.clip = saved; D.prompt.value = saved.prompt || ""; D.quality.value = saved.quality || "balanced"; D.rig.value = saved.rigType || "R15"; D.loop.checked = !!saved.loop; D.loopAuto = false; D.duration.value = saved.duration; D.fps.value = saved.fps; S.sel = 0; } catch { S.clip = null; } } }
+    renderPoses(); renderLayerPick();
     renderAll();
-    requestAnimationFrame(() => { renderPreview(); renderTimeline(); D.host.focus(); });
+    requestAnimationFrame(() => { renderPreview(); renderTimeline(); renderEditor(); D.host.focus(); });
     diag("open", { clip: S.clip ? S.clip.name : null, engine: S.hooks.engine ? S.hooks.engine() : "" });
   }
   function close() { if (!S.open) return; pause(); S.open = false; D.host.classList.remove("open"); document.documentElement.classList.remove("rs-anim-open"); diag("close", {}); }
@@ -539,5 +899,5 @@
     return true;
   }
   function setRigInfo(info) { S.rigInfo = info || null; }
-  window.ORAnimStudio = { open, close, isOpen, getClip, loadClip, setRigInfo, generate: (p, o) => { if (!D) build(); return generate(p, o); }, buildMessage, PRESETS, _state: S, _refine: refine, _variation: variation, _selectKey: selectKey, _setJointValue: setJointValue, _retime: retime, _play: play, _pause: pause, _stop: stop, _scrub: scrub, _undo: undo, _redo: redo, _exportRbxmx: exportRbxmx, _timelineHit: timelineHit };
+  window.ORAnimStudio = { open, close, isOpen, getClip, loadClip, setRigInfo, clipTool, layerWith, insertKey: insertKeyHere, copyPose, pastePose, setView, resetCamera, _viewport: { down: viewportDown, move: viewportMove, up: viewportUp, wheel: viewportWheel }, _editor: { down: editorDown, move: editorMove, up: editorUp }, generate: (p, o) => { if (!D) build(); return generate(p, o); }, buildMessage, PRESETS, _state: S, _refine: refine, _variation: variation, _selectKey: selectKey, _setJointValue: setJointValue, _retime: retime, _play: play, _pause: pause, _stop: stop, _scrub: scrub, _undo: undo, _redo: redo, _exportRbxmx: exportRbxmx, _timelineHit: timelineHit };
 })();

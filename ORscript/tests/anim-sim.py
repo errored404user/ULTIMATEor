@@ -44,13 +44,19 @@ out.programs.build_wrong_bones=RSAnim.buildLuau("build",Object.assign(E.toBuildA
 const unit={name:"Unit",duration:1,loop:false,priority:"Action",fps:30,quality:"fast",params:{},prompt:"unit",rigType:"R6",stages:[],keys:[{t:0,poses:{r_shoulder:{rot:[90,0,0]},l_shoulder:{rot:[90,0,0]},root:{rot:[0,0,0],pos:[0,0.5,0]}},ease:["Linear","Out"],tag:"start"},{t:1,poses:{r_shoulder:{rot:[0,0,90]}},ease:["Linear","Out"],tag:"end"}]};
 out.programs.build_unit=RSAnim.buildLuau("build",E.toBuildArgs(unit,r6)).code;
 out.programs.build_empty=RSAnim.buildLuau("build",{name:"Empty",duration:1,bones:["Head"],keys:[]}).err||"--ERR none";
+// 1.54: chunked build (spline clips bake to the frame grid and arrive in several calls)
+const full=E.toBuildArgs(clip,r15); const half=Math.ceil(full.keys.length/2);
+out.programs.build_chunk1=RSAnim.buildLuau("build",Object.assign({},full,{name:"Chunked",keys:full.keys.slice(0,half),more:true})).code;
+out.programs.build_chunk2=RSAnim.buildLuau("build",Object.assign({},full,{name:"Chunked",keys:full.keys.slice(half),append:true})).code;
+out.programs.build_append_bad=RSAnim.buildLuau("build",Object.assign({},full,{name:"SwordCombo",keys:full.keys.slice(half),append:true})).code;
+out.expect.interp=clip.interp; out.expect.sparseKeys=clip.keys.length;
 out.programs.inspect=RSAnim.buildLuau("inspect",{}).code;
 out.programs.simulate=RSAnim.buildLuau("simulate",{all:true}).code;
 out.programs.preview=RSAnim.buildLuau("preview",{t:0.5}).code;
 out.expect.r15=E.toStudio(clip,ident(r15)).keyframes;
 out.expect.r6=E.toStudio(clip,ident(r6)).keyframes;
 out.expect.r6real=E.toStudio(clip,r6).keyframes;
-out.expect.keys=clip.keys.length; out.expect.duration=clip.duration; out.expect.idleKeys=idle.keys.length;
+out.expect.keys=E.toBuildArgs(clip,r15).keys.length; out.expect.duration=clip.duration; out.expect.idleKeys=E.toBuildArgs(idle,r15).keys.length; // spline clips export baked frames
 out.expect.markers=E.toBuildArgs(clip,r15).keys.reduce((n,k)=>n+k.m.length,0);
 process.stdout.write(JSON.stringify(out));
 """
@@ -144,7 +150,7 @@ ok("build refuses to overwrite silently (overwrite=false)", not res["ok"] and "A
 res = run("rig_info_named")
 ok("rig_info returns the stored engine attributes for refine", res["ok"] and res["data"]["clip"]["name"] == "SwordCombo" and res["data"]["clip"]["quality"] == "high" and res["data"]["clip"]["keyframes"] == data["expect"]["keys"] and "attackSpeed" in res["data"]["clip"]["params"], res["data"].get("clip"))
 res = run("inspect")
-ok("existing animation_inspect works on the engine-built clip", res["ok"] and len(res["data"]["keyframes"]) == data["expect"]["keys"], res)
+ok("existing animation_inspect works on the engine-built clip (truncates its listing for dense spline bakes)", res["ok"] and (len(res["data"]["keyframes"]) == data["expect"]["keys"] or (res["data"].get("truncated") is True and 0 < len(res["data"]["keyframes"]) < data["expect"]["keys"])), {"n": len(res["data"]["keyframes"]), "truncated": res["data"].get("truncated"), "expect": data["expect"]["keys"]})
 res = run("build_idle")
 ok("second clip (idle loop) builds and becomes active", res["ok"] and res["data"]["keyframes"] == data["expect"]["idleKeys"] and find(lib, "IdleLoop").Loop is True and find(lib, "IdleLoop").Priority.Name == "Idle", res)
 res = run("build_wrong_bones")
@@ -152,6 +158,14 @@ ok("R6 bone names on an R15 rig are rejected with both bone lists", not res["ok"
 ok("empty clip is rejected before reaching Studio", data["programs"]["build_empty"].startswith("ERROR") and "no keyframes" in data["programs"]["build_empty"], data["programs"]["build_empty"])
 res = run("simulate")
 ok("animation_simulate QA sweep runs on the engine clip", res["ok"], res)
+ok("the high-quality clip is a spline clip whose export is denser than its authored keys", data["expect"]["interp"] == "spline" and data["expect"]["keys"] > data["expect"]["sparseKeys"], [data["expect"]["interp"], data["expect"]["sparseKeys"], data["expect"]["keys"]])
+res = run("build_chunk1")
+ok("chunk 1 (more=true) creates the sequence, reports chunk progress and leaves it open", res["ok"] and res["data"].get("chunk") is True and res["data"]["total"] < data["expect"]["keys"] and find(lib, "Chunked").GetAttribute(find(lib, "Chunked"), "OR_Chunked") is True, res)
+res = run("build_chunk2")
+seqC = find(lib, "Chunked")
+ok("chunk 2 (append=true) completes it: all keyframes present, chunk flag cleared, AnimSaves copy made", res["ok"] and res["data"]["keyframes"] == data["expect"]["keys"] and len(seqC.GetKeyframes(seqC)) == data["expect"]["keys"] and seqC.GetAttribute(seqC, "OR_Chunked") is None and res["data"]["animSaves"], res)
+res = run("build_append_bad")
+ok("append onto a finished (non-chunked) animation is refused", not res["ok"] and "not an open chunked build" in res["error"], res)
 
 # ───────────────────────── R6 rig ─────────────────────────
 L.execute("local M=...; local ws=M.game:GetService('Workspace'); ws:FindFirstChild('R15Dummy'):Destroy(); local rig=M.buildRig(Enum.HumanoidRigType.R6, 'R6Dummy'); rig.Parent=ws", M)
