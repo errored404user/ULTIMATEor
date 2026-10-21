@@ -1352,11 +1352,14 @@ const ANIM_COMMANDS = [
       duration: { type: "number", req: false, desc: "seconds (default chosen from the motion)" },
       loop: { type: "boolean", req: false, desc: "force looping on/off (cycles and idles loop by default)" },
       fps: { type: "number", req: false, desc: "key grid (24 / 30 / 60; default from quality)" },
+      variations: { type: "number", req: false, desc: "1-6: generate that many DISTINCT takes (_v1.._vN) of the same prompt - different persona (lead side, fidget, arm rest, easing, tempo) and choreography; each is fingerprinted so none repeats" },
+      mirror: { type: "boolean", req: false, desc: "swap left/right (left-handed version); 'mirror' / 'left-handed' in the prompt does the same" },
+      root_motion: { type: "boolean", req: false, desc: "let the HumanoidRootPart travel inside the clip (walk/run/dash/slide) - 'with root motion' in the prompt does the same" },
     },
   },
   {
     name: "animation_refine",
-    description: "Adjust the last generated clip (or {name}) from plain feedback and rebuild it: 'faster attacks', 'slower', 'more / less anticipation', 'heavier / lighter landing', 'exaggerate', 'subtle', 'smoother', 'longer', 'shorter', 'loop', 'variation', 'add a spin', 'add a landing', '2.5 seconds'. Returns before → after numbers and the new validation.",
+    description: "Adjust the last generated clip (or {name}) from plain feedback and rebuild it: 'faster attacks', 'slower', 'more / less anticipation', 'heavier / lighter landing', 'exaggerate', 'subtle', 'smoother', 'longer', 'shorter', 'loop', 'new take' / 'variation', 'mirror' / 'left-handed', 'root motion' / 'in place', 'snappier' / 'softer' / 'mechanical' easing, 'add a spin', 'add a landing', '2.5 seconds'. Returns before → after numbers and the new validation.",
     params: { feedback: { type: "string", req: true, desc: "what to change, in words" }, name: { type: "string", req: false, desc: "clip to refine (default: the last generated)" } },
   },
   {
@@ -1715,7 +1718,8 @@ function describeCommands() {
   lines.push(
     "— RobloxScript animation tools: build REAL Roblox animation keyframe data (KeyframeSequence/Pose) in Studio and " +
     "review it visually. FIRST CHOICE (1.52 engine): animation_generate {prompt} authors, validates and builds a whole clip from words " +
-    "(animation_sequence for multi-stage combos, animation_refine {feedback} to adjust); hand-key only what the engine cannot express. " +
+    "(animation_sequence for multi-stage combos, animation_refine {feedback} to adjust; 1.53: {variations:N} for N distinct takes, {mirror:true} for left-handed, 'new take' / 'mirror' / 'root motion' feedback; " +
+    "idles, walks, runs, sneak, strafe, crawl, swim, climb, fly, sleep, hit reactions, knockback, death, dash, slide, flips, throws, shooting, archery, pickups and 20+ emotes all have their own choreography and a per-prompt persona, so no two prompts move alike); hand-key only what the engine cannot express. " +
     "Manual flow: animation_create → animation_open → animation_set_pose + animation_add_keyframe / " +
     "animation_update_keyframe per keyframe time → animation_preview to check → refine. " +
     "All rotations are DEGREES, order YXZ; bones are the character's joint-connected part names (e.g. RootJoint or HumanoidRootPart, LeftUpperArm, " +

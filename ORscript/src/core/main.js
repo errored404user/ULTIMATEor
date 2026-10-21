@@ -3932,8 +3932,31 @@
       const notes = [];
       if (rigInfo && wanted && wanted !== rigInfo.rigType && (wanted === "R6" || wanted === "R15")) notes.push(`You asked for ${wanted} but the rig in Studio ('${rigInfo.name}') is ${rigInfo.rigType} - built for ${rigInfo.rigType}; animation_select_rig {path} picks another rig.`);
       if (rigInfo && rigInfo.rigType === "Custom") notes.push(`Custom rig '${rigInfo.name}': bones were matched by R15 names; unmatched semantic joints are skipped.`);
-      const opts = { quality, duration, loop, fps, name: nameOf(), rigType };
+      // 1.53: every clip is unique - never repeat a fingerprint already produced this session (same prompt twice → a new take)
+      const avoid = Object.keys(A.animClips).map((n) => A.animClips[n] && A.animClips[n].fingerprint).filter(Boolean);
+      const opts = { quality, duration, loop, fps, name: nameOf(), rigType, avoid, mirror: args.mirror === true, travel: args.root_motion === true || args.travel === true, take: Number(args.take) > 0 ? Math.floor(Number(args.take)) : 0 };
       if (op === "generate") {
+        const variations = Math.max(1, Math.min(6, Math.floor(Number(args.variations || args.takes || 1)) || 1));
+        if (variations > 1) {
+          const clips = [], built = [], failed = [];
+          for (let i = 0; i < variations; i++) {
+            if (A.stop) { failed.push(`take ${i + 1}: cancelled by the user`); break; }
+            let c; try { c = E.generate(prompt, Object.assign({}, opts, { take: opts.take + i, name: opts.name ? opts.name + "_v" + (i + 1) : undefined, avoid: avoid.concat(clips.map((x) => x.fingerprint)) })); } catch (e) { failed.push(`take ${i + 1}: ${String(e && e.message || e)}`); continue; }
+            if (!opts.name) c.name = c.name.replace(/_take\d+$/, "") + "_v" + (i + 1);
+            clips.push(c);
+            if (!rigInfo) { animRemember(c, {}); continue; }
+            const b = await animBuild(c, rigInfo);
+            if (b.ok) { built.push(c.name); animRemember(c, { built: true, rigInfo }); } else { failed.push(`${c.name}: ${b.error}`); animRemember(c, { rigInfo }); }
+          }
+          if (!clips.length) return "ERROR calling 'animation_generate': no variation could be generated - " + failed.join("; ");
+          const lines = [`${clips.length} distinct takes of "${prompt}" (fingerprints ${clips.map((c) => c.fingerprint).join(", ")}; pairwise similarity ${clips.length > 1 ? Math.round(E.similarity(clips[0], clips[1]) * 100) + "% for v1/v2" : "n/a"}):`];
+          for (const c of clips) lines.push(`- ${c.name}: ${c.keys.length} keys, ${c.duration}s, score ${c.report.score}; persona ${(c.persona && c.persona.traits || []).join(", ")}`);
+          if (rigInfo) lines.push(built.length ? `BUILT in Studio: ${built.join(", ")} (each is a KeyframeSequence in the rig's AnimSaves; the last built one is active).` : "None were built in Studio.");
+          else lines.push(offlineNote.replace("%NAME%", clips[0].name));
+          if (failed.length) lines.push("Failed: " + failed.join("; "));
+          lines.push("Pick one by name: animation_build {name} re-activates it, animation_refine {name, feedback} adjusts it, animation_preview plays the active clip.");
+          return lines.join("\n");
+        }
         let clip; try { clip = E.generate(prompt, opts); } catch (e) { return "ERROR calling 'animation_generate': " + String(e && e.message || e); }
         if (!rigInfo) { animRemember(clip, {}); return animReport(clip, offlineNote.replace("%NAME%", clip.name) + (notes.length ? "\n" + notes.join("\n") : "")); }
         const b = await animBuild(clip, rigInfo);

@@ -8719,6 +8719,8 @@ html.rs-anim-open #rs-root { visibility: hidden !important; }
 .rsa-issue.info { border-left-color: #7fb2ff; color: #9fa3b3; }
 .rsa-ok { color: #b9f5cf; padding: 6px 8px; background: rgba(74,222,128,.08); border-radius: 7px; }
 .rsa-fixes { color: #9fa3b3; font-size: 10.5px; line-height: 1.4; }
+.rsa-persona { color: #b7bbcc; font-size: 10.5px; line-height: 1.4; margin: 2px 0 4px; min-height: 0; letter-spacing: 0.01em; }
+.rsa-persona:empty { display: none; }
 .rsa-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: #0d0d10; }
 .rsa-stagewrap { flex: 1; position: relative; min-height: 220px; }
 .rsa-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }

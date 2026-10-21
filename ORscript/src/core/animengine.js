@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/core/animengine.js - ORscript ANIMATION ENGINE (1.52.0)
+// src/core/animengine.js - ORscript ANIMATION ENGINE (1.52.0; 1.53.0 persona / choreography / uniqueness / mirror / travel)
 //
 // Natural language → structured, validated Roblox animation data.
 //
@@ -28,7 +28,7 @@
 // rest. Nothing is faked: unsupported requests return explicit limitations.
 (function (root) {
   "use strict";
-  const VERSION = "1.52.0";
+  const VERSION = "1.53.0";
   const DEG = Math.PI / 180;
 
   // ───────────────────────── rotation math ─────────────────────────
@@ -62,7 +62,7 @@
   const ROOT_HEIGHT = 2.35; // root pivot above the ground, studs (R15 default HipHeight 2 + lower torso)
   // Joint limits (degrees, semantic frame). x: flex (+ = forward swing for limbs, + = lean back for torso), y: twist, z: roll/abduction.
   const LIMITS = {
-    root: { x: [-60, 60], y: [-1800, 1800], z: [-45, 45] }, waist: { x: [-50, 50], y: [-70, 70], z: [-35, 35] }, neck: { x: [-50, 50], y: [-85, 85], z: [-35, 35] },
+    root: { x: [-1800, 1800], y: [-1800, 1800], z: [-45, 45] }, /* root pitch is free too (flips, lying down) */ waist: { x: [-50, 50], y: [-70, 70], z: [-35, 35] }, neck: { x: [-50, 50], y: [-85, 85], z: [-35, 35] },
     l_shoulder: { x: [-190, 190], y: [-90, 90], z: [-190, 40] }, r_shoulder: { x: [-190, 190], y: [-90, 90], z: [-40, 190] },
     l_elbow: { x: [-5, 155], y: [-90, 90], z: [-20, 20] }, r_elbow: { x: [-5, 155], y: [-90, 90], z: [-20, 20] },
     l_wrist: { x: [-70, 70], y: [-90, 90], z: [-45, 45] }, r_wrist: { x: [-70, 70], y: [-90, 90], z: [-45, 45] },
@@ -128,8 +128,26 @@
     fast: WORD("fast(?:er)?|rapid(?:ly)?|quick(?:ly)?|snappy|explosive|lightning|blazing"), slow: WORD("slow(?:ly|er)?|gentle|calm|lazy|relaxed|tired"), extreme: WORD("extremely|insanely|super|ultra|incredibly|very"),
     loop: WORD("loop(?:ing|ed|s)?|cycle|seamless|repeat(?:ing)?"), noloop: WORD("one[- ]shot|once|no loop|non[- ]looping"),
     upper: WORD("upper[- ]body(?: only)?|arms only|torso only"), facial: WORD("facial|face|expression|smile|frown|blink|lip[- ]?sync|eyebrow"),
-    r6: WORD("r6"), r15: WORD("r15"), left: WORD("left[- ]handed|lefty"), twohand: WORD("two[- ]hand(?:ed)?|greatsword|both hands"),
+    r6: WORD("r6"), r15: WORD("r15"), twohand: WORD("two[- ]hand(?:ed)?|greatsword|both hands"),
     qFast: WORD("fast preset|draft|rough|quick preview|low quality"), qHigh: WORD("high[- ]quality|polished|detailed|refined"), qCine: WORD("cinematic|film|cutscene|trailer"),
+    // 1.53 additions
+    hit: WORD("hit reaction|hit react|flinch|stagger(?:ing)?|take damage|taking damage|damaged|hurt|get(?:s|ting)? hit|got hit|wince|recoil from|hit from (?:the )?(?:front|back|behind|left|right|side)|hit in the|struck|takes? a (?:punch|blow)"), knockback: WORD("knock(?:ed)? ?back|knockdown|blown back|launched back|sent flying"),
+    death: WORD("death|die(?:s)?|dying|collapse(?:s)?|defeated|k\\.?o\\.?|knocked out|faint(?:s|ing)?|pass(?:es)? out|ragdoll"),
+    dash: WORD("dash(?:es|ing)?|blink step|burst forward|lunge forward|zoom forward"), slide: WORD("slide|sliding|baseball slide|power slide|slide tackle"),
+    flip: WORD("back ?flip|front ?flip|somersault|flip(?:s|ping)?|cartwheel|aerial"), throwing: WORD("throw(?:s|ing)?|toss(?:es|ing)?|hurl(?:s|ing)?|grenade|lob(?:s|bing)?|pitch(?:es|ing)?"),
+    shoot: WORD("shoot(?:s|ing)?|fire(?:s|ing)? (?:a |the )?(?:gun|pistol|rifle|weapon|shot|shots)|gun(?:fire)?|pistol|rifle|shotgun|blaster|aim(?:s|ing)?|reload(?:s|ing)?|recoil"),
+    archery: WORD("archer(?:y)?|bow and arrow|draw(?:s|ing)? (?:the |a |my )?bow|arrow(?:s)?|longbow|crossbow"),
+    pickup: WORD("pick(?:s|ing)? ?up|pickup|grab(?:s|bing)? (?:an? |the )?(?:item|object|coin|loot|sword|weapon|box|it)|loot(?:s|ing)?|collect(?:s|ing)?"),
+    kneel: WORD("kneel(?:s|ing)?|on one knee|propos(?:e|al|ing)|pray(?:s|ing|er)?|genuflect"),
+    salute: WORD("salute(?:s|ing)?|military greeting"), facepalm: WORD("face ?palm|disappointed|ugh"), shrug: WORD("shrug(?:s|ging)?|i don't know|dunno"), taunt: WORD("taunt(?:s|ing)?|come at me|mock(?:s|ing)?|bring it|provoke"),
+    nod: WORD("nod(?:s|ding)?|say(?:s|ing)? yes|agree(?:s|ing)?"), headshake: WORD("shake(?:s)? (?:the |their |his |her )?head|say(?:s|ing)? no|disagree(?:s|ing)?|no no"),
+    fly: WORD("fly(?:ing)?|hover(?:ing)?|levitat(?:e|ing)|float(?:ing)? in (?:the )?air|superhero flight|flight"), crawl: WORD("crawl(?:s|ing)?|prone|army crawl"),
+    sneak: WORD("sneak(?:ing)? walk|stealth walk|crouch(?:ed|ing)? walk|tip ?toe(?:ing)?|creep(?:ing)?"), strafe: WORD("strafe|strafing|side ?step(?:ping)? cycle|shuffle sideways"), backward: WORD("backwards?|reverse walk|moonwalk|retreat(?:ing)?"),
+    pushup: WORD("push ?ups?|press ?ups?"), sleep: WORD("sleep(?:ing)?|lie(?:s)? down|lying down|nap(?:ping)?|asleep|knocked out cold"), tread: WORD("tread(?:ing)? water|swim idle|float(?:ing)? in (?:the )?water|water idle"),
+    both: WORD("both hands|two hands|two[- ]handed wave|double"), small: WORD("small|tiny|shy|timid|slight|little"), big: WORD("big|huge|wide|enthusiastic|energetic|excited"),
+    fistpump: WORD("fist ?pump|pump(?:s|ing)? (?:the |their )?fist"), sky: WORD("point(?:s|ing)? up|at the sky|to the sky|skyward|upwards|point(?:s|ing)? overhead"), side: WORD("to the side|sideways|left|right"),
+    mirror: WORD("mirror(?:ed)?|flip(?:ped)? horizontally|other hand|opposite side"), travel: WORD("moving forward|root motion|travel(?:s|ling|ing)? forward|advance(?:s|ing)?|with displacement|covers ground"),
+    left: WORD("left[- ]handed|lefty|with the left (?:hand|arm|foot|leg)|left hand|left arm|left leg|left foot"),
   };
   const NUMWORD = { one: 1, two: 2, double: 2, twice: 2, three: 3, triple: 3, four: 4, quad: 4, five: 5, six: 6, seven: 7, eight: 8 };
   function countOf(text, noun) {
@@ -139,7 +157,8 @@
   function parseIntent(text) {
     const t = String(text || "").trim();
     const has = (k) => RE[k].test(t);
-    const intent = { text: t, category: "idle", action: null, style: "default", intensity: 1, speed: 1, loop: null, duration: null, stages: [], weapon: null, hands: 2, rigHint: null, quality: null, upperOnly: has("upper"), unsupported: [], seed: hashStr(t) };
+    const intent = { text: t, category: "idle", action: null, style: "default", intensity: 1, speed: 1, loop: null, duration: null, stages: [], weapon: null, hands: 2, rigHint: null, quality: null, upperOnly: has("upper"), unsupported: [], seed: hashStr(t), take: 0, mirror: has("mirror") || has("left"), travel: has("travel") };
+    intent.variantHints = { both: has("both"), small: has("small"), big: has("big"), fistpump: has("fistpump"), sky: has("sky"), side: has("side"), slow: has("slow"), twoShots: /\b(two|double|2) shots?\b|double tap/i.test(t), burst: /\bburst|full auto|spray\b/i.test(t) };
     if (has("facial")) intent.unsupported.push("facial expressions (FaceControls) - this engine animates Motor6D joints; the face is left untouched");
     if (has("r6")) intent.rigHint = "R6"; if (has("r15")) intent.rigHint = "R15";
     intent.quality = has("qCine") ? "cinematic" : has("qHigh") ? "high" : has("qFast") ? "fast" : null;
@@ -156,16 +175,17 @@
     intent.intensity = clamp(intent.intensity, 0.5, 1.6);
     const dm = t.match(/(\d+(?:\.\d+)?)\s*(?:s|sec|secs|seconds?)\b/i); if (dm) intent.duration = clamp(parseFloat(dm[1]), 0.2, 60);
     // category
-    const combat = has("sword") || has("punch") || has("kick") || has("thrust") || has("combo") || has("finisher") || has("slam") || has("attack") || has("spin") && (has("sword") || has("combo"));
+    const combat = !has("hit") && !has("fistpump") && !has("knockback") && !has("death") && !has("archery") && !has("shoot") && !has("throwing") && (has("sword") || has("punch") || has("kick") || has("thrust") || has("combo") || has("finisher") || has("slam") || has("attack") || has("spin") && (has("sword") || has("combo")));
     if (combat) {
       intent.category = "attack";
       intent.weapon = has("sword") ? "sword" : has("kick") ? "kick" : has("punch") ? "punch" : has("thrust") ? "thrust" : has("slam") ? "slam" : "punch";
       if (has("twohand") || intent.weapon === "slam") intent.hands = 2; else if (intent.weapon === "sword") intent.hands = 1;
-      const strikes = countOf(t, "combo|strikes?|hits?|slash(?:es)?|punch(?:es)?|kicks?") || (has("combo") ? 3 : 1);
+      const named = explicitStrikes(intent.weapon, t).length; // "overhead then thrust" = 2 strikes even without a number
+      const strikes = countOf(t, "combo|strikes?|hits?|slash(?:es)?|punch(?:es)?|kicks?") || Math.max(has("combo") ? 3 : 1, named);
       const seq = [{ kind: "ready" }];
       if (has("anticipation") || strikes > 1 || intent.style === "anime" || intent.style === "heavy") seq.push({ kind: "anticipation" });
-      const dirs = intent.weapon === "kick" ? ["kick_r", "kick_l", "kick_spin"] : intent.weapon === "slam" ? ["slash_over", "slash_r", "slash_over"] : intent.weapon === "thrust" ? ["thrust", "thrust", "thrust_low"] : intent.weapon === "punch" ? ["jab", "cross", "hook", "uppercut"] : ["slash_r", "slash_l", "slash_over", "thrust"];
-      for (let i = 0; i < Math.min(strikes, 6); i++) { seq.push({ kind: "strike", variant: dirs[i % dirs.length], index: i }); if (i < strikes - 1) seq.push({ kind: "transition" }); }
+      const dirs = choreograph(intent.weapon, Math.min(Math.max(strikes, 1), 8), t, intent.seed);
+      for (let i = 0; i < dirs.length; i++) { seq.push({ kind: "strike", variant: dirs[i], index: i }); if (i < dirs.length - 1) seq.push({ kind: "transition" }); }
       if (has("spin")) seq.push({ kind: "spin" });
       if (has("finisher") && !has("spin")) seq.push({ kind: "finisher" });
       if (has("jump") || has("spin") && has("land")) seq.push({ kind: "air" });
@@ -173,30 +193,133 @@
       seq.push({ kind: "recover" });
       intent.stages = seq;
       intent.loop = false;
-    } else if (has("dodge")) { intent.category = "dodge"; intent.loop = false; intent.stages = [{ kind: "ready" }, { kind: "dodge" }, { kind: "recover" }]; }
+    } else if (has("knockback")) { intent.category = "knockback"; intent.loop = false; intent.stages = [{ kind: "hit", variant: "front" }, { kind: "air" }, { kind: "land" }, { kind: "recover" }]; intent.hitDir = "front"; }
+    else if (has("death")) { intent.category = "death"; intent.loop = false; intent.deathDir = /forward|face ?first|face down|on (?:the|their) face/i.test(t) ? "forward" : "back"; intent.stages = [{ kind: "hit", variant: "front" }, { kind: "fall" }, { kind: "still" }]; }
+    else if (has("hit")) { intent.category = "hit_react"; intent.loop = false; intent.hitDir = /from (?:the )?left|left side/i.test(t) ? "left" : /from (?:the )?right|right side/i.test(t) ? "right" : /from behind|from (?:the )?back|in the back/i.test(t) ? "back" : "front"; intent.stages = [{ kind: "hit", variant: intent.hitDir }, { kind: "recover" }]; }
+    else if (has("archery")) { intent.category = "archery"; intent.loop = false; intent.stages = [{ kind: "ready" }, { kind: "draw" }, { kind: "release" }, { kind: "recover" }]; }
+    else if (has("shoot")) { const shots = intent.variantHints.burst ? 4 : intent.variantHints.twoShots ? 2 : countOf(t, "shots?|rounds?|bullets?") || 1; intent.category = /\baim(?:ing)? (?:idle|pose|loop)|aim idle|aiming only|just aim/i.test(t) ? "aim" : "shoot"; intent.loop = intent.category === "aim"; intent.shots = clamp(shots, 1, 6); if (intent.category === "shoot") { intent.stages = [{ kind: "ready" }, { kind: "aimup" }]; for (let i = 0; i < intent.shots; i++) intent.stages.push({ kind: "shot", index: i }); intent.stages.push({ kind: "recover" }); } }
+    else if (has("throwing")) { intent.category = "throw"; intent.loop = false; intent.stages = [{ kind: "ready" }, { kind: "anticipation" }, { kind: "throw" }, { kind: "recover" }]; }
+    else if (has("flip")) { intent.category = "flip"; intent.loop = false; intent.flipDir = /front|forward/i.test(t) ? "front" : "back"; intent.stages = [{ kind: "ready" }, { kind: "anticipation" }, { kind: "flip" }, { kind: "land" }, { kind: "recover" }]; }
+    else if (has("dash")) { intent.category = "dash"; intent.loop = false; intent.travel = true; intent.stages = [{ kind: "ready" }, { kind: "anticipation" }, { kind: "dash" }, { kind: "recover" }]; }
+    else if (has("slide")) { intent.category = "slide"; intent.loop = false; intent.travel = true; intent.stages = [{ kind: "ready" }, { kind: "slide" }, { kind: "recover" }]; }
+    else if (has("pickup")) { intent.category = "pickup"; intent.loop = false; intent.stages = [{ kind: "ready" }, { kind: "pickup" }, { kind: "recover" }]; }
+    else if (has("dodge")) { intent.category = "dodge"; intent.loop = false; intent.stages = [{ kind: "ready" }, { kind: "dodge" }, { kind: "recover" }]; }
     else if (has("block")) { intent.category = "block"; intent.loop = false; intent.stages = [{ kind: "ready" }, { kind: "block" }, { kind: "recover" }]; }
     else if (has("cast") || has("transform")) { intent.category = has("transform") ? "transform" : "cast"; intent.loop = false; intent.stages = [{ kind: "ready" }, { kind: "anticipation" }, { kind: "cast" }, { kind: "recover" }]; }
+    else if (has("pushup")) { intent.category = "pushup"; intent.loop = true; }
+    else if (has("crawl")) { intent.category = "crawl"; intent.loop = true; }
+    else if (has("sneak")) { intent.category = "sneak"; intent.loop = true; }
+    else if (has("strafe")) { intent.category = "strafe"; intent.loop = true; intent.strafeDir = /right/i.test(t) ? 1 : -1; }
+    else if (has("backward") && (has("walk") || has("run") || !has("idle"))) { intent.category = "walk_back"; intent.loop = true; }
     else if (has("run")) { intent.category = "run"; intent.loop = true; }
     else if (has("walk")) { intent.category = "walk"; intent.loop = true; }
+    else if (has("tread")) { intent.category = "tread"; intent.loop = true; }
+    else if (has("fly")) { intent.category = "fly"; intent.loop = true; }
+    else if (has("sleep")) { intent.category = "sleep"; intent.loop = true; }
+    else if (has("kneel")) { intent.category = "kneel"; intent.loop = true; }
     else if (has("swim")) { intent.category = "swim"; intent.loop = true; }
     else if (has("climb")) { intent.category = "climb"; intent.loop = true; }
     else if (has("jump") || has("fall")) { intent.category = "jump"; intent.loop = false; intent.stages = [{ kind: "ready" }, { kind: "anticipation" }, { kind: "air" }, { kind: "land" }, { kind: "recover" }]; }
     else if (has("land")) { intent.category = "land"; intent.loop = false; intent.stages = [{ kind: "air" }, { kind: "land" }, { kind: "recover" }]; }
-    else if (has("wave") || has("cheer") || has("dance") || has("point") || has("clap") || has("laugh") || has("bow")) { intent.category = "emote"; intent.action = ["wave", "cheer", "dance", "point", "clap", "laugh", "bow"].find((k) => has(k)); intent.loop = has("dance") || has("laugh"); }
+    else if (has("wave") || has("cheer") || has("dance") || has("point") || has("clap") || has("laugh") || has("bow") || has("salute") || has("facepalm") || has("shrug") || has("taunt") || has("nod") || has("headshake")) { intent.category = "emote"; intent.action = ["salute", "facepalm", "shrug", "taunt", "nod", "headshake", "wave", "cheer", "dance", "point", "clap", "laugh", "bow"].find((k) => has(k)); intent.loop = has("dance") || has("laugh"); }
     else if (has("sit")) { intent.category = "sit"; intent.loop = true; }
     else if (has("crouch")) { intent.category = "crouch"; intent.loop = true; }
     else { intent.category = "idle"; intent.loop = true; }
     if (has("loop")) intent.loop = true; if (has("noloop")) intent.loop = false;
     if (intent.duration == null) intent.duration = defaultDuration(intent);
-    intent.priority = intent.category === "idle" || intent.category === "sit" || intent.category === "crouch" ? "Idle" : (intent.category === "walk" || intent.category === "run" || intent.category === "swim" || intent.category === "climb") ? "Movement" : "Action";
+    intent.priority = /^(idle|sit|crouch|kneel|sleep|fly|tread|aim)$/.test(intent.category) ? "Idle" : /^(walk|run|swim|climb|sneak|strafe|walk_back|crawl|pushup)$/.test(intent.category) ? "Movement" : "Action";
     return intent;
   }
   function defaultDuration(i) {
     if (i.category === "attack") { const strikes = i.stages.filter((s) => s.kind === "strike").length; return clamp((1.1 + strikes * 0.55 + (i.stages.some((s) => s.kind === "spin") ? 0.7 : 0) + (i.stages.some((s) => s.kind === "land") ? 0.5 : 0)) / i.speed, 0.6, 12); }
-    return { idle: 4, walk: 1.0 / i.speed, run: 0.7 / i.speed, swim: 1.6 / i.speed, climb: 1.4 / i.speed, jump: 1.4 / i.speed, land: 0.9, dodge: 0.8 / i.speed, block: 0.9, cast: 1.8 / i.speed, transform: 2.6 / i.speed, emote: 2.0, sit: 4, crouch: 4 }[i.category] || 2;
+    if (i.category === "shoot") return clamp((0.9 + (i.shots || 1) * 0.35) / i.speed, 0.6, 6);
+    return { idle: 4, walk: 1.0 / i.speed, run: 0.7 / i.speed, swim: 1.6 / i.speed, climb: 1.4 / i.speed, jump: 1.4 / i.speed, land: 0.9, dodge: 0.8 / i.speed, block: 0.9, cast: 1.8 / i.speed, transform: 2.6 / i.speed, emote: 2.0, sit: 4, crouch: 4,
+      hit_react: 0.9 / i.speed, knockback: 1.6 / i.speed, death: 2.4 / i.speed, dash: 0.8 / i.speed, slide: 1.2 / i.speed, flip: 1.5 / i.speed, throw: 1.3 / i.speed, archery: 2.0 / i.speed, pickup: 1.4 / i.speed, aim: 3, kneel: 4, sleep: 5, fly: 3, tread: 2.4,
+      sneak: 1.3 / i.speed, strafe: 1.0 / i.speed, walk_back: 1.1 / i.speed, crawl: 1.6 / i.speed, pushup: 1.6 / i.speed }[i.category] || 2;
   }
   function hashStr(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h; }
   function rng(seed) { let x = (seed >>> 0) || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; }
+  // ── 1.53 choreography: strike order is seeded per prompt (never the same fixed cycle), explicit words win ──
+  const STRIKE_WORDS = [
+    ["slash_over", /\b(overhead|over ?head|downward|chop|vertical|from above|cleave)\b/i], ["slash_up", /\b(rising|upward|uppercut slash|upswing|from below)\b/i], ["slash_diag", /\b(diagonal|cross slash|x slash)\b/i],
+    ["backhand", /\b(backhand|reverse slash|back slash)\b/i], ["slash_l", /\b(left to right|forehand)\b/i], ["slash_r", /\b(right to left|horizontal|sideways slash|wide slash)\b/i], ["thrust_low", /\b(low thrust|low stab|leg stab)\b/i], ["thrust", /\b(thrust|stab|lunge|pierce|poke)\b/i],
+    ["uppercut", /\buppercut\b/i], ["hook", /\bhook\b/i], ["cross", /\b(cross|straight)\b/i], ["jab", /\bjab\b/i], ["elbow", /\belbow\b/i], ["haymaker", /\bhaymaker\b/i],
+    ["kick_spin", /\b(spin(?:ning)? kick|roundhouse|tornado kick)\b/i], ["knee", /\bknee\b/i], ["front_kick", /\b(front kick|push kick|teep)\b/i], ["kick_l", /\bleft kick\b/i], ["kick_r", /\b(right kick|high kick|kick)\b/i],
+  ];
+  const STRIKE_POOL = { sword: ["slash_r", "slash_l", "slash_over", "thrust", "slash_up", "slash_diag", "backhand"], slam: ["slash_over", "slash_r", "slash_up"], thrust: ["thrust", "thrust_low", "slash_up"], punch: ["jab", "cross", "hook", "uppercut", "elbow", "haymaker"], kick: ["kick_r", "kick_l", "front_kick", "knee", "kick_spin"] };
+  // explicit strike words in the order they appear ("overhead then thrust") - only words that belong to this weapon's pool
+  function explicitStrikes(weapon, text) {
+    const pool = STRIKE_POOL[weapon] || STRIKE_POOL.punch;
+    const found = [];
+    for (const [v, re] of STRIKE_WORDS) { const m = re.exec(text); if (m && pool.includes(v)) found.push([m.index, v]); }
+    found.sort((a, b) => a[0] - b[0]);
+    return found.map((f) => f[1]).filter((v, i, a) => i === 0 || a[i - 1] !== v);
+  }
+  function choreograph(weapon, count, text, seed) {
+    const pool = STRIKE_POOL[weapon] || STRIKE_POOL.punch;
+    const explicit = explicitStrikes(weapon, text);
+    const r = rng((seed ^ 0x9e3779b9) >>> 0);
+    const out = explicit.slice(0, count);
+    let last = out[out.length - 1] || null;
+    while (out.length < count) {
+      const cands = pool.filter((v) => v !== last && !(out.length === 0 && (v === "kick_spin" || v === "haymaker" || v === "backhand"))); // open with something readable, never repeat back-to-back
+      const v = cands[Math.floor(r() * cands.length)] || pool[0];
+      out.push(v); last = v;
+    }
+    if (count >= 3 && ["kick_spin", "uppercut", "slash_over"].includes(out[0]) && !explicit.length) { const i = out.findIndex((v) => !["kick_spin", "uppercut", "slash_over"].includes(v)); if (i > 0) { const t = out[0]; out[0] = out[i]; out[i] = t; } }
+    return out;
+  }
+  // ── 1.53 persona: deterministic character traits per prompt (+ take / variation) so no two prompts move the same way ──
+  function persona(intent, params, take) {
+    const r = rng((Math.imul(intent.seed, 2654435761) ^ (Math.round((params.variation || 0) * 1000) * 7919) ^ ((take || 0) * 104729)) >>> 0);
+    const pick = (a) => a[Math.floor(r() * a.length)]; const span = (lo, hi) => r3(lo + (hi - lo) * r());
+    const styles = intent.styles || [];
+    const p = {
+      lead: pick(["l", "r"]), tilt: span(-4, 4), shoulderDrop: span(-3, 3), weightSide: pick([-1, 1]) * span(0.04, 0.12), amp: span(0.9, 1.12), tempo: span(0.92, 1.08),
+      breath: span(0.8, 1.3), swayPhase: span(0, 6.28), fidget: pick(["look", "hands", "shoulders", "weight", "look", "weight"]), armRest: pick(["loose", "loose", "hips", "behind", "folded"]),
+      bounce: span(0.75, 1.3), armAsym: span(0.85, 1.15), headBob: span(0.6, 1.4), hipSway: span(0.6, 1.4), strideLean: span(0.7, 1.3),
+      emoteVariant: Math.floor(r() * 3), holdBias: span(0.8, 1.25), easing: styles.includes("cartoony") ? "bouncy" : styles.includes("robotic") ? "mechanical" : styles.includes("anime") ? "snappy" : styles.includes("fluid") ? "soft" : pick(["soft", "snappy", "soft", "neutral"]),
+    };
+    if (intent.variantHints) { if (intent.variantHints.both) p.emoteVariant = 1; if (intent.variantHints.small) p.emoteVariant = 2; if (intent.variantHints.big || intent.variantHints.fistpump) p.emoteVariant = 1; if (intent.variantHints.sky) p.emoteVariant = 1; if (intent.variantHints.side) p.emoteVariant = 2; }
+    if (styles.includes("robotic")) { p.tilt = 0; p.shoulderDrop = 0; p.weightSide = 0; p.fidget = "none"; }
+    if (params && params.easingFlavor) p.easing = params.easingFlavor; // explicit feedback beats the seeded pick
+    p.traits = [`${p.lead === "l" ? "left" : "right"}-leading`, p.fidget !== "none" ? `fidget: ${p.fidget}` : "still", `arms: ${p.armRest}`, `easing: ${p.easing}`, `tempo ${p.tempo}`];
+    return p;
+  }
+  // Style / persona easing vocabulary: the same beat eases differently for cartoony / robotic / anime / fluid characters.
+  function flavorEase(ease, tag, flavor) {
+    const [st, dir] = ease || ["CubicV2", "InOut"];
+    if (flavor === "mechanical") return tag === "impact" ? ["Linear", "Out"] : ["Linear", "InOut"];
+    if (flavor === "bouncy") return tag === "land" || tag === "settle" || tag === "rise" || tag === "end" ? ["Bounce", "Out"] : tag === "impact" ? ["Linear", "Out"] : [st === "Linear" ? "Linear" : "Cubic", dir];
+    if (flavor === "snappy") return tag === "windup" || tag === "anticipation" ? ["Cubic", "In"] : tag === "impact" ? ["Linear", "Out"] : tag === "follow" || tag === "follow_through" ? ["Cubic", "Out"] : [st, dir];
+    if (flavor === "soft") return tag === "impact" ? ["Cubic", "Out"] : ["CubicV2", dir === "In" ? "InOut" : dir];
+    return [st, dir];
+  }
+  // Mirror a clip left<->right (left-handed take): swap paired joints, negate yaw / roll and the sideways root offset.
+  function mirrorPose(poses) {
+    const out = {}; const pairs = { l_shoulder: "r_shoulder", l_elbow: "r_elbow", l_wrist: "r_wrist", l_hip: "r_hip", l_knee: "r_knee", l_ankle: "r_ankle" };
+    const flip = (q) => { if (!q) return q; const o = { rot: [q.rot[0], -q.rot[1], -q.rot[2]] }; if (q.pos) o.pos = [-q.pos[0], q.pos[1], q.pos[2]]; return o; };
+    for (const j of JOINTS) { const src = pairs[j] || Object.keys(pairs).find((k) => pairs[k] === j) || j; out[j] = flip(poses[src] || poses[j]); }
+    return out;
+  }
+  function mirror(clip) {
+    const c = JSON.parse(JSON.stringify(clip));
+    c.keys = c.keys.map((k) => Object.assign({}, k, { poses: mirrorPose(k.poses) }));
+    c.name = /_Mirror$/.test(c.name) ? c.name.replace(/_Mirror$/, "") : c.name + "_Mirror"; c.mirrored = !clip.mirrored; c.edited = true;
+    c.report = validate(c);
+    return c;
+  }
+  // Fingerprint: quantised pose data → two clips that would look the same share it. generate({avoid:[...]}) re-seeds until unique.
+  function fingerprint(clip) {
+    let h = 0x811c9dc5; const q = (v) => Math.round(v / 4);
+    for (const k of clip.keys) { h = (Math.imul(h ^ Math.round(k.t * 20), 0x01000193)) >>> 0; for (const j of JOINTS) { const p = k.poses[j]; if (!p) continue; for (const v of p.rot) h = (Math.imul(h ^ (q(v) & 0xffff), 0x01000193)) >>> 0; } }
+    return ("00000000" + h.toString(16)).slice(-8);
+  }
+  function similarity(a, b) { // 0..1 mean-pose closeness over 16 samples (1 = identical motion)
+    let acc = 0, n = 0;
+    for (let i = 0; i <= 16; i++) { const pa = sampleAt(a, a.duration * i / 16), pb = sampleAt(b, b.duration * i / 16); for (const j of JOINTS) { const A = pa[j] || J(0, 0, 0), B = pb[j] || J(0, 0, 0); for (let x = 0; x < 3; x++) { acc += Math.min(90, Math.abs(A.rot[x] - B.rot[x])); n++; } } }
+    return r3(1 - (acc / n) / 90);
+  }
 
   // ───────────────────────── pose helpers ─────────────────────────
   const QUALITY = {
@@ -207,15 +330,21 @@
   };
   const J = (x, y, z) => ({ rot: [x, y, z] });
   // Base standing pose (neutral, slightly alive) scaled by style.
+  let PERSONA = null; // set per generate() - stance / idles / cycles / emotes read it for asymmetry
   function stance(k, style) {
     const hunch = style === "zombie" ? 25 : style === "heavy" ? 8 : 0;
+    const P = PERSONA || { tilt: 0, shoulderDrop: 0, weightSide: 0, lead: "r", armRest: "loose" };
+    const ws = P.weightSide, sgn = P.lead === "l" ? -1 : 1;
     const p = {
-      root: { rot: [0, 0, 0], pos: [0, 0, 0] }, waist: J(-hunch * 0.5, 0, 0), neck: J(hunch * 0.6, 0, 0),
-      l_shoulder: J(5, 0, -6), l_elbow: J(8, 0, 0), l_wrist: J(0, 0, 0), r_shoulder: J(5, 0, 6), r_elbow: J(8, 0, 0), r_wrist: J(0, 0, 0),
-      l_hip: J(2, 0, -3), l_knee: J(-4, 0, 0), l_ankle: J(2, 0, 0), r_hip: J(2, 0, 3), r_knee: J(-4, 0, 0), r_ankle: J(2, 0, 0),
+      root: { rot: [0, 0, ws * 12], pos: [ws, 0, 0] }, waist: J(-hunch * 0.5, sgn * 2, -ws * 10), neck: J(hunch * 0.6, -sgn * 3, P.tilt),
+      l_shoulder: J(5, 0, -6 - P.shoulderDrop), l_elbow: J(8, 0, 0), l_wrist: J(0, 0, 0), r_shoulder: J(5, 0, 6 - P.shoulderDrop), r_elbow: J(8, 0, 0), r_wrist: J(0, 0, 0),
+      l_hip: J(2 + (sgn > 0 ? 4 : -2), 0, -3 - ws * 20), l_knee: J(ws < 0 ? -3 : -9, 0, 0), l_ankle: J(2, 0, 0), r_hip: J(2 + (sgn < 0 ? 4 : -2), 0, 3 - ws * 20), r_knee: J(ws > 0 ? -3 : -9, 0, 0), r_ankle: J(2, 0, 0),
     };
+    if (P.armRest === "hips") { p.l_shoulder = J(20, 0, -35); p.r_shoulder = J(20, 0, 35); p.l_elbow = J(70, 0, 0); p.r_elbow = J(70, 0, 0); p.l_wrist = J(0, 0, 25); p.r_wrist = J(0, 0, -25); }
+    else if (P.armRest === "behind") { p.l_shoulder = J(-30, 0, -14); p.r_shoulder = J(-30, 0, 14); p.l_elbow = J(45, 0, 0); p.r_elbow = J(45, 0, 0); }
+    else if (P.armRest === "folded") { p.l_shoulder = J(40, 30, -20); p.r_shoulder = J(40, -30, 20); p.l_elbow = J(115, 0, 0); p.r_elbow = J(115, 0, 0); }
     if (style === "zombie") { p.l_shoulder = J(80, 0, -5); p.r_shoulder = J(75, 0, 5); p.l_elbow = J(20, 0, 0); p.r_elbow = J(25, 0, 0); }
-    if (style === "robotic") { p.l_elbow = J(0, 0, 0); p.r_elbow = J(0, 0, 0); p.l_knee = J(0, 0, 0); p.r_knee = J(0, 0, 0); }
+    if (style === "robotic") { p.l_elbow = J(0, 0, 0); p.r_elbow = J(0, 0, 0); p.l_knee = J(0, 0, 0); p.r_knee = J(0, 0, 0); p.root = { rot: [0, 0, 0], pos: [0, 0, 0] }; }
     return p;
   }
   // Combat ready stance: weight low, lead foot forward, weapon arm cocked.
@@ -266,6 +395,28 @@
       B.push({ at: 0.0, tag: "windup", ease: ["CubicV2", "In"], pose: withOverrides(prev, { waist: J(18 * k, 0, 0), neck: J(-15, 0, 0), r_shoulder: J(175 * k, 0, 15), r_elbow: J(110 * k, 0, 0), r_wrist: J(-30, 0, 0), l_shoulder: twoH ? J(170 * k, 0, -15) : J(40 * k, 0, -30), l_elbow: twoH ? J(115 * k, 0, 0) : J(50, 0, 0), root: { rot: [8 * k, 0, 0], pos: [0, 0.08, 0.15] }, l_knee: J(-10, 0, 0), r_knee: J(-10, 0, 0) }) });
       B.push({ at: 0.5, tag: "impact", ease: ["Linear", "Out"], pose: withOverrides(prev, { waist: J(-40 * k, 0, 0), neck: J(25, 0, 0), r_shoulder: J(60 * k, 0, 10), r_elbow: J(5, 0, 0), r_wrist: J(35, 0, 0), l_shoulder: twoH ? J(55 * k, 0, -10) : J(-15 * k, 0, -35), l_elbow: twoH ? J(5, 0, 0) : J(30, 0, 0), root: { rot: [-22 * k, 0, 0], pos: [0, -0.45 * k, -0.4 * k] }, l_hip: J(55 * k, 0, -8), l_knee: J(-75 * k, 0, 0), r_hip: J(-20 * k, 0, 10), r_knee: J(-30 * k, 0, 0), r_ankle: J(25, 0, 0) }) });
       B.push({ at: 1.0, tag: "follow", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { waist: J(-45 * k, 0, 0), neck: J(30, 0, 0), r_shoulder: J(35 * k, 0, 10), r_elbow: J(12, 0, 0), r_wrist: J(40, 0, 0), l_shoulder: twoH ? J(30 * k, 0, -10) : J(-20 * k, 0, -35), root: { rot: [-25 * k, 0, 0], pos: [0, -0.5 * k, -0.35 * k] } }) });
+    } else if (variant === "slash_up") { // rising cut from low left to high right
+      B.push({ at: 0.0, tag: "windup", ease: ["CubicV2", "In"], pose: withOverrides(prev, { waist: J(-18 * k, 30 * k, 8), neck: J(10, -15, 0), r_shoulder: J(-20 * k, 20, 15), r_elbow: J(35 * k, 0, 0), r_wrist: J(-30, 0, 10), l_shoulder: twoH ? J(-10 * k, 30, -10) : J(20 * k, 0, -30), l_elbow: twoH ? J(40, 0, 0) : J(45, 0, 0), l_knee: J(-45 * k, 0, 0), r_knee: J(-40 * k, 0, 0), root: { rot: [-10 * k, 20 * k, 4], pos: [0, -0.3 * k, 0] } }) });
+      B.push({ at: 0.55, tag: "impact", ease: ["Linear", "Out"], pose: withOverrides(prev, { waist: J(12 * k, -25 * k, -8), neck: J(-10, 10, 0), r_shoulder: J(150 * k, -20, 50 * k), r_elbow: J(15, 0, 0), r_wrist: J(20, 0, -10), l_shoulder: twoH ? J(140 * k, -20, 10) : J(-25 * k, 0, -30), l_elbow: twoH ? J(20, 0, 0) : J(30, 0, 0), l_knee: J(-15, 0, 0), r_knee: J(-10, 0, 0), root: { rot: [8 * k, -15 * k, -4], pos: [0, 0.15 * k, 0.1] } }) });
+      B.push({ at: 1.0, tag: "follow", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { waist: J(16 * k, -35 * k, -10), neck: J(-14, 15, 0), r_shoulder: J(170 * k, -35, 70 * k), r_elbow: J(30, 0, 0), r_wrist: J(25, 0, -15), l_shoulder: twoH ? J(150 * k, -30, 20) : J(-30 * k, 0, -35), l_elbow: twoH ? J(25, 0, 0) : J(35, 0, 0), root: { rot: [10 * k, -25 * k, -6], pos: [0, 0.1 * k, 0.15] } }) });
+    } else if (variant === "slash_diag") { // diagonal cut: high right shoulder to low left hip
+      B.push({ at: 0.0, tag: "windup", ease: ["CubicV2", "In"], pose: withOverrides(prev, { waist: J(-10 * k, 30 * k, 10 * k), neck: J(6, -20, -5), r_shoulder: J(165 * k, 25, 60 * k), r_elbow: J(75 * k, 0, 0), r_wrist: J(-30, 0, 15), l_shoulder: twoH ? J(150 * k, 35, 10) : J(30 * k, 0, -30), l_elbow: twoH ? J(70, 0, 0) : J(45, 0, 0), root: { rot: [-8 * k, 18 * k, 6], pos: [0, -0.15 * k, -0.1] } }) });
+      B.push({ at: 0.5, tag: "impact", ease: ["Linear", "Out"], pose: withOverrides(prev, { waist: J(-25 * k, -30 * k, -14 * k), neck: J(14, 15, 6), r_shoulder: J(40 * k, -30, -30 * k), r_elbow: J(10, 0, 0), r_wrist: J(15, 0, -25), l_shoulder: twoH ? J(35 * k, -25, 25) : J(-20 * k, 0, -35), l_elbow: twoH ? J(15, 0, 0) : J(30, 0, 0), l_knee: J(-40 * k, 0, 0), r_knee: J(-30 * k, 0, 0), root: { rot: [-14 * k, -20 * k, -8], pos: [0, -0.3 * k, 0.2] } }) });
+      B.push({ at: 1.0, tag: "follow", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { waist: J(-28 * k, -45 * k, -16 * k), neck: J(16, 25, 8), r_shoulder: J(15 * k, -45, -45 * k), r_elbow: J(25, 0, 0), r_wrist: J(20, 0, -30), l_shoulder: twoH ? J(20 * k, -35, 30) : J(-30 * k, 0, -40), l_elbow: twoH ? J(20, 0, 0) : J(35, 0, 0), l_knee: J(-45 * k, 0, 0), r_knee: J(-35 * k, 0, 0), root: { rot: [-16 * k, -30 * k, -10], pos: [0, -0.35 * k, 0.25] } }) });
+    } else if (variant === "backhand") { // quick reverse cut with almost no windup (reads as a flick)
+      B.push({ at: 0.0, tag: "windup", ease: ["Cubic", "In"], pose: withOverrides(prev, { waist: J(-8 * k, -25 * k, -4), neck: J(4, 15, 0), r_shoulder: J(85 * k, -35, -20 * k), r_elbow: J(60 * k, 0, 0), r_wrist: J(0, 0, -30), l_shoulder: twoH ? J(80 * k, -25, 15) : J(-10 * k, 0, -30), l_elbow: twoH ? J(45, 0, 0) : J(35, 0, 0), root: { rot: [-6 * k, -12 * k, 0], pos: [0, -0.12 * k, 0] } }) });
+      B.push({ at: 0.4, tag: "impact", ease: ["Linear", "Out"], pose: withOverrides(prev, { waist: J(-10 * k, 38 * k, 6), neck: J(6, -20, 0), r_shoulder: J(80 * k, 40, 75 * k), r_elbow: J(15, 0, 0), r_wrist: J(0, 0, 30), l_shoulder: twoH ? J(70 * k, 40, 5) : J(10 * k, 0, -25), l_elbow: twoH ? J(70, 0, 0) : J(40, 0, 0), root: { rot: [-6 * k, 18 * k, 4], pos: [0, -0.1 * k, 0.1] } }) });
+      B.push({ at: 1.0, tag: "follow", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { waist: J(-8 * k, 48 * k, 8), neck: J(6, -25, 0), r_shoulder: J(70 * k, 50, 85 * k), r_elbow: J(30, 0, 0), r_wrist: J(0, 0, 35), l_shoulder: twoH ? J(60 * k, 45, 10) : J(15 * k, 0, -25), l_elbow: twoH ? J(80, 0, 0) : J(40, 0, 0), root: { rot: [-5 * k, 24 * k, 5], pos: [0, -0.08 * k, 0.12] } }) });
+    } else if (variant === "elbow" || variant === "haymaker") {
+      const hay = variant === "haymaker";
+      B.push({ at: 0.0, tag: "windup", ease: ["CubicV2", "In"], pose: withOverrides(prev, { waist: J(-6 * k, 40 * k, 5), neck: J(4, -25, 0), r_shoulder: hay ? J(20 * k, 45, 80 * k) : J(75 * k, 30, 45 * k), r_elbow: hay ? J(30 * k, 0, 0) : J(150, 0, 0), r_wrist: J(0, 0, 0), l_shoulder: J(70 * k, 0, -20), l_elbow: J(130 * k, 0, 0), l_knee: J(-30 * k, 0, 0), r_knee: J(-35 * k, 0, 0), root: { rot: [-6 * k, 22 * k, 3], pos: [0, -0.2 * k, hay ? -0.15 : 0] } }) });
+      B.push({ at: hay ? 0.55 : 0.45, tag: "impact", ease: ["Linear", "Out"], pose: withOverrides(prev, { waist: J(-12 * k, -40 * k, -6), neck: J(8, 20, 0), r_shoulder: hay ? J(95 * k, -40, 0) : J(95 * k, -40, 20 * k), r_elbow: hay ? J(15, 0, 0) : J(150, 0, 0), r_wrist: J(0, 0, 0), l_shoulder: J(50 * k, 0, -25), l_elbow: J(120 * k, 0, 0), root: { rot: [-8 * k, -22 * k, -4], pos: [0, -0.15 * k, 0.3 * k] } }) });
+      B.push({ at: 1.0, tag: "follow", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { waist: J(-10 * k, -52 * k, -8), neck: J(6, 25, 0), r_shoulder: hay ? J(85 * k, -60, -30 * k) : J(90 * k, -55, 10 * k), r_elbow: hay ? J(30, 0, 0) : J(145, 0, 0), l_shoulder: J(45 * k, 0, -25), l_elbow: J(120 * k, 0, 0), root: { rot: [-8 * k, -30 * k, -5], pos: [0, -0.12 * k, 0.35 * k] } }) });
+    } else if (variant === "knee" || variant === "front_kick") {
+      const fk = variant === "front_kick";
+      B.push({ at: 0.0, tag: "windup", ease: ["CubicV2", "In"], pose: withOverrides(prev, { r_hip: J(-25 * k, 0, 6), r_knee: J(-60 * k, 0, 0), l_knee: J(-30 * k, 0, 0), waist: J(-8 * k, 10, 0), r_shoulder: J(70 * k, 0, 20), r_elbow: J(110, 0, 0), l_shoulder: J(60 * k, 0, -25), l_elbow: J(115, 0, 0), root: { rot: [-6 * k, 8, 0], pos: [0, -0.15, -0.1] } }) });
+      B.push({ at: 0.5, tag: "impact", ease: ["Linear", "Out"], pose: withOverrides(prev, { r_hip: J(fk ? 95 * k : 120 * k, 0, 8), r_knee: J(fk ? -10 : -130 * k, 0, 0), r_ankle: J(fk ? 30 : -20, 0, 0), l_knee: J(-15, 0, 0), waist: J(fk ? 18 * k : -22 * k, -10, 0), neck: J(fk ? -8 : 10, 5, 0), r_shoulder: J(fk ? 30 * k : 100 * k, 0, 20), r_elbow: J(fk ? 90 : 60, 0, 0), l_shoulder: J(fk ? 45 * k : 30 * k, 0, -25), l_elbow: J(110, 0, 0), root: { rot: [fk ? 14 * k : -10 * k, -6, 4], pos: [0, 0.05, fk ? 0.2 : 0.1] } }) });
+      B.push({ at: 1.0, tag: "follow", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { r_hip: J(fk ? 70 * k : 95 * k, 0, 10), r_knee: J(fk ? -40 : -110 * k, 0, 0), r_ankle: J(10, 0, 0), waist: J(fk ? 10 * k : -16 * k, -8, 0), r_shoulder: J(fk ? 35 * k : 85 * k, 0, 20), r_elbow: J(80, 0, 0), root: { rot: [fk ? 8 * k : -8 * k, -4, 3], pos: [0, 0, 0.15] } }) });
     } else if (variant === "thrust" || variant === "thrust_low") {
       const low = variant === "thrust_low" ? 1 : 0;
       B.push({ at: 0.0, tag: "windup", ease: ["CubicV2", "In"], pose: withOverrides(prev, { waist: J(-4, 40 * k, 0), neck: J(4, -30, 0), r_shoulder: J(20 * k, 10, 25), r_elbow: J(130 * k, 0, 0), r_wrist: J(0, 0, 0), l_shoulder: J(60 * k, 20, -20), l_elbow: J(90 * k, 0, 0), root: { rot: [-5, 35 * k, 0], pos: [0, -0.12, 0.2] } }) });
@@ -351,34 +502,147 @@
       { at: 1.0, tag: "hold", ease: ["CubicV2", "Out"], pose: withOverrides(prev, transform ? { root: { rot: [8 * k, 0, 0], pos: [0, 0.05 * k + up * 0.05, 0] }, waist: J(16 * k, 0, 0), neck: J(-25 * k, 0, 0), l_shoulder: J(105 * k, 0, -115 * k), r_shoulder: J(105 * k, 0, 115 * k) } : { root: { rot: [-12 * k, 0, 0], pos: [0, -0.2 * k, -0.3 * k] }, l_shoulder: J(92 * k, 0, -8), r_shoulder: J(92 * k, 0, 8) }) },
     ];
   }
+  // 1.53 stage generators: reactions, falls, ranged, traversal.
+  const RJ = (p, j, d) => p[j] || J(d[0], d[1], d[2]);
+  function hitBeats(dir, k, prev, big) {
+    const s = dir === "left" ? -1 : dir === "right" ? 1 : 0, fwd = dir === "back" ? -1 : 1, m = big ? 1.6 : 1;
+    return [
+      { at: 0.0, tag: "impact", ease: ["Linear", "Out"], pose: withOverrides(prev, { root: { rot: [-18 * k * m * fwd, s * 20 * k, s * 14 * k], pos: [s * 0.3 * m, -0.12 * k, -0.35 * k * m * fwd] }, waist: J(-22 * k * m * fwd, s * 25 * k, s * 12), neck: J(20 * k * fwd, -s * 20, s * 10), l_shoulder: J(s > 0 ? 70 * k : 40 * k, 0, -25), r_shoulder: J(s < 0 ? 70 * k : 40 * k, 0, 25), l_elbow: J(80 * k, 0, 0), r_elbow: J(80 * k, 0, 0), l_knee: J(-35 * k, 0, 0), r_knee: J(-35 * k, 0, 0) }) },
+      { at: 0.35, tag: "hold", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { root: { rot: [-24 * k * m * fwd, s * 24 * k, s * 16 * k], pos: [s * 0.4 * m, -0.2 * k, -0.5 * k * m * fwd] }, waist: J(-26 * k * m * fwd, s * 28 * k, s * 14), neck: J(26 * k * fwd, -s * 22, s * 12), l_shoulder: J(s > 0 ? 75 * k : 45 * k, 0, -28), r_shoulder: J(s < 0 ? 75 * k : 45 * k, 0, 28), l_elbow: J(90 * k, 0, 0), r_elbow: J(90 * k, 0, 0), l_knee: J(-45 * k, 0, 0), r_knee: J(-45 * k, 0, 0) }) },
+      { at: 1.0, tag: "follow", ease: ["CubicV2", "InOut"], pose: withOverrides(prev, { root: { rot: [-10 * k * fwd, s * 10 * k, s * 6 * k], pos: [s * 0.25 * m, -0.15 * k, -0.4 * k * m * fwd] }, waist: J(-12 * k * fwd, s * 12 * k, s * 6), neck: J(12 * k * fwd, -s * 10, s * 5), l_elbow: J(60 * k, 0, 0), r_elbow: J(60 * k, 0, 0), l_knee: J(-30 * k, 0, 0), r_knee: J(-30 * k, 0, 0) }) },
+    ];
+  }
+  function fallBeats(dir, k, prev) {
+    const back = dir !== "forward"; const rx = back ? 1 : -1;
+    const down = { root: { rot: [rx * 90, 0, 3], pos: [0, -(ROOT_HEIGHT - 0.5), back ? -1.15 : 0.95] }, waist: J(rx * -4, 3, 2), neck: J(back ? -28 : 32, 4, 10), l_hip: J(back ? 12 : -8, 0, -16), r_hip: J(back ? 8 : -4, 0, 16), l_knee: J(back ? -20 : -12, 0, 0), r_knee: J(back ? -14 : -8, 0, 0), l_shoulder: J(back ? 155 : 45, 0, -60), r_shoulder: J(back ? 145 : 38, 0, 55), l_elbow: J(22, 0, 0), r_elbow: J(28, 0, 0), l_ankle: J(22, 0, 0), r_ankle: J(22, 0, 0) };
+    return [
+      { at: 0.0, tag: "windup", ease: ["CubicV2", "In"], pose: withOverrides(prev, { root: { rot: [rx * 20 * k, 0, 6], pos: [0, -0.3, back ? -0.4 : 0.3] }, waist: J(rx * -10 * k, 8, 4), neck: J(rx * 15, 0, 6), l_knee: J(-60 * k, 0, 0), r_knee: J(-50 * k, 0, 0), l_hip: J(30 * k, 0, -8), r_hip: J(25 * k, 0, 8), l_shoulder: J(back ? 60 : -20, 0, -40), r_shoulder: J(back ? 55 : -25, 0, 40), l_elbow: J(40, 0, 0), r_elbow: J(40, 0, 0) }) },
+      { at: 0.55, tag: "impact", ease: ["Cubic", "In"], pose: withOverrides(prev, { root: { rot: [rx * 85, 0, 4], pos: [0, -(ROOT_HEIGHT - 0.55), back ? -1.1 : 0.9] }, waist: J(rx * -8, 4, 2), neck: J(back ? -25 : 30, 0, 8), l_hip: J(back ? 15 : -10, 0, -14), r_hip: J(back ? 10 : -5, 0, 14), l_knee: J(back ? -25 : -15, 0, 0), r_knee: J(back ? -18 : -10, 0, 0), l_shoulder: J(back ? 150 : 40, 0, -55), r_shoulder: J(back ? 140 : 35, 0, 50), l_elbow: J(25, 0, 0), r_elbow: J(30, 0, 0), l_ankle: J(20, 0, 0), r_ankle: J(20, 0, 0) }) },
+      { at: 0.75, tag: "settle", ease: ["Bounce", "Out"], pose: withOverrides(prev, down) },
+      { at: 1.0, tag: "end", ease: ["CubicV2", "Out"], pose: withOverrides(prev, down) },
+    ];
+  }
+  function stillBeats(prev) { const n = RJ(prev, "neck", [0, 0, 0]); return [{ at: 0.5, tag: "hold", ease: ["CubicV2", "InOut"], pose: withOverrides(prev, { neck: J(n.rot[0], n.rot[1] + 6, n.rot[2]) }) }, { at: 1.0, tag: "end", ease: ["CubicV2", "Out"], pose: clonePose(prev) }]; }
+  function aimPose(k, base, rifle) {
+    return withOverrides(base, rifle
+      ? { root: { rot: [-4, 20, 0], pos: [0, -0.1, 0] }, waist: J(-6 * k, -28, 2), neck: J(2, 8, -6), r_shoulder: J(80 * k, -15, 15), r_elbow: J(95, 0, 0), r_wrist: J(0, 0, -10), l_shoulder: J(95 * k, -30, -10), l_elbow: J(40, 0, 0), l_wrist: J(0, 0, 10), l_hip: J(15, 0, -6), r_hip: J(-8, 0, 8), l_knee: J(-18, 0, 0), r_knee: J(-14, 0, 0) }
+      : { root: { rot: [-3, 12, 0], pos: [0, -0.08, 0] }, waist: J(-4 * k, -18, 1), neck: J(2, 6, -4), r_shoulder: J(92 * k, -10, 8), r_elbow: J(8, 0, 0), r_wrist: J(0, 0, 0), l_shoulder: J(85 * k, -25, 20), l_elbow: J(45, 0, 0), l_wrist: J(0, 0, 15), l_hip: J(12, 0, -6), r_hip: J(-6, 0, 8), l_knee: J(-16, 0, 0), r_knee: J(-12, 0, 0) });
+  }
+  function shotBeats(k, prev, rifle) {
+    const rec = rifle ? 0.7 : 1;
+    const rs = RJ(prev, "r_shoulder", [90, -10, 8]), re = RJ(prev, "r_elbow", [8, 0, 0]), w = RJ(prev, "waist", [0, 0, 0]), n = RJ(prev, "neck", [0, 0, 0]), rt = prev.root || { rot: [0, 0, 0], pos: [0, 0, 0] };
+    return [
+      { at: 0.0, tag: "impact", ease: ["Linear", "Out"], pose: withOverrides(prev, { r_shoulder: J(rs.rot[0] + 14 * k * rec, rs.rot[1], rs.rot[2]), r_elbow: J(re.rot[0] + 18 * rec, 0, 0), r_wrist: J(-20 * k * rec, 0, 0), waist: J(w.rot[0] - 6 * k * rec, w.rot[1], w.rot[2]), neck: J(n.rot[0] - 5 * rec, n.rot[1], n.rot[2]), root: { rot: [rt.rot[0] - 3 * rec, rt.rot[1], rt.rot[2]], pos: [(rt.pos || [0, 0, 0])[0], (rt.pos || [0, 0, 0])[1] - 0.03, (rt.pos || [0, 0, 0])[2] - 0.08 * rec] } }) },
+      { at: 0.45, tag: "hold", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { r_shoulder: J(rs.rot[0] + 5 * k * rec, rs.rot[1], rs.rot[2]), r_elbow: J(re.rot[0] + 6 * rec, 0, 0), r_wrist: J(-6 * rec, 0, 0) }) },
+      { at: 1.0, tag: "settle", ease: ["CubicV2", "InOut"], pose: clonePose(prev) },
+    ];
+  }
+  function throwBeats(k, prev) {
+    return [
+      { at: 0.0, tag: "windup", ease: ["CubicV2", "In"], pose: withOverrides(prev, { root: { rot: [-10 * k, 35 * k, 0], pos: [0, -0.2, -0.25 * k] }, waist: J(-14 * k, 40 * k, 6), neck: J(6, -35, 0), r_shoulder: J(-40 * k, 30, 60 * k), r_elbow: J(110 * k, 0, 0), r_wrist: J(-40, 0, 0), l_shoulder: J(95 * k, -20, -20), l_elbow: J(20, 0, 0), l_hip: J(35 * k, 0, -10), l_knee: J(-50 * k, 0, 0), r_knee: J(-30 * k, 0, 0) }) },
+      { at: 0.5, tag: "impact", ease: ["Linear", "Out"], pose: withOverrides(prev, { root: { rot: [8 * k, -25 * k, 0], pos: [0, -0.1, 0.5 * k] }, waist: J(18 * k, -35 * k, -6), neck: J(-6, 20, 0), r_shoulder: J(110 * k, -25, 20), r_elbow: J(15, 0, 0), r_wrist: J(30, 0, 0), l_shoulder: J(-30 * k, 0, -30), l_elbow: J(40, 0, 0), l_hip: J(45 * k, 0, -8), l_knee: J(-35 * k, 0, 0), r_hip: J(-25 * k, 0, 10), r_knee: J(-15, 0, 0), r_ankle: J(25, 0, 0) }) },
+      { at: 1.0, tag: "follow", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { root: { rot: [12 * k, -40 * k, -4], pos: [0, -0.15, 0.6 * k] }, waist: J(22 * k, -45 * k, -8), neck: J(-8, 30, 0), r_shoulder: J(60 * k, -40, -20 * k), r_elbow: J(35, 0, 0), r_wrist: J(20, 0, 0), l_shoulder: J(-35 * k, 0, -30), l_hip: J(50 * k, 0, -8), l_knee: J(-45 * k, 0, 0), r_hip: J(-30 * k, 0, 10), r_knee: J(-20, 0, 0), r_ankle: J(30, 0, 0) }) },
+    ];
+  }
+  function drawBeats(k, prev) {
+    return [
+      { at: 0.0, tag: "windup", ease: ["CubicV2", "InOut"], pose: withOverrides(prev, { root: { rot: [-3, 70, 0], pos: [0, -0.08, 0] }, waist: J(-4 * k, -20, 0), neck: J(2, -60, -4), l_shoulder: J(90 * k, -10, -10), l_elbow: J(5, 0, 0), l_wrist: J(0, 0, 0), r_shoulder: J(60 * k, -20, 30), r_elbow: J(70, 0, 0), r_wrist: J(0, 0, 0), l_hip: J(10, 0, -8), r_hip: J(-6, 0, 10), l_knee: J(-14, 0, 0), r_knee: J(-10, 0, 0) }) },
+      { at: 0.75, tag: "hold", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { root: { rot: [-4, 72, 0], pos: [0, -0.12, 0] }, waist: J(-8 * k, -24, 2), neck: J(2, -64, -6), l_shoulder: J(92 * k, -10, -12), l_elbow: J(5, 0, 0), r_shoulder: J(85 * k, -40, 80 * k), r_elbow: J(135 * k, 0, 0), r_wrist: J(0, 0, -10), l_knee: J(-18, 0, 0), r_knee: J(-14, 0, 0) }) },
+      { at: 1.0, tag: "anticipation", ease: ["CubicV2", "InOut"], pose: withOverrides(prev, { root: { rot: [-5, 73, 0], pos: [0, -0.14, 0] }, waist: J(-9 * k, -25, 2), neck: J(1, -65, -6), l_shoulder: J(93 * k, -10, -12), l_elbow: J(4, 0, 0), r_shoulder: J(88 * k, -42, 84 * k), r_elbow: J(140 * k, 0, 0), r_wrist: J(0, 0, -12) }) },
+    ];
+  }
+  function releaseBeats(k, prev) {
+    return [
+      { at: 0.0, tag: "impact", ease: ["Linear", "Out"], pose: withOverrides(prev, { l_shoulder: J(96 * k, -12, -14), l_elbow: J(2, 0, 0), l_wrist: J(-15, 0, 0), r_shoulder: J(75 * k, -55, 110 * k), r_elbow: J(60 * k, 0, 0), r_wrist: J(10, 0, 20), neck: J(0, -66, -6), waist: J(-6 * k, -22, 2) }) },
+      { at: 0.4, tag: "hold", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { l_shoulder: J(94 * k, -12, -14), l_elbow: J(3, 0, 0), r_shoulder: J(70 * k, -58, 120 * k), r_elbow: J(45 * k, 0, 0), r_wrist: J(10, 0, 25) }) },
+      { at: 1.0, tag: "follow", ease: ["CubicV2", "InOut"], pose: withOverrides(prev, { l_shoulder: J(80 * k, -10, -14), l_elbow: J(10, 0, 0), r_shoulder: J(55 * k, -40, 60 * k), r_elbow: J(60 * k, 0, 0), r_wrist: J(0, 0, 10), neck: J(2, -55, -4), waist: J(-4 * k, -18, 1) }) },
+    ];
+  }
+  function flipBeats(dir, k, prev) {
+    const sgn = dir === "front" ? -1 : 1; // back flip rotates the root backwards (lean back = +x)
+    const tuck = { l_hip: J(110 * k, 0, -10), r_hip: J(110 * k, 0, 10), l_knee: J(-135 * k, 0, 0), r_knee: J(-135 * k, 0, 0), waist: J(-30 * k, 0, 0), neck: J(25, 0, 0), l_shoulder: J(60 * k, 0, -20), r_shoulder: J(60 * k, 0, 20), l_elbow: J(120, 0, 0), r_elbow: J(120, 0, 0) };
+    const B = [{ at: 0.0, tag: "launch", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { root: { rot: [sgn * 25 * k, 0, 0], pos: [0, 0.4 * k, 0] }, waist: J(sgn * 10, 0, 0), l_shoulder: J(160 * k, 0, -25), r_shoulder: J(160 * k, 0, 25), l_elbow: J(20, 0, 0), r_elbow: J(20, 0, 0), l_knee: J(-20, 0, 0), r_knee: J(-20, 0, 0) }) }];
+    for (let i = 1; i <= 3; i++) { const f = i / 4; B.push({ at: 0.15 + 0.6 * f, tag: i === 2 ? "apex" : "arc", ease: ["Linear", "InOut"], pose: withOverrides(prev, Object.assign({ root: { rot: [sgn * (25 * k + 335 * f), 0, 0], pos: [0, 0.4 * k + Math.sin(Math.PI * f) * 1.6 * k, sgn * -0.4 * f] } }, tuck)) }); }
+    B.push({ at: 1.0, tag: "fall", ease: ["CubicV2", "In"], pose: withOverrides(prev, { root: { rot: [sgn * 360, 0, 0], pos: [0, 0.35 * k, sgn * -0.5] }, waist: J(-8, 0, 0), neck: J(12, 0, 0), l_hip: J(35, 0, -8), r_hip: J(35, 0, 8), l_knee: J(-40, 0, 0), r_knee: J(-40, 0, 0), l_shoulder: J(40, 0, -50), r_shoulder: J(40, 0, 50), l_elbow: J(30, 0, 0), r_elbow: J(30, 0, 0) }) });
+    B.spinX = sgn * 360;
+    return B;
+  }
+  function dashBeats(k, prev, travel) {
+    const d = travel ? 3.2 * k : 0;
+    return [
+      { at: 0.0, tag: "windup", ease: ["Cubic", "In"], pose: withOverrides(prev, { root: { rot: [-22 * k, 0, 0], pos: [0, -0.35 * k, -0.2] }, waist: J(-18 * k, 0, 0), neck: J(18, 0, 0), l_hip: J(50 * k, 0, -8), r_hip: J(-15 * k, 0, 8), l_knee: J(-70 * k, 0, 0), r_knee: J(-40 * k, 0, 0), r_ankle: J(25, 0, 0), l_shoulder: J(-40 * k, 0, -20), r_shoulder: J(70 * k, 0, 20), l_elbow: J(45, 0, 0), r_elbow: J(70, 0, 0) }) },
+      { at: 0.45, tag: "impact", ease: ["Linear", "Out"], pose: withOverrides(prev, { root: { rot: [-32 * k, 0, 0], pos: [0, -0.25 * k, d * 0.55] }, waist: J(-20 * k, 0, 0), neck: J(26, 0, 0), l_hip: J(-30 * k, 0, -8), r_hip: J(60 * k, 0, 8), l_knee: J(-20, 0, 0), r_knee: J(-85 * k, 0, 0), l_ankle: J(30, 0, 0), l_shoulder: J(80 * k, 0, -20), r_shoulder: J(-50 * k, 0, 20), l_elbow: J(80, 0, 0), r_elbow: J(50, 0, 0) }) },
+      { at: 1.0, tag: "follow", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { root: { rot: [-12 * k, 0, 0], pos: [0, -0.3 * k, d] }, waist: J(-10 * k, 0, 0), neck: J(10, 0, 0), l_hip: J(40 * k, 0, -10), r_hip: J(-20 * k, 0, 10), l_knee: J(-60 * k, 0, 0), r_knee: J(-25, 0, 0), r_ankle: J(20, 0, 0), l_shoulder: J(20, 0, -25), r_shoulder: J(30, 0, 25), l_elbow: J(60, 0, 0), r_elbow: J(60, 0, 0) }) },
+    ];
+  }
+  function slideBeats(k, prev, travel) {
+    const d = travel ? 3.5 * k : 0;
+    return [
+      { at: 0.0, tag: "windup", ease: ["CubicV2", "In"], pose: withOverrides(prev, { root: { rot: [-14 * k, 0, 0], pos: [0, -0.3, 0] }, waist: J(-10, 0, 0), l_hip: J(45 * k, 0, -8), r_hip: J(-10, 0, 8), l_knee: J(-70 * k, 0, 0), r_knee: J(-30, 0, 0), l_shoulder: J(-30, 0, -20), r_shoulder: J(60, 0, 20), l_elbow: J(50, 0, 0), r_elbow: J(80, 0, 0) }) },
+      { at: 0.3, tag: "impact", ease: ["Cubic", "Out"], pose: withOverrides(prev, { root: { rot: [35 * k, 0, 0], pos: [0, -(ROOT_HEIGHT - 1.0), d * 0.4] }, waist: J(-25 * k, 0, 0), neck: J(30, 0, 0), l_hip: J(70 * k, 0, -14), r_hip: J(20, 0, 16), l_knee: J(-20, 0, 0), r_knee: J(-120 * k, 0, 0), l_ankle: J(25, 0, 0), l_shoulder: J(-45, 0, -40), r_shoulder: J(110 * k, 0, 30), l_elbow: J(30, 0, 0), r_elbow: J(40, 0, 0) }) },
+      { at: 0.7, tag: "hold", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { root: { rot: [38 * k, 0, 0], pos: [0, -(ROOT_HEIGHT - 1.05), d * 0.85] }, waist: J(-28 * k, 0, 0), neck: J(32, 0, 0), l_hip: J(72 * k, 0, -14), r_hip: J(22, 0, 16), l_knee: J(-18, 0, 0), r_knee: J(-125 * k, 0, 0), l_ankle: J(25, 0, 0), l_shoulder: J(-50, 0, -40), r_shoulder: J(115 * k, 0, 30), l_elbow: J(30, 0, 0), r_elbow: J(40, 0, 0) }) },
+      { at: 1.0, tag: "rise", ease: ["CubicV2", "InOut"], pose: withOverrides(prev, { root: { rot: [-5, 0, 0], pos: [0, -0.5, d] }, waist: J(-12, 0, 0), neck: J(10, 0, 0), l_hip: J(60 * k, 0, -10), r_hip: J(20, 0, 10), l_knee: J(-80 * k, 0, 0), r_knee: J(-70 * k, 0, 0), l_shoulder: J(20, 0, -25), r_shoulder: J(40, 0, 25), l_elbow: J(50, 0, 0), r_elbow: J(50, 0, 0) }) },
+    ];
+  }
+  function pickupBeats(k, prev) {
+    const low = { root: { rot: [-18 * k, 8, 0], pos: [0, -1.0 * k, 0.25] }, waist: J(-40 * k, -10, 4), neck: J(30, 0, 0), l_hip: J(85 * k, 0, -10), r_hip: J(80 * k, 0, 12), l_knee: J(-115 * k, 0, 0), r_knee: J(-110 * k, 0, 0), l_ankle: J(20, 0, 0), r_ankle: J(20, 0, 0), l_shoulder: J(40, 0, -20), l_elbow: J(60, 0, 0) };
+    return [
+      { at: 0.0, tag: "windup", ease: ["CubicV2", "InOut"], pose: withOverrides(prev, { root: { rot: [-8, 0, 0], pos: [0, -0.3, 0.1] }, waist: J(-20 * k, 0, 0), neck: J(16, 0, 0), l_hip: J(40, 0, -8), r_hip: J(40, 0, 8), l_knee: J(-60 * k, 0, 0), r_knee: J(-60 * k, 0, 0), r_shoulder: J(60 * k, 0, 15), r_elbow: J(20, 0, 0), l_shoulder: J(20, 0, -15) }) },
+      { at: 0.45, tag: "impact", ease: ["CubicV2", "Out"], pose: withOverrides(prev, Object.assign({}, low, { r_shoulder: J(95 * k, 0, 10), r_elbow: J(10, 0, 0), r_wrist: J(25, 0, 0) })) },
+      { at: 0.6, tag: "hold", ease: ["CubicV2", "InOut"], pose: withOverrides(prev, Object.assign({}, low, { r_shoulder: J(90 * k, 0, 10), r_elbow: J(35, 0, 0), r_wrist: J(-20, 0, 0) })) },
+      { at: 1.0, tag: "rise", ease: ["CubicV2", "Out"], pose: withOverrides(prev, { root: { rot: [-4, 2, 0], pos: [0, -0.15, 0.05] }, waist: J(-8, -2, 0), neck: J(4, 0, 0), l_hip: J(15, 0, -6), r_hip: J(15, 0, 6), l_knee: J(-22, 0, 0), r_knee: J(-22, 0, 0), r_shoulder: J(50 * k, 0, 12), r_elbow: J(110, 0, 0), r_wrist: J(-20, 0, 0), l_shoulder: J(10, 0, -10), l_elbow: J(20, 0, 0) }) },
+    ];
+  }
   // Cycles (walk / run / swim / climb) - 8 keys over the loop, second half mirrored.
   function cycleKeys(category, k, style, duration, q) {
     const keys = [];
     const base = stance(k, style);
-    const n = category === "run" ? 8 : 8;
-    const run = category === "run";
-    const swing = run ? 48 * k : 30 * k, kneeMax = run ? 95 * k : 55 * k, armSwing = run ? 55 * k : 26 * k, bob = run ? 0.22 * k : 0.09 * k, lean = run ? -14 * k : -3 * k;
+    const n = 8;
+    const P = PERSONA || { bounce: 1, armAsym: 1, headBob: 1, hipSway: 1, strideLean: 1 };
+    const run = category === "run", back = category === "walk_back", sneak = category === "sneak", strafe = category === "strafe", crawl = category === "crawl", pushup = category === "pushup";
+    const swing = (run ? 48 * k : sneak ? 22 * k : 30 * k) * (back ? 0.8 : 1), kneeMax = run ? 95 * k : sneak ? 40 * k : 55 * k, armSwing = (run ? 55 * k : sneak ? 10 * k : 26 * k), bob = (run ? 0.22 * k : sneak ? 0.04 : 0.09 * k) * P.bounce, lean = (run ? -14 * k : sneak ? -12 : back ? 4 * k : -3 * k) * P.strideLean;
+    const sd = (PERSONA && PERSONA.strafeDir === "right") ? 1 : -1;
     for (let i = 0; i < n; i++) {
       const f = i / n, ph = f * Math.PI * 2; // phase: 0 = right foot contact
       const p = clonePose(base);
       const hipR = Math.cos(ph) * swing, hipL = -hipR;
       // knee bends most during the swing-through (when the hip comes forward from behind)
       const kneeR = -(Math.max(0, Math.sin(ph + Math.PI / 2 + 0.6)) ** 1.5) * kneeMax - 6, kneeL = -(Math.max(0, Math.sin(ph - Math.PI / 2 + 0.6)) ** 1.5) * kneeMax - 6;
-      if (category === "swim") {
-        p.root = { rot: [-80, 0, 0], pos: [0, 0, 0] }; p.waist = J(-6 + Math.sin(ph) * 6, 0, 0); p.neck = J(35, Math.sin(ph) * 10, 0);
-        p.r_shoulder = J(170 - 180 * ((f + 0.5) % 1), 0, 20 * Math.sin(ph)); p.l_shoulder = J(170 - 180 * f, 0, -20 * Math.sin(ph + Math.PI)); p.r_elbow = J(20 + 20 * Math.max(0, Math.sin(ph)), 0, 0); p.l_elbow = J(20 + 20 * Math.max(0, Math.sin(ph + Math.PI)), 0, 0);
+      if (pushup) {
+        const dn = 0.5 - 0.5 * Math.cos(ph); // 0 top, 1 bottom, 0 top
+        const flare = 25 * P.hipSway, depth = 0.55 * clamp(P.bounce, 0.8, 1.2);
+        p.root = { rot: [-88, 0, 0], pos: [0, -(ROOT_HEIGHT - 1.15) - dn * depth, 0] }; p.waist = J(-2 + dn * 3 * (P.strideLean - 1), 0, 0); p.neck = J(30 - dn * 8 * P.headBob, 0, 0);
+        p.l_shoulder = J(85 + dn * 10, 0, -22 - dn * flare); p.r_shoulder = J(85 + dn * 10, 0, 22 + dn * flare); p.l_elbow = J(5 + dn * 105 * k * P.armAsym, 0, 0); p.r_elbow = J(5 + dn * 105 * k / P.armAsym, 0, 0); p.l_wrist = J(-30, 0, 0); p.r_wrist = J(-30, 0, 0);
+        p.l_hip = J(-6, 0, -6); p.r_hip = J(-6, 0, 6); p.l_knee = J(-4, 0, 0); p.r_knee = J(-4, 0, 0); p.l_ankle = J(40, 0, 0); p.r_ankle = J(40, 0, 0);
+      } else if (crawl) {
+        const reach = 45 * P.armAsym, sway = 10 * P.hipSway;
+        p.root = { rot: [-84, 0, Math.sin(ph) * 4 * P.hipSway], pos: [0, -(ROOT_HEIGHT - 0.95) + Math.abs(Math.sin(ph)) * 0.06 * P.bounce, 0] }; p.waist = J(-6, Math.sin(ph) * sway, 0); p.neck = J(42 - 4 * P.strideLean, Math.sin(ph) * 8 * P.headBob, 0);
+        p.r_shoulder = J(120 + Math.sin(ph) * reach, 0, 30); p.l_shoulder = J(120 - Math.sin(ph) * reach, 0, -30); p.r_elbow = J(60 + 40 * Math.max(0, -Math.sin(ph)), 0, 0); p.l_elbow = J(60 + 40 * Math.max(0, Math.sin(ph)), 0, 0);
+        p.r_hip = J(30 - Math.sin(ph) * 40, 0, 20); p.l_hip = J(30 + Math.sin(ph) * 40, 0, -20); p.r_knee = J(-50 - 50 * Math.max(0, -Math.sin(ph)), 0, 0); p.l_knee = J(-50 - 50 * Math.max(0, Math.sin(ph)), 0, 0); p.r_ankle = J(35, 0, 0); p.l_ankle = J(35, 0, 0);
+      } else if (strafe) {
+        const op = Math.sin(ph); // leading leg reaches sideways, trailing leg closes
+        p.root = { rot: [-3, 0, sd * 6 * P.hipSway + Math.sin(ph) * 2], pos: [Math.sin(ph) * 0.05, bob * (0.5 - 0.5 * Math.cos(ph * 2)), 0] }; p.waist = J(-4, -sd * 12, -sd * 4 - op * 3); p.neck = J(2, sd * 14, sd * 3 * P.headBob);
+        p.r_hip = J(6, 0, 12 + sd * op * 22 * k); p.l_hip = J(6, 0, -12 + sd * op * 22 * k); p.r_knee = J(-12 - 20 * Math.max(0, sd * op) * k, 0, 0); p.l_knee = J(-12 - 20 * Math.max(0, -sd * op) * k, 0, 0); p.r_ankle = J(4, 0, -sd * op * 10); p.l_ankle = J(4, 0, -sd * op * 10);
+        p.r_shoulder = J(35 * k, 0, 18 + op * 6); p.l_shoulder = J(35 * k, 0, -18 + op * 6); p.r_elbow = J(70, 0, 0); p.l_elbow = J(70, 0, 0);
+      } else if (category === "swim") {
+        p.root = { rot: [-80 - 3 * (P.strideLean - 1) * 10, 0, Math.sin(ph) * 3 * P.hipSway], pos: [0, Math.sin(ph * 2) * 0.05 * P.bounce, 0] }; p.waist = J(-6 + Math.sin(ph) * 6 * P.hipSway, 0, 0); p.neck = J(35 - 5 * (P.headBob - 1), Math.sin(ph) * 10 * P.headBob, 0);
+        p.r_shoulder = J(170 - 180 * ((f + 0.5) % 1), 0, 20 * Math.sin(ph) * P.armAsym); p.l_shoulder = J(170 - 180 * f, 0, -20 * Math.sin(ph + Math.PI)); p.r_elbow = J(20 + 20 * Math.max(0, Math.sin(ph)), 0, 0); p.l_elbow = J(20 + 20 * Math.max(0, Math.sin(ph + Math.PI)), 0, 0);
         p.r_hip = J(Math.sin(ph * 2) * 18, 0, 4); p.l_hip = J(-Math.sin(ph * 2) * 18, 0, -4); p.r_knee = J(-12 - 10 * Math.max(0, Math.sin(ph * 2)), 0, 0); p.l_knee = J(-12 - 10 * Math.max(0, -Math.sin(ph * 2)), 0, 0);
       } else if (category === "climb") {
-        p.root = { rot: [-10, 0, 0], pos: [0, Math.sin(ph) * 0.1, -0.2] }; p.waist = J(-10, Math.sin(ph) * 6, 0); p.neck = J(-25, 0, 0);
-        p.r_shoulder = J(150 - 40 * Math.sin(ph), 0, 15); p.l_shoulder = J(150 + 40 * Math.sin(ph), 0, -15); p.r_elbow = J(50 + 40 * Math.max(0, Math.sin(ph)), 0, 0); p.l_elbow = J(50 + 40 * Math.max(0, -Math.sin(ph)), 0, 0);
+        p.root = { rot: [-10 * P.strideLean, 0, Math.sin(ph) * 2 * P.hipSway], pos: [0, Math.sin(ph) * 0.1 * P.bounce, -0.2] }; p.waist = J(-10, Math.sin(ph) * 6 * P.hipSway, 0); p.neck = J(-25 + 4 * (P.headBob - 1), Math.sin(ph) * 4 * P.headBob, 0);
+        p.r_shoulder = J(150 - 40 * Math.sin(ph) * P.armAsym, 0, 15); p.l_shoulder = J(150 + 40 * Math.sin(ph) / P.armAsym, 0, -15); p.r_elbow = J(50 + 40 * Math.max(0, Math.sin(ph)), 0, 0); p.l_elbow = J(50 + 40 * Math.max(0, -Math.sin(ph)), 0, 0);
         p.r_hip = J(60 + 40 * Math.sin(ph), 0, 8); p.l_hip = J(60 - 40 * Math.sin(ph), 0, -8); p.r_knee = J(-80 - 30 * Math.sin(ph), 0, 0); p.l_knee = J(-80 + 30 * Math.sin(ph), 0, 0);
       } else {
-        p.root = { rot: [lean + Math.sin(ph * 2) * 2, 0, Math.sin(ph) * (run ? 4 : 2)], pos: [0, bob * (0.5 - 0.5 * Math.cos(ph * 2)) - (run ? 0.1 : 0.03), 0] };
-        p.waist = J(-4 * k, -Math.cos(ph) * (run ? 12 : 6) * k, Math.sin(ph) * 3); p.neck = J(3, Math.cos(ph) * (run ? 6 : 3), -Math.sin(ph) * 2);
-        p.r_hip = J(hipR, 0, 3); p.l_hip = J(hipL, 0, -3); p.r_knee = J(kneeR, 0, 0); p.l_knee = J(kneeL, 0, 0);
-        p.r_ankle = J(clamp(-hipR * 0.35 + (run ? 10 : 4), -40, 40), 0, 0); p.l_ankle = J(clamp(-hipL * 0.35 + (run ? 10 : 4), -40, 40), 0, 0);
-        p.r_shoulder = J(-Math.cos(ph) * armSwing + (run ? 10 : 0), 0, 8); p.l_shoulder = J(Math.cos(ph) * armSwing + (run ? 10 : 0), 0, -8);
-        p.r_elbow = J(run ? 85 * k : 12 + 10 * Math.max(0, -Math.cos(ph)), 0, 0); p.l_elbow = J(run ? 85 * k : 12 + 10 * Math.max(0, Math.cos(ph)), 0, 0);
+        const dirS = back ? -1 : 1, crouchY = sneak ? -0.55 : 0;
+        p.root = { rot: [lean + Math.sin(ph * 2) * 2 * P.bounce, 0, Math.sin(ph) * (run ? 4 : 2) * P.hipSway], pos: [0, bob * (0.5 - 0.5 * Math.cos(ph * 2)) - (run ? 0.1 : 0.03) + crouchY, 0] };
+        p.waist = J((sneak ? -14 : -4) * k, -Math.cos(ph) * (run ? 12 : 6) * k * P.hipSway, Math.sin(ph) * 3 * P.hipSway); p.neck = J(sneak ? 12 : 3, Math.cos(ph) * (run ? 6 : 3) * P.headBob, -Math.sin(ph) * 2 * P.headBob);
+        p.r_hip = J(hipR * dirS + (sneak ? 30 : 0), 0, 3); p.l_hip = J(hipL * dirS + (sneak ? 30 : 0), 0, -3); p.r_knee = J(kneeR - (sneak ? 45 : 0), 0, 0); p.l_knee = J(kneeL - (sneak ? 45 : 0), 0, 0);
+        p.r_ankle = J(clamp(-hipR * 0.35 * dirS + (run ? 10 : 4) + (sneak ? 10 : 0), -40, 40), 0, 0); p.l_ankle = J(clamp(-hipL * 0.35 * dirS + (run ? 10 : 4) + (sneak ? 10 : 0), -40, 40), 0, 0);
+        p.r_shoulder = J((-Math.cos(ph) * armSwing * P.armAsym + (run ? 10 : 0)) * dirS + (sneak ? 35 : 0), 0, 8); p.l_shoulder = J((Math.cos(ph) * armSwing / P.armAsym + (run ? 10 : 0)) * dirS + (sneak ? 35 : 0), 0, -8);
+        p.r_elbow = J(run ? 85 * k : sneak ? 90 : 12 + 10 * Math.max(0, -Math.cos(ph)), 0, 0); p.l_elbow = J(run ? 85 * k : sneak ? 90 : 12 + 10 * Math.max(0, Math.cos(ph)), 0, 0);
+        if (style === "ninja") { p.waist = J(-18 * k, p.waist.rot[1], p.waist.rot[2]); p.r_shoulder = J(-35, 0, 20); p.l_shoulder = J(-35, 0, -20); p.r_elbow = J(10, 0, 0); p.l_elbow = J(10, 0, 0); }
+        if (style === "heavy") { p.root.pos[1] -= 0.08; p.root.rot[2] *= 2; p.r_shoulder = J(p.r_shoulder.rot[0] * 0.6, 0, 22); p.l_shoulder = J(p.l_shoulder.rot[0] * 0.6, 0, -22); }
+        if (style === "cute" || style === "cartoony") { p.root.pos[1] += bob * 0.6 * (0.5 - 0.5 * Math.cos(ph * 2)); p.neck = J(p.neck.rot[0], p.neck.rot[1], p.neck.rot[2] * 2.5); }
         if (style === "zombie") { p.r_shoulder = J(80 + Math.sin(ph) * 10, 0, 5); p.l_shoulder = J(75 - Math.sin(ph) * 10, 0, -5); p.waist = J(-25, Math.cos(ph) * 8, 0); p.neck = J(15, 0, Math.sin(ph) * 6); }
       }
       keys.push({ t: r3(f * duration), poses: p, ease: ["CubicV2", "InOut"], tag: i % (n / 2) === 0 ? "contact" : i % (n / 2) === n / 4 ? "passing" : "breakdown" });
@@ -386,47 +650,116 @@
     return keys;
   }
   function idleKeys(category, k, style, duration, q, seed) {
-    const base = category === "sit" ? withOverrides(stance(k, style), { root: { rot: [0, 0, 0], pos: [0, -1.5, 0] }, l_hip: J(85, 0, -8), r_hip: J(85, 0, 8), l_knee: J(-85, 0, 0), r_knee: J(-85, 0, 0), waist: J(-6, 0, 0) })
-      : category === "crouch" ? withOverrides(stance(k, style), { root: { rot: [-10, 0, 0], pos: [0, -1.1, 0] }, l_hip: J(95, 0, -12), r_hip: J(95, 0, 12), l_knee: J(-125, 0, 0), r_knee: J(-125, 0, 0), waist: J(-20, 0, 0), neck: J(15, 0, 0), l_shoulder: J(50, 0, -15), r_shoulder: J(50, 0, 15), l_elbow: J(70, 0, 0), r_elbow: J(70, 0, 0) })
-      : stance(k, style);
+    const P = PERSONA || { breath: 1, swayPhase: 0, fidget: "look", weightSide: 0.06, lead: "r", tilt: 0 };
+    const st = stance(k, style); const sgn = P.lead === "l" ? -1 : 1;
+    const base = category === "sit" ? withOverrides(st, { root: { rot: [0, 0, 0], pos: [0, -1.5, 0] }, l_hip: J(85, 0, -8 - (sgn < 0 ? 10 : 0)), r_hip: J(85, 0, 8 + (sgn > 0 ? 10 : 0)), l_knee: J(-85, 0, 0), r_knee: J(-85, 0, 0), waist: J(-6, 0, 0), l_shoulder: J(45, 0, -10), r_shoulder: J(45, 0, 10), l_elbow: J(40, 0, 0), r_elbow: J(40, 0, 0) })
+      : category === "crouch" ? withOverrides(st, { root: { rot: [-10, 0, 0], pos: [0, -1.1, 0] }, l_hip: J(95, 0, -12), r_hip: J(95, 0, 12), l_knee: J(-125, 0, 0), r_knee: J(-125, 0, 0), waist: J(-20, 0, 0), neck: J(15, 0, 0), l_shoulder: J(50, 0, -15), r_shoulder: J(50, 0, 15), l_elbow: J(70, 0, 0), r_elbow: J(70, 0, 0) })
+      : category === "kneel" ? withOverrides(st, { root: { rot: [-6, 0, 0], pos: [0, -1.25, 0] }, l_hip: J(sgn > 0 ? 95 : 5, 0, -8), r_hip: J(sgn > 0 ? 5 : 95, 0, 8), l_knee: J(sgn > 0 ? -95 : -125, 0, 0), r_knee: J(sgn > 0 ? -125 : -95, 0, 0), l_ankle: J(sgn > 0 ? 10 : 40, 0, 0), r_ankle: J(sgn > 0 ? 40 : 10, 0, 0), waist: J(-12, 0, 0), neck: J(18, 0, 0), l_shoulder: J(sgn > 0 ? 55 : 20, 0, -10), r_shoulder: J(sgn > 0 ? 20 : 55, 0, 10), l_elbow: J(sgn > 0 ? 80 : 20, 0, 0), r_elbow: J(sgn > 0 ? 20 : 80, 0, 0) })
+      : category === "sleep" ? withOverrides(st, { root: { rot: [88, 0, 8], pos: [0, -(ROOT_HEIGHT - 0.5), 0] }, waist: J(-6, 0, 4), neck: J(-10, sgn * 25, 10), l_shoulder: J(sgn > 0 ? 150 : 40, 0, -30), r_shoulder: J(sgn > 0 ? 40 : 150, 0, 30), l_elbow: J(sgn > 0 ? 110 : 30, 0, 0), r_elbow: J(sgn > 0 ? 30 : 110, 0, 0), l_hip: J(25, 0, -10), r_hip: J(10, 0, 8), l_knee: J(-40, 0, 0), r_knee: J(-15, 0, 0), l_ankle: J(25, 0, 0), r_ankle: J(25, 0, 0) })
+      : category === "fly" ? withOverrides(st, { root: { rot: [-70, 0, 0], pos: [0, 0.6, 0] }, waist: J(-12, 0, 0), neck: J(38, 0, 0), l_shoulder: J(sgn > 0 ? 170 : 20, 0, -20), r_shoulder: J(sgn > 0 ? 20 : 170, 0, 20), l_elbow: J(5, 0, 0), r_elbow: J(5, 0, 0), l_hip: J(-15, 0, -6), r_hip: J(-15, 0, 6), l_knee: J(-10, 0, 0), r_knee: J(-10, 0, 0), l_ankle: J(35, 0, 0), r_ankle: J(35, 0, 0) })
+      : category === "tread" ? withOverrides(st, { root: { rot: [-15, 0, 0], pos: [0, -0.2, 0] }, waist: J(-6, 0, 0), neck: J(14, 0, 0), l_shoulder: J(70, 0, -70), r_shoulder: J(70, 0, 70), l_elbow: J(60, 0, 0), r_elbow: J(60, 0, 0), l_hip: J(35, 0, -15), r_hip: J(35, 0, 15), l_knee: J(-60, 0, 0), r_knee: J(-60, 0, 0) })
+      : category === "aim" ? aimPose(k, st, /rifle|shotgun|blaster|two[- ]hand/i.test(P.text || "")) : st;
     const keys = []; const n = Math.max(4, Math.round(duration * (q.breakdowns + 1) * 1.5)); const rnd = rng(seed);
-    const sway = rnd() * 0.5 + 0.75;
+    const sway = rnd() * 0.5 + 0.75, bf = P.breath, ph0 = P.swayPhase;
+    const fidgetAt = 0.35 + rnd() * 0.3; // where in the loop the fidget happens
     for (let i = 0; i <= n; i++) {
-      const f = i / n, ph = f * Math.PI * 2;
+      const f = i / n, ph = f * Math.PI * 2 * bf;
       const p = clonePose(base);
-      const br = Math.sin(ph) * k, sw = Math.sin(ph * 0.5 + 1.0) * k * sway;
-      p.root = { rot: [(base.root.rot[0]) + br * 1.2, sw * 2, Math.sin(ph * 0.5) * 1.5], pos: [(base.root.pos || [0, 0, 0])[0], (base.root.pos || [0, 0, 0])[1] + br * 0.035, (base.root.pos || [0, 0, 0])[2]] };
-      p.waist = J(base.waist.rot[0] + br * 2.5, base.waist.rot[1] + sw * 3, base.waist.rot[2]); p.neck = J(base.neck.rot[0] - br * 2 + 1.5, base.neck.rot[1] + Math.sin(ph * 0.5 + 2.1) * 6 * k, base.neck.rot[2]);
+      const br = Math.sin(ph) * k, sw = Math.sin(f * Math.PI * 2 * 0.5 + ph0) * k * sway;
+      const rp = base.root.pos || [0, 0, 0];
+      const fid = Math.max(0, 1 - Math.abs(f - fidgetAt) / 0.18); // triangular bump (0 at the loop ends - keeps the seam closed)
+      p.root = { rot: [base.root.rot[0] + br * 1.2, base.root.rot[1] + sw * 2, base.root.rot[2] + Math.sin(f * Math.PI * 2 * 0.5) * 1.5], pos: [rp[0], rp[1] + br * 0.035, rp[2]] };
+      p.waist = J(base.waist.rot[0] + br * 2.5, base.waist.rot[1] + sw * 3, base.waist.rot[2]); p.neck = J(base.neck.rot[0] - br * 2 + 1.5, base.neck.rot[1] + Math.sin(f * Math.PI * 2 * 0.5 + 2.1 + ph0) * 6 * k, base.neck.rot[2]);
       p.l_shoulder = J(base.l_shoulder.rot[0] + br * 2, base.l_shoulder.rot[1], base.l_shoulder.rot[2] - br * 2.5); p.r_shoulder = J(base.r_shoulder.rot[0] + br * 2, base.r_shoulder.rot[1], base.r_shoulder.rot[2] + br * 2.5);
       p.l_elbow = J(base.l_elbow.rot[0] + br * 2, 0, 0); p.r_elbow = J(base.r_elbow.rot[0] + br * 2, 0, 0);
       if (category === "idle") { p.l_knee = J(base.l_knee.rot[0] - Math.max(0, -br) * 1.5, 0, 0); p.r_knee = J(base.r_knee.rot[0] - Math.max(0, br) * 1.5, 0, 0); }
-      keys.push({ t: r3(f * duration), poses: p, ease: ["CubicV2", "InOut"], tag: i === 0 ? "start" : "breath" });
+      if (category === "fly") { p.root.pos[1] += Math.sin(f * Math.PI * 2) * 0.35 * k; p.l_ankle = J(35 + br * 8, 0, 0); p.r_ankle = J(35 - br * 8, 0, 0); }
+      if (category === "tread") { const kick = Math.sin(f * Math.PI * 4); p.l_hip = J(35 + kick * 20, 0, -15); p.r_hip = J(35 - kick * 20, 0, 15); p.l_knee = J(-60 - Math.max(0, -kick) * 30, 0, 0); p.r_knee = J(-60 - Math.max(0, kick) * 30, 0, 0); p.root.pos[1] = rp[1] + Math.sin(f * Math.PI * 4) * 0.08; p.l_shoulder = J(70, 0, -70 - Math.sin(f * Math.PI * 4) * 12); p.r_shoulder = J(70, 0, 70 - Math.sin(f * Math.PI * 4) * 12); }
+      if (category === "sleep") { p.waist = J(base.waist.rot[0] + br * 1.5, base.waist.rot[1], base.waist.rot[2]); p.root.rot = [base.root.rot[0] + br * 0.8, base.root.rot[1], base.root.rot[2]]; p.neck = J(base.neck.rot[0] - br, base.neck.rot[1], base.neck.rot[2]); }
+      // persona fidget layer: one small life sign per loop, zero at the seam
+      if (fid > 0 && category !== "sleep") {
+        if (P.fidget === "look") { p.neck = J(p.neck.rot[0] - 4 * fid, p.neck.rot[1] + sgn * 32 * fid * k, p.neck.rot[2] + sgn * 4 * fid); p.waist = J(p.waist.rot[0], p.waist.rot[1] + sgn * 8 * fid, p.waist.rot[2]); }
+        else if (P.fidget === "hands") { const a = sgn > 0 ? "r" : "l"; p[a + "_elbow"] = J(p[a + "_elbow"].rot[0] + 35 * fid, 0, 0); p[a + "_wrist"] = J(-25 * fid, 0, (sgn > 0 ? -1 : 1) * 20 * fid); p[a + "_shoulder"] = J(p[a + "_shoulder"].rot[0] + 10 * fid, p[a + "_shoulder"].rot[1], p[a + "_shoulder"].rot[2]); }
+        else if (P.fidget === "shoulders") { p.l_shoulder = J(p.l_shoulder.rot[0] - 6 * fid, p.l_shoulder.rot[1], p.l_shoulder.rot[2] - 14 * fid); p.r_shoulder = J(p.r_shoulder.rot[0] - 6 * fid, p.r_shoulder.rot[1], p.r_shoulder.rot[2] + 14 * fid); p.waist = J(p.waist.rot[0] + 4 * fid, p.waist.rot[1], p.waist.rot[2]); p.neck = J(p.neck.rot[0] - 5 * fid, p.neck.rot[1], p.neck.rot[2]); }
+        else if (P.fidget === "weight" && (category === "idle" || category === "crouch")) { p.root.pos[0] = rp[0] - 2 * P.weightSide * fid; p.root.rot[2] = base.root.rot[2] - 20 * P.weightSide * fid; p.waist = J(p.waist.rot[0], p.waist.rot[1], base.waist.rot[2] + 16 * P.weightSide * fid); p.l_knee = J(base.l_knee.rot[0] + (P.weightSide > 0 ? -6 : 6) * fid, 0, 0); p.r_knee = J(base.r_knee.rot[0] + (P.weightSide > 0 ? 6 : -6) * fid, 0, 0); }
+      }
+      keys.push({ t: r3(f * duration), poses: p, ease: ["CubicV2", "InOut"], tag: i === 0 ? "start" : fid > 0.5 ? "fidget" : "breath" });
     }
     return keys;
   }
   function emoteKeys(action, k, style, duration, q) {
     const base = stance(k, style); const keys = [];
     const push = (f, o, ease, tag) => keys.push({ t: r3(f * duration), poses: withOverrides(base, o), ease: ease || ["CubicV2", "InOut"], tag: tag || "beat" });
-    if (action === "wave") {
+    const V = (PERSONA && PERSONA.emoteVariant) || 0;
+    if (action === "wave" && V === 1) { // both hands, big
+      push(0, {}, ["CubicV2", "In"], "start");
+      push(0.18, { l_shoulder: J(165 * k, 0, -40), r_shoulder: J(165 * k, 0, 40), l_elbow: J(50, 0, 0), r_elbow: J(50, 0, 0), waist: J(4, 0, 0), neck: J(-8, 0, 0), root: { rot: [2, 0, 0], pos: [0, 0.05, 0] } }, ["CubicV2", "Out"], "raise");
+      for (let i = 0; i < 3; i++) { push(0.28 + i * 0.2, { l_shoulder: J(165 * k, 0, -55), r_shoulder: J(165 * k, 0, 25), l_elbow: J(35, 0, 0), r_elbow: J(35, 0, 0), l_wrist: J(0, 0, 25 * k), r_wrist: J(0, 0, 25 * k), waist: J(4, 0, 6), neck: J(-8, 0, -6) }, ["CubicV2", "InOut"], "wave"); push(0.38 + i * 0.2, { l_shoulder: J(165 * k, 0, -25), r_shoulder: J(165 * k, 0, 55), l_elbow: J(65, 0, 0), r_elbow: J(65, 0, 0), l_wrist: J(0, 0, -25 * k), r_wrist: J(0, 0, -25 * k), waist: J(4, 0, -6), neck: J(-8, 0, 6) }, ["CubicV2", "InOut"], "wave"); }
+      push(1.0, {}, ["CubicV2", "Out"], "end");
+    } else if (action === "wave" && V === 2) { // shy little wave: elbow bent, hand near the shoulder
+      push(0, {}, ["CubicV2", "In"], "start");
+      push(0.22, { r_shoulder: J(40 * k, 0, 20), r_elbow: J(130, 0, 0), r_wrist: J(0, 0, 0), waist: J(2, -5, -4), neck: J(4, -6, 8) }, ["CubicV2", "Out"], "raise");
+      for (let i = 0; i < 4; i++) { push(0.3 + i * 0.14, { r_shoulder: J(40 * k, 0, 22), r_elbow: J(125, 0, 0), r_wrist: J(0, 0, -22 * k), waist: J(2, -5, -4), neck: J(4, -6, 8) }, ["CubicV2", "InOut"], "wave"); push(0.37 + i * 0.14, { r_shoulder: J(40 * k, 0, 18), r_elbow: J(135, 0, 0), r_wrist: J(0, 0, 22 * k), waist: J(2, -5, -4), neck: J(4, -6, 8) }, ["CubicV2", "InOut"], "wave"); }
+      push(1.0, {}, ["CubicV2", "Out"], "end");
+    } else if (action === "salute") {
+      push(0, {}, ["CubicV2", "In"], "start"); push(0.25, { r_shoulder: J(100 * k, -20, 75 * k), r_elbow: J(140, 0, 0), r_wrist: J(-15, 0, 20), waist: J(4, 0, 0), neck: J(-4, 0, 0), l_shoulder: J(2, 0, -4), root: { rot: [1, 0, 0], pos: [0, 0.03, 0] } }, ["Cubic", "Out"], "impact");
+      push(0.72, { r_shoulder: J(100 * k, -20, 75 * k), r_elbow: J(140, 0, 0), r_wrist: J(-15, 0, 20), waist: J(4, 0, 0), neck: J(-4, 0, 0), l_shoulder: J(2, 0, -4), root: { rot: [1, 0, 0], pos: [0, 0.03, 0] } }, ["CubicV2", "InOut"], "hold"); push(1.0, {}, ["CubicV2", "Out"], "end");
+    } else if (action === "facepalm") {
+      push(0, {}, ["CubicV2", "In"], "start"); push(0.3, { r_shoulder: J(110 * k, -30, 40), r_elbow: J(145, 0, 0), r_wrist: J(-30, 0, 0), neck: J(28 * k, 0, 6), waist: J(-10 * k, 0, 0), root: { rot: [-3, 0, 0], pos: [0, -0.05, 0] }, l_shoulder: J(10, 0, -20), l_elbow: J(30, 0, 0) }, ["CubicV2", "Out"], "impact");
+      push(0.55, { r_shoulder: J(112 * k, -30, 40), r_elbow: J(145, 0, 0), r_wrist: J(-30, 0, 0), neck: J(32 * k, -10, 6), waist: J(-12 * k, -4, 0), root: { rot: [-3, 0, 0], pos: [0, -0.06, 0] }, l_shoulder: J(10, 0, -20), l_elbow: J(30, 0, 0) }, ["CubicV2", "InOut"], "hold");
+      push(0.75, { r_shoulder: J(112 * k, -30, 40), r_elbow: J(145, 0, 0), r_wrist: J(-30, 0, 0), neck: J(32 * k, 10, 6), waist: J(-12 * k, 4, 0), root: { rot: [-3, 0, 0], pos: [0, -0.06, 0] }, l_shoulder: J(10, 0, -20), l_elbow: J(30, 0, 0) }, ["CubicV2", "InOut"], "hold"); push(1.0, {}, ["CubicV2", "Out"], "end");
+    } else if (action === "shrug") {
+      push(0, {}, ["CubicV2", "In"], "start"); push(0.3, { l_shoulder: J(30 * k, 60, -40), r_shoulder: J(30 * k, -60, 40), l_elbow: J(110, 0, 0), r_elbow: J(110, 0, 0), l_wrist: J(0, 0, 40), r_wrist: J(0, 0, -40), waist: J(4, 0, 0), neck: J(-6, 0, 14 * k), root: { rot: [2, 0, 0], pos: [0, 0.04, 0] } }, ["Cubic", "Out"], "impact");
+      push(0.6, { l_shoulder: J(30 * k, 60, -42), r_shoulder: J(30 * k, -60, 42), l_elbow: J(112, 0, 0), r_elbow: J(112, 0, 0), l_wrist: J(0, 0, 40), r_wrist: J(0, 0, -40), waist: J(4, 0, 0), neck: J(-6, 0, 16 * k), root: { rot: [2, 0, 0], pos: [0, 0.05, 0] } }, ["CubicV2", "InOut"], "hold"); push(1.0, {}, ["CubicV2", "Out"], "end");
+    } else if (action === "taunt") {
+      push(0, {}, ["CubicV2", "In"], "start"); push(0.2, { r_shoulder: J(80 * k, 0, 25), r_elbow: J(70, 0, 0), r_wrist: J(30, 0, 0), waist: J(6 * k, -10, 0), neck: J(-8, 8, -6), root: { rot: [4 * k, 0, 0], pos: [0, 0, 0.1] }, l_shoulder: J(20, 0, -30), l_elbow: J(80, 0, 0) }, ["CubicV2", "Out"], "raise");
+      for (let i = 0; i < 3; i++) { push(0.3 + i * 0.18, { r_shoulder: J(78 * k, 0, 25), r_elbow: J(95, 0, 0), r_wrist: J(-30 * k, 0, 0), waist: J(6 * k, -10, 0), neck: J(-8, 8, -6), root: { rot: [4 * k, 0, 0], pos: [0, 0, 0.1] }, l_shoulder: J(20, 0, -30), l_elbow: J(80, 0, 0) }, ["Cubic", "Out"], "impact"); push(0.39 + i * 0.18, { r_shoulder: J(80 * k, 0, 25), r_elbow: J(70, 0, 0), r_wrist: J(30, 0, 0), waist: J(6 * k, -10, 0), neck: J(-8, 8, -6), root: { rot: [4 * k, 0, 0], pos: [0, 0, 0.1] }, l_shoulder: J(20, 0, -30), l_elbow: J(80, 0, 0) }, ["CubicV2", "InOut"], "beat"); }
+      push(1.0, {}, ["CubicV2", "Out"], "end");
+    } else if (action === "nod" || action === "headshake") {
+      const nods = action === "nod" ? 2 : 3;
+      push(0, {}, ["CubicV2", "In"], "start");
+      for (let i = 0; i < nods; i++) { const f0 = 0.15 + i * (0.6 / nods), s = i % 2 ? -1 : 1; push(f0, action === "nod" ? { neck: J(-18 * k, 0, 0), waist: J(-3, 0, 0) } : { neck: J(0, s * 38 * k, 0), waist: J(0, s * 6, 0) }, ["CubicV2", "InOut"], "beat"); push(f0 + 0.3 / nods, action === "nod" ? { neck: J(6 * k, 0, 0), waist: J(1, 0, 0) } : { neck: J(0, -s * 38 * k, 0), waist: J(0, -s * 6, 0) }, ["CubicV2", "InOut"], "beat"); }
+      push(1.0, {}, ["CubicV2", "Out"], "end");
+    } else if (action === "wave") {
       push(0, {}, ["CubicV2", "In"], "start");
       push(0.2, { r_shoulder: J(160 * k, 0, 35), r_elbow: J(60, 0, 0), r_wrist: J(0, 0, 0), waist: J(0, -8, -3), neck: J(0, -8, 4) }, ["CubicV2", "Out"], "raise");
       for (let i = 0; i < 3; i++) { push(0.3 + i * 0.2, { r_shoulder: J(160 * k, 0, 35), r_elbow: J(40, 0, 0), r_wrist: J(0, 0, -30 * k), waist: J(0, -8, -3), neck: J(0, -8, 4) }, ["CubicV2", "InOut"], "wave"); push(0.4 + i * 0.2, { r_shoulder: J(160 * k, 0, 35), r_elbow: J(70, 0, 0), r_wrist: J(0, 0, 30 * k), waist: J(0, -8, -3), neck: J(0, -8, 4) }, ["CubicV2", "InOut"], "wave"); }
+      push(1.0, {}, ["CubicV2", "Out"], "end");
+    } else if (action === "cheer" && V === 1) { // fist pumps
+      push(0, {}, ["CubicV2", "In"], "start");
+      for (let i = 0; i < 2; i++) { push(0.15 + i * 0.35, { r_shoulder: J(40 * k, 0, 30), r_elbow: J(150, 0, 0), r_wrist: J(-20, 0, 0), waist: J(-12 * k, -14, 4), neck: J(4, 10, 0), root: { rot: [-5, 0, 0], pos: [0, -0.1, 0] }, l_shoulder: J(10, 0, -20), l_knee: J(-20, 0, 0), r_knee: J(-20, 0, 0) }, ["CubicV2", "In"], "anticipation"); push(0.3 + i * 0.35, { r_shoulder: J(150 * k, 0, 30), r_elbow: J(60, 0, 0), r_wrist: J(-20, 0, 0), waist: J(8 * k, 10, -4), neck: J(-14, -8, 0), root: { rot: [5, 0, 0], pos: [0, 0.12 * k, 0] }, l_shoulder: J(-15, 0, -20), l_elbow: J(40, 0, 0) }, ["Cubic", "Out"], "impact"); }
       push(1.0, {}, ["CubicV2", "Out"], "end");
     } else if (action === "cheer") {
       push(0, { l_knee: J(-20, 0, 0), r_knee: J(-20, 0, 0), root: { rot: [-5, 0, 0], pos: [0, -0.15, 0] } }, ["CubicV2", "In"], "anticipation");
       push(0.3, { l_shoulder: J(175 * k, 0, -25), r_shoulder: J(175 * k, 0, 25), l_elbow: J(25, 0, 0), r_elbow: J(25, 0, 0), waist: J(10 * k, 0, 0), neck: J(-20, 0, 0), root: { rot: [6, 0, 0], pos: [0, 0.45 * k, 0] }, l_ankle: J(-20, 0, 0), r_ankle: J(-20, 0, 0) }, ["CubicV2", "Out"], "impact");
       push(0.55, { l_shoulder: J(170 * k, 0, -40), r_shoulder: J(170 * k, 0, 40), l_elbow: J(35, 0, 0), r_elbow: J(35, 0, 0), waist: J(6, 0, 0), neck: J(-15, 0, 0), root: { rot: [2, 0, 0], pos: [0, -0.2 * k, 0] }, l_knee: J(-30, 0, 0), r_knee: J(-30, 0, 0) }, ["Bounce", "Out"], "land");
       push(1.0, {}, ["CubicV2", "Out"], "end");
+    } else if (action === "dance" && V === 1) { // arm-wave groove: shoulders roll, hips twist, feet planted
+      for (let i = 0; i <= 8; i++) { const f = i / 8, ph = f * Math.PI * 2; push(f, { root: { rot: [-3 + Math.sin(ph * 2) * 3, Math.sin(ph) * 10 * k, Math.sin(ph) * 5], pos: [0, -0.08 + Math.abs(Math.sin(ph * 2)) * 0.1, 0] }, waist: J(-6 + Math.sin(ph * 2) * 6, -Math.sin(ph) * 22 * k, Math.cos(ph) * 8), neck: J(Math.sin(ph * 2) * 8, Math.sin(ph) * 14, -Math.cos(ph) * 6), l_shoulder: J(90 * k + Math.sin(ph) * 50 * k, 0, -30 - Math.cos(ph) * 20), r_shoulder: J(90 * k - Math.sin(ph) * 50 * k, 0, 30 + Math.cos(ph) * 20), l_elbow: J(70 + Math.cos(ph) * 40, 0, 0), r_elbow: J(70 - Math.cos(ph) * 40, 0, 0), l_wrist: J(Math.sin(ph) * 30, 0, 0), r_wrist: J(-Math.sin(ph) * 30, 0, 0), l_knee: J(-14 - Math.abs(Math.sin(ph * 2)) * 14, 0, 0), r_knee: J(-14 - Math.abs(Math.cos(ph * 2)) * 14, 0, 0) }, ["CubicV2", "InOut"], i === 0 || i === 8 ? "start" : "beat"); }
+    } else if (action === "dance" && V === 2) { // bounce + point: hop on the beat, alternate pointing arms
+      for (let i = 0; i <= 8; i++) { const f = i / 8, s = i % 2 ? 1 : -1, hop = i % 2 ? 0.18 * k : 0; push(f, { root: { rot: [-4, s * 18 * k, 0], pos: [0, -0.1 + hop, 0] }, waist: J(-6, -s * 18 * k, s * 4), neck: J(-4, s * 10, -s * 4), l_shoulder: J(s > 0 ? 150 * k : 30, 0, s > 0 ? -45 : -20), r_shoulder: J(s < 0 ? 150 * k : 30, 0, s < 0 ? 45 : 20), l_elbow: J(s > 0 ? 10 : 90, 0, 0), r_elbow: J(s < 0 ? 10 : 90, 0, 0), l_hip: J(10, 0, -6), r_hip: J(10, 0, 6), l_knee: J(i % 2 ? -10 : -32, 0, 0), r_knee: J(i % 2 ? -10 : -32, 0, 0), l_ankle: J(i % 2 ? -15 : 6, 0, 0), r_ankle: J(i % 2 ? -15 : 6, 0, 0) }, i % 2 ? ["Cubic", "Out"] : ["CubicV2", "In"], i === 0 || i === 8 ? "start" : i % 2 ? "impact" : "beat"); }
     } else if (action === "dance") {
       for (let i = 0; i <= 8; i++) { const s = i % 2 ? 1 : -1, f = i / 8; push(f, { root: { rot: [0, s * 12 * k, s * 6], pos: [s * 0.2, -0.12 + (i % 2) * 0.1, 0] }, waist: J(-5, -s * 20 * k, -s * 8), neck: J(0, s * 15, s * 5), l_shoulder: J(s > 0 ? 120 * k : 20, 0, -30), r_shoulder: J(s < 0 ? 120 * k : 20, 0, 30), l_elbow: J(70, 0, 0), r_elbow: J(70, 0, 0), l_hip: J(s > 0 ? 20 : -10, 0, -8), r_hip: J(s < 0 ? 20 : -10, 0, 8), l_knee: J(-30 - (s > 0 ? 20 : 0), 0, 0), r_knee: J(-30 - (s < 0 ? 20 : 0), 0, 0) }, ["CubicV2", "InOut"], i === 0 || i === 8 ? "start" : "beat"); }
+    } else if (action === "point" && V === 1) { // point up at the sky
+      push(0, {}, ["CubicV2", "In"], "start"); push(0.3, { r_shoulder: J(170 * k, 0, 15), r_elbow: J(5, 0, 0), r_wrist: J(0, 0, 0), waist: J(8 * k, -6, 0), neck: J(-30 * k, -4, 0), root: { rot: [3, 0, 0], pos: [0, 0.03, 0] } }, ["CubicV2", "Out"], "impact"); push(0.75, { r_shoulder: J(168 * k, 0, 15), r_elbow: J(8, 0, 0), waist: J(8 * k, -6, 0), neck: J(-32 * k, -4, 0), root: { rot: [3, 0, 0], pos: [0, 0.03, 0] } }, ["CubicV2", "InOut"], "hold"); push(1.0, {}, ["CubicV2", "Out"], "end");
+    } else if (action === "point" && V === 2) { // point to the side
+      push(0, {}, ["CubicV2", "In"], "start"); push(0.3, { r_shoulder: J(20 * k, 0, 95 * k), r_elbow: J(5, 0, 0), r_wrist: J(0, 0, 0), waist: J(-2, -30, 4), neck: J(0, -45, 0), root: { rot: [0, -8, 0], pos: [0, 0, 0] } }, ["CubicV2", "Out"], "impact"); push(0.75, { r_shoulder: J(18 * k, 0, 94 * k), r_elbow: J(8, 0, 0), waist: J(-2, -30, 4), neck: J(0, -48, 0), root: { rot: [0, -8, 0], pos: [0, 0, 0] } }, ["CubicV2", "InOut"], "hold"); push(1.0, {}, ["CubicV2", "Out"], "end");
     } else if (action === "point") {
       push(0, {}, ["CubicV2", "In"], "start"); push(0.3, { r_shoulder: J(95 * k, 0, 10), r_elbow: J(5, 0, 0), r_wrist: J(0, 0, 0), waist: J(-4, -10, 0), neck: J(0, -10, 0) }, ["CubicV2", "Out"], "impact"); push(0.75, { r_shoulder: J(92 * k, 0, 10), r_elbow: J(8, 0, 0), waist: J(-4, -10, 0), neck: J(0, -10, 0) }, ["CubicV2", "InOut"], "hold"); push(1.0, {}, ["CubicV2", "Out"], "end");
+    } else if (action === "clap" && V === 1) { // slow overhead clap
+      push(0, {}, ["CubicV2", "In"], "start");
+      for (let i = 0; i < 3; i++) { push(0.18 + i * 0.26, { l_shoulder: J(170 * k, 30, -10), r_shoulder: J(170 * k, -30, 10), l_elbow: J(25, 0, 0), r_elbow: J(25, 0, 0), waist: J(6, 0, 0), neck: J(-12, 0, 0) }, ["Linear", "Out"], "impact"); push(0.31 + i * 0.26, { l_shoulder: J(165 * k, 10, -40), r_shoulder: J(165 * k, -10, 40), l_elbow: J(30, 0, 0), r_elbow: J(30, 0, 0), waist: J(6, 0, 0), neck: J(-12, 0, 0) }, ["CubicV2", "InOut"], "open"); }
+      push(1.0, {}, ["CubicV2", "Out"], "end");
     } else if (action === "clap") {
       push(0, {}, ["CubicV2", "In"], "start");
       for (let i = 0; i < 4; i++) { push(0.15 + i * 0.2, { l_shoulder: J(70 * k, 35, -20), r_shoulder: J(70 * k, -35, 20), l_elbow: J(95, 0, 0), r_elbow: J(95, 0, 0) }, ["Linear", "Out"], "impact"); push(0.25 + i * 0.2, { l_shoulder: J(70 * k, 15, -35), r_shoulder: J(70 * k, -15, 35), l_elbow: J(85, 0, 0), r_elbow: J(85, 0, 0) }, ["CubicV2", "InOut"], "open"); }
       push(1.0, {}, ["CubicV2", "Out"], "end");
     } else if (action === "laugh") {
       for (let i = 0; i <= 6; i++) { const f = i / 6, s = i % 2 ? 1 : 0; push(f, { waist: J(-6 - s * 14 * k, 0, 0), neck: J(-10 + s * 22 * k, 0, 0), root: { rot: [-4 - s * 6, 0, 0], pos: [0, -0.05 * s, 0] }, l_shoulder: J(30, 0, -14 + s * 10), r_shoulder: J(30, 0, 14 - s * 10), l_elbow: J(60 + s * 20, 0, 0), r_elbow: J(60 + s * 20, 0, 0) }, ["CubicV2", "InOut"], i === 0 || i === 6 ? "start" : "beat"); }
+    } else if (action === "bow" && V === 1) { // theatrical bow with an arm flourish
+      push(0, {}, ["CubicV2", "In"], "start"); push(0.2, { r_shoulder: J(160 * k, 0, 40), r_elbow: J(20, 0, 0), r_wrist: J(0, 0, 20), waist: J(6, 0, 0), neck: J(-8, 0, 0), l_shoulder: J(-20, 0, -14), l_elbow: J(30, 0, 0) }, ["CubicV2", "Out"], "raise");
+      push(0.5, { waist: J(-50 * k, 0, 0), neck: J(16, 0, 0), root: { rot: [-22 * k, 0, 0], pos: [0, -0.12, 0.15] }, r_shoulder: J(60 * k, 30, 110 * k), r_elbow: J(30, 0, 0), r_wrist: J(0, 0, 30), l_shoulder: J(-30, 0, -14), l_elbow: J(40, 0, 0), l_hip: J(10, 0, -6), r_hip: J(-15, 0, 10), l_knee: J(-14, 0, 0), r_knee: J(-10, 0, 0), r_ankle: J(14, 0, 0) }, ["CubicV2", "Out"], "impact");
+      push(0.75, { waist: J(-50 * k, 0, 0), neck: J(18, 0, 0), root: { rot: [-22 * k, 0, 0], pos: [0, -0.12, 0.15] }, r_shoulder: J(60 * k, 30, 112 * k), r_elbow: J(30, 0, 0), r_wrist: J(0, 0, 30), l_shoulder: J(-30, 0, -14), l_elbow: J(40, 0, 0), l_hip: J(10, 0, -6), r_hip: J(-15, 0, 10), l_knee: J(-14, 0, 0), r_knee: J(-10, 0, 0), r_ankle: J(14, 0, 0) }, ["CubicV2", "InOut"], "hold"); push(1.0, {}, ["CubicV2", "Out"], "end");
     } else if (action === "bow") {
       push(0, {}, ["CubicV2", "In"], "start"); push(0.35, { waist: J(-55 * k, 0, 0), neck: J(20, 0, 0), root: { rot: [-20 * k, 0, 0], pos: [0, -0.1, 0.15] }, l_shoulder: J(25, 0, -10), r_shoulder: J(40, 40, 10), r_elbow: J(110, 0, 0), l_knee: J(-12, 0, 0), r_knee: J(-12, 0, 0) }, ["CubicV2", "Out"], "impact"); push(0.7, { waist: J(-55 * k, 0, 0), neck: J(22, 0, 0), root: { rot: [-20 * k, 0, 0], pos: [0, -0.1, 0.15] }, l_shoulder: J(25, 0, -10), r_shoulder: J(40, 40, 10), r_elbow: J(110, 0, 0) }, ["CubicV2", "InOut"], "hold"); push(1.0, {}, ["CubicV2", "Out"], "end");
     }
@@ -434,7 +767,7 @@
   }
 
   // ───────────────────────── sequencer ─────────────────────────
-  const STAGE_WEIGHT = { ready: 0.4, anticipation: 0.7, strike: 1.0, transition: 0.4, spin: 1.7, finisher: 1.3, air: 1.1, land: 1.25, recover: 0.8, dodge: 1.2, block: 1.2, cast: 1.5 };
+  const STAGE_WEIGHT = { ready: 0.4, anticipation: 0.7, strike: 1.0, transition: 0.4, spin: 1.7, finisher: 1.3, air: 1.1, land: 1.25, recover: 0.8, dodge: 1.2, block: 1.2, cast: 1.5, hit: 0.9, fall: 1.4, still: 1.2, draw: 1.6, release: 0.9, aimup: 0.6, shot: 0.55, throw: 1.1, flip: 1.6, dash: 1.1, slide: 1.6, pickup: 1.5 };
   const DEFAULT_PARAMS = { speed: 1, attackSpeed: 1, anticipation: 1, weight: 1, amplitude: 1, variation: 0 };
   function stageWeights(stages, params) {
     return stages.map((s) => {
@@ -469,13 +802,20 @@
     const loop = typeof opts.loop === "boolean" ? opts.loop : !!intent.loop;
     const style = intent.style;
     let keys = [], stages = [];
-    const seed = (intent.seed ^ Math.round(params.variation * 1000)) >>> 0;
-    const jitter = params.variation ? rng(seed) : null;
+    const take = (opts.take || intent.take || 0) | 0;
+    const seed = (intent.seed ^ Math.round(params.variation * 1000) ^ Math.imul(take, 2246822519)) >>> 0;
+    const P = persona(intent, params, take); P.text = intent.text; P.strafeDir = intent.strafeDir; PERSONA = P;
+    const kP = clamp(k * P.amp, 0.4, 1.8);
+    const jitter = params.variation || take ? rng(seed) : null;
     const vj = (v, pct) => jitter ? v * (1 + (jitter() * 2 - 1) * pct) : v;
+    const travel = !!(intent.travel || params.travel || opts.travel);
     if (intent.stages && intent.stages.length) {
       let durs = stageDurations(intent.stages, duration, params);
-      if (jitter) { durs = durs.map((d) => vj(d, 0.08)); const sum = durs.reduce((a, b) => a + b, 0); durs = durs.map((d) => d * duration / sum); } // variation jitters stage timing but stages still end exactly at `duration`
-      let t0 = 0, prev = stance(k, style), yawOffset = 0;
+      // persona tempo: anticipation / windup stages stretch or tighten a little per character; variation jitters all of them; stages still end exactly at `duration`
+      durs = durs.map((d, i) => { const kind = intent.stages[i].kind; return d * (kind === "anticipation" || kind === "ready" || kind === "draw" ? P.tempo : kind === "recover" ? (2 - P.tempo) : 1); });
+      if (jitter) durs = durs.map((d) => vj(d, 0.08));
+      { const sum = durs.reduce((a, b) => a + b, 0); durs = durs.map((d) => d * duration / sum); }
+      let t0 = 0, prev = stance(k, style), yawOffset = 0, pitchOffset = 0;
       const weapon = intent.weapon || "punch", hands = intent.hands || 1;
       intent.stages.forEach((s, idx) => {
         const d = durs[idx];
@@ -491,27 +831,43 @@
         else if (s.kind === "dodge") beats = dodgeBeats(k, prev);
         else if (s.kind === "block") beats = blockBeats(k, prev);
         else if (s.kind === "cast") beats = castBeats(k, prev, intent.category === "transform");
-        else if (s.kind === "recover") { const end = intent.category === "attack" ? readyPose(k * 0.9, style, weapon, hands) : stance(k, style); beats = [{ at: 0.55, tag: "settle", ease: ["CubicV2", "InOut"], pose: mix(prev, end, 0.6) }, { at: 1, tag: "end", ease: ["CubicV2", "Out"], pose: end }]; }
+        else if (s.kind === "hit") beats = hitBeats(s.variant || intent.hitDir || "front", kP, prev, intent.category === "knockback" || intent.category === "death");
+        else if (s.kind === "fall") beats = fallBeats(intent.deathDir || "back", kP, prev);
+        else if (s.kind === "still") beats = stillBeats(prev);
+        else if (s.kind === "draw") beats = drawBeats(kP, prev);
+        else if (s.kind === "release") beats = releaseBeats(kP, prev);
+        else if (s.kind === "aimup") beats = [{ at: 1, tag: "ready", ease: ["CubicV2", "Out"], pose: aimPose(k, stance(k, style), /rifle|shotgun|blaster|two[- ]hand/i.test(intent.text)) }];
+        else if (s.kind === "shot") beats = shotBeats(kP, prev, /rifle|shotgun|blaster|two[- ]hand/i.test(intent.text));
+        else if (s.kind === "throw") beats = throwBeats(kP, prev);
+        else if (s.kind === "flip") beats = flipBeats(intent.flipDir || "back", kP, prev);
+        else if (s.kind === "dash") beats = dashBeats(kP, prev, travel);
+        else if (s.kind === "slide") beats = slideBeats(kP, prev, travel);
+        else if (s.kind === "pickup") beats = pickupBeats(kP, prev);
+        else if (s.kind === "recover") { const end = intent.category === "attack" ? readyPose(k * 0.9, style, weapon, hands) : stance(k, style); const keepZ = travel && prev.root && prev.root.pos ? prev.root.pos[2] : 0; const endP = keepZ ? withOverrides(end, { root: { rot: end.root.rot, pos: [end.root.pos[0], end.root.pos[1], keepZ] } }) : end; beats = [{ at: 0.55, tag: "settle", ease: ["CubicV2", "InOut"], pose: mix(prev, endP, 0.6) }, { at: 1, tag: "end", ease: ["CubicV2", "Out"], pose: endP }]; }
+        for (const b of beats) b.ease = flavorEase(b.ease, b.tag, P.easing);
         const lastLocal = beats.length ? clonePose(beats[beats.length - 1].pose) : null; // before the offset is baked in - the next stage builds on the LOCAL frame
-        if (yawOffset) for (const b of beats) { const rp = b.pose.root || { rot: [0, 0, 0] }; b.pose.root = Object.assign({}, rp, { rot: [rp.rot[0], rp.rot[1] + yawOffset, rp.rot[2]] }); }
+        if (yawOffset || pitchOffset) for (const b of beats) { const rp = b.pose.root || { rot: [0, 0, 0] }; b.pose.root = Object.assign({}, rp, { rot: [rp.rot[0] + pitchOffset, rp.rot[1] + yawOffset, rp.rot[2]] }); }
         const stageKeys = beats.map((b) => ({ t: r3(t0 + b.at * d), poses: b.pose, ease: b.ease, tag: b.tag, stage: s.kind + (s.index != null ? "_" + (s.index + 1) : "") }));
         let turned = 0;
         if (s.kind === "spin") turned += 360 * (intent.text && /double spin|two spins|720/i.test(intent.text) ? 2 : 1);
         if (beats.spinTurn) turned += beats.spinTurn; // spin kick: the next stage starts one full turn later
         yawOffset += turned;
+        let pitched = 0; if (beats.spinX) { pitched = beats.spinX; pitchOffset += pitched; }
         stages.push({ name: s.kind + (s.index != null ? "_" + (s.index + 1) : "") + (s.variant ? ":" + s.variant : ""), kind: s.kind, t0: r3(t0), t1: r3(t0 + d), marker: s.kind === "strike" || s.kind === "finisher" || s.kind === "spin" ? "hit" : s.kind === "land" ? "land" : s.kind });
         keys.push(...stageKeys);
         if (lastLocal) prev = lastLocal;
         // `prev` lives in the next stage's local frame: after a full turn the local yaw drops by what the offset gained (otherwise a recover that mixes prev with the ready pose wobbles 140° back).
-        if (turned && prev.root) prev = withOverrides(prev, { root: { rot: [prev.root.rot[0], prev.root.rot[1] - turned, prev.root.rot[2]], pos: prev.root.pos } });
+        if ((turned || pitched) && prev.root) prev = withOverrides(prev, { root: { rot: [prev.root.rot[0] - pitched, prev.root.rot[1] - turned, prev.root.rot[2]], pos: prev.root.pos } });
         t0 += d;
       });
-    } else if (intent.category === "walk" || intent.category === "run" || intent.category === "swim" || intent.category === "climb") {
-      keys = cycleKeys(intent.category, k, style, duration, q); stages = [{ name: intent.category + "_cycle", kind: "cycle", t0: 0, t1: duration, marker: "cycle" }];
+    } else if (/^(walk|run|swim|climb|sneak|strafe|walk_back|crawl|pushup)$/.test(intent.category)) {
+      keys = cycleKeys(intent.category, kP, style, duration, q); stages = [{ name: intent.category + "_cycle", kind: "cycle", t0: 0, t1: duration, marker: "cycle" }];
+      if (travel && /^(walk|run|sneak|walk_back|crawl)$/.test(intent.category)) { const stride = (intent.category === "run" ? 6.5 : intent.category === "crawl" ? 1.6 : intent.category === "sneak" ? 2.2 : 3.6) * kP * (intent.category === "walk_back" ? -1 : 1); for (const key of keys) { const rp = key.poses.root.pos || [0, 0, 0]; key.poses.root.pos = [rp[0], rp[1], rp[2] + stride * key.t / duration]; } }
     } else if (intent.category === "emote" && intent.action) {
-      keys = emoteKeys(intent.action, k, style, duration, q); stages = [{ name: intent.action, kind: "emote", t0: 0, t1: duration, marker: intent.action }];
+      keys = emoteKeys(intent.action, kP, style, duration, q); stages = [{ name: intent.action + (P.emoteVariant ? "_v" + (P.emoteVariant + 1) : ""), kind: "emote", t0: 0, t1: duration, marker: intent.action }];
+      for (const key of keys) key.ease = flavorEase(key.ease, key.tag, P.easing);
     } else {
-      keys = idleKeys(intent.category, k, style, duration, q, seed); stages = [{ name: intent.category, kind: "idle", t0: 0, t1: duration, marker: intent.category }];
+      keys = idleKeys(intent.category, kP, style, duration, q, seed); stages = [{ name: intent.category, kind: "idle", t0: 0, t1: duration, marker: intent.category }];
     }
     // merge keys at identical times (later wins), sort
     keys = dedupeKeys(keys);
@@ -521,20 +877,30 @@
     if (q.arcs) keys = addArcs(keys, duration, fps);
     if (q.secondary) keys = addSecondaryLag(keys, k);
     if (intent.upperOnly) for (const key of keys) for (const j of ["l_hip", "l_knee", "l_ankle", "r_hip", "r_knee", "r_ankle"]) key.poses[j] = J(0, 0, 0);
-    if (loop) keys = closeLoop(keys, duration);
+    const mirrored = !!(intent.mirror || opts.mirror);
+    if (mirrored) keys = keys.map((key) => Object.assign({}, key, { poses: mirrorPose(key.poses) }));
+    if (loop) keys = closeLoop(keys, duration, travel);
     keys = snapToFps(dedupeKeys(keys), fps, duration);
     let clip = {
-      version: 1, engine: VERSION, name: opts.name || suggestName(intent), prompt: intent.text, intent, params, quality, rigType, fps, duration, loop, priority: opts.priority || intent.priority,
-      stages, keys, created: opts.now || 0, edited: false, limitations: intent.unsupported.slice(),
+      version: 1, engine: VERSION, name: opts.name || suggestName(intent) + (take ? "_take" + (take + 1) : "") + (mirrored ? "_Mirror" : ""), prompt: intent.text, intent, params, quality, rigType, fps, duration, loop, priority: opts.priority || intent.priority,
+      stages, keys, created: opts.now || 0, edited: false, limitations: intent.unsupported.slice(), take, persona: { traits: P.traits, lead: P.lead, fidget: P.fidget, armRest: P.armRest, easing: P.easing, emoteVariant: P.emoteVariant }, mirrored, travel,
     };
+    if (travel) clip.limitations.push("root motion: the HumanoidRootPart offset travels inside the clip - play it on a rig that is NOT also being moved by a controller, or strip the root track.");
     if (rigType === "R6") clip.limitations.push("R6 rig: no elbow / knee / wrist / ankle / waist joints - elbow and knee bends are folded into the shoulders and hips, waist into the torso.");
     for (let pass = 0; pass < q.passes; pass++) { const r = refine(clip); clip = r.clip; if (!r.changed) break; }
     clip.report = validate(clip);
+    clip.fingerprint = fingerprint(clip);
+    PERSONA = null;
+    // uniqueness: never hand back a clip that looks like one the caller already has (session clips / earlier takes)
+    if (Array.isArray(opts.avoid) && opts.avoid.length && (opts._depth || 0) < 8) {
+      const same = opts.avoid.some((f) => typeof f === "string" ? f === clip.fingerprint : f && f.keys && similarity(f, clip) > 0.985);
+      if (same) return generate(intent, Object.assign({}, opts, { take: take + 1, _depth: (opts._depth || 0) + 1 }));
+    }
     return clip;
   }
   function suggestName(i) {
     const s = i.style !== "default" ? i.style[0].toUpperCase() + i.style.slice(1) : "";
-    const core = i.category === "attack" ? (i.weapon === "sword" ? "SwordCombo" : i.weapon === "kick" ? "KickCombo" : "PunchCombo") : i.category === "emote" ? (i.action || "Emote")[0].toUpperCase() + (i.action || "emote").slice(1) : i.category[0].toUpperCase() + i.category.slice(1);
+    const core = i.category === "attack" ? (i.weapon === "sword" ? "SwordCombo" : i.weapon === "kick" ? "KickCombo" : "PunchCombo") : i.category === "emote" ? (i.action || "Emote")[0].toUpperCase() + (i.action || "emote").slice(1) : i.category.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join("") + (i.category === "hit_react" && i.hitDir ? i.hitDir[0].toUpperCase() + i.hitDir.slice(1) : "") + (i.category === "death" && i.deathDir === "forward" ? "Forward" : "") + (i.category === "flip" ? (i.flipDir === "front" ? "Front" : "Back") : "");
     return (s + core + (i.loop ? "Loop" : "")).replace(/[^A-Za-z0-9_]/g, "");
   }
   function dedupeKeys(keys) {
@@ -594,12 +960,14 @@
     }
     return keys;
   }
-  function closeLoop(keys, duration) {
+  function closeLoop(keys, duration, travel) {
     if (!keys.length) return keys;
     const first = keys[0];
     const last = keys[keys.length - 1];
-    if (Math.abs(last.t - duration) < 1e-6) { last.poses = clonePose(first.poses); last.tag = "loop_end"; return keys; }
-    keys.push({ t: duration, poses: clonePose(first.poses), ease: first.ease, tag: "loop_end", synthetic: true });
+    const p = clonePose(first.poses);
+    if (travel && last.poses.root && last.poses.root.pos && p.root) p.root.pos = [p.root.pos[0], p.root.pos[1], last.poses.root.pos[2]]; // root-motion clips keep the forward offset at the seam (the controller re-bases it)
+    if (Math.abs(last.t - duration) < 1e-6) { last.poses = p; last.tag = "loop_end"; return keys; }
+    keys.push({ t: duration, poses: p, ease: first.ease, tag: "loop_end", synthetic: true });
     return keys;
   }
 
@@ -623,7 +991,7 @@
         if (p.pos && p.pos.some((v) => !Number.isFinite(v))) add("error", "nan", `${j} at ${key.t}s has an invalid position`, { t: key.t, joint: j });
         const L = LIMITS[j];
         ["x", "y", "z"].forEach((ax, i) => { const v = p.rot[i]; if (v < L[ax][0] - 0.01 || v > L[ax][1] + 0.01) add("warn", "limit", `${j}.${ax} = ${Math.round(v)}° exceeds ${L[ax][0]}..${L[ax][1]}° at ${key.t}s`, { t: key.t, joint: j, axis: i }); });
-        if (j === "root" && p.pos && (Math.abs(p.pos[1]) > 2.2 || Math.abs(p.pos[0]) > 3 || Math.abs(p.pos[2]) > 3)) add("warn", "root", `root offset ${p.pos.map((v) => v.toFixed(2)).join(",")} studs at ${key.t}s is very large`, { t: key.t, joint: j });
+        if (j === "root" && p.pos && (Math.abs(p.pos[1]) > 2.2 || Math.abs(p.pos[0]) > 3 || Math.abs(p.pos[2]) > (clip.travel ? 12 : 3))) add("warn", "root", `root offset ${p.pos.map((v) => v.toFixed(2)).join(",")} studs at ${key.t}s is very large`, { t: key.t, joint: j });
       }
     }
     // discontinuities
@@ -635,7 +1003,7 @@
         const d = Math.max(Math.abs(pb.rot[0] - pa.rot[0]), Math.abs(pb.rot[1] - pa.rot[1]), Math.abs(pb.rot[2] - pa.rot[2]));
         const speed = d / dt;
         if (speed > (impact ? SPEED_LIMIT.impact : SPEED_LIMIT.normal)) add(impact ? "warn" : "warn", "discontinuity", `${j} turns ${Math.round(d)}° in ${dt.toFixed(3)}s (${Math.round(speed)}°/s) at ${b.t}s`, { t: b.t, joint: j, speed, impact });
-        if (j === "root" && (pa.pos || pb.pos)) { const A = pa.pos || [0, 0, 0], B = pb.pos || [0, 0, 0]; const dist = Math.hypot(B[0] - A[0], B[1] - A[1], B[2] - A[2]); if (dist / dt > (impact ? SPEED_LIMIT.root_pos_impact : SPEED_LIMIT.root_pos)) add("warn", "root_speed", `root moves ${dist.toFixed(2)} studs in ${dt.toFixed(3)}s at ${b.t}s`, { t: b.t, joint: j }); }
+        if (j === "root" && (pa.pos || pb.pos)) { const A = pa.pos || [0, 0, 0], B = pb.pos || [0, 0, 0]; const dist = Math.hypot(B[0] - A[0], B[1] - A[1], B[2] - A[2]); if (dist / dt > (impact || clip.travel ? SPEED_LIMIT.root_pos_impact : SPEED_LIMIT.root_pos)) add("warn", "root_speed", `root moves ${dist.toFixed(2)} studs in ${dt.toFixed(3)}s at ${b.t}s`, { t: b.t, joint: j }); }
       }
     }
     // loop seam
@@ -644,6 +1012,7 @@
       let worst = 0, wj = null;
       for (const j of JOINTS) { const pa = a.poses[j], pb = b.poses[j]; if (!pa || !pb) continue; const d = Math.max(...[0, 1, 2].map((i) => Math.abs(pa.rot[i] - pb.rot[i]))); if (d > worst) { worst = d; wj = j; } }
       if (worst > 2) add(worst > 15 ? "error" : "warn", "loop", `loop seam: ${wj} differs by ${Math.round(worst)}° between the last and first keyframe${worst > 15 ? " (visible pop)" : ""}`, { joint: wj, delta: worst });
+      if (clip.travel && a.poses.root && b.poses.root && a.poses.root.pos && b.poses.root.pos) add("info", "loop", `root motion clip: the root travels ${r3((b.poses.root.pos[2] || 0) - (a.poses.root.pos[2] || 0))} studs per loop (expected for travel clips)`);
       if (Math.abs(b.t - clip.duration) > 1e-6) add("warn", "loop", `looping clip should end with a keyframe at ${clip.duration}s (last is ${b.t}s)`);
     }
     // timing sanity: too-dense / too-sparse
@@ -662,7 +1031,7 @@
     const fixes = [];
     clip.keys = dedupeKeys(clip.keys.filter((k) => Number.isFinite(k.t) && k.t >= 0 && k.t <= clip.duration + 1e-6).map((k) => Object.assign({}, k, { t: clamp(k.t, 0, clip.duration) })));
     let clamped = 0;
-    for (const key of clip.keys) for (const j of JOINTS) { const p = key.poses[j]; if (!p || !p.rot) continue; const L = LIMITS[j]; ["x", "y", "z"].forEach((ax, i) => { const v = clamp(p.rot[i], L[ax][0], L[ax][1]); if (v !== p.rot[i]) { p.rot[i] = v; clamped++; } }); if (p.pos) p.pos = p.pos.map((v, i) => clamp(v, i === 1 ? -2.2 : -3, i === 1 ? 2.2 : 3)); }
+    for (const key of clip.keys) for (const j of JOINTS) { const p = key.poses[j]; if (!p || !p.rot) continue; const L = LIMITS[j]; ["x", "y", "z"].forEach((ax, i) => { const v = clamp(p.rot[i], L[ax][0], L[ax][1]); if (v !== p.rot[i]) { p.rot[i] = v; clamped++; } }); if (p.pos) { const zMax = clip.travel && j === "root" ? 12 : 3; p.pos = p.pos.map((v, i) => clamp(v, i === 1 ? -2.2 : i === 2 ? -zMax : -3, i === 1 ? 2.2 : i === 2 ? zMax : 3)); } }
     if (clamped) fixes.push(`clamped ${clamped} rotation value(s) to joint limits`);
     // discontinuities → insert a breakdown half-way (non-impact transitions only)
     const added = [];
@@ -675,7 +1044,7 @@
       if (worst / dt > (impact ? SPEED_LIMIT.impact : SPEED_LIMIT.normal) && !impact) added.push({ t: r3((a.t + b.t) / 2), poses: mix(a.poses, b.poses, 0.5), ease: ["CubicV2", "InOut"], tag: "breakdown", stage: a.stage, synthetic: true });
     }
     if (added.length) { clip.keys = dedupeKeys(clip.keys.concat(added)); fixes.push(`inserted ${added.length} breakdown key(s) to smooth abrupt transitions`); }
-    if (clip.loop) { const before = JSON.stringify(clip.keys[clip.keys.length - 1].poses); clip.keys = closeLoop(clip.keys, clip.duration); if (JSON.stringify(clip.keys[clip.keys.length - 1].poses) !== before || clip.keys[clip.keys.length - 1].synthetic) fixes.push("closed the loop (last keyframe = first pose at the clip end)"); }
+    if (clip.loop) { const before = JSON.stringify(clip.keys[clip.keys.length - 1].poses); clip.keys = closeLoop(clip.keys, clip.duration, clip.travel); if (JSON.stringify(clip.keys[clip.keys.length - 1].poses) !== before || clip.keys[clip.keys.length - 1].synthetic) fixes.push("closed the loop (last keyframe = first pose at the clip end)"); }
     clip.keys = snapToFps(clip.keys, clip.fps, clip.duration);
     clip.fixes = (clipIn.fixes || []).concat(fixes);
     return { clip, changed: fixes.length > 0 };
@@ -702,8 +1071,15 @@
     const dm = f.match(/(\d+(?:\.\d+)?)\s*(?:s|sec|seconds?)\b/); if (dm) { duration = clamp(parseFloat(dm[1]), 0.2, 60); notes.push(`duration ${duration}s`); }
     if (has(/\bloop\b/) && !has(/no loop|stop looping|don't loop|do not loop/)) { loop = true; notes.push("looping"); }
     if (has(/no loop|stop looping|don't loop|do not loop|one[- ]shot/)) { loop = false; notes.push("not looping"); }
-    if (has(/variation|different|another take|alternative|variant/)) { p.variation = r3((p.variation || 0) + 0.37); notes.push("new variation"); }
-    const intent = JSON.parse(JSON.stringify(clip.intent)); intent.duration = duration;
+    let take = clip.take || 0, mirror = !!clip.mirrored, travel = !!clip.travel;
+    if (has(/variation|different|another take|alternative|variant|new take|retake|again but|something else/)) { take += 1; notes.push("new take (" + (take + 1) + ")"); }
+    if (has(/\bmirror|flip (?:it )?horizontally|other hand|left[- ]handed|switch (?:hands|sides)|opposite side/)) { mirror = !mirror; notes.push(mirror ? "mirrored (left/right swapped)" : "un-mirrored"); }
+    if (has(/root motion|move forward|travel|cover ground|actually move/) && !has(/no root motion|in place|stay in place/)) { travel = true; notes.push("root motion on"); }
+    if (has(/no root motion|in place|stay in place|stop moving/)) { travel = false; notes.push("root motion off (in place)"); }
+    if (has(/snappier|punchier|crisper/)) { p.easingFlavor = "snappy"; notes.push("snappy easing"); }
+    if (has(/softer|floatier|gentler|dreamy/)) { p.easingFlavor = "soft"; notes.push("soft easing"); }
+    if (has(/mechanical|robotic easing|linear/)) { p.easingFlavor = "mechanical"; notes.push("mechanical easing"); }
+    const intent = JSON.parse(JSON.stringify(clip.intent)); intent.duration = duration; intent.mirror = false; intent.travel = travel;
     if (has(/\badd (?:a )?spin/)) { if (!intent.stages.some((s) => s.kind === "spin")) { const at = Math.max(0, intent.stages.findIndex((s) => s.kind === "land" || s.kind === "recover")); intent.stages.splice(at < 0 ? intent.stages.length : at, 0, { kind: "spin" }); notes.push("added a spin"); } }
     if (has(/\badd (?:a )?(?:landing|land)/) && !intent.stages.some((s) => s.kind === "land")) { const at = intent.stages.findIndex((s) => s.kind === "recover"); intent.stages.splice(at < 0 ? intent.stages.length : at, 0, { kind: "air" }, { kind: "land" }); notes.push("added a landing"); }
     // added stages extend the clip (by their default weight) instead of squeezing the existing beats - unless the user pinned a duration
@@ -711,8 +1087,8 @@
       const w1 = stageWeights(intent.stages, DEFAULT_PARAMS).reduce((a, b) => a + b, 0), w0 = stageWeights(clip.intent.stages, DEFAULT_PARAMS).reduce((a, b) => a + b, 0);
       if (w0 > 0 && w1 > w0) { duration = r3(clamp((duration || clip.duration) * w1 / w0, 0.2, 60)); intent.duration = duration; }
     }
-    if (!notes.length) notes.push("no recognised adjustment - regenerated with the same settings (try: faster, slower, more anticipation, heavier landing, exaggerate, subtle, smoother, longer, shorter, loop, variation)");
-    const out = generate(intent, { quality, rigType: clip.rigType, name: clip.name, fps, loop, params: p, duration, priority: clip.priority });
+    if (!notes.length) notes.push("no recognised adjustment - regenerated with the same settings (try: faster, slower, more anticipation, heavier landing, exaggerate, subtle, smoother, longer, shorter, loop, new take, mirror, root motion, snappier, softer)");
+    const out = generate(intent, { quality, rigType: clip.rigType, name: clip.name, fps, loop, params: p, duration, priority: clip.priority, take, mirror, travel });
     out.feedback = (clip.feedback || []).concat([{ text: feedback, applied: notes }]);
     out.previous = { keys: clip.keys.length, duration: clip.duration, score: clip.report && clip.report.score };
     return out;
@@ -901,7 +1277,7 @@
     return lines.join("\n");
   }
 
-  const api = { VERSION, JOINTS, PARENT, PIVOT, LIMITS, QUALITY, R15_BONES, R6_BONES, R6_C0, PRIORITY_TOKEN, EASING_TOKEN, parseIntent, generate, generateSequence, validate, refine, applyFeedback, variation, toStudio, toBuildArgs, toRbxmx, defaultRigInfo, detectRigType, boneMap, sampleAt, forwardKinematics, metrics, serializeProject, parseProject, retime, moveKey, setJoint, duplicateKey, deleteKey, compare, summary, math: { eulerYXZ, toEulerYXZ, mul, transpose, mulV, flat, from9 } };
+  const api = { VERSION, JOINTS, PARENT, PIVOT, LIMITS, QUALITY, R15_BONES, R6_BONES, R6_C0, PRIORITY_TOKEN, EASING_TOKEN, parseIntent, generate, generateSequence, validate, refine, applyFeedback, variation, toStudio, toBuildArgs, toRbxmx, defaultRigInfo, detectRigType, boneMap, sampleAt, forwardKinematics, metrics, serializeProject, parseProject, retime, moveKey, setJoint, duplicateKey, deleteKey, compare, summary, mirror, fingerprint, similarity, persona, choreograph, STRIKE_POOL, math: { eulerYXZ, toEulerYXZ, mul, transpose, mulV, flat, from9 } };
   root.ORAnimEngine = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

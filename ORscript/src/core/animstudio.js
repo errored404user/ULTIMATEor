@@ -101,7 +101,24 @@
     toast("Applied: " + out.feedback[out.feedback.length - 1].applied.join(", "));
     diag("refine", { fb: fb.slice(0, 80), score: out.report.score });
   }
-  function variation() { if (!S.clip) return toast("Generate a clip first"); pushHistory(); setClip(E().variation(S.clip), { keepT: true }); toast("New variation"); }
+  function variation() {
+    if (!S.clip) return toast("Generate a clip first");
+    pushHistory();
+    const prevFp = S.clip.fingerprint; const seen = (S.history || []).map((h) => { try { return JSON.parse(h).fingerprint; } catch { return null; } }).filter(Boolean).concat(prevFp ? [prevFp] : []);
+    const out = E().generate(S.clip.intent, { quality: S.clip.quality, rigType: S.clip.rigType, name: S.clip.name.replace(/_take\d+$/, ""), fps: S.clip.fps, loop: S.clip.loop, params: S.clip.params, duration: S.clip.intent && S.clip.intent.duration, priority: S.clip.priority, take: (S.clip.take || 0) + 1, mirror: !!S.clip.mirrored, travel: !!S.clip.travel, avoid: seen });
+    out.feedback = S.clip.feedback || [];
+    setClip(out, { keepT: true });
+    toast(`New take ${(out.take || 0) + 1}: ${(out.persona && out.persona.traits || []).slice(0, 3).join(", ")}`);
+    diag("variation", { take: out.take, fp: out.fingerprint });
+  }
+  function mirrorClip() {
+    if (!S.clip) return toast("Generate a clip first");
+    pushHistory();
+    const out = E().mirror(S.clip); out.report = E().validate(out); out.fingerprint = E().fingerprint(out);
+    setClip(out, { keepT: true });
+    toast(out.mirrored ? "Mirrored: left and right swapped" : "Mirror removed: back to the original handedness");
+    diag("mirror", { mirrored: out.mirrored });
+  }
   function regenerate() { if (!S.clip) return toast("Generate a clip first"); generate(S.clip.prompt, { quality: S.clip.quality, rigType: S.clip.rigType, duration: S.clip.intent && S.clip.intent.duration, loop: S.clip.loop, fps: S.clip.fps }); }
 
   // ───────────────────────── editing ─────────────────────────
@@ -177,6 +194,7 @@
     if (c.feedback && c.feedback.length) lines.push("Feedback applied: " + c.feedback.map((f) => f.text).join(" | "));
     lines.push(`Validation: score ${r.score}/100, ${r.errors} errors, ${r.warnings} warnings` + (r.issues.filter((i) => i.level !== "info").slice(0, 4).map((i) => "; " + i.msg).join("")));
     if (c.limitations && c.limitations.length) lines.push("Limits: " + c.limitations.join(" | "));
+    if (c.persona && c.persona.traits) lines.push(`Persona: ${c.persona.traits.join(", ")}${c.take ? `; take ${c.take + 1}` : ""}${c.mirrored ? "; mirrored" : ""}${c.travel ? "; root motion" : ""}; fingerprint ${c.fingerprint || "?"}`);
     lines.push(S.built && S.built.name === c.name ? `It is ALREADY BUILT in Studio as ServerStorage.RobloxScript.AnimLib.${c.name} (active animation). Run animation_preview, then animation_simulate {all:true}; refine with animation_refine {feedback} if needed.` : `Build it with animation_generate {prompt: "${c.prompt.replace(/"/g, "'")}", name: "${c.name}", quality: "${c.quality}", duration: ${c.duration}, loop: ${c.loop}} then animation_preview.`);
     const intent = D && D.intent.value.trim(); if (intent) lines.push("User notes: " + intent);
     return lines.join("\n");
@@ -331,6 +349,7 @@
     const lim = S.clip.limitations && S.clip.limitations.length ? `<div class="rsa-fixes">Limits: ${esc(S.clip.limitations.join(" | "))}</div>` : "";
     const fb = S.clip.feedback && S.clip.feedback.length ? `<div class="rsa-fixes">Feedback: ${esc(S.clip.feedback.map((f) => f.text + " → " + f.applied.join(", ")).join(" | "))}</div>` : "";
     D.report.innerHTML = (items ? `<ul class="rsa-issues">${items}</ul>` : `<div class="rsa-ok">No issues - joint limits, continuity, timing and loop seam all pass.</div>`) + fixes + lim + fb;
+    if (D.persona) { const P = S.clip.persona; D.persona.textContent = P && P.traits ? `Persona: ${P.traits.join(" · ")}${S.clip.take ? ` · take ${S.clip.take + 1}` : ""}${S.clip.mirrored ? " · mirrored" : ""}${S.clip.travel ? " · root motion" : ""} · id ${S.clip.fingerprint || "?"}` : ""; }
   }
   function renderStages() {
     if (!D) return;
@@ -373,7 +392,8 @@
               <label class="rsa-check"><input data-ref="loop" type="checkbox"> Loop</label>
             </div>
             <button type="button" class="rsa-btn primary big" data-act="generate">Generate</button>
-            <div class="rsa-row"><button type="button" class="rsa-btn" data-act="regen" data-ref="regenBtn" title="Regenerate from the same prompt (discards manual edits)">Regenerate</button><button type="button" class="rsa-btn" data-act="variation" data-ref="varBtn" title="Same intent, different timing/amplitude">Variation</button></div>
+            <div class="rsa-row"><button type="button" class="rsa-btn" data-act="regen" data-ref="regenBtn" title="Regenerate from the same prompt (discards manual edits)">Regenerate</button><button type="button" class="rsa-btn" data-act="variation" data-ref="varBtn" title="New take: same prompt, a different persona and choreography (fingerprint guaranteed to differ)">New take</button><button type="button" class="rsa-btn" data-act="mirror" data-ref="mirrorBtn" title="Swap left and right (left-handed version)">Mirror</button></div>
+            <div class="rsa-persona" data-ref="persona" title="Who this clip is: the seeded persona behind its asymmetry, fidget, easing and tempo"></div>
             <div class="rsa-h">Refine with feedback</div>
             <div class="rsa-row"><input data-ref="feedback" type="text" placeholder="faster attacks, more anticipation, heavier landing"><button type="button" class="rsa-btn" data-act="refine" data-ref="refineBtn">Refine</button></div>
             <div class="rsa-h">Stages</div>
@@ -470,6 +490,7 @@
       case "generate": return generate();
       case "regen": return regenerate();
       case "variation": return variation();
+      case "mirror": return mirrorClip();
       case "refine": return refine();
       case "fix": return autoFix();
       case "undo": return undo();
