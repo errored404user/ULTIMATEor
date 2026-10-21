@@ -11,7 +11,7 @@ const E = require(path.join(ROOT, "src/core/animengine.js"));
 
 // ── engine: smoothing ──
 const walk = E.generate("natural walk cycle, loop", { quality: "balanced" });
-ok("engine VERSION is 1.57.0 and the report carries a smoothness metric", E.VERSION === "1.57.0" && Number.isFinite(walk.report.smoothness) && walk.report.smoothness >= 0 && walk.report.smoothness <= 100, [E.VERSION, walk.report.smoothness]);
+ok("engine VERSION is 1.58.0 and the report carries a smoothness metric", E.VERSION === "1.58.0" && Number.isFinite(walk.report.smoothness) && walk.report.smoothness >= 0 && walk.report.smoothness <= 100, [E.VERSION, walk.report.smoothness]);
 const sm = E.smooth(walk, { strength: 1 });
 ok("smooth() keeps the clip valid, keeps first/last/impact keys and reports what it did", sm.report.ok && sm.keys[0].t === 0 && Math.abs(sm.keys[sm.keys.length - 1].t - sm.duration) < 1e-6 && /smoothed \(strength 1/.test(sm.fixes[sm.fixes.length - 1]), sm.fixes);
 ok("smooth() does not lower smoothness and is deterministic", sm.report.smoothness >= walk.report.smoothness && JSON.stringify(E.smooth(walk, { strength: 1 }).keys) === JSON.stringify(sm.keys), [walk.report.smoothness, sm.report.smoothness]);
@@ -189,7 +189,7 @@ ref("prompt").value = "natural walk cycle, loop"; click(act("generate")); const 
 ok("Layer picker lists session clips (studio + AI hook) and a file option, never the current clip", names.includes("ExtWave") && names.includes("__file") && !names.includes(AS.getClip().name) && names[0] === "");
 click(act("layer")); ok("Layer without a pick explains what to do", /Pick the clip/.test(toast()));
 pick.value = "ExtWave"; click(act("layer"));
-ok("Layer combines the picked upper body over the current clip's legs (stretch fit, weight 1)", AS.getClip().layered && AS.getClip().layered.upper === "Wave" && AS.getClip().layered.base === "RealisticWalkLoop" && AS.getClip().name === "RealisticWalkLoop+Wave" && AS.getClip().report.ok, AS.getClip().layered);
+ok("Layer combines the picked upper body over the current clip's legs (keep-tempo fit by default since 1.58, weight 1)", AS.getClip().layered && AS.getClip().layered.requested === "auto" && AS.getClip().layered.upper === "Wave" && AS.getClip().layered.base === "RealisticWalkLoop" && AS.getClip().name === "RealisticWalkLoop+Wave" && AS.getClip().report.ok, AS.getClip().layered);
 ref("layerFit").value = "loop"; ref("layerWeight").value = "0.5"; key("z", { ctrlKey: true }); click(act("layer"));
 ok("fit + weight controls are honoured", AS.getClip().layered.fit === "loop" && AS.getClip().layered.weight === 0.5);
 ok("API exposes the new studio verbs", ["clipTool", "layerWith", "insertKey", "copyPose", "pastePose", "setView", "resetCamera"].every((k) => typeof AS[k] === "function"));

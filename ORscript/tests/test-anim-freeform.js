@@ -1,4 +1,4 @@
-// 1.57.0 — Freeform choreography: any prompt becomes its own motion (act lexicon, "A then B" chains, "X while walking"
+// 1.58.0 — Freeform choreography: any prompt becomes its own motion (act lexicon, "A then B" chains, "X while walking"
 // layering, pose grammar, mood overlays, seeded improvisation that is reported as such), moods / "then …" as feedback, and
 // the tidied Animation Studio (numbered cards, quiet viewport, Pose / Clip / Check tabs, collapsible editor).
 "use strict";
@@ -13,7 +13,7 @@ const inLimits = (clip) => clip.keys.every((k) => Object.entries(k.poses).every(
 // ── 1. the complaint: custom prompts used to collapse into the same idle ──
 const custom = ["drink a potion", "play guitar", "open a heavy door", "headbang to metal", "swing on a rope", "type on a laptop", "answer the phone", "take a selfie", "knock on the door", "think hard", "big yawn and stretch", "shiver in the cold", "cry sadly", "stomp angrily", "push a crate", "pull a rope", "dig a hole", "chop wood", "row a boat", "ride a bike", "look around nervously", "flex muscles", "sneeze", "jumping jacks", "squats", "meditate", "drive a car", "go fishing", "sweep the floor", "paint a picture", "hug", "handshake", "high five", "thumbs up", "curtsy", "out of breath", "dizzy", "cower in fear", "hands up surrender", "kick a ball", "golf swing", "basketball jump shot", "lift a heavy box", "superhero landing", "dab", "floss dance", "twirl around", "lean on a wall", "check the watch", "pet the dog"];
 const clips = custom.map((p) => E.generate(p));
-ok("engine VERSION is 1.57.0", E.VERSION === "1.57.0", E.VERSION);
+ok("engine VERSION is 1.58.0", E.VERSION === "1.58.0", E.VERSION);
 ok("50 custom prompts → 50 clips, none of them the idle fallback", clips.every((c) => c.intent.category !== "idle" && c.intent.category !== "improv"), clips.filter((c) => c.intent.category === "idle" || c.intent.category === "improv").map((c) => c.prompt));
 ok("every clip has its own fingerprint", new Set(clips.map((c) => c.fingerprint)).size === clips.length);
 let maxSim = 0, pair = null; for (let i = 0; i < clips.length; i++) for (let j = i + 1; j < clips.length; j++) { const s = E.similarity(clips[i], clips[j]); if (s > maxSim) { maxSim = s; pair = [custom[i], custom[j]]; } }
@@ -36,7 +36,7 @@ ok("the classics are untouched (idle / walk / sword combo / wave / jump keep the
 const knock = E.generate("knock on the door 5 times"), sq = E.generate("do 3 squats"), sq1 = E.generate("squats");
 ok("'N times' repeats an oscillating act N times; '3 squats' tiles the cycle 3× as a finite clip", knock.intent.repeat === 5 && knock.keys.filter((k) => k.tag === "impact").length === 5 && sq.intent.repeat === 3 && !sq.loop && Math.abs(sq.duration - sq1.duration * 3) < 0.2, [knock.keys.filter((k) => k.tag === "impact").length, sq.duration, sq1.duration]);
 const seq = E.generate("salute then bow then sit down");
-ok("'A then B then C' chains three clips with blends, stage names prefixed per part", seq.intent.category === "sequence" && seq.parts.length === 3 && seq.parts.map((p) => p.category).join(",") === "emote,emote,sit" && seq.stages.some((s) => /^1\./.test(s.name)) && seq.stages.some((s) => /^3\./.test(s.name)) && Math.abs(seq.duration - (seq.parts.reduce((a, p) => a + p.duration, 0) + 0.5)) < 0.05 && seq.report.errors === 0, [seq.parts, seq.duration]);
+ok("'A then B then C' chains three clips with blends, stage names prefixed per part", seq.intent.category === "sequence" && seq.parts.length === 3 && seq.parts.map((p) => p.category).join(",") === "emote,emote,sit" && seq.stages.some((s) => /^1\./.test(s.name)) && seq.stages.some((s) => /^3\./.test(s.name)) && seq.joins.length === 2 && seq.joins.every((j) => j.gap >= 0.25 && j.gap <= 0.9) && Math.abs(seq.duration - (seq.parts.reduce((a, p) => a + p.duration, 0) + seq.joins.reduce((a, j) => a + j.gap, 0))) < 0.05 && seq.report.errors === 0, [seq.parts, seq.joins, seq.duration]); // 1.58: joins are pose-distance based (≥ 0.25 s), no longer a fixed 0.25 s
 ok("a chained clip keeps its keys ascending and every part's first key reachable from the previous part's last", seq.keys.every((k, i) => i === 0 || k.t > seq.keys[i - 1].t) && E.sampleAt(seq, seq.parts[0].duration + 0.125) !== null);
 const ww = E.generate("wave while walking"), dr = E.generate("drink coffee while running");
 ok("'X while walking' = legs + root from the cycle, upper body from the act / emote", ww.layered && ww.layered.base === "WalkLoop" && /Wave/.test(ww.layered.upper) && ww.loop && dr.layered && /Run/.test(dr.layered.base) && /Drink/.test(dr.layered.upper), [ww.layered, dr.layered]);

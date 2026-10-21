@@ -3971,7 +3971,8 @@
       // 1.53: every clip is unique - never repeat a fingerprint already produced this session (same prompt twice → a new take)
       const avoid = Object.keys(A.animClips).map((n) => A.animClips[n] && A.animClips[n].fingerprint).filter(Boolean);
       const personaSeed = animPersonaSeed(args);
-      const opts = { quality, duration, loop, fps, name: nameOf(), rigType, avoid, mirror: args.mirror === true, travel: args.root_motion === true || args.travel === true, take: Number(args.take) > 0 ? Math.floor(Number(args.take)) : 0, personaSeed };
+      // 1.58: a duration the model picks is soft - it may lengthen a clip but never rushes it below 75% of its natural length ("in 2s" in the prompt pins it)
+      const opts = { quality, duration, softDuration: true, loop, fps, name: nameOf(), rigType, avoid, mirror: args.mirror === true, travel: args.root_motion === true || args.travel === true, take: Number(args.take) > 0 ? Math.floor(Number(args.take)) : 0, personaSeed };
       // 1.56: "idle, walk, run and jump animations" is a SET of separate clips, never one combined clip
       const setPrompts = op === "generate" && !(Number(args.variations || args.takes) > 1) ? (Array.isArray(args.prompts) && args.prompts.length ? args.prompts.map(String) : E.splitSet(prompt)) : null;
       if (setPrompts && setPrompts.length > 1) {
@@ -4008,7 +4009,7 @@
         if (!b.ok) { animRemember(clip, { rigInfo }); return `ERROR calling 'animation_generate': generated + validated '${clip.name}' (${clip.keys.length} keys, score ${clip.report.score}) but Studio refused the build: ${b.error}`; }
         animRemember(clip, { built: true, rigInfo });
         const r = clip.report;
-        return animReport(clip, `BUILT in Studio: ${b.text}${b.dropped && b.dropped.length ? ` (joints not on this rig, folded into parents: ${b.dropped.join(", ")})` : ""}.` + (notes.length ? "\n" + notes.join("\n") : "") + `\nNext: animation_preview to watch it on the rig, animation_simulate {all:true} for the QA sweep; animation_refine {feedback: "..."} to adjust (faster / slower / more anticipation / heavier landing / exaggerate / subtle / smoother / longer / shorter / loop / variation); animation_export (plugin) or animation_publish only when the user asks. The user can edit it in the Animation Studio overlay or Studio's Animation Editor (rig.AnimSaves.${clip.name}).` + (r.ok ? "" : "\nValidation has ERRORS - do not publish before refining."));
+        return animReport(clip, `BUILT in Studio: ${b.text}${b.dropped && b.dropped.length ? ` (joints not on this rig, folded into parents: ${b.dropped.join(", ")})` : ""}.` + (notes.length ? "\n" + notes.join("\n") : "") + `\nNext: animation_preview to watch it on the rig, animation_simulate {all:true} for the QA sweep; animation_refine {feedback: "..."} to adjust (make it slow / fast, a bit slower, 2x faster, fluent, more anticipation / heavier landing / exaggerate / subtle / longer / shorter / loop / variation); animation_export (plugin) or animation_publish only when the user asks. The user can edit it in the Animation Studio overlay or Studio's Animation Editor (rig.AnimSaves.${clip.name}).` + (r.ok ? "" : "\nValidation has ERRORS - do not publish before refining."));
       }
       // sequence: combined clip + one clip per stage group
       let seq; try { seq = E.generateSequence(prompt, opts); } catch (e) { return "ERROR calling 'animation_sequence': " + String(e && e.message || e); }
@@ -4100,10 +4101,11 @@
       const base = A.animClips[baseName], upper = A.animClips[upperName];
       if (!base) return `ERROR calling 'animation_layer': no clip named '${baseName || "(last)"}' in this session for 'base' - animation_generate it first. Session clips: ${Object.keys(A.animClips).join(", ") || "(none)"}.`;
       if (!upper) return `ERROR calling 'animation_layer': no clip named '${upperName}' in this session for 'upper' - animation_generate it first. Session clips: ${Object.keys(A.animClips).join(", ") || "(none)"}.`;
-      let out; try { out = E.layer(base, upper, { fit: args.fit === "loop" ? "loop" : "stretch", weight: Number.isFinite(Number(args.weight)) ? Number(args.weight) : 1, name: nameOf(null) }); } catch (e) { return "ERROR calling 'animation_layer': " + String(e && e.message || e); }
+      // 1.58: default fit "auto" keeps both tempos (tiles a looping base / holds a one-shot base under the upper clip); "stretch" / "loop" / "hold" on request
+      let out; try { out = E.layer(base, upper, { fit: ["loop", "stretch", "hold", "auto"].includes(String(args.fit || "")) ? String(args.fit) : "auto", weight: Number.isFinite(Number(args.weight)) ? Number(args.weight) : 1, name: nameOf(null) }); } catch (e) { return "ERROR calling 'animation_layer': " + String(e && e.message || e); }
       const info = await animStudioCall("rig_info", {});
       const rigInfo = info.ok ? animRigFromInfo(info.data) : null;
-      const summary = `Layered: upper body of '${upper.name}' over '${base.name}' (${out.layered.fit}, weight ${out.layered.weight}) → '${out.name}', ${out.keys.length} keys, score ${out.report.score}.`;
+      const summary = `Layered: upper body of '${upper.name}' over '${base.name}' (${out.layered.requested === "auto" ? "keep tempo → " + out.layered.fit : out.layered.fit}, weight ${out.layered.weight}) → '${out.name}', ${out.duration}s, ${out.keys.length} keys, score ${out.report.score}.` + (out.layered.tempo ? "\n" + out.layered.tempo : "");
       if (!rigInfo) { animRemember(out, {}); return animReport(out, summary + "\nNot built: Studio is not connected (animation_build when it is)."); }
       const b = await animBuild(out, rigInfo);
       if (!b.ok) { animRemember(out, { rigInfo }); return `ERROR calling 'animation_layer': layered '${out.name}' but Studio refused the build: ${b.error}`; }

@@ -694,9 +694,9 @@
   function renderLayerPick() { if (!D) return; const cur = D.layerPick.value; const names = Object.keys(libraryClips()).filter((n) => !S.clip || n !== S.clip.name); D.layerPick.innerHTML = `<option value="">upper body from…</option>` + names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("") + `<option value="__file">a saved project file…</option>`; if (names.includes(cur)) D.layerPick.value = cur; }
   function layerWith(upper) {
     if (!S.clip) return toast("Generate the base clip (legs + root) first");
-    const fit = D.layerFit.value === "loop" ? "loop" : "stretch", weight = clamp(parseFloat(D.layerWeight.value) || 1, 0, 1);
+    const fit = ["loop", "stretch", "hold"].includes(D.layerFit.value) ? D.layerFit.value : "auto", weight = clamp(parseFloat(D.layerWeight.value) || 1, 0, 1);
     const out = E().layer(S.clip, upper, { fit, weight });
-    pushHistory(); remember(S.clip); setClip(out, { keepT: true }); toast(`Layered "${upper.name}" (upper body) over "${S.clip.layered.base}" - score ${out.report.score}`); diag("layer", { base: out.layered.base, upper: upper.name, fit, weight });
+    pushHistory(); remember(S.clip); setClip(out, { keepT: true }); toast(`Layered "${upper.name}" (upper body) over "${S.clip.layered.base}" - ${out.duration}s, ${out.layered.requested === "auto" ? "tempo kept" : out.layered.fit}, score ${out.report.score}`); diag("layer", { base: out.layered.base, upper: upper.name, fit, weight });
   }
   function layerFromPick() {
     if (!S.clip) return toast("Generate the base clip first");
@@ -795,8 +795,8 @@
             </section>
             <section class="rsa-card">
               <div class="rsa-h"><b>2</b> Refine with feedback</div>
-              <div class="rsa-row"><input data-ref="feedback" type="text" placeholder="faster · heavier landing · more anticipation · tired · drunk · then wave"><button type="button" class="rsa-btn" data-act="refine" data-ref="refineBtn">Refine</button></div>
-              <div class="rsa-muted">Understands speed, weight, anticipation, exaggerate / subtle, smoother, longer / shorter, loop, new take, mirror, root motion, moods (tired, proud, drunk, scared…), "then …" to append a motion, plant feet, simplify, reverse.</div>
+              <div class="rsa-row"><input data-ref="feedback" type="text" placeholder="make it slow · a bit faster · fluent · heavier landing · more anticipation · tired · drunk · then wave"><button type="button" class="rsa-btn" data-act="refine" data-ref="refineBtn">Refine</button></div>
+              <div class="rsa-muted">Understands speed ("make it slow / fast", "a bit slower", "half speed", "2x", "too fast"), "fluent" / smoother, weight, anticipation, exaggerate / subtle, longer / shorter, loop, new take, mirror, root motion, moods (tired, proud, drunk, scared…), "then …" to append a motion, plant feet, simplify, reverse.</div>
             </section>
             <section class="rsa-card rsa-card-tips">
               <div class="rsa-h"><b>3</b> Edit &amp; deliver</div>
@@ -877,7 +877,7 @@
               </div>
               <div class="rsa-h">Layer upper body (NLA)</div>
               <div class="rsa-row rsa-layer"><select data-ref="layerPick" title="The clip whose upper body goes on top of the current clip's legs and root"></select></div>
-              <div class="rsa-row rsa-layer"><select data-ref="layerFit" title="stretch: upper clip retimed to this clip's duration · loop: upper clip repeats at its own period"><option value="stretch">stretch to fit</option><option value="loop">loop at own period</option></select><input data-ref="layerWeight" type="number" min="0" max="1" step="0.1" value="1" title="Blend weight of the upper body (1 = fully replaced)"><button type="button" class="rsa-btn" data-act="layer" title="Combine: legs + root from this clip, upper body from the picked clip">Layer</button></div>
+              <div class="rsa-row rsa-layer"><select data-ref="layerFit" title="keep tempo: nobody speeds up - a looping base repeats under a longer upper clip, a one-shot base holds its last pose · stretch: upper clip retimed to this clip's duration (changes its speed) · loop: upper clip repeats at its own period · hold: upper plays once, then holds"><option value="auto">keep tempo (auto)</option><option value="stretch">stretch to fit</option><option value="loop">loop at own period</option><option value="hold">play once, hold</option></select><input data-ref="layerWeight" type="number" min="0" max="1" step="0.1" value="1" title="Blend weight of the upper body (1 = fully replaced)"><button type="button" class="rsa-btn" data-act="layer" title="Combine: legs + root from this clip, upper body from the picked clip">Layer</button></div>
               <div class="rsa-muted">Legs + root stay from this clip; waist, head and arms come from the picked clip (walk + wave, run + aim). Or just type "wave while walking".</div>
               <div class="rsa-h">Stages <span class="rsa-muted rsa-hr">click to jump</span></div>
               <div class="rsa-stages" data-ref="stages"></div>

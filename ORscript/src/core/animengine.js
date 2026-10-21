@@ -28,7 +28,7 @@
 // rest. Nothing is faked: unsupported requests return explicit limitations.
 (function (root) {
   "use strict";
-  const VERSION = "1.57.0";
+  const VERSION = "1.58.0";
   const DEG = Math.PI / 180;
 
   // ───────────────────────── rotation math ─────────────────────────
@@ -131,7 +131,7 @@
     finisher: WORD("finisher|finishing (?:strike|blow|move)|final (?:strike|blow)|ultimate"), dodge: WORD("dodge|roll(?:ing)?|evade|sidestep"), block: WORD("block(?:ing)?|guard|parry|parrying|deflect"), cast: WORD("cast(?:ing)?|spell|magic|fireball|summon|charge up|energy|beam|ki blast|kamehameha"), transform: WORD("transform(?:ation)?|power ?up|awaken(?:ing)?|super saiyan|rage mode"),
     combo: WORD("combo|combination|chain|sequence|string"), anticipation: WORD("anticipation|wind ?up|charge|ready|telegraph"), recover: WORD("recover(?:y)?|settle"),
     anime: WORD("anime|shonen|exaggerated|flashy|stylized|stylised|dramatic"), realistic: WORD("realistic|grounded|natural|mocap|lifelike|subtle"), cartoony: WORD("cartoon(?:y|ish)?|bouncy|goofy|silly|squash"), heavy: WORD("heavy|massive|giant|boss|brute|slow and powerful|weighty"), fluid: WORD("fluid|smooth|flowing|graceful|elegant"), robotic: WORD("robot(?:ic)?|mechanical|stiff|rigid"), zombie: WORD("zombie|undead|shambl(?:e|ing)|monster|creature|beast|hunched"), cute: WORD("cute|pet|puppy|kitten|chibi|tiny"), ninja: WORD("ninja|assassin|agile|acrobatic"),
-    fast: WORD("fast(?:er)?|rapid(?:ly)?|quick(?:ly)?|snappy|explosive|lightning|blazing"), slow: WORD("slow(?:ly|er)?|gentle|calm|lazy|relaxed|tired"), extreme: WORD("extremely|insanely|super|ultra|incredibly|very"),
+    fast: WORD("fast(?:er)?|fast[- ]paced|rapid(?:ly)?|quick(?:ly)?|speedy|brisk(?:ly)?|hasty|hurried|in a hurry|up[- ]tempo|high[- ]tempo|snappy|explosive|lightning|blazing"), slow: WORD("slow(?:ly|er)?|slow[- ]?mo(?:tion)?|slo[- ]mo|slow[- ]paced|sluggish|leisurely|unhurried|languid|lethargic|laid[- ]back|gentle|calm|lazy|relaxed|tired"), extreme: WORD("extremely|insanely|super|ultra|incredibly|very"),
     loop: WORD("loop(?:ing|ed|s)?|cycle|seamless|repeat(?:ing)?"), noloop: WORD("one[- ]shot|once|no loop|non[- ]looping"),
     upper: WORD("upper[- ]body(?: only)?|arms only|torso only"), facial: WORD("facial|face|expression|smile|frown|blink|lip[- ]?sync|eyebrow"),
     r6: WORD("r6"), r15: WORD("r15"), twohand: WORD("two[- ]hand(?:ed)?|greatsword|both hands"),
@@ -177,13 +177,14 @@
     intent.styles = styles.filter((s) => has(s));
     intent.style = intent.styles[0] || "default";
     if (has("extreme")) intent.intensity += 0.3;
-    if (has("fast")) { intent.speed *= 1.25; intent.intensity += 0.15; }
-    if (has("slow")) { intent.speed *= 0.75; }
+    // 1.58 tempo words with magnitude: "fast" ×1.25, "very fast" ×1.5; "slow" ×0.75, "very slow" ×0.6, "slow motion" ×0.45
+    if (has("fast")) { intent.speed *= has("extreme") ? 1.5 : 1.25; intent.intensity += 0.15; }
+    if (has("slow")) { intent.speed *= /\bslow[- ]?mo(?:tion)?\b|\bslo[- ]mo\b/i.test(t) ? 0.45 : has("extreme") ? 0.6 : 0.75; }
     if (intent.style === "heavy") intent.speed *= 0.85;
     if (intent.style === "anime") intent.intensity += 0.2;
     if (intent.style === "realistic") intent.intensity -= 0.2;
     intent.intensity = clamp(intent.intensity, 0.5, 1.6);
-    const dm = t.match(/(\d+(?:\.\d+)?)\s*(?:s|sec|secs|seconds?)\b/i); if (dm) intent.duration = clamp(parseFloat(dm[1]), 0.2, 60);
+    const dm = t.match(/(\d+(?:\.\d+)?)\s*(?:s|sec|secs|seconds?)\b/i); if (dm) { intent.duration = clamp(parseFloat(dm[1]), 0.2, 60); intent.durationExplicit = true; }
     // category
     const combat = !has("hit") && !has("fistpump") && !has("knockback") && !has("death") && !has("archery") && !has("shoot") && !has("throwing") && (has("sword") || has("punch") || has("kick") || has("thrust") || has("combo") || has("finisher") || has("slam") || has("attack") || has("spin") && (has("sword") || has("combo")));
     if (exAct) { intent.category = "act"; intent.loop = actsFound.length === 1 ? !!exAct.loop : false; }
@@ -258,9 +259,10 @@
     if (i.category === "act" || i.category === "improv") { const names = i.category === "act" ? i.acts : i.improv; const d = names.reduce((s, n) => s + (ACTS[n] ? ACTS[n].d : 1.5), 0); const a0 = names.length === 1 && ACTS[names[0]]; const reps = i.repeat && a0 ? (a0.loop ? i.repeat : typeof a0.b === "function" ? Math.max(1, i.repeat / (a0.n0 || 3)) : 1) : 1; return clamp(d * reps / i.speed, 0.4, 30); }
     if (i.category === "gesture") return clamp((i.gesture && i.gesture.oscillate ? 2.4 : 2.0) / i.speed, 0.4, 10);
     if (i.layerOn) return { run: 0.7, sneak: 1.3, strafe: 1.0 }[i.layerOn] / i.speed || 1.0 / i.speed;
-    return { idle: 4, walk: 1.0 / i.speed, run: 0.7 / i.speed, swim: 1.6 / i.speed, climb: 1.4 / i.speed, jump: 1.4 / i.speed, land: 0.9, dodge: 0.8 / i.speed, block: 0.9, cast: 1.8 / i.speed, transform: 2.6 / i.speed, emote: 2.0, sit: 4, crouch: 4,
-      hit_react: 0.9 / i.speed, knockback: 1.6 / i.speed, death: 2.4 / i.speed, dash: 0.8 / i.speed, slide: 1.2 / i.speed, flip: 1.5 / i.speed, throw: 1.3 / i.speed, archery: 2.0 / i.speed, pickup: 1.4 / i.speed, aim: 3, kneel: 4, sleep: 5, fly: 3, tread: 2.4,
-      sneak: 1.3 / i.speed, strafe: 1.0 / i.speed, walk_back: 1.1 / i.speed, crawl: 1.6 / i.speed, pushup: 1.6 / i.speed }[i.category] || 2;
+    // 1.58: tempo words scale EVERY category ("slow wave", "fast idle"), not just cycles and attacks
+    return ({ idle: 4, walk: 1.0, run: 0.7, swim: 1.6, climb: 1.4, jump: 1.4, land: 0.9, dodge: 0.8, block: 0.9, cast: 1.8, transform: 2.6, emote: 2.0, sit: 4, crouch: 4,
+      hit_react: 0.9, knockback: 1.6, death: 2.4, dash: 0.8, slide: 1.2, flip: 1.5, throw: 1.3, archery: 2.0, pickup: 1.4, aim: 3, kneel: 4, sleep: 5, fly: 3, tread: 2.4,
+      sneak: 1.3, strafe: 1.0, walk_back: 1.1, crawl: 1.6, pushup: 1.6 }[i.category] || 2) / (i.speed || 1);
   }
   function hashStr(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h; }
   function rng(seed) { let x = (seed >>> 0) || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; }
@@ -981,16 +983,25 @@
   const IMPROV_POOL = ["lookaround", "think", "scratch", "shade", "stretch", "watch", "wipe", "nervous", "heropose", "flex", "thumbsup", "shiver"];
   function improvise(seed, count) { const r = rng(seed || 1); const pool = IMPROV_POOL.slice(); const out = []; while (out.length < count && pool.length) out.push(ACTS[pool.splice(Math.floor(r() * pool.length), 1)[0]]); return out; }
   // several clips in a row with a short blend between them (A then B then C)
+  // 1.58 fluent joins: the blend between two chained parts is the fastest motion in a chained clip when it is a fixed
+  // 0.25 s - a wave ending overhead into a kick stance snaps. The join now takes as long as the pose distance needs at a
+  // calm angular rate (JOIN_RATE deg/s, "fluent" feedback lowers it, "snappy transitions" raises it) and eases in-out.
+  const JOIN_RATE = { snappy: 280, normal: 160, soft: 110 }; // average deg/s over the blend; CubicV2 InOut peaks at 3× the average mid-blend
+  function poseGap(a, b) { let m = 0; for (const j of Object.keys(b || {})) { if (j === "root" || !a || !a[j] || !b[j] || !b[j].rot) continue; const d = Math.hypot(b[j].rot[0] - a[j].rot[0], b[j].rot[1] - a[j].rot[1], b[j].rot[2] - a[j].rot[2]); if (d > m) m = d; } return m; }
   function concatClips(clips, opts) {
-    opts = opts || {}; const gap = opts.gap == null ? 0.25 : opts.gap; const fps = clips[0].fps; let t0 = 0; const keys = [], stages = [];
+    opts = opts || {}; const minGap = opts.gap == null ? 0.25 : opts.gap; const rate = JOIN_RATE[opts.join] || JOIN_RATE.normal; const speed = opts.speed > 0 ? opts.speed : 1;
+    const fps = clips[0].fps; let t0 = 0; const keys = [], stages = [], joins = [];
     clips.forEach((c, i) => {
       const off = t0;
-      for (const k of c.keys) keys.push(Object.assign({}, k, { t: r3(off + k.t), poses: clonePose(k.poses), stage: (i + 1) + "." + (k.stage || c.intent && c.intent.category || "clip") }));
+      // a segment takes the ease of the key that STARTS it, so the last key of every part but the last eases in-out: the blend accelerates out of the old pose and settles into the new one
+      c.keys.forEach((k, ki) => keys.push(Object.assign({}, k, { t: r3(off + k.t), poses: clonePose(k.poses), ease: i < clips.length - 1 && ki === c.keys.length - 1 ? ["CubicV2", "InOut"] : k.ease, stage: (i + 1) + "." + (k.stage || c.intent && c.intent.category || "clip") })));
       for (const s of c.stages || []) stages.push(Object.assign({}, s, { name: (i + 1) + "." + s.name, t0: r3(off + s.t0), t1: r3(off + s.t1) }));
-      t0 = r3(off + c.duration + (i < clips.length - 1 ? gap : 0));
+      let gap = 0;
+      if (i < clips.length - 1) { const deg = poseGap(c.keys[c.keys.length - 1].poses, clips[i + 1].keys[0].poses); gap = r3(Math.max(minGap, Math.min(0.9, deg / rate)) / speed); gap = Math.max(1 / fps, Math.round(gap * fps) / fps); joins.push({ at: r3(Math.round((off + c.duration) * fps) / fps), gap, deg: Math.round(deg) }); }
+      t0 = r3(off + c.duration + gap);
     });
     const first = clips[0];
-    const clip = Object.assign({}, first, { name: opts.name || clips.map((c) => c.name).join("_then_").slice(0, 60), prompt: opts.prompt || clips.map((c) => c.prompt).join(", then "), duration: r3(t0), loop: !!opts.loop, keys: snapToFps(dedupeKeys(keys), fps, r3(t0)), stages, edited: false, fixes: [], feedback: [], layered: null, baked: false,
+    const clip = Object.assign({}, first, { name: opts.name || clips.map((c) => c.name).join("_then_").slice(0, 60), prompt: opts.prompt || clips.map((c) => c.prompt).join(", then "), duration: r3(t0), loop: !!opts.loop, keys: snapToFps(dedupeKeys(keys), fps, r3(t0)), stages, joins, edited: false, fixes: [], feedback: [], layered: null, baked: false,
       intent: Object.assign({}, first.intent, { text: opts.prompt || first.intent.text, category: "sequence", clauses: clips.map((c) => c.prompt), stages: [], duration: r3(t0), mood: opts.mood || null }), limitations: Array.from(new Set(clips.flatMap((c) => c.limitations || []))), parts: clips.map((c) => ({ name: c.name, duration: c.duration, category: c.intent && c.intent.category })) });
     if (clip.loop) clip.keys = closeLoop(clip.keys, clip.duration, false);
     clip.report = validate(clip); clip.fingerprint = fingerprint(clip); return clip;
@@ -1028,8 +1039,10 @@
         const sub = Object.assign({}, opts, { _clause: true, duration: undefined, name: undefined, loop: false, avoid: undefined, mood });
         const parts = clauses.map((c) => generate(c, sub));
         const dm = seqText.match(/(\d+(?:\.\d+)?)\s*(?:s|sec|secs|seconds?)\b/i);
-        let clip = concatClips(parts, { name: opts.name, prompt: seqText, mood, loop: typeof opts.loop === "boolean" ? opts.loop : RE.loop.test(seqText) && !RE.noloop.test(seqText), gap: 0.25 / (opts.params && opts.params.speed || 1) });
-        const want = opts.duration || (dm ? clamp(parseFloat(dm[1]), 0.2, 60) : 0);
+        let clip = concatClips(parts, { name: opts.name, prompt: seqText, mood, loop: typeof opts.loop === "boolean" ? opts.loop : RE.loop.test(seqText) && !RE.noloop.test(seqText), speed: opts.params && opts.params.speed || 1, join: opts.params && opts.params.join });
+        let want = dm ? clamp(parseFloat(dm[1]), 0.2, 60) : opts.duration || 0;
+        // 1.58: a duration the MODEL invented (softDuration) may lengthen a chain freely but never rushes it below 75% of its natural length - "in 2 seconds" in the prompt still pins it
+        if (want && !dm && opts.softDuration && want < clip.duration * 0.75) { const kept = r3(Math.round(clip.duration * 0.75 * clip.fps) / clip.fps); clip.limitations = (clip.limitations || []).concat([`tempo kept: ${want}s was asked but the ${parts.length} parts need ${clip.duration}s to read - trimmed to ${kept}s instead of rushing them (put "in ${want}s" in the prompt to force it)`]); want = kept; }
         if (want && Math.abs(want - clip.duration) > 1e-3) clip = retime(clip, want);
         clip.quality = parts[0].quality; clip.params = parts[0].params; clip.take = parts[0].take || 0; clip.persona = parts[0].persona;
         if (Array.isArray(opts.avoid) && opts.avoid.length && (opts._depth || 0) < 8 && opts.avoid.some((f) => typeof f === "string" ? f === clip.fingerprint : f && f.keys && similarity(f, clip) > 0.985)) return generate(seqText, Object.assign({}, opts, { take: (opts.take || 0) + 1, _depth: (opts._depth || 0) + 1 }));
@@ -1043,7 +1056,7 @@
       const sub = Object.assign({}, opts, { _noLayer: true, _clause: true, name: undefined, loop: true, avoid: undefined, duration: undefined });
       const base = generate(Object.assign({}, intent, { layerOn: null, upperText: null, category: intent.layerOn, text: intent.layerOn + " cycle", acts: [], gesture: null, mood: null, stages: [] }), Object.assign({}, sub, { duration: opts.duration }));
       const upper = generate(intent.upperText, sub);
-      const out = layer(base, upper, { fit: "loop", weight: 1, name: opts.name || suggestName(intent) });
+      const out = layer(base, upper, { fit: "auto", weight: 1, name: opts.name || suggestName(intent) }); // 1.58: the act keeps its tempo, the cycle is tiled under it
       out.prompt = intent.text; out.intent = Object.assign({}, intent, { stages: [] }); out.limitations = Array.from(new Set([...(base.limitations || []), ...(upper.limitations || [])]));
       if (intent.mood) { out.keys = applyMood(out.keys, MOODS[intent.mood], out.duration, 1); out.report = validate(out); out.fingerprint = fingerprint(out); }
       return out;
@@ -1052,7 +1065,9 @@
     const q = QUALITY[quality];
     const params = Object.assign({}, DEFAULT_PARAMS, opts.params || {});
     const rigType = String(opts.rigType || intent.rigHint || "R15").toUpperCase() === "R6" ? "R6" : "R15";
-    let duration = r3(clamp((opts.duration || intent.duration) / params.speed, 0.2, 60));
+    let askDur = opts.duration || 0, tempoNote = null;
+    if (askDur && opts.softDuration && !intent.durationExplicit && askDur < intent.duration * 0.75) { tempoNote = `tempo kept: ${askDur}s was asked but "${String(intent.text || intent.category).slice(0, 48)}" needs about ${r3(intent.duration)}s to read - made it ${r3(intent.duration * 0.75)}s instead of rushing it (put "in ${askDur}s" in the prompt to force it)`; askDur = intent.duration * 0.75; }
+    let duration = r3(clamp((askDur || intent.duration) / params.speed, 0.2, 60));
     if (intent.stages && intent.stages.length) { const w = stageWeights(intent.stages, params).reduce((a, b) => a + b, 0), w0 = stageWeights(intent.stages, DEFAULT_PARAMS).reduce((a, b) => a + b, 0); duration = r3(clamp(duration * w / w0, 0.2, 60)); }
     const k = clamp(intent.intensity * params.amplitude, 0.4, 1.8);
     const fps = clamp(Math.round(opts.fps || q.fps), 10, 120);
@@ -1154,6 +1169,7 @@
       version: 1, engine: VERSION, name: opts.name || suggestName(intent) + (take ? "_take" + (take + 1) : "") + (mirrored ? "_Mirror" : ""), prompt: intent.text, intent, params, quality, rigType, fps, duration, loop, priority: opts.priority || intent.priority,
       stages, keys, created: opts.now || 0, edited: false, limitations: intent.unsupported.slice(), take, personaSeed: Number.isFinite(opts.personaSeed) ? opts.personaSeed >>> 0 : intent.seed, interp: opts.interp === "spline" || opts.interp === "eased" ? opts.interp : (q.spline && opts.smooth !== false && params.smooth !== false ? "spline" : "eased"), persona: { traits: P.traits, lead: P.lead, fidget: P.fidget, armRest: P.armRest, easing: P.easing, emoteVariant: P.emoteVariant }, mirrored, travel,
     };
+    if (tempoNote) clip.limitations.push(tempoNote);
     if (travel) clip.limitations.push("root motion: the HumanoidRootPart offset travels inside the clip - play it on a rig that is NOT also being moved by a controller, or strip the root track.");
     if (rigType === "R6") clip.limitations.push("R6 rig: no elbow / knee / wrist / ankle / waist joints - elbow and knee bends are folded into the shoulders and hips, waist into the torso.");
     for (let pass = 0; pass < q.passes; pass++) { const r = refine(clip); clip = r.clip; if (!r.changed) break; }
@@ -1331,15 +1347,37 @@
     const notes = [];
     const has = (re) => re.test(f);
     const more = has(/\b(more|bigger|stronger|increase|longer|extra|exaggerat)/), less = has(/\b(less|smaller|weaker|decrease|shorter|reduce|subtle)/);
-    if (has(/\b(attacks?|strikes?|hits?|slash(?:es)?|punch(?:es)?|kicks?)\b.*\b(faster|quicker|snappier)|\b(faster|quicker|snappier)\b.*\b(attacks?|strikes?|hits?)/)) { p.attackSpeed = r3(p.attackSpeed * 1.35); notes.push("attacks 35% faster"); }
-    else if (has(/\bfaster|quicker|speed (?:it )?up|snappier|too slow\b/)) { p.speed = r3(p.speed * 1.25); notes.push("overall 25% faster"); }
-    if (has(/\bslower|slow (?:it )?down|too fast\b/)) { p.speed = r3(p.speed / 1.25); notes.push("overall 25% slower"); }
+    // 1.58 tempo words: "make it slow / fast", "too fast", "a bit slower", "much faster", "half speed", "2x", "30% slower", "slow motion"…
+    const mag = (() => {
+      const pm = f.match(/(\d+(?:\.\d+)?)\s*(?:%|percent)/); if (pm) return clamp(1 + parseFloat(pm[1]) / 100, 1.05, 4);
+      const xm = f.match(/(?:^|[\s(])(\d+(?:\.\d+)?)\s*[x×]\b|\b[x×]\s*(\d+(?:\.\d+)?)\b|(\d+(?:\.\d+)?)\s*times (?:as )?(?:fast|slow|quick)/); if (xm) { const v = parseFloat(xm[1] || xm[2] || xm[3]); if (v > 0 && v !== 1) return clamp(v >= 1 ? v : 1 / v, 1.05, 4); }
+      if (has(/\b(half speed|half as fast|half the speed|slow[- ]?mo(?:tion)?|slo[- ]mo|twice as slow|double speed|double the speed|twice as fast|twice the speed)\b/)) return 2;
+      if (has(/\b(very|much|way|a lot|lots|really|far|extremely|super|drastically|significantly|considerably|massively)\b/)) return 1.6;
+      if (has(/\b(a bit|slightly|a little|a tad|a touch|little bit|somewhat|marginally|a notch)\b/)) return 1.12;
+      return 1.25;
+    })();
+    const pct = (m) => m >= 2 ? r3(m) + "×" : Math.round((m - 1) * 100) + "%";
+    const slowRx = /\b(slower|slow(?:er)? (?:it |this |things |everything |the whole thing |them )?down|too fast|too quick|too rushed|too hectic|too snappy|too hurried|rushed|hectic|hurried|frantic|more slowly|slowly|slow[- ]?mo(?:tion)?|slo[- ]mo|leisurely|unhurried|not so fast|not that fast|less fast|less quick|half speed|half as fast|half the speed|twice as slow|take (?:its|your|his|her|their) time|calmer pace|relaxed pace|ease (?:up|off)(?: on)? the pace|lower (?:the )?tempo)\b|\b(?:make|be|go|it|more|bit|little|very|much|way|really|so|quite|rather|pretty|lot|them|everything)\s+(?:it\s+)?slow\b|\bslow\s*(?:$|[.!,;)])/;
+    const fastRx = /\b(faster|quicker|speed (?:it |this |things |everything |the whole thing |them )?up|snappier|too slow|too sluggish|too lazy|too leisurely|not fast enough|not quick enough|more quickly|quickly|rapid(?:ly)?|hurry(?: up)?|hasty|brisk(?:er)?|double speed|double the speed|twice as fast|twice the speed|pick up the pace|more pace|more tempo|higher tempo|up[- ]tempo|zippier)\b|\b(?:make|be|go|it|more|bit|little|very|much|way|really|so|quite|rather|pretty|lot|them|everything)\s+(?:it\s+)?(?:fast|quick)\b|\b(?:fast|quick)\s*(?:$|[.!,;)])/;
+    const attackWord = /\b(attacks?|strikes?|hits?|slash(?:es)?|punch(?:es)?|kicks?|swings?|combo)\b/;
+    const joinRx = /\b(?:(?:snappier|faster|quicker|shorter|harder|sharper|tighter|crisper) (?:transitions?|blends?|joins?|cuts?|blending)|(?:transitions?|blends?|joins?|cuts?|blending) (?:snappier|faster|quicker|shorter|harder|sharper|tighter|crisper))\b/;
+    const joinSnappy = joinRx.test(f), fTempo = f.replace(joinRx, " ");
+    const sm = slowRx.exec(fTempo), fm = fastRx.exec(fTempo);
+    const slowFirst = sm && (!fm || sm.index <= fm.index), fastFirst = fm && (!sm || fm.index < sm.index);
+    if (fastFirst && attackWord.test(f) && !/\b(overall|everything|whole|all of it)\b/.test(f)) { p.attackSpeed = r3(p.attackSpeed * Math.max(mag, 1.35)); notes.push("attacks " + pct(Math.max(mag, 1.35)) + " faster"); }
+    else if (fastFirst) { p.speed = r3(p.speed * mag); notes.push("overall " + pct(mag) + " faster"); }
+    if (slowFirst && attackWord.test(f) && !/\b(overall|everything|whole|all of it)\b/.test(f)) { p.attackSpeed = r3(p.attackSpeed / mag); notes.push("attacks " + pct(mag) + " slower"); }
+    else if (slowFirst) { p.speed = r3(p.speed / mag); notes.push("overall " + pct(mag) + " slower" + (mag === 2 ? " (half speed)" : "")); }
+    // transitions between chained parts: "fluent / smoother transitions" blend longer, "snappier transitions" cut quicker
+    const fluent = has(/\b(fluent(?:ly)?|fluid(?:ly)?|flowing|flow (?:better|more|nicer)|smooth(?:er|ly)?|silky|butter(?:y)?|graceful(?:ly)?|seamless(?:ly)?|less jerky|less choppy|less robotic|less stiff|less abrupt|more natural|blends? better|smoother transitions?|better transitions?|softer transitions?|longer transitions?|organic)\b/);
+    if (joinSnappy) { p.join = "snappy"; notes.push("snappy transitions"); }
+    else if (fluent) { p.join = "soft"; if (!(sm && !fastFirst)) notes.push("fluent transitions"); }
     if (has(/anticipation|wind ?up|telegraph/)) { const up = !less; p.anticipation = r3(clamp(p.anticipation * (up ? 1.45 : 0.7), 0.3, 3)); notes.push((up ? "more" : "less") + " anticipation"); }
     if (has(/landing|land|impact|heav(?:y|ier)|weight/)) { const up = !has(/lighter|less heavy|softer/); p.weight = r3(clamp(p.weight * (up ? 1.4 : 0.7), 0.4, 2.5)); notes.push((up ? "heavier" : "lighter") + " landing / weight"); }
     if (has(/exaggerat|bigger|more dramatic|over the top|wilder/)) { p.amplitude = r3(clamp(p.amplitude * 1.25, 0.4, 1.8)); notes.push("bigger poses"); }
     if (has(/subtle|smaller|tone (?:it )?down|calmer|less dramatic/)) { p.amplitude = r3(clamp(p.amplitude * 0.8, 0.4, 1.8)); notes.push("smaller poses"); }
     let quality = clip.quality, duration = clip.intent.duration, loop = clip.loop, fps = clip.fps;
-    if (has(/smooth|fluid|less jerky|polish/)) { quality = quality === "fast" ? "balanced" : quality === "balanced" ? "high" : "cinematic"; notes.push("quality → " + quality); }
+    if (fluent || has(/polish/)) { quality = quality === "fast" ? "balanced" : quality === "balanced" ? "high" : "cinematic"; notes.push("quality → " + quality); }
     if (has(/\blonger\b/) && !has(/anticipation/)) { duration = r3(duration * 1.3); notes.push("30% longer"); }
     if (has(/\bshorter\b/) && !has(/anticipation/)) { duration = r3(duration / 1.3); notes.push("30% shorter"); }
     const dm = f.match(/(\d+(?:\.\d+)?)\s*(?:s|sec|seconds?)\b/); if (dm) { duration = clamp(parseFloat(dm[1]), 0.2, 60); notes.push(`duration ${duration}s`); }
@@ -1368,11 +1406,11 @@
       const w1 = stageWeights(intent.stages, DEFAULT_PARAMS).reduce((a, b) => a + b, 0), w0 = stageWeights(clip.intent.stages, DEFAULT_PARAMS).reduce((a, b) => a + b, 0);
       if (w0 > 0 && w1 > w0) { duration = r3(clamp((duration || clip.duration) * w1 / w0, 0.2, 60)); intent.duration = duration; }
     }
-    const polish = has(/\b(smooth|smoother|fluid|flowing|silky|butter|plant|ground|glue|stick|slid|float|simplif|fewer keys|clean|less keys|revers|backwards|rewind)/);
-    if (!notes.length && !polish) notes.push("no recognised adjustment - regenerated with the same settings (try: faster, slower, more anticipation, heavier landing, exaggerate, subtle, smoother, longer, shorter, loop, new take, mirror, root motion, snappier, softer)");
+    const polish = fluent || has(/\b(plant|ground|glue|stick|slid|float|simplif|fewer keys|clean|less keys|revers|backwards|rewind)/);
+    if (!notes.length && !polish) notes.push("no recognised adjustment - regenerated with the same settings (try: make it slow / fast, a bit slower, much faster, half speed, 2x, fluent, smoother, more anticipation, heavier landing, exaggerate, subtle, longer, shorter, loop, new take, mirror, root motion, snappier, softer)");
     const durChanged = !!dm || has(/\b(longer|shorter)\b/);
     let out = generate(intent, { quality, rigType: clip.rigType, name: notes.some((n) => /^(appended|prepended)/.test(n)) ? undefined : clip.name, fps, loop, params: p, duration: intent.category === "sequence" && !durChanged ? undefined : duration, priority: clip.priority, take, mirror, travel, mood: intent.mood || null });
-    if (has(/\b(smooth|smoother|fluid|flowing|silky|butter)/)) { out = smooth(out, { strength: 1 }); notes.push("spline smoothing pass"); }
+    if (fluent) { out = smooth(out, { strength: 1 }); notes.push("spline smoothing pass"); }
     if (has(/\b(plant|ground(?:ed)?|glue|stick)\b.*\b(feet|foot|soles?)|\b(feet|foot)\b.*\b(plant|ground|slid|float)/)) { out = groundFeet(out, { force: true }); notes.push("planted the feet"); }
     if (has(/\b(simplif|fewer keys|clean(?: up)? keys|less keys)/)) { out = simplify(out, 2); notes.push("cleaned redundant keys"); }
     if (has(/\b(revers|backwards|rewind)/)) { out = reverse(out); notes.push("reversed"); }
@@ -1853,25 +1891,54 @@
   }
   // Blender NLA-style layering: lower body + root from `base`, upper body from `upper` (stretched to the base duration or looped
   // at its own period), blended by `weight`. walk + wave, run + aim, idle + talk ...
-  function layer(base, upper, opts) {
-    opts = opts || {}; const weight = clamp(Number.isFinite(opts.weight) ? opts.weight : 1, 0, 1), fit = opts.fit === "loop" ? "loop" : "stretch";
+  // 1.58 keep-tempo layering. "stretch" retimes the upper clip to the base's length - a 2 s wave over a 1 s walk cycle plays
+  // twice as fast, which is exactly what people complain about after combining. The default is now "auto": the upper clip
+  // keeps its own tempo; a looping base is tiled to cover it (phase preserved), a one-shot base holds its last pose, and an
+  // upper clip shorter than the base plays once and holds (or repeats, if it loops).
+  function tileLoop(clip, n) {
+    const c = cloneClip(clip); const D = clip.duration; const keys = []; const first = clip.keys[0], last = clip.keys[clip.keys.length - 1];
+    const dz = clip.travel && first.poses.root && first.poses.root.pos && last.poses.root && last.poses.root.pos ? last.poses.root.pos[2] - first.poses.root.pos[2] : 0;
+    for (let i = 0; i < n; i++) for (const k of clip.keys) { if (i > 0 && k.t < 1e-6) continue; const poses = clonePose(k.poses); if (dz && poses.root && poses.root.pos) poses.root.pos = [poses.root.pos[0], poses.root.pos[1], poses.root.pos[2] + dz * i]; keys.push(Object.assign({}, k, { t: r3(i * D + k.t), poses })); }
+    c.keys = keys; c.duration = r3(n * D); c.stages = [];
+    for (let i = 0; i < n; i++) for (const st of clip.stages || []) c.stages.push(Object.assign({}, st, { name: n > 1 ? st.name + "_" + (i + 1) : st.name, t0: r3(i * D + st.t0), t1: r3(i * D + st.t1) }));
+    return c;
+  }
+  function holdTo(clip, T) {
+    const c = cloneClip(clip); if (T <= clip.duration + 1e-6) return c; const last = clip.keys[clip.keys.length - 1];
+    c.keys = c.keys.concat([{ t: r3(T), poses: clonePose(last.poses), ease: ["Linear", "InOut"], tag: "hold" }]);
+    c.duration = r3(T); c.stages = (clip.stages || []).concat([{ name: "hold", kind: "hold", t0: r3(clip.duration), t1: r3(T), marker: "hold" }]); return c;
+  }
+  function layer(baseIn, upper, opts) {
+    opts = opts || {}; const weight = clamp(Number.isFinite(opts.weight) ? opts.weight : 1, 0, 1);
+    let fit = opts.fit === "loop" ? "loop" : opts.fit === "stretch" ? "stretch" : opts.fit === "hold" ? "hold" : "auto";
+    const requested = fit; let base = baseIn, tempo = null;
+    if (fit === "auto") {
+      const U0 = upper.duration || baseIn.duration, D0 = baseIn.duration;
+      if (U0 > D0 + 1e-6) {
+        if (baseIn.loop) { const n = Math.ceil(U0 / D0 - 1e-6); base = tileLoop(baseIn, n); if (base.duration > U0 + 1e-6 && base.duration / U0 <= 1.25) { base = retime(base, U0); base.loop = baseIn.loop; } tempo = `kept tempo: "${upper.name}" (${U0}s) plays at its own speed over ${n} cycles of "${baseIn.name}"${base.duration !== r3(n * D0) ? ` (cycle eased to ${r3(base.duration / n)}s)` : ""}`; }
+        else { base = holdTo(baseIn, U0); tempo = `kept tempo: "${upper.name}" (${U0}s) plays at its own speed; "${baseIn.name}" holds its last pose from ${D0}s to ${U0}s`; }
+      } else if (U0 < D0 - 1e-6) tempo = `kept tempo: "${upper.name}" (${U0}s) plays once at its own speed and ${upper.loop ? "repeats" : "holds its last pose"} until ${D0}s`;
+      fit = upper.loop && U0 < base.duration - 1e-6 ? "loop" : "hold";
+    }
     const joints = Array.isArray(opts.joints) && opts.joints.length ? opts.joints.filter((j) => JOINTS.includes(j)) : UPPER_JOINTS;
     const D = base.duration, U = upper.duration || D;
-    const tu = (t) => fit === "loop" ? ((t % U) + U) % U : (t / D) * U;
+    const tu = (t) => fit === "loop" ? ((t % U) + U) % U : fit === "hold" ? Math.min(t, U) : (t / D) * U;
     const times = new Set(base.keys.map((k) => r3(k.t)));
     if (fit === "loop") { for (let n = 0; n * U < D + 1e-6; n++) for (const k of upper.keys) { const t = r3(n * U + k.t); if (t <= D + 1e-6) times.add(Math.min(D, t)); } }
+    else if (fit === "hold") { for (const k of upper.keys) if (k.t <= D + 1e-6) times.add(r3(k.t)); }
     else for (const k of upper.keys) times.add(r3((k.t / U) * D));
     const keys = Array.from(times).sort((a, b) => a - b).map((t) => {
       const poses = clonePose(sampleAt(base, t)), up = sampleAt(upper, tu(t));
       for (const j of joints) { const A = poses[j] || J(0, 0, 0), B = up[j] || J(0, 0, 0); const o = { rot: [0, 1, 2].map((ax) => lerp(A.rot[ax], B.rot[ax], weight)) }; if (j !== "root" && (A.pos || B.pos)) { const pa = A.pos || [0, 0, 0], pb = B.pos || [0, 0, 0]; o.pos = [0, 1, 2].map((ax) => lerp(pa[ax], pb[ax], weight)); } if (j === "root" && A.pos) o.pos = A.pos.slice(); poses[j] = o; }
-      const bk = base.keys.find((k) => Math.abs(k.t - t) < 1e-6), uk = upper.keys.find((k) => Math.abs(r3(fit === "loop" ? k.t : (k.t / U) * D) - t) < 1e-6 || (fit === "loop" && Math.abs(((t % U) + U) % U - k.t) < 1e-6));
+      const bk = base.keys.find((k) => Math.abs(k.t - t) < 1e-6), uk = upper.keys.find((k) => Math.abs(r3(fit === "stretch" ? (k.t / U) * D : k.t) - t) < 1e-6 || (fit === "loop" && Math.abs(((t % U) + U) % U - k.t) < 1e-6));
       return { t, poses, ease: (bk && bk.ease) || (uk && uk.ease) || ["CubicV2", "InOut"], tag: bk ? bk.tag : uk ? "layer" : "layer", stage: bk && bk.stage };
     });
     const c = cloneClip(base);
-    c.keys = keys; c.name = opts.name || `${base.name}+${upper.name}`; c.prompt = `${base.prompt || base.name} + ${upper.prompt || upper.name} (upper body)`;
-    c.layered = { base: base.name, upper: upper.name, weight, fit, joints };
-    c.stages = (base.stages || []).concat((upper.stages || []).map((s) => Object.assign({}, s, { name: "upper:" + s.name, t0: r3(fit === "loop" ? Math.min(D, s.t0) : (s.t0 / U) * D), t1: r3(fit === "loop" ? Math.min(D, s.t1) : (s.t1 / U) * D) })));
-    c.limitations = (base.limitations || []).concat([`layered clip: ${joints.length === UPPER_JOINTS.length ? "upper body" : joints.join(", ")} comes from "${upper.name}" (${fit}, weight ${weight}) - the two were not authored together, check the seam and shoulder/hip balance in the preview.`]);
+    c.keys = keys; c.name = opts.name || `${base.name}+${upper.name}`;
+    c.interp = "spline"; // 1.58: the upper body is re-sampled at the base's key times; per-segment easing between dense samples pulses, a spline through them stays fluent c.prompt = `${base.prompt || base.name} + ${upper.prompt || upper.name} (upper body)`;
+    c.layered = { base: base.name, upper: upper.name, weight, fit, requested, tempo, joints };
+    c.stages = (base.stages || []).concat((upper.stages || []).map((s) => Object.assign({}, s, { name: "upper:" + s.name, t0: r3(fit === "stretch" ? (s.t0 / U) * D : Math.min(D, s.t0)), t1: r3(fit === "stretch" ? (s.t1 / U) * D : Math.min(D, s.t1)) })));
+    c.limitations = (base.limitations || []).concat([`layered clip: ${joints.length === UPPER_JOINTS.length ? "upper body" : joints.join(", ")} comes from "${upper.name}" (${requested === "auto" ? "keep tempo → " + fit : fit}, weight ${weight}) - the two were not authored together, check the seam and shoulder/hip balance in the preview.`]).concat(tempo ? [tempo] : []);
     if (c.loop) c.keys = closeLoop(c.keys, D, c.travel);
     finish(c); noteFix(c, `layered ${upper.name} over ${base.name}`); c.report = validate(c); c.edited = true;
     return c;
