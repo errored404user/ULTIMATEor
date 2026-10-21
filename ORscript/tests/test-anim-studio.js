@@ -60,7 +60,7 @@ for (const s of [
   ".rsa-empty {", "pointer-events: none;",
   ".rsa-score.good", ".rsa-issue.error", ".rsa-joint.on", ".rsa-btn.primary",
 ]) ok("overlay.css: " + s.slice(0, 60), css.includes(s), s);
-ok("bar button styled with the other bar buttons", (css.match(/:is\(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn\)/g) || []).length >= 5 && !css.includes(":is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn)"));
+ok("bar button styled with the other bar buttons (nested :is keeps the pinned selector intact for test-paint / test-gui-studio)", (css.match(/:is\(:is\(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn\), #rs-anim-btn\)/g) || []).length >= 20 && !/#rs-gui-btn, #rs-anim-btn\)/.test(css));
 
 // ── overlay in jsdom ───────────────────────────────────────────────────────
 const { JSDOM } = require("jsdom");

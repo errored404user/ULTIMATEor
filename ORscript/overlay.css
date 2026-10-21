@@ -2242,7 +2242,7 @@ html.rs-light #rs-state b { color: color-mix(in srgb, var(--rsa) 70%, #000000); 
   box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
 }
 #rs-cards-btn:hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.18); }
-:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn) {
+:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn) {
   flex: none; width: 28px; height: 28px; padding: 0;
   display: flex; align-items: center; justify-content: center;
   background: rgba(255,255,255,0.07); color: #c8c8ce;
@@ -2251,7 +2251,7 @@ html.rs-light #rs-state b { color: color-mix(in srgb, var(--rsa) 70%, #000000); 
   transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
   box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
 }
-:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn):hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.18); }
+:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn):hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.18); }
 /* ── Danger zone (AgentScript session panel) — FULL ACCESS toggle ──────── */
 .rs-danger-zone {
   margin-top: 10px; padding: 9px 10px;
@@ -3092,17 +3092,17 @@ html.rs-light .rs-mode-btn.on[data-mode="roblox"],
 html.rs-light .rs-mode-btn.on[data-mode="local"],
 html.rs-light .rs-mode-btn.on[data-mode="anim"] { color: #000000 !important; }
 
-#rs-action, #rs-stop, #rs-extra, :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn), #rs-cards-btn,
+#rs-action, #rs-stop, #rs-extra, :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-cards-btn,
 button.act, .rs-tgl-row, .rs-cards-tab, .rs-anim-btn {
   background: transparent !important;
   box-shadow: none !important;
 }
-#rs-action, #rs-stop, #rs-extra, :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn) {
+#rs-action, #rs-stop, #rs-extra, :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn) {
   border: 1px solid #ffffff !important;
   color: #ffffff !important;
   border-radius: 0 !important;
 }
-html.rs-light #rs-action, html.rs-light #rs-stop, html.rs-light #rs-extra, html.rs-light :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn) {
+html.rs-light #rs-action, html.rs-light #rs-stop, html.rs-light #rs-extra, html.rs-light :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn) {
   border-color: #000000 !important;
   color: #000000 !important;
 }
@@ -3230,7 +3230,7 @@ html.rs-light .rs-mode-btn.on[data-mode="roblox"],
 html.rs-light .rs-mode-btn.on[data-mode="local"],
 html.rs-light .rs-mode-btn.on[data-mode="anim"] { color: #111111 !important; }
 
-#rs-action, #rs-stop, #rs-extra, :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn), #rs-cards-btn,
+#rs-action, #rs-stop, #rs-extra, :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-cards-btn,
 #rs-discord, #rs-support, #rs-switch {
   background: rgba(255,255,255,0.06) !important;
   border: 1px solid var(--or-line) !important;
@@ -3239,13 +3239,13 @@ html.rs-light .rs-mode-btn.on[data-mode="anim"] { color: #111111 !important; }
   box-shadow: none !important;
   transition: background 0.16s var(--or-ease), border-color 0.16s var(--or-ease), transform 0.12s var(--or-ease) !important;
 }
-#rs-action:hover, #rs-stop:hover, #rs-extra:hover, :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn):hover,
+#rs-action:hover, #rs-stop:hover, #rs-extra:hover, :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn):hover,
 #rs-cards-btn:hover, #rs-discord:hover, #rs-support:hover, #rs-switch:hover {
   background: rgba(255,255,255,0.11) !important;
   transform: translateY(-0.5px);
 }
 html.rs-light #rs-action, html.rs-light #rs-stop, html.rs-light #rs-extra,
-html.rs-light :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn), html.rs-light #rs-cards-btn,
+html.rs-light :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), html.rs-light #rs-cards-btn,
 html.rs-light #rs-discord, html.rs-light #rs-support, html.rs-light #rs-switch {
   background: rgba(0,0,0,0.04) !important;
   border-color: var(--or-line) !important;
@@ -3461,7 +3461,7 @@ html[data-rs-theme]:not([data-rs-theme="night"]) #rs-action[data-kind="restart"]
   border-color: var(--or-accent) !important;
 }
 html[data-rs-theme]:not([data-rs-theme="night"]) #rs-discord,
-html[data-rs-theme]:not([data-rs-theme="night"]) :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn),
+html[data-rs-theme]:not([data-rs-theme="night"]) :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn),
 html[data-rs-theme]:not([data-rs-theme="night"]) #rs-extra {
   color: var(--or-accent) !important;
   border-color: var(--or-line) !important;
@@ -3908,7 +3908,7 @@ html[data-rs-theme] #rs-action[data-kind="start"] {
   background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 6px, rgba(255,255,255,0) 6px 12px) !important;
 }
 
-#rs-discord, :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn) {
+#rs-discord, :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn) {
   width: 30px !important;
   height: 30px !important;
   border-radius: 10px !important;
@@ -3918,13 +3918,13 @@ html[data-rs-theme] #rs-action[data-kind="start"] {
   box-shadow: none !important;
 }
 html[data-rs-theme]:not([data-rs-theme="night"]) #rs-discord,
-html[data-rs-theme]:not([data-rs-theme="night"]) :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn),
+html[data-rs-theme]:not([data-rs-theme="night"]) :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn),
 html[data-rs-theme]:not([data-rs-theme="night"]) #rs-extra {
   color: #ddd9d2 !important;
   border-color: rgba(255,255,255,.1) !important;
   background: rgba(255,255,255,.05) !important;
 }
-#rs-discord:hover, :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn):hover {
+#rs-discord:hover, :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn):hover {
   background: rgba(255,255,255,.12) !important;
   color: #fff !important;
 }
@@ -4776,7 +4776,7 @@ html[data-rs-theme="autumn"] #rs-bar.rs-bar-inline {
 .rs-menu-head, #rs-setup-head, #rs-tut-head, #rs-cards-panel::before {
   border-radius: 0 !important;
 }
-#rs-action, #rs-stop, #rs-extra, #rs-discord, :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn),
+#rs-action, #rs-stop, #rs-extra, #rs-discord, :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn),
 .rs-site-opt, .rs-tip-opt, .rs-work-card, .rs-lib-card, .rs-card,
 .rs-mcp-item, .rs-chip, .rs-lvl-btn, .rs-mode-btn,
 #rs-cards-search, #rs-cards-clear, #rs-approve-allow, #rs-approve-deny,
@@ -4792,7 +4792,7 @@ html[data-rs-theme="autumn"] #rs-bar.rs-bar-inline {
   font-size: 11px !important;
   letter-spacing: .02em !important;
 }
-#rs-discord, :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn) {
+#rs-discord, :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn) {
   width: 26px !important; height: 26px !important;
 }
 
@@ -5205,7 +5205,7 @@ html[data-rs-theme="autumn"] #rs-bar.rs-bar-inline {
 /* Settings tray: rotated 90° into a horizontal strip on top of the OR bar. */
 #rs-bar.rs-bar-inline { position: relative !important; overflow: visible !important; }
 #rs-bar.rs-menu-open { overflow: visible !important; }
-:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn).on, :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn)[aria-expanded="true"] {
+:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn).on, :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn)[aria-expanded="true"] {
   background: rgba(255,255,255,0.16);
   color: #fff;
 }
@@ -5472,7 +5472,7 @@ html[data-rs-theme] #rs-extra,
 html[data-rs-theme] #rs-undo,
 html[data-rs-theme] #rs-discord,
 html[data-rs-theme] #rs-settings-btn,
-html[data-rs-theme] :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn),
+html[data-rs-theme] :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn),
 html[data-rs-theme] .rs-mode-btn,
 html[data-rs-theme] #rs-approve-allow,
 html[data-rs-theme] #rs-approve-deny {
@@ -5847,7 +5847,7 @@ html[data-rs-theme="pixelated"] #rs-stop,
 html[data-rs-theme="pixelated"] #rs-extra,
 html[data-rs-theme="pixelated"] #rs-undo,
 html[data-rs-theme="pixelated"] #rs-discord,
-html[data-rs-theme="pixelated"] :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn) {
+html[data-rs-theme="pixelated"] :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn) {
   border-width: 2px !important;
   border-color: #2fae5f !important;
   box-shadow: 3px 3px 0 rgba(0,0,0,.6) !important;
@@ -6264,7 +6264,7 @@ html[data-rs-theme="void"] .rs-menu-sec{border-color:var(--void-line)!important}
 html[data-rs-theme="void"] .rs-work-card,html[data-rs-theme="void"] .rs-site-opt,html[data-rs-theme="void"] .rs-tip-opt,html[data-rs-theme="void"] .rs-mcp-item,html[data-rs-theme="void"] .rs-blender-card{position:relative;background:linear-gradient(145deg,rgba(24,31,44,.92),rgba(12,16,24,.96))!important;border:1px solid var(--void-line)!important;border-radius:7px!important;color:var(--void-text-2)!important;box-shadow:inset 0 1px rgba(255,255,255,.025)!important;transition:background-color .14s ease,border-color .14s ease,transform .14s ease!important}
 html[data-rs-theme="void"] .rs-work-card:hover,html[data-rs-theme="void"] .rs-site-opt:hover,html[data-rs-theme="void"] .rs-tip-opt:hover{background:var(--void-hover)!important;border-color:var(--void-line-strong)!important;transform:translateY(-1px)!important}html[data-rs-theme="void"] .rs-work-card.on{background:linear-gradient(100deg,var(--void-soft),rgba(16,22,32,.96) 58%)!important;border-color:rgba(255,112,72,.43)!important;box-shadow:inset 2px 0 var(--void-accent)!important}
 html[data-rs-theme="void"] input,html[data-rs-theme="void"] textarea,html[data-rs-theme="void"] select{background:#080b11!important;border-color:var(--void-line-strong)!important;color:var(--void-text)!important;caret-color:var(--void-accent)}html[data-rs-theme="void"] input::placeholder,html[data-rs-theme="void"] textarea::placeholder{color:var(--void-muted)!important}html[data-rs-theme="void"] :focus-visible{outline:2px solid var(--void-accent)!important;outline-offset:2px!important}
-html[data-rs-theme="void"] #rs-action{background:linear-gradient(180deg,#ff805b,#e95831)!important;border-color:#ff9678!important;color:#180b07!important;box-shadow:0 5px 16px rgba(255,112,72,.14)!important}html[data-rs-theme="void"] #rs-stop{border-color:rgba(230,108,120,.45)!important;color:#ffadb5!important}html[data-rs-theme="void"] #rs-extra,html[data-rs-theme="void"] #rs-steering,html[data-rs-theme="void"] :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn){background:var(--void-panel-2)!important;border-color:var(--void-line)!important;color:var(--void-text-2)!important}
+html[data-rs-theme="void"] #rs-action{background:linear-gradient(180deg,#ff805b,#e95831)!important;border-color:#ff9678!important;color:#180b07!important;box-shadow:0 5px 16px rgba(255,112,72,.14)!important}html[data-rs-theme="void"] #rs-stop{border-color:rgba(230,108,120,.45)!important;color:#ffadb5!important}html[data-rs-theme="void"] #rs-extra,html[data-rs-theme="void"] #rs-steering,html[data-rs-theme="void"] :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn){background:var(--void-panel-2)!important;border-color:var(--void-line)!important;color:var(--void-text-2)!important}
 html[data-rs-theme="void"] #rs-state{color:var(--void-text-2)!important}html[data-rs-theme="void"] #rs-state::before{content:"VOID";margin-right:6px;color:var(--void-muted);font:700 7px "Cascadia Mono",monospace;letter-spacing:.12em}html[data-rs-theme="void"] .rs-state-warn .rs-state-txt{color:var(--void-bad)!important}
 html[data-rs-theme="void"] .rs-template-row,html[data-rs-theme="void"] .rs-template-editor,html[data-rs-theme="void"] .rs-builder-row,html[data-rs-theme="void"] .rs-project-reference{background:linear-gradient(145deg,rgba(20,27,39,.97),rgba(9,13,20,.98))!important;border-color:var(--void-line)!important;border-radius:7px!important;color:var(--void-text-2)!important}html[data-rs-theme="void"] .rs-template-row:hover{border-color:var(--void-line-strong)!important;background:var(--void-panel-2)!important}html[data-rs-theme="void"] .rs-template-row b,html[data-rs-theme="void"] .rs-template-editor b{color:var(--void-text)!important}
 html[data-rs-theme="void"] .rs-template-modal{background:rgba(3,5,9,.8)!important}html[data-rs-theme="void"] .rs-template-editor{box-shadow:0 30px 80px rgba(0,0,0,.62)!important}html[data-rs-theme="void"] .rs-template-editor header,html[data-rs-theme="void"] .rs-template-editor footer,html[data-rs-theme="void"] .rs-template-editor nav{border-color:var(--void-line)!important}html[data-rs-theme="void"] .rs-template-editor nav button.on{background:var(--void-soft)!important;color:var(--void-text)!important;box-shadow:inset 0 -1px var(--void-accent)!important}
@@ -6712,7 +6712,7 @@ html[data-rs-theme] #rs-discord,
 html[data-rs-theme] #rs-support,
 html[data-rs-theme] #rs-switch,
 html[data-rs-theme] #rs-settings-btn,
-html[data-rs-theme] :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn),
+html[data-rs-theme] :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn),
 html[data-rs-theme] .rs-lvl-btn,
 html[data-rs-theme] #rs-approve-deny {
   background: linear-gradient(180deg, var(--orx-ghost-hi), var(--orx-ghost)) !important;
@@ -6726,7 +6726,7 @@ html[data-rs-theme] #rs-action[data-kind="restart"]:hover,
 html[data-rs-theme] #rs-discord:hover,
 html[data-rs-theme] #rs-support:hover,
 html[data-rs-theme] #rs-switch:hover,
-html[data-rs-theme] :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn):hover,
+html[data-rs-theme] :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn):hover,
 html[data-rs-theme] .rs-lvl-btn:hover,
 html[data-rs-theme] #rs-approve-deny:hover {
   background: linear-gradient(180deg, color-mix(in srgb, var(--orx-a) 30%, transparent), var(--orx-ghost-hi)) !important;
@@ -6736,13 +6736,13 @@ html[data-rs-theme] #rs-approve-deny:hover {
   box-shadow: 0 1px 0 rgba(255,255,255,.12) inset, 0 6px 18px var(--orx-glow) !important;
 }
 html[data-rs-theme="npcenergy"] #rs-action[data-kind="restart"]:hover, html[data-rs-theme="npcenergy"] #rs-discord:hover, html[data-rs-theme="npcenergy"] #rs-support:hover,
-html[data-rs-theme="npcenergy"] #rs-switch:hover, html[data-rs-theme="npcenergy"] :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn):hover, html[data-rs-theme="npcenergy"] .rs-lvl-btn:hover,
+html[data-rs-theme="npcenergy"] #rs-switch:hover, html[data-rs-theme="npcenergy"] :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn):hover, html[data-rs-theme="npcenergy"] .rs-lvl-btn:hover,
 html[data-rs-theme="npcenergy"] #rs-approve-deny:hover { color: #111 !important; }
 html[data-rs-theme] #rs-action[data-kind="restart"]:active,
 html[data-rs-theme] #rs-discord:active,
 html[data-rs-theme] #rs-support:active,
 html[data-rs-theme] #rs-switch:active,
-html[data-rs-theme] :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn):active,
+html[data-rs-theme] :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn):active,
 html[data-rs-theme] .rs-lvl-btn:active,
 html[data-rs-theme] #rs-approve-deny:active { transform: translateY(0) scale(.97); }
 /* selected level reads as "lit" rather than a filled block */
@@ -8443,6 +8443,7 @@ html[data-rs-hide~="voice"] #rs-voice,
 html[data-rs-hide~="discord"] #rs-discord,
 html[data-rs-hide~="paint"] #rs-paint-btn { display: none !important; }
 html[data-rs-hide~="paint"] #rs-gui-btn { display: none !important; }
+html[data-rs-hide~="paint"] #rs-anim-btn { display: none !important; }
 
 /* custom logos are shown whole (contain) on a quiet plate instead of cropped */
 #rs-logo.rs-logo.rs-logo-custom,
@@ -8465,7 +8466,7 @@ html[data-rs-btn="flat"] #rs-extra,
 html[data-rs-btn="flat"] #rs-voice,
 html[data-rs-btn="flat"] #rs-undo,
 html[data-rs-btn="flat"] .rs-mode-btn,
-html[data-rs-btn="flat"] :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn),
+html[data-rs-btn="flat"] :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn),
 html[data-rs-btn="flat"] #rs-approve-deny {
   background: color-mix(in srgb, var(--orx-a) 14%, transparent) !important;
   border-color: transparent !important;
@@ -8473,7 +8474,7 @@ html[data-rs-btn="flat"] #rs-approve-deny {
 }
 html[data-rs-btn="flat"] #rs-action[data-kind="restart"]:hover,
 html[data-rs-btn="flat"] #rs-discord:hover,
-html[data-rs-btn="flat"] :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn):hover,
+html[data-rs-btn="flat"] :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn):hover,
 html[data-rs-btn="flat"] #rs-approve-deny:hover { background: color-mix(in srgb, var(--orx-a) 26%, transparent) !important; transform: none; box-shadow: none !important; }
 html[data-rs-btn="flat"] #rs-stop { background: #ef4444 !important; border-color: transparent !important; box-shadow: none !important; }
 
@@ -8499,7 +8500,7 @@ html[data-rs-btn="outline"] #rs-extra,
 html[data-rs-btn="outline"] #rs-voice,
 html[data-rs-btn="outline"] #rs-undo,
 html[data-rs-btn="outline"] .rs-mode-btn,
-html[data-rs-btn="outline"] :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn),
+html[data-rs-btn="outline"] :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn),
 html[data-rs-btn="outline"] #rs-approve-deny {
   background: transparent !important;
   border: 1px solid color-mix(in srgb, var(--orx-a) 45%, transparent) !important;
@@ -8525,7 +8526,7 @@ html[data-rs-btn="glass"] #rs-extra,
 html[data-rs-btn="glass"] #rs-voice,
 html[data-rs-btn="glass"] #rs-undo,
 html[data-rs-btn="glass"] .rs-mode-btn,
-html[data-rs-btn="glass"] :is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn, #rs-anim-btn),
+html[data-rs-btn="glass"] :is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn),
 html[data-rs-btn="glass"] #rs-approve-deny {
   background: rgba(255,255,255,.08) !important;
   -webkit-backdrop-filter: blur(10px);

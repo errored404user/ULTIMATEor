@@ -954,7 +954,7 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
   function detectGuiIntent(text) {
     const t = String(text || "");
     const out = { gui: false, edit: false, reference: false, mobile: false, words: [] };
-    if (!t.trim() || t.includes(GUI_BRIEF_MARK) || /GUI STUDIO HAND-OFF/.test(t) || GUI_NEGATIVE.test(t)) return out;
+    if (!t.trim() || t.includes(GUI_BRIEF_MARK) || /GUI STUDIO HAND-OFF|ANIMATION STUDIO HAND-OFF/.test(t) || GUI_NEGATIVE.test(t)) return out;
     const words = t.match(new RegExp(GUI_WORDS.source, "gi")) || [];
     if (!words.length) return out;
     // "write a script for the shop" is scripting, not GUI, unless a GUI word is explicit.
