@@ -1,4 +1,4 @@
-// 1.63.0 — Freeform choreography: any prompt becomes its own motion (act lexicon, "A then B" chains, "X while walking"
+// 1.64.0 — Freeform choreography: any prompt becomes its own motion (act lexicon, "A then B" chains, "X while walking"
 // layering, pose grammar, mood overlays, seeded improvisation that is reported as such), moods / "then …" as feedback, and
 // the tidied Animation Studio (numbered cards, quiet viewport, Pose / Clip / Check tabs, collapsible editor).
 "use strict";
@@ -13,7 +13,7 @@ const inLimits = (clip) => clip.keys.every((k) => Object.entries(k.poses).every(
 // ── 1. the complaint: custom prompts used to collapse into the same idle ──
 const custom = ["drink a potion", "play guitar", "open a heavy door", "headbang to metal", "swing on a rope", "type on a laptop", "answer the phone", "take a selfie", "knock on the door", "think hard", "big yawn and stretch", "shiver in the cold", "cry sadly", "stomp angrily", "push a crate", "pull a rope", "dig a hole", "chop wood", "row a boat", "ride a bike", "look around nervously", "flex muscles", "sneeze", "jumping jacks", "squats", "meditate", "drive a car", "go fishing", "sweep the floor", "paint a picture", "hug", "handshake", "high five", "thumbs up", "curtsy", "out of breath", "dizzy", "cower in fear", "hands up surrender", "kick a ball", "golf swing", "basketball jump shot", "lift a heavy box", "superhero landing", "dab", "floss dance", "twirl around", "lean on a wall", "check the watch", "pet the dog"];
 const clips = custom.map((p) => E.generate(p));
-ok("engine VERSION is 1.63.0", E.VERSION === "1.63.0", E.VERSION);
+ok("engine VERSION is 1.64.0", E.VERSION === "1.64.0", E.VERSION);
 ok("50 custom prompts → 50 clips, none of them the idle fallback", clips.every((c) => c.intent.category !== "idle" && c.intent.category !== "improv"), clips.filter((c) => c.intent.category === "idle" || c.intent.category === "improv").map((c) => c.prompt));
 ok("every clip has its own fingerprint", new Set(clips.map((c) => c.fingerprint)).size === clips.length);
 let maxSim = 0, pair = null; for (let i = 0; i < clips.length; i++) for (let j = i + 1; j < clips.length; j++) { const s = E.similarity(clips[i], clips[j]); if (s > maxSim) { maxSim = s; pair = [custom[i], custom[j]]; } }
@@ -97,7 +97,7 @@ ok("right panel tabs: Pose is open, Clip and Check hidden; the score badge sits 
 click(right.querySelector("[data-rtab=clip]"));
 ok("clicking the Clip tab shows the clip panel and hides the others", !right.querySelector("[data-rpanel=clip]").hidden && right.querySelector("[data-rpanel=pose]").hidden && right.querySelector("[data-rtab=clip]").classList.contains("on"));
 click(right.querySelector("[data-rtab=pose]"));
-ok("editor toggle collapses the dope sheet / graph canvas and relabels itself; picking an editor tab reopens it", (click(act("toggleEditor")), ref("editor").hidden && /Show/.test(ref("editorToggle").title)) && (click(host.querySelector("[data-editor=graph]")), !ref("editor").hidden && AS._state.editor === "graph"));
+ok("editor toggle collapses the key workbench and relabels itself; toggling again reopens it", (click(act("toggleEditor")), ref("editor").hidden && /Show/.test(ref("editorToggle").title)) && (click(act("toggleEditor")), !ref("editor").hidden && ref("editor").classList.contains("rsa-bench") && /Hide/.test(ref("editorToggle").title)));
 ok("the footer carries Send to AI / Export / Preview / Build in one row and the title bar keeps undo / redo / open / save / close", main.querySelectorAll(".rsa-foot [data-act]").length === 4 && main.querySelector(".rsa-foot [data-act=export]") && host.querySelectorAll(".rsa-title [data-act]").length === 6);
 AS.generate("drink a potion then wave");
 ok("generating a chain toasts what it understood (2 motions in a row)", /Generated .*2 motions in a row/.test(toast()), toast());

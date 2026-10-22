@@ -1442,7 +1442,7 @@ const ANIM_COMMANDS = [
   },
   {
     name: "animation_refine",
-    description: "Adjust the last generated clip (or {name}) from plain feedback and rebuild it: 'make it slow' / 'make it fast', 'a bit slower', 'much faster', 'half speed', '2x', '30% slower', 'too fast', 'slow motion', 'fluent' (smoother + longer blends between chained parts), 'faster attacks', 'more / less anticipation', 'heavier / lighter landing', 'exaggerate', 'subtle', 'smoother', 'longer', 'shorter', 'loop', 'new take' / 'variation', 'mirror' / 'left-handed', 'root motion' / 'in place', 'snappier' / 'softer' / 'mechanical' easing, 'add a spin', 'add a landing', '2.5 seconds'. Returns before → after numbers and the new validation.",
+    description: "Adjust the last generated clip (or {name}) from plain feedback and rebuild it: 'make it slow' / 'make it fast', 'a bit slower', 'much faster', 'half speed', '2x', '30% slower', 'too fast', 'slow motion', 'fluent' (smoother + longer blends between chained parts), 'faster attacks', 'more / less anticipation', 'heavier / lighter landing', 'exaggerate', 'subtle', 'smoother', 'longer', 'shorter', 'loop', 'new take' / 'variation', 'mirror' / 'left-handed', 'root motion' / 'in place', 'snappier' / 'softer' / 'mechanical' / 'bouncy' / 'elastic' / 'organic' easing, 'more follow-through' (1.64 overlap: elbows / wrists / head / knees / ankles trail by N frames), 'hold the impact 4 frames' (moving holds), 'add a spin', 'add a landing', '2.5 seconds'. Returns before → after numbers and the new validation.",
     params: { feedback: { type: "string", req: true, desc: "what to change, in words" }, name: { type: "string", req: false, desc: "clip to refine (default: the last generated)" } },
   },
   {

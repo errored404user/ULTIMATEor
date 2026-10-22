@@ -5,8 +5,9 @@
  * (1.54: orbitable 3D viewport with ground grid, shadow, onion skin and IK
  * handles on hands / feet, plus fixed front / side / top views; still the
  * engine's semantic skeleton, NOT the Roblox renderer), a timeline with
- * draggable keyframes and stage bands, a dope sheet (joint rows x keys) and a
- * graph editor (per-joint X / Y / Z curves with draggable points), Blender-style
+ * draggable keyframes and stage bands, a key workbench (1.64: key strip, breakdown
+ * / tween machine, moving holds, frame nudge, KeyframeMarkers, ease presets,
+ * overlap / follow-through, retime, motion arcs, timing read), Blender-style
  * key tools (insert / copy / paste / paste flipped / lock, auto-key, pose
  * library) and clip tools (Smooth, Plant feet, Simplify, Reverse, Bake, Cycle
  * offset, Layer = NLA-style upper-body layering), a
@@ -48,7 +49,7 @@
   ];
   const STORAGE_KEY = "rsAnimProject";
 
-  const S = { rtab: "pose", editorOpen: true, personaSeed: null, builtNames: {}, compat: null, open: false, hooks: {}, clip: null, prev: null, history: [], future: [], sel: -1, selJoint: "r_shoulder", t: 0, playing: false, speed: 1, ghost: false, rigInfo: null, built: null, drag: null, raf: 0, lastTs: 0, busy: false, view: "3d", cam: { yaw: 35, pitch: 18, zoom: 1, pan: [0, 0] }, onion: true, autoKey: false, editor: "dope", clipboard: null, handles: [], cams: [], library: {}, ikDrag: null, orbit: null, gdrag: null };
+  const S = { rtab: "pose", editorOpen: true, arcs: false, personaSeed: null, builtNames: {}, compat: null, open: false, hooks: {}, clip: null, prev: null, history: [], future: [], sel: -1, selJoint: "r_shoulder", t: 0, playing: false, speed: 1, ghost: false, rigInfo: null, built: null, drag: null, raf: 0, lastTs: 0, busy: false, view: "3d", cam: { yaw: 35, pitch: 18, zoom: 1, pan: [0, 0] }, onion: true, autoKey: false, clipboard: null, handles: [], cams: [], library: {}, ikDrag: null, orbit: null, gdrag: null };
   let D = null;
   let toastTimer = 0;
   const toast = (m) => { if (!D) return; D.toast.textContent = m; D.toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => D.toast.classList.remove("show"), 2600); try { S.hooks.diag && S.hooks.diag("anim.toast", { m }); } catch {} };
@@ -494,13 +495,14 @@
       if (ghost) drawRig(ctx, E().forwardKinematics(ghost), cam, { ghost: true, rigType });
       if (onion && onion.prev) drawRig(ctx, E().forwardKinematics(onion.prev), cam, { ghost: true, rigType, tint: "rgba(126,178,255,.3)" });
       if (onion && onion.next) drawRig(ctx, E().forwardKinematics(onion.next), cam, { ghost: true, rigType, tint: "rgba(255,159,110,.3)" });
+      if (S.arcs) drawArcs(ctx, cam);
       const P = drawRig(ctx, E().forwardKinematics(poses), cam, { weapon, rigType, selJoint: S.selJoint });
       if (i === views.length - 1 && !S.playing) drawHandles(ctx, P);
     });
     if (S.clip) {
       ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.font = "10px ui-monospace, Consolas, monospace";
       const hint = S.view === "3d" ? "drag: orbit · wheel: zoom · shift-drag: pan · double-click: reset" : "drag: pan · wheel: zoom";
-      ctx.fillText(`schematic rig preview (${S.clip.rigType}) · t=${fmt(S.t, 2)}s · ${hint} · drag a yellow hand/foot: IK${S.ghost && S.prev ? " · white ghost = previous version" : ""}${S.onion ? " · blue/orange = previous/next key" : ""}`, 12, H - 8);
+      ctx.fillText(`schematic rig preview (${S.clip.rigType}) · t=${fmt(S.t, 2)}s · ${hint} · drag a yellow hand/foot: IK${S.ghost && S.prev ? " · white ghost = previous version" : ""}${S.onion ? " · blue/orange = previous/next key" : ""}${S.arcs ? " · arcs = motion trails" : ""}`, 12, H - 8);
       if (S.ikDrag) { ctx.fillStyle = "#ffd166"; ctx.fillText(`IK ${S.ikDrag.eff}: target ${S.ikDrag.target.map((v) => v.toFixed(2)).join(", ")} · ${S.ikDrag.reached ? "reached" : "out of reach by " + fmt(S.ikDrag.distance, 2) + " studs"}`, 12, H - 22); }
     }
   }
@@ -590,121 +592,50 @@
     c.keys.forEach((k, i) => {
       const kx = S.drag && S.drag.index === i ? x(S.drag.t) : x(k.t); const sel = i === S.sel;
       ctx.beginPath(); ctx.moveTo(kx, cy - 8); ctx.lineTo(kx + 7, cy); ctx.lineTo(kx, cy + 8); ctx.lineTo(kx - 7, cy); ctx.closePath();
-      ctx.fillStyle = sel ? "#ffd166" : k.tag === "impact" ? "#ff7b6b" : k.synthetic ? "rgba(200,200,210,.55)" : "#9ec1ff"; ctx.fill();
+      ctx.fillStyle = sel ? "#ffd166" : k.tag === "impact" ? "#ff7b6b" : k.tag === "hold" ? "#7bd88f" : k.tag === "breakdown" ? "#c79bff" : k.synthetic ? "rgba(200,200,210,.55)" : "#9ec1ff"; ctx.fill();
       if (sel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke(); }
+      if (k.markers && k.markers.length) { ctx.fillStyle = "#ffd166"; ctx.fillRect(kx - 0.5, cy - 16, 1, 7); ctx.beginPath(); ctx.moveTo(kx, cy - 16); ctx.lineTo(kx + 6, cy - 13.5); ctx.lineTo(kx, cy - 11); ctx.closePath(); ctx.fill(); } // 1.64 marker flag
     });
     // playhead
     ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x(S.t), 16); ctx.lineTo(x(S.t), H - 14); ctx.stroke();
   }
   function timelineHit(ev) { const r = D.timeline.getBoundingClientRect(); const W = r.width, L = 10, span = W - 20; const t = clamp(((ev.clientX - r.left) - L) / span, 0, 1) * (S.clip ? S.clip.duration : 1); let hit = -1; if (S.clip) S.clip.keys.forEach((k, i) => { const kx = L + (k.t / S.clip.duration) * span; if (Math.abs(kx - (ev.clientX - r.left)) <= 8) hit = i; }); return { t, hit }; }
-  // ───────────────────────── dope sheet + graph editor ─────────────────────────
-  const AXIS_COLOR = ["#ff6b6b", "#7bd88f", "#6ea8ff"], AXIS_NAME = ["X", "Y", "Z"], POS_COLOR = ["rgba(255,107,107,.55)", "rgba(123,216,143,.55)", "rgba(110,168,255,.55)"];
-  const SHORT = { root: "root", waist: "waist", neck: "neck", l_shoulder: "L shoulder", l_elbow: "L elbow", l_wrist: "L wrist", r_shoulder: "R shoulder", r_elbow: "R elbow", r_wrist: "R wrist", l_hip: "L hip", l_knee: "L knee", l_ankle: "L ankle", r_hip: "R hip", r_knee: "R knee", r_ankle: "R ankle" };
-  const GUTTER = 92;
-  function editorGeom(W, H) { const L = GUTTER + 6, R = W - 10; return { L, R, span: R - L, x: (t) => L + (t / (S.clip ? S.clip.duration : 1)) * (R - L), t: (px) => clamp((px - L) / (R - L), 0, 1) * (S.clip ? S.clip.duration : 1), top: 16, H }; }
-  function graphRange() {
-    const c = S.clip; const j = S.selJoint; let lo = Infinity, hi = -Infinity;
-    for (const k of c.keys) { const p = k.poses[j] || { rot: [0, 0, 0] }; for (const v of p.rot) { lo = Math.min(lo, v); hi = Math.max(hi, v); } if (j === "root" && p.pos) for (const v of p.pos) { lo = Math.min(lo, v * 30); hi = Math.max(hi, v * 30); } }
-    if (!Number.isFinite(lo)) { lo = -30; hi = 30; }
-    const mid = (lo + hi) / 2, half = Math.max(20, (hi - lo) / 2 * 1.25);
-    return { lo: mid - half, hi: mid + half };
-  }
+  // ───────────────────────── 1.64 key workbench (replaces the dope sheet + graph editor) ─────────────────────────
+  // Professional key tools on one strip: key chips (select / inspect), breakdown (tween machine), moving holds, frame
+  // nudge, KeyframeMarkers, ease presets for the whole clip, overlap / follow-through, retime, motion arcs and a timing read.
+  const TAG_GLYPH = { impact: "!", hold: "=", breakdown: "~", start: "|", end: "|", loop_end: "|", copy: "+", land: "!", contact: "." };
   function renderEditor() {
-    if (!D) return;
-    const cv = D.editor; const W = cv.clientWidth || 600, H = cv.clientHeight || 190; const dpr = window.devicePixelRatio || 1;
-    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
-    const ctx = cv.getContext("2d"); if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = "#0f0f13"; ctx.fillRect(0, 0, W, H);
-    D.host.querySelectorAll("[data-editor]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-editor") === S.editor));
-    if (!S.clip) { ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.font = "10px ui-monospace, Consolas, monospace"; ctx.fillText(S.editor === "graph" ? "Graph editor: per-joint X / Y / Z curves appear here once a clip exists." : "Dope sheet: one row per joint, a diamond per key.", 12, 20); return; }
-    const g = editorGeom(W, H); const c = S.clip; S.edGeom = { W, H };
-    // time ruler
-    ctx.strokeStyle = "rgba(255,255,255,.1)"; ctx.lineWidth = 1; const step = c.duration > 4 ? 1 : c.duration > 1.5 ? 0.5 : 0.1;
-    ctx.font = "9px ui-monospace, Consolas, monospace";
-    for (let t = 0; t <= c.duration + 1e-9; t += step) { ctx.beginPath(); ctx.moveTo(g.x(t), g.top); ctx.lineTo(g.x(t), H); ctx.stroke(); ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillText(fmt(t, 1), g.x(t) + 2, 10); }
-    if (S.editor === "graph") renderGraph(ctx, g, W, H); else renderDope(ctx, g, W, H);
-    // playhead
-    ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(g.x(S.t), g.top); ctx.lineTo(g.x(S.t), H); ctx.stroke();
+    if (!D || !D.keystrip) return;
+    const c = S.clip;
+    for (const b of D.host.querySelectorAll(".rsa-bench [data-act]")) if (b.getAttribute("data-act") !== "toggleEditor") b.disabled = !c;
+    for (const el of [D.bias, D.holdFrames, D.markerName, D.lagFrames, D.retimeTo]) if (el) el.disabled = !c;
+    if (!c) { D.keystrip.innerHTML = `<span class="rsa-muted">Generate a clip - its keys line up here. Click a key to edit it, use the tools below to time it like a pro.</span>`; D.markerList.innerHTML = ""; D.timing.innerHTML = ""; return; }
+    D.keystrip.innerHTML = c.keys.map((k, i) => { const mk = (k.markers || []).length; const tag = k.tag || "key"; return `<button type="button" class="rsa-kchip${i === S.sel ? " on" : ""}${k.locked ? " locked" : ""} tag-${esc(tag.replace(/[^a-z_]/g, ""))}" data-key="${i}" title="Key ${i + 1} · ${fmt(k.t, 3)} s · ${esc(tag)} · ease ${esc((k.ease || []).join(" "))}${k.stage ? " · " + esc(k.stage) : ""}${mk ? " · " + mk + " marker" + (mk > 1 ? "s" : "") : ""}${k.locked ? " · locked" : ""}"><i>${TAG_GLYPH[tag] || "◆"}</i><b>${fmt(k.t, 2)}</b><small>${esc(tag === "key" || tag === "beat" ? (k.ease || ["", ""])[0].replace("CubicV2", "cubic").toLowerCase() : tag)}</small>${mk ? `<em>⚑${mk > 1 ? mk : ""}</em>` : ""}</button>`; }).join("");
+    try { const on = D.keystrip.querySelector(".rsa-kchip.on"); if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch {}
+    const k = c.keys[S.sel];
+    D.markerList.innerHTML = k && k.markers && k.markers.length ? k.markers.map((m) => `<span class="rsa-marker" title="KeyframeMarker ${esc(m.name)}${m.value ? " = " + esc(m.value) : ""} - GetMarkerReachedSignal(&quot;${esc(m.name)}&quot;) fires here in Studio">⚑ ${esc(m.name)}${m.value ? `<small>${esc(m.value)}</small>` : ""}<button type="button" data-marker-del="${esc(m.name)}" title="Remove marker">×</button></span>`).join("") : `<span class="rsa-muted">no markers on this key</span>`;
+    if (D.biasVal) D.biasVal.textContent = `${D.bias.value}%`;
+    if (D.easeAllRow) for (const b of D.easeAllRow.querySelectorAll("[data-ease-all]")) b.classList.toggle("on", c.easePreset === b.getAttribute("data-ease-all"));
+    if (D.arcsBtn) D.arcsBtn.classList.toggle("on", !!S.arcs);
+    const tm = E().timing ? E().timing(c) : null;
+    D.timing.innerHTML = tm ? `<span class="rsa-tm"><b>${c.keys.length}</b> keys</span><span class="rsa-tm"><b>${tm.impacts}</b> impacts</span><span class="rsa-tm"><b>${tm.holds}</b> holds</span><span class="rsa-tm"><b>${tm.breakdowns}</b> breakdowns</span><span class="rsa-tm"><b>${tm.markers}</b> markers</span><span class="rsa-tm"><b>${c.overlapFrames || 0}f</b> overlap</span>${tm.notes.map((n) => `<span class="rsa-tm note ${n.level}" title="${esc(n.text)}">${esc(n.text)}</span>`).join("")}` : "";
   }
-  function renderDope(ctx, g, W, H) {
-    const c = S.clip; const J = E().JOINTS; const rh = (H - g.top - 2) / J.length;
-    S.dopeRows = [];
-    J.forEach((j, r) => {
-      const y = g.top + r * rh + rh / 2; S.dopeRows.push({ j, y0: g.top + r * rh, y1: g.top + (r + 1) * rh });
-      ctx.fillStyle = r % 2 ? "rgba(255,255,255,.025)" : "transparent"; ctx.fillRect(0, g.top + r * rh, W, rh);
-      if (j === S.selJoint) { ctx.fillStyle = "rgba(255,209,102,.07)"; ctx.fillRect(0, g.top + r * rh, W, rh); }
-      ctx.fillStyle = j === S.selJoint ? "#ffd166" : "rgba(255,255,255,.6)"; ctx.font = "9.5px ui-monospace, Consolas, monospace"; ctx.fillText(SHORT[j], 8, y + 3.5);
-      c.keys.forEach((k, i) => {
-        const prev = c.keys[i - 1]; const p = k.poses[j] || { rot: [0, 0, 0] }, q = prev ? prev.poses[j] || { rot: [0, 0, 0] } : null;
-        const changed = !q || p.rot.some((v, ax) => Math.abs(v - q.rot[ax]) > 0.5) || (j === "root" && JSON.stringify(p.pos || 0) !== JSON.stringify(q.pos || 0));
-        const kx = S.drag && S.drag.index === i ? g.x(S.drag.t) : g.x(k.t); const sel = i === S.sel; const r2 = sel ? 4.5 : 3.5;
-        ctx.beginPath(); ctx.moveTo(kx, y - r2); ctx.lineTo(kx + r2, y); ctx.lineTo(kx, y + r2); ctx.lineTo(kx - r2, y); ctx.closePath();
-        ctx.fillStyle = sel ? "#ffd166" : changed ? (k.tag === "impact" ? "#ff7b6b" : k.locked ? "#c7a0ff" : "#9ec1ff") : "rgba(255,255,255,.14)"; ctx.fill();
-        if (sel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; ctx.stroke(); }
-      });
-    });
-    // hold bars: consecutive unchanged keys on the selected joint
-    ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.font = "9px ui-monospace, Consolas, monospace"; ctx.fillText(`${c.keys.length} keys · bright = joint changes at that key · dim = held`, g.L, H - 4);
+  function benchBreakdown() { if (!S.clip) return toast("Generate a clip first"); const bias = (parseFloat(D.bias.value) || 50) / 100; pushHistory(); const r = E().breakdown(S.clip, S.t, bias); S.sel = r.index; S.t = r.clip.keys[r.index] ? r.clip.keys[r.index].t : S.t; setClip(r.clip, { keepT: true, noPrev: true }); toast(r.reason ? "Breakdown: " + r.reason : `Breakdown key at ${fmt(S.t, 3)}s favouring the ${bias < 0.5 ? "previous" : bias > 0.5 ? "next" : "middle"} pose (${Math.round(bias * 100)}%)`); diag("bench.breakdown", { t: S.t, bias }); }
+  function benchHold() { if (!S.clip || S.sel < 0) return toast("Select a key first"); const n = Math.max(1, Math.round(parseFloat(D.holdFrames.value) || 3)); pushHistory(); const r = E().holdKey(S.clip, S.sel, n); if (r.reason) { toast("Hold: " + r.reason); return; } S.sel = r.index; S.t = r.clip.keys[r.index].t; setClip(r.clip, { keepT: true, noPrev: true }); toast(`Moving hold: pose held for ${n} frame${n > 1 ? "s" : ""}`); diag("bench.hold", { frames: n }); }
+  function benchNudge(frames) { if (!S.clip || S.sel < 0) return toast("Select a key first"); const before = S.clip.keys[S.sel].t; const next = E().nudgeKey(S.clip, S.sel, frames); const after = next.keys[S.sel] ? next.keys[S.sel].t : before; if (Math.abs(after - before) < 1e-6) return toast("Key cannot move further - its neighbour is on the next frame"); pushHistory(); S.t = after; setClip(next, { keepT: true, noPrev: true }); toast(`Key ${S.sel + 1} → ${fmt(after, 3)}s`); }
+  function benchMarker() { if (!S.clip || S.sel < 0) return toast("Select a key first"); const raw = String(D.markerName.value || "").trim(); if (!raw) { D.markerName.focus(); return toast("Name the marker (footstep, hit, sfx…)"); } const [name, value] = raw.split(/\s*[=:]\s*/); pushHistory(); setClip(E().setMarker(S.clip, S.sel, name, value || ""), { keepT: true, noPrev: true }); D.markerName.value = ""; toast(`Marker "${name}" on key ${S.sel + 1} - GetMarkerReachedSignal("${name}") in Studio`); diag("bench.marker", { name }); }
+  function benchMarkerDel(name) { if (!S.clip || S.sel < 0) return; pushHistory(); setClip(E().removeMarker(S.clip, S.sel, name), { keepT: true, noPrev: true }); toast(`Marker "${name}" removed`); }
+  function benchEaseAll(preset) { if (!S.clip) return toast("Generate a clip first"); pushHistory(); setClip(E().easeAll(S.clip, preset), { keepT: true }); const p = E().EASE_PRESETS[preset]; toast(`Ease preset ${p ? p.label : preset}: ${p ? p.note : ""}`); diag("bench.easeAll", { preset }); }
+  function benchOverlap() { if (!S.clip) return toast("Generate a clip first"); const n = Math.max(1, Math.round(parseFloat(D.lagFrames.value) || 2)); pushHistory(); setClip(E().overlap(S.clip, n), { keepT: true }); toast(`Overlap: elbows, wrists, head, knees and ankles now trail by ${n} frame${n > 1 ? "s" : ""} (follow-through)`); diag("bench.overlap", { frames: n }); }
+  function benchRetime() { if (!S.clip) return toast("Generate a clip first"); const to = parseFloat(D.retimeTo.value); if (!(to > 0.05 && to <= 60)) { D.retimeTo.focus(); return toast("Enter the new length in seconds (0.1 - 60)"); } pushHistory(); const c = E().retime(S.clip, to); c.edited = true; c.report = E().validate(c); setClip(c, { keepT: false }); D.retimeTo.value = ""; toast(`Clip retimed to ${fmt(to, 2)}s (${to > S.clip.duration ? "slower" : "faster"}, timing ratios kept)`); }
+  function benchArcs() { S.arcs = !S.arcs; renderPreview(); renderEditor(); toast(S.arcs ? "Motion arcs: hands, feet and head trails (yellow dots = keys). Clean arcs = good animation." : "Motion arcs off"); }
+  function drawArcs(ctx, cam) {
+    if (!S.clip || !E().arcs) return; const A = E().arcs(S.clip, null, Math.min(160, Math.round(S.clip.duration * S.clip.fps) + 1));
+    const col = { r_hand: "rgba(255,159,110,.85)", l_hand: "rgba(126,178,255,.85)", r_foot: "rgba(255,120,160,.7)", l_foot: "rgba(120,220,180,.7)", head: "rgba(255,230,140,.7)", root: "rgba(255,255,255,.35)" };
+    ctx.save(); ctx.lineWidth = 1.25;
+    for (const w of Object.keys(A)) { const pts = A[w].map((sm) => cam.project(sm.p)); ctx.strokeStyle = col[w]; ctx.beginPath(); pts.forEach((pp, i) => { if (i) ctx.lineTo(pp[0], pp[1]); else ctx.moveTo(pp[0], pp[1]); }); ctx.stroke(); ctx.fillStyle = "#ffd166"; A[w].forEach((sm, i) => { if (sm.key) { ctx.beginPath(); ctx.arc(pts[i][0], pts[i][1], 2.2, 0, Math.PI * 2); ctx.fill(); } }); }
+    ctx.restore();
   }
-  function renderGraph(ctx, g, W, H) {
-    const c = S.clip; const j = S.selJoint; const { lo, hi } = graphRange(); const y = (v) => g.top + 6 + (1 - (v - lo) / (hi - lo)) * (H - g.top - 24);
-    // value grid
-    const vstep = (hi - lo) > 240 ? 90 : (hi - lo) > 120 ? 45 : (hi - lo) > 60 ? 15 : 10;
-    ctx.font = "9px ui-monospace, Consolas, monospace";
-    for (let v = Math.ceil(lo / vstep) * vstep; v <= hi; v += vstep) { ctx.strokeStyle = v === 0 ? "rgba(255,255,255,.25)" : "rgba(255,255,255,.07)"; ctx.beginPath(); ctx.moveTo(g.L, y(v)); ctx.lineTo(g.R, y(v)); ctx.stroke(); ctx.fillStyle = "rgba(255,255,255,.45)"; ctx.fillText(`${v}°`, 8, y(v) + 3); }
-    // curves (what the easing really produces, sampled every 2 px)
-    const n = Math.max(2, Math.floor(g.span / 2)); const samples = []; for (let i = 0; i <= n; i++) { const t = (i / n) * c.duration; samples.push([t, E().sampleAt(c, t)[j] || { rot: [0, 0, 0] }]); }
-    const draw = (get, color, dashed) => { ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.setLineDash(dashed ? [4, 3] : []); ctx.beginPath(); samples.forEach(([t, p], i) => { const px = g.x(t), py = y(get(p)); if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); }); ctx.stroke(); ctx.setLineDash([]); };
-    [0, 1, 2].forEach((ax) => draw((p) => p.rot[ax], AXIS_COLOR[ax], false));
-    const showPos = j === "root"; if (showPos) [0, 1, 2].forEach((ax) => draw((p) => (p.pos || [0, 0, 0])[ax] * 30, POS_COLOR[ax], true));
-    // key points
-    S.graphPts = [];
-    c.keys.forEach((k, i) => {
-      const p = k.poses[j] || { rot: [0, 0, 0] }; const kx = g.x(k.t);
-      [0, 1, 2].forEach((ax) => { const py = y(p.rot[ax]); const sel = i === S.sel; ctx.beginPath(); ctx.arc(kx, py, sel ? 4.5 : 3, 0, Math.PI * 2); ctx.fillStyle = AXIS_COLOR[ax]; ctx.fill(); if (sel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.2; ctx.stroke(); } S.graphPts.push({ index: i, axis: ax, x: kx, y: py, v: p.rot[ax] }); });
-      if (showPos) [0, 1, 2].forEach((ax) => { const v = (p.pos || [0, 0, 0])[ax]; const py = y(v * 30); ctx.beginPath(); ctx.rect(kx - 2.5, py - 2.5, 5, 5); ctx.fillStyle = POS_COLOR[ax]; ctx.fill(); S.graphPts.push({ index: i, axis: 3 + ax, x: kx, y: py, v }); });
-    });
-    // legend
-    ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.font = "9.5px ui-monospace, Consolas, monospace";
-    ctx.fillText(`${JOINT_LABEL[j]} · `, 8, H - 4); let lx = 8 + ctx.measureText(`${JOINT_LABEL[j]} · `).width;
-    [0, 1, 2].forEach((ax) => { ctx.fillStyle = AXIS_COLOR[ax]; ctx.fillText(AXIS_NAME[ax], lx, H - 4); lx += 12; });
-    ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillText(showPos ? " dashed = root offset ×30 (studs)  · drag a point: value ↕ / time ↔" : " · drag a point: value ↕ / time ↔ · Shift+drag: snap 5°", lx + 4, H - 4);
-    S.graphY = { lo, hi, pxPerDeg: (H - g.top - 24) / (hi - lo) };
-  }
-  function editorDown(ev) {
-    if (!S.clip || ev.button !== 0) return; const r = D.editor.getBoundingClientRect(); const pt = [ev.clientX - r.left, ev.clientY - r.top]; const W = (S.edGeom && S.edGeom.W) || r.width, H = (S.edGeom && S.edGeom.H) || r.height; const g = editorGeom(W, H);
-    if (S.playing) pause();
-    if (S.editor === "graph") {
-      let best = null, bd = 8; for (const p of S.graphPts || []) { const d = Math.hypot(p.x - pt[0], p.y - pt[1]); if (d < bd) { bd = d; best = p; } }
-      if (best) { S.sel = best.index; S.t = S.clip.keys[S.sel].t; pushHistory(); S.gdrag = { index: best.index, axis: best.axis, v0: best.v, t0: S.clip.keys[best.index].t, start: pt, g, moved: false, shift: ev.shiftKey }; try { D.editor.setPointerCapture(ev.pointerId); } catch {} renderAll(); return; }
-      scrub(g.t(pt[0])); return;
-    }
-    // dope sheet: row → joint, diamond → key (drag retimes it)
-    const row = (S.dopeRows || []).find((rw) => pt[1] >= rw.y0 && pt[1] < rw.y1); if (row) S.selJoint = row.j;
-    let hit = -1; S.clip.keys.forEach((k, i) => { if (Math.abs(g.x(k.t) - pt[0]) <= 6) hit = i; });
-    if (hit >= 0) { S.sel = hit; S.t = S.clip.keys[hit].t; S.drag = { index: hit, t: S.clip.keys[hit].t, moved: false, from: "dope", g }; try { D.editor.setPointerCapture(ev.pointerId); } catch {} renderAll(); }
-    else { renderJoints(); renderInspector(); scrub(g.t(pt[0])); }
-  }
-  function editorMove(ev) {
-    if (!S.clip) return; const r = D.editor.getBoundingClientRect(); const pt = [ev.clientX - r.left, ev.clientY - r.top];
-    if (S.gdrag) {
-      const d = S.gdrag; const dx = pt[0] - d.start[0], dy = pt[1] - d.start[1]; d.moved = true;
-      let v = d.v0 + (d.axis < 3 ? -dy / S.graphY.pxPerDeg : -dy / S.graphY.pxPerDeg / 30); if (d.shift) v = Math.round(v / (d.axis < 3 ? 5 : 0.1)) * (d.axis < 3 ? 5 : 0.1);
-      const k = S.clip.keys[d.index]; const p = k.poses[S.selJoint] || (k.poses[S.selJoint] = { rot: [0, 0, 0] });
-      if (d.axis < 3) p.rot[d.axis] = Math.round(v * 10) / 10; else { p.pos = p.pos || [0, 0, 0]; p.pos[d.axis - 3] = Math.round(clamp(v, -5, 5) * 100) / 100; }
-      const nt = d.t0 + dx / (d.g.span / S.clip.duration); const stepT = 1 / S.clip.fps; const snapped = Math.round(nt / stepT) * stepT;
-      if (Math.abs(snapped - k.t) > 1e-6) { const moved = E().moveKey(S.clip, d.index, snapped); k.t = moved.keys[d.index].t; }
-      S.t = k.t; renderPreview(); renderEditor(); renderTimeline(); renderInspector(); renderTransport(); return;
-    }
-    if (S.drag && S.drag.from === "dope") { const stepT = 1 / S.clip.fps; S.drag.t = Math.round(S.drag.g.t(pt[0]) / stepT) * stepT; S.drag.moved = true; S.t = S.drag.t; renderEditor(); renderTimeline(); renderPreview(); renderTransport(); }
-  }
-  function editorUp(ev) {
-    try { D.editor.releasePointerCapture(ev.pointerId); } catch {}
-    if (S.gdrag) { const d = S.gdrag; S.gdrag = null; const c = S.clip; if (d.moved) { c.edited = true; c.report = E().validate(c); c.fingerprint = E().fingerprint(c); setClip(c, { keepT: true, noPrev: true }); } else { S.history.pop(); renderAll(); } return; }
-    if (S.drag && S.drag.from === "dope") { const d = S.drag; S.drag = null; if (d.moved && Math.abs(d.t - S.clip.keys[d.index].t) > 1e-6) { pushHistory(); const c = E().moveKey(S.clip, d.index, d.t); setClip(c, { keepT: true, noPrev: true }); S.sel = nearestKey(d.t); S.t = S.clip.keys[S.sel].t; } renderAll(); }
-  }
-
   // ───────────────────────── pose tools, clip tools, pose library, layering ─────────────────────────
   const POSES_KEY = "rsAnimPoses";
   function loadPoses() { try { const j = JSON.parse(localStorage.getItem(POSES_KEY) || "[]"); return Array.isArray(j) ? j : []; } catch { return []; } }
@@ -768,8 +699,7 @@
     if (!D) return;
     for (const b of D.host.querySelectorAll("[data-rtab]")) b.classList.toggle("on", b.getAttribute("data-rtab") === S.rtab);
     for (const p of D.host.querySelectorAll("[data-rpanel]")) p.hidden = p.getAttribute("data-rpanel") !== S.rtab;
-    D.editor.hidden = !S.editorOpen; D.editorToggle.classList.toggle("on", !S.editorOpen); D.editorToggle.title = S.editorOpen ? "Hide the editor panel (more room for the viewport)" : "Show the dope sheet / graph editor";
-    if (D.edhint) D.edhint.textContent = S.editorOpen ? (S.editor === "graph" ? "drag a point to retune the key · G toggles" : "Shift-click = multi-select · drag = retime · G toggles") : "";
+    D.editor.hidden = !S.editorOpen; D.editorToggle.classList.toggle("on", !S.editorOpen); D.editorToggle.title = S.editorOpen ? "Hide the key workbench (more room for the viewport)" : "Show the key workbench";
   }
   function renderTools() { if (!D) return; D.onionBtn.classList.toggle("on", !!S.onion); D.autoKeyBtn.classList.toggle("on", !!S.autoKey); D.pasteBtn.disabled = !S.clipboard || !S.clip; D.pasteFlipBtn.disabled = !S.clipboard || !S.clip; for (const b of D.host.querySelectorAll("[data-tool]")) b.disabled = !S.clip; if (D.interpBtn) { const sp = !!(S.clip && S.clip.interp === "spline"); D.interpBtn.textContent = sp ? "Spline" : "Eased"; D.interpBtn.classList.toggle("on", sp); } D.lockBtn.classList.toggle("on", !!(S.clip && S.clip.keys[S.sel] && S.clip.keys[S.sel].locked)); if (D.smoothVal) { const r = S.clip && S.clip.report; D.smoothVal.textContent = r && Number.isFinite(r.smoothness) ? `${r.smoothness}` : "–"; D.smoothVal.title = r && r.roughestJoint ? `motion smoothness (100 = silky). Roughest joint: ${r.roughestJoint}` : "motion smoothness (100 = silky)"; } }
   function renderJoints() {
@@ -865,7 +795,7 @@
             </section>
             <section class="rsa-card rsa-card-tips">
               <div class="rsa-h"><b>3</b> Edit &amp; deliver</div>
-              <div class="rsa-muted">Drag the figure to orbit · drag a hand / foot to pose with IK · click a joint, then type angles on the right · <kbd>I</kbd> insert key · <kbd>Shift+D</kbd> duplicate · <kbd>X</kbd> delete · <kbd>G</kbd> graph editor · <kbd>Ctrl+Z</kbd> undo. Build in Studio writes the KeyframeSequence; Export saves an .rbxmx.</div>
+              <div class="rsa-muted">Drag the figure to orbit · drag a hand / foot to pose with IK · click a joint, then type angles on the right · <kbd>I</kbd> insert key · <kbd>Shift+D</kbd> duplicate · <kbd>X</kbd> delete · <kbd>B</kbd> breakdown · <kbd>H</kbd> hold · <kbd>,</kbd> <kbd>.</kbd> nudge a frame · <kbd>G</kbd> motion arcs · <kbd>Ctrl+Z</kbd> undo. Build in Studio writes the KeyframeSequence; Export saves an .rbxmx.</div>
             </section>
           </aside>
           <main class="rsa-main">
@@ -888,8 +818,40 @@
               <span class="rsa-time" data-ref="time">0.00 / 0.00 s</span>
             </div>
             <canvas class="rsa-timeline" data-ref="timeline" title="Click to scrub · drag a key to retime it · click a key to edit it"></canvas>
-            <div class="rsa-edtabs"><button type="button" class="rsa-chip on" data-editor="dope" title="Dope sheet: joint rows × key diamonds (G toggles)">Dope sheet</button><button type="button" class="rsa-chip" data-editor="graph" title="Graph editor: X / Y / Z curves of the selected joint, draggable points (G toggles)">Graph editor</button><span class="rsa-muted" data-ref="edhint"></span><button type="button" class="rsa-ib mini" data-act="toggleEditor" data-ref="editorToggle" title="Show / hide the editor panel">${I.collapse}</button></div>
-            <canvas class="rsa-editor" data-ref="editor"></canvas>
+            <div class="rsa-bench" data-ref="editor">
+              <div class="rsa-bench-head">
+                <span class="rsa-bench-t" title="Every key of the clip in order - click to select; the glyph is the key's role (! impact · = hold · ~ breakdown · ⚑ marker)">Keys</span>
+                <div class="rsa-keystrip" data-ref="keystrip"></div>
+                <button type="button" class="rsa-ib mini" data-act="toggleEditor" data-ref="editorToggle" title="Show / hide the key workbench">${I.collapse}</button>
+              </div>
+              <div class="rsa-bench-tools">
+                <div class="rsa-bt" title="Tween machine: insert a key at the playhead whose pose favours the previous key (0%) or the next key (100%) instead of the plain in-between - passing positions, favours, overshoots">
+                  <b>Breakdown</b><input type="range" data-ref="bias" min="0" max="100" value="50" step="5"><span class="rsa-bt-v" data-ref="biasVal">50%</span><button type="button" class="rsa-btn mini" data-act="breakdown">Insert at playhead</button>
+                </div>
+                <div class="rsa-bt" title="Moving hold: repeat the selected pose N frames later (later keys slide back if needed) - lets a pose read before the next move">
+                  <b>Hold</b><input type="number" data-ref="holdFrames" value="3" min="1" max="30" step="1"><span class="rsa-bt-v">frames</span><button type="button" class="rsa-btn mini" data-act="hold">Add moving hold</button>
+                </div>
+                <div class="rsa-bt" title="Move the selected key by one frame (never past its neighbours)">
+                  <b>Nudge</b><button type="button" class="rsa-btn mini" data-act="nudgeL">◀ 1 frame</button><button type="button" class="rsa-btn mini" data-act="nudgeR">1 frame ▶</button>
+                </div>
+                <div class="rsa-bt rsa-bt-wide" title="KeyframeMarker on the selected key: Studio fires AnimationTrack:GetMarkerReachedSignal(name) when playback passes it - footsteps, hit frames, sounds, VFX. 'name=value' sets a value">
+                  <b>Marker</b><input type="text" data-ref="markerName" placeholder="footstep · hit=right · sfx=swing"><button type="button" class="rsa-btn mini" data-act="marker">Add to key</button><div class="rsa-markers" data-ref="markerList"></div>
+                </div>
+                <div class="rsa-bt rsa-bt-wide" data-ref="easeAllRow" title="Set the easing of every key at once; impacts / lands get the preset's arrival, holds stay flat">
+                  <b>Ease all</b>${Object.entries((typeof ORAnimEngine !== "undefined" && ORAnimEngine.EASE_PRESETS) || { snappy: { label: "Snappy" }, organic: { label: "Organic" }, mechanical: { label: "Mechanical" }, bouncy: { label: "Bouncy" }, elastic: { label: "Elastic" }, anticipate: { label: "Anticipate" } }).map(([id, p]) => `<button type="button" class="rsa-chip" data-ease-all="${id}" title="${esc(p.note || "")}">${esc(p.label)}</button>`).join("")}
+                </div>
+                <div class="rsa-bt" title="Follow-through: elbows, wrists, head, knees and ankles trail their parents by N frames - the secondary motion that makes a pose feel alive">
+                  <b>Overlap</b><input type="number" data-ref="lagFrames" value="2" min="1" max="8" step="1"><span class="rsa-bt-v">frames</span><button type="button" class="rsa-btn mini" data-act="overlap">Follow-through</button>
+                </div>
+                <div class="rsa-bt" title="Stretch or compress the whole clip to a new length, keeping every timing ratio">
+                  <b>Retime</b><input type="number" data-ref="retimeTo" placeholder="s" min="0.1" max="60" step="0.1"><button type="button" class="rsa-btn mini" data-act="retime">Set length</button>
+                </div>
+                <div class="rsa-bt" title="Draw the paths of hands, feet and head through the whole clip in the viewport (yellow dots = keys). Smooth arcs read well; zig-zags need a breakdown">
+                  <b>Arcs</b><button type="button" class="rsa-btn mini tgl" data-act="arcs" data-ref="arcsBtn">Motion trails</button>
+                </div>
+              </div>
+              <div class="rsa-timing" data-ref="timing"></div>
+            </div>
             <div class="rsa-foot">
               <span class="rsa-status" data-ref="status"></span>
               <input data-ref="intent" type="text" placeholder="Note for the AI (optional)">
@@ -971,7 +933,9 @@
       const joint = e.target.closest("[data-joint]"); if (joint) { S.selJoint = joint.getAttribute("data-joint"); renderJoints(); renderInspector(); return; }
       const view = e.target.closest("[data-view]"); if (view) { setView(view.getAttribute("data-view")); return; }
       const tool = e.target.closest("[data-tool]"); if (tool) { clipTool(tool.getAttribute("data-tool")); return; }
-      const ed = e.target.closest("[data-editor]"); if (ed) { S.editor = ed.getAttribute("data-editor"); if (!S.editorOpen) { S.editorOpen = true; renderPanels(); } renderEditor(); return; }
+      const kc = e.target.closest("[data-key]"); if (kc) { selectKey(parseInt(kc.getAttribute("data-key"), 10)); return; }
+      const ea = e.target.closest("[data-ease-all]"); if (ea) { benchEaseAll(ea.getAttribute("data-ease-all")); return; }
+      const md = e.target.closest("[data-marker-del]"); if (md) { benchMarkerDel(md.getAttribute("data-marker-del")); return; }
       const rt = e.target.closest("[data-rtab]"); if (rt) { setRightTab(rt.getAttribute("data-rtab")); return; }
       const dc = e.target.closest("[data-delclip]"); if (dc) { forgetClip(dc.getAttribute("data-delclip")); return; }
       const ci = e.target.closest("[data-clip]"); if (ci) { switchClip(ci.getAttribute("data-clip")); return; }
@@ -995,8 +959,10 @@
     // viewport: orbit / pan / zoom / pick / IK
     D.canvas.addEventListener("pointerdown", viewportDown); D.canvas.addEventListener("pointermove", viewportMove); D.canvas.addEventListener("pointerup", viewportUp); D.canvas.addEventListener("pointercancel", viewportUp);
     D.canvas.addEventListener("wheel", viewportWheel, { passive: false }); D.canvas.addEventListener("dblclick", resetCamera);
-    // dope sheet / graph editor
-    D.editor.addEventListener("pointerdown", editorDown); D.editor.addEventListener("pointermove", editorMove); D.editor.addEventListener("pointerup", editorUp); D.editor.addEventListener("pointercancel", editorUp);
+    // key workbench
+    D.bias.addEventListener("input", () => { if (D.biasVal) D.biasVal.textContent = `${D.bias.value}%`; });
+    D.markerName.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); benchMarker(); } });
+    D.retimeTo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); benchRetime(); } });
     D.poseName.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); savePoseToLibrary(); } });
     D.prompt.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); generate(); } });
     D.feedback.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); refine(); } });
@@ -1029,7 +995,10 @@
       else if (e.key === "1") { e.preventDefault(); setView("front"); } else if (e.key === "3") { e.preventDefault(); setView("side"); } else if (e.key === "7") { e.preventDefault(); setView("top"); } else if (e.key === "5") { e.preventDefault(); setView("3d"); } else if (e.key === "2") { e.preventDefault(); setView("both"); }
       else if (e.key === "o" || e.key === "O") { e.preventDefault(); S.onion = !S.onion; renderPreview(); renderTools(); }
       else if (e.key === "k" || e.key === "K") { e.preventDefault(); S.autoKey = !S.autoKey; renderTools(); toast(S.autoKey ? "Auto-key ON: edits off a key insert one at the playhead" : "Auto-key OFF: edits land on the selected key"); }
-      else if ((e.key === "g" || e.key === "G") && S.clip) { e.preventDefault(); S.editor = S.editor === "graph" ? "dope" : "graph"; renderEditor(); }
+      else if ((e.key === "g" || e.key === "G") && S.clip) { e.preventDefault(); benchArcs(); }
+      else if ((e.key === "b" || e.key === "B") && S.clip && !e.ctrlKey && !e.metaKey) { e.preventDefault(); benchBreakdown(); }
+      else if ((e.key === "h" || e.key === "H") && S.clip && !e.ctrlKey && !e.metaKey) { e.preventDefault(); benchHold(); }
+      else if (e.key === "," && S.clip) { e.preventDefault(); benchNudge(-1); } else if (e.key === "." && S.clip) { e.preventDefault(); benchNudge(1); }
       else if (e.key === "Home") { e.preventDefault(); scrub(0); } else if (e.key === "End" && S.clip) { e.preventDefault(); scrub(S.clip.duration); }
     });
     window.addEventListener("resize", () => { if (S.open) { renderPreview(); renderTimeline(); renderEditor(); } });
@@ -1059,6 +1028,14 @@
       case "autoKey": S.autoKey = !S.autoKey; renderTools(); toast(S.autoKey ? "Auto-key ON: edits off a key insert one at the playhead" : "Auto-key OFF: edits land on the selected key"); return;
       case "resetCam": return resetCamera();
       case "toggleEditor": S.editorOpen = !S.editorOpen; renderPanels(); if (S.editorOpen) renderEditor(); return;
+      case "breakdown": return benchBreakdown();
+      case "hold": return benchHold();
+      case "nudgeL": return benchNudge(-1);
+      case "nudgeR": return benchNudge(1);
+      case "marker": return benchMarker();
+      case "overlap": return benchOverlap();
+      case "retime": return benchRetime();
+      case "arcs": return benchArcs();
       case "buildAll": return buildAll();
       case "exportAll": return exportAll();
       case "checkSet": return checkSet();
@@ -1117,5 +1094,5 @@
     if (D) { renderClipList(); renderCompat(); setRightTab("clips"); }
     return ok;
   }
-  window.ORAnimStudio = { open, close, isOpen, getClip, loadClip, loadSet, switchClip, checkSet, buildAll, exportAll, setRigInfo, clipTool, layerWith, insertKey: insertKeyHere, copyPose, pastePose, setView, resetCamera, _viewport: { down: viewportDown, move: viewportMove, up: viewportUp, wheel: viewportWheel }, _editor: { down: editorDown, move: editorMove, up: editorUp }, generate: (p, o) => { if (!D) build(); return generate(p, o); }, buildMessage, PRESETS, _state: S, _refine: refine, _variation: variation, _selectKey: selectKey, _setJointValue: setJointValue, _retime: retime, _play: play, _pause: pause, _stop: stop, _scrub: scrub, _undo: undo, _redo: redo, _exportRbxmx: exportRbxmx, _timelineHit: timelineHit };
+  window.ORAnimStudio = { open, close, isOpen, getClip, loadClip, loadSet, switchClip, checkSet, buildAll, exportAll, setRigInfo, clipTool, layerWith, insertKey: insertKeyHere, copyPose, pastePose, setView, resetCamera, _viewport: { down: viewportDown, move: viewportMove, up: viewportUp, wheel: viewportWheel }, _bench: { breakdown: benchBreakdown, hold: benchHold, nudge: benchNudge, marker: benchMarker, easeAll: benchEaseAll, overlap: benchOverlap, retime: benchRetime, arcs: benchArcs }, generate: (p, o) => { if (!D) build(); return generate(p, o); }, buildMessage, PRESETS, _state: S, _refine: refine, _variation: variation, _selectKey: selectKey, _setJointValue: setJointValue, _retime: retime, _play: play, _pause: pause, _stop: stop, _scrub: scrub, _undo: undo, _redo: redo, _exportRbxmx: exportRbxmx, _timelineHit: timelineHit };
 })();

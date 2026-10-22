@@ -96,8 +96,8 @@ ok("mandates teach 'read before you write' in both budgets", configSrc.includes(
 ok("luau-parse-check covers the project programs", fs.readFileSync("tests/luau-parse-check.py", "utf8").includes("PROJECT_COMMANDS"));
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README documents the project index pack", readme.includes("project_index_build") && readme.includes("1.32.0") && readme.includes("project-index-sim.py"));
-ok("manifest version is 1.63.0", manifest.version === "1.63.0", manifest.version);
-ok("plugin / crate pinned at 1.63.0", /1\.63\.0/.test(fs.readFileSync("plugin/ORscript.lua", "utf8")) && /^version = "1\.63\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
+ok("manifest version is 1.64.0", manifest.version === "1.64.0", manifest.version);
+ok("plugin / crate pinned at 1.64.0", /1\.64\.0/.test(fs.readFileSync("plugin/ORscript.lua", "utf8")) && /^version = "1\.64\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
 
 // ── simulator ─────────────────────────────────────────────────────────────────
 ok("project-index-sim.py exists and covers build / search / graph / stale / changes", (() => { const t = fs.readFileSync("tests/project-index-sim.py", "utf8"); return t.includes("from roblox_sim import make_runtime") && ["project_index_build", "project_index_search", "project_index_graph", "project_index_changes", "stale", "GhostRemote", "cycle"].every((k) => t.includes(k)); })());

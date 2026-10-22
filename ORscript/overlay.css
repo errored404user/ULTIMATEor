@@ -8858,7 +8858,7 @@ html.rs-anim-open #rs-root { visibility: hidden !important; }
 .rsa-num input { width: 100%; background: #0f0f12; color: #e8e8ec; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; padding: 5px 6px; font: 11px ui-monospace, Consolas, monospace; }
 .rsa-sel { display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: #a9a9b4; }
 .rsa-muted { color: #8f8f9a; font-size: 10.5px; line-height: 1.4; }
-/* 1.54.0 - viewport tools, dope sheet / graph editor, pose tools, pose library, layering */
+/* 1.54.0 - viewport tools, pose tools, pose library, layering */
 .rsa-canvas { touch-action: none; cursor: move; }
 .rsa-viewsel .rsa-ib { width: 24px; height: 24px; }
 .rsa-tools { display: flex; flex-direction: column; gap: 4px; }
@@ -8868,9 +8868,47 @@ html.rs-anim-open #rs-root { visibility: hidden !important; }
 .rsa-toolrow small { color: #8f8f9a; font-size: 10px; line-height: 1.25; }
 .rsa-vtools { position: absolute; left: 10px; top: 8px; flex-direction: row; gap: 4px; }
 .rsa-vtools .rsa-ib { width: 26px; height: 26px; background: rgba(20,20,26,.78); backdrop-filter: blur(4px); }
-.rsa-edtabs { flex: none; display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-top: 1px solid rgba(255,255,255,.07); background: #121216; }
-.rsa-edtabs .rsa-muted { margin-left: auto; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rsa-editor { flex: none; height: 168px; width: 100%; display: block; border-top: 1px solid rgba(255,255,255,.07); cursor: crosshair; touch-action: none; }
+/* 1.64.0 - key workbench (replaces the dope sheet / graph editor): key strip + professional key tools + timing read */
+.rsa-bench { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 6px 10px 7px; border-top: 1px solid rgba(255,255,255,.07); background: #121216; max-height: 230px; overflow: auto; scrollbar-width: thin; }
+.rsa-bench[hidden] { display: none !important; }
+.rsa-bench-head { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+.rsa-bench-t { flex: none; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #8f8f9a; }
+.rsa-bench-head .rsa-ib.mini { margin-left: auto; flex: none; }
+.rsa-bench-head .rsa-ib.mini.on svg { transform: rotate(180deg); }
+.rsa-keystrip { flex: 1; min-width: 0; display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; padding: 2px 0; }
+.rsa-kchip { flex: none; display: inline-grid; grid-template-columns: 12px auto; grid-template-rows: auto auto; column-gap: 4px; align-items: center; padding: 3px 7px 3px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); color: #d6d6de; font: 10.5px ui-monospace, Consolas, monospace; cursor: pointer; text-align: left; position: relative; transition: border-color .12s, background .12s; }
+.rsa-kchip:hover { border-color: rgba(158,193,255,.5); }
+.rsa-kchip.on { border-color: #ffd166; background: rgba(255,209,102,.14); color: #fff; box-shadow: 0 0 0 1px rgba(255,209,102,.35); }
+.rsa-kchip i { grid-row: 1 / span 2; font-style: normal; font-weight: 700; color: #9ec1ff; text-align: center; }
+.rsa-kchip.tag-impact i, .rsa-kchip.tag-land i { color: #ff7b6b; }
+.rsa-kchip.tag-hold i { color: #7bd88f; }
+.rsa-kchip.tag-breakdown i { color: #c79bff; }
+.rsa-kchip.locked { border-style: dashed; }
+.rsa-kchip b { font-weight: 600; line-height: 1.1; }
+.rsa-kchip small { font-size: 8.5px; color: #8f8f9a; line-height: 1.1; white-space: nowrap; max-width: 64px; overflow: hidden; text-overflow: ellipsis; }
+.rsa-kchip em { position: absolute; right: -4px; top: -6px; font: 700 9px system-ui, sans-serif; font-style: normal; color: #1a1a1f; background: #ffd166; border-radius: 999px; padding: 0 4px; line-height: 13px; }
+.rsa-bench-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 4px 10px; }
+.rsa-bt { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; min-height: 26px; padding: 2px 6px; border-radius: 7px; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.05); }
+.rsa-bt-wide { grid-column: 1 / -1; }
+.rsa-bt > b { flex: none; min-width: 66px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #a9a9b4; }
+.rsa-bt .rsa-btn.mini { margin-left: 0; padding: 3px 8px; }
+.rsa-bt .rsa-btn.mini.on, .rsa-bt .rsa-btn.mini.tgl.on { background: rgba(255,209,102,.2); border-color: rgba(255,209,102,.6); color: #fff2c9; }
+.rsa-bt input[type="number"] { width: 46px; padding: 2px 5px; font-size: 10.5px; }
+.rsa-bt input[type="text"] { flex: 1; min-width: 120px; padding: 2px 6px; font-size: 10.5px; }
+.rsa-bt input[type="range"] { width: 96px; accent-color: #ffd166; }
+.rsa-bt-v { font: 10px ui-monospace, Consolas, monospace; color: #8f8f9a; min-width: 28px; }
+.rsa-bt .rsa-chip { cursor: pointer; }
+.rsa-bt .rsa-chip.on { border-color: rgba(255,209,102,.6); background: rgba(255,209,102,.16); color: #fff2c9; }
+.rsa-bt button:disabled, .rsa-bt input:disabled { opacity: .45; cursor: default; }
+.rsa-markers { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; }
+.rsa-marker { display: inline-flex; align-items: center; gap: 4px; padding: 1px 4px 1px 7px; border-radius: 999px; font-size: 10px; color: #fff2c9; background: rgba(255,209,102,.12); border: 1px solid rgba(255,209,102,.4); }
+.rsa-marker small { color: #c8b78a; font-size: 9.5px; }
+.rsa-marker button { all: unset; cursor: pointer; width: 14px; height: 14px; line-height: 14px; text-align: center; border-radius: 999px; color: #fff; font-size: 11px; }
+.rsa-marker button:hover { background: rgba(255,120,120,.5); }
+.rsa-timing { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 10px; color: #8f8f9a; }
+.rsa-tm b { color: #d6d6de; font-weight: 600; margin-right: 3px; }
+.rsa-tm.note { padding: 1px 7px; border-radius: 999px; border: 1px solid rgba(255,255,255,.1); color: #c4c4cd; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rsa-tm.note.warn { border-color: rgba(255,209,102,.45); color: #ffe6a8; }
 .rsa-posetools { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .rsa-posetools .rsa-btn.mini { margin-left: 0; display: inline-flex; align-items: center; gap: 5px; justify-content: center; padding: 5px 6px; }
 .rsa-posetools .rsa-btn.mini svg { width: 13px; height: 13px; }
@@ -8904,8 +8942,6 @@ html.rs-anim-open #rs-root { visibility: hidden !important; }
 .rsa-rtabs .rsa-chip { flex: 1; justify-content: center; display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; font-size: 11px; }
 .rsa-rtabs .rsa-score { font-size: 9.5px; padding: 0 5px; }
 .rsa-rpanel { display: flex; flex-direction: column; gap: 8px; }
-.rsa-edtabs .rsa-ib.mini { margin-left: auto; }
-.rsa-edtabs .rsa-ib.mini.on svg { transform: rotate(180deg); }
 .rsa-foot .rsa-btn svg { width: 13px; height: 13px; }
 .rsa-foot input { flex: 1; min-width: 80px; max-width: 260px; }
 .rsa-row .rsa-btn.mini { flex: 0 0 auto; }

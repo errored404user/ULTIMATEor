@@ -28,7 +28,7 @@
 // rest. Nothing is faked: unsupported requests return explicit limitations.
 (function (root) {
   "use strict";
-  const VERSION = "1.63.0";
+  const VERSION = "1.64.0";
   const DEG = Math.PI / 180;
 
   // ───────────────────────── rotation math ─────────────────────────
@@ -1622,14 +1622,18 @@
       const w1 = stageWeights(intent.stages, DEFAULT_PARAMS).reduce((a, b) => a + b, 0), w0 = stageWeights(clip.intent.stages, DEFAULT_PARAMS).reduce((a, b) => a + b, 0);
       if (w0 > 0 && w1 > w0) { duration = r3(clamp((duration || clip.duration) * w1 / w0, 0.2, 60)); intent.duration = duration; }
     }
-    const polish = fluent || has(/\b(plant|ground|glue|stick|slid|float|simplif|fewer keys|clean|less keys|revers|backwards|rewind)/);
-    if (!notes.length && !polish) notes.push("no recognised adjustment - regenerated with the same settings (try: make it slow / fast, a bit slower, much faster, half speed, 2x, fluent, smoother, more anticipation, heavier landing, exaggerate, subtle, longer, shorter, loop, new take, mirror, root motion, snappier, softer)");
+    const polish = fluent || has(/\b(plant|ground|glue|stick|slid|float|simplif|fewer keys|clean|less keys|revers|backwards|rewind|overlap|follow[- ]?through|secondary motion|moving holds?|organic|mechanical|robotic|bouncy|bouncier|elastic|rubbery)\b|\b(hold|holds|linger|pause)\b.*\b(impact|hit|pose|poses|key|keys)/);
+    if (!notes.length && !polish) notes.push("no recognised adjustment - regenerated with the same settings (try: make it slow / fast, a bit slower, much faster, half speed, 2x, fluent, smoother, more anticipation, heavier landing, exaggerate, subtle, longer, shorter, loop, new take, mirror, root motion, snappier, softer, more follow-through, hold the impact 4 frames, bouncy / mechanical / elastic easing)");
     const durChanged = !!dm || has(/\b(longer|shorter)\b/);
     let out = generate(intent, { quality, rigType: clip.rigType, name: notes.some((n) => /^(appended|prepended)/.test(n)) ? undefined : clip.name, fps, loop, params: p, duration: intent.category === "sequence" && !durChanged ? undefined : duration, priority: clip.priority, take, mirror, travel, mood: intent.mood || null });
     if (fluent) { out = smooth(out, { strength: 1 }); notes.push("spline smoothing pass"); }
     if (has(/\b(plant|ground(?:ed)?|glue|stick)\b.*\b(feet|foot|soles?)|\b(feet|foot)\b.*\b(plant|ground|slid|float)/)) { out = groundFeet(out, { force: true }); notes.push("planted the feet"); }
     if (has(/\b(simplif|fewer keys|clean(?: up)? keys|less keys)/)) { out = simplify(out, 2); notes.push("cleaned redundant keys"); }
     if (has(/\b(revers|backwards|rewind)/)) { out = reverse(out); notes.push("reversed"); }
+    // 1.64 workbench tools by name: follow-through / overlap, ease presets, holds on impacts
+    { const m = f.match(/\b(?:more\s+)?(?:overlap|follow[- ]?through|drag|secondary motion)\b(?:\s*(?:of|by)?\s*(\d+)\s*(?:f|frames?))?/); if (m) { const fr = Math.min(8, Math.max(1, parseInt(m[1], 10) || 2)); out = overlap(out, fr); notes.push(`overlap ${fr}f (follow-through)`); } }
+    { const m = f.match(/\b(snappy|snappier|organic|mechanical|robotic|bouncy|bouncier|elastic|rubbery|anticipat\w*)\b/); if (m) { const id = /snap/.test(m[1]) ? "snappy" : /robot|mechan/.test(m[1]) ? "mechanical" : /bounc/.test(m[1]) ? "bouncy" : /elast|rubber/.test(m[1]) ? "elastic" : /anticip/.test(m[1]) ? "anticipate" : "organic"; out = easeAll(out, id); notes.push(`ease preset: ${id}`); } }
+    if (has(/\b(hold|holds|linger|pause)\b.*\b(impact|hit|pose|poses|key|keys)|\b(moving holds?)\b/)) { const m = f.match(/(\d+)\s*(?:f|frames?)/); const fr = Math.min(12, Math.max(1, m ? parseInt(m[1], 10) : 3)); let cnt = 0; for (let i = out.keys.length - 2; i >= 1; i--) { if (/^(impact|land|reach)$/.test(out.keys[i].tag || "")) { out = holdKey(out, i, fr).clip; cnt++; } } if (cnt) notes.push(`${cnt} moving hold${cnt > 1 ? "s" : ""} of ${fr}f`); }
     out.feedback = (clip.feedback || []).concat([{ text: feedback, applied: notes }]);
     out.previous = { keys: clip.keys.length, duration: clip.duration, score: clip.report && clip.report.score };
     return out;
@@ -1825,7 +1829,7 @@
     for (let t = 0; t < clip.duration - 1e-6; t += step) times.add(r3(t));
     times.add(r3(clip.duration));
     const byT = new Map(clip.keys.map((k) => [r3(k.t), k]));
-    return Array.from(times).sort((x, y) => x - y).map((t) => { const k = byT.get(t); return k ? { t, poses: k.poses, ease: ["Linear", "Out"], tag: k.tag, stage: k.stage } : { t, poses: sampleAt(clip, t), ease: ["Linear", "Out"], tag: "baked", synthetic: true }; });
+    return Array.from(times).sort((x, y) => x - y).map((t) => { const k = byT.get(t); return k ? { t, poses: k.poses, ease: ["Linear", "Out"], tag: k.tag, stage: k.stage, markers: k.markers } : { t, poses: sampleAt(clip, t), ease: ["Linear", "Out"], tag: "baked", synthetic: true }; });
   }
   function setInterp(clipIn, mode) { const c = cloneClip(clipIn); c.interp = mode === "spline" ? "spline" : "eased"; c.edited = true; c.report = validate(c); c.fingerprint = fingerprint(c); return c; }
   // World positions of every pivot + tips in the semantic frame (studs), root pivot at ROOT_HEIGHT.
@@ -1874,6 +1878,7 @@
       const markers = []; const st = (clip.stages || []).find((s) => Math.abs(s.t0 - key.t) < 1e-6 && s.marker);
       if (st) markers.push({ name: st.marker, value: st.name });
       if (key.tag === "impact") markers.push({ name: "impact", value: key.stage || "" });
+      for (const m of key.markers || []) if (m && m.name && !markers.some((x) => x.name === m.name)) markers.push({ name: String(m.name), value: String(m.value == null ? "" : m.value) }); // 1.64 user markers
       const re = robloxEase(key.ease);
       return { t: key.t, easing: { style: re[0], direction: re[1] }, markers, poses };
     });
@@ -1891,6 +1896,7 @@
       const sem = foldForRig(key.poses, type);
       const p = joints.map((j) => { const q = sem[j] || J(0, 0, 0); const arr = [r2(q.rot[0]), r2(q.rot[1]), r2(q.rot[2])]; if (q.pos && (q.pos[0] || q.pos[1] || q.pos[2])) arr.push(r3(q.pos[0]), r3(q.pos[1]), r3(q.pos[2])); return arr; });
       const m = []; const st = (clip.stages || []).find((s) => Math.abs(s.t0 - key.t) < 1e-6 && s.marker); if (st) m.push([st.marker, st.name]); if (key.tag === "impact") m.push(["impact", key.stage || ""]);
+      for (const mk of key.markers || []) if (mk && mk.name && !m.some((x) => x[0] === mk.name)) m.push([String(mk.name), String(mk.value == null ? "" : mk.value)]); // 1.64 user markers
       return { t: key.t, e: robloxEase(key.ease), m, p };
     });
     return { name: clip.name, duration: clip.duration, loop: !!clip.loop, priority: clip.priority || "Action", fps: clip.fps, prompt: clip.prompt || "", quality: clip.quality || "balanced", params: JSON.stringify(clip.params || {}), engine: VERSION, overwrite: opts.overwrite !== false, anim_saves: opts.animSaves !== false, bones: joints.map((j) => map[j]), keys, rigType: type, dropped: JOINTS.filter((j) => !map[j]) };
@@ -2162,6 +2168,100 @@
   // 2-bone IK (analytic, Blender-style pole): hands reach a world target through shoulder (x,y,z) + elbow (x), feet through
   // hip (x,y,z) + knee (x). The limb's natural bend is the pole (elbows back/out, knees forward), joint limits are respected,
   // the wrist/ankle tip offset is iterated in, and a short bounded coordinate-descent polish absorbs what the clamps cost.
+  // ───────────────────────── 1.64 professional key tools (replace the dope sheet / graph editor) ─────────────────────────
+  // breakdown: a "tween machine" key between the neighbours of time t, favouring the previous (bias 0) or the next (bias 1)
+  // pose instead of the interpolation - the classic way to add a passing position or a favour without re-posing by hand.
+  function breakdown(clipIn, t, bias) {
+    const c = cloneClip(clipIn); const b = clamp(Number.isFinite(bias) ? bias : 0.5, 0, 1); const step = 1 / (c.fps || 30);
+    const tt = clamp(t, 0, c.duration);
+    const existing = c.keys.findIndex((k) => Math.abs(k.t - tt) < step / 2);
+    let prev = null, next = null; for (const k of c.keys) { if (k.t < tt - step / 2) prev = k; if (k.t > tt + step / 2 && !next) next = k; }
+    if (!prev || !next) { const r = insertKey(c, tt); return { clip: r.clip, index: r.index, inserted: r.inserted, bias: b, reason: "no neighbour on one side - plain key" }; }
+    const poses = {}; for (const j of JOINTS) { const a = prev.poses[j] || J(0, 0, 0), z = next.poses[j] || J(0, 0, 0); const o = { rot: [0, 1, 2].map((i) => r3(lerp(a.rot[i], z.rot[i], b))) }; if (a.pos || z.pos) o.pos = [0, 1, 2].map((i) => r3(lerp((a.pos || [0, 0, 0])[i], (z.pos || [0, 0, 0])[i], b))); poses[j] = o; }
+    if (existing >= 0) { c.keys[existing].poses = poses; c.keys[existing].tag = "breakdown"; c.edited = true; c.report = validate(c); c.fingerprint = fingerprint(c); return { clip: c, index: existing, inserted: false, bias: b }; }
+    c.keys.push({ t: r3(Math.round(tt / step) * step), poses, ease: ["CubicV2", "InOut"], tag: "breakdown", stage: prev.stage });
+    c.keys = dedupeKeys(c.keys); c.edited = true; c.report = validate(c); c.fingerprint = fingerprint(c);
+    return { clip: c, index: c.keys.findIndex((k) => k.tag === "breakdown" && Math.abs(k.t - tt) < step), inserted: true, bias: b };
+  }
+  // hold: a moving hold - the selected pose is repeated `frames` later (tagged "hold", so Smooth / Simplify keep it)
+  function holdKey(clipIn, index, frames) {
+    const c = cloneClip(clipIn); const k = c.keys[index]; if (!k) return { clip: c, index };
+    const step = 1 / (c.fps || 30); const n = Math.max(1, Math.round(Number(frames) || 2)); const t = r3(Math.min(c.duration, k.t + n * step));
+    if (t <= k.t + 1e-6) return { clip: c, index, reason: "already at the end" };
+    const nextI = c.keys.findIndex((x) => x.t > k.t + 1e-6);
+    // push later keys back by the hold length when they would collide, never past the duration
+    if (nextI >= 0 && c.keys[nextI].t < t + step) { const shift = r3(t + step - c.keys[nextI].t); for (let i = nextI; i < c.keys.length; i++) c.keys[i].t = r3(Math.min(c.duration, c.keys[i].t + shift)); }
+    c.keys.push({ t, poses: clonePose(k.poses), ease: ["Linear", "InOut"], tag: "hold", stage: k.stage });
+    k.ease = ["Linear", "InOut"]; // a hold is flat: no ease-out drift into the copy
+    c.keys = dedupeKeys(c.keys); c.edited = true; c.report = validate(c); c.fingerprint = fingerprint(c);
+    return { clip: c, index: c.keys.findIndex((x) => Math.abs(x.t - t) < step / 2), frames: n };
+  }
+  // nudge: move a key by whole frames (clamped between its neighbours, like moveKey)
+  function nudgeKey(clip, index, frames) { const step = 1 / (clip.fps || 30); const k = clip.keys[index]; if (!k) return clip; return moveKey(clip, index, k.t + (Number(frames) || 0) * step); }
+  // ease presets over the whole clip - impacts / lands keep a sharp arrival, holds stay flat
+  const EASE_PRESETS = {
+    snappy: { label: "Snappy", note: "fast in, settle out (CubicV2 Out); impacts Linear", key: ["CubicV2", "Out"], impact: ["Linear", "InOut"] },
+    organic: { label: "Organic", note: "ease both ends (CubicV2 InOut)", key: ["CubicV2", "InOut"], impact: ["CubicV2", "Out"] },
+    mechanical: { label: "Mechanical", note: "constant speed (Linear) - robots, machines", key: ["Linear", "InOut"], impact: ["Linear", "InOut"] },
+    bouncy: { label: "Bouncy", note: "Bounce Out into impacts / lands, CubicV2 elsewhere", key: ["CubicV2", "Out"], impact: ["Bounce", "Out"] },
+    elastic: { label: "Elastic", note: "Elastic Out into impacts (cartoony overshoot)", key: ["CubicV2", "Out"], impact: ["Elastic", "Out"] },
+    anticipate: { label: "Anticipate", note: "CubicV2 In into impacts (wind-up feel), InOut elsewhere", key: ["CubicV2", "InOut"], impact: ["CubicV2", "In"] },
+  };
+  function easeAll(clipIn, preset) {
+    const c = cloneClip(clipIn); const p = EASE_PRESETS[preset] || EASE_PRESETS.organic;
+    c.keys = c.keys.map((k) => { const tag = k.tag || ""; const ease = tag === "hold" ? ["Linear", "InOut"] : /^(impact|land|contact|slam)$/.test(tag) ? p.impact.slice() : p.key.slice(); return Object.assign({}, k, { ease }); });
+    c.interp = "eased"; c.easePreset = preset; c.edited = true; c.report = validate(c); c.fingerprint = fingerprint(c); return c;
+  }
+  // overlap / follow-through: child joints (elbows, wrists, head, knees, ankles) lag their parents by `frames`
+  const LAG_JOINTS = ["neck", "l_elbow", "l_wrist", "r_elbow", "r_wrist", "l_knee", "l_ankle", "r_knee", "r_ankle"];
+  function overlap(clipIn, frames, joints) {
+    const src = cloneClip(clipIn); const c = cloneClip(clipIn); const step = 1 / (c.fps || 30); const lag = Math.max(0, Number(frames) || 0) * step; if (!lag) return c;
+    const set = Array.isArray(joints) && joints.length ? joints.filter((j) => JOINTS.includes(j)) : LAG_JOINTS;
+    const n = c.keys.length;
+    c.keys.forEach((k, i) => {
+      if (!c.loop && (i === 0 || i === n - 1)) return; // one-shots keep their rest poses at both ends
+      let t = k.t - lag; if (c.loop) { while (t < 0) t += c.duration; } else t = Math.max(0, t);
+      const past = sampleAt(src, t);
+      for (const j of set) if (past[j]) k.poses[j] = Object.assign({}, k.poses[j] || {}, { rot: past[j].rot.map((v) => r3(v)) });
+    });
+    if (c.loop && n > 1) c.keys[n - 1].poses = clonePose(c.keys[0].poses);
+    c.overlapFrames = (c.overlapFrames || 0) + Math.round(frames); c.edited = true; c.report = validate(c); c.fingerprint = fingerprint(c); return c;
+  }
+  // markers: KeyframeMarker events on a key (GetMarkerReachedSignal in Studio) - footsteps, hits, sounds, VFX cues
+  function setMarker(clipIn, index, name, value) {
+    const c = cloneClip(clipIn); const k = c.keys[index]; if (!k) return c;
+    const nm = String(name || "").trim().slice(0, 50); if (!nm) return c;
+    k.markers = (k.markers || []).filter((m) => m.name !== nm).concat([{ name: nm, value: String(value == null ? "" : value).slice(0, 100) }]);
+    c.edited = true; c.fingerprint = fingerprint(c); return c;
+  }
+  function removeMarker(clipIn, index, name) { const c = cloneClip(clipIn); const k = c.keys[index]; if (!k || !k.markers) return c; k.markers = k.markers.filter((m) => m.name !== name); if (!k.markers.length) delete k.markers; c.edited = true; c.fingerprint = fingerprint(c); return c; }
+  function markers(clip) { const out = []; (clip.keys || []).forEach((k, i) => { for (const m of k.markers || []) out.push({ t: k.t, index: i, name: m.name, value: m.value }); }); return out; }
+  // arcs: the path an effector tip draws through the clip (motion trail) - sampled per frame, keys flagged
+  const ARC_TIPS = { r_hand: "r_wrist_tip", l_hand: "l_wrist_tip", r_foot: "r_ankle_tip", l_foot: "l_ankle_tip", head: "neck_tip", root: "root" };
+  function arcs(clip, which, samples) {
+    const names = Array.isArray(which) && which.length ? which.filter((w) => ARC_TIPS[w]) : Object.keys(ARC_TIPS);
+    const n = Math.max(2, Math.min(240, Number(samples) || Math.round(clip.duration * clip.fps) + 1));
+    const out = {}; for (const w of names) out[w] = [];
+    for (let i = 0; i < n; i++) { const t = (i / (n - 1)) * clip.duration; const pts = forwardKinematics(sampleAt(clip, t)); for (const w of names) out[w].push({ t: r3(t), p: pts[ARC_TIPS[w]].map((v) => r3(v)) }); }
+    const keyTimes = clip.keys.map((k) => k.t);
+    for (const w of names) for (const s of out[w]) s.key = keyTimes.some((kt) => Math.abs(kt - s.t) < 0.5 / clip.fps);
+    return out;
+  }
+  // timing report: spacing / arc / twinning analysis an animator would do by eye
+  function timing(clip) {
+    const notes = []; const keys = clip.keys; const step = 1 / (clip.fps || 30);
+    const gaps = []; for (let i = 1; i < keys.length; i++) gaps.push(keys[i].t - keys[i - 1].t);
+    if (gaps.length >= 3 && !clip.loop) { const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length; const varc = Math.sqrt(gaps.reduce((a, g) => a + (g - mean) ** 2, 0) / gaps.length) / (mean || 1); if (varc < 0.12) notes.push({ level: "warn", kind: "even", text: `keys are evenly spaced (${fmtS(mean)} apart) - real motion has fast and slow parts; try a hold or a breakdown` }); }
+    const tiny = gaps.filter((g) => g < step * 1.5).length; if (tiny) notes.push({ level: "info", kind: "dense", text: `${tiny} key gap${tiny > 1 ? "s" : ""} of a single frame - fine for impacts, noisy elsewhere` });
+    // twinning: left and right arms mirroring each other on most keys reads mechanical
+    let twins = 0, cnt = 0; for (const k of keys) { const l = k.poses.l_shoulder, r = k.poses.r_shoulder; if (!l || !r) continue; cnt++; if (Math.abs(l.rot[0] - r.rot[0]) < 4 && Math.abs(l.rot[2] + r.rot[2]) < 4) twins++; }
+    if (cnt >= 3 && twins / cnt > 0.7 && !/^(idle|block|cheer|clap|pushup|situp|jacks|squat|meditate|pray|surrender)/.test((clip.intent || {}).category + "_" + ((clip.intent || {}).acts || []).join("_"))) notes.push({ level: "info", kind: "twinning", text: `arms mirror each other on ${twins}/${cnt} keys (twinning) - offset one side a few degrees or a frame` });
+    const hasHold = keys.some((k) => k.tag === "hold"), hasBreak = keys.some((k) => k.tag === "breakdown"), hasMark = keys.some((k) => k.markers && k.markers.length);
+    const ends = !clip.loop && keys.length >= 2 ? Math.max(0, (keys[1].t - keys[0].t)) : 0;
+    if (!clip.loop && keys.length >= 3 && ends < step * 2) notes.push({ level: "info", kind: "anticipation", text: "the first move starts on frame 1 - a 2-4 frame anticipation (small counter-move) sells it" });
+    return { gaps: gaps.map((g) => r3(g)), holds: keys.filter((k) => k.tag === "hold").length, breakdowns: keys.filter((k) => k.tag === "breakdown").length, markers: markers(clip).length, impacts: keys.filter((k) => k.tag === "impact").length, notes, flags: { hasHold, hasBreak, hasMark } };
+  }
+  const fmtS = (v) => (Math.round(v * 1000) / 1000) + "s";
   function ikSolve(posesIn, effector, target, opts) {
     const E = EFFECTORS[effector]; if (!E || !target || target.length !== 3) return { poses: posesIn, distance: Infinity, reached: false, joints: [] };
     opts = opts || {}; const poses = clonePose(posesIn);
@@ -2269,7 +2369,7 @@
     return lines.join("\n");
   }
 
-  const api = { VERSION, JOINTS, PARENT, PIVOT, LIMITS, QUALITY, R15_BONES, R6_BONES, R6_C0, PRIORITY_TOKEN, EASING_TOKEN, parseIntent, generate, generateSequence, generateSet, splitSet, compatibility, describeSet, stanceDistance, setPriority, validate, refine, applyFeedback, variation, toStudio, toBuildArgs, toRbxmx, defaultRigInfo, detectRigType, boneMap, sampleAt, forwardKinematics, fkFull, metrics, serializeProject, parseProject, retime, moveKey, setJoint, duplicateKey, deleteKey, smooth, smoothness, simplify, reverse, bake, cycleOffset, insertKey, layer, ikSolve, groundFeet, copyPose, pastePose, channels, mirrorPose, easeAlpha, exportKeys, robloxEase, setInterp, ACTS, MOODS, findActs, findMood, posePhrase, classGesture, expandVocabulary, vocabulary, inspire, THESAURUS, VERB_CLASSES, splitClauses, concatClips, applyMood, UPPER_JOINTS, LOWER_JOINTS, EFFECTORS, TIP, ROOT_HEIGHT, compare, summary, mirror, fingerprint, similarity, persona, choreograph, STRIKE_POOL, math: { eulerYXZ, toEulerYXZ, mul, transpose, mulV, flat, from9 } };
+  const api = { VERSION, JOINTS, PARENT, PIVOT, LIMITS, QUALITY, R15_BONES, R6_BONES, R6_C0, PRIORITY_TOKEN, EASING_TOKEN, parseIntent, generate, generateSequence, generateSet, splitSet, compatibility, describeSet, stanceDistance, setPriority, validate, refine, applyFeedback, variation, toStudio, toBuildArgs, toRbxmx, defaultRigInfo, detectRigType, boneMap, sampleAt, forwardKinematics, fkFull, metrics, serializeProject, parseProject, retime, moveKey, setJoint, duplicateKey, deleteKey, smooth, smoothness, simplify, reverse, bake, cycleOffset, insertKey, breakdown, holdKey, nudgeKey, easeAll, EASE_PRESETS, overlap, LAG_JOINTS, setMarker, removeMarker, markers, arcs, ARC_TIPS, timing, layer, ikSolve, groundFeet, copyPose, pastePose, channels, mirrorPose, easeAlpha, exportKeys, robloxEase, setInterp, ACTS, MOODS, findActs, findMood, posePhrase, classGesture, expandVocabulary, vocabulary, inspire, THESAURUS, VERB_CLASSES, splitClauses, concatClips, applyMood, UPPER_JOINTS, LOWER_JOINTS, EFFECTORS, TIP, ROOT_HEIGHT, compare, summary, mirror, fingerprint, similarity, persona, choreograph, STRIKE_POOL, math: { eulerYXZ, toEulerYXZ, mul, transpose, mulV, flat, from9 } };
   root.ORAnimEngine = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -1,6 +1,7 @@
 // 1.54.0 — Animation engine polish + Blender-style tools (smooth / plant feet / simplify / reverse / bake / cycle offset /
 // insert key / layer / analytic 2-bone IK / pose copy-paste-flip) and the Animation Studio's orbitable viewport, IK handles,
-// dope sheet, graph editor, hotkeys, pose library and Layer picker. Run with NODE_PATH pointing at a jsdom install.
+// hotkeys, pose library and Layer picker; 1.64 replaced the dope sheet + graph editor with the key workbench
+// (tests/test-anim-bench.js). Run with NODE_PATH pointing at a jsdom install.
 "use strict";
 const fs = require("fs"), path = require("path");
 const ROOT = path.join(__dirname, "..");
@@ -11,7 +12,7 @@ const E = require(path.join(ROOT, "src/core/animengine.js"));
 
 // ── engine: smoothing ──
 const walk = E.generate("natural walk cycle, loop", { quality: "balanced" });
-ok("engine VERSION is 1.63.0 and the report carries a smoothness metric", E.VERSION === "1.63.0" && Number.isFinite(walk.report.smoothness) && walk.report.smoothness >= 0 && walk.report.smoothness <= 100, [E.VERSION, walk.report.smoothness]);
+ok("engine VERSION is 1.64.0 and the report carries a smoothness metric", E.VERSION === "1.64.0" && Number.isFinite(walk.report.smoothness) && walk.report.smoothness >= 0 && walk.report.smoothness <= 100, [E.VERSION, walk.report.smoothness]);
 const sm = E.smooth(walk, { strength: 1 });
 ok("smooth() keeps the clip valid, keeps first/last/impact keys and reports what it did", sm.report.ok && sm.keys[0].t === 0 && Math.abs(sm.keys[sm.keys.length - 1].t - sm.duration) < 1e-6 && /smoothed \(strength 1/.test(sm.fixes[sm.fixes.length - 1]), sm.fixes);
 ok("smooth() does not lower smoothness and is deterministic", sm.report.smoothness >= walk.report.smoothness && JSON.stringify(E.smooth(walk, { strength: 1 }).keys) === JSON.stringify(sm.keys), [walk.report.smoothness, sm.report.smoothness]);
@@ -110,7 +111,7 @@ const click = (el, o) => el.dispatchEvent(new w.MouseEvent("click", Object.assig
 const key = (k, o) => host.dispatchEvent(new w.KeyboardEvent("keydown", Object.assign({ key: k, bubbles: true, cancelable: true }, o || {})));
 const studio = read("src/core/animstudio.js"), css = read("overlay.css");
 ok("every data-act button has a doAction case and every data-tool button a clipTool branch (no dead controls)", [...host.querySelectorAll("[data-act]")].every((b) => studio.includes(`case "${b.dataset.act}":`)) && [...host.querySelectorAll("[data-tool]")].every((b) => studio.includes(`kind === "${b.dataset.tool}"`)) && host.querySelectorAll("[data-tool]").length === 7);
-ok("overlay.css styles the new surfaces", [".rsa-tools {", ".rsa-editor {", ".rsa-edtabs {", ".rsa-posetools {", ".rsa-poses {", ".rsa-pose-apply {", ".rsa-layer select", ".rsa-smooth {"].every((s) => css.includes(s)));
+ok("overlay.css styles the new surfaces", [".rsa-tools {", ".rsa-bench {", ".rsa-keystrip {", ".rsa-kchip {", ".rsa-bench-tools {", ".rsa-posetools {", ".rsa-poses {", ".rsa-pose-apply {", ".rsa-layer select", ".rsa-smooth {"].every((s) => css.includes(s)));
 ref("prompt").value = "natural walk cycle, loop"; click(act("generate"));
 const S = AS._state;
 ok("default view is the orbitable 3D viewport with joint + effector handles laid out", S.view === "3d" && S.cams.length === 1 && S.handles.filter((h) => h.kind === "joint").length === 15 && S.handles.filter((h) => h.kind === "effector").length === 4 && ops.includes("arc"));
@@ -141,18 +142,11 @@ key("D", { shiftKey: true }); ok("Shift+D duplicates the key one frame later", A
 const selBefore = S.sel; key("ArrowUp"); ok("↑ jumps to the next key", S.sel === selBefore + 1 && Math.abs(S.t - AS.getClip().keys[S.sel].t) < 1e-6);
 key("o"); ok("O toggles onion skin", S.onion === false && !ref("onionBtn").classList.contains("on")); key("o");
 key("k"); ok("K toggles auto-key", S.autoKey === true && ref("autoKeyBtn").classList.contains("on")); key("k");
-// graph editor
-key("g"); ok("G toggles the graph editor tab", S.editor === "graph" && host.querySelector('[data-editor="graph"]').classList.contains("on") && S.graphPts && S.graphPts.length === AS.getClip().keys.length * 3);
-const ed = ref("editor"); const ee = (type, x, y, o) => ed.dispatchEvent(new w.MouseEvent(type, Object.assign({ bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }, o || {})));
-const gp = S.graphPts.find((p) => p.index === S.sel && p.axis === 0); const v0 = AS.getClip().keys[S.sel].poses[S.selJoint].rot[0];
-ee("pointerdown", gp.x, gp.y); ee("pointermove", gp.x, gp.y - 40); ee("pointerup", gp.x, gp.y - 40);
-ok("dragging a graph point up raises that axis value on that key (and revalidates)", AS.getClip().keys[S.sel].poses[S.selJoint].rot[0] > v0 + 3 && AS.getClip().edited && AS.getClip().report, [v0, AS.getClip().keys[S.sel].poses[S.selJoint].rot[0]]);
-// dope sheet
-click(host.querySelector('[data-editor="dope"]')); const row = S.dopeRows.find((r) => r.j === "neck"); const c1 = AS.getClip(); const kx = 92 + 6 + (c1.keys[2].t / c1.duration) * (800 - 10 - 98);
-ee("pointerdown", kx, (row.y0 + row.y1) / 2); ee("pointerup", kx, (row.y0 + row.y1) / 2);
-ok("clicking a dope-sheet diamond selects that key AND that joint row", S.selJoint === "neck" && S.sel === 2 && S.dopeRows.length === 15, [S.selJoint, S.sel]);
-ee("pointerdown", kx, (row.y0 + row.y1) / 2); ee("pointermove", kx + 30, (row.y0 + row.y1) / 2); ee("pointerup", kx + 30, (row.y0 + row.y1) / 2);
-ok("dragging a dope-sheet diamond retimes the key (order preserved)", AS.getClip().keys[2].t > c1.keys[2].t && AS.getClip().keys.every((k, i, a) => !i || k.t > a[i - 1].t), [c1.keys[2].t, AS.getClip().keys[2].t]);
+// 1.64: the dope sheet + graph editor are gone - G now toggles motion arcs; the key strip is the key picker
+ok("no dope sheet / graph editor is left in the Studio (no editor tabs, no editor canvas, no S.editor state)", !host.querySelector("[data-editor]") && !host.querySelector("canvas.rsa-editor") && !("editor" in S) && !/renderGraph|renderDope|graphPts|dopeRows/.test(studio));
+key("g"); ok("G toggles the motion-arc overlay (not a graph editor)", S.arcs === true && ref("arcsBtn").classList.contains("on")); key("g"); ok("G again hides the arcs", S.arcs === false);
+const chips = host.querySelectorAll(".rsa-kchip"); ok("the key strip shows one chip per key with the selected one highlighted", chips.length === AS.getClip().keys.length && host.querySelectorAll(".rsa-kchip.on").length === 1 && chips[S.sel].classList.contains("on"));
+click(chips[2]); ok("clicking a key chip selects that key and moves the playhead there", S.sel === 2 && Math.abs(S.t - AS.getClip().keys[2].t) < 1e-6, [S.sel, S.t]);
 // copy / paste flipped
 S.selJoint = "r_shoulder"; const srcPose = JSON.stringify(AS.getClip().keys[S.sel].poses.r_shoulder);
 key("c", { ctrlKey: true }); ok("Ctrl+C copies the pose and enables Paste", S.clipboard && !ref("pasteBtn").disabled && !ref("pasteFlipBtn").disabled);
