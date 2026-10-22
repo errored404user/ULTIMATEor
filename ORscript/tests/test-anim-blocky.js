@@ -1,4 +1,4 @@
-// 1.67.0 / 1.67.1 — Animation Studio viewport draws a blocky Roblox rig-test style rig: one lit
+// 1.67.0 / 1.67.1 / 1.68.0 — Animation Studio viewport draws two blocky Roblox rig-test style rig models (R15 15 parts, R6 6 parts): one lit
 // block per bone in the joint's own frame (fkFull), classic default-avatar
 // colours (yellow head + arms, blue torso, green legs), a face on the front of
 // the head, R15 = 15 blocks, R6 = single torso block. Rendered through a
@@ -45,9 +45,10 @@ function render(prompt, rigType, view, t) {
 // ── R15, front ──
 render("looping idle with calm breathing", "R15", "front", 0.3);
 let q = quads();
-ok("source: blocks are built in each joint's own frame from fkFull (points + rotations), not from bare FK points", /drawRig\(ctx, E\(\)\.fkFull\(poses\), cam/.test(src) && /const pts = rig\.pts \|\| rig, world = rig\.world/.test(src) && /mulV\(w\.R, l\)/.test(src));
-ok("source: R15 part table has exactly 15 blocks (lower/upper torso, head, 3 per arm, 3 per leg) and R6 a single torso block", (src.match(/\["[a-z_]+", -?[\d.]+, -?[\d.]+, [\d.]+, [\d.]+, "(torso|head|limb)"/g) || []).length === 15 + 14 && /const PARTS_R6 = \[\n\s*\["waist", -0\.4, 1\.2/.test(src));
-ok("source: Rig-Builder proportions - torso 2 : limb 1 : depth 1 (0.667 / 0.333 / 0.333 in schematic studs), 1.2-cube head (0.8), LowerTorso a fifth of the torso, flat feet under the shin", /\["waist", -0\.08, 1\.2, 0\.667, 0\.333, "torso"/.test(src) && /\["root", -0\.2, 0\.12, 0\.667, 0\.333, "torso"/.test(src) && /\["neck", 0\.02, 0\.82, 0\.4, 0\.4, "head"/.test(src) && /\["l_shoulder", -0\.02, -0\.58, 0\.333, 0\.333, "limb"\]/.test(src) && /\["l_ankle", -0\.15, 0\.04, 0\.4, 0\.4, "limb", \{ zc: -0\.06 \}\]/.test(src));
+ok("source: blocks are built in each joint's own frame from fkFull (points + rotations), not from bare FK points", /drawRig\(ctx, rigFK\(poses, rigType\), cam/.test(src) && /return e\.fkFull\(poses\);/.test(src) && /const pts = rig\.pts \|\| rig, world = rig\.world/.test(src) && /mulV\(w\.R, l\)/.test(src));
+ok("source: two separate rig models - R15 table has exactly 15 parts (lower/upper torso, head, 3 per arm, 3 per leg), R6 table exactly 6 (Torso, Head, Left/Right Arm, Left/Right Leg)", (src.match(/\["[a-z_]+", -?[\d.]+, -?[\d.]+, [\d.]+, [\d.]+, "(torso|head|limb)"/g) || []).length === 15 + 6 && /const PARTS_R6 = \[\n\s*\["waist", -0\.4, 1\.2/.test(src) && /RIG_MODELS = \{ R15: \{ parts: PARTS_R15, fold: false[^}]*\}, R6: \{ parts: PARTS_R6, fold: true/.test(src) && ["Torso", "Head", "Left Arm", "Right Arm", "Left Leg", "Right Leg", "LowerTorso", "UpperTorso", "LeftUpperArm", "RightFoot"].every((n) => src.includes(`name: "${n}"`)));
+ok("source: R6 limbs are single rigid 1x2x1 blocks from the shoulder / hip to the hand / sole (no elbow, wrist, knee or ankle parts) and the preview folds the poses like the exporter (engine.foldForRig)", /\["l_shoulder", 0\.0, -1\.5, 0\.333, 0\.333, "limb", \{ name: "Left Arm" \}\]/.test(src) && /\["r_hip", 0\.0, -1\.65, 0\.4, 0\.36, "limb", \{ xc: -0\.1, name: "Right Leg" \}\]/.test(src) && !/\["[lr]_(elbow|wrist|knee|ankle)"[^\n]*\n[^\n]*\n[^\n]*\n[^\n]*const RIG_MODELS/.test(src) && /e\.foldForRig\(poses, "R6"\)/.test(src) && typeof E.foldForRig === "function");
+ok("source: Rig-Builder proportions - torso 2 : limb 1 : depth 1 (0.667 / 0.333 / 0.333 in schematic studs), 1.2-cube head (0.8), LowerTorso a fifth of the torso, flat feet under the shin", /\["waist", -0\.08, 1\.2, 0\.667, 0\.333, "torso"/.test(src) && /\["root", -0\.2, 0\.12, 0\.667, 0\.333, "torso"/.test(src) && /\["neck", 0\.02, 0\.82, 0\.4, 0\.4, "head"/.test(src) && /\["l_shoulder", -0\.02, -0\.58, 0\.333, 0\.333, "limb", \{ name: "LeftUpperArm" \}\]/.test(src) && /\["l_ankle", -0\.15, 0\.04, 0\.4, 0\.4, "limb", \{ zc: -0\.06, name: "LeftFoot" \}\]/.test(src));
 ok("front view of an idle R15 fills lit block faces (>= 15 quads, one per visible block) - no stick-figure line pass", q.length >= 15 && q.length <= 60, q.length);
 const cols = q.map((o) => colourOf(o.style));
 ok("rig-test decal colours from the front: red fronts on the 14 body blocks, a grey head, no blue backs visible", cols.filter(isRed).length >= 14 && cols.some(isGrey) && !cols.some(isBlue), cols.slice(0, 6));
@@ -75,7 +76,13 @@ AS._state.selJoint = "r_shoulder";
 render("looping idle with calm breathing", "R6", "front", 0.3);
 q = quads();
 tx = texts();
-ok("R6 front: one torso block (FRONT) and ONE F per limb (4) - no seams / letters on the folded elbow, wrist, knee, ankle blocks", tx.filter((t) => t === "FRONT").length === 1 && tx.filter((t) => t === "F").length === 4 && q.filter((o) => isRed(colourOf(o.style))).length >= 13, tx);
+ok("R6 front: a 6-part model - one torso block (FRONT), ONE rigid block per limb (4 F), grey head; no elbow / wrist / knee / ankle seams", tx.filter((t) => t === "FRONT").length === 1 && tx.filter((t) => t === "F").length === 4 && q.filter((o) => isRed(colourOf(o.style))).length >= 4 && q.filter((o) => isRed(colourOf(o.style))).length <= 6 && q.some((o) => isGrey(colourOf(o.style))) && q.length < 30, { red: q.filter((o) => isRed(colourOf(o.style))).length, quads: q.length, tx });
+// R6 preview follows the R6 fold: a bent elbow does not bend the rigid arm - the hand handle sits on the straight arm line
+AS.loadClip(E.generate("looping idle with calm breathing", { quality: "balanced", rigType: "R6" })); AS._state.view = "front";
+{ const c = AS._state.clip; c.keys.forEach((k) => { k.poses.r_shoulder = { rot: [0, 0, 0] }; k.poses.r_elbow = { rot: [-1.4, 0, 0] }; k.poses.r_wrist = { rot: [0, 0, 0] }; }); }
+ops.length = 0; AS._scrub(0.2);
+const hand = pv().filter((o) => o.op === "fill" && o.el && o.el.length === 1 && /ffd166|255,209,102/i.test(o.style));
+ok("R6 fold in the viewport: the status line names the model and the elbow key is folded into the shoulder (engine.foldForRig halves it) rather than drawn as a bent forearm", pv().some((o) => o.op === "text" && /R6 · 6 parts/.test(o.text)) && E.foldForRig({ r_shoulder: { rot: [0, 0, 0] }, r_elbow: { rot: [-1.4, 0, 0] } }, "R6").r_shoulder.rot[0] === -0.7, hand.length);
 // ghosts / onion skins stay translucent outlines
 render("walk", "R15", "front", 0.4);
 AS._state.onion = true; AS._state.playing = false; ops.length = 0; AS._scrub(0.4);
@@ -87,6 +94,6 @@ ok("the sword still hangs off the right hand (blade + cross-guard)", pv().some((
 // handles unchanged
 ok("joint handles / IK effectors still render on top for dragging", AS._state.handles.length >= 15 && AS._state.handles.some((h) => h.kind === "effector"));
 const readme = read("README.md");
-ok("README documents the blocky rig (1.67.0) and the rig-test decals (1.67.1)", /\*\*1\.67\.0 — /.test(readme) && /\*\*1\.67\.1 — /.test(readme) && /blocky/i.test(readme) && /FRONT/.test(readme) && /test-anim-blocky\.js/.test(readme));
+ok("README documents the blocky rig (1.67.0), the rig-test decals (1.67.1) and the two separate rig models (1.68.0)", /\*\*1\.67\.0 — /.test(readme) && /\*\*1\.67\.1 — /.test(readme) && /\*\*1\.68\.0 — /.test(readme) && /6 parts/.test(readme) && /blocky/i.test(readme) && /FRONT/.test(readme) && /test-anim-blocky\.js/.test(readme));
 console.log(`test-anim-blocky: ${n} checks, ${failed} failed`);
 process.exit(failed ? 1 : 0);

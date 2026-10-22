@@ -425,34 +425,55 @@
     ctx.fillStyle = "rgba(126,178,255,.7)"; ctx.font = "9px ui-monospace, Consolas, monospace"; ctx.fillText("fwd", f[0] + 3, f[1] - 3);
     ctx.restore();
   }
-  // ── 1.67 blocky Roblox-style rig ──
-  // Every bone is drawn as a block in the JOINT'S OWN frame (fkFull gives the
-  // world rotation of each joint, so twist / roll show). Proportions follow the
-  // Rig Builder block rigs scaled to the schematic skeleton (torso 2 wide : limb
-  // 1 : depth 1, head 1.2 cube, LowerTorso a fifth of the torso, feet flat
-  // blocks under the shin) and the blocks wear the standard rig-test decals:
-  // red FRONT / F, blue BACK / B, yellow right side, green left side, white
-  // top / bottom, Medium-stone-grey head with a face. Faces are lit per normal
-  // and painted far → near with back-face culling.
-  // [joint, y0, y1, halfX, halfZ, kind, extra]  (local studs; y along the bone)
+  // ── 1.67 blocky Roblox-style rig · 1.68 two separate rig models ──
+  // Every part is drawn as a block in the JOINT'S OWN frame (fkFull gives the
+  // world rotation of each joint, so twist / roll show). There are two distinct
+  // models, exactly like the Rig Builder's block rigs:
+  //   R15 - 15 parts (LowerTorso, UpperTorso, Head, Upper/Lower Arm + Hand × 2,
+  //         Upper/Lower Leg + Foot × 2), every joint of the semantic skeleton.
+  //   R6  - 6 parts (Torso, Head, Left/Right Arm, Left/Right Leg): rigid 1×2×1
+  //         limbs hung from the shoulders / hips, one 2×2×1 torso. The preview
+  //         runs the clip through the engine's R6 fold (elbow/knee into the
+  //         shoulder/hip, waist into the root) so what you see is what Studio plays.
+  // Proportions follow the Rig Builder scaled to the schematic skeleton (torso 2
+  // wide : limb 1 : depth 1, head 1.2 cube, LowerTorso a fifth of the torso, feet
+  // flat under the shin) and the blocks wear the standard rig-test decals: red
+  // FRONT / F, blue BACK / B, yellow right side, green left side, white top /
+  // bottom, Medium-stone-grey head with a face. Faces are lit per normal and
+  // painted far → near with back-face culling.
+  // [joint, y0, y1, halfX, halfZ, kind, extra]  (local studs; y along the bone; extra.xc / extra.zc shift the block sideways / forward)
   const PARTS_R15 = [
-    ["root", -0.2, 0.12, 0.667, 0.333, "torso", { label: "F", back: "B" }],
-    ["waist", -0.08, 1.2, 0.667, 0.333, "torso", { label: "FRONT", back: "BACK" }],
-    ["neck", 0.02, 0.82, 0.4, 0.4, "head", { head: true }],
-    ["l_shoulder", -0.02, -0.58, 0.333, 0.333, "limb"], ["l_elbow", -0.02, -0.58, 0.333, 0.333, "limb"], ["l_wrist", -0.02, -0.3, 0.333, 0.333, "limb"],
-    ["r_shoulder", -0.02, -0.58, 0.333, 0.333, "limb"], ["r_elbow", -0.02, -0.58, 0.333, 0.333, "limb"], ["r_wrist", -0.02, -0.3, 0.333, 0.333, "limb"],
-    ["l_hip", -0.02, -0.73, 0.4, 0.36, "limb"], ["l_knee", -0.02, -0.73, 0.4, 0.36, "limb"], ["l_ankle", -0.15, 0.04, 0.4, 0.4, "limb", { zc: -0.06 }],
-    ["r_hip", -0.02, -0.73, 0.4, 0.36, "limb"], ["r_knee", -0.02, -0.73, 0.4, 0.36, "limb"], ["r_ankle", -0.15, 0.04, 0.4, 0.4, "limb", { zc: -0.06 }],
+    ["root", -0.2, 0.12, 0.667, 0.333, "torso", { label: "F", back: "B", name: "LowerTorso" }],
+    ["waist", -0.08, 1.2, 0.667, 0.333, "torso", { label: "FRONT", back: "BACK", name: "UpperTorso" }],
+    ["neck", 0.02, 0.82, 0.4, 0.4, "head", { head: true, name: "Head" }],
+    ["l_shoulder", -0.02, -0.58, 0.333, 0.333, "limb", { name: "LeftUpperArm" }], ["l_elbow", -0.02, -0.58, 0.333, 0.333, "limb", { name: "LeftLowerArm" }], ["l_wrist", -0.02, -0.3, 0.333, 0.333, "limb", { name: "LeftHand" }],
+    ["r_shoulder", -0.02, -0.58, 0.333, 0.333, "limb", { name: "RightUpperArm" }], ["r_elbow", -0.02, -0.58, 0.333, 0.333, "limb", { name: "RightLowerArm" }], ["r_wrist", -0.02, -0.3, 0.333, 0.333, "limb", { name: "RightHand" }],
+    ["l_hip", -0.02, -0.73, 0.4, 0.36, "limb", { name: "LeftUpperLeg" }], ["l_knee", -0.02, -0.73, 0.4, 0.36, "limb", { name: "LeftLowerLeg" }], ["l_ankle", -0.15, 0.04, 0.4, 0.4, "limb", { zc: -0.06, name: "LeftFoot" }],
+    ["r_hip", -0.02, -0.73, 0.4, 0.36, "limb", { name: "RightUpperLeg" }], ["r_knee", -0.02, -0.73, 0.4, 0.36, "limb", { name: "RightLowerLeg" }], ["r_ankle", -0.15, 0.04, 0.4, 0.4, "limb", { zc: -0.06, name: "RightFoot" }],
   ];
-  // R6: one torso block, one block per limb (no seams, one letter), cube head.
+  // R6: six parts. One torso block (hips → neck), cube head, and ONE rigid block per limb reaching from the
+  // shoulder / hip to the hand / sole (R6 arms and legs are single 1×2×1 parts - no elbow, wrist, knee or ankle).
   const PARTS_R6 = [
-    ["waist", -0.4, 1.2, 0.667, 0.333, "torso", { label: "FRONT", back: "BACK" }],
-    ["neck", 0.02, 0.86, 0.42, 0.42, "head", { head: true }],
-    ["l_shoulder", 0.0, -0.6, 0.333, 0.333, "limb"], ["l_elbow", 0.0, -0.6, 0.333, 0.333, "limb", { nolabel: true }], ["l_wrist", 0.0, -0.35, 0.333, 0.333, "limb", { nolabel: true }],
-    ["r_shoulder", 0.0, -0.6, 0.333, 0.333, "limb"], ["r_elbow", 0.0, -0.6, 0.333, 0.333, "limb", { nolabel: true }], ["r_wrist", 0.0, -0.35, 0.333, 0.333, "limb", { nolabel: true }],
-    ["l_hip", 0.0, -0.75, 0.4, 0.36, "limb"], ["l_knee", 0.0, -0.75, 0.4, 0.36, "limb", { nolabel: true }], ["l_ankle", -0.15, 0.02, 0.4, 0.4, "limb", { zc: -0.06, nolabel: true }],
-    ["r_hip", 0.0, -0.75, 0.4, 0.36, "limb"], ["r_knee", 0.0, -0.75, 0.4, 0.36, "limb", { nolabel: true }], ["r_ankle", -0.15, 0.02, 0.4, 0.4, "limb", { zc: -0.06, nolabel: true }],
+    ["waist", -0.4, 1.2, 0.667, 0.333, "torso", { label: "FRONT", back: "BACK", name: "Torso" }],
+    ["neck", 0.02, 0.86, 0.42, 0.42, "head", { head: true, name: "Head" }],
+    ["l_shoulder", 0.0, -1.5, 0.333, 0.333, "limb", { name: "Left Arm" }],
+    ["r_shoulder", 0.0, -1.5, 0.333, 0.333, "limb", { name: "Right Arm" }],
+    ["l_hip", 0.0, -1.65, 0.4, 0.36, "limb", { xc: 0.1, name: "Left Leg" }],
+    ["r_hip", 0.0, -1.65, 0.4, 0.36, "limb", { xc: -0.1, name: "Right Leg" }],
   ];
+  const RIG_MODELS = { R15: { parts: PARTS_R15, fold: false, label: "R15 · 15 parts" }, R6: { parts: PARTS_R6, fold: true, label: "R6 · 6 parts" } };
+  const rigModel = (rigType) => RIG_MODELS[String(rigType || "R15").toUpperCase() === "R6" ? "R6" : "R15"];
+  // Skeleton for the preview: R15 uses the poses as they are; R6 folds them the way the exporter does
+  // (engine.foldForRig) and straightens the joints the R6 rig does not have, so the rigid blocks sit
+  // exactly where the Motor6Ds will put the real parts.
+  const R6_DROPPED = ["waist", "l_elbow", "l_wrist", "r_elbow", "r_wrist", "l_knee", "l_ankle", "r_knee", "r_ankle"];
+  function rigFK(poses, rigType) {
+    const e = E();
+    if (!rigModel(rigType).fold || typeof e.foldForRig !== "function") return e.fkFull(poses);
+    const p = e.foldForRig(poses, "R6");
+    for (const j of R6_DROPPED) p[j] = { rot: [0, 0, 0] };
+    return e.fkFull(p);
+  }
   // Rig-test decal colours (BrickColor): Bright red front, Bright blue back, Bright yellow right, Bright green left, Institutional white top/bottom, Medium stone grey head.
   const SIDE_COLOUR = { front: [196, 40, 28], back: [13, 105, 172], right: [245, 205, 48], left: [75, 151, 75], top: [229, 229, 224], bottom: [205, 205, 200] };
   const HEAD_COLOUR = [163, 162, 165];
@@ -462,7 +483,7 @@
   ];
   const rgba = (c, a, m) => `rgba(${Math.round(Math.min(255, c[0] * (m == null ? 1 : m)))},${Math.round(Math.min(255, c[1] * (m == null ? 1 : m)))},${Math.round(Math.min(255, c[2] * (m == null ? 1 : m)))},${a})`;
   function drawRig(ctx, rig, cam, style) {
-    const pts = rig.pts || rig, world = rig.world || null; const ghost = !!style.ghost; const r6 = style.rigType === "R6";
+    const pts = rig.pts || rig, world = rig.world || null; const ghost = !!style.ghost; const model = rigModel(style.rigType);
     const P = {}; for (const k of Object.keys(pts)) P[k] = cam.project(pts[k]);
     ctx.save(); ctx.lineJoin = "round";
     if (!ghost && style.shadow !== false) { // flattened contact shadow on the ground plane
@@ -475,10 +496,10 @@
     const light = (() => { const v = [-cam.right[0] * 0.45 + cam.up[0] * 0.8 - cam.depth[0] * 0.65, -cam.right[1] * 0.45 + cam.up[1] * 0.8 - cam.depth[1] * 0.65, -cam.right[2] * 0.45 + cam.up[2] * 0.8 - cam.depth[2] * 0.65]; const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; })();
     const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
     const boxes = [];
-    for (const part of (r6 ? PARTS_R6 : PARTS_R15)) {
+    for (const part of model.parts) {
       const [j, y0, y1, hx, hz, kind, extra] = part; const w = world[j]; if (!w) continue;
-      const zc = (extra && extra.zc) || 0;
-      const loc = (bx, by, bz) => [bx ? hx : -hx, by ? y1 : y0, zc + (bz ? hz : -hz)];
+      const zc = (extra && extra.zc) || 0, xc = (extra && extra.xc) || 0;
+      const loc = (bx, by, bz) => [xc + (bx ? hx : -hx), by ? y1 : y0, zc + (bz ? hz : -hz)];
       const corners = []; const proj = [];
       for (let i = 0; i < 8; i++) { const l = loc(i & 1, i & 2, i & 4); const o = mulV(w.R, l); const q = [w.p[0] + o[0], w.p[1] + o[1], w.p[2] + o[2]]; corners.push(q); proj.push(cam.project(q)); }
       const centre = corners.reduce((a, q) => [a[0] + q[0] / 8, a[1] + q[1] / 8, a[2] + q[2] / 8], [0, 0, 0]);
@@ -563,17 +584,17 @@
       if (i) { ctx.strokeStyle = "rgba(255,255,255,.08)"; ctx.beginPath(); ctx.moveTo(box.x, 0); ctx.lineTo(box.x, H); ctx.stroke(); }
       if (!poses) return;
       const weapon = S.clip.intent && S.clip.intent.weapon, rigType = S.clip.rigType;
-      if (ghost) drawRig(ctx, E().fkFull(ghost), cam, { ghost: true, rigType });
-      if (onion && onion.prev) drawRig(ctx, E().fkFull(onion.prev), cam, { ghost: true, rigType, tint: "rgba(126,178,255,.3)" });
-      if (onion && onion.next) drawRig(ctx, E().fkFull(onion.next), cam, { ghost: true, rigType, tint: "rgba(255,159,110,.3)" });
+      if (ghost) drawRig(ctx, rigFK(ghost, rigType), cam, { ghost: true, rigType });
+      if (onion && onion.prev) drawRig(ctx, rigFK(onion.prev, rigType), cam, { ghost: true, rigType, tint: "rgba(126,178,255,.3)" });
+      if (onion && onion.next) drawRig(ctx, rigFK(onion.next, rigType), cam, { ghost: true, rigType, tint: "rgba(255,159,110,.3)" });
       if (S.arcs) drawArcs(ctx, cam);
-      const P = drawRig(ctx, E().fkFull(poses), cam, { weapon, rigType, selJoint: S.selJoint });
+      const P = drawRig(ctx, rigFK(poses, rigType), cam, { weapon, rigType, selJoint: S.selJoint });
       if (i === views.length - 1 && !S.playing) drawHandles(ctx, P);
     });
     if (S.clip) {
       ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.font = "10px ui-monospace, Consolas, monospace";
       const hint = S.view === "3d" ? "drag: orbit · wheel: zoom · shift-drag: pan · double-click: reset" : "drag: pan · wheel: zoom";
-      ctx.fillText(`blocky rig preview (${S.clip.rigType}) · t=${fmt(S.t, 2)}s · ${hint} · drag a yellow hand/foot: IK${S.ghost && S.prev ? " · white ghost = previous version" : ""}${S.onion ? " · blue/orange = previous/next key" : ""}${S.arcs ? " · arcs = motion trails" : ""}`, 12, H - 8);
+      ctx.fillText(`blocky rig preview (${rigModel(S.clip.rigType).label}) · t=${fmt(S.t, 2)}s · ${hint} · drag a yellow hand/foot: IK${S.ghost && S.prev ? " · white ghost = previous version" : ""}${S.onion ? " · blue/orange = previous/next key" : ""}${S.arcs ? " · arcs = motion trails" : ""}`, 12, H - 8);
       if (S.ikDrag) { ctx.fillStyle = "#ffd166"; ctx.fillText(`IK ${S.ikDrag.eff}: target ${S.ikDrag.target.map((v) => v.toFixed(2)).join(", ")} · ${S.ikDrag.reached ? "reached" : "out of reach by " + fmt(S.ikDrag.distance, 2) + " studs"}`, 12, H - 22); }
     }
   }

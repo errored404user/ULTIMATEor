@@ -28,7 +28,7 @@
 // rest. Nothing is faked: unsupported requests return explicit limitations.
 (function (root) {
   "use strict";
-  const VERSION = "1.67.1";
+  const VERSION = "1.68.0";
   const DEG = Math.PI / 180;
 
   // ───────────────────────── rotation math ─────────────────────────
@@ -2369,7 +2369,7 @@
     return lines.join("\n");
   }
 
-  const api = { VERSION, JOINTS, PARENT, PIVOT, LIMITS, QUALITY, R15_BONES, R6_BONES, R6_C0, PRIORITY_TOKEN, EASING_TOKEN, parseIntent, generate, generateSequence, generateSet, splitSet, compatibility, describeSet, stanceDistance, setPriority, validate, refine, applyFeedback, variation, toStudio, toBuildArgs, toRbxmx, defaultRigInfo, detectRigType, boneMap, sampleAt, forwardKinematics, fkFull, metrics, serializeProject, parseProject, retime, moveKey, setJoint, duplicateKey, deleteKey, smooth, smoothness, simplify, reverse, bake, cycleOffset, insertKey, breakdown, holdKey, nudgeKey, easeAll, EASE_PRESETS, overlap, LAG_JOINTS, setMarker, removeMarker, markers, arcs, ARC_TIPS, timing, layer, ikSolve, groundFeet, copyPose, pastePose, channels, mirrorPose, easeAlpha, exportKeys, robloxEase, setInterp, ACTS, MOODS, findActs, findMood, posePhrase, classGesture, expandVocabulary, vocabulary, inspire, THESAURUS, VERB_CLASSES, splitClauses, concatClips, applyMood, UPPER_JOINTS, LOWER_JOINTS, EFFECTORS, TIP, ROOT_HEIGHT, compare, summary, mirror, fingerprint, similarity, persona, choreograph, STRIKE_POOL, math: { eulerYXZ, toEulerYXZ, mul, transpose, mulV, flat, from9 } };
+  const api = { VERSION, JOINTS, PARENT, PIVOT, LIMITS, QUALITY, R15_BONES, R6_BONES, R6_C0, foldForRig, PRIORITY_TOKEN, EASING_TOKEN, parseIntent, generate, generateSequence, generateSet, splitSet, compatibility, describeSet, stanceDistance, setPriority, validate, refine, applyFeedback, variation, toStudio, toBuildArgs, toRbxmx, defaultRigInfo, detectRigType, boneMap, sampleAt, forwardKinematics, fkFull, metrics, serializeProject, parseProject, retime, moveKey, setJoint, duplicateKey, deleteKey, smooth, smoothness, simplify, reverse, bake, cycleOffset, insertKey, breakdown, holdKey, nudgeKey, easeAll, EASE_PRESETS, overlap, LAG_JOINTS, setMarker, removeMarker, markers, arcs, ARC_TIPS, timing, layer, ikSolve, groundFeet, copyPose, pastePose, channels, mirrorPose, easeAlpha, exportKeys, robloxEase, setInterp, ACTS, MOODS, findActs, findMood, posePhrase, classGesture, expandVocabulary, vocabulary, inspire, THESAURUS, VERB_CLASSES, splitClauses, concatClips, applyMood, UPPER_JOINTS, LOWER_JOINTS, EFFECTORS, TIP, ROOT_HEIGHT, compare, summary, mirror, fingerprint, similarity, persona, choreograph, STRIKE_POOL, math: { eulerYXZ, toEulerYXZ, mul, transpose, mulV, flat, from9 } };
   root.ORAnimEngine = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

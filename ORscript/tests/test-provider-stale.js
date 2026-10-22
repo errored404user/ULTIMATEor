@@ -1,4 +1,4 @@
-// 1.67.1 — "it executed the previous answer again" on Arena (and others).
+// 1.68.0 — "it executed the previous answer again" on Arena (and others).
 // Two layers: (1) the core never parses a reply that is provably the turn that
 // already existed before the send (same node / no new node + identical text);
 // (2) the Arena provider recognises turns without depending on this month's
