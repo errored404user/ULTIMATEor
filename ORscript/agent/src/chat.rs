@@ -983,7 +983,7 @@ mod approval_tests {
         assert!(err.contains("DENIED"), "{err}");
         // dismissed (sender dropped without an answer)
         let (tx, rx) = channel::<ChatEvent>();
-        let waiter = tokio::spawn({ let tx = tx.clone(); let cancel = cancel.clone(); async move { await_approval(&tx, &cancel, "c3", "open_path", &json!({})).await } });
+        let waiter = tokio::spawn({ let tx = tx.clone(); let cancel = cancel.clone(); async move { await_approval(&tx, &cancel, "open_path", &json!({})).await } });
         let ev = tokio::task::spawn_blocking(move || rx.recv().unwrap()).await.unwrap();
         drop(ev);
         let err = waiter.await.unwrap().unwrap_err();
@@ -991,7 +991,7 @@ mod approval_tests {
         // window gone (receiver dropped before the request)
         let (tx, rx) = channel::<ChatEvent>();
         drop(rx);
-        let err = await_approval(&tx, &cancel, "c4", "run_command", &json!({})).await.unwrap_err();
+        let err = await_approval(&tx, &cancel, "run_command", &json!({})).await.unwrap_err();
         assert!(err.contains("window"), "{err}");
     }
 
@@ -999,7 +999,7 @@ mod approval_tests {
     async fn approval_respects_stop() {
         let cancel = Arc::new(AtomicBool::new(false));
         let (tx, rx) = channel::<ChatEvent>();
-        let waiter = tokio::spawn({ let tx = tx.clone(); let cancel = cancel.clone(); async move { await_approval(&tx, &cancel, "c5", "run_command", &json!({})).await } });
+        let waiter = tokio::spawn({ let tx = tx.clone(); let cancel = cancel.clone(); async move { await_approval(&tx, &cancel, "run_command", &json!({})).await } });
         let _keep = tokio::task::spawn_blocking(move || rx.recv().unwrap()).await.unwrap();
         cancel.store(true, Ordering::Relaxed);
         let err = waiter.await.unwrap().unwrap_err();

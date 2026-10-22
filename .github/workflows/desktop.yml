@@ -67,11 +67,13 @@ jobs:
         run: |
           set +e
           [ -f test.log ] || exit 0
-          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' test.log | head -10 | while IFS= read -r line; do
+          esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" test.log > test.plain
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' test.plain | head -10 | while IFS= read -r line; do
             f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
             echo "::error file=ORscript/agent/$f,line=$l::$msg"
           done
-          grep -E "^test .* FAILED|panicked at|^---- |^error" test.log | head -20 | while IFS= read -r line; do echo "::error::$line"; done
+          grep -E "^test .* FAILED|panicked at|^---- |^error" test.plain | head -20 | while IFS= read -r line; do echo "::error::$line"; done
+          tail -6 test.plain | while IFS= read -r line; do echo "::warning::tail: $line"; done
           exit 0
       - name: Smoke test (headless flag parses)
         run: ./target/release/or-core.exe --help
@@ -136,11 +138,13 @@ jobs:
         run: |
           set +e
           [ -f test.log ] || exit 0
-          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' test.log | head -10 | while IFS= read -r line; do
+          esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" test.log > test.plain
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' test.plain | head -10 | while IFS= read -r line; do
             f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
             echo "::error file=ORscript/agent/$f,line=$l::$msg"
           done
-          grep -E "^test .* FAILED|panicked at|^---- |^error" test.log | head -20 | while IFS= read -r line; do echo "::error::$line"; done
+          grep -E "^test .* FAILED|panicked at|^---- |^error" test.plain | head -20 | while IFS= read -r line; do echo "::error::$line"; done
+          tail -6 test.plain | while IFS= read -r line; do echo "::warning::tail: $line"; done
           exit 0
       - name: Smoke test
         run: ./target/release/or-core --help

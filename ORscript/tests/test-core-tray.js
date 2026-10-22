@@ -39,7 +39,7 @@ ok("normal Close only hides when a usable tray exists",
 ok("status window exposes an explicit Quit button", gui.includes('pill(ui, t, "Quit", false)') && gui.includes("request_quit(&self.shared)"));
 ok("launching or-core again reopens the existing hidden instance",
   /fn main\(\)[\s\S]*if let Some\(hwnd\) = (?:other_)?agent_window\(\)[\s\S]*show_agent_window\(hwnd\);[\s\S]*return;/.test(main)
-    && main.includes("FindWindowW"));
+    && main.includes("pub fn EnumWindows(") && !main.includes("pub fn FindWindowW("));
 if (workflow !== null) ok("Windows build commits the rebuilt lockfile and executable",
   workflow.includes("git add agent/Cargo.lock bin/or-core.exe"));
 else console.log("SKIP  Windows release workflow is not distributed in the extension package");

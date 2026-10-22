@@ -113,7 +113,6 @@ mod win_msg {
             caption: *const u16,
             ty: u32,
         ) -> i32;
-        pub fn FindWindowW(class_name: *const u16, window_name: *const u16) -> *mut core::ffi::c_void;
         pub fn ShowWindow(hwnd: *mut core::ffi::c_void, command: i32) -> i32;
         pub fn SetForegroundWindow(hwnd: *mut core::ffi::c_void) -> i32;
         pub fn PostMessageW(hwnd: *mut core::ffi::c_void, msg: u32, wparam: usize, lparam: isize) -> i32;
@@ -776,7 +775,7 @@ fn env_first(keys: &[&str]) -> Option<String> {
 fn main() {
     // Double-clicking or-core.exe while it is already in the notification area
     // should reopen that instance, not start a doomed second bridge on the same
-    // ports. FindWindowW sees hidden windows too.
+    // ports. EnumWindows (other_agent_window) sees hidden windows too.
     #[cfg(windows)]
     if let Some(hwnd) = other_agent_window() {
         show_agent_window(hwnd);
