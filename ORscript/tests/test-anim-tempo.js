@@ -1,4 +1,4 @@
-// 1.60.0 — keep the tempo when combining animations + plain speed words.
+// 1.61.0 — keep the tempo when combining animations + plain speed words.
 // Chained clips ("A then B") used to join with a fixed 0.25 s snap, layering stretched the upper clip to the base
 // length (a 2 s wave over a 1 s walk = 2× faster), a model-picked duration squeezed whole sequences, and "make it slow"
 // was not even recognised. Engine-only + string pins; no jsdom needed.

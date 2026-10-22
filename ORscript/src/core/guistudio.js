@@ -17,7 +17,13 @@
  *     studioReady() -> boolean, engine() -> string, toast(msg), diag(event, data)
  *   }
  *   close(), isOpen(), getSpec(), loadSpec(spec), toLuau(spec), buildMessage(intent), check()
+ *   generate(prompt?), refine(), variation(), lastDesign          // 1.61 describe → Generate (ORGuiGen)
  *
+ * 1.61: describe → Generate - a prompt bar above the stage turns plain words
+ * into a design locally through guigen.js (closest library screen + theme /
+ * counts / names / placement / size / extras transforms), with Refine-with-
+ * feedback, Variation, a score + notes line, and the prompt / feedback trail
+ * in the Send-to-AI hand-off. Same loop as Animation Studio, no model turn.
  * 1.50: template gallery - 100+ themed screens from guistudio_templates.js, a
  * searchable gallery overlay with lazily rendered, memoised mini-previews,
  * featured start cards, category-grouped dropdown, lazy tree rendering.
@@ -36,6 +42,7 @@
   const SVG = (d) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const I = {
     select: SVG('<path d="M5 4l6 15 2-6 6-2z"/>'),
+    spark: SVG('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>'),
     frame: SVG('<rect x="4" y="5" width="16" height="14" rx="2"/>'),
     text: SVG('<path d="M5 6h14"/><path d="M12 6v13"/><path d="M9 19h6"/>'),
     button: SVG('<rect x="3" y="8" width="18" height="8" rx="4"/><path d="M8 12h8"/>'),
@@ -134,6 +141,7 @@
     preset: "midnight", tokens: Object.assign({}, FALLBACK_PRESETS.midnight),
     nodes: [], sel: [], history: [], redo: [], clipboard: null, sideTab: "props", intent: "",
     studioScreens: [], issues: null, issuesOpen: false, pendingRestore: null, galleryOpen: false, galCat: "all", galQuery: "", thumb: false,
+    gen: null, // 1.61: last prompt-generated design (ORGuiGen) - drives Refine / Variation and the hand-off text
     simple: (() => { try { return localStorage.getItem("rsg-mode") !== "advanced"; } catch { return true; } })(),
   };
   const byId = new Map();
@@ -472,7 +480,7 @@
     const inset = S.screen.ignore_inset === false ? `<div class="rsg-inset" style="height:${d.inset}px"></div>` : `<div class="rsg-inset ghost" style="height:${d.inset}px"></div>`;
     const roots = S.nodes.slice().sort((a, b) => (a.z || 1) - (b.z || 1)).map((r) => renderNode(r, null)).join("");
     const restore = S.pendingRestore && !S.nodes.length ? `<div class="rsg-restore"><span>Your last design was kept — <b>${esc(S.pendingRestore.spec.screen && S.pendingRestore.spec.screen.name || "GUI")}</b>, ${S.pendingRestore.count} object${S.pendingRestore.count === 1 ? "" : "s"}, ${esc(ago(S.pendingRestore.t))}.</span><button type="button" class="rsg-btn sm primary" data-act="restore">Restore it</button><button type="button" class="rsg-btn sm" data-act="restoreDismiss">Start fresh</button></div>` : "";
-    const empty = S.nodes.length ? "" : `<div class="rsg-empty-stage">${restore}<img class="rsg-empty-logo" alt="GUI Studio by ORscript" src="${esc(assetUrl("assets/gui-studio-wordmark.png"))}" draggable="false"><b>Start with a ready screen</b><div class="rsg-start">${featuredTemplates(8).map((t) => templateCard(t, "rsg-start-card")).join("")}</div><button type="button" class="rsg-btn primary rsg-browse" data-act="gallery">Browse all ${templates().length} templates</button><span>…or add your own: ${S.simple ? "click <b>Button</b>, <b>Text</b> or <b>Panel</b> on the left" : "pick a tool on the left and drag it out here"}.</span>${S.simple ? "" : `<span>V select · F frame · B button · T text · I image · Shift+drag multi-select · Del delete · Ctrl+Z undo</span>`}</div>`;
+    const empty = S.nodes.length ? "" : `<div class="rsg-empty-stage">${restore}<img class="rsg-empty-logo" alt="GUI Studio by ORscript" src="${esc(assetUrl("assets/gui-studio-wordmark.png"))}" draggable="false"><b>Start with a ready screen</b><div class="rsg-start">${featuredTemplates(8).map((t) => templateCard(t, "rsg-start-card")).join("")}</div><button type="button" class="rsg-btn primary rsg-browse" data-act="gallery">Browse all ${templates().length} templates</button><span>…or <b>describe it</b> in the box above and press Generate — or add your own: ${S.simple ? "click <b>Button</b>, <b>Text</b> or <b>Panel</b> on the left" : "pick a tool on the left and drag it out here"}.</span>${S.simple ? "" : `<span>V select · F frame · B button · T text · I image · Shift+drag multi-select · Del delete · Ctrl+Z undo</span>`}</div>`;
     D.screen.innerHTML = inset + roots + empty + `<div class="rsg-marquee" hidden></div><div class="rsg-guides"></div>`;
     D.marquee = D.screen.querySelector(".rsg-marquee"); D.guides = D.screen.querySelector(".rsg-guides");
     if (!S.nodes.length && !S.thumb) fillThumbs(D.screen);
@@ -492,7 +500,7 @@
   }
   let renderGuard = false;
   function renderAll() {
-    try { renderStage(); renderTree(); renderProps(); renderCode(); syncButtons(); syncTheme(); autosave(); }
+    try { renderStage(); renderTree(); renderProps(); renderCode(); syncButtons(); syncTheme(); renderGen(); autosave(); }
     catch (e) {
       diag("renderError", { err: String(e && e.message || e).slice(0, 160) });
       if (renderGuard) { try { console.error("[GUI Studio] render failed twice", e); } catch {} return; }
@@ -750,12 +758,11 @@
   }
   function templateCats() { const lib = window.ORGuiTemplates; return (lib && lib.categories) || [{ id: "hud", label: "HUD" }, { id: "menu", label: "Menus" }]; }
   function featuredTemplates(n) { const all = templates(); const f = all.filter((t) => t.featured); return (f.length ? f : all).slice(0, n || 8); }
-  function applyTemplate(id) {
-    const t = templates().find((x) => x.id === id); if (!t) return;
+  // Shared by templates and the prompt generator: replace the design with a ready screen (one history step).
+  function installScreen(nodes, screenName, preset) {
     pushHistory();
-    if (t.preset && presets()[t.preset]) { S.preset = t.preset; S.tokens = Object.assign({}, presets()[t.preset]); }
-    const nodes = t.build();
-    S.screen.name = t.screen;
+    if (preset && presets()[preset]) { S.preset = preset; S.tokens = Object.assign({}, presets()[preset]); }
+    if (screenName) S.screen.name = screenName;
     S.nodes = nodes.map((n) => adopt(n, null));
     // 1.57: HUD-style screens (nothing covering the whole screen) sit BELOW the Roblox top bar; full-screen menus keep ignoring the inset
     const fullscreen = S.nodes.some((n) => Array.isArray(n.size) && n.size[0] >= 0.98 && n.size[2] >= 0.98 && n.visible !== false);
@@ -763,11 +770,62 @@
     reindex(); computeGeometry();
     const strokeFloating = (list) => { for (const n of list) { if (/^(TextLabel)$/.test(n.class) && n.text && !n.text_stroke && !effectiveBg(n)) n.text_stroke = { color: "#000000", transparency: 0.35 }; strokeFloating(n.children || []); } };
     strokeFloating(S.nodes);
-    S.lastTemplate = t.id;
     { const seen = new Set(); for (const c of S.nodes) { if (seen.has(c.name)) c.name = uniqueName(S.nodes.filter((x) => x !== c), c.name); seen.add(c.name); } }
     S.sel = []; S.issues = null; closeGallery(); reindex(); renderAll(); renderTheme();
+  }
+  function applyTemplate(id) {
+    const t = templates().find((x) => x.id === id); if (!t) return;
+    installScreen(t.build(), t.screen, t.preset);
+    S.lastTemplate = t.id; S.gen = null; renderGen();
     toast(`Template "${t.label}" loaded${t.preset ? " · theme " + t.preset.replace(/_/g, " ") : ""}`);
     diag("template", { id, nodes: byId.size });
+  }
+  // ───────────────────────── 1.61: describe → Generate (no AI turn) ─────────────────────────
+  // Same loop as Animation Studio: a prompt becomes a design locally through ORGuiGen
+  // (closest library screen + transforms), feedback refines it, Variation takes another
+  // pass. The result lands on the canvas like a template, so every tool still works on it.
+  const gen = () => window.ORGuiGen || null;
+  const genEnv = () => ({ templates: window.ORGuiTemplates || null, comp, presets: presets() });
+  function applyDesign(d, verb) {
+    if (!d || !Array.isArray(d.nodes) || !d.nodes.length) { toast("Nothing came out of that prompt"); return; }
+    installScreen(JSON.parse(JSON.stringify(d.nodes)), d.screen, d.preset);
+    S.gen = d; S.lastTemplate = d.templateId || null;
+    renderGen();
+    const note = d.report && d.report.notes && d.report.notes.find((n) => n.level !== "info");
+    toast(`${verb || "Generated"}: ${gen().describe(d)} · score ${d.report ? d.report.score : "-"}`);
+    setStatus(note ? note.text : (d.applied || []).join(" · "));
+    diag("generate", { template: d.templateId, preset: d.preset, take: d.take, nodes: byId.size, score: d.report && d.report.score, feedback: (d.feedback || []).length });
+  }
+  function genGenerate(promptText) {
+    const G = gen(); if (!G) { toast("Generator not loaded"); return; }
+    const text = String(promptText != null ? promptText : (D && D.genPrompt ? D.genPrompt.value : "")).trim();
+    if (!text) { toast("Describe the screen first — e.g. “a dark shop with 6 items and a search bar”"); if (D && D.genPrompt) D.genPrompt.focus(); return; }
+    if (D && D.genPrompt && D.genPrompt.value !== text) D.genPrompt.value = text;
+    try { applyDesign(G.generate(text, {}, genEnv()), "Generated"); } catch (e) { toast("Generate failed: " + (e && e.message || e)); }
+  }
+  function genRefine() {
+    const G = gen(); if (!G) return;
+    if (!S.gen) { toast("Generate something first, then refine it"); return; }
+    const fb = D && D.genFb ? D.genFb.value.trim() : ""; if (!fb) { toast("Type the change first — bigger, neon, 8 items, add a timer, move it to the top-left…"); if (D && D.genFb) D.genFb.focus(); return; }
+    try { const d = G.refine(S.gen, fb, genEnv()); applyDesign(d, "Refined"); if (D && D.genFb) D.genFb.value = ""; } catch (e) { toast("Refine failed: " + (e && e.message || e)); }
+  }
+  function genVariation() {
+    const G = gen(); if (!G) return;
+    if (!S.gen) { genGenerate(); return; }
+    try { applyDesign(G.variation(S.gen, genEnv()), "Variation"); } catch (e) { toast("Variation failed: " + (e && e.message || e)); }
+  }
+  function genSurprise() { const G = gen(); if (!G) return; const q = G.QUICK || []; if (!q.length) return; const pick = q[Math.floor(Math.random() * q.length)]; genGenerate(pick); }
+  function genClear() { S.gen = null; renderGen(); setStatus(""); }
+  function renderGen() {
+    if (!D || !D.genBox) return;
+    const d = S.gen; const G = gen();
+    D.genBox.classList.toggle("rsg-gen-has", !!d);
+    D.genBox.classList.toggle("rsg-gen-off", !G);
+    if (D.genRefineRow) D.genRefineRow.hidden = !d;
+    if (D.genChips) D.genChips.hidden = !!d || !!S.nodes.length;
+    if (D.genSum) { const score = d && d.report ? d.report.score : null; D.genSum.innerHTML = d ? `<b>${esc(G.describe(d))}</b>${score != null ? ` <i class="rsg-gen-score ${score >= 90 ? "ok" : score >= 70 ? "warn" : "bad"}">${score}</i>` : ""}${(d.feedback || []).length ? ` <small>${d.feedback.length} refinement${d.feedback.length === 1 ? "" : "s"}</small>` : ""}` : ""; }
+    if (D.genNotes) { const notes = d && d.report ? d.report.notes.filter((n) => n.level !== "info") : []; D.genNotes.hidden = !notes.length; D.genNotes.textContent = notes.map((n) => n.text).join(" · "); }
+    if (D.genPrompt && d && !D.genPrompt.value) D.genPrompt.value = d.prompt || "";
   }
   function insertComponent(kind) {
     pushHistory();
@@ -1202,6 +1260,7 @@
     const lines = [
       "GUI STUDIO HAND-OFF (ORscript): the user designed a Roblox GUI visually. The JSON spec below is EXACT - do not redesign it, build it.",
       `Screen: ${spec.screen.name} · ${count} object(s) · tokens preset ${spec.preset} · behaviours ${countActions(S.nodes)}.`,
+      ...genHandoffLines(),
       "Steps: (1) run ui_build_spec with EXACTLY this spec and replace:true; (2) run quality_audit {path:\"StarterGui." + spec.screen.name + "\"} and fix anything < 85; (3) then " + (intent && intent.trim() ? "do this: " + intent.trim() : "report the paths and what each behaviour does") + ".",
       "Use the spec verbatim as the `spec` param (one command, no splitting):",
       "```json",
@@ -1209,6 +1268,14 @@
       "```",
     ];
     return lines.join("\n");
+  }
+  function genHandoffLines() {
+    const d = S.gen; if (!d) return [];
+    const out = [`Prompt: ${d.prompt}`, `Generated from: ${d.templateLabel || "custom window"} · theme ${d.preset}${d.take ? " · take " + (d.take + 1) : ""} · score ${d.report ? d.report.score : "-"} (${(d.applied || []).join(", ") || "as is"}).`];
+    if (d.feedback && d.feedback.length) out.push("Feedback applied: " + d.feedback.map((f) => `"${f.text}" → ${(f.applied || []).join(", ")}`).join("; ") + ".");
+    const warn = d.report && d.report.notes ? d.report.notes.filter((n) => n.level !== "info").map((n) => n.text) : [];
+    if (warn.length) out.push("Generator notes: " + warn.join(" ") + " Keep the spec as designed; only fix these if the user asks.");
+    return out;
   }
   function countActions(list) { let n = 0; const walk = (l) => { for (const x of l) { n += (x.actions || []).length; walk(x.children || []); } }; walk(list); return n; }
   async function sendToAI() {
@@ -1372,6 +1439,23 @@
               <span class="rsg-hint-tool"></span>
               <span class="rsg-count"></span>
             </div>
+            <div class="rsg-gen">
+              <div class="rsg-gen-row">
+                <span class="rsg-gen-k" title="Type what you want and press Enter — the studio builds it from its library, no AI turn needed">${I.spark} Describe</span>
+                <input class="rsg-gen-prompt" placeholder="e.g. a dark shop with 6 items and a search bar · settings with tabs Gameplay, Audio, Controls · neon main menu…" spellcheck="false">
+                <button type="button" class="rsg-btn primary sm rsg-gen-go" data-act="genGo" title="Build this description on the canvas (Enter)">Generate</button>
+                <button type="button" class="rsg-btn sm" data-act="genVar" title="Another take on the same description">Variation</button>
+                <button type="button" class="rsg-btn sm rsg-adv" data-act="genSurprise" title="Try an example prompt">Surprise me</button>
+              </div>
+              <div class="rsg-gen-row rsg-gen-refine" hidden>
+                <span class="rsg-gen-sum"></span>
+                <input class="rsg-gen-fb" placeholder="Refine with feedback: bigger · neon · 8 items · add a timer · move it to the top-left · rename it to Shop · no close button" spellcheck="false">
+                <button type="button" class="rsg-btn sm" data-act="genRefine" title="Regenerate with this change on top (Enter)">Apply</button>
+                <button type="button" class="rsg-ib" data-act="genClear" title="Forget this generation (keeps the design)">${I.close}</button>
+              </div>
+              <div class="rsg-gen-notes" hidden></div>
+              <div class="rsg-gen-chips">${(window.ORGuiGen && window.ORGuiGen.QUICK || []).slice(0, 6).map((q) => `<button type="button" class="rsg-chip" data-gen-chip="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+            </div>
             <div class="rsg-stage" data-tool="select"><div class="rsg-stage-wrap"><div class="rsg-screen"></div></div></div>
             <div class="rsg-foot">
               <span class="rsg-status"></span>
@@ -1402,6 +1486,7 @@
     D = {
       host, toast: host.querySelector(".rsg-toast"), side: host.querySelector(".rsg-side"), stage: host.querySelector(".rsg-stage"), stageWrap: host.querySelector(".rsg-stage-wrap"), screen: host.querySelector(".rsg-screen"), props: host.querySelector(".rsg-props"), tree: host.querySelector(".rsg-tree"), theme: host.querySelector(".rsg-theme"), code: host.querySelector(".rsg-code"),
       codeJson: host.querySelector(".rsg-code-json"), codeLua: host.querySelector(".rsg-code-lua"), hint: host.querySelector(".rsg-hint-tool"), status: host.querySelector(".rsg-status"), sendStatus: host.querySelector(".rsg-send-status"), zoomLbl: host.querySelector(".rsg-zoom"), countLbl: host.querySelector(".rsg-count"),
+      genBox: host.querySelector(".rsg-gen"), genPrompt: host.querySelector(".rsg-gen-prompt"), genFb: host.querySelector(".rsg-gen-fb"), genRefineRow: host.querySelector(".rsg-gen-refine"), genSum: host.querySelector(".rsg-gen-sum"), genNotes: host.querySelector(".rsg-gen-notes"), genChips: host.querySelector(".rsg-gen-chips"),
       presetSel: host.querySelector(".rsg-preset-sel"), templateSel: host.querySelector(".rsg-template-sel"), deviceSel: host.querySelector(".rsg-device"), screenName: host.querySelector(".rsg-screen-name"), intent: host.querySelector(".rsg-intent"), buildBtn: host.querySelector(".rsg-build"), sendBtn: host.querySelector(".rsg-send"), importBox: host.querySelector(".rsg-import"), importSel: host.querySelector(".rsg-import-sel"),
       gallery: host.querySelector(".rsg-gallery"), galSearch: host.querySelector(".rsg-gal-search"), galCats: host.querySelector(".rsg-gal-cats"), galGrid: host.querySelector(".rsg-gal-grid"), galCount: host.querySelector(".rsg-gal-count"),
     };
@@ -1413,6 +1498,7 @@
       const ad = e.target.closest("[data-add]"); if (ad) { insertElement(ad.dataset.add); return; }
       const gc = e.target.closest("[data-galcat]"); if (gc) { S.galCat = gc.dataset.galcat; renderGallery(); return; }
       const tp = e.target.closest("[data-tpl]"); if (tp) { if (!S.nodes.length || confirm("Replace the current design with this template?")) applyTemplate(tp.dataset.tpl); return; }
+      const chip = e.target.closest("[data-gen-chip]"); if (chip) { genGenerate(chip.dataset.genChip); return; }
       const iss = e.target.closest("[data-issue]"); if (iss) { const n = byId.get(iss.dataset.issue); if (n) { S.sel = [n]; renderAll(); } return; }
       const tb = e.target.closest("[data-tool]"); if (tb) { setTool(tb.dataset.tool); return; }
       const cb = e.target.closest("[data-comp]"); if (cb) { insertComponent(cb.dataset.comp); return; }
@@ -1461,7 +1547,7 @@
     });
     document.addEventListener("keydown", onKey, true);
     host.addEventListener("pointerdown", (e) => e.stopPropagation());
-    host.addEventListener("keydown", (e) => e.stopPropagation());
+    host.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter" && !e.shiftKey && e.target && e.target.classList) { if (e.target.classList.contains("rsg-gen-prompt")) { e.preventDefault(); if (S.nodes.length && !S.gen && !confirm("Replace the current design with a generated one?")) return; genGenerate(); } else if (e.target.classList.contains("rsg-gen-fb")) { e.preventDefault(); genRefine(); } } });
     window.addEventListener("resize", () => { if (S.open) fitZoom(); });
     setTool("select");
   }
@@ -1474,8 +1560,10 @@
       case "import": return importFromStudio(); case "importGo": return importPath(D.importSel.value); case "importCancel": D.importBox.hidden = true; return;
       case "open": return openJson(); case "save": return downloadJson(); case "copyLua": return copyText(toLuau(getSpec()), "Luau"); case "copyJson": return copyText(JSON.stringify(getSpec(), null, 2), "JSON");
       case "applyJson": if (loadSpec(D.codeJson.value)) toast("Applied"); return;
-      case "clear": if (S.nodes.length && !confirm("Clear the whole design?")) return; pushHistory(); S.nodes = []; S.sel = []; S.issues = null; reindex(); try { localStorage.removeItem(AUTOSAVE_KEY); } catch {} return renderAll();
+      case "clear": if (S.nodes.length && !confirm("Clear the whole design?")) return; pushHistory(); S.nodes = []; S.sel = []; S.issues = null; S.gen = null; reindex(); try { localStorage.removeItem(AUTOSAVE_KEY); } catch {} return renderAll();
       case "gallery": return openGallery(); case "galleryClose": return closeGallery();
+      case "genGo": if (S.nodes.length && !S.gen && !confirm("Replace the current design with a generated one?")) return; return genGenerate();
+      case "genRefine": return genRefine(); case "genVar": return genVariation(); case "genSurprise": if (S.nodes.length && !S.gen && !confirm("Replace the current design with a generated one?")) return; return genSurprise(); case "genClear": return genClear();
       case "check": return runCheck(false); case "issuesClose": S.issuesOpen = false; return renderProps();
       case "restore": if (S.pendingRestore) { const d = S.pendingRestore; S.pendingRestore = null; if (loadSpec(d.spec, { silent: true })) toast("Design restored"); } return;
       case "restoreDismiss": S.pendingRestore = null; try { localStorage.removeItem(AUTOSAVE_KEY); } catch {} return renderStage();
@@ -1507,5 +1595,5 @@
   function close() { if (!S.open) return; closeGallery(); S.open = false; D.host.classList.remove("open"); document.documentElement.classList.remove("rs-gui-open"); diag("close", { nodes: byId.size }); }
   function isOpen() { return S.open; }
 
-  window.ORGuiStudio = { open, close, isOpen, getSpec, loadSpec, toLuau, buildMessage, setMode, check, openGallery, closeGallery, get TEMPLATES() { return templates(); }, get TEMPLATE_CATEGORIES() { return templateCats(); }, DEVICES, ELEMENT_TOOLS, SIMPLE_ELEMENTS, SIMPLE_COMPONENTS, _state: S, _geo: geo, _computeGeometry: computeGeometry, _setBox: setBox, _makeNode: makeNode, _adopt: adopt, _reindex: reindex, _rename: renameNode, _resolveTarget: resolveTarget, _fitTextSize: fitTextSize, _autosaveNow: autosaveNow, _loadAutosave: loadAutosave, _startInlineEdit: startInlineEdit, _endInlineEdit: endInlineEdit, _renderThumbHtml: renderThumbHtml, _thumbCache: thumbCache, _galleryFiltered: galleryFiltered };
+  window.ORGuiStudio = { open, close, isOpen, getSpec, loadSpec, toLuau, buildMessage, setMode, check, openGallery, closeGallery, generate: genGenerate, refine: genRefine, variation: genVariation, get lastDesign() { return S.gen; }, get TEMPLATES() { return templates(); }, get TEMPLATE_CATEGORIES() { return templateCats(); }, DEVICES, ELEMENT_TOOLS, SIMPLE_ELEMENTS, SIMPLE_COMPONENTS, _state: S, _geo: geo, _computeGeometry: computeGeometry, _setBox: setBox, _makeNode: makeNode, _adopt: adopt, _reindex: reindex, _rename: renameNode, _resolveTarget: resolveTarget, _fitTextSize: fitTextSize, _autosaveNow: autosaveNow, _loadAutosave: loadAutosave, _startInlineEdit: startInlineEdit, _endInlineEdit: endInlineEdit, _renderThumbHtml: renderThumbHtml, _thumbCache: thumbCache, _galleryFiltered: galleryFiltered };
 })();

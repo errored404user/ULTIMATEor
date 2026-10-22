@@ -7238,6 +7238,29 @@ html.rs-gui-open #rs-root { visibility: hidden !important; }
 .rsg-rf input { width: 140px; }
 .rsg-hint-tool { font-size: 10.5px; color: #8f8f9a; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rsg-count { font: 10.5px ui-monospace, Consolas, monospace; color: #8f8f9a; }
+/* 1.61 · describe → Generate bar (GUI Studio's local prompt pipeline, mirrors Animation Studio) */
+.rsg-gen { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.07); background: linear-gradient(180deg, rgba(120,160,255,.10), rgba(120,160,255,.03)), #15151a; }
+.rsg-gen.rsg-gen-off { display: none; }
+.rsg-gen-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rsg-gen-k { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #bcd0ff; white-space: nowrap; }
+.rsg-gen-k svg { width: 14px; height: 14px; color: #9db5ff; filter: drop-shadow(0 0 6px rgba(120,160,255,.6)); }
+.rsg-gen-prompt, .rsg-gen-fb { flex: 1; min-width: 160px; background: #0f0f12; color: #e8e8ec; border: 1px solid rgba(120,160,255,.28); border-radius: 9px; padding: 7px 10px; font-size: 12px; outline: none; transition: border-color .12s, box-shadow .12s; }
+.rsg-gen-prompt:focus, .rsg-gen-fb:focus { border-color: rgba(120,160,255,.7); box-shadow: 0 0 0 3px rgba(120,160,255,.14); }
+.rsg-gen-prompt::placeholder, .rsg-gen-fb::placeholder { color: #70707c; }
+.rsg-gen-fb { border-color: rgba(255,255,255,.12); font-size: 11.5px; }
+.rsg-gen-go { font-weight: 800; letter-spacing: .03em; }
+.rsg-gen-sum { font-size: 11px; color: #c9d4f2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42%; flex: none; display: inline-flex; align-items: center; gap: 6px; }
+.rsg-gen-sum b { font-weight: 700; color: #e8eeff; overflow: hidden; text-overflow: ellipsis; }
+.rsg-gen-sum small { color: #8f8f9a; }
+.rsg-gen-score { font: 700 10px ui-monospace, Consolas, monospace; font-style: normal; padding: 1px 6px; border-radius: 999px; background: rgba(47,191,114,.18); color: #9ff0bf; border: 1px solid rgba(47,191,114,.4); }
+.rsg-gen-score.warn { background: rgba(255,196,0,.14); color: #ffe08a; border-color: rgba(255,196,0,.4); }
+.rsg-gen-score.bad { background: rgba(255,92,92,.14); color: #ffb4b4; border-color: rgba(255,92,92,.4); }
+.rsg-gen-notes { font-size: 10.5px; color: #ffd9a3; padding: 2px 0 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rsg-gen-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.rsg-chip { padding: 3px 9px; border-radius: 999px; font-size: 10.5px; color: #c4c4cd; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); white-space: nowrap; }
+.rsg-chip:hover { background: rgba(120,160,255,.16); color: #fff; border-color: rgba(120,160,255,.45); }
+#rs-gui .rsg-gen [hidden] { display: none !important; }
+@media (max-width: 1100px) { .rsg-gen-sum { max-width: 30%; } .rsg-gen-chips { display: none; } }
 .rsg-stage { flex: 1; position: relative; overflow: auto; min-height: 0; background: #0d0d10; background-image: radial-gradient(rgba(255,255,255,.06) 1px, transparent 1px); background-size: 18px 18px; display: flex; padding: 24px; cursor: default; }
 .rsg-stage[data-tool]:not([data-tool="select"]) { cursor: crosshair; }
 .rsg-stage-wrap { position: relative; flex: none; margin: auto; }
