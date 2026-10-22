@@ -874,6 +874,7 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
             }
             let _ = events.send(ChatEvent::Status(format!("step {steps}/{max_steps} · running {real}")));
             let _ = events.send(ChatEvent::ToolStart { id: id.clone(), name: real.clone(), args: args.clone() });
+            let fail_key = format!("{real}\n{}", args); // 1.69: taken before `args` moves into the executor
             let t0 = Instant::now();
             let outcome = if !by_wire.contains_key(&call.name) {
                 Err(anyhow::anyhow!("unknown tool '{}' — only the advertised tools exist", call.name))
@@ -912,8 +913,7 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
                 last_fail_key.clear();
                 last_fail_count = 0;
             } else {
-                let key = format!("{real}\n{}", args);
-                if key == last_fail_key { last_fail_count += 1; } else { last_fail_key = key; last_fail_count = 1; }
+                if fail_key == last_fail_key { last_fail_count += 1; } else { last_fail_key = fail_key; last_fail_count = 1; }
                 if last_fail_count >= 2 {
                     content.push_str(&format!("\n[OR: this exact call has now failed {last_fail_count} times in a row — change the arguments or the approach; do not repeat it verbatim.]"));
                 }
