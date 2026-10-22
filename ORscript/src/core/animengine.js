@@ -28,7 +28,7 @@
 // rest. Nothing is faked: unsupported requests return explicit limitations.
 (function (root) {
   "use strict";
-  const VERSION = "1.61.1";
+  const VERSION = "1.62.0";
   const DEG = Math.PI / 180;
 
   // ───────────────────────── rotation math ─────────────────────────
@@ -161,12 +161,14 @@
     if (!m) return null; const v = m[1].toLowerCase(); return NUMWORD[v] || parseInt(v, 10) || null;
   }
   function parseIntent(text) {
-    const t = String(text || "").trim();
+    const raw = String(text || "").trim();
+    const ex = expandVocabulary(raw); // 1.61: synonyms / implied objects → known vocabulary ("guzzle a beer" → drink)
+    const t = ex.text;
     const has = (k) => RE[k].test(t);
-    const intent = { text: t, category: "idle", action: null, style: "default", intensity: 1, speed: 1, loop: null, duration: null, stages: [], weapon: null, hands: 2, rigHint: null, quality: null, upperOnly: has("upper"), unsupported: [], seed: hashStr(t), take: 0, mirror: has("mirror") || has("left"), travel: has("travel") };
+    const intent = { text: t, category: "idle", action: null, style: "default", intensity: 1, speed: 1, loop: null, duration: null, stages: [], weapon: null, hands: 2, rigHint: null, quality: null, upperOnly: has("upper"), unsupported: [], seed: hashStr(raw), take: 0, swaps: ex.swaps, rawText: raw, mirror: has("mirror") || has("left"), travel: has("travel") };
     // 1.55 freeform layer: everyday / sport / work / social acts, mood overlays, pose grammar, repeats
     const actsFound = findActs(t), exAct = actsFound.find((a) => a.ex), moodFound = findMood(t);
-    intent.acts = actsFound.map((a) => a.name); intent.mood = moodFound ? moodFound.name : null; intent.repeat = repeatCount(t); intent.gesture = posePhrase(t);
+    intent.acts = actsFound.map((a) => a.name); intent.mood = moodFound ? moodFound.name : null; intent.repeat = repeatCount(t); intent.gesture = posePhrase(t) || (actsFound.length ? null : classGesture(t)); // 1.61: unknown motion verbs → body-region primitives
     if (moodFound && moodFound.slow) intent.speed *= moodFound.slow; if (moodFound && moodFound.fast) intent.speed *= moodFound.fast;
     intent.variantHints = { both: has("both"), small: has("small"), big: has("big"), fistpump: has("fistpump"), sky: has("sky"), side: has("side"), slow: has("slow"), twoShots: /\b(two|double|2) shots?\b|double tap/i.test(t), burst: /\bburst|full auto|spray\b/i.test(t) };
     if (has("facial")) intent.unsupported.push("facial expressions (FaceControls) - this engine animates Motor6D joints; the face is left untouched");
@@ -239,8 +241,8 @@
     else { intent.category = "idle"; intent.loop = true; intent.fallback = !has("idle"); }
     if (intent.category === "idle" && actsFound.length) { intent.category = "act"; intent.loop = actsFound.length === 1 ? !!actsFound[0].loop : false; }
     if (intent.category === "act" && intent.repeat > 1 && actsFound.length === 1 && actsFound[0].loop) intent.loop = false;
-    else if (intent.category === "idle" && intent.fallback && intent.gesture) { intent.category = "gesture"; intent.loop = !!intent.gesture.oscillate; intent.mirror = has("mirror"); } // sides are already in the pose grammar - "left arm" must not also mirror
-    else if (intent.category === "idle" && intent.fallback && t.replace(/[^a-z]/gi, "").length >= 3) { intent.category = "improv"; intent.loop = false; intent.improv = improvise(intent.seed, 3).map((a) => a.name); intent.unsupported.push(`no known motion in "${t.slice(0, 60)}" - improvised ${intent.improv.join(" → ")} from the prompt's seed. Use motion verbs (drink, dig, wave, kick, dance, climb, "raise the left arm", "A then B") or a mood (tired, proud, drunk) to steer it.`); }
+    else if (intent.category === "idle" && intent.fallback && intent.gesture) { intent.category = "gesture"; intent.loop = !!intent.gesture.oscillate; intent.mirror = has("mirror"); if (intent.gesture.synth) { intent.synth = true; intent.unsupported.push(`interpreted ${intent.gesture.hits.join(" + ")} - not in the act lexicon, so the motion comes from the body-region primitive. Name a part / direction ("with the left arm", "forward") or a mood to steer it.`); if (intent.gesture.fast) intent.speed *= 1.3; } } // sides are already in the pose grammar - "left arm" must not also mirror
+    else if (intent.category === "idle" && intent.fallback && !moodFound && t.replace(/[^a-z]/gi, "").length >= 3) { intent.category = "improv"; intent.loop = false; intent.improv = improvise(intent.seed, 3).map((a) => a.name); intent.unsupported.push(`no known motion in "${t.slice(0, 60)}" - improvised ${intent.improv.join(" → ")} from the prompt's seed. Use motion verbs (drink, dig, wave, kick, dance, climb, "raise the left arm", "A then B") or a mood (tired, proud, drunk) to steer it.`); }
     // "wave while walking" / "drink coffee while running": upper body from the act / emote, legs from the cycle
     const locoM = t.match(/\b(walk(?:ing)?|run(?:ning)?|jog(?:ging)?|sneak(?:ing)?|march(?:ing)?|strafe|strafing)\b/i);
     if (locoM && !exAct && /\b(while|whilst|as|during|and)\b/i.test(t) && /^(walk|run|sneak|strafe|walk_back|act|emote|gesture)$/.test(intent.category)) {
@@ -980,6 +982,220 @@
     else { if (beats[0].at > 0) beats.unshift({ at: 0, pose: clonePose(beats[beats.length - 1].at >= 1 ? beats[beats.length - 1].pose : beats[0].pose), tag: "start", ease: ["CubicV2", "InOut"] }); if (beats[beats.length - 1].at < 1) beats.push({ at: 1, pose: clonePose(beats[0].pose), tag: "loop_end", ease: ["CubicV2", "InOut"] }); }
     return beats.map((b) => ({ t: r3(b.at * duration), poses: b.pose, ease: b.ease, tag: b.tag, stage: act.name }));
   }
+  // ───────────────────────── 1.61 "any word" layer: thesaurus + verb classes + inspiration ─────────────────────────
+  // The lexicon is finite, language is not. Three things make the space effectively unbounded: (1) a THESAURUS that
+  // rewrites hundreds of synonyms / implied-object words into the vocabulary the classifier knows ("guzzle a beer" →
+  // drink, "pirouette" → spin, "shovel" → dig, "waltz" → dance); (2) VERB CLASSES - every English motion verb that is
+  // still unknown is mapped to a body region + motion pattern (arm swing, hands pulse, foot tap, head nod, torso sway,
+  // tremble, slump…) and rendered through the pose grammar, so "wring", "teeter", "sniff", "shimmy" each get their own
+  // motion instead of a generic improvisation; (3) everything composes: acts × moods × speeds × sides × parts ×
+  // directions × "then" chains × "while" layers × takes. vocabulary() reports the counts, inspire(seed) composes prompts.
+  const TH = (words, to) => [new RegExp("\\b(?:" + words + ")\\b", "gi"), to];
+  const THESAURUS = [
+    TH("slurp(?:s|ed|ing)?|guzzl(?:e|es|ed|ing)|swig(?:s|ged|ging)?|quaff(?:s|ed|ing)?|chugg?(?:s|ed|ing)?|a pint|lemonade|juice|milkshake|smoothie|wine|whisky|whiskey|vodka|cocktail|energy drink|canteen|flask", "drink"),
+    TH("devour(?:s|ed|ing)?|nibbl(?:e|es|ed|ing)|gobbl(?:e|es|ed|ing)|scarf(?:s|ed|ing)?|feast(?:s|ed|ing)?|taco|hot ?dog|noodles|ramen|sushi|ice cream|donut|doughnut|chips|popcorn|cake|chocolate|bread|lunch|dinner|breakfast", "eat"),
+    TH("waltz(?:es|ed|ing)?|tango(?:s|ed|ing)?|salsa|samba|breakdanc(?:e|es|ed|ing)|boogie(?:s|d|ing)?|disco(?:s|ed|ing)?|jive(?:s|d)?|groov(?:e|es|ed|ing)|shimmy(?:ing)?|shimmies|moonwalk(?:s|ed|ing)?|macarena|ballet|hip ?hop dance|party dance|club dance|rav(?:e|es|ing)", "dance"),
+    TH("pirouette(?:s|d)?|twirl(?:s|ed|ing)? around|spin(?:s|ning)? around", "twirl"),
+    TH("snooz(?:e|es|ed|ing)|doz(?:e|es|ed|ing)|slumber(?:s|ed|ing)?|hibernat(?:e|es|ed|ing)|passed out|pass(?:es)? out|koed|k\\.?o\\.?'?d", "sleep"),
+    TH("saunter(?:s|ed|ing)?|ambl(?:e|es|ed|ing)|mosey(?:s|ed|ing)?|meander(?:s|ed|ing)?|promenad(?:e|es|ing)|plod(?:s|ded|ding)?|trot(?:s|ted|ting)?|catwalk|runway walk|power walk(?:ing)?|strid(?:e|es|ing)|lumber(?:s|ed|ing)? along|waddl(?:e|es|ed|ing)|toddl(?:e|es|ed|ing)", "walk"),
+    TH("scamper(?:s|ed|ing)?|scurr(?:y|ies|ied|ying)|bolt(?:s|ed|ing)? (?:away|forward|off)|flee(?:s|ing)?|fled|gallop(?:s|ed|ing)?|race(?:s|d)? forward|racing forward|hurr(?:y|ies|ied|ying)|rush(?:es|ed|ing)? forward|charge(?:s|d)? forward|charging forward|chase(?:s|d)?|chasing|hustl(?:e|es|ed|ing)", "run"),
+    TH("vault(?:s|ed|ing)?|bound(?:s|ed|ing)? over|hurdl(?:e|es|ed|ing)|spring(?:s|ing)? up|pounc(?:e|es|ed|ing)|skip(?:s|ped|ping)? rope|jump ?rope|bunny ?hop(?:s|ping)?|trampoline", "jump"),
+    TH("plummet(?:s|ed|ing)?|tumbl(?:e|es|ed|ing) down|plung(?:e|es|ed|ing) down|skydiv(?:e|es|ed|ing)", "fall"),
+    TH("scal(?:e|es|ed|ing) (?:a |the )?(?:wall|cliff|rope|tree)|shimmy(?:ing)? up|clamber(?:s|ed|ing)?|rope climb|boulder(?:s|ed|ing)?|mountaineer(?:s|ing)?", "climb"),
+    TH("backstrok(?:e|es|ing)|breaststrok(?:e|es|ing)|freestyle swim(?:ming)?|front crawl|doggy ?paddl(?:e|es|ing)|snorkel(?:s|ed|ing)?|scuba", "swim"),
+    TH("perch(?:es|ed|ing)?|squat(?:s|ted|ting)? on (?:a |the )?(?:chair|bench|stool|log|rock)|plop(?:s|ped|ping)? down|take(?:s)? a seat|taking a seat|sit(?:s|ting)? down", "sit"),
+    TH("duck(?:s|ed|ing)? down|hunker(?:s|ed|ing)? down|tiptoe(?:s|d|ing)? around|creep(?:s|ing)? around|crept|skulk(?:s|ed|ing)?|lurk(?:s|ed|ing)?|slink(?:s|ing)?|prowl(?:s|ed|ing)? around", "sneak"),
+    TH("sock(?:s|ed|ing)?|wallop(?:s|ed|ing)?|clobber(?:s|ed|ing)?|slug(?:s|ged|ging)?|deck(?:s|ed)? (?:him|her|them)|haymaker|cross punch|one[- ]two|knuckle sandwich|beat(?:s)? up|beating up|brawl(?:s|ed|ing)?|fistfight|pummel(?:s|ed|ing)?", "punch"),
+    TH("boot(?:s|ed|ing)? (?:him|her|them|it|the ball)|punt(?:s|ed|ing)?|drop ?kick(?:s|ed|ing)?|bicycle kick|high kick|front kick|side kick|back kick|knee strike|knee(?:s)? (?:him|her|them)", "kick"),
+    TH("brandish(?:es|ed|ing)?|wield(?:s|ed|ing)?|unsheath(?:e|es|ed|ing)|machete|cutlass|scimitar|rapier|longsword|claymore|dagger|knife|cleaver|lightsaber|laser sword|energy blade|cut(?:s|ting)? down|hack(?:s|ed|ing)? at|chop(?:s|ped|ping)? at (?:him|her|them|the enemy)", "sword"),
+    TH("hammer(?:s|ed|ing)?|sledgehammer|mallet|axe|hatchet|pickaxe|mine(?:s|d)? ore|mining|fell(?:s|ed|ing)? a tree|lumberjack|woodcut(?:ter|ting)|split(?:s|ting)? (?:logs|wood|firewood)", "chop wood"),
+    TH("shovel(?:s|ed|ing)?|spade|trowel|excavat(?:e|es|ed|ing)|unearth(?:s|ed|ing)?|bur(?:y|ies|ied|ying) (?:the |a )?(?:treasure|body|bone|box|chest|loot)|gardening|plant(?:s|ed|ing)? (?:a |the )?(?:seed|tree|flower|flowers|crops)|till(?:s|ed|ing)? (?:the )?soil|hoe(?:s|d|ing)? (?:the )?(?:field|ground)", "dig"),
+    TH("broom|mop(?:s|ped|ping)?|rake(?:s|d)?|raking|vacuum(?:s|ed|ing)?|hoover(?:s|ed|ing)?|brush(?:es|ed|ing)? (?:the )?(?:floor|ground|steps|porch)|tid(?:y|ies|ied|ying) up|janitor|clean(?:s|ed|ing)? (?:the )?(?:floor|room|house|deck)", "sweep"),
+    TH("paintbrush|roller brush|whitewash(?:es|ed|ing)?|graffiti|spray ?paint(?:s|ed|ing)?|decorat(?:e|es|ed|ing) (?:a |the )?wall|plaster(?:s|ed|ing)?|varnish(?:es|ed|ing)?|artist at (?:an )?easel|easel", "paint"),
+    TH("fishing rod|fishing pole|angl(?:e|es|ed|ing) for fish|cast(?:s|ing)? a line|reel(?:s|ed|ing)? in|go(?:es|ing)? fishing|fisherman", "fishing"),
+    TH("oar(?:s)?|paddl(?:e|es|ed|ing)|canoe(?:s|d|ing)?|kayak(?:s|ed|ing)?|rowboat|rowing machine|erg(?:o)?meter", "rowing"),
+    TH("pedal(?:s|led|ling)?|cycl(?:e|es|ed|ing) (?:fast|slow|along|uphill|downhill|to work)|bicycle|bmx|mountain bike|exercise bike|spin class|unicycle|tricycle", "cycling"),
+    TH("steer(?:s|ed|ing)?|steering wheel|behind the wheel|truck(?:er|ing)|taxi driver|bus driver|race ?car|go[- ]?kart(?:ing)?|motorbike|motorcycle|quad bike|tractor|forklift", "drive"),
+    TH("text(?:s|ed|ing)? (?:on|with) (?:a |the |my )?phone|scroll(?:s|ed|ing)? (?:on |through )?(?:a |the |my )?(?:phone|feed|tiktok|instagram)|doom ?scroll(?:s|ed|ing)?|facetim(?:e|es|ed|ing)|video call(?:s|ed|ing)?|smartphone|mobile phone|cell ?phone|dial(?:s|ed|ing)? (?:a |the )?number", "phone"),
+    TH("keyboard warrior|type(?:s|d)? an? (?:email|message|essay|report)|writ(?:e|es|ing) code|cod(?:e|es|ing) on (?:a |the )?laptop|spreadsheet|office work(?:er)?|data entry|gamer|gaming|play(?:s|ing)? (?:video ?games|on (?:a |the )?pc|pc games)|pianist|harpsichord|synth(?:esizer)? solo", "typing"),
+    TH("electric guitar|acoustic guitar|banjo|mandolin|cello|violin|fiddl(?:e|es|ed|ing)|air guitar|rock ?star|busk(?:s|ed|ing)?|busker", "guitar"),
+    TH("bongos?|tabla|timpani|snare|cymbals?|xylophone|marimba|drumstick(?:s)?|beat(?:s|ing)? (?:a |the )?(?:drum|drums)", "drums"),
+    TH("gym bro|bodybuild(?:er|ing)|show(?:s|ing)? off (?:his |her |their )?(?:muscles|biceps|guns)|pose(?:s|d)? like (?:a )?bodybuilder|muscle pose|bicep(?:s)? pose|strongman pose", "flex"),
+    TH("lift(?:s|ed|ing)? weights|weightlift(?:s|ed|ing|er)?|barbell|dumbbells?|kettlebell|bench ?press(?:es|ed|ing)?|deadlift(?:s|ed|ing)?|clean and jerk|snatch(?:es|ed|ing)? (?:the )?bar|overhead press|military press|power ?lift(?:ing|er)?", "deadlift"),
+    TH("haul(?:s|ed|ing)?|lug(?:s|ged|ging)?|schlep(?:s|ped|ping)?|carr(?:y|ies|ied|ying) (?:a |the )?(?:sack|bag|barrel|log|body)|moving boxes|porter|delivery (?:guy|man|person)", "carry a box"),
+    TH("shov(?:e|es|ed|ing)|heav(?:e|es|ed|ing)|bulldoz(?:e|es|ed|ing)|ram(?:s|med|ming)? (?:the |a )?(?:door|wall|gate)|push(?:es|ed|ing)? (?:a |the )?(?:cart|car|boulder|crate|wall|box|stroller|wheelbarrow)|shoulder barg(?:e|es|ed|ing)", "shove"),
+    TH("tug(?:s|ged|ging)?|yank(?:s|ed|ing)?|drag(?:s|ged|ging)? (?:a |the )?(?:body|crate|sled|rope|net|anchor)|tow(?:s|ed|ing)? (?:a |the )?(?:car|boat|sled)|tug of war|haul(?:s|ed|ing)? (?:a |the |in the )?(?:rope|net|anchor|line)|rope pull", "haul"),
+    TH("fist ?bump(?:s|ed|ing)?|bro ?fist|knuckle bump|dap(?:s|ped|ping)? (?:him|her|them|up)", "fistbump"),
+    TH("high ?five(?:s|d)?|high[- ]fiving|up top|slap(?:s|ped|ping)? hands", "highfive"),
+    TH("embrac(?:e|es|ed|ing)|cuddl(?:e|es|ed|ing)|snuggl(?:e|es|ed|ing)|bear ?hug|group hug|hold(?:s|ing)? (?:him|her|them) (?:tight|close)|squeez(?:e|es|ed|ing) (?:him|her|them)", "hug"),
+    TH("shake(?:s|n)? hands|shaking hands|hand ?shake|seal(?:s|ed|ing)? the deal|business greeting|firm grip", "handshake"),
+    TH("thumbs?[- ]up|like button|approv(?:e|es|ed|ing) gesture|good job gesture|okay sign|ok sign", "thumbsup"),
+    TH("blow(?:s|ing)? (?:a |some )?kiss(?:es)?|air kiss(?:es)?|flirt(?:s|ed|ing)?|smooch(?:es|ed|ing)? (?:the air|at)", "blow a kiss"),
+    TH("ponder(?:s|ed|ing)?|contemplat(?:e|es|ed|ing)|muse(?:s|d)?|musing|puzzl(?:e|es|ed|ing) over|deliberat(?:e|es|ed|ing)|wonder(?:s|ed|ing)? about|chin stroke|strok(?:e|es|ed|ing) (?:his |her |their )?(?:chin|beard)|hmm+|thinking face", "think"),
+    TH("limber(?:s|ed|ing)? up|warm(?:s|ed|ing)? up|yoga|pilates|sun salutation|touch(?:es|ed|ing)? (?:his |her |their )?toes|loosen(?:s|ed|ing)? up|cool ?down stretch|hamstring stretch|calf stretch|neck roll(?:s)?", "stretch"),
+    TH("freez(?:e|es|ing) cold|frostbit(?:e|ten)|brr+|teeth chatter(?:s|ing)?|hypotherm(?:ia|ic)|goosebumps|chill(?:s|ed|y) to the bone|shudder(?:s|ed|ing)? (?:from|with|in) (?:the )?cold", "shiver"),
+    TH("sob(?:s|bed|bing)?|weep(?:s|ing)?|wept|bawl(?:s|ed|ing)?|blubber(?:s|ed|ing)?|tear(?:s|ed|ing)? up|in tears|heartbroken|mourn(?:s|ed|ing)?|griev(?:e|es|ed|ing)|wail(?:s|ed|ing)?", "cry"),
+    TH("tantrum|throw(?:s|ing)? a fit|foot ?stamp(?:s|ed|ing)?|stamp(?:s|ed|ing)? (?:his |her |their )?(?:foot|feet)|angry stomp(?:s|ing)?", "stomp"),
+    TH("knock(?:s|ed|ing)? on|rap(?:s|ped|ping)? on (?:the |a )?(?:door|window|table)|bang(?:s|ed|ing)? on (?:the |a )?(?:door|window|wall|glass)|door ?bell|ring(?:s|ing)? the bell", "knock"),
+    TH("unlock(?:s|ed|ing)? (?:a |the )?(?:door|gate|chest)|swing(?:s|ing)? (?:a |the )?(?:door|gate) open|kick(?:s|ed|ing)? (?:a |the )?door open|barg(?:e|es|ed|ing) (?:in|through)|burst(?:s)? through (?:a |the )?door|open(?:s|ed|ing)? (?:a |the )?(?:fridge|cupboard|closet|wardrobe|window|hatch|trunk|coffin|crate|box|locker)", "open the door"),
+    TH("squint(?:s|ed|ing)?|peer(?:s|ed|ing)? (?:out|into the distance|ahead)|scout(?:s|ed|ing)?|lookout|binoculars|spot(?:s|ted|ting)? something far|hand over (?:his |her |their )?eyes|search(?:es|ed|ing)? the horizon|scan(?:s|ned|ning)? the horizon", "gaze"),
+    TH("glance(?:s|d)? around|glancing around|survey(?:s|ed|ing)? the (?:room|area)|check(?:s|ed|ing)? (?:his |her |their )?surroundings|lost tourist|where am i|look(?:s|ed|ing)? for (?:something|someone|the exit)|searching the room|confused look", "look around"),
+    TH("mop(?:s|ped|ping)? (?:his |her |their )?(?:brow|forehead)|phew|wipe(?:s|d)? (?:away )?(?:the )?sweat|wiping sweat|sweaty|out of (?:breath|puff)|exhausted after", "wipe the sweat"),
+    TH("dust(?:s|ed|ing)? (?:himself|herself|themselves) off|brush(?:es|ed|ing)? (?:himself|herself|themselves) off|pat(?:s|ted|ting)? (?:his |her |their )?(?:pockets|clothes)|itch(?:es|ed|ing|y)?|flea(?:s)?|mosquito bite", "scratch"),
+    TH("jumping jacks?|star jumps?|jump(?:s|ed|ing)? jack|aerobics|hiit|cardio", "jumping jacks"),
+    TH("air squats?|goblet squat|sumo squat|leg day|squat(?:s|ted|ting)? (?:down )?(?:and|then) (?:stand|up|stands)|deep squats?|burpee(?:s)?", "squat"),
+    TH("sit[- ]?ups?|crunch(?:es)?|ab(?:s|dominal)? (?:workout|exercise)|core workout|v[- ]ups?", "situp"),
+    TH("meditat(?:e|es|ed|ing)|zen|lotus (?:pose|position)|mindful(?:ness)?|monk pose|yogi|om+|levitat(?:e|es|ing) in lotus|inner peace", "meditate"),
+    TH("salut(?:e|es|ed|ing) (?:the )?(?:flag|officer|captain|general|commander)|soldier salute|at attention|stand(?:s|ing)? at attention|attention stance|yes sir", "salute"),
+    TH("curts(?:y|ies|ied|ying)|royal curtsy|ladylike bow|princess greeting", "curtsy"),
+    TH("sulk(?:s|ed|ing)?|mop(?:e|es|ed|ing)|downcast|dejected|gloomy|melancholy|despair(?:s|ed|ing)?|hopeless|miserable|blue mood|defeated look|hang(?:s|ing)? (?:his |her |their )?head", "sad"),
+    TH("ecstatic|overjoyed|thrilled|delighted|jolly|cheerful|giddy|elated|jubilant|gleeful|joyful|beaming", "happy"),
+    TH("furious|enraged|livid|irate|seething|fuming|rage(?:s|d)?|raging|infuriated|mad as hell|pissed off|hot[- ]headed|wrathful", "angry"),
+    TH("terrified|petrified|frightened|spooked|horrified|panick(?:ed|ing|y)|panic(?:s)?|jumpy|anxious|trembling with fear|afraid|fearful|creeped out|freaked out", "scared"),
+    TH("smug|cocky|arrogant|boastful|haughty|conceited|confident|swagger(?:s|ed|ing)?|chest out|triumphant|regal|majestic|kingly|queenly|noble", "proud"),
+    TH("elderly|geriatric|grandpa|grandma|granny|senior citizen|aged|ancient man|frail|creaky|hunched old|with a cane|walking stick|arthritic", "old"),
+    TH("wounded|hurt leg|hurt arm|limp(?:s|ed|ing)?|bleeding|bandaged|crippled|sprained|broken leg|broken arm|clutch(?:es|ed|ing) (?:his |her |their )?(?:side|wound|stomach|arm|leg)|battle[- ]damaged", "injured"),
+    TH("wasted|hammered|tipsy|intoxicated|plastered|sloshed|inebriated|boozed|buzzed|woozy|stumbling drunk|three sheets", "drunk"),
+    TH("sleepy|drowsy|weary|fatigued|worn out|knackered|exhausted|drained|lethargic|sluggish|yawning|groggy|dead on (?:his |her |their )?feet|burnt out|burned out", "tired"),
+    TH("hyper(?:active)?|peppy|zippy|perky|bubbly|pumped(?: up)?|hyped(?: up)?|amped(?: up)?|caffeinated|wired|full of beans|bouncing off the walls|jazzed|fired up", "energetic"),
+    TH("freezing|frozen stiff|chilly|icy cold|arctic|in the snow|snowstorm|blizzard|winter cold", "cold"),
+    TH("stealthy|sneaky|shifty|suspicious looking|up to no good|mischievous|cat burglar|thief|burglar|pickpocket|spy(?:ing)? around", "sneaky"),
+    TH("antsy|jittery|fidgety|uneasy|on edge|restless|stage fright|awkward|shy and awkward|bashful|sheepish", "nervous"),
+    TH("boogie ?woogie|robot dance|do the robot|the worm|running man|cabbage patch|sprinkler dance|dougie|whip and nae nae|gangnam style|orange justice|take the l|hype dance", "dance"),
+    TH("superhero pose|power stance|hands on hips|heroic stance|victory stance|stand(?:s|ing)? heroically|superman pose|wonder woman pose|strik(?:e|es|ing) a (?:heroic |power )?pose", "hero pose"),
+    TH("three[- ]point landing|superhero landing|hero drop|land(?:s|ed|ing)? like a hero|iron man landing|crater landing", "hero landing"),
+    TH("sprinkler|dabb?(?:s|ed|ing)? on (?:them|haters)|hit(?:s|ting)? the dab", "dab"),
+    TH("box(?:es|ed|ing)? (?:the air|practice|training)|shadow ?box(?:es|ed|ing)?|sparr(?:ed|ing)|spar(?:s)?|punching bag|heavy bag|speed bag|pad work|boxer stance|fighting stance", "boxing"),
+    TH("pray(?:s|ed|ing)? for|say(?:s|ing)? a prayer|hands together in prayer|grace before (?:a )?meal|bless(?:es|ed|ing)? (?:himself|herself|themselves)|namaste|amen|plead(?:s|ed|ing)? on (?:his |her |their )?knees|beg(?:s|ged|ging)? for (?:mercy|forgiveness|his life|her life|their life)", "pray"),
+    TH("stroke(?:s|d)? (?:a |the )?(?:dog|cat|puppy|kitten|horse|animal|pet)|stroking (?:a |the )?(?:dog|cat|puppy|kitten|horse|animal|pet)|pat(?:s|ted|ting)? (?:a |the )?(?:dog|cat|puppy|kitten|horse|animal|pet|head)|scratch(?:es|ed|ing)? (?:a |the )?(?:dog|cat|puppy|kitten)|good boy|good girl|pet(?:s|ted|ting)? (?:a |the )?(?:dog|cat|puppy|kitten|horse|animal)", "pet the dog"),
+    TH("bow(?:s|ed|ing)? (?:his |her |their )?head|dip(?:s|ped|ping)? (?:his |her |their )?head|head bow|respectful nod|solemn nod|moment of silence", "bow the head"),
+    TH("flail(?:s|ed|ing)?|wav(?:e|es|ed|ing) (?:his |her |their |both )?arms (?:around|wildly|frantically|for help)|signal(?:s|led|ling)? for help|help me gesture|hail(?:s|ed|ing)? a (?:taxi|cab|bus)|flag(?:s|ged|ging)? down (?:a |the )?(?:car|taxi|bus|plane|ship)|arms in the air|hands in the air|put your hands up", "wave both arms"),
+    TH("balanc(?:e|es|ed|ing) on (?:a |the )?(?:beam|rope|ledge|edge|tightrope|wire|rail)|tightrope|balance beam|slackline|teeter(?:s|ed|ing)? on (?:a |the )?(?:ledge|edge)|wobbl(?:e|es|ed|ing) on (?:a |the )?(?:ledge|edge|beam)", "lean on a wall"),
+    TH("stargaz(?:e|es|ed|ing)|cloud ?watch(?:es|ed|ing)?|bird ?watch(?:es|ed|ing)?|watch(?:es|ed|ing)? (?:the )?(?:sunset|sunrise|sky|stars|fireworks|birds|planes)|admir(?:e|es|ed|ing) the view|look(?:s|ed|ing)? up at (?:the )?(?:sky|stars|moon|clouds|ceiling)|gaz(?:e|es|ed|ing) at (?:the )?(?:sky|stars|horizon|sunset|moon)", "gaze"),
+    TH("reach(?:es|ed|ing)? (?:up )?for (?:the |a )?(?:top shelf|shelf|cookie jar|ceiling|high branch|apple)|too short to reach|stand(?:s|ing)? on tiptoes?|on (?:his |her |their )?tiptoes?|tippy ?toes?", "reach up"),
+    TH("car sick|sea ?sick|vertigo|lightheaded|light[- ]headed|spun around|stunned|dazed|woozy and spinning|concussed|stars around (?:his |her |their )?head|seeing stars|head spinning", "dizzy"),
+    TH("winded|gasp(?:s|ed|ing)? for (?:air|breath)|catch(?:es|ing)? (?:his |her |their )?breath|catching breath|huff(?:s|ed|ing)? and puff(?:s|ed|ing)?|out of breath|breathless|hands on (?:his |her |their )?knees (?:panting|breathing|exhausted)", "pant"),
+    TH("hands up|hands in the air don't shoot|give(?:s)? up|giving up|i surrender|white flag|don't (?:shoot|hurt me)|yield(?:s|ed|ing)?|submit(?:s|ted|ting)?|capitulat(?:e|es|ed|ing)", "surrender"),
+    TH("cring(?:e|es|ed|ing)|flinch(?:es|ed|ing)? away|shield(?:s|ed|ing)? (?:his |her |their )?face|brac(?:e|es|ed|ing) for impact|recoil(?:s|ed|ing)? in fear|shrink(?:s|ing)? (?:back|away)|shrank back|curl(?:s|ed|ing)? up (?:in fear|scared|terrified)|protect(?:s|ed|ing)? (?:his |her |their )?head", "cower"),
+    TH("clucks?|cluck(?:s|ed|ing)?|bawk|chicken dance|flap(?:s|ped|ping)? (?:his |her |their )?(?:wings|arms like wings)|bird dance|chicken walk|hen", "chicken"),
+    TH("football kick|penalty kick|free kick|volley(?:s|ed|ing)? (?:a |the )?ball|shoot(?:s|ing)? (?:a |the )?(?:football|soccer ball)|striker|kick(?:s|ed|ing)? (?:a |the )?(?:ball|football|soccer ball)", "soccer"),
+    TH("catch(?:es|ing)? (?:a |the )?(?:ball|frisbee|football|baseball|pass)|caught (?:a |the )?(?:ball|frisbee|football|pass)|receiv(?:e|es|ed|ing) (?:a |the )?(?:pass|ball)|wide receiver|goalkeeper (?:save|catch)|fielder", "catch"),
+    TH("baseball bat|cricket bat|home ?run|swing(?:s|ing)? (?:a |the )?bat|batter up|batting|slugger|hit(?:s|ting)? (?:a |the )?(?:baseball|home run|ball with a bat)|rounders", "baseball swing"),
+    TH("dribbl(?:e|es|ed|ing)|slam ?dunk(?:s|ed|ing)?|dunk(?:s|ed|ing)?|free throw|three[- ]pointer|jump shot|lay ?up|hoops|nba", "basketball"),
+    TH("blink(?:s|ed|ing)? away tears|sobbing laugh|teardrop|tear(?:s)? streaming", "cry"),
+    TH("salute(?:s|d)? with (?:a |the )?sword", "salute"),
+    TH("wave(?:s|d)? goodbye|goodbye wave|wave(?:s|d)? hi|wave(?:s|d)? hello|wave(?:s|d)? at (?:the )?(?:crowd|camera|fans|friend|kids)|say(?:s|ing)? (?:hi|hello|goodbye|bye)|hiya|howdy|greets? (?:the )?(?:crowd|fans|camera)", "wave"),
+    TH("round of applause|standing ovation|give(?:s)? (?:him|her|them|it) a hand|golf clap|slow clap|clapp?(?:s|ed|ing)? along|applaud(?:s|ed|ing)?", "clap"),
+    TH("giggl(?:e|es|ed|ing)|chuckl(?:e|es|ed|ing)|cackl(?:e|es|ed|ing)|guffaw(?:s|ed|ing)?|snicker(?:s|ed|ing)?|lol|rofl|lmao|crack(?:s|ed|ing)? up|burst(?:s)? out laughing|belly laugh|evil laugh|maniacal laugh|villain laugh|muahaha+", "laugh"),
+    TH("kneel(?:s|ed|ing)? before|take(?:s)? a knee|taking a knee|genuflect(?:s|ed|ing)?|knight(?:s|ed|ing)? (?:him|her|them)|be knighted|accolade|propose(?:s|d)? marriage|will you marry me|down on one knee", "kneel"),
+    TH("hooray|hurray|hurrah|yay+|woo+hoo+|woot|yes+!|let'?s go+!|gg|victory dance|celebrat(?:e|es|ed|ing) (?:a |the )?(?:win|goal|victory|touchdown)|pump(?:s|ed|ing)? (?:up )?the crowd|fist in the air|arms raised in victory|champion(?:ship)? celebration", "cheer"),
+    TH("exclaim(?:s|ed|ing)?|accus(?:e|es|ed|ing)|blam(?:e|es|ed|ing) (?:him|her|them|someone)|it was him|it was her|that one|over there|look over there|gestur(?:e|es|ed|ing) (?:at|toward|towards)|indicat(?:e|es|ed|ing) (?:the|a) (?:door|exit|way|direction)|show(?:s|ed|ing)? the way|direct(?:s|ed|ing)? traffic", "point"),
+    TH("meh|whatever gesture|beats me|no idea|who knows|not sure gesture|couldn'?t care less|palms up confused", "shrug"),
+    TH("oh no|oh dear|oh brother|smh|hand on (?:his |her |their )?forehead|rub(?:s|bed|bing)? (?:his |her |their )?(?:temples|forehead|eyes in frustration)|exasperated|headache gesture|can'?t believe (?:it|this)|cringe(?:s|d|ing)? hard|embarrass(?:ed|ing) (?:himself|herself|themselves)", "facepalm"),
+    TH("curse(?:s|d)? at|cursing at|insult(?:s|ed|ing)?|trash ?talk(?:s|ed|ing)?|provok(?:e|es|ed|ing)|goad(?:s|ed|ing)?|jeer(?:s|ed|ing)?|heckl(?:e|es|ed|ing)|flex(?:es|ed|ing)? on (?:him|her|them|the enemy)|you want some|fight me|come here gesture|beckon(?:s|ed|ing)? (?:the enemy|them to fight)", "taunt"),
+    TH("hover(?:s|ed|ing)? in (?:the )?air|superman flight|flies like superman|soar(?:s|ed|ing)?|glid(?:e|es|ed|ing) through the air|jetpack|iron man flight|take(?:s)? off into the sky|airborne hero|float(?:s|ed|ing)? (?:in )?mid ?air", "fly"),
+    TH("belly crawl|slither(?:s|ed|ing)? (?:along|forward|on the ground)|worm(?:s|ed|ing)? (?:along|forward)|commando crawl|crawl(?:s|ed|ing)? (?:through|under) (?:a |the )?(?:vent|tunnel|fence|wire|pipe)|on all fours", "crawl"),
+    TH("backpedal(?:s|led|ling)?|back(?:s|ed|ing)? away|backing away|step(?:s|ped|ping)? back(?:wards?)?|retreat(?:s|ed|ing)? slowly|walk(?:s|ed|ing)? away backwards|reverse(?:s|d)? slowly", "backward"),
+    TH("sidestep(?:s|ped|ping)? (?:left|right|along)|side ?shuffl(?:e|es|ed|ing)|crab ?walk(?:s|ed|ing)?|lateral (?:shuffle|movement|steps)|defensive shuffle|circle(?:s|d)? (?:around )?(?:the |an? )?(?:enemy|opponent|target)|circling (?:the |an? )?(?:enemy|opponent|target)", "strafe"),
+    TH("lob(?:s|bed|bing)?|chuck(?:s|ed|ing)?|fling(?:s|ing)?|flung|pitch(?:es|ed|ing)? (?:a |the )?(?:ball|baseball)|pitcher|hurl(?:s|ed|ing)? (?:a |the )?(?:spear|javelin|rock|stone|grenade|axe|knife)|javelin|shot ?put|discus|skip(?:s|ped|ping)? (?:a |the )?(?:stone|rock|pebble)|grenade|snowball|throw(?:s|ing)? (?:a |the )?(?:ball|stone|rock|spear|dart|frisbee|snowball|shuriken|knife|axe)", "throwing"),
+    TH("rifle|pistol|revolver|shotgun|sniper|musket|blaster|laser gun|ray ?gun|machine gun|smg|assault rifle|handgun|crossbow bolt|pew pew|gun(?:s|ned|ning)? (?:down|them)|open(?:s|ed|ing)? fire|firing|fires? (?:at|on) (?:the )?(?:enemy|target|them)", "shoot"),
+    TH("longbow|shortbow|recurve bow|compound bow|nock(?:s|ed|ing)? an arrow|loos(?:e|es|ed|ing) an arrow|arrow(?:s)? at|robin hood|legolas|archer stance|bowman|bowwoman", "archery"),
+    TH("scoop(?:s|ed|ing)? up|bend(?:s|ing)? (?:down|over) (?:and|to) (?:pick|grab|take|lift)|retriev(?:e|es|ed|ing) (?:a |the |an )?(?:item|object|coin|key|sword|weapon|bag|box)|loot(?:s|ed|ing)?|collect(?:s|ed|ing)? (?:a |the |an )?(?:coin|coins|item|items|gem|gems|loot)|take(?:s|ing)? (?:a |the |an )?(?:item|object|coin|key|weapon) from the (?:ground|floor)", "pickup"),
+    TH("parkour vault|wall ?run(?:s|ning)?|free ?run(?:ning|ner)?|ninja run|roof(?:top)? run(?:ning)?", "run"),
+  ];
+  function expandVocabulary(text) {
+    let t = String(text || ""); const swaps = [];
+    const known = (m) => !!findMood(m) || Object.keys(ACTS).some((a) => { const x = m.match(ACTS[a].rx); return x && x[0].length >= m.length - 2; }); // never rewrite a phrase the lexicon already understands as a whole
+    for (const [rx, to] of THESAURUS) { rx.lastIndex = 0; if (!rx.test(t)) { rx.lastIndex = 0; continue; } rx.lastIndex = 0; t = t.replace(rx, (m) => { if (m.toLowerCase() === to || known(m)) return m; swaps.push(m.toLowerCase() + " → " + to); return to; }); rx.lastIndex = 0; }
+    return { text: t, swaps: [...new Set(swaps)] };
+  }
+  // VERB CLASSES: body region + pattern for motion verbs outside the act lexicon. Rendered through the pose grammar.
+  const VC = (words, part, pattern, amp, extra) => Object.assign({ rx: new RegExp("\\b(?:" + words + ")\\b", "i"), words, part, pattern, amp: amp || 1 }, extra || {});
+  const VERB_CLASSES = [
+    VC("wring(?:s|ing)?|wrung|knead(?:s|ed|ing)?|squeez(?:e|es|ed|ing)|pinch(?:es|ed|ing)?|crumpl(?:e|es|ed|ing)|rub(?:s|bed|bing)? (?:his |her |their )?hands|warm(?:s|ed|ing)? (?:his |her |their )?hands|lather(?:s|ed|ing)?|scrub(?:s|bed|bing)? (?:his |her |their )?hands|wash(?:es|ed|ing)? (?:his |her |their )?hands|fidget(?:s|ed|ing)? with", "hands", "pulse", 0.9),
+    VC("stir(?:s|red|ring)?|whisk(?:s|ed|ing)?|mix(?:es|ed|ing)? (?:the )?(?:batter|dough|bowl|pot|paint|potion)|ladl(?:e|es|ed|ing)|crank(?:s|ed|ing)?|wind(?:s|ing)? (?:up )?(?:a |the )?(?:clock|toy|handle|crank|jack)|churn(?:s|ed|ing)?|grind(?:s|ing)? (?:coffee|pepper|grain)|turn(?:s|ed|ing)? (?:a |the )?(?:crank|handle|wheel|valve|knob|dial)", "arm", "circle", 1),
+    VC("swat(?:s|ted|ting)?|slap(?:s|ped|ping)?|smack(?:s|ed|ing)?|spank(?:s|ed|ing)?|whack(?:s|ed|ing)?|swipe(?:s|d)?|swiping|flick(?:s|ed|ing)?|shoo(?:s|ed|ing)?|bat(?:s|ted|ting)? away|fan(?:s|ned|ning)? (?:himself|herself|themselves|the air|his face|her face)|wav(?:e|es|ed|ing) (?:away|off) (?:a |the )?(?:fly|smoke|smell|bug|mosquito)", "arm", "osc", 1.1, { fast: true }),
+    VC("pok(?:e|es|ed|ing)|prod(?:s|ded|ding)?|jab(?:s|bed|bing)? (?:at|the button|a button)|press(?:es|ed|ing)? (?:a |the )?(?:button|buzzer|switch|doorbell|keypad)|push(?:es|ed|ing)? (?:a |the )?(?:button|buzzer|switch)|tap(?:s|ped|ping)? (?:a |the )?(?:screen|button|glass|window)|ring(?:s|ing)? (?:a |the )?(?:buzzer|doorbell)|dial(?:s|ed|ing)?|touch(?:es|ed|ing)? (?:a |the )?(?:screen|panel|wall|glass)", "arm", "hold", 0.9, { dir: "forward" }),
+    VC("beckon(?:s|ed|ing)?|summon(?:s|ed|ing)? (?:him|her|them) over|come here|come hither|gestur(?:e|es|ed|ing) to (?:come|follow)|motion(?:s|ed|ing)? (?:him|her|them) (?:over|closer|forward)|signal(?:s|led|ling)? (?:to )?(?:stop|go|come|advance|left|right)|wav(?:e|es|ed|ing) (?:him|her|them) (?:over|through|in)|conduct(?:s|ed|ing)? (?:an? |the )?(?:orchestra|choir|band)|direct(?:s|ed|ing)? (?:an? |the )?(?:orchestra|choir|band)|maestro|usher(?:s|ed|ing)?", "arm", "osc", 1),
+    VC("writ(?:e|es|ing)|wrote|scribbl(?:e|es|ed|ing)|sketch(?:es|ed|ing)?|draw(?:s|ing)? (?:a |the )?(?:picture|map|portrait|sketch|diagram|circle)|doodl(?:e|es|ed|ing)|sign(?:s|ed|ing)? (?:a |the )?(?:paper|contract|form|autograph|cheque|check|document)|autograph(?:s|ed|ing)?|jot(?:s|ted|ting)?|fill(?:s|ed|ing)? (?:in|out) (?:a |the )?form|take(?:s|ing)? notes|not(?:e|es|ed|ing) down|knit(?:s|ted|ting)?|sew(?:s|ed|ing|n)?|crochet(?:s|ed|ing)?|embroider(?:s|ed|ing)?|stitch(?:es|ed|ing)?|whittl(?:e|es|ed|ing)|carv(?:e|es|ed|ing)|sculpt(?:s|ed|ing)?|solder(?:s|ed|ing)?|tinker(?:s|ed|ing)?|repair(?:s|ed|ing)?|fix(?:es|ed|ing)? (?:a |the )?(?:engine|pipe|wire|machine|toy|watch|bike)|read(?:s|ing)? (?:a |the )?(?:book|map|letter|scroll|note|newspaper|menu|sign)", "hands", "hold", 0.8, { dir: "chest" }),
+    VC("juggl(?:e|es|ed|ing)|toss(?:es|ed|ing)? (?:a |the )?(?:coin|ball|apple) (?:up|in the air)|flip(?:s|ped|ping)? a coin|coin flip|bounc(?:e|es|ed|ing) a ball|dribbl(?:e|es|ed|ing) (?:a |the )?ball|yo[- ]?yo|spin(?:s|ning)? a (?:pen|pencil|coin|ball)|twirl(?:s|ed|ing)? a (?:baton|pen|staff|sword|stick)|baton", "hands", "osc", 1, { fast: true, dir: "up" }),
+    VC("count(?:s|ed|ing)? on (?:his |her |their )?fingers|count(?:s|ed|ing)? (?:money|coins|cash|bills)|finger ?gun(?:s)?|snap(?:s|ped|ping)? (?:his |her |their )?fingers|finger snap|click(?:s|ed|ing)? (?:his |her |their )?fingers|crack(?:s|ed|ing)? (?:his |her |their )?(?:knuckles|fingers)|examin(?:e|es|ed|ing) (?:his |her |their )?(?:nails|hand|ring|watch)|check(?:s|ed|ing)? (?:his |her |their )?(?:watch|nails|phone briefly)|look(?:s|ed|ing)? at (?:his |her |their )?(?:watch|hand|nails|palm)", "arm", "hold", 0.7, { dir: "chest" }),
+    VC("stamp(?:s|ed|ing)? (?:a |the )?(?:foot|feet|ground)|tap(?:s|ped|ping)? (?:a |his |her |their |the )?(?:foot|feet|toe|toes)|foot ?tap(?:s|ping)?|impatient(?:ly)? tap(?:s|ping)?|kick(?:s|ed|ing)? (?:a |the )?(?:dirt|dust|pebble|can|rock|sand|ball around)|scuff(?:s|ed|ing)? (?:his |her |their )?(?:feet|shoes|foot)|drag(?:s|ged|ging)? (?:his |her |their )?feet|shuffl(?:e|es|ed|ing) (?:his |her |their )?feet|stomp(?:s|ed|ing)? in place|march(?:es|ed|ing)? in place|jog(?:s|ged|ging)? in place|run(?:s|ning)? in place|high knees|butt kicks", "leg", "osc", 1),
+    VC("trip(?:s|ped|ping)? (?:over|on)|slip(?:s|ped|ping)? on|stumbl(?:e|es|ed|ing) (?:over|on|back|forward)|lurch(?:es|ed|ing)?|totter(?:s|ed|ing)?|teeter(?:s|ed|ing)?|wobbl(?:e|es|ed|ing)|lose(?:s)? (?:his |her |their )?balance|losing (?:his |her |their )?balance|off[- ]balance|regain(?:s|ed|ing)? balance|catch(?:es|ing)? (?:himself|herself|themselves)", "torso", "sway", 1.2),
+    VC("sway(?:s|ed|ing)?|rock(?:s|ed|ing)? (?:back and forth|side to side|gently|slowly|in place)|bob(?:s|bed|bing)?|bobbl(?:e|es|ed|ing)|jiggl(?:e|es|ed|ing)|wiggl(?:e|es|ed|ing) (?:around|in place|his hips|her hips|their hips)|twerk(?:s|ed|ing)?|gyrat(?:e|es|ed|ing)|hula|belly ?danc(?:e|es|ed|ing)|hip ?sway(?:s|ing)?|squirm(?:s|ed|ing)?|writh(?:e|es|ed|ing)|wriggl(?:e|es|ed|ing)|limbo|grind(?:s|ed|ing)? (?:on|to) the (?:beat|music)|vib(?:e|es|ed|ing) to|nod(?:s|ded|ding)? (?:along )?to the (?:beat|music)", "torso", "sway", 1),
+    VC("trembl(?:e|es|ed|ing)|shudder(?:s|ed|ing)?|quak(?:e|es|ed|ing)|quiver(?:s|ed|ing)?|convuls(?:e|es|ed|ing)|twitch(?:es|ed|ing)?|spasm(?:s|ed|ing)?|jitter(?:s|ed|ing)?|vibrat(?:e|es|ed|ing)|shak(?:e|es|ing) (?:all over|uncontrollably|violently|like a leaf|with rage|with fear)|electrocut(?:ed|ion)|zapped|tased|shock(?:ed)? by|seizure|glitch(?:es|ed|ing)?|malfunction(?:s|ed|ing)?|short[- ]circuit(?:s|ed|ing)?", "torso", "tremble", 0.8, { fast: true }),
+    VC("slump(?:s|ed|ing)?|sag(?:s|ged|ging)?|droop(?:s|ed|ing)?|wilt(?:s|ed|ing)?|deflat(?:e|es|ed|ing)|faint(?:s|ed|ing)?|swoon(?:s|ed|ing)?|keel(?:s|ed|ing)? over|crumpl(?:e|es|ed|ing) (?:to the ground|down)|go(?:es)? limp|going limp|hang(?:s|ing)? limp|doubl(?:e|es|ed|ing) over|hunch(?:es|ed|ing)? over|bent over|bend(?:s|ing)? over|stoop(?:s|ed|ing)?|cower(?:s|ed|ing)? down", "torso", "slump", 1),
+    VC("puff(?:s|ed|ing)? (?:out |up )?(?:his |her |their )?chest|chest puff|straighten(?:s|ed|ing)? up|stand(?:s|ing)? (?:up )?(?:tall|straight|proud)|square(?:s|d)? (?:his |her |their )?shoulders|shoulders back|crack(?:s|ed|ing)? (?:his |her |their )?(?:neck|back)|roll(?:s|ed|ing)? (?:his |her |their )?(?:shoulders|neck)|shoulder roll(?:s)?|arch(?:es|ed|ing)? (?:his |her |their )?back|lean(?:s|ed|ing)? back and relax(?:es)?", "torso", "arch", 1),
+    VC("peek(?:s|ed|ing)?|peep(?:s|ed|ing)?|glanc(?:e|es|ed|ing)|glimps(?:e|es|ed|ing)|look(?:s|ed|ing)? (?:over|behind|back over) (?:his |her |their )?shoulder|check(?:s|ed|ing)? behind|double[- ]take|do(?:es)? a double take|eavesdrop(?:s|ped|ping)?|listen(?:s|ed|ing)? (?:in|closely|at the door|carefully)|cock(?:s|ed|ing)? (?:his |her |their )?head|tilt(?:s|ed|ing)? (?:his |her |their )?head", "head", "turn", 1),
+    VC("star(?:e|es|ed|ing)|gaz(?:e|es|ed|ing)|gawk(?:s|ed|ing)?|gap(?:e|es|ed|ing)|ogl(?:e|es|ed|ing)|glar(?:e|es|ed|ing)|scowl(?:s|ed|ing)?|frown(?:s|ed|ing)?|squint(?:s|ed|ing)? at|death ?stare|stare[- ]?down|eye(?:s|d|ing)? (?:him|her|them|it) (?:up|suspiciously)|size(?:s|d)? (?:him|her|them) up|sizing (?:him|her|them) up|inspect(?:s|ed|ing)?|examin(?:e|es|ed|ing)|scrutiniz(?:e|es|ed|ing)|studies|stud(?:y|ying) (?:the|a|an) (?:map|screen|painting|object|wall)", "head", "hold", 0.8, { dir: "forward" }),
+    VC("sniff(?:s|ed|ing)?|smell(?:s|ed|ing)?|snort(?:s|ed|ing)?|whiff|inhal(?:e|es|ed|ing)|breath(?:e|es|ed|ing) (?:in )?deeply|deep breath|take(?:s)? a deep breath|exhal(?:e|es|ed|ing)|sigh(?:s|ed|ing)?|yawn(?:s|ed|ing)?|hiccup(?:s|ed|ing)?|burp(?:s|ed|ing)?|belch(?:es|ed|ing)?|gag(?:s|ged|ging)?|retch(?:es|ed|ing)?|puk(?:e|es|ed|ing)|vomit(?:s|ed|ing)?|throw(?:s|ing)? up|cough(?:s|ed|ing)? up", "head", "nod", 0.9),
+    VC("scream(?:s|ed|ing)?|shout(?:s|ed|ing)?|yell(?:s|ed|ing)?|holler(?:s|ed|ing)?|bellow(?:s|ed|ing)?|roar(?:s|ed|ing)?|howl(?:s|ed|ing)?|shriek(?:s|ed|ing)?|cry(?:ing)? out|call(?:s|ed|ing)? out|call(?:s|ed|ing)? (?:for|to) (?:help|someone|the dog|the kids)|whistl(?:e|es|ed|ing)|sing(?:s|ing)?|sang|serenad(?:e|es|ed|ing)|karaoke|chant(?:s|ed|ing)?|rap(?:s|ped|ping)? (?:a |the )?(?:verse|song|bars)|freestyl(?:e|es|ed|ing) rap|opera|announc(?:e|es|ed|ing)|preach(?:es|ed|ing)?|speech|give(?:s)? a speech|giving a speech|toast(?:s|ed|ing)? (?:the )?(?:bride|groom|couple|crowd)|cheers to|lectur(?:e|es|ed|ing)|scold(?:s|ed|ing)?|argu(?:e|es|ed|ing)|rant(?:s|ed|ing)?|complain(?:s|ed|ing)?|nag(?:s|ged|ging)?|gossip(?:s|ed|ing)?|chat(?:s|ted|ting)? (?:with|to)|talk(?:s|ed|ing)? (?:to|with|at)|explain(?:s|ed|ing)?|negotiat(?:e|es|ed|ing)|debat(?:e|es|ed|ing)|storytell(?:ing|er)|tell(?:s|ing)? a (?:story|joke|tale)", "arm", "osc", 0.9, { dir: "forward", head: true }),
+    VC("bit(?:e|es|ing)|chomp(?:s|ed|ing)?|gnaw(?:s|ed|ing)?|lick(?:s|ed|ing)?|kiss(?:es|ed|ing)?|smooch(?:es|ed|ing)?|headbutt(?:s|ed|ing)?|head ?butt|nuzzl(?:e|es|ed|ing)|whisper(?:s|ed|ing)?|blow(?:s|ing)? (?:out )?(?:the )?(?:candles?|a dandelion|bubbles|a whistle|a horn|smoke)|spit(?:s|ting)?|spat", "head", "nod", 1),
+    VC("salsa dip|dip(?:s|ped|ping)? (?:his |her |their )?partner|lean(?:s|ed|ing)? (?:in|closer|forward to listen)|lean(?:s|ed|ing)? on (?:a |the )?(?:wall|counter|table|railing|fence|pillar)|rest(?:s|ed|ing)? (?:his |her |their )?(?:elbow|elbows|arm|arms) on|prop(?:s|ped|ping)? (?:himself|herself|themselves) up", "torso", "lean", 0.9),
+    VC("hop(?:s|ped|ping)? on one (?:foot|leg)|one[- ]legged hop|pogo|bounce(?:s|d)? (?:up and down|in place|on (?:his |her |their )?toes|excitedly)|bouncing (?:up and down|in place|on (?:his |her |their )?toes|excitedly)|jitterbug|can'?t (?:stand|keep) still|excited bounce|potty dance|need(?:s)? to pee|hold(?:s|ing)? it in", "torso", "bounce", 1, { fast: true }),
+    VC("pos(?:e|es|ed|ing) (?:for|like)|strik(?:e|es|ing) a pose|model(?:s|led|ling)? (?:on|for|the)|vogue(?:s|d|ing)?|fashion pose|photo ?shoot|catwalk pose|mannequin|freeze frame|hold(?:s|ing)? (?:a |the |that )?pose|statue|frozen (?:in place|like a statue)|t[- ]pose|a[- ]pose|flex pose|dramatic pose|pin[- ]?up pose|jojo pose|anime pose", "arm", "hold", 1, { dir: "up", bothArms: true }),
+    VC("shield(?:s|ed|ing)? (?:his |her |their )?eyes from|hide(?:s)? (?:his |her |their )?face|hiding (?:his |her |their )?face|cover(?:s|ed|ing)? (?:his |her |their )?(?:face|eyes|ears|mouth|nose|head)|plug(?:s|ged|ging)? (?:his |her |their )?(?:ears|nose)|hold(?:s|ing)? (?:his |her |their )?nose|peek(?:s|ed|ing)? through (?:his |her |their )?fingers|hands over (?:his |her |their )?(?:face|eyes|ears|mouth)|bury(?:ing)? (?:his |her |their )?face in (?:his |her |their )?hands|buries (?:his |her |their )?face|rub(?:s|bed|bing)? (?:his |her |their )?(?:eyes|face|neck|belly|stomach|tummy|back of (?:his|her|their) neck)|massag(?:e|es|ed|ing) (?:his |her |their )?(?:neck|temples|shoulder|shoulders|forehead|back)|pat(?:s|ted|ting)? (?:his |her |their )?(?:belly|stomach|tummy|chest|head)", "hands", "hold", 0.9, { dir: "face" }),
+  ];
+  const PART_POSES = {
+    arm: { up: { rs: [165, 0, 20], re: [8, 0, 0] }, forward: { rs: [90, 0, 10], re: [5, 0, 0] }, chest: { rs: [60, -40, 20], re: [120, 0, 0] }, face: { rs: [120, -30, 30], re: [140, 0, 0] }, side: { rs: [10, 0, 90], re: [5, 0, 0] }, default: { rs: [85, -10, 25], re: [40, 0, 0], rw: [-10, 0, 0] } },
+    hands: { chest: { rs: [60, -35, 20], re: [115, 0, 0], ls: [60, 35, -20], le: [115, 0, 0] }, face: { rs: [120, -25, 30], re: [135, 0, 0], ls: [120, 25, -30], le: [135, 0, 0], ne: [8, 0, 0] }, up: { rs: [150, -10, 25], re: [30, 0, 0], ls: [150, 10, -25], le: [30, 0, 0] }, default: { rs: [70, -30, 20], re: [110, 0, 0], ls: [70, 30, -20], le: [110, 0, 0], ne: [8, 0, 0] } },
+    leg: { default: { rh: [28, 0, 6], rk: [-50, 0, 0], ra: [-10, 0, 0], ro: [0, 0, -3], rp: [0.15, 0, 0], wa: [0, 0, 3] } },
+    head: { turn: { ne: [0, 42, 0], wa: [0, 10, 0] }, forward: { ne: [8, 0, 0], wa: [-6, 0, 0] }, nod: { ne: [22, 0, 0] }, default: { ne: [0, 20, 0] } },
+    torso: { sway: { wa: [0, 0, 16], ro: [0, 0, 6], ne: [0, 0, -8], rp: [0.3, 0, 0] }, tremble: { wa: [-4, 0, 3], ne: [3, 0, 4], rs: [25, -5, 12], re: [55, 0, 0], ls: [25, 5, -12], le: [55, 0, 0], ro: [0, 0, 1.5] }, slump: { wa: [-32, 0, 0], ne: [26, 0, 0], ro: [-8, 0, 0], rs: [15, 0, 8], ls: [15, 0, -8], rk: [-18, 0, 0], lk: [-18, 0, 0], rp: [0, -0.3, 0] }, arch: { wa: [16, 0, 0], ne: [-14, 0, 0], ro: [6, 0, 0], rs: [-10, 0, 18], ls: [-10, 0, -18] }, lean: { wa: [-14, 0, 10], ro: [-4, 0, 5], ne: [8, 0, -8], rs: [40, -20, 15], re: [95, 0, 0] }, bounce: { lk: [-32, 0, 0], rk: [-32, 0, 0], rp: [0, -0.18, 0], rs: [20, 0, 10], ls: [20, 0, -10], re: [60, 0, 0], le: [60, 0, 0] } },
+  };
+  // → the same shape posePhrase() returns, so gestureBeats() renders it; sides from the prompt ("left") flip the pose
+  function classGesture(text) {
+    const t = String(text || ""); const found = [];
+    for (const c of VERB_CLASSES) { const m = t.match(c.rx); if (m) found.push({ c, word: m[0].toLowerCase(), at: m.index }); }
+    if (!found.length) return null;
+    found.sort((a, b) => a.at - b.at);
+    const pose = {}; let osc = false, fast = false; const hits = [];
+    const left = /\b(left|lefty|left[- ]handed)\b/i.test(t) && !/\bright\b/i.test(t);
+    for (const f of found.slice(0, 3)) {
+      const c = f.c; const table = PART_POSES[c.part] || PART_POSES.arm;
+      let p = table[c.dir] || table[c.pattern] || table.default || {};
+      if (c.part === "arm" && c.bothArms) p = both(p);
+      if (left && (c.part === "arm" || c.part === "leg")) p = L(p);
+      for (const k of Object.keys(p)) { const v = p[k]; pose[k] = k === "rp" ? v.slice() : [v[0] * c.amp, v[1] * c.amp, v[2] * c.amp]; }
+      if (c.head && !pose.ne) pose.ne = [6, left ? 10 : -10, 0];
+      if (/^(osc|pulse|circle|sway|tremble|bounce|nod|turn)$/.test(c.pattern)) osc = true;
+      if (c.fast) fast = true;
+      hits.push(f.word + " (" + c.part + " " + c.pattern + ")");
+    }
+    if (!Object.keys(pose).length) return null;
+    return { pose, oscillate: osc, hits, synth: true, fast, reps: fast ? 5 : 3 };
+  }
+  // vocabulary size for the studio + prompt composer for "Inspire me"
+  function vocabulary() {
+    const acts = Object.keys(ACTS).filter((k) => !MOODS[k]).length, moods = Object.keys(MOODS).length;
+    const categories = Object.keys(RE).filter((k) => !/^(anime|realistic|cartoony|heavy|fluid|robotic|zombie|cute|ninja|fast|slow|extreme|loop|noloop|upper|facial|twohand|both|small|big|side|mirror|travel|left|combo|anticipation|recover)$/.test(k)).length;
+    const top = (src) => { let d = 0, n = 1; for (const ch of src) { if (ch === "(") d++; else if (ch === ")") d--; else if (ch === "|" && d === 0) n++; } return n; };
+    const synonyms = THESAURUS.reduce((n, [rx]) => n + top(rx.source.replace(/^\\b\(\?:|\)\\b$/g, "")), 0), verbClasses = VERB_CLASSES.reduce((n, c) => n + top(c.words), 0);
+    return { acts, categories, moods, synonyms, verbClasses, styles: 9, speeds: 7, parts: 8, directions: 8, composition: ["then-chains", "while-layers", "repeats", "sides", "moods", "speeds", "styles", "takes"] };
+  }
+  const INSPIRE = {
+    acts: ["drink a potion", "open a heavy door", "play guitar", "dig a hole", "chop wood", "sweep the floor", "wave at the crowd", "salute", "bow", "clap", "stretch", "shiver", "juggle", "stir a cauldron", "read a book", "knock on the door", "take a selfie", "flex", "pray", "pet a dog", "look around", "think hard", "high five", "fist pump", "dab", "cast a fireball", "block with a shield", "throw a spear", "draw a bow", "swing a greatsword", "two punch combo", "roundhouse kick", "dodge roll", "backflip", "sit on a bench", "crouch", "climb a ladder", "swim", "sneak", "crawl"],
+    cycles: ["idle", "walk", "run", "sneak walk", "march", "jog", "walk backwards", "strafe", "crawl", "swim", "climb", "fly"],
+    moods: ["tired", "proud", "drunk", "scared", "angry", "happy", "sad", "old", "injured", "cold", "energetic", "nervous", "sneaky"],
+    styles: ["anime", "realistic", "cartoony", "heavy", "fluid", "robotic", "cute", "ninja"],
+    speeds: ["slowly", "fast", "in slow motion", "quickly", "at half speed"],
+    parts: ["raise the left arm", "turn head right", "lean back", "kick the right leg forward", "lift both arms", "shake the right fist", "nod", "twist the torso", "tilt head left", "spread both arms"],
+  };
+  function inspire(seed) {
+    const r = rng(hashStr("inspire:" + (seed == null ? Date.now() : seed)) || 1); const pick = (a) => a[Math.floor(r() * a.length)];
+    const form = Math.floor(r() * 9);
+    switch (form) {
+      case 0: return `${pick(INSPIRE.moods)} ${pick(INSPIRE.cycles)}`;
+      case 1: return `${pick(INSPIRE.acts)} then ${pick(INSPIRE.acts)}`;
+      case 2: return `${pick(INSPIRE.acts)} while walking`;
+      case 3: return `${pick(INSPIRE.styles)} ${pick(INSPIRE.acts)}`;
+      case 4: return `${pick(INSPIRE.acts)} ${pick(INSPIRE.speeds)}`;
+      case 5: return `${pick(INSPIRE.parts)} then ${pick(INSPIRE.parts)}`;
+      case 6: return `${pick(INSPIRE.moods)} ${pick(INSPIRE.acts)} ${pick(["twice", "three times", "x4"])}`;
+      case 7: return `${pick(INSPIRE.acts)} then ${pick(INSPIRE.acts)} then ${pick(INSPIRE.acts)}`;
+      default: return `${pick(INSPIRE.moods)} ${pick(INSPIRE.styles)} ${pick(INSPIRE.cycles)}, ${pick(INSPIRE.speeds)}`;
+    }
+  }
   const IMPROV_POOL = ["lookaround", "think", "scratch", "shade", "stretch", "watch", "wipe", "nervous", "heropose", "flex", "thumbsup", "shiver"];
   function improvise(seed, count) { const r = rng(seed || 1); const pool = IMPROV_POOL.slice(); const out = []; while (out.length < count && pool.length) out.push(ACTS[pool.splice(Math.floor(r() * pool.length), 1)[0]]); return out; }
   // several clips in a row with a short blend between them (A then B then C)
@@ -1166,7 +1382,7 @@
     if (loop) keys = closeLoop(keys, duration, travel);
     keys = snapToFps(dedupeKeys(keys), fps, duration);
     let clip = {
-      version: 1, engine: VERSION, name: opts.name || suggestName(intent) + (take ? "_take" + (take + 1) : "") + (mirrored ? "_Mirror" : ""), prompt: intent.text, intent, params, quality, rigType, fps, duration, loop, priority: opts.priority || intent.priority,
+      version: 1, engine: VERSION, name: opts.name || suggestName(intent) + (take ? "_take" + (take + 1) : "") + (mirrored ? "_Mirror" : ""), prompt: intent.rawText || intent.text, intent, params, quality, rigType, fps, duration, loop, priority: opts.priority || intent.priority,
       stages, keys, created: opts.now || 0, edited: false, limitations: intent.unsupported.slice(), take, personaSeed: Number.isFinite(opts.personaSeed) ? opts.personaSeed >>> 0 : intent.seed, interp: opts.interp === "spline" || opts.interp === "eased" ? opts.interp : (q.spline && opts.smooth !== false && params.smooth !== false ? "spline" : "eased"), persona: { traits: P.traits, lead: P.lead, fidget: P.fidget, armRest: P.armRest, easing: P.easing, emoteVariant: P.emoteVariant }, mirrored, travel,
     };
     if (tempoNote) clip.limitations.push(tempoNote);
@@ -2053,7 +2269,7 @@
     return lines.join("\n");
   }
 
-  const api = { VERSION, JOINTS, PARENT, PIVOT, LIMITS, QUALITY, R15_BONES, R6_BONES, R6_C0, PRIORITY_TOKEN, EASING_TOKEN, parseIntent, generate, generateSequence, generateSet, splitSet, compatibility, describeSet, stanceDistance, setPriority, validate, refine, applyFeedback, variation, toStudio, toBuildArgs, toRbxmx, defaultRigInfo, detectRigType, boneMap, sampleAt, forwardKinematics, fkFull, metrics, serializeProject, parseProject, retime, moveKey, setJoint, duplicateKey, deleteKey, smooth, smoothness, simplify, reverse, bake, cycleOffset, insertKey, layer, ikSolve, groundFeet, copyPose, pastePose, channels, mirrorPose, easeAlpha, exportKeys, robloxEase, setInterp, ACTS, MOODS, findActs, findMood, posePhrase, splitClauses, concatClips, applyMood, UPPER_JOINTS, LOWER_JOINTS, EFFECTORS, TIP, ROOT_HEIGHT, compare, summary, mirror, fingerprint, similarity, persona, choreograph, STRIKE_POOL, math: { eulerYXZ, toEulerYXZ, mul, transpose, mulV, flat, from9 } };
+  const api = { VERSION, JOINTS, PARENT, PIVOT, LIMITS, QUALITY, R15_BONES, R6_BONES, R6_C0, PRIORITY_TOKEN, EASING_TOKEN, parseIntent, generate, generateSequence, generateSet, splitSet, compatibility, describeSet, stanceDistance, setPriority, validate, refine, applyFeedback, variation, toStudio, toBuildArgs, toRbxmx, defaultRigInfo, detectRigType, boneMap, sampleAt, forwardKinematics, fkFull, metrics, serializeProject, parseProject, retime, moveKey, setJoint, duplicateKey, deleteKey, smooth, smoothness, simplify, reverse, bake, cycleOffset, insertKey, layer, ikSolve, groundFeet, copyPose, pastePose, channels, mirrorPose, easeAlpha, exportKeys, robloxEase, setInterp, ACTS, MOODS, findActs, findMood, posePhrase, classGesture, expandVocabulary, vocabulary, inspire, THESAURUS, VERB_CLASSES, splitClauses, concatClips, applyMood, UPPER_JOINTS, LOWER_JOINTS, EFFECTORS, TIP, ROOT_HEIGHT, compare, summary, mirror, fingerprint, similarity, persona, choreograph, STRIKE_POOL, math: { eulerYXZ, toEulerYXZ, mul, transpose, mulV, flat, from9 } };
   root.ORAnimEngine = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

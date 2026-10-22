@@ -81,6 +81,63 @@
     const dur = parseFloat(D.duration.value);
     return { quality: D.quality.value, rigType: D.rig.value, duration: Number.isFinite(dur) && dur > 0 ? dur : undefined, loop: D.loop.checked ? true : (D.loopAuto ? undefined : false), fps: parseInt(D.fps.value, 10) || undefined };
   }
+  // 1.61 vocabulary browser: everything the engine knows, grouped, click-to-insert (prefix for moods/styles, chain for motions)
+  const BROWSE = [
+    ["Everyday", "chain", ["drink a potion", "eat", "open a heavy door", "knock on the door", "answer the phone", "take a selfie", "type on a laptop", "read a book", "stir a cauldron", "sweep the floor", "paint a picture", "dig a hole", "chop wood", "push a crate", "pull a rope", "carry a box", "lift a heavy box", "drive a car", "ride a bike", "row a boat", "go fishing", "check the watch", "look around", "think hard", "stretch", "shiver", "yawn", "sneeze", "cough", "wipe the sweat", "scratch", "sit down", "sleep"]],
+    ["Social & emotes", "chain", ["wave", "wave both arms", "clap", "cheer", "bow", "curtsy", "salute", "nod", "shake head", "shrug", "facepalm", "point", "taunt", "laugh", "cry", "hug", "handshake", "high five", "fist bump", "thumbs up", "blow a kiss", "pray", "kneel", "pet the dog", "hero pose", "dab", "floss", "twirl", "conduct an orchestra", "give a speech", "beckon"]],
+    ["Sport & fitness", "chain", ["jumping jacks", "squats", "sit ups", "pushups", "lunge", "flex", "deadlift", "boxing", "kick a ball", "catch a ball", "baseball swing", "basketball jump shot", "juggle", "meditate", "run in place", "jog", "swim", "climb", "crawl", "dodge roll", "backflip", "front flip", "slide"]],
+    ["Combat", "chain", ["sword slash", "8 hit anime sword combo", "3 hit punch combo", "roundhouse kick", "heavy axe slash", "spin attack", "finisher", "block", "parry", "dodge", "cast a fireball", "charge up and transform", "throw a grenade", "shoot pistol", "fire rifle two shots", "draw a bow and release", "hit reaction", "knockback", "death falling backwards", "dash forward", "fly"]],
+    ["Cycles", "set", ["idle", "walk cycle", "run cycle", "sneak walk", "zombie walk", "strafe left", "walk backwards", "crouch idle", "sit idle", "sleep", "tread water", "fly idle"]],
+    ["Moods", "prefix", ["tired", "proud", "drunk", "scared", "angry", "happy", "sad", "old", "injured", "cold", "energetic", "nervous", "sneaky"]],
+    ["Styles & speed", "prefix", ["anime", "realistic", "cartoony", "heavy", "fluid", "robotic", "cute", "ninja", "slow", "fast", "slow motion", "snappy", "subtle", "exaggerated"]],
+    ["Body grammar", "chain", ["raise the left arm", "lift both arms", "extend the right arm forward", "spread both arms", "shake the right fist", "kick the right leg forward", "lift the left knee", "turn head left", "tilt head right", "nod", "lean back", "lean forward", "twist the torso", "crouch", "bounce"]],
+    ["Compose", "raw", ["… then …", "… while walking", "… while running", "… twice", "… three times", "… with the left hand", "… mirrored", "… with root motion", "… for my knight: idle, walk, run and jump", "… upper body only"]],
+  ];
+  function vocabBrowserHtml() {
+    return BROWSE.map(([title, mode, items]) => `<div class="rsa-browse-g"><div class="rsa-browse-t">${esc(title)}</div><div class="rsa-chips">${items.map((w) => `<button type="button" class="rsa-chip" data-ins="${esc(w)}" data-mode="${mode}">${esc(w)}</button>`).join("")}</div></div>`).join("") +
+      `<div class="rsa-muted rsa-browse-foot">Any other verb works too: synonyms are understood ("guzzle", "pirouette", "shovel", "waltz"), and unknown motion verbs are rendered as body-region primitives ("wring", "teeter", "sniff", "shimmy", "tremble", "slump"). Chain with "then", layer with "while", repeat with "twice" / "x3".</div>`;
+  }
+  function insertVocab(word, mode) {
+    const cur = String(D.prompt.value || "").trim(); let next;
+    if (mode === "raw") { const w = word.replace(/^…\s*/, ""); next = cur ? (/^then\b|^while\b|^with\b|^twice|^three|^mirrored|^upper|^for my/.test(w) ? cur + " " + w : cur + " " + w) : w.replace(/\s*…$/, ""); }
+    else if (mode === "prefix") next = cur ? (new RegExp("\\b" + word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(cur) ? cur : word + " " + cur) : word + " idle";
+    else if (mode === "set") next = cur ? cur + ", " + word : word;
+    else next = cur ? cur + " then " + word : word;
+    D.prompt.value = next.replace(/\s+/g, " ").trim(); D.loopAuto = true; D.duration.value = ""; D.prompt.focus(); renderUnderstood();
+  }
+  function vocabLine() {
+    const v = E().vocabulary ? E().vocabulary() : null; if (!v) return "";
+    const n = (x) => x >= 1000 ? (Math.floor(x / 100) / 10).toFixed(1).replace(/\.0$/, "") + "k+" : String(x);
+    return `${v.acts} motions · ${v.categories} move types · ${v.moods} moods · ${n(v.synonyms)} synonyms · ${v.verbClasses}+ verbs · ${v.styles} styles · pose grammar · chains & layers → <b>unlimited</b>`;
+  }
+  function inspire() { if (!E().inspire) return; const p = E().inspire(); D.prompt.value = p; D.loopAuto = true; D.duration.value = ""; renderUnderstood(); toast("Try: " + p + " - press Generate"); diag("inspire", { prompt: p }); }
+  function toggleBrowse() { const open = D.browse.hidden; D.browse.hidden = !open; D.browseBtn.classList.toggle("on", open); D.browseBtn.setAttribute("aria-pressed", open ? "true" : "false"); }
+  // live read-back of what the engine understood while typing (before Generate)
+  let understoodTimer = 0;
+  function renderUnderstood() {
+    if (!D || !D.understood) return;
+    const text = String(D.prompt.value || "").trim();
+    if (!text) { D.understood.textContent = ""; D.understood.hidden = true; return; }
+    let i; try { i = E().parseIntent(text); } catch { D.understood.hidden = true; return; }
+    const bits = [];
+    const setN = E().splitSet ? (E().splitSet(text) || []).length : 0;
+    if (setN > 1) bits.push(`${setN} separate clips (one character)`);
+    const cat = i.category;
+    if (cat === "sequence") bits.push(`${(i.parts || i.clauses || []).length || "several"} motions in a row`);
+    else if (cat === "act") bits.push((i.acts || []).join(" + "));
+    else if (cat === "gesture") bits.push((i.gesture && i.gesture.synth ? "interpreted " : "gesture ") + ((i.gesture || {}).hits || []).join(", "));
+    else if (cat === "improv") bits.push("no motion word yet - will improvise " + (i.improv || []).join(" → "));
+    else bits.push(cat.replace(/_/g, " ") + (i.upperText ? " + " + i.upperText : ""));
+    if (i.mood) bits.push("mood " + i.mood);
+    if (i.style && i.style !== "default") bits.push(i.style);
+    if (i.speed && Math.abs(i.speed - 1) > 0.05) bits.push((i.speed > 1 ? "faster ×" : "slower ×") + Number(i.speed).toFixed(2).replace(/0+$/, "").replace(/\.$/, ""));
+    if (i.repeat) bits.push("×" + i.repeat);
+    if (i.swaps && i.swaps.length) bits.push("understood " + i.swaps.slice(0, 3).join(", "));
+    if (i.loop) bits.push("loop");
+    D.understood.innerHTML = `<span class="rsa-understood-k">${cat === "improv" ? "?" : "→"}</span> ${esc(bits.join(" · "))}`;
+    D.understood.classList.toggle("warn", cat === "improv");
+    D.understood.hidden = false;
+  }
   function generate(prompt, opts) {
     const text = String(prompt == null ? D.prompt.value : prompt).trim();
     if (!text) { toast("Describe the animation first"); D.prompt.focus(); return null; }
@@ -100,7 +157,9 @@
     D.loopAuto = false; D.loop.checked = !!clip.loop; D.duration.value = clip.duration; D.fps.value = clip.fps; D.rig.value = clip.rigType; D.quality.value = clip.quality;
     const cat = clip.intent && clip.intent.category;
     const what = cat === "sequence" ? `${(clip.parts || []).length} motions in a row` : cat === "act" ? (clip.intent.acts || []).join(" + ") : cat === "improv" ? "improvised " + (clip.intent.improv || []).join(" → ") : cat === "gesture" ? "gesture: " + ((clip.intent.gesture || {}).hits || []).join(", ") : clip.layered ? `${clip.layered.base} + ${clip.layered.upper}` : cat;
-    toast(`Generated ${clip.name} (${what}${clip.intent && clip.intent.mood ? ", mood " + clip.intent.mood : ""}): ${clip.keys.length} keys, ${clip.duration}s, score ${clip.report.score}/100`);
+    const swaps = clip.intent && clip.intent.swaps && clip.intent.swaps.length ? "; understood " + clip.intent.swaps.slice(0, 2).join(", ") : "";
+    toast(`Generated ${clip.name} (${what}${clip.intent && clip.intent.mood ? ", mood " + clip.intent.mood : ""}${swaps}): ${clip.keys.length} keys, ${clip.duration}s, score ${clip.report.score}/100`);
+    renderUnderstood();
     if (cat === "improv" || clip.report.errors) setRightTab("check");
     diag("generate", { prompt: text.slice(0, 80), keys: clip.keys.length, score: clip.report.score, quality: clip.quality, rig: clip.rigType, category: cat });
     return clip;
@@ -778,8 +837,14 @@
         <div class="rsa-body">
           <aside class="rsa-left">
             <section class="rsa-card">
-              <div class="rsa-h"><b>1</b> Describe the motion</div>
-              <textarea data-ref="prompt" rows="4" placeholder="Anything: 'drink a potion', 'tired old man walk', 'wave while walking', 'salute then bow', '8 hit anime sword combo'. Several at once: 'idle, walk, run and jump animations for my knight' → one clip each, same character"></textarea>
+              <div class="rsa-h"><b>1</b> Describe ANY motion <span class="rsa-h-tag" data-ref="vocabTag" title="Everything the generator understands composes: motions × moods × styles × speeds × sides × parts × directions × then-chains × while-layers × takes">unlimited</span></div>
+              <textarea data-ref="prompt" rows="4" placeholder="Anything: 'drink a potion', 'tired old man walk', 'wave while walking', 'salute then bow', '8 hit anime sword combo', 'guzzle a beer', 'stir a cauldron', 'teeter on the edge'. Several at once: 'idle, walk, run and jump animations for my knight' → one clip each, same character"></textarea>
+              <div class="rsa-understood" data-ref="understood" aria-live="polite"></div>
+              <div class="rsa-vocab">
+                <div class="rsa-vocab-n" data-ref="vocabLine"></div>
+                <div class="rsa-vocab-acts"><button type="button" class="rsa-btn small" data-act="inspire" title="Compose a random prompt from the vocabulary (motion × mood × style × speed × chain)">Inspire me</button><button type="button" class="rsa-btn small tgl" data-act="browse" data-ref="browseBtn" title="Browse everything the generator knows - click to insert">Browse motions</button></div>
+              </div>
+              <div class="rsa-browse" data-ref="browse" hidden>${vocabBrowserHtml()}</div>
               <details class="rsa-examples"><summary>Examples</summary><div class="rsa-chips">${PRESETS.map((p) => `<button type="button" class="rsa-chip" data-preset="${esc(p[1])}">${esc(p[0])}</button>`).join("")}</div></details>
               <div class="rsa-grid">
                 <label>Quality<select data-ref="quality"><option value="fast">Fast</option><option value="balanced" selected>Balanced</option><option value="high">High Quality</option><option value="cinematic">Cinematic</option></select></label>
@@ -806,7 +871,7 @@
           <main class="rsa-main">
             <div class="rsa-stagewrap">
               <canvas class="rsa-canvas" data-ref="canvas"></canvas>
-              <div class="rsa-empty" data-ref="empty"><b>Describe an animation, then Generate</b><span>Idles, cycles, jumps, combat combos, emotes - and anything else you can phrase: "drink a potion", "open a heavy door", "tired old man walk", "wave while walking", "salute then bow", "raise the left arm".</span><span>Preview is a schematic skeleton - use Preview in Studio for the real rig.</span></div>
+              <div class="rsa-empty" data-ref="empty"><b>Describe ANY animation, then Generate</b><span>Idles, cycles, jumps, combat combos, emotes - and anything else you can phrase: "drink a potion", "open a heavy door", "tired old man walk", "wave while walking", "salute then bow", "raise the left arm", "guzzle a beer", "stir a cauldron", "teeter on the edge". Unknown words become synonyms or body-region primitives, so nearly any sentence turns into motion.</span><span>Preview is a schematic skeleton - use Preview in Studio for the real rig.</span></div>
               <div class="rsa-tools rsa-vtools">
                 <button type="button" class="rsa-ib tgl" data-act="onion" data-ref="onionBtn" title="Onion skin: previous key (blue) and next key (orange) as ghosts (O)">${I.onion}</button>
                 <button type="button" class="rsa-ib tgl" data-act="autoKey" data-ref="autoKeyBtn" title="Auto-key: editing at a time with no key inserts one there (K)">${I.key}</button>
@@ -896,10 +961,13 @@
     D = { host, toast: host.querySelector(".rsa-toast") };
     host.querySelectorAll("[data-ref]").forEach((el) => { D[el.getAttribute("data-ref")] = el; });
     D.loopAuto = true;
+    if (D.vocabLine) D.vocabLine.innerHTML = vocabLine();
+    D.prompt.addEventListener("input", () => { clearTimeout(understoodTimer); understoodTimer = setTimeout(renderUnderstood, 160); });
     // actions
     host.addEventListener("click", (e) => {
       const act = e.target.closest("[data-act]"); if (act) { e.preventDefault(); return doAction(act.getAttribute("data-act")); }
       const preset = e.target.closest("[data-preset]"); if (preset) { D.prompt.value = preset.getAttribute("data-preset"); D.loopAuto = true; D.duration.value = ""; generate(); return; }
+      const ins = e.target.closest("[data-ins]"); if (ins) { insertVocab(ins.getAttribute("data-ins"), ins.getAttribute("data-mode")); return; }
       const joint = e.target.closest("[data-joint]"); if (joint) { S.selJoint = joint.getAttribute("data-joint"); renderJoints(); renderInspector(); return; }
       const view = e.target.closest("[data-view]"); if (view) { setView(view.getAttribute("data-view")); return; }
       const tool = e.target.closest("[data-tool]"); if (tool) { clipTool(tool.getAttribute("data-tool")); return; }
@@ -971,6 +1039,8 @@
     switch (name) {
       case "generate": return generate();
       case "regen": return regenerate();
+      case "inspire": return inspire();
+      case "browse": return toggleBrowse();
       case "variation": return variation();
       case "mirror": return mirrorClip();
       case "refine": return refine();
