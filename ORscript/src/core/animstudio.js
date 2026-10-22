@@ -425,40 +425,93 @@
     ctx.fillStyle = "rgba(126,178,255,.7)"; ctx.font = "9px ui-monospace, Consolas, monospace"; ctx.fillText("fwd", f[0] + 3, f[1] - 3);
     ctx.restore();
   }
-  function drawRig(ctx, pts, cam, style) {
-    const r6 = style.rigType === "R6"; const ghost = !!style.ghost;
+  // ── 1.67 blocky Roblox-style rig ──
+  // Every bone is drawn as a block in the JOINT'S OWN frame (fkFull gives the
+  // world rotation of each joint, so twist / roll show), with the classic
+  // default-avatar colours: yellow head + arms, blue torso, green legs. Faces
+  // are lit per normal and painted far → near; the head gets the face on its
+  // front (-z) so the facing direction is never ambiguous. Left / right keep a
+  // thin blue / orange seam so the sides stay tellable apart.
+  // [joint, y0, y1, halfX, halfZ, colour, extra]  (local studs; y along the bone)
+  const PARTS_R15 = [
+    ["root", -0.25, 0.22, 0.75, 0.42, "torso"],
+    ["waist", 0.0, 1.2, 0.75, 0.42, "torso"],
+    ["neck", 0.02, 0.82, 0.4, 0.4, "head", { head: true }],
+    ["l_shoulder", -0.03, -0.58, 0.25, 0.3, "arm"], ["l_elbow", -0.03, -0.58, 0.25, 0.3, "arm"], ["l_wrist", -0.03, -0.36, 0.23, 0.28, "arm"],
+    ["r_shoulder", -0.03, -0.58, 0.25, 0.3, "arm"], ["r_elbow", -0.03, -0.58, 0.25, 0.3, "arm"], ["r_wrist", -0.03, -0.36, 0.23, 0.28, "arm"],
+    ["l_hip", -0.03, -0.73, 0.34, 0.36, "leg"], ["l_knee", -0.03, -0.73, 0.34, 0.36, "leg"], ["l_ankle", -0.16, 0.1, 0.34, 0.34, "leg", { zc: -0.16 }],
+    ["r_hip", -0.03, -0.73, 0.34, 0.36, "leg"], ["r_knee", -0.03, -0.73, 0.34, 0.36, "leg"], ["r_ankle", -0.16, 0.1, 0.34, 0.34, "leg", { zc: -0.16 }],
+  ];
+  // R6: one torso block, one block per limb (no seams), bigger cube head.
+  const PARTS_R6 = [
+    ["waist", -0.42, 1.2, 0.75, 0.42, "torso"],
+    ["neck", 0.02, 0.9, 0.44, 0.44, "head", { head: true }],
+    ["l_shoulder", 0.0, -0.6, 0.25, 0.3, "arm"], ["l_elbow", 0.0, -0.6, 0.25, 0.3, "arm"], ["l_wrist", 0.0, -0.36, 0.25, 0.3, "arm"],
+    ["r_shoulder", 0.0, -0.6, 0.25, 0.3, "arm"], ["r_elbow", 0.0, -0.6, 0.25, 0.3, "arm"], ["r_wrist", 0.0, -0.36, 0.25, 0.3, "arm"],
+    ["l_hip", 0.0, -0.75, 0.34, 0.36, "leg"], ["l_knee", 0.0, -0.75, 0.34, 0.36, "leg"], ["l_ankle", -0.16, 0.08, 0.34, 0.34, "leg", { zc: -0.16 }],
+    ["r_hip", 0.0, -0.75, 0.34, 0.36, "leg"], ["r_knee", 0.0, -0.75, 0.34, 0.36, "leg"], ["r_ankle", -0.16, 0.08, 0.34, 0.34, "leg", { zc: -0.16 }],
+  ];
+  const PART_COLOUR = { head: [245, 205, 48], arm: [245, 205, 48], torso: [13, 105, 172], leg: [164, 189, 71] }; // Bright yellow / Bright blue / Br. yellowish green
+  const CHILD_OF = { root: "waist", waist: "neck", neck: "neck_tip", l_shoulder: "l_elbow", l_elbow: "l_wrist", l_wrist: "l_wrist_tip", r_shoulder: "r_elbow", r_elbow: "r_wrist", r_wrist: "r_wrist_tip", l_hip: "l_knee", l_knee: "l_ankle", l_ankle: "l_ankle_tip", r_hip: "r_knee", r_knee: "r_ankle", r_ankle: "r_ankle_tip" };
+  const FACES = [ // [normal, corner indices] - corners: bit0 x+, bit1 y+, bit2 z+
+    [[1, 0, 0], [1, 3, 7, 5]], [[-1, 0, 0], [0, 4, 6, 2]], [[0, 1, 0], [2, 6, 7, 3]], [[0, -1, 0], [0, 1, 5, 4]], [[0, 0, 1], [4, 5, 7, 6]], [[0, 0, -1], [0, 2, 3, 1]],
+  ];
+  const rgba = (c, a, m) => `rgba(${Math.round(Math.min(255, c[0] * (m == null ? 1 : m)))},${Math.round(Math.min(255, c[1] * (m == null ? 1 : m)))},${Math.round(Math.min(255, c[2] * (m == null ? 1 : m)))},${a})`;
+  function drawRig(ctx, rig, cam, style) {
+    const pts = rig.pts || rig, world = rig.world || null; const ghost = !!style.ghost; const r6 = style.rigType === "R6";
     const P = {}; for (const k of Object.keys(pts)) P[k] = cam.project(pts[k]);
-    ctx.save(); ctx.lineCap = r6 ? "square" : "round"; ctx.lineJoin = "round";
+    ctx.save(); ctx.lineJoin = "round";
     if (!ghost && style.shadow !== false) { // flattened contact shadow on the ground plane
-      ctx.strokeStyle = "rgba(0,0,0,.42)"; ctx.lineWidth = 7;
+      ctx.strokeStyle = "rgba(0,0,0,.42)"; ctx.lineWidth = 9; ctx.lineCap = "round";
       for (const [a, b] of BONES) { const A = cam.project([pts[a][0], 0, pts[a][2]]), B = cam.project([pts[b][0], 0, pts[b][2]]); ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke(); }
     }
-    const segs = BONES.map(([a, b]) => ({ a, b, z: (P[a][2] + P[b][2]) / 2 })).sort((u, v) => v.z - u.z); // far → near
-    const torsoZ = (P.waist[2] + P.root[2]) / 2;
-    const drawTorso = () => {
-      const poly = [P.l_shoulder, P.r_shoulder, P.r_hip, P.l_hip];
-      ctx.beginPath(); ctx.moveTo(poly[0][0], poly[0][1]); for (const q of poly.slice(1)) ctx.lineTo(q[0], q[1]); ctx.closePath();
-      ctx.fillStyle = ghost ? (style.tint || "rgba(255,255,255,.08)") : "rgba(232,232,236,.16)"; ctx.fill();
-      ctx.strokeStyle = ghost ? (style.tint || "rgba(255,255,255,.22)") : "rgba(232,232,236,.7)"; ctx.lineWidth = 1.2; ctx.stroke();
-    };
-    let torsoDone = false;
-    for (const sgm of segs) {
-      if (!torsoDone && sgm.z <= torsoZ) { drawTorso(); torsoDone = true; }
-      const A = P[sgm.a], B = P[sgm.b]; const k = (A[3] + B[3]) / 2;
-      const left = sgm.a.startsWith("l_"), right = sgm.a.startsWith("r_"), foot = /ankle$/.test(sgm.a), spine = sgm.a === "root" || sgm.a === "waist";
-      const base = spine ? 5 : foot ? 5 : /wrist$/.test(sgm.a) ? 2.5 : 3.6;
-      ctx.lineWidth = Math.max(1, base * (r6 ? 1.7 : 1) * k * (ghost ? 0.6 : 1));
-      ctx.strokeStyle = ghost ? (style.tint || "rgba(255,255,255,.22)") : left ? "#7fb2ff" : right ? "#ff9f6e" : "#e8e8ec";
-      if (!ghost && style.selJoint && (sgm.a === style.selJoint || sgm.b === style.selJoint)) ctx.strokeStyle = "#ffd166";
-      ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke();
+    if (!world) { ctx.restore(); return P; } // (legacy caller passed bare points)
+    const mulV = E().math.mulV;
+    const camPos = [cam.target[0] - cam.depth[0] * 16, cam.target[1] - cam.depth[1] * 16, cam.target[2] - cam.depth[2] * 16];
+    const light = (() => { const v = [-cam.right[0] * 0.45 + cam.up[0] * 0.8 - cam.depth[0] * 0.65, -cam.right[1] * 0.45 + cam.up[1] * 0.8 - cam.depth[1] * 0.65, -cam.right[2] * 0.45 + cam.up[2] * 0.8 - cam.depth[2] * 0.65]; const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; })();
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const boxes = [];
+    for (const part of (r6 ? PARTS_R6 : PARTS_R15)) {
+      const [j, y0, y1, hx, hz, colKey, extra] = part; const w = world[j]; if (!w) continue;
+      const zc = (extra && extra.zc) || 0;
+      const loc = (bx, by, bz) => [bx ? hx : -hx, by ? y1 : y0, zc + (bz ? hz : -hz)];
+      const corners = []; const proj = [];
+      for (let i = 0; i < 8; i++) { const l = loc(i & 1, i & 2, i & 4); const o = mulV(w.R, l); const q = [w.p[0] + o[0], w.p[1] + o[1], w.p[2] + o[2]]; corners.push(q); proj.push(cam.project(q)); }
+      const centre = corners.reduce((a, q) => [a[0] + q[0] / 8, a[1] + q[1] / 8, a[2] + q[2] / 8], [0, 0, 0]);
+      const cz = cam.project(centre)[2];
+      const left = j.startsWith("l_"), right = j.startsWith("r_");
+      const sel = !!style.selJoint && !ghost && (j === style.selJoint || CHILD_OF[j] === style.selJoint);
+      boxes.push({ j, w, corners, proj, cz, col: PART_COLOUR[colKey], left, right, sel, head: !!(extra && extra.head), hx, hz, y0, y1, zc });
     }
-    if (!torsoDone) drawTorso();
-    // head
-    const head = P.neck_tip, neck = P.neck; const r = Math.max(4, Math.hypot(head[0] - neck[0], head[1] - neck[1]) * (r6 ? 0.62 : 0.55));
-    ctx.beginPath(); ctx.arc(head[0], head[1], r, 0, Math.PI * 2); ctx.fillStyle = ghost ? (style.tint || "rgba(255,255,255,.1)") : "rgba(232,232,236,.92)"; ctx.fill();
-    if (!ghost) { // eyes side = facing: a small dark dot toward -z
-      const nose = cam.project([pts.neck_tip[0], pts.neck_tip[1], pts.neck_tip[2] - 0.32]); ctx.fillStyle = "rgba(20,20,26,.9)"; ctx.beginPath(); ctx.arc(nose[0], nose[1], Math.max(1.5, r * 0.22), 0, Math.PI * 2); ctx.fill(); }
-    if (style.weapon === "sword" && !ghost) { const w = P.r_wrist, t = P.r_wrist_tip; const dx = t[0] - w[0], dy = t[1] - w[1]; ctx.strokeStyle = "#c9d6ff"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(t[0], t[1]); ctx.lineTo(t[0] + dx * 2.6, t[1] + dy * 2.6); ctx.stroke(); }
+    boxes.sort((a, b) => b.cz - a.cz); // far → near
+    for (const b of boxes) {
+      const faces = [];
+      for (const [nLoc, idx] of FACES) {
+        const n = mulV(b.w.R, nLoc);
+        const fc = idx.reduce((a, i) => [a[0] + b.corners[i][0] / 4, a[1] + b.corners[i][1] / 4, a[2] + b.corners[i][2] / 4], [0, 0, 0]);
+        const toCam = cam.persp ? [camPos[0] - fc[0], camPos[1] - fc[1], camPos[2] - fc[2]] : [-cam.depth[0], -cam.depth[1], -cam.depth[2]];
+        if (dot(n, toCam) <= 0) continue; // back face
+        faces.push({ idx, n, z: cam.project(fc)[2], nLoc });
+      }
+      faces.sort((u, v) => v.z - u.z);
+      for (const f of faces) {
+        const pp = f.idx.map((i) => b.proj[i]);
+        ctx.beginPath(); ctx.moveTo(pp[0][0], pp[0][1]); for (const q of pp.slice(1)) ctx.lineTo(q[0], q[1]); ctx.closePath();
+        if (ghost) { ctx.fillStyle = style.tint || "rgba(255,255,255,.07)"; ctx.fill(); ctx.strokeStyle = style.tint || "rgba(255,255,255,.22)"; ctx.lineWidth = 1; ctx.stroke(); continue; }
+        const lum = 0.58 + 0.42 * Math.max(0, dot(f.n, light));
+        ctx.fillStyle = rgba(b.col, 1, lum); ctx.fill();
+        ctx.strokeStyle = b.sel ? "#ffd166" : b.left ? "rgba(127,178,255,.85)" : b.right ? "rgba(255,159,110,.85)" : "rgba(0,0,0,.45)"; ctx.lineWidth = b.sel ? 2 : 1; ctx.stroke();
+        if (b.head && f.nLoc[2] === -1) { // the face: two eyes + a smile on the front of the head
+          const s = cam.s * (b.proj[0][3] || 1); const at = (x, y) => { const o = mulV(b.w.R, [x, y, b.zc - b.hz - 0.002]); return cam.project([b.w.p[0] + o[0], b.w.p[1] + o[1], b.w.p[2] + o[2]]); };
+          const eh = b.y0 + (b.y1 - b.y0) * 0.62, ex = b.hx * 0.38; ctx.fillStyle = "rgba(20,20,26,.92)";
+          for (const sx of [-1, 1]) { const e = at(sx * ex, eh); ctx.beginPath(); ctx.ellipse(e[0], e[1], Math.max(1.2, s * 0.045), Math.max(1.6, s * 0.075), 0, 0, Math.PI * 2); ctx.fill(); }
+          ctx.strokeStyle = "rgba(20,20,26,.92)"; ctx.lineWidth = Math.max(1, s * 0.03); ctx.beginPath();
+          for (let i = 0; i <= 8; i++) { const t = -1 + i / 4; const m = at(t * b.hx * 0.42, b.y0 + (b.y1 - b.y0) * 0.3 - (1 - t * t) * (b.y1 - b.y0) * 0.09); if (i) ctx.lineTo(m[0], m[1]); else ctx.moveTo(m[0], m[1]); }
+          ctx.stroke();
+        }
+      }
+    }
+    if (style.weapon === "sword" && !ghost) { const w = P.r_wrist, t = P.r_wrist_tip; const dx = t[0] - w[0], dy = t[1] - w[1]; ctx.strokeStyle = "#c9d6ff"; ctx.lineWidth = 3; ctx.lineCap = "square"; ctx.beginPath(); ctx.moveTo(t[0], t[1]); ctx.lineTo(t[0] + dx * 2.6, t[1] + dy * 2.6); ctx.stroke(); ctx.strokeStyle = "#8a6a2a"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(t[0] - dy * 0.35, t[1] + dx * 0.35); ctx.lineTo(t[0] + dy * 0.35, t[1] - dx * 0.35); ctx.stroke(); }
     ctx.restore();
     return P;
   }
@@ -492,11 +545,11 @@
       if (i) { ctx.strokeStyle = "rgba(255,255,255,.08)"; ctx.beginPath(); ctx.moveTo(box.x, 0); ctx.lineTo(box.x, H); ctx.stroke(); }
       if (!poses) return;
       const weapon = S.clip.intent && S.clip.intent.weapon, rigType = S.clip.rigType;
-      if (ghost) drawRig(ctx, E().forwardKinematics(ghost), cam, { ghost: true, rigType });
-      if (onion && onion.prev) drawRig(ctx, E().forwardKinematics(onion.prev), cam, { ghost: true, rigType, tint: "rgba(126,178,255,.3)" });
-      if (onion && onion.next) drawRig(ctx, E().forwardKinematics(onion.next), cam, { ghost: true, rigType, tint: "rgba(255,159,110,.3)" });
+      if (ghost) drawRig(ctx, E().fkFull(ghost), cam, { ghost: true, rigType });
+      if (onion && onion.prev) drawRig(ctx, E().fkFull(onion.prev), cam, { ghost: true, rigType, tint: "rgba(126,178,255,.3)" });
+      if (onion && onion.next) drawRig(ctx, E().fkFull(onion.next), cam, { ghost: true, rigType, tint: "rgba(255,159,110,.3)" });
       if (S.arcs) drawArcs(ctx, cam);
-      const P = drawRig(ctx, E().forwardKinematics(poses), cam, { weapon, rigType, selJoint: S.selJoint });
+      const P = drawRig(ctx, E().fkFull(poses), cam, { weapon, rigType, selJoint: S.selJoint });
       if (i === views.length - 1 && !S.playing) drawHandles(ctx, P);
     });
     if (S.clip) {
