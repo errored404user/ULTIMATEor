@@ -104,7 +104,7 @@ pub enum ChatEvent {
     /// A guarded tool (shell / process / delete / download / open) wants to
     /// run. The turn is paused until the window answers through `reply`
     /// (true = run it). Dropping the sender counts as Deny.
-    Approval { id: String, name: String, args: Value, reply: tokio::sync::oneshot::Sender<bool> },
+    Approval { name: String, args: Value, reply: tokio::sync::oneshot::Sender<bool> },
     /// Turn finished. `appended` are the messages to add to the GUI's history
     /// (assistant + tool messages) so the next turn has full context.
     Finished { appended: Vec<Value>, prompt_tokens: u64, completion_tokens: u64, steps: usize, error: Option<String> },
@@ -126,9 +126,9 @@ pub fn is_guarded(name: &str) -> bool {
 
 /// Ask the window and wait. `Ok(())` = allowed; `Err(text)` = the reason the
 /// tool must not run (denied, timed out, window gone, turn stopped).
-async fn await_approval(events: &Sender<ChatEvent>, cancel: &Arc<AtomicBool>, id: &str, name: &str, args: &Value) -> Result<(), String> {
+async fn await_approval(events: &Sender<ChatEvent>, cancel: &Arc<AtomicBool>, name: &str, args: &Value) -> Result<(), String> {
     let (tx, mut rx) = tokio::sync::oneshot::channel::<bool>();
-    if events.send(ChatEvent::Approval { id: id.to_string(), name: name.to_string(), args: args.clone(), reply: tx }).is_err() {
+    if events.send(ChatEvent::Approval { name: name.to_string(), args: args.clone(), reply: tx }).is_err() {
         return Err(format!("'{name}' was not run: the window that must approve it is gone"));
     }
     let deadline = Instant::now() + APPROVAL_TIMEOUT;
@@ -880,7 +880,7 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
                 Err(anyhow::anyhow!("unknown tool '{}' — only the advertised tools exist", call.name))
             } else if is_guarded(&real) {
                 let _ = events.send(ChatEvent::Status(format!("step {steps}/{max_steps} · waiting for your Allow / Deny on {real}")));
-                match await_approval(&events, &cancel, &id, &real, &args).await {
+                match await_approval(&events, &cancel, &real, &args).await {
                     Ok(()) => execute(&state, engine, &real, args).await,
                     Err(why) => { state.ui.track("chat", format!("{real} not run: approval missing")); Err(anyhow::anyhow!("{why}")) }
                 }
@@ -954,22 +954,6 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
     }
 }
 
-// ───────────────────────────── history helpers for the GUI ─────────────────────────────
-
-/// Strip base64 images out of a history message before it is written to disk
-/// or exported (keeps the file small; the model already saw them).
-pub fn strip_images(msg: &Value) -> Value {
-    let mut m = msg.clone();
-    if let Some(parts) = m.get_mut("content").and_then(|c| c.as_array_mut()) {
-        for p in parts.iter_mut() {
-            if p.get("type").and_then(|t| t.as_str()) == Some("image_url") {
-                *p = json!({"type": "text", "text": "[image omitted]"});
-            }
-        }
-    }
-    m
-}
-
 #[cfg(test)]
 mod approval_tests {
     use super::*;
@@ -986,13 +970,13 @@ mod approval_tests {
         let cancel = Arc::new(AtomicBool::new(false));
         // allow
         let (tx, rx) = channel::<ChatEvent>();
-        let waiter = tokio::spawn({ let tx = tx.clone(); let cancel = cancel.clone(); async move { await_approval(&tx, &cancel, "c1", "run_command", &json!({"command": "dir"})).await } });
+        let waiter = tokio::spawn({ let tx = tx.clone(); let cancel = cancel.clone(); async move { await_approval(&tx, &cancel, "run_command", &json!({"command": "dir"})).await } });
         let ev = tokio::task::spawn_blocking(move || rx.recv().unwrap()).await.unwrap();
         match ev { ChatEvent::Approval { name, reply, .. } => { assert_eq!(name, "run_command"); reply.send(true).unwrap(); } _ => panic!("expected Approval") }
         assert!(waiter.await.unwrap().is_ok());
         // deny
         let (tx, rx) = channel::<ChatEvent>();
-        let waiter = tokio::spawn({ let tx = tx.clone(); let cancel = cancel.clone(); async move { await_approval(&tx, &cancel, "c2", "delete_path", &json!({"path": "x"})).await } });
+        let waiter = tokio::spawn({ let tx = tx.clone(); let cancel = cancel.clone(); async move { await_approval(&tx, &cancel, "delete_path", &json!({"path": "x"})).await } });
         let ev = tokio::task::spawn_blocking(move || rx.recv().unwrap()).await.unwrap();
         if let ChatEvent::Approval { reply, .. } = ev { reply.send(false).unwrap(); }
         let err = waiter.await.unwrap().unwrap_err();

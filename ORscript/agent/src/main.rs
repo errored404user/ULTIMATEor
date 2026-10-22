@@ -463,11 +463,7 @@ impl McpRuntime {
         Ok(())
     }
 
-    async fn request(&mut self, method: &str, params: serde_json::Value) -> anyhow::Result<serde_json::Value> {
-        self.request_within(method, params, Duration::from_secs(120)).await
-    }
-
-    /// Same as `request`, with an explicit deadline. Handshake and discovery
+    /// One JSON-RPC request with an explicit deadline. Handshake and discovery
     /// calls use short deadlines so a wedged helper is recycled in seconds,
     /// not after the 120 s tool budget.
     async fn request_within(&mut self, method: &str, params: serde_json::Value, deadline: Duration) -> anyhow::Result<serde_json::Value> {

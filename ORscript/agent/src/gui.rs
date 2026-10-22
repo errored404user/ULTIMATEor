@@ -2515,7 +2515,7 @@ impl App {
                     let args = match args { serde_json::Value::String(s) => s, other => serde_json::to_string_pretty(&other).unwrap_or_default() };
                     self.chat_last_assistant().tools.push(ChatToolCard { id, name, args, result: String::new(), ok: None, elapsed_ms: 0, images: Vec::new(), open: false });
                 }
-                E::Approval { id: _, name, args, reply } => {
+                E::Approval { name, args, reply } => {
                     let args = serde_json::to_string_pretty(&args).unwrap_or_default();
                     self.chat_status = format!("waiting for Allow / Deny · {name}");
                     self.chat_approval = Some(PendingApproval { name, args, reply: Some(reply), since: Instant::now() });
