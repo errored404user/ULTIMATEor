@@ -463,6 +463,7 @@ async fn complete(
         .map_err(|e| format!("request failed: {e}"))?;
     let status = resp.status();
     let content_type = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("").to_lowercase();
+    let retry_after = resp.headers().get("retry-after").and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse::<u64>().ok());
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_default();
         let msg = short_error(&text);
@@ -474,7 +475,8 @@ async fn complete(
             429 => " — rate limited, wait a moment",
             _ => "",
         };
-        return Err(format!("HTTP {code}{hint}: {msg}"));
+        let ra = retry_after.map(|secs| format!(" (retry-after {secs}s)")).unwrap_or_default();
+        return Err(format!("HTTP {code}{hint}{ra}: {msg}"));
     }
     let mut out = Completion::default();
     if !content_type.contains("text/event-stream") {
@@ -570,6 +572,109 @@ fn clamp_result(text: &str) -> String {
     format!("{head}\n…[truncated {} characters — ask for a narrower slice]", n - (RESULT_MAX_CHARS - 200))
 }
 
+// ───────────────────────────── failure taxonomy (1.69) ─────────────────────────────
+
+/// What a failed `/chat/completions` call means for the retry policy.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ErrClass {
+    /// HTTP 429 — wait (Retry-After when given) and resend, at most twice.
+    RateLimit,
+    /// HTTP 5xx / overloaded — short back-off, at most twice.
+    Server,
+    /// The request never reached the server (DNS, refused, reset) — at most twice.
+    Network,
+    /// HTTP 4xx saying the prompt is longer than the model's window — drop the
+    /// oldest exchange and resend.
+    ContextLength,
+    /// HTTP 4xx rejecting a request field (`temperature` on reasoning models…).
+    UnsupportedParam,
+    /// Everything else (bad key, wrong model, invalid request…) — never retried.
+    Permanent,
+}
+
+fn classify_error(e: &str) -> ErrClass {
+    let l = e.to_lowercase();
+    // Mid-stream failures are never resent: tokens were already shown and a resend would double any tool work.
+    if l.starts_with("stream error") { return ErrClass::Permanent; }
+    if l.starts_with("http 429") { return ErrClass::RateLimit; }
+    if l.starts_with("http 5") || l.contains("overloaded") || l.contains("server is busy") { return ErrClass::Server; }
+    if l.starts_with("request failed:") { return ErrClass::Network; }
+    if l.starts_with("http 4") {
+        if ["context length", "context_length", "maximum context", "too many tokens", "reduce the length", "prompt is too long", "input is too long", "exceeds the model", "token limit", "context window", "max_tokens"].iter().any(|k| l.contains(k)) {
+            return ErrClass::ContextLength;
+        }
+        if ["unsupported parameter", "unknown parameter", "unrecognized request argument", "temperature", "is not supported with", "not supported for this model"].iter().any(|k| l.contains(k)) {
+            return ErrClass::UnsupportedParam;
+        }
+    }
+    ErrClass::Permanent
+}
+
+fn class_label(c: ErrClass) -> &'static str {
+    match c {
+        ErrClass::RateLimit => "rate limited",
+        ErrClass::Server => "provider error",
+        ErrClass::Network => "connection failed",
+        ErrClass::ContextLength => "context too long",
+        ErrClass::UnsupportedParam => "unsupported parameter",
+        ErrClass::Permanent => "request rejected",
+    }
+}
+
+/// Seconds announced by a `Retry-After` header that `complete` folded into the
+/// error text as ` (retry-after Ns)`.
+fn retry_after_secs(e: &str) -> Option<u64> {
+    let l = e.to_lowercase();
+    let i = l.find("retry-after ")?;
+    let digits: String = l[i + "retry-after ".len()..].chars().take_while(|c| c.is_ascii_digit()).collect();
+    digits.parse().ok()
+}
+
+/// Drop the oldest exchange — everything from the first non-system message up
+/// to (not including) the next user message — so a context-length rejection
+/// can be retried with a shorter history. Whole exchanges only, so an
+/// assistant `tool_calls` message is never separated from its `tool` results.
+/// Returns false when only the current exchange is left (nothing to drop).
+fn trim_history(messages: &mut Vec<Value>) -> bool {
+    let first = match messages.iter().position(|m| m["role"] != "system") { Some(i) => i, None => return false };
+    let next_user = (first + 1..messages.len()).find(|&i| messages[i]["role"] == "user");
+    match next_user {
+        Some(end) if end > first => { messages.drain(first..end); true }
+        _ => false,
+    }
+}
+
+/// Required parameters (per the tool's JSON schema) that the model left out or
+/// sent empty. `studio_id` is injected by the bridge and never required of the
+/// model.
+fn missing_required(schema: &Value, args: &Value) -> Vec<String> {
+    let Some(req) = schema.get("required").and_then(|r| r.as_array()) else { return Vec::new() };
+    req.iter()
+        .filter_map(|k| k.as_str())
+        .filter(|k| *k != "studio_id")
+        .filter(|k| match args.get(*k) {
+            None | Some(Value::Null) => true,
+            Some(Value::String(s)) => s.trim().is_empty(),
+            Some(_) => false,
+        })
+        .map(str::to_string)
+        .collect()
+}
+
+/// Compact one-line schema for an error message: `name {a: string, b?: integer}`.
+fn schema_line(wire: &str, schema: &Value) -> String {
+    let required: Vec<&str> = schema.get("required").and_then(|r| r.as_array()).map(|a| a.iter().filter_map(|v| v.as_str()).collect()).unwrap_or_default();
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(props) = schema.get("properties").and_then(|p| p.as_object()) {
+        for (k, v) in props.iter().take(24) {
+            let ty = v.get("type").map(|t| match t { Value::String(s) => s.clone(), Value::Array(a) => a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join("|"), _ => "any".into() }).unwrap_or_else(|| "any".into());
+            let en = v.get("enum").and_then(|e| e.as_array()).map(|a| format!(" ∈ {{{}}}", a.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", "))).unwrap_or_default();
+            parts.push(format!("{k}{}: {ty}{en}", if required.contains(&k.as_str()) { "" } else { "?" }));
+        }
+    }
+    format!("{wire} {{{}}}", parts.join(", "))
+}
+
 // ───────────────────────────── the agent loop ─────────────────────────────
 
 pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEvent>, cancel: Arc<AtomicBool>) {
@@ -589,6 +694,10 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
     let system = system_prompt(&state, &cat, &req.instructions, req.tools && !cat.tools.is_empty());
     let tool_defs: Vec<Value> = cat.tools.iter().map(|t| t.def.clone()).collect();
     let by_wire: HashMap<String, (&'static str, String)> = cat.tools.iter().map(|t| (t.wire.clone(), (t.engine, t.name.clone()))).collect();
+    let schema_by_wire: HashMap<String, Value> = cat.tools.iter().map(|t| (t.wire.clone(), t.def.pointer("/function/parameters").cloned().unwrap_or(json!({})))).collect();
+    // 1.69: loop guard — the same failing call repeated verbatim.
+    let mut last_fail_key = String::new();
+    let mut last_fail_count: u32 = 0;
     let mut use_tools = req.tools && !tool_defs.is_empty();
 
     let mut messages: Vec<Value> = Vec::with_capacity(req.messages.len() + 1);
@@ -619,7 +728,48 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
             body["tool_choice"] = json!("auto");
         }
         let _ = events.send(ChatEvent::AssistantStart);
-        let mut result = complete(&base, &req.api_key, &body, &events, &cancel).await;
+        // 1.69: bounded recovery BEFORE anything streamed — transient classes
+        // (429 / 5xx / connection) back off and resend (max 2 retries, honouring
+        // Retry-After), a rejected `temperature` is dropped once, a context-length
+        // rejection drops the oldest exchange (max 3 times). Permanent failures
+        // (bad key, wrong model, invalid request) fall through untouched.
+        let mut transient_retries: u32 = 0;
+        let mut trims: u32 = 0;
+        let mut result: Result<Completion, String> = loop {
+            let err = match complete(&base, &req.api_key, &body, &events, &cancel).await { Ok(c) => break Ok(c), Err(e) => e };
+            if cancel.load(Ordering::Relaxed) { break Err(err); }
+            let class = classify_error(&err);
+            match class {
+                ErrClass::RateLimit | ErrClass::Server | ErrClass::Network if transient_retries < 2 => {
+                    transient_retries += 1;
+                    let base_wait: u64 = match class { ErrClass::RateLimit => 8 * transient_retries as u64, ErrClass::Network => 2 * transient_retries as u64, _ => 4 * transient_retries as u64 };
+                    let wait = retry_after_secs(&err).map(|s| s.clamp(base_wait, 120)).unwrap_or(base_wait);
+                    let _ = events.send(ChatEvent::Status(format!("{} — retrying in {wait}s (attempt {transient_retries}/2)", class_label(class))));
+                    state.ui.track("chat", format!("retry {transient_retries} ({}) after: {}", class_label(class), crate::gui_truncate(&err, 120)));
+                    let t0 = Instant::now();
+                    while t0.elapsed() < Duration::from_secs(wait) && !cancel.load(Ordering::Relaxed) {
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                    }
+                    if cancel.load(Ordering::Relaxed) { break Err(err); }
+                    continue;
+                }
+                ErrClass::UnsupportedParam if err.to_lowercase().contains("temperature") && body.get("temperature").is_some() => {
+                    let _ = events.send(ChatEvent::Status("model rejected `temperature` — retrying without it".into()));
+                    state.ui.track("chat", format!("{} rejected temperature; resending without it", req.model));
+                    if let Some(obj) = body.as_object_mut() { obj.remove("temperature"); }
+                    continue;
+                }
+                ErrClass::ContextLength if trims < 3 => {
+                    if !trim_history(&mut messages) { break Err(err); }
+                    trims += 1;
+                    let _ = events.send(ChatEvent::Status(format!("context too long for {} — dropped the oldest exchange, retrying ({trims}/3)", req.model)));
+                    state.ui.track("chat", format!("context length exceeded; history trimmed to {} messages", messages.len()));
+                    body["messages"] = Value::Array(messages.clone());
+                    continue;
+                }
+                _ => break Err(err),
+            }
+        };
         // Providers / models without tool support usually answer 400 mentioning
         // "tools" — retry once without the catalogue instead of dying.
         if let Err(e) = &result {
@@ -706,6 +856,22 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
                     continue;
                 }
             };
+            // 1.69: answer a call that misses required parameters instantly WITH
+            // the schema, instead of a bridge round trip that comes back as an
+            // opaque MCP / Luau error.
+            if let Some(schema) = schema_by_wire.get(&call.name) {
+                let missing = missing_required(schema, &args);
+                if !missing.is_empty() {
+                    let text = format!("ERROR MISSING_PARAMS: '{real}' needs {} — schema: {}. Fix the call and retry.", missing.join(", "), schema_line(&call.name, schema));
+                    let _ = events.send(ChatEvent::ToolStart { id: id.clone(), name: real.clone(), args: args.clone() });
+                    let _ = events.send(ChatEvent::ToolDone { id: id.clone(), name: real.clone(), ok: false, text: text.clone(), images: Vec::new(), elapsed_ms: 0 });
+                    state.ui.track("chat", format!("{real} not run: missing {}", missing.join(", ")));
+                    let tool_msg = json!({"role": "tool", "tool_call_id": id, "content": text});
+                    messages.push(tool_msg.clone());
+                    appended.push(tool_msg);
+                    continue;
+                }
+            }
             let _ = events.send(ChatEvent::Status(format!("step {steps}/{max_steps} · running {real}")));
             let _ = events.send(ChatEvent::ToolStart { id: id.clone(), name: real.clone(), args: args.clone() });
             let t0 = Instant::now();
@@ -739,6 +905,28 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
             let _ = events.send(ChatEvent::ToolDone { id: id.clone(), name: real.clone(), ok, text: text.clone(), images: images.clone(), elapsed_ms });
             let mut content = if ok { text.clone() } else { format!("ERROR: {text}") };
             if content.trim().is_empty() { content = if ok { "(no output)".into() } else { "ERROR (no message)".into() }; }
+            // 1.69: repeated-failure guard. The identical call failing again and
+            // again is the classic dead loop; tell the model after the second
+            // time, stop the turn after the fourth.
+            if ok {
+                last_fail_key.clear();
+                last_fail_count = 0;
+            } else {
+                let key = format!("{real}\n{}", args);
+                if key == last_fail_key { last_fail_count += 1; } else { last_fail_key = key; last_fail_count = 1; }
+                if last_fail_count >= 2 {
+                    content.push_str(&format!("\n[OR: this exact call has now failed {last_fail_count} times in a row — change the arguments or the approach; do not repeat it verbatim.]"));
+                }
+                if last_fail_count >= 4 {
+                    let tool_msg = json!({"role": "tool", "tool_call_id": id, "content": clamp_result(&content)});
+                    messages.push(tool_msg.clone());
+                    appended.push(tool_msg);
+                    let note = format!("Stopped: {real} failed {last_fail_count} times with identical arguments. Last error: {}", crate::gui_truncate(&text, 200));
+                    state.ui.track("error", format!("chat: {}", crate::gui_truncate(&note, 160)));
+                    finish(appended, prompt_tokens, completion_tokens, steps, Some(note));
+                    return;
+                }
+            }
             if !images.is_empty() {
                 let where_ = if req.send_images { " in the next message" } else { " — shown to the user; image forwarding is off" };
                 content.push_str(&format!("\n[{} image(s) attached{where_}]", images.len()));
@@ -832,5 +1020,60 @@ mod approval_tests {
         cancel.store(true, Ordering::Relaxed);
         let err = waiter.await.unwrap().unwrap_err();
         assert!(err.contains("stopped"), "{err}");
+    }
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+
+    #[test]
+    fn error_classes_separate_transient_from_permanent() {
+        assert_eq!(classify_error("HTTP 429 — rate limited, wait a moment (retry-after 20s): slow down"), ErrClass::RateLimit);
+        assert_eq!(classify_error("HTTP 503: service unavailable"), ErrClass::Server);
+        assert_eq!(classify_error("HTTP 502 bad gateway"), ErrClass::Server);
+        assert_eq!(classify_error("request failed: error sending request for url"), ErrClass::Network);
+        assert_eq!(classify_error("HTTP 400: This model's maximum context length is 128000 tokens"), ErrClass::ContextLength);
+        assert_eq!(classify_error("HTTP 400: Unsupported parameter: 'temperature' is not supported with this model"), ErrClass::UnsupportedParam);
+        assert_eq!(classify_error("HTTP 401 — check the API key: invalid api key"), ErrClass::Permanent);
+        assert_eq!(classify_error("HTTP 404 — wrong base URL or model id: model not found"), ErrClass::Permanent);
+        assert_eq!(classify_error("stream error: connection reset"), ErrClass::Permanent, "mid-stream failures are never resent (tokens already shown)");
+        assert_eq!(retry_after_secs("HTTP 429 (retry-after 20s): x"), Some(20));
+        assert_eq!(retry_after_secs("HTTP 429: x"), None);
+    }
+
+    #[test]
+    fn trim_history_drops_whole_exchanges_and_keeps_the_last_user_turn() {
+        let mut m = vec![
+            json!({"role": "system", "content": "s"}),
+            json!({"role": "user", "content": "u1"}),
+            json!({"role": "assistant", "content": null, "tool_calls": [{"id": "c1"}]}),
+            json!({"role": "tool", "tool_call_id": "c1", "content": "r1"}),
+            json!({"role": "assistant", "content": "a1"}),
+            json!({"role": "user", "content": "u2"}),
+            json!({"role": "assistant", "content": "a2"}),
+            json!({"role": "user", "content": "u3"}),
+        ];
+        assert!(trim_history(&mut m));
+        assert_eq!(m.len(), 4);
+        assert_eq!(m[1]["content"], "u2");
+        assert!(trim_history(&mut m));
+        assert_eq!(m.len(), 2);
+        assert_eq!(m[1]["content"], "u3");
+        assert!(!trim_history(&mut m), "only the current exchange left");
+        assert_eq!(m.len(), 2);
+        let mut none: Vec<Value> = vec![json!({"role": "system", "content": "s"})];
+        assert!(!trim_history(&mut none));
+    }
+
+    #[test]
+    fn missing_required_ignores_studio_id_and_flags_empty_strings() {
+        let schema = json!({"type": "object", "properties": {"code": {"type": "string"}, "datamodel_type": {"type": "string", "enum": ["Edit", "Client", "Server"]}, "studio_id": {"type": "string"}}, "required": ["code", "datamodel_type", "studio_id"]});
+        assert_eq!(missing_required(&schema, &json!({"code": "print(1)", "datamodel_type": "Edit"})), Vec::<String>::new());
+        assert_eq!(missing_required(&schema, &json!({"code": "  "})), vec!["code".to_string(), "datamodel_type".to_string()]);
+        assert_eq!(missing_required(&json!({}), &json!({})), Vec::<String>::new());
+        let line = schema_line("execute_luau", &schema);
+        assert!(line.starts_with("execute_luau {"), "{line}");
+        assert!(line.contains("code: string") && line.contains("datamodel_type: string ∈ {\"Edit\", \"Client\", \"Server\"}"), "{line}");
     }
 }

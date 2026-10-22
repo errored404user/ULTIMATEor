@@ -22,6 +22,10 @@
   const OR_BOOT_AT=performance.now();
   const P = RSProvider;
   const T = P.timings;
+  // 1.69: provider orchestration layer (task understanding, error taxonomy,
+  // argument validation, capability record, redaction). Optional: every use
+  // below degrades to the pre-1.69 behaviour when the module is missing.
+  const ORCH = (typeof OROrchestrator !== "undefined" && OROrchestrator) || null;
   // Template storage is provider-independent and must hydrate on every page,
   // even when this conversation has never started an agent session.
   const templateRegistryReady=globalThis.ORTemplateRegistry?ORTemplateRegistry.initialize().then(r=>{try{dispatchEvent(new CustomEvent("or-templates-synced",{detail:{count:r.count}}));}catch{}return r;}):Promise.resolve({success:false,count:0});
@@ -295,6 +299,7 @@
   function diag(event, data) {
     let snap = {};
     try { snap = { ...P.snapshot(), gen: P.isGenerating(), run: (typeof A !== 'undefined' ? A.running : false) }; } catch {}
+    if (data && ORCH) { try { data = ORCH.redactData(data); } catch {} } // 1.69: never keep keys / tokens in the ring buffer
     const e = { t: Date.now(), iso: new Date().toISOString().slice(11, 23), event,
                 data: data || null, snap };
     _diag.push(e);
@@ -922,6 +927,8 @@
 
   const A = {
     guiBrief: null, // 1.51.1: pending GUI BRIEF for the current user request ({ text, intent, imageAttached, sent })
+    task: null, // 1.69: OROrchestrator.classifyTask record of the current user request (+ riderSent)
+    lastSent: null, // 1.69: { text, images, at } of the last message OR injected - re-sent after a transient provider error
     running: false,
     stop: false,
     // stopping: the user clicked Stop and we are winding the loop down. Set the
@@ -1298,6 +1305,7 @@
       return P.assistantCount();
     }
     A._lastSubmit = { sig: _sig, at: Date.now() };
+    A.lastSent = { text: String(text), images: images || null, at: Date.now() }; // 1.69: re-sent verbatim after a transient provider error
 
     const requestId=`chat-${Date.now().toString(36)}-${++A.requestSeq}`;A.activeRequestId=requestId;A.requestStartedAt=performance.now();
     captureSendToken();
@@ -1471,7 +1479,10 @@
       const text = String(detail || "");
       const context = (P.isTooLongMsg && P.isTooLongMsg(text))
         || /context.{0,20}(?:limit|length|exceeded)|maximum.{0,15}tokens|conversation.{0,20}too long/i.test(text);
-      return { kind: context ? "context_limit" : "provider_error", detail: text };
+      let cls = null;
+      if (ORCH) { try { cls = ORCH.classifyProviderError(text); } catch {} }
+      if (cls && cls.cls === "context_limit") return { kind: "context_limit", detail: text, cls };
+      return { kind: context ? "context_limit" : "provider_error", detail: text, cls };
     };
 
     // v1.12.2: deadline sliding while hidden+bgMode (replaces the old
@@ -4931,6 +4942,17 @@
       if (missing.length) {
         return `ERROR MISSING_PARAMS calling '${name}': required parameter(s) not provided: ${missing.join(", ")}.\nSchema:\n${toolDetailLine(schemaTool)}\nFix the call and retry now - no list_commands needed.`;
       }
+      // 1.69: type / enum / range validation with lossless coercion ("5" → 5,
+      // "edit" → "Edit", "true" → true). A real mismatch is answered instantly
+      // with the schema instead of a bridge round trip that comes back as a
+      // Luau or MCP error the model then has to decode.
+      if (schemaTool && ORCH) {
+        try {
+          const v = ORCH.validateToolArgs(schemaTool.inputSchema, args);
+          if (v.problems.length) { diag("tool.invalidArgs", { name: bareName, problems: v.problems.map((x) => x.key) }); return ORCH.argProblemsMessage(name, v, toolDetailLine(schemaTool)); }
+          if (v.coerced.length || v.dropped.length) { diag("tool.argsCoerced", { name: bareName, coerced: v.coerced, dropped: v.dropped }); args = v.args; }
+        } catch {}
+      }
     }
     // 1.38.0: heavy skill programs (project index, blueprint install, place-wide
     // analysis) pass their own budget via _orTimeout - the flat 20 s execute_luau
@@ -5179,6 +5201,8 @@
     let deadRetries = 0;
     let refuseRetries = 0;
     let parseRetries = 0;
+    let providerRetries = 0; // 1.69: bounded re-send after a TRANSIENT provider error (rate limit / busy / network)
+    let falseSuccessNudged = false; // 1.69: one "you said done but nothing ran" correction per run
     let modeGateSent = false; // 1.38.0: one evidence gate per run
     const effortGate = { verify: false, audit: false, review: false }; // 1.60: one of each per run
     A.runTools = new Set();
@@ -5233,9 +5257,28 @@
           break;
         }
         if (res.kind === "provider_error") {
+          // 1.69: classify first. Transient classes (rate limit, overloaded /
+          // 5xx, dropped connection) get a bounded back-off and the SAME message
+          // re-sent (the site never delivered it to the model, so nothing runs
+          // twice); permanent classes (auth, quota, moderation, invalid request)
+          // stop at once with an actionable hint instead of a generic banner.
+          const cls = res.cls || (ORCH ? ORCH.classifyProviderError(res.detail) : null);
+          const wait = cls && cls.retryable && ORCH && A.lastSent && !A.stop && A.started ? ORCH.retryDelay(cls.cls, providerRetries + 1, cls.waitMs) : null;
+          if (wait != null) {
+            providerRetries++;
+            diag("loop.providerRetry", { cls: cls.cls, n: providerRetries, waitMs: wait });
+            ui.toast(`${P.displayName}: ${cls.cls.replace("_", " ")} — retrying in ${Math.round(wait / 1000)}s (${providerRetries}/2)`);
+            ui.steeringProgress("correcting", `Provider ${cls.cls.replace("_", " ")} — retrying in ${Math.round(wait / 1000)}s`, toolTurns);
+            const t0 = Date.now();
+            while (Date.now() - t0 < wait && !A.stop) await sleep(250);
+            if (A.stop) break;
+            const again = A.lastSent;
+            base = await submitAndGetBase(again.text + "\n\n" + ORCH.FEEDBACK.providerRetry(cls.cls, providerRetries, Math.round(wait / 1000)), again.images);
+            continue;
+          }
           ui.steeringProgress("error", "The provider request failed", toolTurns);
-          ui.banner("warn", `${P.displayName} request failed`,
-            res.detail || "The provider rejected or failed this request. Retry after resolving the provider error.");
+          ui.banner("warn", `${P.displayName} request failed${cls && cls.cls !== "unknown" ? " (" + cls.cls.replace("_", " ") + ")" : ""}`,
+            (cls && cls.hint ? cls.hint + " " : "") + (res.detail ? "Provider said: " + String(res.detail).slice(0, 240) : "The provider rejected or failed this request."));
           break;
         }
         if (res.kind === "too_long") {
@@ -5321,6 +5364,7 @@
         }
         truncCount = 0;
         deadRetries = 0; // healthy turn (text/tool/parse outcome) — refill the retry budget
+        providerRetries = 0; // 1.69: a delivered turn refills the transient-error budget too
 
         if (res.kind === "parse_error") {
           // The command turn ended in a parse error - it NEVER ran. Paint its chip
@@ -5379,6 +5423,21 @@
             providerCommandless = toolTurns === 0 && typeof P.shouldRetryCommandlessText === "function"
               && P.shouldRetryCommandlessText(body);
           } catch {}
+          // 1.69: a request to EXPLAIN / answer / plan is allowed to end in prose.
+          // Only implement / fix / review intents are nudged for a command.
+          if (providerCommandless && A.task && A.task.explainOnly) { providerCommandless = false; diag("loop.commandlessAccepted", { intent: A.task.intent }); }
+          // 1.69: false-success guard - prose that reports the work as done while
+          // NO command has run in this task gets ONE correction (truthful report
+          // or real commands), never a silent "complete".
+          if (!falseSuccessNudged && !A.stop && toolTurns === 0 && A.task && A.task.mutates && ORCH && ORCH.claimsCompletion(body, toolTurns)) {
+            falseSuccessNudged = true;
+            diag("loop.falseSuccess", { intent: A.task.intent, primary: A.task.primary });
+            try { ui.toast("The model reported success without running anything — asking for the real commands"); } catch {}
+            ui.steeringProgress("correcting", "Claimed done without acting — requesting the real commands", toolTurns);
+            const state = asStateTag();
+            base = await submitAndGetBase(ORCH.FEEDBACK.falseSuccess + (state ? "\n" + state : ""));
+            continue;
+          }
           if (refuseRetries < 1 && !A.stop && (isCapabilityRefuse(body) || providerCommandless)) {
             refuseRetries++;
             diag("loop.capabilityRefuse", { n: refuseRetries, providerCommandless });
@@ -5735,6 +5794,18 @@
             A.guiBrief.sent = true;
             diag("guiBrief.sent", { via: "result" });
             try { ui.toast("GUI brief sent with the result"); } catch {}
+          }
+          // 1.69: Layer C - the task brief (type, intent, the user's own
+          // constraints, how to verify) rides on the first result of the run.
+          if (A.task && !A.task.riderSent && ORCH) {
+            A.task.riderSent = true;
+            try {
+              const tight = !!(P.sysMaxChars && P.sysMaxChars < 16000) || !!P.compactCommandList;
+              const rider = ORCH.taskLayer(A.task, { tight });
+              const cap = P.sendCharBudget || Infinity;
+              if (rider && toSend.length + rider.length + 2 <= cap) { toSend += "\n\n" + rider; diag("task.riderSent", { chars: rider.length, tight, intent: A.task.intent, primary: A.task.primary }); }
+              else if (rider) diag("task.riderSkipped", { chars: rider.length, cap });
+            } catch {}
           }
           // This result becomes a turn, so it counts toward the re-statement
           // budget - context volume is what makes the site summarise, and the
@@ -12136,6 +12207,17 @@ statusTimer = rsInterval(() => bg({ type: "status" }).then(onStatus), 5000);
       // the first result (never by rewriting the composer).
       A.guiBrief = null;
       try { A.guiBrief = ui.noteGuiRequest(); } catch {}
+      // 1.69: task understanding BEFORE the model acts - category, intent
+      // (implement / fix / explain / plan / review / continue), follow-up
+      // inheritance and the user's explicit constraints. Read from the composer
+      // at send time (same instant the GUI brief reads it); falls back to the
+      // newest user turn a moment later when the site already cleared it.
+      try {
+        const txt = String((P.editorText && P.editorText()) || "").trim();
+        const classify = (text) => { if (!ORCH || !text) return; const prev = A.task && A.task.v ? A.task : null; A.task = ORCH.classifyTask(text, { prev }); A.task.riderSent = false; diag("task.classified", { primary: A.task.primary, intent: A.task.intent, followUp: A.task.followUp, constraints: A.task.constraints.length, words: A.task.words }); };
+        if (txt) classify(txt);
+        else setTimeout(() => { try { const items = P.allItems(); for (let i = items.length - 1; i >= 0; i--) if (P.isUserItem(items[i])) { classify(String(P.itemText(items[i]) || "").trim()); break; } } catch {} }, 900);
+      } catch {}
       // A fresh user message = fresh intent: clear any previous manual stop so
       // the loop is allowed to run again.
       A.userStopped = false;
@@ -12182,6 +12264,9 @@ statusTimer = rsInterval(() => bg({ type: "status" }).then(onStatus), 5000);
     providerHooksReady = true;
     providerHooksError = null;
     diag("provider.hooksReady", {provider:P.id,ui_init:Math.round(performance.now()-OR_BOOT_AT),responseDetectorReady:true});
+    // 1.69: normalised capability record of this adapter (what the loop can
+    // rely on) - in the diag log and on window.__rsProviderCaps() for support.
+    try { if (ORCH) { const caps = ORCH.capabilities(P); window.__rsProviderCaps = () => ORCH.capabilities(P); window.__rsTask = () => A.task || null; diag("provider.caps", caps); } } catch {}
   } catch (e) {
     providerHooksReady = false;
     providerHooksError = e instanceof Error ? e : new Error(String(e));

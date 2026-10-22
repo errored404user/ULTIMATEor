@@ -3425,7 +3425,7 @@ const RSProvider = (() => {
 
   const timings = {
     WARMUP_MS: 90000,
-    PRE_START_MS: 90000,
+    PRESTART_MS: 90000, // 1.69: was PRE_START_MS - the core reads T.PRESTART_MS, so Notion silently ran on the 60 s default
     STABLE_MS: 15000,
     GEN_IDLE_MS: 9000,
     REASON_NOREPLY_MS: 180000,
