@@ -33,7 +33,13 @@ const matchesHost = (pattern, host) => { const h = hostOf(pattern); return h ===
 
 let failures = 0, rows = [];
 for (const b of bundles) {
-  const providerFile = b.js.find((j) => /src\/providers\//.test(j));
+  // Shared helpers under src/providers/ (the 1.65 stream-reader) are not adapters.
+  const providerFile = b.js.find((j) => /src\/providers\//.test(j) && !/stream-reader\.js$/.test(j));
+  if (b.js.includes("src/providers/stream-reader.js")) {
+    assert(b.js.indexOf("src/providers/stream-reader.js") < b.js.indexOf(providerFile), "stream-reader.js must load before " + providerFile);
+    const tap = manifest.content_scripts.find((c) => c.world === "MAIN" && c.js.includes("src/providers/stream-net.js"));
+    assert(tap && b.matches.every((m) => tap.matches.includes(m)), "every host that loads stream-reader.js must also get the MAIN-world stream-net.js tap: " + b.matches.join(","));
+  }
   assert(providerFile, "bundle without provider: " + b.matches.join(","));
   assert(b.js.indexOf(providerFile) < b.js.indexOf("src/core/main.js"), providerFile + " must load before the core");
   assert(b.js.indexOf("src/core/config.js") === 0, "config.js first in " + providerFile);
@@ -93,7 +99,7 @@ for (const pg of PAGES) {
   for (const f of [...js, ...cssLinks]) if (!fs.existsSync(path.join(root, f))) problems.push("missing file " + f);
   if (!cssLinks.includes("overlay.css")) problems.push("overlay.css not linked");
   // Same module set as a hosted bundle (only the provider differs).
-  const expect = refBundle.js.map((j) => (/src\/providers\//.test(j) ? pg.provider : j));
+  const expect = refBundle.js.filter((j) => !/stream-reader\.js$/.test(j)).map((j) => (/src\/providers\//.test(j) ? pg.provider : j));
   if (JSON.stringify(expect) !== JSON.stringify(js)) problems.push("script list differs from the reference bundle: " + JSON.stringify(js.filter((j) => !expect.includes(j)).concat(expect.filter((j) => !js.includes(j)))));
   const win = mockWindow(pg.apiHost, "/");
   let P = null;

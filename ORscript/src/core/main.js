@@ -1587,7 +1587,7 @@
           // on Qwen kept ending "empty" with a complete command in the net tap,
           // and without the branch name the cause was unfindable from the log.
           if (Date.now() - preStartSilent > PRESTART_MS) { diag("empty.why", { branch: "preStart", rep: (d.reply||"").length }); return { kind: "empty" }; }
-          await sleep(200);
+          await sleep(140); // 1.65: catch the first token sooner (was 200)
           continue;
         }
       }
@@ -1644,7 +1644,7 @@
         // (effective) open-block reading is holding us.
         if (genOffFirstAt) { if (gen) waitedFlicker++; else if (effectiveBlock) waitedBlock++; }
         doneSince = 0;
-        await sleep(160);
+        await sleep(120); // 1.65: tighter poll while streaming (was 160) - finalisation lands a beat sooner on every provider
         continue;
       }
       if (stuckDone && gen) log("generating flag stuck - falling back to text stability");
@@ -1694,8 +1694,8 @@
       }
 
       if (!doneSince) doneSince = Date.now();
-      if (Date.now() - doneSince < 280) {  // short settle – DOM is stable
-        await sleep(70);
+      if (Date.now() - doneSince < 220) {  // short settle – DOM is stable (1.65: 220 ms, was 280)
+        await sleep(60);
         continue;
       }
 

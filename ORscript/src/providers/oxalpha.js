@@ -92,7 +92,20 @@ const RSProvider = (() => {
     return "";
   }
 
+  // 1.65: the watcher asks for the transcript several times per tick
+  // (readAssistant, assistantCount, lastAssistantId, isGenerating); on a heavy
+  // workspace page every scan is a few full-document queries. Memoise for one
+  // beat; the core's mutation observer calls invalidateItems() on DOM changes.
+  let _itemsCache = { at: 0, list: null };
+  const invalidateItems = () => { _itemsCache = { at: 0, list: null }; };
   function allItems() {
+    const now = Date.now();
+    if (_itemsCache.list && now - _itemsCache.at < 120) return _itemsCache.list;
+    const list = allItemsUncached();
+    _itemsCache = { at: now, list };
+    return list;
+  }
+  function allItemsUncached() {
     const sels = [
       "[data-message-role]",
       "[data-role='user']",
@@ -243,7 +256,18 @@ const RSProvider = (() => {
     if (!item) return "";
     return classifyText(item, ".rs-chip").trim();
   }
-  const streamLen = (item) => streamText(item === undefined ? lastAssistant() : item).length;
+  const streamLen = (item) => { const nt = netText(); if (nt) return nt.length; return streamText(item === undefined ? lastAssistant() : item).length; };
+
+  // ── 1.65 universal stream tap (src/providers/stream-net.js + stream-reader.js) ──
+  // The model's reply as it crossed the network: verbatim markdown, with the
+  // stream's close as the exact end of the turn. Preferred over the shape-based
+  // DOM read whenever the tap has text for THIS turn; the DOM remains the
+  // fallback and still anchors chips / counts turns.
+  const NET = () => (typeof RSStreamNet !== "undefined" ? RSStreamNet : (window.RSStreamNet || null));
+  const netText = () => { try { const n = NET(); return n ? n.replyText() : ""; } catch { return ""; } };
+  const netGen = (stopVisible) => { try { const n = NET(); return n ? n.genState({ stopVisible }) : null; } catch { return null; } };
+  const netMarkSent = (text) => { try { const n = NET(); if (n) n.markSent(text); } catch {} };
+  const netError = () => { try { const n = NET(); const e = n && n.error(); return e ? n.describe(e, "Ox Alpha") : null; } catch { return null; } };
 
   let _streamMax = -1, _streamAt = 0, _streamItem = null;
   function sampleStream() {
@@ -263,6 +287,11 @@ const RSProvider = (() => {
     sampleStream();
     const stop = !!stopButton();
     const now = Date.now();
+    // Tap first: streaming per the network = generating; stream closed = done
+    // (unless a stop button is still up - then the DOM wedge rules below apply).
+    const g = netGen(stop);
+    if (g === "streaming") return true;
+    if (g === "done" && !stop) return false;
     if (stop) {
       if (!_stopSince) _stopSince = now;
       return (now - _streamAt < WEDGE_MS) || (now - _stopSince < 2000);
@@ -272,7 +301,7 @@ const RSProvider = (() => {
   }
   const isGenerating = genActive;
   const isBusyNow = genActive;
-  const isHardGenerating = () => !!stopButton();
+  const isHardGenerating = () => !!stopButton() || netGen(false) === "streaming";
 
   const turnHalted = () => false;
   const findContinueBtn = () => null;
@@ -287,6 +316,8 @@ const RSProvider = (() => {
   }
   function readAssistant() {
     const item = lastAssistant();
+    const nt = netText().trim();
+    if (nt) return { present: true, reply: nt, thinking: "", item, net: true };
     if (!item) return { present: false, reply: "", thinking: "", item: null };
     return { present: true, reply: streamText(item).trim(), thinking: "", item };
   }
@@ -356,6 +387,7 @@ const RSProvider = (() => {
     editor.focus();
     await sleep(40);
     text = truncateForSend(text);
+    netMarkSent(text);
     setRichText(editor, text);
     await sleep(80);
     if (images && images.length) {
@@ -388,6 +420,8 @@ const RSProvider = (() => {
   }
 
   function scanError() {
+    const ne = netError();
+    if (ne) return ne;
     try {
       for (const el of document.querySelectorAll(S.errorSurfaces)) {
         if (!visible(el)) continue;
@@ -441,6 +475,7 @@ const RSProvider = (() => {
       const ed = getEditor();
       if (!ed || !ed.contains(e.target)) return;
       if (editorText().trim() === "") return;
+      netMarkSent(editorText());
       if (handlers.isBlocked()) return;
       if (!handlers.isStarted()) {
         if (!chatIsEmpty()) return;
@@ -459,6 +494,7 @@ const RSProvider = (() => {
       const isSend = S.sendAria.test(ariaOf(btn)) || btn.type === "submit";
       if (!isSend) return;
       if (btn.disabled) return;
+      netMarkSent(editorText());
       if (handlers.isBlocked()) return;
       if (!handlers.isStarted()) {
         if (!chatIsEmpty()) return;
@@ -494,7 +530,7 @@ const RSProvider = (() => {
       try { document.documentElement.setAttribute("data-rs-oxalpha-ver", "2026-09"); } catch {}
       diag("oxalpha.init", { hasEditor: !!getEditor(), login: loginGatePresent(), path: location.pathname });
     },
-    allItems, isUserItem, isAssistantItem, itemText, classifyText,
+    allItems, invalidateItems, isUserItem, isAssistantItem, itemText, classifyText,
     assistantCount, userCount, lastAssistant, lastAssistantId, itemKey, readAssistant,
     streamLen, snapshot,
     getEditor, editorText, chatIsEmpty, isFreshChat, composerFrame, barAnchor,

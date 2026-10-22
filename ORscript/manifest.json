@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ORscript",
-  "version": "1.64.0",
+  "version": "1.65.0",
   "minimum_chrome_version": "111",
   "description": "Turn ChatGPT, Claude, DeepSeek, Gemini, Kimi, NVIDIA NIM Kimi K3, GLM, Qwen, Arena, Meta AI, Crax GPT, Notion AI or Ox Alpha into a Roblox Studio / AgentScript agent. Two engines (RS/AS), work modes, image-to-model, auto-fix playtest errors, and Extra Thinking.",
   "permissions": [
@@ -800,6 +800,7 @@
         "src/core/skills/agent_skills.js",
         "src/core/agent_crew.js",
         "src/core/command_registry.js",
+        "src/providers/stream-reader.js",
         "src/providers/oxalpha.js",
         "src/core/templates.js",
         "src/core/screenshot.js",
@@ -821,6 +822,34 @@
         "overlay.css"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://c.vani.ai/*",
+        "https://app.clickup.com/*",
+        "https://oxalpha.com/*",
+        "https://www.oxalpha.com/*",
+        "https://oxalpha.org/*",
+        "https://www.oxalpha.org/*",
+        "https://agent.minimax.io/*",
+        "https://overchat.ai/*",
+        "https://*.overchat.ai/*",
+        "https://huggingface.co/chat/*",
+        "https://chat.mistral.ai/*",
+        "https://mistral.ai/*",
+        "https://openrouter.ai/*",
+        "https://www.openrouter.ai/*",
+        "https://console.groq.com/*",
+        "https://dashboard.cohere.com/*",
+        "https://api.together.ai/*",
+        "https://fireworks.ai/*",
+        "https://app.fireworks.ai/*"
+      ],
+      "js": [
+        "src/providers/stream-net.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
     },
     {
       "matches": [
@@ -854,6 +883,7 @@
         "src/core/skills/agent_skills.js",
         "src/core/agent_crew.js",
         "src/core/command_registry.js",
+        "src/providers/stream-reader.js",
         "src/providers/vani.js",
         "src/core/templates.js",
         "src/core/screenshot.js",
@@ -908,6 +938,7 @@
         "src/core/skills/agent_skills.js",
         "src/core/agent_crew.js",
         "src/core/command_registry.js",
+        "src/providers/stream-reader.js",
         "src/providers/clickup.js",
         "src/core/templates.js",
         "src/core/screenshot.js",
@@ -974,6 +1005,7 @@
         "src/core/skills/agent_skills.js",
         "src/core/agent_crew.js",
         "src/core/command_registry.js",
+        "src/providers/stream-reader.js",
         "src/providers/multichat.js",
         "src/core/templates.js",
         "src/core/screenshot.js",
