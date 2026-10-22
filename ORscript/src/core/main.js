@@ -8745,7 +8745,7 @@
               <div class="rs-effort-dial" data-level="${esc(lvl.id)}" style="--p:${idx}">
                 <div class="rs-effort-rail"><i class="rs-effort-fill"></i></div>
                 <div class="rs-effort-stops" role="radiogroup" aria-label="Reasoning effort">
-                  ${ORReasoning.LEVELS.map((l, i) => `<button type="button" class="rs-effort-stop ${thinkingLevel === l.id ? "on" : ""} ${i < idx ? "lit" : ""}" data-effort="${l.id}" role="radio" aria-checked="${thinkingLevel === l.id ? "true" : "false"}" title="${esc(l.name)} - ${esc(l.sub)}"><i></i><span>${esc(l.name)}</span></button>`).join("")}
+                  ${ORReasoning.LEVELS.map((l, i) => `<button type="button" class="rs-effort-stop ${thinkingLevel === l.id ? "on" : ""} ${i < idx ? "lit" : ""}" data-effort="${l.id}" role="radio" aria-checked="${thinkingLevel === l.id ? "true" : "false"}" title="${esc(l.name)} - ${esc(l.sub)}"><i class="rs-effort-dot"></i><span class="rs-effort-stop-name">${esc(l.name)}</span></button>`).join("")}
                 </div>
               </div>
               <div class="rs-effort-profile" data-level="${esc(lvl.id)}">
