@@ -79,7 +79,7 @@ ok("S: main.js — developer_product_update exists (session first, or-core secon
   'update_developer_product: "developer_product_update"', 'if (bareName === "developer_product_update" || bareName === "devproduct_update")',
 ].every((s) => main.includes(s)) && /PUBLISH_OPS=new Set\(\[[^\]]*"developer_product_update"/.test(main));
 ok("S: main.js — gamepass_update now carries the universe (PATCH needs it) and icons", main.includes('const payload = { gamePassId: gamePassId, universeId: universeU, placeId:') && main.includes('universe_id: universeU || undefined'));
-ok("S: main.js — creator.publishAnimation runs the real flow (no more instructions-only)", main.includes('if(roadmapName==="creator.publishAnimation")return await publishAnimation('));
+ok("S: main.js — creator.publishAnimation runs the real flow (no more instructions-only)", main.includes('if(toolName==="creator.publishAnimation")return await publishAnimation('));
 ok("S: catalogue + mandates teach animation_publish / developer_product_update", plus.includes('{ name: "animation_publish"') && plus.includes('{ name: "developer_product_update"') && config.includes("\\`animation_publish\\` {animation | path, name?}") && config.includes("\\`developer_product_update\\` {product_id"));
 ok("S: README changelog covers 1.45.0 monetization + publishing", /\*\*1\.45\.0 — /.test(readme) && readme.includes("animation_publish") && readme.includes("developer-products/v2"));
 

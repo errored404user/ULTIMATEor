@@ -1134,17 +1134,6 @@ async function agentWorkspaceRoot() {
   return "";
 }
 
-function pyLiteral(v) {
-  if (v === null || v === undefined) return "None";
-  if (typeof v === "boolean") return v ? "True" : "False";
-  if (typeof v === "number") return Number.isFinite(v) ? String(v) : "0";
-  if (typeof v === "string") return JSON.stringify(v);
-  if (Array.isArray(v)) return "[" + v.map(pyLiteral).join(", ") + "]";
-  const parts = [];
-  for (const [k, val] of Object.entries(v)) parts.push(JSON.stringify(k) + ": " + pyLiteral(val));
-  return "{" + parts.join(", ") + "}";
-}
-
 const BLENDER_CMD = {
   blender_export_fbx: "export_fbx", export_blender_fbx: "export_fbx",
   blender_import_fbx: "import_fbx", import_blender_fbx: "import_fbx",

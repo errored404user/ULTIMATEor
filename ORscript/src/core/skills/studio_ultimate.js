@@ -224,7 +224,7 @@
       "  part.Parent=m made[#made+1]=part end end",
       "if #made==0 then m:Destroy() return fail('no valid part specs') end",
       "local primaryName=" + q(a.primary || "") + " local prim=nil if primaryName~='' then prim=m:FindFirstChild(primaryName) end m.PrimaryPart=prim or made[1]",
-      "local cf,sz=m:GetBoundingBox() m.WorldPivot=CFrame.new(cf.Position-Vector3.new(0,sz.Y/2,0))",
+      "local cf,sz=m:GetBoundingBox() local footCF=CFrame.new(cf.Position-Vector3.new(0,sz.Y/2,0)) m.PrimaryPart.PivotOffset=m.PrimaryPart.CFrame:ToObjectSpace(footCF) m.WorldPivot=footCF",
       (a.position ? "m:PivotTo(CFrame.new(" + vec(a.position) + "))" : "-- keep authored positions"),
       "m.Parent=parent wpDone(rec)",
       "return ok({path=m:GetFullName(),parts=#made,size={sz.X,sz.Y,sz.Z},primary=m.PrimaryPart.Name},'built '..m.Name..' with '..#made..' part(s)')",
@@ -243,7 +243,7 @@
   B.model_center_pivot = (a) => [
     "local m=need(" + q(a.path) + ",'model') if not m:IsA('Model') then return fail('model_center_pivot needs a Model') end",
     "local cf,sz=m:GetBoundingBox() local bottom=" + bb(a.bottom, true),
-    "local rec=wp() m.WorldPivot=if bottom then CFrame.new(cf.Position-Vector3.new(0,sz.Y/2,0)) else CFrame.new(cf.Position) wpDone(rec)",
+    "local rec=wp() local pivotCF=if bottom then CFrame.new(cf.Position-Vector3.new(0,sz.Y/2,0)) else CFrame.new(cf.Position) m.WorldPivot=pivotCF if m.PrimaryPart then m.PrimaryPart.PivotOffset=m.PrimaryPart.CFrame:ToObjectSpace(pivotCF) end wpDone(rec)",
     "local p=m:GetPivot().Position return ok({path=m:GetFullName(),pivot={p.X,p.Y,p.Z},bottom=bottom},'pivot set to bounding-box '..(bottom and 'bottom center' or 'center'))",
   ].join("\n");
   B.model_snap_to_ground = (a) => [
@@ -311,7 +311,7 @@
     "local wallH=size.Y-(openBottom and 0 or t)-(openTop and 0 or t) local wallY=(openBottom and -hy or -hy+t)+wallH/2",
     "slab('WallNorth',Vector3.new(size.X,wallH,t),Vector3.new(0,wallY,-hz+t/2)) slab('WallSouth',Vector3.new(size.X,wallH,t),Vector3.new(0,wallY,hz-t/2))",
     "slab('WallWest',Vector3.new(t,wallH,size.Z-2*t),Vector3.new(-hx+t/2,wallY,0)) slab('WallEast',Vector3.new(t,wallH,size.Z-2*t),Vector3.new(hx-t/2,wallY,0))",
-    "m.PrimaryPart=m:FindFirstChild('Floor') or m:FindFirstChild('WallNorth') m.WorldPivot=CFrame.new(pos-Vector3.new(0,hy,0)) m.Parent=parent wpDone(rec)",
+    "m.PrimaryPart=m:FindFirstChild('Floor') or m:FindFirstChild('WallNorth') local footCF=CFrame.new(pos-Vector3.new(0,hy,0)) m.WorldPivot=footCF if m.PrimaryPart then m.PrimaryPart.PivotOffset=m.PrimaryPart.CFrame:ToObjectSpace(footCF) end m.Parent=parent wpDone(rec)",
     "return ok({path=m:GetFullName(),parts=#m:GetChildren(),size={size.X,size.Y,size.Z}},'hollow box '..m.Name..' with '..#m:GetChildren()..' slabs')",
   ].join("\n");
   B.model_pipe = (a) => {

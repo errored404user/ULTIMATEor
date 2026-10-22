@@ -28,7 +28,7 @@
 // rest. Nothing is faked: unsupported requests return explicit limitations.
 (function (root) {
   "use strict";
-  const VERSION = "1.69.0";
+  const VERSION = "1.70.0";
   const DEG = Math.PI / 180;
 
   // ───────────────────────── rotation math ─────────────────────────
@@ -406,7 +406,6 @@
   }
   const clonePose = (p) => JSON.parse(JSON.stringify(p));
   function withOverrides(base, o) { const p = clonePose(base); for (const j of Object.keys(o)) p[j] = Object.assign({}, p[j] || {}, o[j]); return p; }
-  function scalePose(base, p, s) { return mix(base, p, s); } // exaggerate (s>1) or soften relative to base
 
   // ───────────────────────── stage generators ─────────────────────────
   // Each generator returns beats: [{ at: 0..1 (fraction of the stage), pose, ease, tag }].
@@ -1238,8 +1237,8 @@
   // Stage lengths: the prompt's duration is the budget at default params; feedback (faster attacks, more anticipation,
   // heavier landing) stretches or shrinks the affected stages, and therefore the clip, instead of stealing time elsewhere.
   function stageDurations(stages, total, params) {
-    const w = stageWeights(stages, params), w0 = stageWeights(stages, DEFAULT_PARAMS);
-    const sum = w.reduce((a, b) => a + b, 0), sum0 = w0.reduce((a, b) => a + b, 0);
+    const w = stageWeights(stages, params);
+    const sum = w.reduce((a, b) => a + b, 0);
     return w.map((v) => total * v / sum); // distribute the (already speed-scaled) total exactly - stages always end at `duration`
   }
   function generate(intentOrText, opts) {

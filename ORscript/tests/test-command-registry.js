@@ -26,7 +26,7 @@ R.execute("broken",{}, {environment:"GENERAL"}).then((r)=>{
     check(`${id} registered and mapped`,bg.includes(`btool(\"${id}\"`)&&bg.includes(`${id}:`));
   for(const op of ["cmd_export_gltf","cmd_import_gltf","cmd_scene_cleanup","cmd_set_world","cmd_set_render","cmd_render_image","cmd_principled_material","cmd_inset","cmd_add_bone","cmd_normalize_weights"])
     check(`${op} real executor`,ops.includes(`def ${op}(`));
-  check("discovery commands execute in shared core",main.includes('roadmapName==="search_commands"')&&main.includes('roadmapName==="get_command"'));
+  check("discovery commands execute in shared core",main.includes('toolName==="search_commands"')&&main.includes('toolName==="get_command"'));
   check("offline Blender catalogue discoverable",bg.includes('case "command_catalog"'));
   process.exitCode=fail?1:0;
 });

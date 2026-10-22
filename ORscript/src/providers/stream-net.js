@@ -111,7 +111,6 @@
   // `finish-step` close a PART, not the message.
   const DONE_TYPE_RE = /^(done|finish(ed)?|complete[d]?|end|stop|message_stop|message_end|response\.completed|response\.done|finish-message|finish|final|turn_end|end_of_stream|(message|response|conversation|chat|stream|generation|completion|turn|run|answer)[._-](complete[d]?|done|end(ed)?|stop(ped)?|finish(ed)?|final))$/i;
   const ERROR_TYPE_RE = /^(error|failure|failed)$/i;
-  const TEXT_DELTA_TYPE_RE = /^(text-delta|text_delta|content_block_delta|response\.output_text\.delta|output_text\.delta|delta|token|text|content|answer|message_delta|chunk|data)$/i;
   const SKIP_KEY_RE = /^(reasoning|reasoning_content|reasoning_text|thinking|thought|thoughts|tool_calls|tool_call|function_call|citations|sources|metadata|usage|id|model|created|object|role|name|type|index|status|conversation_id|conversationId|messageId|message_id|parent_id|timestamp|time|ts)$/;
   const str = (v) => (typeof v === "string" ? v : null);
 

@@ -1,4 +1,4 @@
-/* ORscript GUI Studio — prompt-to-GUI generation engine (1.69.0).
+/* ORscript GUI Studio — prompt-to-GUI generation engine (1.70.0).
  *
  * The GUI counterpart of animengine.js: "describe it → Generate" without a
  * model turn. A plain-words prompt is parsed into an INTENT (kind of screen,
@@ -24,7 +24,7 @@
 (() => {
   "use strict";
   if (window.ORGuiGen) return;
-  const VERSION = "1.69.0";
+  const VERSION = "1.70.0";
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const lc = (s) => String(s == null ? "" : s).toLowerCase();
   const words = (s) => lc(s).replace(/[^a-z0-9+&' ]+/g, " ").split(/\s+/).filter(Boolean);
@@ -57,7 +57,6 @@
   ];
   const DARK = ["midnight", "neon", "royal_gold", "forest", "horror", "ocean", "retro"], LIGHT = ["clean_light", "candy", "sakura"];
   const PLACES = [["top-left", /\b(top[- ]?left|upper[- ]?left)\b/], ["top-right", /\b(top[- ]?right|upper[- ]?right)\b/], ["bottom-left", /\b(bottom[- ]?left|lower[- ]?left)\b/], ["bottom-right", /\b(bottom[- ]?right|lower[- ]?right)\b/], ["top", /\b(at the top|top center|top centre|top of the screen|on top)\b/], ["bottom", /\b(at the bottom|bottom center|bottom centre|bottom of the screen)\b/], ["left", /\b(left side|on the left|to the left)\b/], ["right", /\b(right side|on the right|to the right)\b/], ["center", /\b(center|centre|middle|centered|centred)\b/]];
-  const ITEM_NOUN = /\b(items?|cards?|products?|slots?|pets?|skins?|packs?|deals?|entries|rows?|players?|quests?|rewards?|options?|friends?|messages?|servers?|classes|modes|maps|teams|tiers?|levels?|badges?|achievements?|listings?|recipes?|weapons?|skills?|emotes?|offers?|days?|stages?|lines?)\b/;
   const EXTRAS = [["close", /\bclose (button|icon|x)\b|\bx button\b/], ["search", /\bsearch( bar| box| field)?\b/], ["timer", /\b(timer|countdown|clock)\b/], ["currency", /\b(coins?|gems?|currency|money|cash|gold) (display|counter|hud|bar|label|amount|balance)\b|\bshow(ing)? (the )?(coins|gems|currency|balance)\b/], ["avatar", /\b(avatar|profile picture|player icon|portrait)\b/], ["back", /\bback button\b/], ["progress", /\b(progress bar|xp bar|level bar)\b/], ["footer", /\b(ok|okay|cancel|confirm) (and|\/|or) (cancel|ok|okay|no) buttons?\b|\bfooter buttons\b/]];
 
   // ── intent ─────────────────────────────────────────────────────────────────

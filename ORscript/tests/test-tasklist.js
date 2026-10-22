@@ -65,7 +65,7 @@ const css = read("overlay.css");
 const manifest = JSON.parse(read("manifest.json"));
 const bundles = manifest.content_scripts.filter((c) => (c.js || []).includes("src/core/main.js"));
 ok("manifest loads tasklist.js before main.js in every main.js bundle", bundles.length > 0 && bundles.every((c) => { const i = c.js.indexOf("src/core/tasklist.js"); return i >= 0 && i < c.js.indexOf("src/core/main.js"); }));
-ok("runTool routes task_* to ORTaskList.run and reports via __rsAfterTool", /if \(\/\^task_\(list\|next\|add\|update\)\$\/\.test\(roadmapName\) && typeof ORTaskList !== "undefined"\)/.test(main) && main.includes("const r = ORTaskList.run(roadmapName, args);"));
+ok("runTool routes task_* to ORTaskList.run and reports via __rsAfterTool", /if \(\/\^task_\(list\|next\|add\|update\)\$\/\.test\(toolName\) && typeof ORTaskList !== "undefined"\)/.test(main) && main.includes("const r = ORTaskList.run(toolName, args);"));
 ok("task tools injected into the catalogue only while enabled; refreshed on enable/load", main.includes("for (const virtual of ORTaskList.toolEntries())") && main.includes("t.publicSkill || t.taskList") && /or-tasklist-change[^\n]*why === "enabled" \|\| why === "loaded"/.test(main));
 ok("SYSTEM_STATE carries the TASKS tag", main.includes("env += ORTaskList.stateTag();"));
 ok("list_commands shows a TASK LIST line in the universal tier when enabled", main.includes("TASK LIST (user enabled it in Settings;"));

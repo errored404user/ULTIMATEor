@@ -21,11 +21,11 @@ const pi = fs.readFileSync("src/core/skills/studio_project.js", "utf8");
 const readme = fs.readFileSync("README.md", "utf8");
 
 // ── A. lookup tools are hidden, still callable ──
-ok("lookup tools moved out of the advertised list", main.includes("const COMMAND_LOOKUP_TOOLS = [") && /const COMMAND_DISCOVERY_TOOLS = \[\s*\{name:"orscript_help"/.test(main));
+ok("lookup tools moved out of the advertised list", !/\{name:"search_commands"/.test(main) && /const COMMAND_DISCOVERY_TOOLS = \[\s*\{name:"orscript_help"/.test(main));
 ok("orscript_help is the only discovery tool advertised", !/COMMAND_DISCOVERY_TOOLS = \[[^\]]*search_commands/.test(main));
 ok("lookup tools stay known (CORE_VIRTUAL_TOOLS) so a stray call is redirected, not COMMAND_NOT_FOUND", /"search_commands", "get_command", "command_registry_stats", "generate_command_docs"/.test(main));
-ok("runTool routes the lookup family through noSearchReply", main.includes("if (LOOKUP_TOOL_RE.test(roadmapName)) {") && main.includes("return noSearchReply(roadmapName,"));
-ok("registry executors kept for tooling (pinned by test-command-registry)", main.includes('roadmapName==="search_commands"') && main.includes('roadmapName==="get_command"') && main.includes("args._orRegistry === true"));
+ok("runTool routes the lookup family through noSearchReply", main.includes("if (LOOKUP_TOOL_RE.test(toolName)) {") && main.includes("return noSearchReply(toolName,"));
+ok("registry executors kept for tooling (pinned by test-command-registry)", main.includes('toolName==="search_commands"') && main.includes('toolName==="get_command"') && main.includes("args._orRegistry === true"));
 ok("list_commands {query} is a search -> noSearchReply; the broad bootstrap call is untouched", main.includes('if (String(args.query || args.search || "").trim() && !args._orInternal) {') && main.includes("return noSearchReply(name, args.query || args.search);"));
 ok("diag event for blocked lookups", main.split('diag("lookup.blocked"').length >= 3);
 
@@ -131,8 +131,8 @@ ok("offline feedback for project_index_* / blueprint_* gains the no-retry / no-s
 
 // ── G. release bookkeeping ──
 const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
-ok("manifest 1.69.0", manifest.version === "1.69.0", manifest.version);
-ok("plugin + crate pinned at 1.69.0", fs.readFileSync("plugin/ORscript.lua", "utf8").includes('local VERSION = "1.69.0"') && /^version = "1\.69\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "or-agent"\nversion = "1\.69\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
+ok("manifest 1.70.0", manifest.version === "1.70.0", manifest.version);
+ok("plugin + crate pinned at 1.70.0", fs.readFileSync("plugin/ORscript.lua", "utf8").includes('local VERSION = "1.70.0"') && /^version = "1\.70\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "or-agent"\nversion = "1\.70\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
 ok("README changelog 1.37.1", readme.includes("**1.37.1 — no command searching; project_index_build / blueprint_list hardened.**") && readme.includes("test-v1371.js"));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall 1.37.1 checks passed");

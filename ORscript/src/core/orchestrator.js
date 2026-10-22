@@ -33,7 +33,7 @@
 // content script (window.OROrchestrator).
 const OROrchestrator = (() => {
   "use strict";
-  const VERSION = "1.69.0";
+  const VERSION = "1.70.0";
 
   // ───────────────────────── 1. task understanding ─────────────────────────
   const CATEGORY_RE = {

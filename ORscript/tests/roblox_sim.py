@@ -301,8 +301,8 @@ local function aabb(m)
   return mn, mx
 end
 function methods:GetPivot()
-  if isa(self.__class, "BasePart") then return self.CFrame end
-  local pp = self.__props.PrimaryPart if pp then return pp.CFrame end
+  if isa(self.__class, "BasePart") then local po = self.__props.PivotOffset if po then return self.CFrame * po end return self.CFrame end
+  local pp = self.__props.PrimaryPart if pp then return pp:GetPivot() end
   local wp = self.__props.WorldPivot if wp then return wp end
   local mn, mx = aabb(self) if mn then return CFrame.new((mn+mx)*0.5) end
   return CFrame.new()
@@ -525,7 +525,7 @@ Inst.__newindex = function(o, k, v)
   end
   if isa(o.__class, "Light") and k == "Color" and getmetatable(v) ~= Color3 then error("Light.Color must be a Color3") end
   if o.__class == "ParticleEmitter" and k == "Color" and (type(v) ~= "table" or v.Keypoints == nil) then error("ParticleEmitter.Color must be a ColorSequence") end
-  if (k == "C0" or k == "C1" or k == "Transform" or k == "WorldPivot") and getmetatable(v) ~= CFrame then error(k .. " must be a CFrame") end
+  if (k == "C0" or k == "C1" or k == "Transform" or k == "WorldPivot" or k == "PivotOffset") and getmetatable(v) ~= CFrame then error(k .. " must be a CFrame") end
   if k == "Lifetime" or k == "Speed" or k == "RotSpeed" then if type(v) ~= "table" or v.Min == nil then error(k .. " must be a NumberRange") end end
   if k == "AnchorPoint" and getmetatable(v) ~= Vector2 then error("AnchorPoint must be a Vector2") end
   if k == "LayoutOrder" or k == "ZIndex" then if type(v) ~= "number" then error(k .. " must be a number") end end

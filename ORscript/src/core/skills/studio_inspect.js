@@ -282,6 +282,8 @@ return query()`;
     spawn_location: "spawn_location_create", click_detector: "click_detector_create", billboard: "billboard_gui_create",
     humanoid_max_health_set: "player_max_health", physics_linear_set: "linear_velocity_create", web_api: "api_request",
     cancollide_set: "collision_set / set_property", massless_set: "set_property", can_touch_set: "set_property", can_query_set: "set_property",
+    // 1.70.0: two more one-property duplicates so the catalogue stays under budget with model_prefab / model_check added.
+    physics_pivot_set: "pivot_set", cast_shadow_set: "set_property",
   };
   for (const [name, better] of Object.entries(HIDDEN_DUPLICATES)) {
     const c = RobloxScriptSkills.SKILL_COMMANDS.find((x) => x && x.name === name);

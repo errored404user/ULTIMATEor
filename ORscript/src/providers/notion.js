@@ -1996,40 +1996,6 @@ const RSProvider = (() => {
     }
     diag('notion.write.smallPasteAccepted',{chars:value.length});return draftLooksWritten(edText(el),value);
   }
-  async function setRichTextChunked(el, value, chunkSize) {
-    const deadline = Date.now() + 5000;
-    const first = Math.min(48, chunkSize);
-    const chunks = [value.slice(0, first)];
-    for (let i = first; i < value.length; i += chunkSize) chunks.push(value.slice(i, i + chunkSize));
-    let prefix = "", accepted = "";
-    for (let i = 0; i < chunks.length; i++) {
-      if (!safeRead(() => el.isConnected, false) || isStopped() || Date.now() >= deadline) break;
-      el.focus();
-      // React can move the selection while reconciling a rich-text leaf.
-      const sel = window.getSelection(), range = document.createRange();
-      range.selectNodeContents(el);
-      if (i > 0) range.collapse(false);
-      sel.removeAllRanges(); sel.addRange(range);
-      _selfWrite = true;
-      let ok = false;
-      try { ok = document.execCommand("insertText", false, chunks[i]); } catch {}
-      finally { _selfWrite = false; }
-      prefix += chunks[i];
-      await sleep(i === 0 || i === chunks.length - 1 ? 160 : 35);
-      if (!ok || !draftLooksWritten(edText(el), prefix)) {
-        diag("notion.write.chunkRejected", { index: i, total: chunks.length, chunkSize,
-          insertedChars: prefix.length, retainedChars: edText(el).length, connected: safeRead(() => el.isConnected, false) });
-        const remaining = edText(el);
-        if (safeRead(() => el.isConnected, false) && remaining &&
-            (draftLooksWritten(remaining, prefix) || (accepted && draftLooksWritten(remaining, accepted)))) {
-          setRichText(el, "");
-        }
-        return "chunkRejected";
-      }
-      accepted = prefix;
-    }
-    return prefix.length === value.length ? "chunkedInsertText" : "chunkRejected";
-  }
   async function waitFor(pred, timeout) {
     const budget = waitBudget(timeout, 100), t0 = Date.now();
     for (let poll = 0; poll < budget.polls && Date.now() - t0 < budget.ms; poll++) {
@@ -2440,7 +2406,6 @@ const RSProvider = (() => {
         diag("notion.tas.editorMissing", { attempt, waitedMs: editorWaitMs });
         break; // repeating the same full wait cannot send without a composer
       }
-      const chunkSize = [256, 48, 16][Math.min(attempt, 2)];
       let writeMethod;
       const largePaste=text.length>2500||text.split('\n').length>60;
       // Literal HTML code protects internal protocol payloads. Human follow-ups
@@ -3464,7 +3429,6 @@ const RSProvider = (() => {
     // Never append chips/classes under Notion's DOM-locked response editor.
     immutableTranscript: true,
     mountActivitySummary, setActivityFolded, renderReadyAcknowledgement, collectExportHistory,
-    activityItemKey: item => safeRead(() => item.getAttribute("data-agent-service-scroll-anchor"), null) || immutableKey(item),
     itemKey: item => safeRead(() => safeClosest(item, AGENT_ROW_SEL)?.getAttribute("data-agent-service-scroll-anchor"), null) || null,
     canRenderImmutableChip: (item, opts) => !opts.whole || isUserItem(item) || !!safeRead(() => item.getAttribute("data-agent-service-scroll-anchor"), null),
     immutableChipPresent: (item) => !!immutableCardFor(item, immutableKey(item)),
