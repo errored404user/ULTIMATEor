@@ -8708,21 +8708,34 @@
         + r.options.map((o) => `<option value="${esc(o.id)}" ${r.mode.id === o.id ? "selected" : ""}>${esc(o.label)}${o.id === ORReasoning.providerOf(P.id).map[r.level] ? " (default)" : ""}</option>`).join("")
         + `<option value="off" ${r.mode.id === "off" ? "selected" : ""}>Leave the site as it is</option></select>`;
       const applied = _nativeApplied && _nativeApplied.key && _nativeApplied.key.indexOf(P.id + ":" + thinkingLevel + ":") === 0 ? _nativeApplied : null;
-      const state = applied ? (applied.ok ? (applied.how === "prompt-only" ? "" : applied.how === "already" ? "site already set" : "site switched") : "switch it by hand") : "";
+      // 1.61 redesign: a glowing effort dial (five stops on one rail) + a live
+      // "effort profile" card - what the AI will actually do at this level - and a
+      // one-line site status. The per-site mode picker moved into an Advanced-only
+      // disclosure; the switch itself stays automatic.
+      const idx = Math.max(0, ORReasoning.LEVELS.findIndex((l) => l.id === lvl.id));
+      const prof = lvl.profile || {};
+      const chips = (ORReasoning.PROFILE_KEYS || []).map(([k, label]) => { const v = prof[k]; return `<span class="rs-effort-chip ${v ? "on" : ""}" data-chip="${k}"><i></i><b>${esc(label)}</b><small>${esc(v ? v : "off")}</small></span>`; }).join("");
+      const siteState = native ? (applied ? (applied.ok ? (applied.how === "already" ? "already on" : applied.how === "prompt-only" ? "prompt" : "switched") : "switch by hand") : "auto") : "prompt only";
       return `<section class="rs-menu-sec rs-effort-sec">
               <div class="rs-sec-label"><span>Reasoning effort</span><span class="rs-sec-state">${esc(lvl.name)} · ${esc(lvl.short)}</span></div>
-              <div class="rs-menu-note">How hard the AI thinks before it acts: planning, self-review loops and proof before "done". Higher = slower, more careful.</div>
-              <div class="rs-work-row rs-effort-row" role="radiogroup" aria-label="Reasoning effort">
-                ${ORReasoning.LEVELS.map((l) => `<button type="button" class="rs-work-card rs-effort-card ${thinkingLevel === l.id ? "on" : ""}" data-effort="${l.id}" role="radio" aria-checked="${thinkingLevel === l.id ? "true" : "false"}" title="${esc(l.sub)}"><span class="rs-work-name">${esc(l.name)}</span><span class="rs-work-sub">${esc(l.short)}</span></button>`).join("")}
+              <div class="rs-effort-dial" data-level="${esc(lvl.id)}" style="--p:${idx}">
+                <div class="rs-effort-rail"><i class="rs-effort-fill"></i></div>
+                <div class="rs-effort-stops" role="radiogroup" aria-label="Reasoning effort">
+                  ${ORReasoning.LEVELS.map((l, i) => `<button type="button" class="rs-effort-stop ${thinkingLevel === l.id ? "on" : ""} ${i < idx ? "lit" : ""}" data-effort="${l.id}" role="radio" aria-checked="${thinkingLevel === l.id ? "true" : "false"}" title="${esc(l.name)} — ${esc(l.sub)}"><i class="rs-effort-dot"></i><span class="rs-effort-stop-name">${esc(l.name)}</span></button>`).join("")}
+                </div>
               </div>
-              <div class="rs-menu-note rs-effort-sub">${esc(lvl.sub)}</div>
-              <div class="rs-effort-site">
-                <div class="rs-effort-site-head"><span class="rs-effort-site-name">On ${esc(P.displayName)}</span><span class="rs-sec-state">${native ? esc(cur.mode.label) + (state ? " · " + state : "") : "prompt only"}</span></div>
-                <div class="rs-menu-note">${esc(prov.note)}</div>
-                ${native ? `<label class="rs-effort-line"><span>${esc(lvl.name)} effort uses</span>${selectFor(cur)}</label>` : ""}
-                ${native ? `<details class="rs-effort-all rs-adv"><summary>All levels on ${esc(P.displayName)}</summary>${rows.map((r) => `<label class="rs-effort-line ${r.level === thinkingLevel ? "on" : ""}"><span>${esc(r.name)}</span>${selectFor(r)}</label>`).join("")}<div class="rs-set-row"><button type="button" data-effort-reset="1">Reset ${esc(P.displayName)} to defaults</button><button type="button" data-effort-apply="1">Apply to the site now</button></div></details>` : ""}
-                <details class="rs-effort-others rs-adv"><summary>What each level means on other sites</summary><div class="rs-effort-grid">${Object.keys(ORReasoning.PROVIDERS).filter((id) => id !== P.id).map((id) => { const pr = ORReasoning.PROVIDERS[id]; return `<div class="rs-effort-grid-row"><b>${esc(pr.name)}</b><span>${ORReasoning.LEVELS.map((l) => esc(l.name) + ": " + esc(ORReasoning.modeFor(id, l.id, reasoningModes).label)).join(" · ")}</span></div>`; }).join("")}</div><div class="rs-menu-note">Remap a site from its own tab - the switch is applied there.</div></details>
+              <div class="rs-effort-profile" data-level="${esc(lvl.id)}">
+                <div class="rs-effort-profile-head"><b>${esc(lvl.name)}</b><span>${esc(lvl.short)}</span><em>${idx + 1}/5</em></div>
+                <div class="rs-effort-profile-sub">${esc(lvl.sub)}</div>
+                <div class="rs-effort-chips">${chips}</div>
               </div>
+              <div class="rs-effort-site ${native ? "native" : "prompt"}" title="${esc(prov.note)}">
+                <span class="rs-effort-site-name">On ${esc(P.displayName)}</span>
+                <span class="rs-effort-site-mode">${native ? esc(cur.mode.label) : "prompt steering"}</span>
+                <span class="rs-effort-site-state ${applied && !applied.ok ? "warn" : ""}">${esc(siteState)}</span>
+                ${native ? `<button type="button" class="rs-effort-site-go" data-effort-apply="1" title="Switch the site's think-more control to ${esc(cur.mode.label)} now">↻</button>` : ""}
+              </div>
+              ${native ? `<details class="rs-effort-all rs-adv"><summary>Site switch (advanced): which ${esc(P.displayName)} mode each level uses</summary><div class="rs-menu-note">${esc(prov.note)}</div>${rows.map((r) => `<label class="rs-effort-line ${r.level === thinkingLevel ? "on" : ""}"><span>${esc(r.name)}</span>${selectFor(r)}</label>`).join("")}<div class="rs-set-row"><button type="button" data-effort-reset="1">Reset ${esc(P.displayName)} to defaults</button></div></details>` : ""}
             </section>`;
     }
     function buildMenu() {
@@ -9084,6 +9097,12 @@
       });
       menuEl.querySelectorAll("[data-effort]").forEach(btn=>{
         btn.addEventListener("click", () => { setThinkingLevel(btn.dataset.effort); });
+        btn.addEventListener("keydown", (e) => { // 1.61: the dial walks with the arrow keys
+          const ids = ORReasoning.LEVEL_IDS; const i = ids.indexOf(btn.dataset.effort); if (i < 0) return;
+          const to = e.key === "ArrowRight" || e.key === "ArrowUp" ? ids[Math.min(ids.length - 1, i + 1)] : e.key === "ArrowLeft" || e.key === "ArrowDown" ? ids[Math.max(0, i - 1)] : e.key === "Home" ? ids[0] : e.key === "End" ? ids[ids.length - 1] : null;
+          if (!to || to === btn.dataset.effort) return; e.preventDefault(); setThinkingLevel(to);
+          try { const nb = menuEl.querySelector(`[data-effort="${to}"]`); if (nb) nb.focus(); } catch {}
+        });
       });
       menuEl.querySelectorAll("select[data-effort-mode]").forEach(sel=>{
         sel.addEventListener("click", (e) => e.stopPropagation());

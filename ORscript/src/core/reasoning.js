@@ -1,4 +1,4 @@
-// ORscript — Reasoning effort (1.61.0)
+// ORscript — Reasoning effort (1.61.1)
 //
 // One setting, five levels: low · mid · high · max · ultimate. It does two things:
 //
@@ -19,13 +19,19 @@
 // No dependencies. Loaded before main.js in every bundle (manifest.json).
 (function () {
   "use strict";
+  // profile = what the AI actually does at that level (rendered as the live
+  // "effort profile" in Settings, 1.61): plan before acting, flaw critique,
+  // review loops, read-back of changed files, proof (playtest / console),
+  // quality audit, final self-review, API research. Values are display text;
+  // false = off.
   const LEVELS = [
-    { id: "low", name: "Low", short: "fast", sub: "Act fast, one quick self-check. Cheapest and quickest replies." },
-    { id: "mid", name: "Medium", short: "balanced", sub: "Default. One review loop after writing code." },
-    { id: "high", name: "High", short: "careful", sub: "Plan first, critique 2–3 flaws, read the result back before done." },
-    { id: "max", name: "Max", short: "rigorous", sub: "Plan → build → review 3+ flaws → fix → verify, up to three loops; research APIs." },
-    { id: "ultimate", name: "Ultimate", short: "no shortcuts", sub: "Everything in Max plus a playtest / console check, a quality audit and a final self-review before any 'done'." },
+    { id: "low", name: "Low", short: "fast", sub: "Act fast, one quick self-check. Cheapest and quickest replies.", profile: { plan: false, critique: "quick check", loops: "1", readback: false, proof: false, audit: false, review: false, research: false } },
+    { id: "mid", name: "Medium", short: "balanced", sub: "Default. One review loop after writing code.", profile: { plan: false, critique: "1 pass", loops: "1", readback: false, proof: false, audit: false, review: false, research: false } },
+    { id: "high", name: "High", short: "careful", sub: "Plan first, critique 2–3 flaws, read the result back before done.", profile: { plan: "steps first", critique: "2–3 flaws", loops: "1", readback: "changes", proof: false, audit: false, review: false, research: false } },
+    { id: "max", name: "Max", short: "rigorous", sub: "Plan → build → review 3+ flaws → fix → verify, up to three loops; research APIs.", profile: { plan: "outline", critique: "3+ flaws", loops: "up to 3", readback: "every change", proof: false, audit: false, review: "final pass", research: "unknown APIs" } },
+    { id: "ultimate", name: "Ultimate", short: "no shortcuts", sub: "Everything in Max plus a playtest / console check, a quality audit and a final self-review before any 'done'.", profile: { plan: "full plan", critique: "5+ flaws", loops: "up to 5", readback: "every change", proof: "play+console", audit: "quality", review: "flaw hunt", research: "never guess" } },
   ];
+  const PROFILE_KEYS = [["plan", "Plan"], ["critique", "Critique"], ["loops", "Loops"], ["readback", "Read-back"], ["proof", "Proof"], ["audit", "Audit"], ["review", "Review"], ["research", "Research"]];
   const LEVEL_IDS = LEVELS.map((l) => l.id);
   const LEGACY = { default: "mid", medium: "mid", middle: "mid", maximum: "max", extreme: "ultimate", ultra: "ultimate" };
   const normalize = (v) => { const s = String(v || "").toLowerCase().trim(); if (LEVEL_IDS.includes(s)) return s; return LEGACY[s] || "mid"; };
@@ -277,7 +283,8 @@
     return null;
   }
 
-  const api = { VERSION: "1.61.0", LEVELS, LEVEL_IDS, PROVIDERS, normalize, levelOf, rank, atLeast, providerOf, hasNative, modeFor, table, apply, gate, _test: { pressed, shortLabel, findControl } };
+  const api = {
+    PROFILE_KEYS, VERSION: "1.61.1", LEVELS, LEVEL_IDS, PROVIDERS, normalize, levelOf, rank, atLeast, providerOf, hasNative, modeFor, table, apply, gate, _test: { pressed, shortLabel, findControl } };
   try { window.ORReasoning = api; } catch {}
   try { if (typeof module !== "undefined" && module.exports) module.exports = api; } catch {}
 })();
