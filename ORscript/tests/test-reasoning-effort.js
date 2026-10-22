@@ -1,4 +1,4 @@
-// 1.67.0 — Reasoning effort setting (low · mid · high · max · ultimate) with a
+// 1.67.1 — Reasoning effort setting (low · mid · high · max · ultimate) with a
 // native "think more" mode per provider (src/core/reasoning.js + Settings tray).
 // Run: NODE_PATH=/tmp/harness/node_modules node tests/test-reasoning-effort.js
 "use strict";

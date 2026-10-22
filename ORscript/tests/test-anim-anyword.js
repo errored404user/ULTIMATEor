@@ -1,4 +1,4 @@
-// 1.67.0 — "nearly infinite" animation: thesaurus (synonyms / implied objects → known vocabulary), verb classes (unknown
+// 1.67.1 — "nearly infinite" animation: thesaurus (synonyms / implied objects → known vocabulary), verb classes (unknown
 // motion verbs → body-region primitives), vocabulary() / inspire(), and the Animation Studio "Describe ANY motion" UI
 // (vocabulary meter, Inspire me, motion browser with click-to-insert, live read-back of what the engine understood).
 // Run: NODE_PATH=/tmp/harness/node_modules node tests/test-anim-anyword.js
@@ -9,7 +9,7 @@ let n = 0, failed = 0; const ok = (name, cond, detail) => { n++; if (!cond) { fa
 
 const ctx = {}; new Function("window", read("src/core/animengine.js"))(ctx);
 const E = ctx.ORAnimEngine;
-ok("engine VERSION is 1.67.0", E.VERSION === "1.67.0", E.VERSION);
+ok("engine VERSION is 1.67.1", E.VERSION === "1.67.1", E.VERSION);
 ok("engine exports the any-word layer", typeof E.expandVocabulary === "function" && typeof E.classGesture === "function" && typeof E.vocabulary === "function" && typeof E.inspire === "function" && Array.isArray(E.THESAURUS) && Array.isArray(E.VERB_CLASSES));
 
 // ── 1. thesaurus: every target phrase is itself understood (no entry maps into the void) ──

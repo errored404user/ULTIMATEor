@@ -427,34 +427,38 @@
   }
   // ── 1.67 blocky Roblox-style rig ──
   // Every bone is drawn as a block in the JOINT'S OWN frame (fkFull gives the
-  // world rotation of each joint, so twist / roll show), with the classic
-  // default-avatar colours: yellow head + arms, blue torso, green legs. Faces
-  // are lit per normal and painted far → near; the head gets the face on its
-  // front (-z) so the facing direction is never ambiguous. Left / right keep a
-  // thin blue / orange seam so the sides stay tellable apart.
-  // [joint, y0, y1, halfX, halfZ, colour, extra]  (local studs; y along the bone)
+  // world rotation of each joint, so twist / roll show). Proportions follow the
+  // Rig Builder block rigs scaled to the schematic skeleton (torso 2 wide : limb
+  // 1 : depth 1, head 1.2 cube, LowerTorso a fifth of the torso, feet flat
+  // blocks under the shin) and the blocks wear the standard rig-test decals:
+  // red FRONT / F, blue BACK / B, yellow right side, green left side, white
+  // top / bottom, Medium-stone-grey head with a face. Faces are lit per normal
+  // and painted far → near with back-face culling.
+  // [joint, y0, y1, halfX, halfZ, kind, extra]  (local studs; y along the bone)
   const PARTS_R15 = [
-    ["root", -0.25, 0.22, 0.75, 0.42, "torso"],
-    ["waist", 0.0, 1.2, 0.75, 0.42, "torso"],
+    ["root", -0.2, 0.12, 0.667, 0.333, "torso", { label: "F", back: "B" }],
+    ["waist", -0.08, 1.2, 0.667, 0.333, "torso", { label: "FRONT", back: "BACK" }],
     ["neck", 0.02, 0.82, 0.4, 0.4, "head", { head: true }],
-    ["l_shoulder", -0.03, -0.58, 0.25, 0.3, "arm"], ["l_elbow", -0.03, -0.58, 0.25, 0.3, "arm"], ["l_wrist", -0.03, -0.36, 0.23, 0.28, "arm"],
-    ["r_shoulder", -0.03, -0.58, 0.25, 0.3, "arm"], ["r_elbow", -0.03, -0.58, 0.25, 0.3, "arm"], ["r_wrist", -0.03, -0.36, 0.23, 0.28, "arm"],
-    ["l_hip", -0.03, -0.73, 0.34, 0.36, "leg"], ["l_knee", -0.03, -0.73, 0.34, 0.36, "leg"], ["l_ankle", -0.16, 0.1, 0.34, 0.34, "leg", { zc: -0.16 }],
-    ["r_hip", -0.03, -0.73, 0.34, 0.36, "leg"], ["r_knee", -0.03, -0.73, 0.34, 0.36, "leg"], ["r_ankle", -0.16, 0.1, 0.34, 0.34, "leg", { zc: -0.16 }],
+    ["l_shoulder", -0.02, -0.58, 0.333, 0.333, "limb"], ["l_elbow", -0.02, -0.58, 0.333, 0.333, "limb"], ["l_wrist", -0.02, -0.3, 0.333, 0.333, "limb"],
+    ["r_shoulder", -0.02, -0.58, 0.333, 0.333, "limb"], ["r_elbow", -0.02, -0.58, 0.333, 0.333, "limb"], ["r_wrist", -0.02, -0.3, 0.333, 0.333, "limb"],
+    ["l_hip", -0.02, -0.73, 0.4, 0.36, "limb"], ["l_knee", -0.02, -0.73, 0.4, 0.36, "limb"], ["l_ankle", -0.15, 0.04, 0.4, 0.4, "limb", { zc: -0.06 }],
+    ["r_hip", -0.02, -0.73, 0.4, 0.36, "limb"], ["r_knee", -0.02, -0.73, 0.4, 0.36, "limb"], ["r_ankle", -0.15, 0.04, 0.4, 0.4, "limb", { zc: -0.06 }],
   ];
-  // R6: one torso block, one block per limb (no seams), bigger cube head.
+  // R6: one torso block, one block per limb (no seams, one letter), cube head.
   const PARTS_R6 = [
-    ["waist", -0.42, 1.2, 0.75, 0.42, "torso"],
-    ["neck", 0.02, 0.9, 0.44, 0.44, "head", { head: true }],
-    ["l_shoulder", 0.0, -0.6, 0.25, 0.3, "arm"], ["l_elbow", 0.0, -0.6, 0.25, 0.3, "arm"], ["l_wrist", 0.0, -0.36, 0.25, 0.3, "arm"],
-    ["r_shoulder", 0.0, -0.6, 0.25, 0.3, "arm"], ["r_elbow", 0.0, -0.6, 0.25, 0.3, "arm"], ["r_wrist", 0.0, -0.36, 0.25, 0.3, "arm"],
-    ["l_hip", 0.0, -0.75, 0.34, 0.36, "leg"], ["l_knee", 0.0, -0.75, 0.34, 0.36, "leg"], ["l_ankle", -0.16, 0.08, 0.34, 0.34, "leg", { zc: -0.16 }],
-    ["r_hip", 0.0, -0.75, 0.34, 0.36, "leg"], ["r_knee", 0.0, -0.75, 0.34, 0.36, "leg"], ["r_ankle", -0.16, 0.08, 0.34, 0.34, "leg", { zc: -0.16 }],
+    ["waist", -0.4, 1.2, 0.667, 0.333, "torso", { label: "FRONT", back: "BACK" }],
+    ["neck", 0.02, 0.86, 0.42, 0.42, "head", { head: true }],
+    ["l_shoulder", 0.0, -0.6, 0.333, 0.333, "limb"], ["l_elbow", 0.0, -0.6, 0.333, 0.333, "limb", { nolabel: true }], ["l_wrist", 0.0, -0.35, 0.333, 0.333, "limb", { nolabel: true }],
+    ["r_shoulder", 0.0, -0.6, 0.333, 0.333, "limb"], ["r_elbow", 0.0, -0.6, 0.333, 0.333, "limb", { nolabel: true }], ["r_wrist", 0.0, -0.35, 0.333, 0.333, "limb", { nolabel: true }],
+    ["l_hip", 0.0, -0.75, 0.4, 0.36, "limb"], ["l_knee", 0.0, -0.75, 0.4, 0.36, "limb", { nolabel: true }], ["l_ankle", -0.15, 0.02, 0.4, 0.4, "limb", { zc: -0.06, nolabel: true }],
+    ["r_hip", 0.0, -0.75, 0.4, 0.36, "limb"], ["r_knee", 0.0, -0.75, 0.4, 0.36, "limb", { nolabel: true }], ["r_ankle", -0.15, 0.02, 0.4, 0.4, "limb", { zc: -0.06, nolabel: true }],
   ];
-  const PART_COLOUR = { head: [245, 205, 48], arm: [245, 205, 48], torso: [13, 105, 172], leg: [164, 189, 71] }; // Bright yellow / Bright blue / Br. yellowish green
+  // Rig-test decal colours (BrickColor): Bright red front, Bright blue back, Bright yellow right, Bright green left, Institutional white top/bottom, Medium stone grey head.
+  const SIDE_COLOUR = { front: [196, 40, 28], back: [13, 105, 172], right: [245, 205, 48], left: [75, 151, 75], top: [229, 229, 224], bottom: [205, 205, 200] };
+  const HEAD_COLOUR = [163, 162, 165];
   const CHILD_OF = { root: "waist", waist: "neck", neck: "neck_tip", l_shoulder: "l_elbow", l_elbow: "l_wrist", l_wrist: "l_wrist_tip", r_shoulder: "r_elbow", r_elbow: "r_wrist", r_wrist: "r_wrist_tip", l_hip: "l_knee", l_knee: "l_ankle", l_ankle: "l_ankle_tip", r_hip: "r_knee", r_knee: "r_ankle", r_ankle: "r_ankle_tip" };
-  const FACES = [ // [normal, corner indices] - corners: bit0 x+, bit1 y+, bit2 z+
-    [[1, 0, 0], [1, 3, 7, 5]], [[-1, 0, 0], [0, 4, 6, 2]], [[0, 1, 0], [2, 6, 7, 3]], [[0, -1, 0], [0, 1, 5, 4]], [[0, 0, 1], [4, 5, 7, 6]], [[0, 0, -1], [0, 2, 3, 1]],
+  const FACES = [ // [normal, corner indices, side] - corners: bit0 x+, bit1 y+, bit2 z+ ; semantic frame: +x = rig's right, -z = front
+    [[1, 0, 0], [1, 3, 7, 5], "right"], [[-1, 0, 0], [0, 4, 6, 2], "left"], [[0, 1, 0], [2, 6, 7, 3], "top"], [[0, -1, 0], [0, 1, 5, 4], "bottom"], [[0, 0, 1], [4, 5, 7, 6], "back"], [[0, 0, -1], [0, 2, 3, 1], "front"],
   ];
   const rgba = (c, a, m) => `rgba(${Math.round(Math.min(255, c[0] * (m == null ? 1 : m)))},${Math.round(Math.min(255, c[1] * (m == null ? 1 : m)))},${Math.round(Math.min(255, c[2] * (m == null ? 1 : m)))},${a})`;
   function drawRig(ctx, rig, cam, style) {
@@ -472,36 +476,50 @@
     const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
     const boxes = [];
     for (const part of (r6 ? PARTS_R6 : PARTS_R15)) {
-      const [j, y0, y1, hx, hz, colKey, extra] = part; const w = world[j]; if (!w) continue;
+      const [j, y0, y1, hx, hz, kind, extra] = part; const w = world[j]; if (!w) continue;
       const zc = (extra && extra.zc) || 0;
       const loc = (bx, by, bz) => [bx ? hx : -hx, by ? y1 : y0, zc + (bz ? hz : -hz)];
       const corners = []; const proj = [];
       for (let i = 0; i < 8; i++) { const l = loc(i & 1, i & 2, i & 4); const o = mulV(w.R, l); const q = [w.p[0] + o[0], w.p[1] + o[1], w.p[2] + o[2]]; corners.push(q); proj.push(cam.project(q)); }
       const centre = corners.reduce((a, q) => [a[0] + q[0] / 8, a[1] + q[1] / 8, a[2] + q[2] / 8], [0, 0, 0]);
       const cz = cam.project(centre)[2];
-      const left = j.startsWith("l_"), right = j.startsWith("r_");
       const sel = !!style.selJoint && !ghost && (j === style.selJoint || CHILD_OF[j] === style.selJoint);
-      boxes.push({ j, w, corners, proj, cz, col: PART_COLOUR[colKey], left, right, sel, head: !!(extra && extra.head), hx, hz, y0, y1, zc });
+      const head = kind === "head";
+      boxes.push({ j, w, corners, proj, cz, head, sel, hx, hz, y0, y1, zc, label: head || (extra && extra.nolabel) ? "" : (extra && extra.label) || "F", back: head || (extra && extra.nolabel) ? "" : (extra && extra.back) || "B" });
     }
     boxes.sort((a, b) => b.cz - a.cz); // far → near
+    const labelOn = (b, f, text) => { // decal letter centred on the face, rotated with the face's horizontal edge
+      const pp = f.idx.map((i) => b.proj[i]);
+      const cx = (pp[0][0] + pp[1][0] + pp[2][0] + pp[3][0]) / 4, cy = (pp[0][1] + pp[1][1] + pp[2][1] + pp[3][1]) / 4;
+      // horizontal edge of the face: the two BOTTOM corners that differ only in x (front/back) or z (sides); flipped so the text always reads left → right
+      const hb = f.side === "front" || f.side === "back" ? 1 : 4;
+      const xi = [f.idx.find((i) => !(i & 2) && !(i & hb)), f.idx.find((i) => !(i & 2) && (i & hb))];
+      const a = b.proj[xi[0]], c = b.proj[xi[1]]; let ang = Math.atan2(c[1] - a[1], c[0] - a[0]); if (Math.cos(ang) < 0) ang += Math.PI;
+      const wPx = Math.hypot(c[0] - a[0], c[1] - a[1]);
+      const yi = [f.idx.find((i) => !(i & 2)), f.idx.find((i) => i & 2)]; const hPx = Math.hypot(b.proj[yi[1]][0] - b.proj[yi[0]][0], b.proj[yi[1]][1] - b.proj[yi[0]][1]);
+      const size = Math.min(hPx * 0.55, (wPx * 1.5) / Math.max(1, text.length)); if (size < 5) return;
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang); ctx.font = `700 ${size.toFixed(1)}px ui-sans-serif, system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "rgba(255,255,255,.92)"; ctx.fillText(text, 0, 0); ctx.restore();
+    };
     for (const b of boxes) {
       const faces = [];
-      for (const [nLoc, idx] of FACES) {
+      for (const [nLoc, idx, side] of FACES) {
         const n = mulV(b.w.R, nLoc);
         const fc = idx.reduce((a, i) => [a[0] + b.corners[i][0] / 4, a[1] + b.corners[i][1] / 4, a[2] + b.corners[i][2] / 4], [0, 0, 0]);
         const toCam = cam.persp ? [camPos[0] - fc[0], camPos[1] - fc[1], camPos[2] - fc[2]] : [-cam.depth[0], -cam.depth[1], -cam.depth[2]];
         if (dot(n, toCam) <= 0) continue; // back face
-        faces.push({ idx, n, z: cam.project(fc)[2], nLoc });
+        faces.push({ idx, n, z: cam.project(fc)[2], side });
       }
       faces.sort((u, v) => v.z - u.z);
       for (const f of faces) {
         const pp = f.idx.map((i) => b.proj[i]);
         ctx.beginPath(); ctx.moveTo(pp[0][0], pp[0][1]); for (const q of pp.slice(1)) ctx.lineTo(q[0], q[1]); ctx.closePath();
         if (ghost) { ctx.fillStyle = style.tint || "rgba(255,255,255,.07)"; ctx.fill(); ctx.strokeStyle = style.tint || "rgba(255,255,255,.22)"; ctx.lineWidth = 1; ctx.stroke(); continue; }
-        const lum = 0.58 + 0.42 * Math.max(0, dot(f.n, light));
-        ctx.fillStyle = rgba(b.col, 1, lum); ctx.fill();
-        ctx.strokeStyle = b.sel ? "#ffd166" : b.left ? "rgba(127,178,255,.85)" : b.right ? "rgba(255,159,110,.85)" : "rgba(0,0,0,.45)"; ctx.lineWidth = b.sel ? 2 : 1; ctx.stroke();
-        if (b.head && f.nLoc[2] === -1) { // the face: two eyes + a smile on the front of the head
+        const lum = 0.6 + 0.4 * Math.max(0, dot(f.n, light));
+        ctx.fillStyle = rgba(b.head ? HEAD_COLOUR : SIDE_COLOUR[f.side], 1, lum); ctx.fill();
+        ctx.strokeStyle = b.sel ? "#ffd166" : "rgba(0,0,0,.45)"; ctx.lineWidth = b.sel ? 2 : 1; ctx.stroke();
+        if (!b.head && f.side === "front" && b.label) labelOn(b, f, b.label);
+        else if (!b.head && f.side === "back" && b.back) labelOn(b, f, b.back);
+        if (b.head && f.side === "front") { // the face: two eyes + a smile on the front of the head
           const s = cam.s * (b.proj[0][3] || 1); const at = (x, y) => { const o = mulV(b.w.R, [x, y, b.zc - b.hz - 0.002]); return cam.project([b.w.p[0] + o[0], b.w.p[1] + o[1], b.w.p[2] + o[2]]); };
           const eh = b.y0 + (b.y1 - b.y0) * 0.62, ex = b.hx * 0.38; ctx.fillStyle = "rgba(20,20,26,.92)";
           for (const sx of [-1, 1]) { const e = at(sx * ex, eh); ctx.beginPath(); ctx.ellipse(e[0], e[1], Math.max(1.2, s * 0.045), Math.max(1.6, s * 0.075), 0, 0, Math.PI * 2); ctx.fill(); }
@@ -541,7 +559,7 @@
       const cam = makeCamera(view, box, focus); S.cams.push({ view, box, cam });
       drawGrid(ctx, cam, box);
       ctx.fillStyle = "rgba(255,255,255,.45)"; ctx.font = "10px ui-monospace, Consolas, monospace";
-      ctx.fillText(view === "front" ? "FRONT  (x →)" : view === "side" ? "SIDE  (forward →)" : view === "top" ? "TOP" : view === "back" ? "BACK" : `3D  yaw ${Math.round(cam.yaw)}° pitch ${Math.round(cam.pitch)}°`, box.x + 12, 14);
+      ctx.fillText(view === "front" ? "FRONT  (x →)" : view === "side" ? "SIDE  (forward →)" : view === "top" ? "TOP" : view === "back" ? "BACK  (x ←)" : `3D  yaw ${Math.round(cam.yaw)}° pitch ${Math.round(cam.pitch)}°`, box.x + 12, 14);
       if (i) { ctx.strokeStyle = "rgba(255,255,255,.08)"; ctx.beginPath(); ctx.moveTo(box.x, 0); ctx.lineTo(box.x, H); ctx.stroke(); }
       if (!poses) return;
       const weapon = S.clip.intent && S.clip.intent.weapon, rigType = S.clip.rigType;
@@ -555,7 +573,7 @@
     if (S.clip) {
       ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.font = "10px ui-monospace, Consolas, monospace";
       const hint = S.view === "3d" ? "drag: orbit · wheel: zoom · shift-drag: pan · double-click: reset" : "drag: pan · wheel: zoom";
-      ctx.fillText(`schematic rig preview (${S.clip.rigType}) · t=${fmt(S.t, 2)}s · ${hint} · drag a yellow hand/foot: IK${S.ghost && S.prev ? " · white ghost = previous version" : ""}${S.onion ? " · blue/orange = previous/next key" : ""}${S.arcs ? " · arcs = motion trails" : ""}`, 12, H - 8);
+      ctx.fillText(`blocky rig preview (${S.clip.rigType}) · t=${fmt(S.t, 2)}s · ${hint} · drag a yellow hand/foot: IK${S.ghost && S.prev ? " · white ghost = previous version" : ""}${S.onion ? " · blue/orange = previous/next key" : ""}${S.arcs ? " · arcs = motion trails" : ""}`, 12, H - 8);
       if (S.ikDrag) { ctx.fillStyle = "#ffd166"; ctx.fillText(`IK ${S.ikDrag.eff}: target ${S.ikDrag.target.map((v) => v.toFixed(2)).join(", ")} · ${S.ikDrag.reached ? "reached" : "out of reach by " + fmt(S.ikDrag.distance, 2) + " studs"}`, 12, H - 22); }
     }
   }

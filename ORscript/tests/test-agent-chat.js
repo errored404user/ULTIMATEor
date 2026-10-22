@@ -123,9 +123,9 @@ ok("suggestion chips on empty transcript", gui.includes("Build a spawn lobby"));
 // ── docs + pins ──
 ok("agent README documents the panel", agentReadme.includes("## AI chat panel (1.37.0)") && agentReadme.includes("src/chat.rs"));
 ok("README changelog 1.37.0", readme.includes("**1.37.0 — or-core: AI chat side panel that works in Studio.**"));
-ok("README crate line updated", readme.includes("`or-agent` 1.67.0") && !readme.includes("removed desktop status window"));
-ok("manifest version is 1.67.0", manifest.version === "1.67.0", manifest.version);
-ok("crate / plugin pinned at 1.67.0", /^version = "1\.67\.0"/m.test(cargo) && read("plugin/ORscript.lua").includes('local VERSION = "1.67.0"') && /name = "or-agent"\nversion = "1\.67\.0"/.test(read("agent/Cargo.lock")));
+ok("README crate line updated", readme.includes("`or-agent` 1.67.1") && !readme.includes("removed desktop status window"));
+ok("manifest version is 1.67.1", manifest.version === "1.67.1", manifest.version);
+ok("crate / plugin pinned at 1.67.1", /^version = "1\.67\.1"/m.test(cargo) && read("plugin/ORscript.lua").includes('local VERSION = "1.67.1"') && /name = "or-agent"\nversion = "1\.67\.1"/.test(read("agent/Cargo.lock")));
 ok("no new crates needed", !/^(eventsource|async-openai|openai)/m.test(cargo));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall agent-chat checks passed");

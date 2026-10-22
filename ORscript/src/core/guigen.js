@@ -1,4 +1,4 @@
-/* ORscript GUI Studio — prompt-to-GUI generation engine (1.67.0).
+/* ORscript GUI Studio — prompt-to-GUI generation engine (1.67.1).
  *
  * The GUI counterpart of animengine.js: "describe it → Generate" without a
  * model turn. A plain-words prompt is parsed into an INTENT (kind of screen,
@@ -24,7 +24,7 @@
 (() => {
   "use strict";
   if (window.ORGuiGen) return;
-  const VERSION = "1.67.0";
+  const VERSION = "1.67.1";
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const lc = (s) => String(s == null ? "" : s).toLowerCase();
   const words = (s) => lc(s).replace(/[^a-z0-9+&' ]+/g, " ").split(/\s+/).filter(Boolean);
