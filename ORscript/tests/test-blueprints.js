@@ -121,8 +121,8 @@ ok("mandates teach the blueprint workflow (install -> configure -> extend -> UI 
 ok("luau-parse-check covers the blueprint programs and the library sources", (() => { const t = fs.readFileSync("tests/luau-parse-check.py", "utf8"); return t.includes("BLUEPRINT_COMMANDS") && t.includes("__ORBlueprintLib") && t.includes("blueprint lib"); })());
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README documents the blueprints pack", readme.includes("blueprint_install") && readme.includes("1.31.0") && readme.includes("blueprints-sim.py"));
-ok("manifest version is 1.62.0", manifest.version === "1.62.0", manifest.version);
-ok("plugin / crate pinned at 1.62.0", /1\.62\.0/.test(fs.readFileSync("plugin/ORscript.lua", "utf8")) && /^version = "1\.62\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
+ok("manifest version is 1.63.0", manifest.version === "1.63.0", manifest.version);
+ok("plugin / crate pinned at 1.63.0", /1\.63\.0/.test(fs.readFileSync("plugin/ORscript.lua", "utf8")) && /^version = "1\.63\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
 
 // ── simulator ─────────────────────────────────────────────────────────────────
 const sim = fs.readFileSync("tests/roblox_sim.py", "utf8");

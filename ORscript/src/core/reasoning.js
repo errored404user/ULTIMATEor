@@ -1,11 +1,19 @@
-// ORscript — Reasoning effort (1.62.0)
+// ORscript — Reasoning effort (1.63.0)
 //
 // One setting, five levels: low · mid · high · max · ultimate. It does two things:
 //
 //  1. PROMPT: config.js reads window.__rsThinkingLevel() and appends the matching
 //     THINKING LEVEL block to the system prompt (plan → build → review → verify
 //     rigor grows with the level); main.js adds an evidence gate at high+.
-//  2. NATIVE MODE PER PROVIDER: every AI site has its own switch for "think more"
+//  1b. (1.63) PROMPT POWER-UPS: boosts (force any profile behaviour on at any
+//     level), focus lenses (performance / security / mobile / multiplayer /
+//     clean code / minimal changes / explain / ask-first) and one standing rule.
+//     promptExtras() renders them after the level note; effectiveProfile() is
+//     what Settings shows; gate() honours boosted read-back / proof / review.
+//     ORscript NEVER switches the site's model or think mode for the user
+//     (1.63): the provider table below is kept as a library for API providers
+//     and tests, but main.js no longer calls apply() on its own.
+//  2. NATIVE MODE PER PROVIDER (library only): every AI site has its own switch for "think more"
 //     (ChatGPT Instant / Thinking / Pro, Gemini Fast / Thinking / Pro / Deep Think,
 //     DeepSeek DeepThink, Qwen / Kimi / GLM thinking toggles, Claude extended
 //     thinking, CodeCraft reasoning_effort ...). Each provider declares its modes
@@ -258,33 +266,86 @@
     }
   }
 
+  // ── 1.63 prompt-side power-ups (the site's model picker is NEVER touched) ──
+  // BOOSTS: any profile behaviour can be forced on at any level ("Medium, but
+  // always prove it"). The boosted value is Ultimate's value for that key.
+  const BOOST_TEXT = {
+    plan: "PLAN FIRST: before the first mutating command restate the goal, list assumptions / unknowns and the ordered steps; resolve unknowns by reading the place or the docs, never by guessing.",
+    critique: "CRITIQUE: after writing code list at least five concrete flaws or edge cases (Play vs Edit, respawn, mobile, two players, nil access, races, performance) and fix each before answering.",
+    loops: "REVIEW LOOPS: repeat review → fix up to five times until a pass finds nothing new.",
+    readback: "READ-BACK: after every change read the result back (script_read / inspect_instance / lighting_inspect) and confirm it matches the request before moving on.",
+    proof: "PROOF: nothing is 'done' until start_stop_play + get_console_output (or or_debug) ran clean on what you built.",
+    audit: "AUDIT: run quality_audit / script_analysis on the result and fix what they report.",
+    review: "FINAL REVIEW: before finishing, hunt for remaining flaws one last time and state what you checked.",
+    research: "RESEARCH: never guess an API or property name - web_search / docs lookup first, then use it.",
+  };
+  // FOCUS LENSES: what the review passes must specifically look for.
+  const FOCUS = [
+    { id: "perf", label: "Performance", hint: "frame budget, loops, instance counts, RenderStepped", text: "PERFORMANCE: watch per-frame work (RenderStepped / Heartbeat), unbounded loops, instance counts, :GetChildren() in hot paths, Debris, streaming; prefer events over polling." },
+    { id: "security", label: "Security", hint: "exploit-proof remotes, server authority", text: "SECURITY: the server is the authority - validate every RemoteEvent / RemoteFunction argument (type, range, ownership, rate), never trust client values for money / damage / position, no server secrets on the client." },
+    { id: "mobile", label: "Mobile & UI", hint: "touch, scaling, safe areas", text: "MOBILE & UI: Scale (not Offset) sizing, UIAspectRatio / UIListLayout, touch targets >= 44 px, GuiInset / safe areas, test both phone and desktop viewports, no hover-only interactions." },
+    { id: "multiplayer", label: "Multiplayer", hint: "replication, respawn, late joiners", text: "MULTIPLAYER: think two players + a late joiner - replication direction, CharacterAdded / respawn, PlayerRemoving cleanup, per-player state, race conditions, StreamingEnabled." },
+    { id: "clean", label: "Clean code", hint: "readable, named, commented", text: "CLEAN CODE: descriptive names, small functions, a header comment per script, typed Luau where it helps, no magic numbers, no dead code." },
+    { id: "minimal", label: "Minimal changes", hint: "touch only what the task needs", text: "MINIMAL CHANGES: edit only what the task needs - no rewrites, renames or reformatting of untouched code; prefer script_edit / multi_edit over replacing whole scripts." },
+    { id: "explain", label: "Explain decisions", hint: "why, not just what", text: "EXPLAIN DECISIONS: in the final answer say in 2-3 lines WHY the approach was chosen and what you deliberately did not do." },
+    { id: "ask", label: "Ask before destructive", hint: "confirm deletes / overwrites", text: "ASK FIRST: before deleting instances, overwriting whole scripts or changing DataStore schemas, stop and ask the user - one question, then wait." },
+  ];
+  const FOCUS_IDS = FOCUS.map((f) => f.id);
+  const cleanExtras = (x) => {
+    const e = x && typeof x === "object" ? x : {};
+    const boost = {}; for (const [k] of PROFILE_KEYS) if (e.boost && e.boost[k]) boost[k] = true;
+    const focus = Array.isArray(e.focus) ? e.focus.filter((f) => FOCUS_IDS.includes(f)) : [];
+    const rule = String(e.rule || "").replace(/\s+/g, " ").trim().slice(0, 240);
+    return { boost, focus, rule };
+  };
+  // What the AI actually does at this level once boosts are applied.
+  function effectiveProfile(level, extras) {
+    const lvl = levelOf(level); const e = cleanExtras(extras); const top = LEVELS[LEVELS.length - 1].profile;
+    return PROFILE_KEYS.map(([k, label]) => { const base = lvl.profile[k]; const boosted = !!e.boost[k] && base !== top[k]; return { key: k, label, value: boosted ? top[k] : base, on: !!base || boosted, boosted, forced: !!e.boost[k] }; });
+  }
+  // Prompt additions appended after the level note (config.js) - and shown
+  // verbatim in Settings so the preview is the truth.
+  function promptExtras(level, extras) {
+    const lvl = levelOf(level); const e = cleanExtras(extras); const parts = [];
+    const top = LEVELS[LEVELS.length - 1].profile;
+    const boosted = PROFILE_KEYS.filter(([k]) => e.boost[k] && lvl.profile[k] !== top[k]).map(([k]) => BOOST_TEXT[k]);
+    if (boosted.length) parts.push("BOOSTED (the user forced these on at " + lvl.name + "):\n- " + boosted.join("\n- "));
+    const lenses = e.focus.map((id) => FOCUS.find((f) => f.id === id)).filter(Boolean);
+    if (lenses.length) parts.push("FOCUS LENSES (check these specifically in every review pass):\n- " + lenses.map((f) => f.text).join("\n- "));
+    if (e.rule) parts.push("STANDING RULE (the user's own, always applies): " + e.rule);
+    return parts.length ? "\n" + parts.join("\n") : "";
+  }
+  const extrasCount = (extras) => { const e = cleanExtras(extras); return Object.keys(e.boost).length + e.focus.length + (e.rule ? 1 : 0); };
+
   // Evidence gate for the agent loop (main.js): what a finishing run still owes
   // at this level. runTools = Set of bare tool names used in the run.
   const MUTATE_RE = /^(script_(create|set_source|replace|insert|append|module|new|delete_lines|rename_symbol|deprecations_fix|write|edit)|multi_edit|module_scaffold|blueprint_install|blueprint_configure|remote_scaffold|datastore_profile_scaffold|execute_luau|run_code|create_|insert_|set_property|set_properties|ui_(?!list_tree|audit|inspect|layout_report|export_spec)|gui_(?!hide|show)|fx_|vfx_|lighting_set|atmosphere|animation_(?!validate|compatibility|export)|tween_|write_file|edit_file|build_|place_|terrain_)/;
   const VERIFY_RE = /^(script_read|script_check|script_analysis|script_lint|get_console_output|start_stop_play|or_debug|audit_script_errors|script_diff|project_index_changes|studio_playtest|inspect_instance|inspect|get_properties|or_screenshot|screen_capture|gfx_capture|screenshot_frame|ui_layout_report|ui_audit|quality_audit|read_file|list_children|get_children|playtest_)/;
   const AUDIT_RE = /^(quality_audit|or_debug|start_stop_play|studio_playtest|get_console_output|audit_script_errors|script_analysis|playtest_)/;
-  function gate(level, runTools, state) {
+  function gate(level, runTools, state, extras) {
     const lvl = normalize(level);
     const st = state || {};
     const bare = [...(runTools || [])];
-    if (!bare.length || !atLeast(lvl, "high")) return null;
+    const e = cleanExtras(extras);
+    const wantVerify = atLeast(lvl, "high") || !!e.boost.readback, wantAudit = lvl === "ultimate" || !!e.boost.proof || !!e.boost.audit, wantReview = atLeast(lvl, "max") || !!e.boost.review || !!e.boost.critique;
+    if (!bare.length || !(wantVerify || wantAudit || wantReview)) return null;
     const mutated = bare.some((b) => MUTATE_RE.test(b));
     const verified = bare.some((b) => VERIFY_RE.test(b));
     const audited = bare.some((b) => AUDIT_RE.test(b));
-    if (mutated && !verified && !st.verify) {
+    if (wantVerify && mutated && !verified && !st.verify) {
       return { id: "verify", text: `━━━ REASONING EFFORT ${lvl.toUpperCase()} - VERIFY (System note from OR, not the user) ━━━\nYou changed things in this run but never read the result back. Before the final answer: read back what you changed (script_read / inspect_instance / or_screenshot as fits), fix what is wrong, then report with that evidence. Do not acknowledge this note; do it.` };
     }
-    if (lvl === "ultimate" && mutated && !audited && !st.audit) {
+    if (wantAudit && mutated && !audited && !st.audit) {
       return { id: "audit", text: `━━━ REASONING EFFORT ULTIMATE - PROVE IT (System note from OR, not the user) ━━━\nUltimate effort means nothing ships unproven: run start_stop_play + get_console_output (or or_debug) and, if available, quality_audit / script_analysis on what you built; fix every error or warning they report, then re-check once. Only then the final report, citing the clean result.` };
     }
-    if (atLeast(lvl, "max") && mutated && !st.review) {
+    if (wantReview && mutated && !st.review) {
       return { id: "review", text: `━━━ REASONING EFFORT ${lvl.toUpperCase()} - FINAL REVIEW (System note from OR, not the user) ━━━\nBefore you finish: list ${lvl === "ultimate" ? "five" : "three"} concrete ways this work could still fail (Play vs Edit, respawn, mobile, two players, missing instances, nil access, race conditions, performance). For each: fix it with a command now, or state in one line why it cannot happen here with evidence you already read. Then the final report.` };
     }
     return null;
   }
 
   const api = {
-    PROFILE_KEYS, VERSION: "1.62.0", LEVELS, LEVEL_IDS, PROVIDERS, normalize, levelOf, rank, atLeast, providerOf, hasNative, modeFor, table, apply, gate, _test: { pressed, shortLabel, findControl } };
+    PROFILE_KEYS, VERSION: "1.63.0", LEVELS, LEVEL_IDS, PROVIDERS, FOCUS, FOCUS_IDS, BOOST_TEXT, normalize, levelOf, rank, atLeast, providerOf, hasNative, modeFor, table, apply, gate, cleanExtras, effectiveProfile, promptExtras, extrasCount, _test: { pressed, shortLabel, findControl } };
   try { window.ORReasoning = api; } catch {}
   try { if (typeof module !== "undefined" && module.exports) module.exports = api; } catch {}
 })();

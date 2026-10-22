@@ -1065,7 +1065,7 @@
     beginner:{title:"Getting started (beginner guide)",summary:"Four steps, then talk in plain words: (1) run the ORscript agent app (bin/or-core.exe) and leave it open, (2) open Roblox Studio and switch on Assistant → ⋯ → Manage MCP Servers → 'Studio as MCP server', (3) open a place, (4) press ▶ Start Agent on the OR bar. The bar's getting-started card ticks each step off live and offers three starter requests.",details:["No code is needed: describe the result ('make a coin pickup that saves', 'build a small lobby', 'fix the error in Output'). The AI reads the place first, then builds, playtests and screenshots to verify.","Settings opens in a SIMPLE view (Help, Work mode, Access, everyday toggles). Flip 'Show advanced settings' for Multi-Agent, task list, shortcuts, custom prompt and MCP servers.","Access: Sandbox (default) touches only Studio and the agent workspace. Ask shows an approval card before writes / runs. Full unlocks the whole PC - leave it off while learning.","Settings → Help → 'Getting-started checklist' reopens the live card any time; 'Read the Tutorial' opens the full walkthrough.","Stuck? Red text on the bar names the missing piece in plain words. 'Agent app offline' → run bin/or-core.exe; 'Studio not connected' → the MCP switch in Studio (or Repair Studio link in Settings → MCP servers); 'open a place' → File → New → Baseplate."]},
     design:{title:"Design pack (GUI generation)",summary:"Generate real, responsive Roblox GUI - ScreenGui trees with LocalScripts, remotes and server stubs - from design tokens and screen templates instead of static mock-ups.",details:["design_tokens_set {preset, primary, secondary, surface, text, font, radius} writes ReplicatedStorage.OR_Design (Tokens, UIKit, Responsive ModuleScripts). Presets: midnight, clean_light, candy, neon, royal_gold, forest, horror, ocean, sakura, retro. Re-run it to restyle every generated screen at once; design_tokens_get reads the current set.","ui_screen_generate {kind} builds complete screens: main_menu, hud, shop, inventory, settings, leaderboard, daily_rewards, quest_log, loading, dialog, notification_stack - each with an OR_Controller LocalScript (actions, open keys, gamepad B, typewriter), data feeds (leaderstats pills, health, leaderboard rows, toasts) and, where needed, remotes plus server scripts (shop purchase validation, DataStore-backed daily rewards).","ui_from_spec {name, spec} turns a JSON tree (Window, Panel, Row, Column, Grid, ScrollList, Tabs, Button, Label, ItemCard, Slot, CurrencyPill, ProgressBar, Toggle, Input...) sized in pixels on a 1280x720 canvas into scale-based UI with aspect/size constraints and TextScaled text. ui_component_place adds one component to an existing GUI; ui_export_spec converts any GUI back into a spec.","Retrofit tools: ui_apply_tokens (restyle legacy UI), ui_make_responsive (offset roots -> scale + constraints + OR_Responsive script), ui_gamepad_focus (NextSelection links + selection cursor), ui_states_wire (hover/press states + OR_Controller).","ui_audit {path} scores 0-100 and lists issues (contrast, tiny text, small touch targets, offset-only roots, overlap, static canvases, global ZIndex, missing runtime). ui_preview {path, device} stages a window for or_screenshot; call it again with restore:true before shipping.","Everything lives in Studio as normal instances - no account, no web app, no image-only mock-ups. The Creation work mode focuses these commands and uses them whenever a request involves a menu, HUD, shop or any other screen."]},
     quality:{title:"Quality Gate (1.47 quality pack)",summary:"A measurable finish line for builds, UI, lighting and scripts: style_guide gives the art direction in numbers, brief_set stores the brief, quality_audit scores the place 0-100 with exact fix commands, quality_fix applies the mechanical ones, and Creation mode does not hand off below 85.",details:["style_guide {genre} (medieval, fantasy, scifi, cyberpunk, horror, cozy, nature, desert, winter, tropical, city, cartoon / simulator / obby, candy, industrial, underwater, space - aliases like castle, neon, forest, snow work) returns a palette (6 roles as hex + Color3), materials per surface, a full lighting recipe, UI tokens for design_tokens_set, real-scale notes, motifs, VFX / SFX beats, an avoid list and a 5-step recipe. It needs no Studio.","brief_set {title, genre, palette, scale, must_have, avoid} stores the brief in ServerStorage._ORBrief (palette filled from the guide when omitted); brief_get reads it back when a project continues. style_lighting_apply {genre} writes the recipe into Lighting (Atmosphere, Bloom, ColorCorrection) in one undoable step.","quality_audit {path?, scope?} finds default grey Plastic, one-material / two-colour builds, plain-block-only builds, unanchored parts, Models without PrimaryPart, Part / Model names, loose parts, parts off the brief palette, untouched Lighting, white 1px-border Frames, default fonts, fixed 14px text, Offset-only roots, containers without layouts, wait() / LocalScript-in-server / LocalPlayer-on-server / DataStore-without-pcall / --!strict / print() issues. Each finding carries severity, examples and the command that fixes it; the score is 100 minus weighted deductions, pass is >= 85.","quality_fix {fixes: anchor | primary_part | names | ui} anchors free parts, sets the largest part as PrimaryPart, renames Part -> BrickWall_3 by material + role, strips legacy borders, adds UICorner, TextScaled + UITextSizeConstraint and replaces default fonts; dry_run:true only reports. Colours, materials, lighting and layout stay design decisions."],howTo:["style_guide {genre} before the first build / UI / lighting command","brief_set once; brief_get when continuing","quality_audit before every hand-off; quality_fix, then re-audit until >= 85 and report the score"]},
-    reasoning:{title:"Reasoning effort (Settings → Reasoning effort)",summary:"Five levels - Low, Medium (default), High, Max, Ultimate - set how hard the AI thinks before it acts. The level does two things: it adds a matching REASONING EFFORT block to the system prompt (plan first, self-review loops, read-back and proof before 'done' grow with the level) and, from High up, OR itself gates the final answer: a run that changed things must read them back (High+), gets one final self-review (Max+), and must playtest / console-check / audit what it built (Ultimate). Each AI site also has its own think-more switch (ChatGPT Instant / Thinking / Pro, Gemini Fast / Thinking / Pro / Deep Think, DeepSeek DeepThink, Qwen / Kimi / GLM thinking toggles, Claude extended thinking, CodeCraft reasoning_effort). The setting maps every level to one of those native modes per provider, flips the switch for you at Start and when you change the level, and lets you remap any level per site (or choose 'Leave the site as it is').",details:["Stored as rsThinkingLevel (low | mid | high | max | ultimate); per-site remaps in rsReasoningModes = {provider:{level:mode}}.","Native switching is best effort and label-anchored: if the site's control is not found you get a toast telling you which mode to pick by hand - the prompt part always applies.","Sites without a switch (Arena, NVIDIA NIM, Notion, ClickUp, Vani, Crax, Ox Alpha, Meta AI) are prompt-only.","Picking a work mode in the popup no longer overwrites the effort level."]},
+    reasoning:{title:"Reasoning effort (Settings → Reasoning effort)",summary:"Five levels - Low, Medium (default), High, Max, Ultimate - set how hard the AI thinks before it acts, through the prompt only. The level adds a matching REASONING EFFORT block to the system prompt (plan first, self-review loops, read-back and proof before 'done' grow with the level) and, from High up, OR itself gates the final answer: a run that changed things must read them back (High+), gets one final self-review (Max+), and must playtest / console-check / audit what it built (Ultimate). On top of the level you can pin individual behaviours on (boosts), add focus lenses (performance, security, mobile, multiplayer, clean code, minimal changes, explain, ask-first) and one standing rule. ORscript never changes the AI site's model or think-more switch - your model stays as you set it.",details:["Stored as rsThinkingLevel (low | mid | high | max | ultimate); boosts, focus lenses and the standing rule live in rsEffortExtras = {boost:{}, focus:[], rule:\"\"}.","Boosts: click any behaviour chip in the effort profile (Plan, Critique, Loops, Read-back, Proof, Audit, Review, Research) to pin it on at every level - e.g. Medium with Proof pinned still playtests before done. Boosted read-back / proof / review also arm the evidence gate.","Focus lenses: Performance, Security, Mobile & UI, Multiplayer, Clean code, Minimal changes, Explain decisions, Ask before destructive - each adds a precise checklist to every review pass.","Standing rule: one line of your own (\"Always use typed Luau and ModuleScripts\") injected with the effort block on every turn.","Prompt-only since 1.63: ORscript never switches the site's model or think mode (ChatGPT Instant / Thinking / Pro, Gemini, DeepSeek, Claude, CodeCraft reasoning_effort). Whatever you pick on the site stays. \"What the AI is told (advanced)\" shows the exact block that is injected.","Picking a work mode in the popup no longer overwrites the effort level."]},
     guibrief:{title:"GUI brief (custom message for GUI requests)",summary:"When your own message asks for a GUI (make a shop UI, redesign my HUD, build this menu like the screenshot) ORscript sends the AI an 'ORscript GUI BRIEF' message right after it (appended to the first command result, or as its own message when the AI answers without acting - your message itself is never edited): a six-step build protocol (understand, art direction with tokens, one-shot ui_build_spec, wiring with remotes, verification with ui_layout_report + screenshots + quality_audit, hand-off). If a reference image is attached or mentioned, a REFERENCE READ step makes the AI measure the image (regions as % of the screen, hex palette, typography, states) and rebuild it 1:1, then compare its screenshot against the reference until they match. Editing an existing GUI switches to a read-first protocol (ui_export_spec, change only what was asked).",details:["Toggle: OR menu → GUI brief (on by default, saved as rsGuiBrief). Off = your message goes out untouched.","Detection is local and instant: GUI nouns (gui, ui, hud, menu, shop, inventory, popup, settings menu, health bar...) plus a build / edit verb; questions ('how do I make a gui?'), pure scripting requests and messages that say 'no gui' are left alone.","Reference images: attach the screenshot in the chat as usual (ChatGPT, Claude, Gemini... any multimodal provider); ORscript detects the attachment thumbnail in the composer or words like 'like this screenshot', 'from the image', '1:1', 'mockup'.","The brief is a normal visible message in the chat; GUI Studio hand-offs are never double-briefed."]},
     gui:{title:"GUI Studio (1.48 visual GUI builder)",summary:"A Paint-style designer for Roblox GUIs: open it from the bar (window icon, Ctrl+Shift+G), draw Frames / buttons / labels / images / scrolling lists on a phone, tablet, desktop or console screen, drop finished components (toggle, slider, window, tabs, hotbar, currency, health bar, shop card...), pick a theme preset, then Build in Studio (ui_build_spec runs directly) or Send to AI - the spec, Luau and your intent go to the chat and the AI wires the behaviour.",details:["Describe → Generate (1.61): type what you want in the bar above the canvas - \"a dark shop with 6 items and a search bar\", \"settings with tabs Gameplay, Audio, Controls\", \"neon main menu with buttons Play, Shop, Settings, Quit\" - and press Enter; the studio builds it locally from its 104-screen library (no AI turn). Refine with feedback (bigger, neon, 8 items, add a timer, move it to the top-left, rename it to Mega Store, no close button), Variation for another take, score + notes line, and the prompt / feedback trail travels with Send to AI.","Tools: Select (drag, resize with 8 handles, multi-select with marquee or Shift, arrows nudge 1 px / 10 px with Shift), Frame, Text label, Button, Image, Image button, TextBox, Scrolling frame and Component. Snap grid, smart guides, align / distribute / group, undo / redo, duplicate, z-order, visibility per node, device presets with the 58 px topbar inset preview.","Props panel edits Name, UDim2 Size / Position, AnchorPoint presets, colours (tokens or hex), transparency, UICorner / UIStroke / UIGradient / UIPadding / list / grid layouts, text + font + align, image id + ScaleType, scrolling, ZIndex, Visible, Active and actions (open / close / toggle / destroy a target, fire a remote, message, tween effect).","Theme tab: 10 token presets (midnight, clean_light, candy, neon, royal_gold, forest, horror, ocean, sakura, retro) re-colour every token-bound node live. Code tab: the JSON spec (editable, round-trips) and generated Luau (StarterGui builder script).","Extra GUI commands (1.48 pack): ui_build_spec {spec, replace}, ui_export_spec {path} (Studio -> designer import), ui_component {kind, parent, ...}, ui_align, ui_distribute, ui_anchor_preset, ui_to_scale, ui_responsive_fix, ui_text_fit, ui_zorder_fix, ui_tokens_apply {preset | tokens}, ui_tween {path, effect}, ui_state_toggle {button, target, action}, ui_find {query}, ui_bulk_set, ui_screen_create, ui_layout_report {path}."],howTo:["Open GUI Studio from the bar or Ctrl+Shift+G; describe the screen and press Generate, pick a template (HUD, main menu, shop, inventory, settings, leaderboard, quests, dialogue, loading, rewards) or start empty","Design, choose a theme, then Build in Studio for an instant preview or Send to AI with your intent so the behaviour gets scripted","Afterwards: ui_responsive_fix + ui_layout_report {path}, then quality_audit"]},
     gfx:{title:"Thumbnail & Icon Studio (gfx pack)",summary:"Stage, light, pose and photograph real game thumbnails (1920x1080) and icons (512x512) inside Roblox Studio - the finished PNG is cropped, downloaded and attached to the chat - instead of a static AI image you cannot edit.",details:["gfx_stage_create {style, kind} builds a cyclorama stage far above the map (floor, cove, backdrop, Key/Fill/Rim SpotLights) and applies the style lighting + post stack: cinematic, cartoony, horror, neon, clean or chroma (green screen). Lighting and the camera are snapshotted so gfx_teardown leaves no trace.","gfx_subject_add {source, pose, face, slot} puts a character on stage: 'dummy' (R15), 'r6', 'player:USERID' / 'user:Name' (the real avatar) or any model path. Poses: hero, point, jump, wave, scared, victory, run, think, sit, dab, fight, crossed_arms. Faces on dynamic heads: happy, shocked, angry, scared, smirk, determined, laughing, wink (face_id for classic decal heads). gfx_pose re-poses; gfx_prop_add floats a glowing sword / pet / chest beside the subject.","gfx_camera {preset} frames the shot: hero_low, three_quarter, front, closeup, top_down, dutch, wide, icon (+ fov / pitch / yaw / roll / distance_scale). gfx_overlay {title, subtitle, badge, logo_image} adds a huge outlined gradient title in the style font with 16:9 / 1:1 masks, safe-area and thirds guides. gfx_fx adds sparkles / embers / smoke / confetti / snow / magic / rays; gfx_lighting fine-tunes bloom, saturation, DOF, fog, time and the rig lights.","gfx_capture photographs the viewport through the Studio MCP, hides the guides, crops to the aspect box and returns the PNG (thumbnail 1920x1080, icon 512x512 or custom) - downloaded by the browser and attached to the chat so the model can judge and iterate. gfx_brief writes an art-director brief, an image-generation prompt and a CTR checklist for chats that can paint.","Workflow: gfx_brief -> gfx_stage_create -> gfx_subject_add (+ gfx_prop_add) -> gfx_overlay -> gfx_fx -> gfx_camera -> gfx_capture (judge, iterate) -> gfx_teardown. Maximise the 3D viewport first: the capture is only as sharp as the viewport."]},
@@ -5182,7 +5182,6 @@
     let modeGateSent = false; // 1.38.0: one evidence gate per run
     const effortGate = { verify: false, audit: false, review: false }; // 1.60: one of each per run
     A.runTools = new Set();
-    try { if (window.__rsApplyReasoning) window.__rsApplyReasoning("loop"); } catch {}
     let toolTurns = A.steeringStep || 0;
     // Re-send the command list after this many successful tool calls. Kept high
     // so the reminder does not bloat the context too often.
@@ -5439,7 +5438,7 @@
           // max+ get one final self-review; ultimate must playtest / audit.
           if (!A.stop && toolTurns >= 1 && typeof ORReasoning !== "undefined") {
             let g = null;
-            try { g = ORReasoning.gate(window.__rsThinkingLevel && window.__rsThinkingLevel(), A.runTools, effortGate); } catch {}
+            try { g = ORReasoning.gate(window.__rsThinkingLevel && window.__rsThinkingLevel(), A.runTools, effortGate, window.__rsEffortExtras && window.__rsEffortExtras()); } catch {}
             if (g && !effortGate[g.id]) {
               effortGate[g.id] = true;
               diag("loop.effortGate", { id: g.id, level: (() => { try { return window.__rsThinkingLevel(); } catch { return "?"; } })(), tools: [...A.runTools].slice(0, 20) });
@@ -6352,7 +6351,6 @@
       if (!alive()) return;
       // 1.60: put the site's own think-more switch where the effort level says
       // before the first prompt goes out (bounded: ~1 s worst case).
-      try { if (window.__rsApplyReasoning) await Promise.race([window.__rsApplyReasoning("start"), sleep(1500)]); } catch {}
       if (!alive()) return;
       if (!A.toolList.length) {
         const eng = activeEngine();
@@ -7748,7 +7746,11 @@
     // "default" = mid). Per-provider native-mode overrides live in rsReasoningModes.
     const normEffort = (v) => { try { return ORReasoning.normalize(v); } catch { return /^(low|mid|high|max|ultimate)$/.test(String(v || "")) ? v : "mid"; } };
     let thinkingLevel = "mid";
-    let reasoningModes = {}; // { providerId: { level: modeId | "off" } }
+    let reasoningModes = {}; // { providerId: { level: modeId | "off" } } (legacy; the site is never switched since 1.63)
+    // 1.63 prompt power-ups: boosts (force a profile behaviour on at any level),
+    // focus lenses and one standing rule. Prompt-only - stored separately.
+    let effortExtras = { boost: {}, focus: [], rule: "" };
+    const normExtras = (x) => { try { return ORReasoning.cleanExtras(x); } catch { return { boost: {}, focus: [], rule: "" }; } };
     try {
       chrome.storage.local.get(["rsThinkingLevel", "rsReasoningModes"], (r) => {
         if (r && r.rsThinkingLevel) {
@@ -7759,16 +7761,39 @@
         try { window.__rsReasoningModes = () => reasoningModes; } catch {}
         if (!menuEl.hidden) buildMenu();
       });
+      chrome.storage.local.get(["rsEffortExtras"], (r) => {
+        if (r && r.rsEffortExtras && typeof r.rsEffortExtras === "object") effortExtras = normExtras(r.rsEffortExtras);
+        try { window.__rsEffortExtras = () => effortExtras; } catch {}
+        if (!menuEl.hidden) buildMenu();
+      });
     } catch {}
     try { window.__rsThinkingLevel = () => thinkingLevel; } catch {}
     try { window.__rsReasoningModes = () => reasoningModes; } catch {}
+    try { window.__rsEffortExtras = () => effortExtras; } catch {}
+    function setEffortExtras(patch, opts) {
+      const next = Object.assign({}, effortExtras, patch || {});
+      effortExtras = normExtras(next);
+      try { chrome.storage.local.set({ rsEffortExtras: effortExtras }); } catch {}
+      try { window.__rsEffortExtras = () => effortExtras; } catch {}
+      if (!(opts && opts.noRebuild)) { try { buildMenu(); } catch {} }
+    }
+    function toggleEffortBoost(key) {
+      const boost = Object.assign({}, effortExtras.boost); if (boost[key]) delete boost[key]; else boost[key] = true;
+      setEffortExtras({ boost });
+      try { const lbl = (ORReasoning.PROFILE_KEYS.find((k) => k[0] === key) || [key, key])[1]; toast(boost[key] ? lbl + " boosted on at every level" : lbl + " back to the level default"); } catch {}
+    }
+    function toggleEffortFocus(id) {
+      const focus = effortExtras.focus.includes(id) ? effortExtras.focus.filter((f) => f !== id) : effortExtras.focus.concat(id);
+      setEffortExtras({ focus });
+      try { const f = ORReasoning.FOCUS.find((x) => x.id === id); toast("Focus lens " + (f ? f.label : id) + (focus.includes(id) ? " on" : " off")); } catch {}
+    }
+    try { window.__rsSetEffortExtras = (patch) => setEffortExtras(patch); } catch {}
     function setThinkingLevel(v, opts) {
       thinkingLevel = normEffort(v);
       try { chrome.storage.local.set({ rsThinkingLevel: thinkingLevel }); } catch {}
       try { window.__rsThinkingLevel = () => thinkingLevel; } catch {}
       try { buildMenu(); } catch {}
-      if (!(opts && opts.silent)) { try { toast("Reasoning effort: " + ORReasoning.levelOf(thinkingLevel).name); } catch {} }
-      try { applyNativeReasoning("setting"); } catch {}
+      if (!(opts && opts.silent)) { try { toast("Reasoning effort: " + ORReasoning.levelOf(thinkingLevel).name + " (prompt only - your model stays as it is)"); } catch {} }
     }
     function setReasoningModeOverride(providerId, level, modeId) {
       const lvl = normEffort(level);
@@ -7780,14 +7805,17 @@
       try { chrome.storage.local.set({ rsReasoningModes: reasoningModes }); } catch {}
       try { window.__rsReasoningModes = () => reasoningModes; } catch {}
       try { buildMenu(); } catch {}
-      if (lvl === thinkingLevel) { try { applyNativeReasoning("override"); } catch {} }
     }
     // Flip the site's own "think more" control to match the effort level. Best
     // effort, label-anchored, never destructive; the user is told when the
     // control could not be found so they can flip it by hand.
     var _nativeApplied = null; // { key, at, ok } (var: read by reasoningSectionHtml, no TDZ)
+    // 1.63: ORscript never changes the site's model / think mode on its own. The
+    // effort setting is prompt-only; this routine is inert unless a page
+    // explicitly opts in (window.__rsAllowSiteSwitch === true, never set by the UI).
     async function applyNativeReasoning(reason) {
       if (typeof ORReasoning === "undefined") return null;
+      if (window.__rsAllowSiteSwitch !== true) { _nativeApplied = { key: P.id + ":" + thinkingLevel + ":prompt", at: Date.now(), ok: true, how: "prompt-only", reason: "site-switch-disabled" }; return _nativeApplied; }
       let mode;
       try { mode = ORReasoning.modeFor(P.id, thinkingLevel, reasoningModes); } catch { return null; }
       if (!mode || !mode.rule || mode.rule.kind === "none") { _nativeApplied = { key: P.id + ":" + mode.id, at: Date.now(), ok: true, how: "prompt-only" }; return _nativeApplied; }
@@ -8700,42 +8728,40 @@
       if (typeof ORReasoning === "undefined") return "";
       const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
       const lvl = ORReasoning.levelOf(thinkingLevel);
-      const prov = ORReasoning.providerOf(P.id);
-      const native = ORReasoning.hasNative(P.id);
-      const rows = ORReasoning.table(P.id, reasoningModes);
-      const cur = rows.find((r) => r.level === thinkingLevel) || rows[1];
-      const selectFor = (r) => `<select class="rs-effort-mode" data-effort-mode="${r.level}" aria-label="${esc(prov.name || P.displayName)} mode for ${esc(r.name)} effort">`
-        + r.options.map((o) => `<option value="${esc(o.id)}" ${r.mode.id === o.id ? "selected" : ""}>${esc(o.label)}${o.id === ORReasoning.providerOf(P.id).map[r.level] ? " (default)" : ""}</option>`).join("")
-        + `<option value="off" ${r.mode.id === "off" ? "selected" : ""}>Leave the site as it is</option></select>`;
-      const applied = _nativeApplied && _nativeApplied.key && _nativeApplied.key.indexOf(P.id + ":" + thinkingLevel + ":") === 0 ? _nativeApplied : null;
-      // 1.61 redesign: a glowing effort dial (five stops on one rail) + a live
-      // "effort profile" card - what the AI will actually do at this level - and a
-      // one-line site status. The per-site mode picker moved into an Advanced-only
-      // disclosure; the switch itself stays automatic.
       const idx = Math.max(0, ORReasoning.LEVELS.findIndex((l) => l.id === lvl.id));
-      const prof = lvl.profile || {};
-      const chips = (ORReasoning.PROFILE_KEYS || []).map(([k, label]) => { const v = prof[k]; return `<span class="rs-effort-chip ${v ? "on" : ""}" data-chip="${k}"><i></i><b>${esc(label)}</b><small>${esc(v ? v : "off")}</small></span>`; }).join("");
-      const siteState = native ? (applied ? (applied.ok ? (applied.how === "already" ? "already on" : applied.how === "prompt-only" ? "prompt" : "switched") : "switch by hand") : "auto") : "prompt only";
+      const ex = effortExtras || { boost: {}, focus: [], rule: "" };
+      // 1.61 dial (five stops on one rail) + live effort profile. 1.63: the
+      // profile chips are BOOST toggles (force a behaviour on at any level),
+      // plus focus lenses, one standing rule and a verbatim prompt preview.
+      // Prompt-only: the site's model picker is never touched.
+      const prof = ORReasoning.effectiveProfile(lvl.id, ex);
+      const chips = prof.map((c) => `<button type="button" class="rs-effort-chip ${c.on ? "on" : ""} ${c.boosted ? "boost" : ""} ${c.forced && !c.boosted ? "forced" : ""}" data-effort-boost="${c.key}" aria-pressed="${c.forced ? "true" : "false"}" title="${esc(c.boosted ? c.label + " is boosted on at every level - click to go back to the level default" : c.on ? c.label + " is part of " + lvl.name + (c.forced ? " (also boosted - click to unpin)" : " - click to pin it on at every level") : c.label + " is off at " + lvl.name + " - click to force it on")}"><i></i><b>${esc(c.label)}</b><small>${esc(c.on ? c.value : "off")}</small></button>`).join("");
+      const lenses = ORReasoning.FOCUS.map((f) => `<button type="button" class="rs-effort-lens ${ex.focus.includes(f.id) ? "on" : ""}" data-effort-focus="${f.id}" aria-pressed="${ex.focus.includes(f.id) ? "true" : "false"}" title="${esc(f.hint)}">${esc(f.label)}</button>`).join("");
+      const nExtra = ORReasoning.extrasCount(ex);
+      let note = ""; try { note = (RS.REASONING_NOTES || {})[lvl.id] || ""; } catch {}
+      const preview = `━━━ REASONING EFFORT: ${lvl.id.toUpperCase()} (user setting) ━━━\n${note}${ORReasoning.promptExtras(lvl.id, ex)}`;
       return `<section class="rs-menu-sec rs-effort-sec">
-              <div class="rs-sec-label"><span>Reasoning effort</span><span class="rs-sec-state">${esc(lvl.name)} · ${esc(lvl.short)}</span></div>
+              <div class="rs-sec-label"><span>Reasoning effort</span><span class="rs-sec-state">${esc(lvl.name)} · ${esc(lvl.short)}${nExtra ? ` · +${nExtra}` : ""}</span></div>
               <div class="rs-effort-dial" data-level="${esc(lvl.id)}" style="--p:${idx}">
                 <div class="rs-effort-rail"><i class="rs-effort-fill"></i></div>
                 <div class="rs-effort-stops" role="radiogroup" aria-label="Reasoning effort">
-                  ${ORReasoning.LEVELS.map((l, i) => `<button type="button" class="rs-effort-stop ${thinkingLevel === l.id ? "on" : ""} ${i < idx ? "lit" : ""}" data-effort="${l.id}" role="radio" aria-checked="${thinkingLevel === l.id ? "true" : "false"}" title="${esc(l.name)} — ${esc(l.sub)}"><i class="rs-effort-dot"></i><span class="rs-effort-stop-name">${esc(l.name)}</span></button>`).join("")}
+                  ${ORReasoning.LEVELS.map((l, i) => `<button type="button" class="rs-effort-stop ${thinkingLevel === l.id ? "on" : ""} ${i < idx ? "lit" : ""}" data-effort="${l.id}" role="radio" aria-checked="${thinkingLevel === l.id ? "true" : "false"}" title="${esc(l.name)} - ${esc(l.sub)}"><i></i><span>${esc(l.name)}</span></button>`).join("")}
                 </div>
               </div>
               <div class="rs-effort-profile" data-level="${esc(lvl.id)}">
                 <div class="rs-effort-profile-head"><b>${esc(lvl.name)}</b><span>${esc(lvl.short)}</span><em>${idx + 1}/5</em></div>
                 <div class="rs-effort-profile-sub">${esc(lvl.sub)}</div>
                 <div class="rs-effort-chips">${chips}</div>
+                <div class="rs-effort-hint">Click a behaviour to pin it on at every level.</div>
               </div>
-              <div class="rs-effort-site ${native ? "native" : "prompt"}" title="${esc(prov.note)}">
+              <div class="rs-effort-lenses" role="group" aria-label="Focus lenses"><span class="rs-effort-lenses-k">Focus</span>${lenses}</div>
+              <label class="rs-effort-rule"><span>Standing rule</span><input type="text" class="rs-effort-rule-in" data-effort-rule="1" maxlength="240" value="${esc(ex.rule)}" placeholder="Always … (optional, e.g. 'use typed Luau and ModuleScripts')"></label>
+              <div class="rs-effort-site prompt" title="Reasoning effort steers the AI through the prompt only. ORscript never switches ${esc(P.displayName)}'s model or think mode - whatever you picked on the site stays.">
                 <span class="rs-effort-site-name">On ${esc(P.displayName)}</span>
-                <span class="rs-effort-site-mode">${native ? esc(cur.mode.label) : "prompt steering"}</span>
-                <span class="rs-effort-site-state ${applied && !applied.ok ? "warn" : ""}">${esc(siteState)}</span>
-                ${native ? `<button type="button" class="rs-effort-site-go" data-effort-apply="1" title="Switch the site's think-more control to ${esc(cur.mode.label)} now">↻</button>` : ""}
+                <span class="rs-effort-site-mode">prompt steering only</span>
+                <span class="rs-effort-site-state">your model stays</span>
               </div>
-              ${native ? `<details class="rs-effort-all rs-adv"><summary>Site switch (advanced): which ${esc(P.displayName)} mode each level uses</summary><div class="rs-menu-note">${esc(prov.note)}</div>${rows.map((r) => `<label class="rs-effort-line ${r.level === thinkingLevel ? "on" : ""}"><span>${esc(r.name)}</span>${selectFor(r)}</label>`).join("")}<div class="rs-set-row"><button type="button" data-effort-reset="1">Reset ${esc(P.displayName)} to defaults</button></div></details>` : ""}
+              <details class="rs-effort-preview rs-adv"><summary>What the AI is told (advanced)</summary><pre class="rs-effort-pre">${esc(preview)}</pre></details>
             </section>`;
     }
     function buildMenu() {
@@ -9104,20 +9130,18 @@
           try { const nb = menuEl.querySelector(`[data-effort="${to}"]`); if (nb) nb.focus(); } catch {}
         });
       });
-      menuEl.querySelectorAll("select[data-effort-mode]").forEach(sel=>{
-        sel.addEventListener("click", (e) => e.stopPropagation());
-        sel.addEventListener("change", () => {
-          const lvl = sel.dataset.effortMode, v = sel.value;
-          let def = ""; try { def = ORReasoning.providerOf(P.id).map[lvl]; } catch {}
-          setReasoningModeOverride(P.id, lvl, v === def ? null : v);
-          try { toast(ORReasoning.levelOf(lvl).name + " effort on " + P.displayName + ": " + (v === "off" ? "leave the site as it is" : (sel.options[sel.selectedIndex] || {}).text || v)); } catch {}
-        });
+      menuEl.querySelectorAll("[data-effort-boost]").forEach(btn=>{
+        btn.addEventListener("click", (e) => { e.stopPropagation(); toggleEffortBoost(btn.dataset.effortBoost); });
       });
-      menuEl.querySelectorAll("[data-effort-reset]").forEach(btn=>{
-        btn.addEventListener("click", (e) => { e.stopPropagation(); const cur = Object.assign({}, reasoningModes); delete cur[P.id]; reasoningModes = cur; try { chrome.storage.local.set({ rsReasoningModes: reasoningModes }); } catch {} try { window.__rsReasoningModes = () => reasoningModes; } catch {} try { buildMenu(); toast(P.displayName + " reasoning modes reset"); } catch {} try { applyNativeReasoning("override"); } catch {} });
+      menuEl.querySelectorAll("[data-effort-focus]").forEach(btn=>{
+        btn.addEventListener("click", (e) => { e.stopPropagation(); toggleEffortFocus(btn.dataset.effortFocus); });
       });
-      menuEl.querySelectorAll("[data-effort-apply]").forEach(btn=>{
-        btn.addEventListener("click", (e) => { e.stopPropagation(); applyNativeReasoning("manual").then(() => { try { buildMenu(); } catch {} }); });
+      menuEl.querySelectorAll("input[data-effort-rule]").forEach(inp=>{
+        inp.addEventListener("click", (e) => e.stopPropagation());
+        inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); inp.blur(); } });
+        const commit = () => { const v = String(inp.value || "").trim(); if (v === (effortExtras.rule || "")) return; setEffortExtras({ rule: v }); try { toast(v ? "Standing rule saved" : "Standing rule cleared"); } catch {} };
+        inp.addEventListener("change", commit);
+        inp.addEventListener("blur", commit);
       });
       menuEl.querySelectorAll("[data-perm]").forEach(btn=>{
         btn.addEventListener("click", () => {
