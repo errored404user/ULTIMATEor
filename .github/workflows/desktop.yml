@@ -27,14 +27,23 @@ jobs:
         run: |
           set -o pipefail
           (cargo build --release --locked --message-format=short 2>&1 || cargo build --release --message-format=short 2>&1) | tee build.log
-      - name: Annotate compiler warnings (dead code)
+      - name: Annotate compiler warnings (dead code and everything else)
         if: always()
         run: |
           set +e
           [ -f build.log ] || exit 0
-          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.log | grep -iE 'never used|never read|never constructed|unused|dead_code' | head -60 | while IFS= read -r line; do
+          # cargo colours its output even under tee; strip ANSI first or ": warning" never matches.
+          esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" build.log > build.plain
+          total=$(grep -cE '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain)
+          dead=$(grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | grep -ciE 'never used|never read|never constructed|unused|dead_code')
+          echo "::notice title=or-agent compiler warnings::$total warning(s), $dead dead-code"
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | sort -u | head -10 | while IFS= read -r line; do
             f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
             echo "::warning file=ORscript/agent/$f,line=$l::$msg"
+          done
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | sort -u | sed -n '11,20p' | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::notice file=ORscript/agent/$f,line=$l::$msg"
           done
           exit 0
       - name: Annotate compiler errors
@@ -87,14 +96,23 @@ jobs:
         run: |
           set -o pipefail
           (cargo build --release --locked --message-format=short 2>&1 || cargo build --release --message-format=short 2>&1) | tee build.log
-      - name: Annotate compiler warnings (dead code)
+      - name: Annotate compiler warnings (dead code and everything else)
         if: always()
         run: |
           set +e
           [ -f build.log ] || exit 0
-          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.log | grep -iE 'never used|never read|never constructed|unused|dead_code' | head -60 | while IFS= read -r line; do
+          # cargo colours its output even under tee; strip ANSI first or ": warning" never matches.
+          esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" build.log > build.plain
+          total=$(grep -cE '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain)
+          dead=$(grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | grep -ciE 'never used|never read|never constructed|unused|dead_code')
+          echo "::notice title=or-agent compiler warnings::$total warning(s), $dead dead-code"
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | sort -u | head -10 | while IFS= read -r line; do
             f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
             echo "::warning file=ORscript/agent/$f,line=$l::$msg"
+          done
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | sort -u | sed -n '11,20p' | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::notice file=ORscript/agent/$f,line=$l::$msg"
           done
           exit 0
       - name: Annotate compiler errors

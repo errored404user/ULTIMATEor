@@ -486,7 +486,7 @@ impl Theme {
         v.override_text_color = Some(self.text);
         v.panel_fill = self.bg;
         v.window_fill = self.panel;
-        v.window_stroke = Stroke::new(1.0, self.border2);
+        v.window_stroke = Stroke::new(1.0_f32, self.border2);
         v.window_rounding = Rounding::same(14.0);
         v.menu_rounding = Rounding::same(10.0);
         v.extreme_bg_color = self.bg2;
@@ -496,36 +496,36 @@ impl Theme {
         v.warn_fg_color = self.warn;
         v.error_fg_color = self.bad;
         v.selection.bg_fill = self.accent.linear_multiply(0.35);
-        v.selection.stroke = Stroke::new(1.0, self.accent);
+        v.selection.stroke = Stroke::new(1.0_f32, self.accent);
 
         v.widgets.noninteractive.bg_fill = self.panel;
         v.widgets.noninteractive.weak_bg_fill = self.panel;
-        v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, self.border);
-        v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, self.text);
+        v.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, self.border);
+        v.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, self.text);
         v.widgets.noninteractive.rounding = Rounding::same(10.0);
 
         v.widgets.inactive.bg_fill = self.panel2;
         v.widgets.inactive.weak_bg_fill = self.panel2;
-        v.widgets.inactive.bg_stroke = Stroke::new(1.0, self.border);
-        v.widgets.inactive.fg_stroke = Stroke::new(1.0, self.text);
+        v.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, self.border);
+        v.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, self.text);
         v.widgets.inactive.rounding = Rounding::same(10.0);
 
         v.widgets.hovered.bg_fill = self.border;
         v.widgets.hovered.weak_bg_fill = self.border;
-        v.widgets.hovered.bg_stroke = Stroke::new(1.0, self.border2);
-        v.widgets.hovered.fg_stroke = Stroke::new(1.5, self.text);
+        v.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, self.border2);
+        v.widgets.hovered.fg_stroke = Stroke::new(1.5_f32, self.text);
         v.widgets.hovered.rounding = Rounding::same(10.0);
 
         v.widgets.active.bg_fill = self.border2;
         v.widgets.active.weak_bg_fill = self.border2;
-        v.widgets.active.bg_stroke = Stroke::new(1.0, self.accent);
-        v.widgets.active.fg_stroke = Stroke::new(1.5, self.text);
+        v.widgets.active.bg_stroke = Stroke::new(1.0_f32, self.accent);
+        v.widgets.active.fg_stroke = Stroke::new(1.5_f32, self.text);
         v.widgets.active.rounding = Rounding::same(10.0);
 
         v.widgets.open.bg_fill = self.panel2;
         v.widgets.open.weak_bg_fill = self.panel2;
-        v.widgets.open.bg_stroke = Stroke::new(1.0, self.accent);
-        v.widgets.open.fg_stroke = Stroke::new(1.0, self.text);
+        v.widgets.open.bg_stroke = Stroke::new(1.0_f32, self.accent);
+        v.widgets.open.fg_stroke = Stroke::new(1.0_f32, self.text);
         v.widgets.open.rounding = Rounding::same(10.0);
 
         style.visuals = v;
@@ -1145,7 +1145,7 @@ impl App {
         let t = self.theme;
         egui::TopBottomPanel::top("titlebar")
             .exact_height(40.0)
-            .frame(egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).inner_margin(Margin::symmetric(12.0, 0.0)))
+            .frame(egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).inner_margin(Margin::symmetric(12.0, 0.0)))
             .show(ctx, |ui| {
                 let rect = ui.max_rect();
                 let drag = ui.interact(rect, egui::Id::new("titlebar-drag"), Sense::click_and_drag());
@@ -1211,7 +1211,7 @@ impl App {
         egui::SidePanel::left("sidebar")
             .exact_width(228.0)
             .resizable(false)
-            .frame(egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).inner_margin(Margin::symmetric(12.0, 14.0)))
+            .frame(egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).inner_margin(Margin::symmetric(12.0, 14.0)))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     self.logo_mark(ui, 38.0);
@@ -1255,7 +1255,7 @@ impl App {
                 }
                 ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
                     let s = &self.shared;
-                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
+                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
                     frame.show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         ui.label(RichText::new("BRIDGE").small().strong().color(t.muted));
@@ -1295,7 +1295,7 @@ impl App {
         let channels = s.roblox_clients.load(Ordering::Relaxed) + s.local_clients.load(Ordering::Relaxed);
 
         if let Some(f) = fatal.clone() {
-            let frame = egui::Frame::none().fill(t.bad.linear_multiply(0.15)).stroke(Stroke::new(1.0, t.bad)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
+            let frame = egui::Frame::none().fill(t.bad.linear_multiply(0.15)).stroke(Stroke::new(1.0_f32, t.bad)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.label(RichText::new("Bridge failed to start").strong().color(t.bad));
@@ -1305,7 +1305,7 @@ impl App {
         }
 
         // Hero
-        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border2)).rounding(Rounding::same(16.0)).inner_margin(Margin::same(18.0));
+        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border2)).rounding(Rounding::same(16.0)).inner_margin(Margin::same(18.0));
         frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
@@ -1339,7 +1339,7 @@ impl App {
             let ext_ok = channels > 0;
             let all_ok = fatal.is_none() && listening && ext_ok && studio_proc && studio_link && ws_ready;
             if !all_ok || self.settings.show_checklist {
-                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, if all_ok { t.ok.linear_multiply(0.5) } else { t.border2 })).rounding(Rounding::same(14.0)).inner_margin(Margin::same(14.0));
+                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, if all_ok { t.ok.linear_multiply(0.5) } else { t.border2 })).rounding(Rounding::same(14.0)).inner_margin(Margin::same(14.0));
                 frame.show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.horizontal(|ui| {
@@ -1354,10 +1354,10 @@ impl App {
                             let (rect, _) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::hover());
                             if done {
                                 ui.painter().circle_filled(rect.center(), 8.0, t.ok);
-                                ui.painter().line_segment([rect.center() + Vec2::new(-4.0, 0.0), rect.center() + Vec2::new(-1.0, 3.0)], Stroke::new(2.0, t.accent_ink));
-                                ui.painter().line_segment([rect.center() + Vec2::new(-1.0, 3.0), rect.center() + Vec2::new(4.5, -3.5)], Stroke::new(2.0, t.accent_ink));
+                                ui.painter().line_segment([rect.center() + Vec2::new(-4.0, 0.0), rect.center() + Vec2::new(-1.0, 3.0)], Stroke::new(2.0_f32, t.accent_ink));
+                                ui.painter().line_segment([rect.center() + Vec2::new(-1.0, 3.0), rect.center() + Vec2::new(4.5, -3.5)], Stroke::new(2.0_f32, t.accent_ink));
                             } else {
-                                ui.painter().circle_stroke(rect.center(), 8.0, Stroke::new(1.6, t.warn));
+                                ui.painter().circle_stroke(rect.center(), 8.0, Stroke::new(1.6_f32, t.warn));
                             }
                             ui.label(RichText::new(title).strong().color(if done { t.text } else { t.warn }));
                             if !done { ui.label(RichText::new(hint).small().color(t.muted)); }
@@ -1401,7 +1401,7 @@ impl App {
         ];
         ui.columns(4, |cols| {
             for (i, (title, value, sub, color)) in cards.iter().enumerate() {
-                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::same(14.0));
+                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::same(14.0));
                 frame.show(&mut cols[i], |ui| {
                     ui.set_width(ui.available_width());
                     ui.horizontal(|ui| {
@@ -1422,7 +1422,7 @@ impl App {
                     let ui = &mut cols[0];
                     ui.label(RichText::new("Studio viewport").size(16.0).strong().color(t.text));
                     ui.add_space(6.0);
-                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
+                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
                     frame.show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         match &self.snapshot {
@@ -1457,7 +1457,7 @@ impl App {
                         ("Settings", "Theme, tray behaviour, workspace, MCP launcher", Page::Settings),
                     ];
                     for (title, sub, page) in items {
-                        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::symmetric(12.0, 10.0));
+                        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::symmetric(12.0, 10.0));
                         let resp = frame.show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             ui.horizontal(|ui| {
@@ -1485,7 +1485,7 @@ impl App {
                         });
                     });
                     ui.add_space(6.0);
-                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
+                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
                     frame.show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         let list = s.activity.lock().unwrap_or_else(|e| e.into_inner()).clone();
@@ -1575,7 +1575,7 @@ impl App {
         ui.add_space(8.0);
 
         // ── split: file list | editor ──
-        let panel_frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
+        let panel_frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
         egui::SidePanel::left("explorer-tree")
             .frame(panel_frame)
             .resizable(true)
@@ -1614,8 +1614,8 @@ impl App {
                                 p.rect_filled(icon, Rounding::same(2.0), t.accent.linear_multiply(0.9));
                                 p.rect_filled(egui::Rect::from_min_size(icon.min, Vec2::new(6.0, 3.0)), Rounding::same(1.0), t.accent);
                             } else {
-                                p.rect_stroke(icon.shrink2(Vec2::new(2.0, 0.0)), Rounding::same(2.0), Stroke::new(1.2, t.muted));
-                                p.line_segment([icon.left_center() + Vec2::new(4.0, 0.0), icon.right_center() - Vec2::new(4.0, 0.0)], Stroke::new(1.0, t.muted));
+                                p.rect_stroke(icon.shrink2(Vec2::new(2.0, 0.0)), Rounding::same(2.0), Stroke::new(1.2_f32, t.muted));
+                                p.line_segment([icon.left_center() + Vec2::new(4.0, 0.0), icon.right_center() - Vec2::new(4.0, 0.0)], Stroke::new(1.0_f32, t.muted));
                             }
                             let size_text = if is_dir { String::new() } else { human_size(size) };
                             let size_w = if is_dir { 0.0 } else { 62.0 };
@@ -1637,7 +1637,7 @@ impl App {
                 });
             });
 
-        let editor_frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
+        let editor_frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
         egui::CentralPanel::default()
             .frame(egui::Frame::none().inner_margin(Margin { left: 10.0, right: 0.0, top: 0.0, bottom: 0.0 }))
             .show_inside(ui, |ui| {
@@ -1729,7 +1729,7 @@ impl App {
         let selected = self.selected_tool.clone();
 
         // ── split: catalog | run panel ──
-        let list_frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
+        let list_frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
         let mut pick: Option<(String, String)> = None;
         egui::SidePanel::left("tools-list")
             .frame(list_frame)
@@ -1743,7 +1743,7 @@ impl App {
                     if show_studio {
                         section_header(ui, t, "ROBLOX STUDIO", studio.len(), t.accent);
                         if studio_total == 0 {
-                            let frame = egui::Frame::none().fill(t.warn.linear_multiply(0.10)).stroke(Stroke::new(1.0, t.warn.linear_multiply(0.6))).rounding(Rounding::same(8.0)).inner_margin(Margin::same(8.0));
+                            let frame = egui::Frame::none().fill(t.warn.linear_multiply(0.10)).stroke(Stroke::new(1.0_f32, t.warn.linear_multiply(0.6))).rounding(Rounding::same(8.0)).inner_margin(Margin::same(8.0));
                             frame.show(ui, |ui| {
                                 ui.set_width(ui.available_width());
                                 ui.label(RichText::new(if mcp_alive { "The helper is running but reported no tools yet." } else { "Studio tools appear once the MCP helper is running." }).small().color(t.text));
@@ -1778,7 +1778,7 @@ impl App {
             self.selected_tool = Some((engine, name));
         }
 
-        let detail_frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border2)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
+        let detail_frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border2)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
         egui::CentralPanel::default()
             .frame(egui::Frame::none().inner_margin(Margin { left: 10.0, right: 0.0, top: 0.0, bottom: 0.0 }))
             .show_inside(ui, |ui| {
@@ -1848,7 +1848,7 @@ impl App {
                     });
                     ui.add_space(8.0);
                     ui.label(RichText::new("OUTPUT").small().strong().color(t.muted));
-                    let out_frame = egui::Frame::none().fill(t.bg).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(8.0)).inner_margin(Margin::same(8.0));
+                    let out_frame = egui::Frame::none().fill(t.bg).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(8.0)).inner_margin(Margin::same(8.0));
                     out_frame.show(ui, |ui| {
                         ui.set_min_size(ui.available_size());
                         egui::ScrollArea::vertical().id_salt("tool-output").auto_shrink([false, false]).show(ui, |ui| {
@@ -1873,7 +1873,7 @@ impl App {
 
         egui::ScrollArea::vertical().id_salt("servers").auto_shrink([false, false]).show(ui, |ui| {
             // Roblox Studio MCP
-            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
+            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
@@ -1911,7 +1911,7 @@ impl App {
             ui.add_space(8.0);
 
             // Local filesystem
-            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
+            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 let ready = s.workspace_ready.load(Ordering::Relaxed);
@@ -1941,7 +1941,7 @@ impl App {
             ui.add_space(8.0);
 
             // Extension channels
-            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
+            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.label(RichText::new("Extension channels").size(16.0).strong().color(t.text));
@@ -1992,7 +1992,7 @@ impl App {
                     }
                     if ui.small_button("Log file").clicked() { open_external(&log_path().to_string_lossy()); }
                 });
-                let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
+                let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
                 frame.show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.set_min_height(avail - 50.0);
@@ -2027,7 +2027,7 @@ impl App {
                         }
                     });
                 });
-                let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
+                let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
                 frame.show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.set_min_height(avail - 50.0);
@@ -2314,7 +2314,7 @@ impl eframe::App for App {
                     .anchor(egui::Align2::RIGHT_BOTTOM, Vec2::new(-20.0, -20.0))
                     .show(ctx, |ui| {
                         let color = if ok { t.ok } else { t.bad };
-                        egui::Frame::none().fill(t.panel2).stroke(Stroke::new(1.0, color)).rounding(Rounding::same(10.0)).inner_margin(Margin::symmetric(14.0, 10.0)).show(ui, |ui| {
+                        egui::Frame::none().fill(t.panel2).stroke(Stroke::new(1.0_f32, color)).rounding(Rounding::same(10.0)).inner_margin(Margin::symmetric(14.0, 10.0)).show(ui, |ui| {
                             ui.horizontal(|ui| { status_dot(ui, color); ui.label(RichText::new(text).color(t.text)); });
                         });
                     });
@@ -2584,7 +2584,7 @@ impl App {
         let mut answer: Option<bool> = None;
         egui::Frame::none()
             .fill(t.panel2)
-            .stroke(Stroke::new(1.0, t.warn))
+            .stroke(Stroke::new(1.0_f32, t.warn))
             .rounding(Rounding::same(8.0))
             .inner_margin(Margin::symmetric(10.0, 8.0))
             .show(ui, |ui| {
@@ -2620,13 +2620,13 @@ impl App {
             .default_width(width)
             .width_range(320.0..=760.0)
             .resizable(true)
-            .frame(egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)))
+            .frame(egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)))
             .show(ctx, |ui| {
                 egui::TopBottomPanel::top("chat-head")
                     .frame(egui::Frame::none().fill(t.bg2).inner_margin(Margin::symmetric(12.0, 10.0)))
                     .show_inside(ui, |ui| self.chat_header(ui, false));
                 egui::TopBottomPanel::bottom("chat-composer")
-                    .frame(egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).inner_margin(Margin::symmetric(12.0, 10.0)))
+                    .frame(egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).inner_margin(Margin::symmetric(12.0, 10.0)))
                     .show_inside(ui, |ui| self.chat_composer(ui, ctx));
                 egui::CentralPanel::default()
                     .frame(egui::Frame::none().fill(t.bg).inner_margin(Margin::symmetric(12.0, 8.0)))
@@ -2659,7 +2659,7 @@ impl App {
             .show_inside(ui, |ui| {
                 let rect = column_rect(ui);
                 ui.allocate_ui_at_rect(rect, |ui| {
-                    egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(12.0, 10.0)).show(ui, |ui| {
+                    egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(12.0, 10.0)).show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         self.chat_composer(ui, &ctx);
                     });
@@ -2671,7 +2671,7 @@ impl App {
                 let rect = column_rect(ui);
                 ui.allocate_ui_at_rect(rect, |ui| {
                     ui.set_min_height(rect.height());
-                    egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(12.0, 8.0)).show(ui, |ui| {
+                    egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(12.0, 8.0)).show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         self.chat_header(ui, true);
                     });
@@ -2750,7 +2750,7 @@ impl App {
 
     fn chat_setup(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
-        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border2)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
+        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border2)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
         frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.label(RichText::new("PROVIDER").small().strong().color(t.muted));
@@ -2859,7 +2859,7 @@ impl App {
                 "Write a typed DataStore module with session locking and autosave, save it to ServerScriptService.",
             ];
             for s in suggestions {
-                if ui.add(egui::Button::new(RichText::new(s).small().color(t.text)).fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(10.0)).wrap()).clicked() {
+                if ui.add(egui::Button::new(RichText::new(s).small().color(t.text)).fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(10.0)).wrap()).clicked() {
                     self.chat_input = s.to_string();
                     self.chat_pending_focus = true;
                 }
@@ -2876,7 +2876,7 @@ impl App {
                     ChatRole::User => {
                         // Right-aligned bubble; text inside stays left-aligned.
                         ui.with_layout(Layout::top_down(Align::Max), |ui| {
-                            egui::Frame::none().fill(t.accent.linear_multiply(0.16)).stroke(Stroke::new(1.0, t.accent.linear_multiply(0.45))).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(14.0, 10.0)).show(ui, |ui| {
+                            egui::Frame::none().fill(t.accent.linear_multiply(0.16)).stroke(Stroke::new(1.0_f32, t.accent.linear_multiply(0.45))).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(14.0, 10.0)).show(ui, |ui| {
                                 ui.set_max_width(avail * 0.8);
                                 ui.with_layout(Layout::top_down(Align::Min), |ui| {
                                     ui.add(egui::Label::new(RichText::new(&msg.text).size(15.0).color(t.text)).wrap());
@@ -2889,7 +2889,7 @@ impl App {
                         });
                     }
                     ChatRole::Assistant => {
-                        egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(14.0, 12.0)).show(ui, |ui| {
+                        egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(14.0, 12.0)).show(ui, |ui| {
                             ui.set_width(avail - 4.0);
                             ui.spacing_mut().item_spacing.y = 6.0;
                             ui.horizontal(|ui| {
@@ -2989,7 +2989,7 @@ fn pick_default_model(list: &[String]) -> Option<String> {
 
 fn chat_tool_card(ui: &mut egui::Ui, t: Theme, card: &mut ChatToolCard) {
     let (dot, state) = match card.ok { None => (t.warn, "running"), Some(true) => (t.ok, "ok"), Some(false) => (t.bad, "error") };
-    egui::Frame::none().fill(t.panel2).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(8.0)).inner_margin(Margin::symmetric(8.0, 6.0)).show(ui, |ui| {
+    egui::Frame::none().fill(t.panel2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(8.0)).inner_margin(Margin::symmetric(8.0, 6.0)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
             status_dot(ui, dot);
@@ -3035,7 +3035,7 @@ fn chat_rich_text(ui: &mut egui::Ui, t: Theme, text: &str) {
                 _ => (String::new(), seg.to_string()),
             };
             let body = body.trim_end_matches('\n').to_string();
-            egui::Frame::none().fill(t.bg).stroke(Stroke::new(1.0, t.border2)).rounding(Rounding::same(8.0)).inner_margin(Margin::symmetric(10.0, 8.0)).show(ui, |ui| {
+            egui::Frame::none().fill(t.bg).stroke(Stroke::new(1.0_f32, t.border2)).rounding(Rounding::same(8.0)).inner_margin(Margin::symmetric(10.0, 8.0)).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(if lang.is_empty() { "code" } else { lang.as_str() }).small().color(t.muted));
@@ -3059,11 +3059,11 @@ fn chat_rich_text(ui: &mut egui::Ui, t: Theme, text: &str) {
 fn status_dot(ui: &mut egui::Ui, color: Color32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
     ui.painter().circle_filled(rect.center(), 4.0, color);
-    ui.painter().circle_stroke(rect.center(), 5.5, Stroke::new(1.0, color.linear_multiply(0.35)));
+    ui.painter().circle_stroke(rect.center(), 5.5, Stroke::new(1.0_f32, color.linear_multiply(0.35)));
 }
 
 fn tag(ui: &mut egui::Ui, text: &str, color: Color32) {
-    let frame = egui::Frame::none().fill(color.linear_multiply(0.18)).stroke(Stroke::new(1.0, color.linear_multiply(0.6))).rounding(Rounding::same(999.0)).inner_margin(Margin::symmetric(7.0, 2.0));
+    let frame = egui::Frame::none().fill(color.linear_multiply(0.18)).stroke(Stroke::new(1.0_f32, color.linear_multiply(0.6))).rounding(Rounding::same(999.0)).inner_margin(Margin::symmetric(7.0, 2.0));
     frame.show(ui, |ui| { ui.label(RichText::new(text).small().color(color)); });
 }
 
@@ -3109,9 +3109,9 @@ fn tool_row(ui: &mut egui::Ui, t: Theme, tool: &ToolInfo, selected: bool) -> egu
 
 fn pill_widget(t: Theme, text: &str, primary: bool) -> egui::Button<'static> {
     if primary {
-        egui::Button::new(RichText::new(text).strong().color(t.accent_ink)).fill(t.accent).stroke(Stroke::new(1.0, t.accent2)).rounding(Rounding::same(999.0))
+        egui::Button::new(RichText::new(text).strong().color(t.accent_ink)).fill(t.accent).stroke(Stroke::new(1.0_f32, t.accent2)).rounding(Rounding::same(999.0))
     } else {
-        egui::Button::new(RichText::new(text).color(t.text)).fill(t.panel2).stroke(Stroke::new(1.0, t.border2)).rounding(Rounding::same(999.0))
+        egui::Button::new(RichText::new(text).color(t.text)).fill(t.panel2).stroke(Stroke::new(1.0_f32, t.border2)).rounding(Rounding::same(999.0))
     }
 }
 
@@ -3131,7 +3131,7 @@ fn window_button(ui: &mut egui::Ui, glyph: WinGlyph, color: Color32, t: Theme) -
         ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
     }
     let c = rect.center();
-    let stroke = Stroke::new(1.4, if resp.hovered() { color } else { t.muted });
+    let stroke = Stroke::new(1.4_f32, if resp.hovered() { color } else { t.muted });
     let r = 4.5;
     match glyph {
         WinGlyph::Minimize => { ui.painter().line_segment([egui::pos2(c.x - r, c.y), egui::pos2(c.x + r, c.y)], stroke); }
@@ -3152,7 +3152,7 @@ fn row_status(ui: &mut egui::Ui, t: Theme, label: &str, on: bool) {
 }
 
 fn settings_section(ui: &mut egui::Ui, t: Theme, title: &str, add: impl FnOnce(&mut egui::Ui)) {
-    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
+    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.label(RichText::new(title).size(16.0).strong().color(t.text));
@@ -3164,7 +3164,7 @@ fn settings_section(ui: &mut egui::Ui, t: Theme, title: &str, add: impl FnOnce(&
 
 /// Simple vector icons for the navigation (no emoji fonts needed).
 fn nav_icon(p: &egui::Painter, r: egui::Rect, page: Page, c: Color32) {
-    let s = Stroke::new(1.6, c);
+    let s = Stroke::new(1.6_f32, c);
     let (l, top, w, h) = (r.left(), r.top(), r.width(), r.height());
     let pt = |x: f32, y: f32| egui::pos2(l + x * w, top + y * h);
     match page {
@@ -3186,7 +3186,7 @@ fn nav_icon(p: &egui::Painter, r: egui::Rect, page: Page, c: Color32) {
             p.line_segment([pt(0.4, 0.12), pt(0.5, 0.25)], s);
         }
         Page::Tools => {
-            p.line_segment([pt(0.2, 0.8), pt(0.7, 0.3)], Stroke::new(2.4, c));
+            p.line_segment([pt(0.2, 0.8), pt(0.7, 0.3)], Stroke::new(2.4_f32, c));
             p.circle_stroke(pt(0.72, 0.28), w * 0.2, s);
         }
         Page::Servers => {
@@ -3202,7 +3202,7 @@ fn nav_icon(p: &egui::Painter, r: egui::Rect, page: Page, c: Color32) {
             p.line_segment([pt(0.5, 0.66), pt(0.75, 0.66)], s);
         }
         Page::Settings => {
-            p.circle_stroke(pt(0.5, 0.5), w * 0.36, Stroke::new(2.2, c));
+            p.circle_stroke(pt(0.5, 0.5), w * 0.36, Stroke::new(2.2_f32, c));
             p.circle_stroke(pt(0.5, 0.5), w * 0.13, s);
         }
     }
