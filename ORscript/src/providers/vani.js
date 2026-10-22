@@ -32,8 +32,8 @@ const RSProvider = (() => {
   const RE = {
     contextLimit: /context.{0,20}(limit|exceeded|window)|conversation.{0,20}too long|(token|context|input).{0,12}(limit|too long)|message is too long/i,
     tooLong: /conversation .{0,20}(too long|getting too long)|message is too long|too many tokens/i,
-    busy: /rate limit|too many requests|try again (later|in)|temporarily unavailable|server is busy|high demand|overloaded/i,
-    allowance: /allowance (used up|is used up|exhausted|exceeded)|(used up|exhausted) (your|the) (free |shared |guest )?allowance|out of (free )?(messages|allowance)|(^|[^0-9.])0% of your free allowance|no (free )?allowance left/i,
+    busy: /rate limit|too many requests|try again (later|in)|temporarily unavailable|server is busy|high demand|overloaded|concurrency_limit|one (active )?(reply|conversation|request) at a time|one reply at a time/i,
+    allowance: /allowance (used up|is used up|exhausted|exceeded)|(used up|exhausted) (your|the) (free |shared |guest )?allowance|out of (free )?(messages|allowance)|(^|[^0-9.])0% of your free allowance|no (free )?allowance left|free allowance is used up|weekly_limit/i,
     continueBtn: /^(continue|continue generating|keep going)$/i,
     // Composer chrome we must never treat as a transcript row.
     chrome: /^(new chat|see plans and pricing|sign up for free|log in|back to vani\.ai|decline|accept|try vani)$/i,
@@ -42,9 +42,12 @@ const RSProvider = (() => {
   const timings = {
     GEN_IDLE_MS: 600,
     REASON_IDLE_MS: 4000,
-    WARMUP_MS: 12000,
-    REASON_NOREPLY_MS: 25000,
-    STABLE_MS: 3000,
+    // 1.66: Vani's guest models (GPT-6.1 Sol / GPT-6 Luna) reason for a long
+    // time before the first token; the network tap reports the open stream as
+    // "generating", these only govern the DOM fallback.
+    WARMUP_MS: 40000,
+    REASON_NOREPLY_MS: 60000,
+    STABLE_MS: 2500,
     RESPONSE_TIMEOUT_MS: 300000,
   };
 
@@ -693,12 +696,12 @@ const RSProvider = (() => {
     // Guest chat has a shared allowance and an unknown per-message cap: use the
     // compact system prompt (same as ChatGPT) so the bootstrap always lands.
     sysMaxChars: 14000,
-    promptExtra: "Vani Chat rules: this is a plain markdown chat with NO native tools - the ONLY way to act is to write the command as text. Every command goes in ONE fenced code block: three backticks, the word json, a newline, then exactly {\"command\":\"name\",\"params\":{...}} and a closing three backticks (execute_luau uses the ###LUA### markers inside a plain fenced block instead). Never say you cannot run code or use JSON blocks - you only have to WRITE the block; the extension on this page executes it and pastes the result back as the next user message. One command per reply, then stop and wait for the result. Guest sessions are not saved - never rely on an earlier page load. If Vani reports that the free allowance is used up, stop and tell the user to log in.",
+    promptExtra: "Vani Chat rules: this is a plain markdown chat with NO native tools - the ONLY way to act is to write the command as text. Every command goes in ONE fenced code block: three backticks, the word json, a newline, then exactly {\"command\":\"name\",\"params\":{...}} and a closing three backticks (execute_luau uses the ###LUA### markers inside a plain fenced block instead). Never say you cannot run code or use JSON blocks - you only have to WRITE the block; the extension on this page executes it and pastes the result back as the next user message. One command per reply, then stop and wait for the result. Do NOT search the web, do NOT create a Document / Slides / Design / canvas / artifact and do NOT propose Vani tools - everything goes in the chat reply as text. Keep prose to one short line per reply; the command block is the work. Guest sessions are not saved - never rely on an earlier page load. If Vani reports that the free allowance is used up, stop and tell the user to log in.",
     timings,
     thinkingSel: ".reasoning, [class*='thinking' i], [class*='reason' i], [class*='thought' i], [data-testid*='reasoning' i], details summary",
     init({ diag: d } = {}) {
       if (d) diag = d;
-      try { document.documentElement.setAttribute("data-rs-vani-ver", "2026-10b"); } catch {}
+      try { document.documentElement.setAttribute("data-rs-vani-ver", "2026-10c"); } catch {}
       diag("vani.init", { hasEditor: !!getEditor(), login: loginGatePresent(), path: location.pathname });
     },
     allItems, invalidateItems, isUserItem, isAssistantItem, itemText, classifyText,

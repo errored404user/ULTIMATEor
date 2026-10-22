@@ -74,10 +74,13 @@ const RSStreamNet = (() => {
     if (c.rid !== lastRid) { lastRid = c.rid; lastTextLen = (c.text || "").length; lastGrowAt = now; }
     const len = (c.text || "").length;
     if (len !== lastTextLen) { lastTextLen = len; lastGrowAt = now; }
-    // Nothing decoded yet: a matched request in flight is "warming up" (bounded
-    // to 30 s so an undecodable dialect can never pin the watcher); a "maybe"
-    // says nothing and the DOM decides.
-    if (!len && !c.err) return (!c.done && c.matched && now - (c.startedAt || now) < 30000) ? "streaming" : null;
+    // Nothing decoded yet: a matched request whose connection is still open is
+    // the model thinking (Vani's reasoning models sit silent for a minute or
+    // more before the first token) - report "streaming" so the core never calls
+    // the turn empty while the stream is alive. Bounded to 150 s so an
+    // undecodable dialect can never pin the watcher; a "maybe" says nothing and
+    // the DOM decides.
+    if (!len && !c.err) return (!c.done && c.matched && now - (c.startedAt || now) < 150000) ? "streaming" : null;
     if (c.done) return "done";
     if (c.err && !len) return "done";
     const stall = Number(opts.stallMs) || (c.kind === "ws" ? 4000 : 8000);
@@ -96,13 +99,19 @@ const RSStreamNet = (() => {
   // (isTooLongMsg → context_limit; the rest → provider_error / busy).
   function describe(e, site) {
     if (!e) return null;
-    const s = e.status, who = site || "The site";
+    const s = e.status, who = site || "The site", body = String(e.text || "");
+    // Body-level reasons beat the bare status: Vani answers 429 for BOTH "weekly
+    // allowance used up" and "one active reply per connection"; the wording
+    // below matches the adapters' allowance / busy / too-long detectors.
+    if (/weekly_limit|allowance|quota|out of credits|usage limit|insufficient_(credits|quota|balance)/i.test(body)) return `${who} says the free allowance is used up (HTTP ${s || "?"}) — log in or wait for the reset, then retry.`;
+    if (/concurrency_limit|concurrent|already (running|active|generating)|one active|in progress/i.test(body)) return `${who} allows one reply at a time per connection (HTTP ${s || "?"}) — try again in a moment.`;
+    if (/context.{0,20}(length|limit|window)|too many tokens|token limit|maximum context|message is too long|payload too large|request entity too large/i.test(body)) return `${who} says the message is too long (HTTP ${s || "?"}) — the next turn is sent shorter.`;
     if (s === 401 || s === 403) return `${who} rejected the request (HTTP ${s}: not signed in / no access) — log in, then retry.`;
     if (s === 402) return `${who} says the AI allowance is used up (HTTP 402) — upgrade or wait, then retry.`;
     if (s === 413) return `${who} says the message is too long (HTTP 413) — the next turn is sent shorter.`;
     if (s === 429) return `${who} is rate limiting (HTTP 429: too many requests) — try again later.`;
     if (s >= 500) return `${who} server error (HTTP ${s}) — temporarily unavailable, retrying.`;
-    return `${who} request failed: ${e.text}`;
+    return `${who} request failed: ${body}`;
   }
   return { latest, current, replyText, genState, error, describe, markSent, fragmentOf, enabled, _consumed: () => consumedRid };
 })();

@@ -105,7 +105,11 @@
   }
 
   // ── delta extraction ─────────────────────────────────────────────────────
-  const DONE_TYPE_RE = /^(done|finish(ed)?|complete[d]?|end|stop|message_stop|message_end|response\.completed|response\.done|finish-message|finish-step|finish|final|turn_end|end_of_stream)$/i;
+  // End-of-message types. Dotted / underscored / dashed vendor forms are listed
+  // explicitly (Vani `message.complete`, `response.done`, …) - NOT a generic
+  // "ends with done" rule, because `text-end` / `content_block_stop` /
+  // `finish-step` close a PART, not the message.
+  const DONE_TYPE_RE = /^(done|finish(ed)?|complete[d]?|end|stop|message_stop|message_end|response\.completed|response\.done|finish-message|finish|final|turn_end|end_of_stream|(message|response|conversation|chat|stream|generation|completion|turn|run|answer)[._-](complete[d]?|done|end(ed)?|stop(ped)?|finish(ed)?|final))$/i;
   const ERROR_TYPE_RE = /^(error|failure|failed)$/i;
   const TEXT_DELTA_TYPE_RE = /^(text-delta|text_delta|content_block_delta|response\.output_text\.delta|output_text\.delta|delta|token|text|content|answer|message_delta|chunk|data)$/i;
   const SKIP_KEY_RE = /^(reasoning|reasoning_content|reasoning_text|thinking|thought|thoughts|tool_calls|tool_call|function_call|citations|sources|metadata|usage|id|model|created|object|role|name|type|index|status|conversation_id|conversationId|messageId|message_id|parent_id|timestamp|time|ts)$/;
@@ -143,7 +147,7 @@
     if (type === "content_block_delta" && o.delta) { if (typeof o.delta.text === "string") out.text += o.delta.text; return out; }
     if (/^response\.output_text\.delta$|^output_text\.delta$/.test(type) && typeof o.delta === "string") { out.text += o.delta; return out; }
     if (/^text[-_]delta$/i.test(type)) { out.text += str(o.delta) || str(o.textDelta) || str(o.text) || str(o.content) || ""; return out; }
-    if (/^(text|text-start|text-end|reasoning|reasoning-delta|reasoning-start|reasoning-end|tool-call|tool-input|tool-result|source|file|start|start-step|step-start|step-finish|message_start|content_block_start|content_block_stop|ping)$/i.test(type) && !/^text$/i.test(type)) return out;
+    if (/^(text|text-start|text-end|reasoning|reasoning-delta|reasoning-start|reasoning-end|tool-call|tool-input|tool-result|source|file|start|start-step|step-start|step-finish|message_start|message\.start|content_block_start|content_block_stop|ping|usage|heartbeat|keepalive|tool\.[a-z_.-]+|citation|citations|sources|search\.[a-z_.-]+)$/i.test(type) && !/^text$/i.test(type)) return out;
     // Generic objects: direct text-bearing keys first.
     const direct = str(o.delta) || str(o.textDelta) || str(o.token) || str(o.output_text) || str(o.text) || str(o.answer) || str(o.content) || str(o.response) || str(o.reply) || str(o.output) || str(o.result) || str(o.completion) || str(o.generated_text);
     if (direct != null) {
