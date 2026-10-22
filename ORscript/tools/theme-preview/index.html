@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en" data-rs-theme="night" data-rs-glass="true" data-meme-effects="full">
+<head>
+<meta charset="utf-8">
+<title>ORscript theme preview harness</title>
+<!-- The gear toggles the settings tray (opens above the bar, like the extension). Click any ♪ pill (or Start/Stop) to hear the theme's sound pack; browsers need one click before audio starts. -->
+<link rel="stylesheet" href="/overlay.css">
+<style>
+  body{margin:0;min-height:100vh;background:#1e1e22 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M0 39.5h40M39.5 0v40' stroke='%23303036' stroke-width='1'/%3E%3C/svg%3E");font:14px system-ui,sans-serif;color:#ddd}
+  #picker{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:2147483647;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;max-width:900px;background:rgba(0,0,0,.72);padding:8px 10px;border-radius:10px;border:1px solid #444}
+  #picker button{font:12px system-ui;padding:4px 8px;border-radius:6px;border:1px solid #555;background:#222;color:#eee;cursor:pointer}
+  #picker button.on{background:#eee;color:#111}
+  #picker label{font-size:12px;display:flex;gap:4px;align-items:center;margin-left:8px}
+  /* harness-only layout: the extension positions these every frame */
+  #rs-root{position:fixed;inset:0;pointer-events:none}
+  #rs-root>*{pointer-events:auto}
+  #rs-bar{position:fixed;left:50%;bottom:48px;transform:translateX(-50%);width:760px}
+  #rs-approve{position:fixed;left:40px;bottom:140px;width:340px}
+  #rs-approve .rs-approve-card{max-width:none}
+  #rs-cards-panel{position:fixed;left:40px;top:90px;width:340px;height:300px;overflow:hidden}
+</style>
+</head>
+<body>
+<div id="picker"></div>
+<div id="rs-root">
+  <div id="rs-bar" class="rs-bar-inline rs-menu-open rs-menu-contained">
+    <div class="rs-cluster rs-cluster-left">
+      <span id="rs-dot" class="on"></span>
+      <span id="rs-ornament" aria-hidden="true"></span>
+      <span id="rs-brand" data-rs-brand>OrScript</span>
+      <div id="rs-engine" data-engine="roblox">
+        <span id="rs-engine-thumb"></span>
+        <button data-mode="roblox" class="rs-mode-btn on">RS</button>
+        <button data-mode="local" class="rs-mode-btn">AS</button>
+      </div>
+    </div>
+    <span id="rs-state">Ready · <b>Studio linked</b></span>
+    <div class="rs-cluster rs-cluster-right">
+      <button id="rs-action" data-kind="start">▶ Start</button>
+      <button id="rs-stop">■ Stop</button>
+      <button id="rs-extra">Think</button>
+      <button id="rs-discord" aria-label="Discord"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg></button>
+      <button id="rs-settings-btn" aria-label="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg></button>
+    </div>
+    <div id="rs-menu" class="rs-menu-top">
+    <div class="rs-menu-head"><span class="rs-menu-mark" aria-hidden="true"></span><div class="rs-menu-head-txt"><span class="rs-menu-logo"><span class="rs-menu-glyph"></span> Settings</span><span class="rs-menu-tag"><span data-rs-brand>OrScript</span> · v1.19.7 · <span id="pv-theme-name">Night</span></span></div></div>
+    <section class="rs-menu-sec">
+      <div class="rs-sec-label"><span>Buttons</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:4px 0 8px">
+        <button id="pv-start" style="width:140px;height:32px" data-kind="restart">↻ Restart</button>
+        <button class="rs-lvl-btn on">High</button><button class="rs-lvl-btn">Medium</button><button class="rs-lvl-btn">Low</button>
+        <span class="rs-tgl on"></span><span class="rs-tgl"></span>
+      </div>
+      <div class="rs-theme-tools"><button type="button" data-theme-exit-preview>Exit preview</button><button type="button" data-theme-random>🎲 Surprise Me</button><div class="rs-theme-sound-list" id="pv-sounds"></div></div>
+    </section>
+    <section class="rs-menu-sec">
+      <div class="rs-sec-label"><span>Theme</span></div>
+      <div class="rs-theme-grid" id="pv-grid"></div>
+    </section>
+    <div class="rs-menu-foot">OR v1.19.7 • RS • preview harness</div>
+  </div>
+  </div>
+
+  <div id="rs-cards-panel">
+    <div class="rs-cards-tabs"><button class="on">Work</button><button>Memory</button></div>
+    <div style="padding:12px;opacity:.8">Cards panel surface — same background recipe.</div>
+  </div>
+
+
+  <div id="rs-approve">
+    <div class="rs-approve-card">
+      <div class="rs-approve-kicker">Ask mode</div>
+      <div class="rs-approve-title">Allow this action?</div>
+      <div id="rs-approve-body">Write to ServerScriptService/Main.lua</div>
+      <div class="rs-approve-actions"><button id="rs-approve-deny">Deny</button><button id="rs-approve-allow">Allow</button></div>
+    </div>
+  </div>
+</div>
+<script src="/tools/theme-preview/harness.js"></script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;height:100%;background:#191919;color:#d4d4d4;font-family:ui-sans-serif,sans-serif}
+.app{display:flex;flex-direction:column;height:100vh}
+.thread{flex:1;overflow:auto;padding:24px 0}
+[data-agent-service-scroll-anchor]{display:flex;max-width:720px;margin:12px auto}
+.ev-user{justify-content:flex-end}.ev-ai{justify-content:flex-start}
+.bubble{padding:10px 14px;background:#252525;border-radius:12px;max-width:85%;white-space:pre-wrap}
+.composer{width:100%;box-sizing:border-box;max-width:720px;align-self:center;margin:0 0 28px;background:#202020;border:1px solid #333;border-radius:14px;padding:12px}
+.editor{min-height:40px;outline:none}
+.row{display:flex;justify-content:flex-end;margin-top:8px}
+[role=button]{padding:6px 10px;background:#2e7cf6;border-radius:8px;color:#fff;cursor:pointer}
+</style></head><body><div class="app"><div class="thread" id="thread"></div>
+<div class="composer" id="composer"><div class="editor" id="editor" contenteditable="true" role="textbox" data-placeholder="Do anything with AI" aria-label="Ask Notion AI"></div>
+<div class="row"><div role="button" data-testid="agent-send-message-button" aria-label="Send message">Send</div></div></div></div>
+<script>
+// Minimal Notion-ish behaviour: Enter or Send commits the editor into a user event; the harness answers via window.__answer(text).
+const ed=document.getElementById("editor"), thread=document.getElementById("thread");
+let n=0; window.__sent=[];
+let commit=function(){const t=ed.innerText.trim(); if(!t) return; window.__sent.push(t); ed.innerHTML="";
+  const row=document.createElement("div"); row.className="ev-user"; row.setAttribute("data-agent-service-scroll-anchor","u"+(++n)); row.style.justifyContent="flex-end";
+  row.innerHTML='<div class="bubble"></div>'; row.firstChild.textContent=t; thread.appendChild(row);};
+document.querySelector("[data-testid=agent-send-message-button]").addEventListener("click",()=>commit());
+window.__files=[];
+const comp=document.getElementById("composer"); let chips=null;
+["dragenter","dragover"].forEach(t=>comp.addEventListener(t,e=>e.preventDefault()));
+comp.addEventListener("drop",e=>{e.preventDefault(); const fl=e.dataTransfer&&e.dataTransfer.files; if(!fl||!fl.length) return;
+  if(!chips){chips=document.createElement("div"); chips.id="chips"; comp.insertBefore(chips, comp.firstChild);}
+  for(const f of fl){ const c=document.createElement("span"); c.setAttribute("data-testid","attachment-card"); c.textContent=f.name; chips.appendChild(c); f.text().then(t=>window.__files.push({name:f.name,text:t})); }});
+const _commit=commit; commit=function(){ const t=ed.innerText.trim(); const names=chips?[...chips.children].map(c=>c.textContent):[]; if(!t&&!names.length) return; window.__sent.push(t+(names.length?" [files: "+names.join(",")+"]":"")); ed.innerHTML=""; if(chips){chips.remove();chips=null;}
+  const row=document.createElement("div"); row.className="ev-user"; row.setAttribute("data-agent-service-scroll-anchor","u"+(++n)); row.style.justifyContent="flex-end"; row.innerHTML='<div class="bubble"></div>'; row.firstChild.textContent=t; thread.appendChild(row);};
+ed.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();commit();}});
+window.__answer=(text)=>{const row=document.createElement("div"); row.className="ev-ai"; row.setAttribute("data-agent-service-scroll-anchor","a"+(++n)); row.style.justifyContent="flex-start";
+  const b=document.createElement("div"); b.className="bubble"; row.appendChild(b); thread.appendChild(row);
+  let i=0; const iv=setInterval(()=>{ i+=12; b.textContent=text.slice(0,i); if(i>=text.length) clearInterval(iv); },40); };
+// ?late=<ms>: mount the composer late, like Notion's real shell does (bar must stay visible meanwhile).
+(() => { const late = Number(new URLSearchParams(location.search).get("late") || 0); if (!late) return; const c = document.getElementById("composer"); const ph = document.createElement("div"); ph.id = "composer-slot"; c.replaceWith(ph); setTimeout(() => ph.replaceWith(c), late); })();
+</script></body></html>
