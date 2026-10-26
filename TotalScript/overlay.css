@@ -49,7 +49,7 @@ html {
     box-shadow 0.4s ease,
     color 0.3s ease;
 }
-/* TotalScript mark (black & white R, 1.39.2) — bar, settings tray, templates panel */
+/* TotalScript mark (aqua T, 1.71.1; was the black & white R of 1.39.2) — bar, settings tray, templates panel */
 #rs-logo.rs-logo {
   width: 22px; height: 22px; flex: none; border-radius: 6px; display: inline-block;
   object-fit: cover; box-shadow: 0 0 0 1px rgba(255,255,255,.28), 0 0 10px rgba(255,255,255,.12);

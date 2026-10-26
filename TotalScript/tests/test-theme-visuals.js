@@ -113,7 +113,7 @@ for (const id of MEME) {
 // the skin is fixed to Night and nothing reads rsTheme any more.
 assert(!main.includes("data-theme-card") && !main.includes("rs-theme-sec") && !main.includes("Surprise Me") && !main.includes("data-theme-random"), "settings theme picker must be removed");
 assert(!main.includes("rsTheme\"") && !main.includes("changes.rsTheme") && !main.includes("function setOrTheme") && !main.includes("previewOrTheme"), "nothing may read or write rsTheme");
-assert(main.includes('const totalTheme = "aqua";'), "skin must be pinned to aqua (1.71.0 default)");
+assert(main.includes('const totalTheme = "aqua";'), "skin must be pinned to aqua (1.71.1 default)");
 assert(!css.includes(".rs-theme-card") && !css.includes(".rs-theme-tools") && !css.includes(".rs-theme-sound-list"), "picker CSS must be removed");
 
 // 5) Sound packs: seven distinct, short, hand-tuned effects per theme.
