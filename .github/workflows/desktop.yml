@@ -1,9 +1,9 @@
-name: ORscript Desktop (Rust)
+name: TotalScript Desktop (Rust)
 
 on:
   push:
     paths:
-      - "ORscript/agent/**"
+      - "TotalScript/agent/**"
       - ".github/workflows/desktop.yml"
   workflow_dispatch:
 
@@ -15,14 +15,14 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
-        working-directory: ORscript/agent
+        working-directory: TotalScript/agent
         shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ORscript/agent
+          workspaces: TotalScript/agent
       - name: Build (release)
         run: |
           set -o pipefail
@@ -36,14 +36,14 @@ jobs:
           esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" build.log > build.plain
           total=$(grep -cE '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain)
           dead=$(grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | grep -ciE 'never used|never read|never constructed|unused|dead_code')
-          echo "::notice title=or-agent compiler warnings::$total warning(s), $dead dead-code"
+          echo "::notice title=total-agent compiler warnings::$total warning(s), $dead dead-code"
           grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | sort -u | head -10 | while IFS= read -r line; do
             f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
-            echo "::warning file=ORscript/agent/$f,line=$l::$msg"
+            echo "::warning file=TotalScript/agent/$f,line=$l::$msg"
           done
           grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | sort -u | sed -n '11,20p' | while IFS= read -r line; do
             f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
-            echo "::notice file=ORscript/agent/$f,line=$l::$msg"
+            echo "::notice file=TotalScript/agent/$f,line=$l::$msg"
           done
           exit 0
       - name: Annotate compiler errors
@@ -52,7 +52,7 @@ jobs:
           set +e
           grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' build.log | head -10 | while IFS= read -r line; do
             f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
-            echo "::error file=ORscript/agent/$f,line=$l::$msg"
+            echo "::error file=TotalScript/agent/$f,line=$l::$msg"
           done
           grep -iE 'error' build.log | grep -vE '^[^ :]+\.rs:[0-9]+:[0-9]+: error' | head -12 | while IFS= read -r line; do echo "::error::$line"; done
           echo "::group::build.log tail"; tail -40 build.log; echo "::endgroup::"
@@ -70,30 +70,30 @@ jobs:
           esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" test.log > test.plain
           grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' test.plain | head -10 | while IFS= read -r line; do
             f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
-            echo "::error file=ORscript/agent/$f,line=$l::$msg"
+            echo "::error file=TotalScript/agent/$f,line=$l::$msg"
           done
           grep -E "^test .* FAILED|panicked at|^---- |^error" test.plain | head -20 | while IFS= read -r line; do echo "::error::$line"; done
           tail -6 test.plain | while IFS= read -r line; do echo "::warning::tail: $line"; done
           exit 0
       - name: Smoke test (headless flag parses)
-        run: ./target/release/or-core.exe --help
+        run: ./target/release/total-core.exe --help
       - uses: actions/upload-artifact@v4
         with:
-          name: or-core-windows-x64
-          path: ORscript/agent/target/release/or-core.exe
+          name: total-core-windows-x64
+          path: TotalScript/agent/target/release/total-core.exe
 
   macos:
     runs-on: macos-latest
     defaults:
       run:
-        working-directory: ORscript/agent
+        working-directory: TotalScript/agent
         shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ORscript/agent
+          workspaces: TotalScript/agent
       - name: Build (release)
         run: |
           set -o pipefail
@@ -107,14 +107,14 @@ jobs:
           esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" build.log > build.plain
           total=$(grep -cE '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain)
           dead=$(grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | grep -ciE 'never used|never read|never constructed|unused|dead_code')
-          echo "::notice title=or-agent compiler warnings::$total warning(s), $dead dead-code"
+          echo "::notice title=total-agent compiler warnings::$total warning(s), $dead dead-code"
           grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | sort -u | head -10 | while IFS= read -r line; do
             f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
-            echo "::warning file=ORscript/agent/$f,line=$l::$msg"
+            echo "::warning file=TotalScript/agent/$f,line=$l::$msg"
           done
           grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | sort -u | sed -n '11,20p' | while IFS= read -r line; do
             f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
-            echo "::notice file=ORscript/agent/$f,line=$l::$msg"
+            echo "::notice file=TotalScript/agent/$f,line=$l::$msg"
           done
           exit 0
       - name: Annotate compiler errors
@@ -123,7 +123,7 @@ jobs:
           set +e
           grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' build.log | head -10 | while IFS= read -r line; do
             f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
-            echo "::error file=ORscript/agent/$f,line=$l::$msg"
+            echo "::error file=TotalScript/agent/$f,line=$l::$msg"
           done
           grep -iE 'error' build.log | grep -vE '^[^ :]+\.rs:[0-9]+:[0-9]+: error' | head -12 | while IFS= read -r line; do echo "::error::$line"; done
           echo "::group::build.log tail"; tail -40 build.log; echo "::endgroup::"
@@ -141,14 +141,14 @@ jobs:
           esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" test.log > test.plain
           grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' test.plain | head -10 | while IFS= read -r line; do
             f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
-            echo "::error file=ORscript/agent/$f,line=$l::$msg"
+            echo "::error file=TotalScript/agent/$f,line=$l::$msg"
           done
           grep -E "^test .* FAILED|panicked at|^---- |^error" test.plain | head -20 | while IFS= read -r line; do echo "::error::$line"; done
           tail -6 test.plain | while IFS= read -r line; do echo "::warning::tail: $line"; done
           exit 0
       - name: Smoke test
-        run: ./target/release/or-core --help
+        run: ./target/release/total-core --help
       - uses: actions/upload-artifact@v4
         with:
-          name: or-core-macos
-          path: ORscript/agent/target/release/or-core
+          name: total-core-macos
+          path: TotalScript/agent/target/release/total-core
