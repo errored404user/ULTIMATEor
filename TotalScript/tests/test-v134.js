@@ -65,18 +65,18 @@ for (const wm of ["creation"]) {
   ok(wm + ": without a catalogue the full skills list is kept", noCat.includes("STUDIO SKILLS & VIRTUAL TOOLS: In addition to core MCP tools") && noCat.includes("ANIMATION TOOLS: the animation_* tools"));
   const tight = RS.buildSystemPrompt({ siteName: "ChatGPT", providerId: "chatgpt", engine: "roblox", maxChars: 14000 });
   ok(wm + ": tight prompt within 14k", tight.length <= 14000, String(tight.length));
-  ok(wm + ": tight prompt carries the mode heading", tight.includes("━━━ " + wm.toUpperCase() + " WORK MODE"));
+  ok(wm + ": tight prompt carries the mode heading", tight.includes("━━━ " + RS.workModeLabel(wm).toUpperCase() + " WORK MODE")); // 1.74.0: id creation is labelled Totality
 }
 // mode switch rider replaces the whole-prompt restate on a mode change only
 ok("mode switch pending flag set by setWorkMode while a session runs", main.includes("try { if (A.started || A.running) { A.workModeSwitchPending = true; A.forceSysResend = true; } } catch {}"));
 ok("withSysResend sends the short rider unless the periodic restate is due", main.includes("if (A.workModeSwitchPending && !periodicDue) {") && main.includes('diag("sys.modeSwitch"') && main.includes("A.workModeSwitchPending = false; // the full prompt carries the new mode too"));
 const note = RS.workModeSwitchNote("animator"); // legacy id → creation (1.39.0)
-ok("switch note is the creation profile (+ playbooks), not the loop", note.length > 10000 && note.length < 16000 && note.includes("━━━ CREATION WORK MODE") && !note.includes("━━━ OPERATING LOOP"), String(note.length));
+ok("switch note is the creation profile (+ playbooks), not the loop", note.length > 10000 && note.length < 16000 && note.includes("━━━ TOTALITY WORK MODE") && !note.includes("━━━ OPERATING LOOP"), String(note.length));
 ok("reminder checklist is short (one merged line)", ["creation", "ultimate", "visualizer", "animator"].every((m) => RS.workModeChecklist(m).length > 120 && RS.workModeChecklist(m).length < 600));
 
 // ── help / popup copy ─────────────────────────────────────────────────────────
-ok("help topic explains the merged mode + quick starts", main.includes("Creation runs on the shared OPERATING LOOP") && main.includes("The mode card has Quick starts"));
-ok("popup describes the first move of the mode", /creation:\s+"One creator mode[^"]*First move: blueprints \/ project index/.test(fs.readFileSync("popup.js", "utf8")));
+ok("help topic explains the merged mode + quick starts", main.includes("Totality runs on the shared OPERATING LOOP") && main.includes("The mode card has Quick starts"));
+ok("popup no longer carries the long mode paragraph (1.74.0: removed on request); the card keeps its one-line sub", !/WORK_HELP/.test(fs.readFileSync("popup.js", "utf8")) && /Luau systems · Modeling · VFX &amp; Lighting · UI · Animation &amp; Camera/.test(fs.readFileSync("popup.html", "utf8")));
 
 if (process.exitCode) { console.error(`test-v134: ${passed} passed, some FAILED`); process.exit(1); }
 console.log(`PASS  1.34.0: batched commands (parser ${calls.length} calls, loop, feedback, prompts), work modes 2.0 (loop + profiles, switch rider, checklist, quick starts), prompt diet — ${passed} checks`);

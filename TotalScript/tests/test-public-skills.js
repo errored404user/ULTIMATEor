@@ -53,7 +53,7 @@ ok("mode installs: snake name from title, badge sanitised, legacy base migrates 
 ok("mode with a short mandate is rejected", !PS.validate({ kind: "mode", title: "Tiny", mandate: "too short" }).ok);
 ok("activeMode is null until set; setActiveMode persists rsPublicMode", PS.activeMode() === null && PS.setActiveMode("horror_builder").name === "horror_builder" && store.rsPublicMode === r.item.id && window.__rsPublicMode().title === "Horror Builder");
 const mp = PS.modePrompt();
-ok("modePrompt layers the mandate on the base mode and lists focus commands", /CUSTOM WORK MODE: HORROR BUILDER/.test(mp) && /layered on CREATION/.test(mp) && /FOCUS COMMANDS[^\n]*execute_luau, fx_fog/.test(mp), mp.slice(0, 120));
+ok("modePrompt layers the mandate on the base mode and lists focus commands", /CUSTOM WORK MODE: HORROR BUILDER/.test(mp) && /layered on TOTALITY/.test(mp) && /FOCUS COMMANDS[^\n]*execute_luau, fx_fog/.test(mp), mp.slice(0, 120));
 ok("disabling the active mode deactivates it", (PS.setEnabled("horror_builder", false), PS.activeMode() === null) && (PS.setEnabled("horror_builder", true), true));
 ok("modes are not commands", !PS.isCommand("horror_builder") && PS.isCommand("lantern_row") && PS.isCommand("script_audit"));
 

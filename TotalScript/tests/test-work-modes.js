@@ -19,7 +19,7 @@ assert(main.includes("chrome.storage.local.set({rsWorkMode: workMode})"), "setWo
 assert(main.includes("workMode = normalizeWorkMode(changes.rsWorkMode.newValue);") && !main.includes("WORK_MODE_IDS.includes(changes.rsWorkMode.newValue)"), "popup changes propagate (normalised)");
 assert(main.includes('data-work="${id}"') && main.includes('WORK_MODE_IDS.map((id) =>'), "settings tray renders one card per built-in mode");
 assert(main.includes('<span id="rs-work-badge" hidden></span>') && main.includes("function syncWorkModeUi()") && main.includes('setAttribute("data-rs-work", workMode)'), "bar badge + html flag");
-assert(main.includes('name: "Creation", badge: "CREATION", short: "Creation"'), "creation card + badge");
+assert(main.includes('name: "Totality", badge: "TOTALITY", short: "Totality"'), "creation card + badge");
 
 // focus regex = union of the three former families
 const focusSrc = main.match(/focus: (\/\^\(script_[^\n]*\/),\n/);
@@ -58,15 +58,15 @@ assert.deepStrictEqual(Object.keys(RS.WORK_MODE_PROMPTS), ["creation"], "exactly
 const wm = "creation";
 const full = RS.workModePrompt(wm), tight = RS.workModePrompt(wm, { tight: true });
 assert(full.startsWith("━━━ OPERATING LOOP (every work mode) ━━━") && tight.startsWith("━━━ OPERATING LOOP ━━━"), "shared loop first");
-assert(full.includes("━━━ CREATION WORK MODE") && tight.includes("━━━ CREATION WORK MODE"), "own heading");
+assert(full.includes("━━━ TOTALITY WORK MODE") && tight.includes("━━━ TOTALITY WORK MODE"), "own heading");
 for (const legacy of ["ULTIMATE", "VISUALIZER", "ANIMATOR"]) assert(!full.includes("━━━ " + legacy + " WORK MODE") && !tight.includes("━━━ " + legacy + " WORK MODE"), "no stacked legacy heading " + legacy);
 // three former profiles (6k + 4.5k + 4.6k) merged into one ~11k profile + 12 playbooks
 assert(full.length > 12000 && full.length < 18500, "full profile is substantial but bounded (" + full.length + ")");
 assert(tight.length > 2500 && tight.length < 3600, "tight profile fits a 14k budget (" + tight.length + ")");
 assert(/FIRST MOVE:/.test(full) && /NEVER:/.test(full), "first move + never list");
-assert(RS.workModeChecklist(wm).startsWith("CREATION CHECK:"), "reminder checklist");
+assert(RS.workModeChecklist(wm).startsWith("TOTALITY CHECK:"), "reminder checklist");
 const note = RS.workModeSwitchNote(wm);
-assert(note.startsWith("━━━ WORK MODE SWITCHED → CREATION") && note.includes("Do not acknowledge this note") && !note.includes("━━━ OPERATING LOOP"), "switch note = profile only");
+assert(note.startsWith("━━━ WORK MODE SWITCHED → TOTALITY") && note.includes("Do not acknowledge this note") && !note.includes("━━━ OPERATING LOOP"), "switch note = profile only");
 // legacy ids resolve to the same text everywhere
 for (const legacy of ["ultimate", "visualizer", "animator", "adaptive", undefined, ""]) {
   assert.strictEqual(RS.workModePrompt(legacy), full, "workModePrompt(" + legacy + ") → creation");
@@ -105,7 +105,7 @@ assert(main.includes("modeCheck = RS.workModeChecklist(normalizeWorkMode(window.
 assert(css.includes(".rs-work-starters") && css.includes(".rs-work-starter:hover { background: var(--totalx-grad); box-shadow: var(--totalx-glow);"), "quick-start pills styled with the theme pill tokens");
 
 // popup + css
-assert(popup.includes('const WORK_MODES = ["creation"]') && popup.includes("WORK_HELP[settings.workMode]") && popup.includes('workMode: "creation"'), "popup modes");
+assert(popup.includes('const WORK_MODES = ["creation"]') && !popup.includes("WORK_HELP") && popup.includes('workMode: "creation"'), "popup modes"); // 1.74.0: long help paragraph removed
 assert(popup.includes('const LEGACY_WORK_MODES = { ultimate: "creation", visualizer: "creation", animator: "creation", adaptive: "creation" };') && popup.includes("settings.workMode = normalizeWorkMode(r.rsWorkMode)"), "popup migrates legacy stored ids");
 assert(popupHtml.includes('id="work-creation"') && !popupHtml.includes('id="work-ultimate"') && !popupHtml.includes('id="work-visualizer"') && !popupHtml.includes('id="work-animator"'), "popup has exactly the creation card");
 assert(!popupHtml.includes('data-work="adaptive"') && !popup.includes('"adaptive"'), "popup has no adaptive leftovers");

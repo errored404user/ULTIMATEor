@@ -72,7 +72,7 @@ const famsWithSigs = (t) => [...t.matchAll(/^── (.+?) \(\d+\) ──$/gm)].m
 ok("creation catalogue: scripting / blueprints / data / build families carry signatures first", famsWithSigs(cats.creation).slice(0, 4).join("|") === "SCRIPTING|SYSTEM BLUEPRINTS|DATA, REMOTES, NETWORK & MONETIZATION|MODELING & BUILD", famsWithSigs(cats.creation).join("|"));
 ok("creation catalogue: lighting / VFX / UI families follow physics", famsWithSigs(cats.creation).slice(5, 8).join("|") === "LIGHTING & ATMOSPHERE|VFX & PARTICLES|UI & HUD", famsWithSigs(cats.creation).join("|"));
 ok("creation catalogue: animation / tweens-camera families follow UI", famsWithSigs(cats.creation).slice(8, 10).join("|") === "ANIMATION|TWEENS, SPRINGS & CAMERA", famsWithSigs(cats.creation).join("|"));
-ok("the heading names the mode", cats.creation.includes("SIGNATURES BY FAMILY (callable as shown; CREATION families first):"));
+ok("the heading names the mode", cats.creation.includes("SIGNATURES BY FAMILY (callable as shown; TOTALITY families first):"));
 for (const mode of Object.keys(cats)) {
   const t = cats[mode];
   ok(`${mode}: within budget (${t.length} chars, ${t.split("\n").length} lines)`, t.length <= 20000 && t.split("\n").length <= 420);
@@ -120,8 +120,8 @@ ok("gate runs after the commandless-retry rescue (never instead of it)", main.in
 // G. mode notes + bookkeeping
 ok("mode note describes catalogue order, playbooks and the gates", /Catalogue: scripting, blueprints, data, build and physics families first, then lighting, VFX, UI, animation and motion\. Playbooks: new system, bug fix, existing place, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene\. Gate: changed scripts must be read back and checked, a changed look screenshotted and new motion previewed before 'done'\./.test(main));
 const mf = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
-ok("manifest 1.73.0", mf.version === "1.73.0", mf.version);
-ok("plugin + crate pinned at 1.73.0", fs.readFileSync("plugin/TotalScript.lua", "utf8").includes('local VERSION = "1.73.0"') && /^version = "1\.73\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "total-agent"\nversion = "1\.73\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
+ok("manifest 1.74.0", mf.version === "1.74.0", mf.version);
+ok("plugin + crate pinned at 1.74.0", fs.readFileSync("plugin/TotalScript.lua", "utf8").includes('local VERSION = "1.74.0"') && /^version = "1\.74\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "total-agent"\nversion = "1\.74\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
 ok("README changelog 1.38.0", readme.includes("**1.38.0 — Modes & commands overhaul:") && readme.includes("test-v138.js"));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall 1.38.0 checks passed");

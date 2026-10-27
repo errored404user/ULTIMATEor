@@ -150,6 +150,12 @@
       opacity:.9;
     }
     .work{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:14px}
+    .donate-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px}
+    .dono{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 11px; border-radius:10px; cursor:pointer; font:inherit;
+      color:var(--text); background:var(--surface-2); border:1px solid var(--line-strong); transition:transform .12s ease, box-shadow .12s ease}
+    .dono span{font-weight:700; font-size:12px}
+    .dono b{font-size:11.5px; font-weight:800; color:var(--accent); white-space:nowrap}
+    .dono:hover{transform:translateY(-1px); box-shadow:0 0 0 1px rgba(34,211,238,.35), 0 0 16px rgba(34,211,238,.22)}
     .work-card{
       display:flex; flex-direction:column; gap:4px; padding:12px 10px 11px; border-radius:4px;
       border:1px solid var(--line); background:rgba(0,0,0,.28); color:var(--text-dim); cursor:pointer;
@@ -163,8 +169,8 @@
     .work-name{font-size:12.5px; font-weight:800; letter-spacing:-.1px}
     .work-sub{font-size:10px; color:var(--text-faint); line-height:1.35; font-weight:600}
     .work-card.on .work-sub{color:#5c4e3d}
-    #work-creation.on{background:linear-gradient(135deg,#f3dfa4 0%,#d6ae4f 45%,#b8862b 100%); color:#1a1408}
-    #work-creation.on .work-sub{color:rgba(26,20,8,.72)}
+    #work-creation.on{background:linear-gradient(135deg,#9ff3ff 0%,#22d3ee 45%,#0e7490 100%); color:#03161c}
+    #work-creation.on .work-sub{color:rgba(3,22,28,.72)}
 
 
     .tgl-well{
@@ -275,11 +281,10 @@
       <div class="sec-label">Session</div>
       <div class="work">
         <button type="button" class="work-card" data-work="creation" id="work-creation">
-          <span class="work-name">Creation</span>
+          <span class="work-name">Totality</span>
           <span class="work-sub">Luau systems · Modeling · VFX &amp; Lighting · UI · Animation &amp; Camera — everything, verified</span>
         </button>
       </div>
-      <div class="row work-help" id="work-help">One creator mode: senior Luau engineer, 3D modeler, VFX / lighting / UI artist and animator at once. Reads the project first, architects server-authoritative systems, builds to scale, sets the mood and layers VFX, generates design-system UI, animates with anticipation and camera beats, and verifies with playtests, console reads, screenshots and previews.</div>
       <div class="sec-label">Access</div>
       <div class="work">
         <button type="button" class="work-card" data-perm="sandbox" id="perm-sandbox">
@@ -318,6 +323,17 @@
       <div class="sec-label">Publishing safety</div>
       <label class="config-field ai-check"><input id="publish-automation" type="checkbox"> Allow confirmed publishing commands without a per-operation prompt</label>
       <div class="row config-note">Off by default. Roblox authentication, ownership, moderation, and rate limits always apply.</div>
+    </div>
+
+    <div class="card" id="donate-card">
+      <div class="sec-label">Donate</div>
+      <div class="row config-note">TotalScript is free. A Robux game-pass donation keeps it going — each opens on roblox.com.</div>
+      <div class="donate-grid">
+        <button type="button" class="dono" data-dono="https://www.roblox.com/game-pass/1941336506/SmallDono"><span>SmallDono</span><b>R$ 10</b></button>
+        <button type="button" class="dono" data-dono="https://www.roblox.com/game-pass/1941228530/NormalDono"><span>NormalDono</span><b>R$ 25</b></button>
+        <button type="button" class="dono" data-dono="https://www.roblox.com/game-pass/1940736510/BigDono"><span>BigDono</span><b>R$ 100</b></button>
+        <button type="button" class="dono" data-dono="https://www.roblox.com/game-pass/1941672495/HUGEDONO"><span>HUGEDONO</span><b>R$ 500</b></button>
+      </div>
     </div>
 
     <div class="acts">

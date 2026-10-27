@@ -34,6 +34,14 @@ pub const APP_NAME: &str = "TotalScript";
 /// Explorer windows opened on the TotalScript folder.
 pub const WINDOW_TITLE: &str = "TotalScript Desktop";
 pub const REPO: &str = "errored404user/ULTIMATEor";
+/// 1.74.0 — Donation game passes (name, Robux, roblox.com URL). Shown on Home
+/// and in Settings → Donate; every button just opens the pass page.
+pub const DONATION_PASSES: [(&str, u32, &str); 4] = [
+    ("SmallDono", 10, "https://www.roblox.com/game-pass/1941336506/SmallDono"),
+    ("NormalDono", 25, "https://www.roblox.com/game-pass/1941228530/NormalDono"),
+    ("BigDono", 100, "https://www.roblox.com/game-pass/1940736510/BigDono"),
+    ("HUGEDONO", 500, "https://www.roblox.com/game-pass/1941672495/HUGEDONO"),
+];
 const LOG_CAP: usize = 800;
 
 /// egui context of the running window, so the tray thread / HTTP "show"
@@ -1353,6 +1361,12 @@ impl App {
                     self.toast("Diagnostics copied to clipboard", true);
                 }
             });
+            ui.add_space(10.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new("Donate").strong().color(t.text));
+                ui.label(RichText::new("free tool — a Robux game pass says thanks:").small().color(t.muted));
+                donation_row(ui, t);
+            });
         });
         ui.add_space(14.0);
 
@@ -2217,6 +2231,11 @@ impl App {
                     }
                 });
                 ui.label(RichText::new(format!("Keys and the chosen model are stored in plain text in {} — only on this PC. Ctrl+J toggles the panel.", Settings::path().display())).small().color(t.muted));
+            });
+            settings_section(ui, t, "Donate", |ui| {
+                ui.label(RichText::new("TotalScript is free. If it saves you time, a Robux game-pass donation keeps it going — each button opens the pass on roblox.com.").color(t.muted));
+                ui.add_space(6.0);
+                donation_row(ui, t);
             });
             settings_section(ui, t, "About", |ui| {
             ui.horizontal(|ui| {
@@ -3171,6 +3190,15 @@ fn row_status(ui: &mut egui::Ui, t: Theme, label: &str, on: bool) {
     ui.horizontal(|ui| {
         status_dot(ui, if on { t.ok } else { t.muted });
         ui.label(RichText::new(label).small().color(if on { t.text } else { t.muted }));
+    });
+}
+
+/// Donation buttons: "SmallDono · R$ 10" … each opens its game pass in the browser.
+fn donation_row(ui: &mut egui::Ui, t: Theme) {
+    ui.horizontal_wrapped(|ui| {
+        for (name, robux, url) in DONATION_PASSES {
+            if pill(ui, t, &format!("{name} · R$ {robux}"), false).on_hover_text(url).clicked() { open_external(url); }
+        }
     });
 }
 

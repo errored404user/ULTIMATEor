@@ -26,16 +26,13 @@ function sanitizeBrandLite(raw) {
   const logo = typeof src.logo === "string" && src.logo.length <= 400000 && BRAND_LOGO_RE.test(src.logo.trim()) ? src.logo.trim() : "";
   return { name, logo };
 }
-// 1.39.0: ONE built-in work mode. Creation = the former Ultimate (Luau
+// 1.39.0: ONE built-in work mode. Totality (id "creation") = the former Ultimate (Luau
 // engineering + modeling), Visualizer (VFX / lighting / UI) and Animator
 // (rigs, keyframes, tweens, camera) merged; legacy stored ids migrate to it.
 const LEGACY_WORK_MODES = { ultimate: "creation", visualizer: "creation", animator: "creation", adaptive: "creation" };
 const normalizeWorkMode = (id) => (WORK_MODES.includes(id) ? id : (LEGACY_WORK_MODES[id] || "creation"));
 const WORK_PRESETS = {
   creation: { thinking: "max", extra: false },
-};
-const WORK_HELP = {
-  creation: "One creator mode: senior Luau engineer, 3D modeler, VFX / lighting / UI artist and animator at once. First move: blueprints / project index for systems, a blockout for builds, screenshot + lighting read for looks, rig read for motion. Architects server-authoritative systems with typed modules, remotes and DataStores, builds to scale, sets the mood and layers VFX, generates design-system UI, blocks key poses with anticipation and follow-through and gives every hero animation a camera beat. Verifies everything: playtests, console reads, screenshots, animation previews.",
 };
 
 const PERM_MODES = ["sandbox", "ask", "full"];
@@ -94,8 +91,6 @@ function renderSettings() {
     const el = document.getElementById("work-" + id);
     if (el) el.classList.toggle("on", settings.workMode === id);
   }
-  const help = document.getElementById("work-help");
-  if (help) help.textContent = WORK_HELP[settings.workMode] || WORK_HELP.creation;
   for (const id of PERM_MODES) {
     const el = document.getElementById("perm-" + id);
     if (el) el.classList.toggle("on", settings.permMode === id);
@@ -277,6 +272,8 @@ document.getElementById("restart").addEventListener("click", (e) => {
 document.getElementById("discord")?.addEventListener("click", () => {
   chrome.tabs.create({ url: DISCORD_URL });
 });
+// 1.74.0 — Donate: Robux game passes (SmallDono 10 · NormalDono 25 · BigDono 100 · HUGEDONO 500)
+document.querySelectorAll(".dono[data-dono]").forEach((b) => b.addEventListener("click", () => { chrome.tabs.create({ url: b.dataset.dono }); }));
 document.getElementById("codecraft")?.addEventListener("click", () => {
   // Reuse an open CodeCraft chat tab (same conversation) instead of stacking copies.
   chrome.tabs.query({ url: CODECRAFT_PAGE_URL + "*" }, (tabs) => {

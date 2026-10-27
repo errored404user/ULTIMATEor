@@ -72,11 +72,11 @@ ok("A: Creation evidence gates (scripts / look / motion) exist and feed modeGate
     vm.runInContext(config + "\n;globalThis.__cfg = (typeof RS !== 'undefined' ? RS : (window.RS || null));", sandbox);
     const full = /creation: \{\s*full: `([\s\S]*?)`,\s*tight: `([\s\S]*?)`/.exec(config);
     detail = full ? full[1].slice(0, 80) : "no block";
-    promptOk = !!full && full[1].includes("CREATION WORK MODE") && full[2].includes("CREATION WORK MODE") && full[1].length > 1500 && full[2].length > 300 && full[2].length < full[1].length;
+    promptOk = !!full && full[1].includes("TOTALITY WORK MODE") && full[2].includes("TOTALITY WORK MODE") && full[1].length > 1500 && full[2].length > 300 && full[2].length < full[1].length;
   } catch (e) { detail = String(e && e.message || e); }
-  ok("B: config.js carries a full and a tight CREATION WORK MODE block (compact providers get the tight one)", promptOk, detail);
+  ok("B: config.js carries a full and a tight TOTALITY WORK MODE block (compact providers get the tight one)", promptOk, detail);
   ok("B: the mode block is selected by the live work mode (normalizeModeId → creation)", config.includes('function normalizeModeId(wm) { return WORK_MODE_PROMPTS[wm] ? wm : "creation"; }') && config.includes('const wm = (window.__rsWorkMode && window.__rsWorkMode()) || "creation";'));
-  ok("B: Creation playbooks + CREATION CHECK line exist for the per-turn reminder", /creation: `PLAYBOOKS \(pick the one that matches/.test(config) && /creation: "CREATION CHECK: read before you write/.test(config));
+  ok("B: Creation playbooks + TOTALITY CHECK line exist for the per-turn reminder", /creation: `PLAYBOOKS \(pick the one that matches/.test(config) && /creation: "TOTALITY CHECK: read before you write/.test(config));
   ok("B: SYSTEM_STATE tag reports WORK=<mode> and PERM=<access mode> on every tool result", main.includes("[SYSTEM_STATE: ENGINE=${eng} | WORK=${wm}") && main.includes("PERM=${perm}"));
 }
 
@@ -212,7 +212,7 @@ if (!JSDOM) { console.log("skip jsdom walk (jsdom not installed)"); finish(); }
 
     // A — activation + UI state
     ok("walk A: boot with a legacy stored mode ('visualizer') lands on creation and rewrites storage", w.__rsWorkMode() === "creation" && storage.rsWorkMode === "creation", w.__rsWorkMode() + "/" + storage.rsWorkMode);
-    ok("walk A: <html data-rs-work=creation> and the bar badge says CREATION", d.documentElement.getAttribute("data-rs-work") === "creation" && (() => { const b = d.getElementById("rs-work-badge"); return b && !b.hidden && b.textContent === "CREATION"; })());
+    ok("walk A: <html data-rs-work=creation> and the bar badge says TOTALITY", d.documentElement.getAttribute("data-rs-work") === "creation" && (() => { const b = d.getElementById("rs-work-badge"); return b && !b.hidden && b.textContent === "TOTALITY"; })());
     const supportBtn = d.getElementById("rs-support-btn") || d.querySelector("[data-rs-menu], #rs-menu-btn, .rs-menu-btn");
     if (supportBtn) { supportBtn.click(); await sleep(150); }
     const menu = d.getElementById("rs-menu");

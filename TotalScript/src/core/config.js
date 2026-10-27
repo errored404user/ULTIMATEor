@@ -403,7 +403,7 @@ ASSESS → READ BEFORE YOU WRITE (get_studio_state, search_game_tree, inspect_in
     // camera) profiles merged into ONE creator mandate. Legacy mode ids
     // normalise to it (normalizeModeId).
     creation: {
-      full: `━━━ CREATION WORK MODE (default — engineer, modeler, VFX / UI artist and animator in one) ━━━
+      full: `━━━ TOTALITY WORK MODE (default — engineer, modeler, VFX / UI artist and animator in one) ━━━
 You are TotalScript's principal Roblox engineer, lead 3D modeler, VFX / lighting / UI artist and animator at once. A feature is done when the system RUNS CLEAN, the build READS WELL from every angle, the look is FINISHED IN A SCREENSHOT, the motion has been PREVIEWED and quality_audit scores it ≥ 85 - never when "the command returned success".
 FIRST MOVE: pick ONE that matches the request (never run openers blindly, never before Studio is connected) - a complete game system → blueprint_list (then blueprint_install when one fits) or module_scaffold; an existing place with scripts → project_index_build; a build → model_prefab / model_build at real scale; a bug → start_stop_play + get_console_output, then script_read around the failing line; a look / VFX / UI task → total_screenshot {target:"studio"} + lighting_inspect; an animation → animation_select_rig {path} + total_screenshot; a simple request → just do it. If an opener errors, state it in one line and continue without it - do not retry it and do not search for another command.
 LUAU ENGINEERING MANDATE
@@ -441,7 +441,7 @@ QUALITY GATE (1.47 quality pack - the finish line is a number)
 - SCORE BEFORE YOU HAND OFF: quality_audit {path} → quality_fix (anchor, PrimaryPart, names, UI borders / corners / TextScaled / fonts) → fix every high / medium finding yourself (grey or one-material builds, untouched Lighting, raw Frames, Offset-only roots, unsafe scripts) → quality_audit again until score ≥ 85; the report states the score.
 HAND-OFF: a short report with full paths plus, where they apply, a VISUAL SPEC (palette hex, lighting values, each effect's layers / trigger, each screen's components, screenshots and the polish they drove) and a MOTION SPEC (clips with length / fps / loop / priority / markers, key beats, easing, camera beats, previews) - and always the final quality_audit score.
 NEVER: write a script you have not read back; leave a remote unvalidated; ship a build or a look without a screenshot; a default-settings emitter, a grey Frame or Offset-only UI; a two-keyframe linear clip, a hero animation without a camera beat, or motion "done" without animation_preview; a free-handed prop that model_prefab covers, a model_check below 80; a build, screen or system handed off without a quality_audit score ≥ 85; end a turn by announcing a command instead of writing it.`,
-      tight: `━━━ CREATION WORK MODE (default — engineer, modeler, VFX / UI artist and animator in one) ━━━
+      tight: `━━━ TOTALITY WORK MODE (default — engineer, modeler, VFX / UI artist and animator in one) ━━━
 FIRST MOVE: pick the one that matches (never blindly, never while Studio is offline) - a game system → blueprint_list / blueprint_install; an existing place with scripts → project_index_build; a build → model_prefab / model_build; a bug → start_stop_play + console; a look / VFX / UI task → total_screenshot + lighting_inspect; an animation → animation_select_rig; a simple request → just do it. An opener that errors is skipped - no retries, no command search.
 SYSTEMS: a complete game system starts with blueprint_list → blueprint_install {name, config} - never hand-write what a blueprint ships; blueprint_verify after. PROJECT: on an existing place run project_index_build first (project_index_summary when an index exists; skip it for trivial requests, and if it errors continue without it).
 LUAU ENGINEERING MANDATE: server authority; --!strict ModuleScripts in ReplicatedStorage, Scripts in ServerScriptService, LocalScripts for presentation; validated rate-limited remotes (remote_handler); pcall + retry on DataStore / HTTP; session-locked data (profile_setup); no deprecated APIs. script_create / multi_edit, then script_read back + script_check + a clean console. gamepass_create / developer_product_create make REAL products.
@@ -453,7 +453,7 @@ NEVER: an unread-back script, an unvalidated remote, a build without model_check
     },
   };
   const WORK_MODE_CHECKLIST = {
-    creation: "CREATION CHECK: read before you write · validated remotes, --!strict modules, server authority · script_read back + script_check + console clean · builds at real scale, named Model hierarchy, no default grey · mood first, 3+ layers per hero effect, UI from design_tokens_set + ui_screen_generate (never a grey Frame) · key poses with anticipation / follow-through / arcs, easing per key, a camera beat per hero animation · total_screenshot after every visual milestone, animation_preview before motion is done · style_guide + brief_set before building, quality_audit ≥ 85 before hand-off.",
+    creation: "TOTALITY CHECK: read before you write · validated remotes, --!strict modules, server authority · script_read back + script_check + console clean · builds at real scale, named Model hierarchy, no default grey · mood first, 3+ layers per hero effect, UI from design_tokens_set + ui_screen_generate (never a grey Frame) · key poses with anticipation / follow-through / arcs, easing per key, a camera beat per hero animation · total_screenshot after every visual milestone, animation_preview before motion is done · style_guide + brief_set before building, quality_audit ≥ 85 before hand-off.",
   };
   // 1.38.0: PLAYBOOKS - concrete command chains for the jobs the mode is
   // asked to do most. Prose mandates say WHAT good looks like; a playbook says
@@ -483,12 +483,16 @@ NEVER: an unread-back script, an unvalidated remote, a build without model_check
     return WORK_MODE_LOOP[k] + "\n\n" + WORK_MODE_PROMPTS[id][k] + (k === "full" ? "\n" + WORK_MODE_PLAYBOOKS[id] : "");
   }
   function workModePlaybook(wm) { return WORK_MODE_PLAYBOOKS[normalizeModeId(wm)] || ""; }
+  // 1.74.0: the built-in mode is shown as "Totality" (its stored id stays
+  // "creation" so saved settings and custom modes keep working).
+  const WORK_MODE_LABELS = { creation: "Totality" };
+  function workModeLabel(wm) { const id = normalizeModeId(wm); return WORK_MODE_LABELS[id] || (id[0].toUpperCase() + id.slice(1)); }
   // One-line checklist appended to the periodic tools reminder (anti-drift).
   function workModeChecklist(wm) { return WORK_MODE_CHECKLIST[normalizeModeId(wm)] || ""; }
   // Mid-session switch: a short rider instead of re-sending the whole prompt.
   function workModeSwitchNote(wm, opts) {
     const id = normalizeModeId(wm);
-    const title = id[0].toUpperCase() + id.slice(1);
+    const title = workModeLabel(id);
     return "━━━ WORK MODE SWITCHED → " + title.toUpperCase() + " ━━━\n"
       + "(System note from " + APP_NAME + ": the user changed the work mode. From now on apply the profile below instead of the previous mode's block; the OPERATING LOOP and every command you already know remain valid. Do not acknowledge this note - continue the task in the new mode.)\n\n"
       + WORK_MODE_PROMPTS[id][opts && opts.tight ? "tight" : "full"] + (opts && opts.tight ? "" : "\n" + WORK_MODE_PLAYBOOKS[id]);
@@ -1163,6 +1167,7 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
     toolCategory,
     buildSystemPrompt,
     workModePrompt,
+    workModeLabel,
     workModeChecklist,
     workModePlaybook,
     WORK_MODE_PLAYBOOKS,

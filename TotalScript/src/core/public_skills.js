@@ -44,6 +44,8 @@
   const snake = (s) => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").replace(/^[0-9]+/, "").slice(0, 40);
   const uid = () => "ps_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
   const titleCase = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  // 1.74.0: the built-in base mode is shown as Totality (stored id "creation").
+  const baseLabel = (b) => (String(b || "") === "creation" ? "Totality" : titleCase(b));
 
   function luauLiteral(v) {
     if (v == null) return "nil";
@@ -196,7 +198,7 @@
       item.note = str(def.note, 320).trim() || description.slice(0, 320);
       item.mandate = str(def.mandate || def.prompt || def.systemPrompt, LIMITS.mandate).trim();
       item.focus = stringList(def.focus || def.focusCommands, LIMITS.focus, true).map(snake).filter(Boolean);
-      item.toast = str(def.toast, 140).trim() || `${item.title} - custom work mode on ${titleCase(item.base)}`;
+      item.toast = str(def.toast, 140).trim() || `${item.title} - custom work mode on ${baseLabel(item.base)}`;
       if (item.mandate.length < 80) errors.push("mode mandate must be at least 80 characters (how the agent must think, build and verify in this mode)");
       if (reserved.size) { const unknown = item.focus.filter((c) => !reserved.has(c)); if (unknown.length) warnings.push(`focus commands not found in this build: ${unknown.join(", ")}`); }
       if (!item.focus.length) warnings.push("no focus commands - the mode will inherit only the base mode's focus list");
@@ -280,8 +282,9 @@
   function modePrompt(m) {
     m = m && m.kind === "mode" ? m : activeMode();
     if (!m) return "";
-    const focus = m.focus.length ? `\nFOCUS COMMANDS for this mode (use them heavily, on top of the ${m.base.toUpperCase()} focus list): ${m.focus.join(", ")}` : "";
-    return `━━━ CUSTOM WORK MODE: ${m.title.toUpperCase()} (public mode by ${m.author}, layered on ${m.base.toUpperCase()}) ━━━\n${m.sub ? m.sub + "\n" : ""}${m.mandate}${focus}\nThe ${m.base.toUpperCase()} workflow above stays the process; this block sets the priorities and the standard of quality. The user picked this mode on purpose - follow it.`;
+    const BASE = baseLabel(m.base).toUpperCase();
+    const focus = m.focus.length ? `\nFOCUS COMMANDS for this mode (use them heavily, on top of the ${BASE} focus list): ${m.focus.join(", ")}` : "";
+    return `━━━ CUSTOM WORK MODE: ${m.title.toUpperCase()} (public mode by ${m.author}, layered on ${BASE}) ━━━\n${m.sub ? m.sub + "\n" : ""}${m.mandate}${focus}\nThe ${BASE} workflow above stays the process; this block sets the priorities and the standard of quality. The user picked this mode on purpose - follow it.`;
   }
 
   // ── Execution ───────────────────────────────────────────────────────────
