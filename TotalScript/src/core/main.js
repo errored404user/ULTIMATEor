@@ -6295,6 +6295,128 @@
     });
   }
   window.__rsOpenAnimStudio = openAnimStudio;
+  // ═════════════════════════════════════════════════════════════════
+  //  1.72.0 — PROMPT ENHANCER (src/core/enhancer.js)
+  //  The user's rough request goes to the CURRENT AI site as a "rewrite this
+  //  into a precise prompt" turn; the reply is read back and extracted
+  //  (RS.parseEnhanced) into the enhancer's editable preview. Nothing is sent
+  //  to the agent until the user presses Send there. The round trip is a
+  //  visible chat turn on purpose - no camouflage, no hidden traffic, and it
+  //  never touches the site's model or reasoning settings.
+  // ═════════════════════════════════════════════════════════════════
+  const ENHANCE_TIMEOUT_MS = 180000;
+  const ENHANCE_STABLE_MS = 1200;
+  async function enhancePromptViaAI(rough, opts, onStatus) {
+    const say = (m) => { try { onStatus && onStatus(m); } catch {} };
+    const o = opts || {};
+    const cancelled = () => { try { return !!(o.cancelled && o.cancelled()); } catch { return false; } };
+    if (typeof RS === "undefined" || typeof RS.enhancerRequest !== "function") throw new Error("config module missing - reload the extension");
+    if (!P.getEditor || !P.getEditor()) throw new Error(`${P.displayName || "the site"} has no chat box on this page`);
+    if (A.starting) { say("Agent is starting - the enhancer runs right after…"); const up = await waitFor(() => !A.starting, 240000); if (!up) throw new Error("the agent did not finish starting"); }
+    if (A.running || A.injecting) {
+      say("Agent is busy - the enhancer runs as soon as this step finishes…");
+      const free = await waitFor(() => (!A.running && !A.injecting) || cancelled(), 600000);
+      if (cancelled()) return null;
+      if (!free) throw new Error("the agent stayed busy - stop it and try again");
+    }
+    const focus = (o.focus === "roblox" || o.focus === "general") ? o.focus : RS.enhancerFocus({ text: rough, engine: activeEngine() });
+    const request = RS.enhancerRequest({ rough, focus, notes: o.notes, short: !!o.short, agentStarted: !!A.started });
+    const prevItem = P.lastAssistant();
+    const prevId = (P.lastAssistantId && prevItem) ? P.lastAssistantId() : null;
+    const prevText = prevItem ? String((P.readAssistant() || {}).reply || "") : "";
+    const base = P.assistantCount();
+    // Our own send: the provider's send hooks must not treat it as a user turn
+    // (isBlocked() reads A.injecting), and no other injection may interleave.
+    A.injecting = true;
+    let sent = false;
+    try {
+      say(`Sending the rewrite request to ${P.displayName || "the AI"}…`);
+      sent = (await P.typeAndSend(request)) !== false;
+    } finally {
+      setTimeout(() => { A.injecting = false; }, 400);
+    }
+    if (!sent) throw new Error("the message was not sent");
+    diag("enhancer.sent", { focus, chars: request.length, roughChars: rough.length, agentStarted: !!A.started });
+    say(`Waiting for ${P.displayName || "the AI"}'s rewrite…`);
+    const t0 = Date.now();
+    let text = "", lastLen = -1, stableSince = Date.now(), seenTurn = false;
+    while (Date.now() - t0 < ENHANCE_TIMEOUT_MS) {
+      if (cancelled()) { try { if (P.isGenerating()) P.stopGeneration(); } catch {} return null; }
+      await sleep(250);
+      const it = P.lastAssistant();
+      const idNow = (P.lastAssistantId && it) ? P.lastAssistantId() : null;
+      const isNew = !!it && (P.assistantCount() > base || (prevId != null && idNow !== prevId) || (!prevItem) || (it !== prevItem && P.isGenerating()));
+      if (!isNew) {
+        const err = P.scanError && P.scanError();
+        if (err) throw new Error(`${P.displayName || "the site"} reported an error: ${String(err).slice(0, 160)}`);
+        continue;
+      }
+      seenTurn = true;
+      const r = P.readAssistant();
+      const cur = String((r && r.reply) || "");
+      if (cur && cur === prevText && P.assistantCount() <= base) continue; // still reading the previous turn
+      if (cur.length !== lastLen) { lastLen = cur.length; stableSince = Date.now(); text = cur; continue; }
+      if (!P.isGenerating() && cur.trim() && Date.now() - stableSince >= ENHANCE_STABLE_MS) { text = cur; break; }
+      if (P.isGenerating()) say(`${P.displayName || "The AI"} is writing… (${cur.length} chars)`);
+    }
+    if (!text.trim()) throw new Error(seenTurn ? "the AI returned an empty reply" : `no reply from ${P.displayName || "the site"} within ${Math.round(ENHANCE_TIMEOUT_MS / 1000)}s`);
+    const parsed = RS.parseEnhanced(text);
+    diag("enhancer.reply", { ms: Date.now() - t0, source: parsed.source, command: parsed.command, chars: text.length, outChars: parsed.text.length });
+    if (parsed.command) throw new Error("the AI answered with a command instead of a rewrite - try again (or switch the focus to General)");
+    if (!parsed.text) throw new Error("the AI's reply had no prompt in it");
+    return { text: parsed.text, focus, source: parsed.source, raw: text };
+  }
+  // Send the reviewed prompt. A running session takes it through the same path
+  // as Paint / GUI Studio hand-offs (the loop picks up the reply); with the
+  // agent off it is a plain chat message - the enhancer never starts the agent
+  // behind the user's back.
+  async function sendEnhancedPrompt(text, onStatus) {
+    if (A.started) return sendPainting(text, null, onStatus);
+    if (A.running || A.injecting || A.starting) throw new Error("the agent is busy - try again in a moment");
+    A.injecting = true;
+    try { const r = await P.typeAndSend(text); return r !== false; }
+    finally { setTimeout(() => { A.injecting = false; }, 400); }
+  }
+  // Put text in the site's composer without sending (provider writeDraft when
+  // it has one, else the generic select-all + insertText / value path).
+  async function fillComposer(text) {
+    const value = String(text || "");
+    if (!value.trim()) return false;
+    if (A.running || A.injecting || A.starting) return false;
+    try { if (typeof P.writeDraft === "function") { const r = await P.writeDraft(value, P.editorText()); if (r && r.ok) return true; } } catch {}
+    const ed = P.getEditor && P.getEditor();
+    if (!ed) return false;
+    try { if (P.setInputLock) P.setInputLock(false); } catch {}
+    try { ed.focus(); } catch {}
+    const tag = String(ed.tagName || "").toUpperCase();
+    if (tag === "TEXTAREA" || tag === "INPUT") {
+      try {
+        const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ed), "value");
+        if (desc && desc.set) desc.set.call(ed, value); else ed.value = value;
+        ed.dispatchEvent(new Event("input", { bubbles: true }));
+      } catch { ed.value = value; }
+    } else {
+      try { document.execCommand("selectAll", false, null); document.execCommand("insertText", false, value); } catch {}
+    }
+    await sleep(60);
+    const now = String((P.editorText && P.editorText()) || "");
+    return now.includes(value.slice(0, 40).trim());
+  }
+  function openEnhancer() {
+    if (typeof TotalEnhancer === "undefined") { ui.toast("Prompt Enhancer module missing - reload the extension"); return; }
+    TotalEnhancer.open({
+      draft: () => { try { return String((P.editorText && P.editorText()) || ""); } catch { return ""; } },
+      enhance: enhancePromptViaAI,
+      send: sendEnhancedPrompt,
+      insert: fillComposer,
+      engine: () => activeEngine(),
+      agentStarted: () => !!A.started,
+      providerName: () => P.displayName || "the AI",
+      toast: (m) => ui.toast(m),
+      diag,
+    });
+  }
+  window.__rsOpenEnhancer = openEnhancer;
 
   async function startSession(opts = {}) {
     const isRestart = !!(opts && opts.restart);
@@ -7171,6 +7293,7 @@
           <button id="rs-voice" type="button" aria-pressed="false" title="Enable voice coding">🎙 Voice</button>
           <button id="rs-undo" hidden title="Undo last Studio change the agent made">Undo</button>
           <button id="rs-discord" aria-label="Discord" title="TotalScript Discord"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.8 19.8 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg></button>
+          <button id="rs-enhance-btn" aria-label="Prompt Enhancer" title="Prompt Enhancer — the AI rewrites your rough request into a precise prompt, you review and send it (Ctrl+Shift+E)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/><path d="M5 15l.6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6z"/></svg></button>
           <button id="rs-paint-btn" aria-label="Paint" title="Paint — draw it, the AI builds it (Ctrl+Shift+P)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 4c-3 1-8 6-10 9l2 2c3-2 8-7 9-10z"/><path d="M8 15c-2 0-4 1-4 4 0 1-1 1-1 1s4 1 6-1c1-1 1-2 1-2z"/></svg></button>
           <button id="rs-anim-btn" aria-label="Animation Studio" title="Animation Studio — describe a motion, preview the keys, build the KeyframeSequence in Studio (Ctrl+Shift+K)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="4.5" r="2"/><path d="M12 7v6"/><path d="M12 9l-4 3M12 9l4-2"/><path d="M12 13l-3 7M12 13l3 6"/></svg></button>
           <button id="rs-gui-btn" aria-label="GUI Studio" title="GUI Studio — design a Roblox GUI visually, build it in Studio (Ctrl+Shift+G)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="17" height="15" rx="2"/><path d="M2.5 7.5h17M7.5 18.5v-11"/><rect x="10" y="12" width="7" height="3.5" rx="1.75" fill="currentColor" stroke="none"/><path d="M15 14.5l6.5 2.6-2.6 1 1.6 2.6-1.5.9-1.6-2.6-1.8 2.1z" fill="currentColor" stroke="none"/></svg></button>
@@ -7493,6 +7616,9 @@
         setMenuOpen(!!menuEl.hidden, toSupport);
       };
       supportBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleMenu(true); });
+      const enhanceBtn = root.querySelector("#rs-enhance-btn");
+      if (enhanceBtn) enhanceBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenEnhancer) window.__rsOpenEnhancer(); });
+      document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "E" || e.key === "e") && !e.altKey) { if (typeof TotalEnhancer !== "undefined" && TotalEnhancer.isOpen()) return; e.preventDefault(); if (window.__rsOpenEnhancer) window.__rsOpenEnhancer(); } });
       const paintBtn = root.querySelector("#rs-paint-btn");
       if (paintBtn) paintBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenPaint) window.__rsOpenPaint(); });
       const guiBtn = root.querySelector("#rs-gui-btn");

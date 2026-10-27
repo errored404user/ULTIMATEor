@@ -13,7 +13,7 @@ const rig = E.defaultRigInfo("R15");
 
 // ── engine: breakdown / tween machine ──
 const potion = E.generate("drink a potion");
-ok("engine VERSION is 1.71.1 and exposes the workbench API", E.VERSION === "1.71.1" && ["breakdown", "holdKey", "nudgeKey", "easeAll", "EASE_PRESETS", "overlap", "setMarker", "removeMarker", "markers", "arcs", "timing"].every((k) => k in E), E.VERSION);
+ok("engine VERSION is 1.72.0 and exposes the workbench API", E.VERSION === "1.72.0" && ["breakdown", "holdKey", "nudgeKey", "easeAll", "EASE_PRESETS", "overlap", "setMarker", "removeMarker", "markers", "arcs", "timing"].every((k) => k in E), E.VERSION);
 const mid = (potion.keys[1].t + potion.keys[2].t) / 2;
 const bd0 = E.breakdown(potion, mid, 0), bd1 = E.breakdown(potion, mid, 1), bd5 = E.breakdown(potion, mid, 0.5);
 ok("breakdown inserts ONE key tagged 'breakdown' between the neighbours and keeps the clip valid + ordered", bd5.inserted && bd5.clip.keys.length === potion.keys.length + 1 && bd5.clip.keys[bd5.index].tag === "breakdown" && ordered(bd5.clip) && bd5.clip.report.errors === 0, [bd5.index, bd5.clip.keys.length]);

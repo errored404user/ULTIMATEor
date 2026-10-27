@@ -22,9 +22,9 @@ const cargo = read("agent/Cargo.toml");
 
 // ── plugin source ──
 assert(lua.startsWith("--!nocheck"), "plugin disables type checking (plugin globals)");
-assert(lua.includes('local VERSION = "1.71.1"'), "plugin version 1.71.1");
-assert(manifest.version === "1.71.1", "manifest 1.71.1");
-assert(/version = "1\.71\.1"/.test(cargo), "crate 1.71.1");
+assert(lua.includes('local VERSION = "1.72.0"'), "plugin version 1.72.0");
+assert(manifest.version === "1.72.0", "manifest 1.72.0");
+assert(/version = "1\.72\.0"/.test(cargo), "crate 1.72.0");
 assert(lua.includes("if RunService:IsRunning() then return end"), "plugin is edit-mode only");
 assert(lua.includes('"/api/plugin/hello"') && lua.includes('"/api/plugin/poll?client_id="') && lua.includes('"/api/plugin/result"'), "plugin speaks the hub protocol");
 assert(lua.includes('http://127.0.0.1:3000'), "default bridge URL is total-core");
@@ -90,7 +90,7 @@ assert(rs.includes("rx = self.results.subscribe();") && rs.indexOf("self.results
 assert(rs.includes("TOTAL_PLUGIN_EXEC") && rs.includes("TOTAL_NO_PLUGIN_INSTALL") && rs.includes("TOTAL_OPEN_CLOUD_KEY"), "env switches");
 for (const t of handlers.filter((h) => h !== "studio_plugin_ping")) assert(rs.includes('"' + t + '"'), "total-core advertises " + t);
 for (const t of ["cloud_gamepass_create", "cloud_gamepass_update", "cloud_gamepass_list", "cloud_product_create", "cloud_product_update", "cloud_product_list", "cloud_animation_publish"]) assert(rs.includes('"' + t + '"'), "Open Cloud tool " + t);
-assert(rs.includes('format!("{APIS}/game-passes/v1/universes/{universe}/game-passes")') && rs.includes('format!("{APIS}/game-passes/v1/universes/{universe}/game-passes/{id}")') && rs.includes("reqwest::Method::PATCH"), "Open Cloud game pass endpoints (1.71.1: universe-scoped create + PATCH, the legacy /details route is retired)");
+assert(rs.includes('format!("{APIS}/game-passes/v1/universes/{universe}/game-passes")') && rs.includes('format!("{APIS}/game-passes/v1/universes/{universe}/game-passes/{id}")') && rs.includes("reqwest::Method::PATCH"), "Open Cloud game pass endpoints (1.72.0: universe-scoped create + PATCH, the legacy /details route is retired)");
 assert(rs.includes("multipart/form-data; boundary=") && !/reqwest::multipart/.test(rs), "multipart built by hand (no extra reqwest feature)");
 assert(rs.includes("x-api-key"), "Open Cloud key header");
 assert(rs.includes("/monetization/") && rs.includes('"passes"'), "errors point at the dashboard fallback");

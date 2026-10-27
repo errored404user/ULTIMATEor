@@ -965,7 +965,7 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
   function detectGuiIntent(text) {
     const t = String(text || "");
     const out = { gui: false, edit: false, reference: false, mobile: false, words: [] };
-    if (!t.trim() || t.includes(GUI_BRIEF_MARK) || /GUI STUDIO HAND-OFF|ANIMATION STUDIO HAND-OFF/.test(t) || GUI_NEGATIVE.test(t)) return out;
+    if (!t.trim() || t.includes(GUI_BRIEF_MARK) || t.includes(ENHANCER_MARK) || /GUI STUDIO HAND-OFF|ANIMATION STUDIO HAND-OFF/.test(t) || GUI_NEGATIVE.test(t)) return out;
     const words = t.match(new RegExp(GUI_WORDS.source, "gi")) || [];
     if (!words.length) return out;
     // "write a script for the shop" is scripting, not GUI, unless a GUI word is explicit.
@@ -1005,8 +1005,91 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
     return L.join("\n");
   }
 
+  // ── 1.72.0 PROMPT ENHANCER ───────────────────────────────────────────────
+  // The user's rough request is sent to the CURRENT AI site as a "rewrite this
+  // into a precise brief" pre-pass; the reply comes back into an editable
+  // preview and nothing is sent to the agent until the user presses Send.
+  // Focus: "roblox" (a Studio brief with scope / behaviour / look / done-when)
+  // or "general" (goal / context / requirements / output format). "auto" picks
+  // by engine + wording (enhancerFocus). The brief is written in the USER's
+  // voice because it becomes the user's next message, not TotalScript's.
+  const ENHANCER_MARK = "⟦TotalScript PROMPT ENHANCER⟧";
+  const ENHANCED_OPEN = "<<<ENHANCED PROMPT>>>";
+  const ENHANCED_CLOSE = "<<<END ENHANCED PROMPT>>>";
+  const ENHANCER_ROBLOX = /\b(roblox|studio|luau|lua|scripts?|parts?|models?|guis?|screengui|frames?|textlabel|textbutton|imagelabel|remotes?|remoteevent|remotefunction|datastores?|workspace|replicatedstorage|serverscriptservice|starterplayer|startergui|humanoid|tweens?|animations?|animate|keyframes?|rigs?|r15|r6|vfx|particles?|beam|trail|lighting|atmosphere|skybox|npcs?|tools?|leaderstats?|players?|game|place|terrain|mesh(?:es|part)?|cframe|vector3|udim2?|shop|coins?|currency|hud|menu|inventory|doors?|swords?|guns?|zones?|spawns?|checkpoints?|obby|tycoon|simulator|round|lobby|teleport|badge|gamepass|dev ?product|module(?:script)?|localscript|camera|raycast|collision|physics|building|build|blockout|map|lobby|pet|quest|enemy|boss|health ?bar|minimap)\b/i;
+  const ENHANCER_GENERAL = /^(what|why|how|when|who|which|explain|describe|compare|define|summari[sz]e|translate|proofread|rewrite|write (?:an?|the) (?:e-?mail|essay|poem|story|letter|blog|article|tweet|post|cover letter|resume|cv)|tell me|is it|are there|can you explain|help me understand)\b/i;
+  function enhancerFocus(opts) {
+    const o = opts || {};
+    const text = String(o.text || "").trim();
+    if (o.engine === "local") return "general";
+    if (!text) return "roblox";
+    if (ENHANCER_ROBLOX.test(text)) return "roblox";
+    if (ENHANCER_GENERAL.test(text)) return "general";
+    return "roblox";
+  }
+  function enhancerRequest(opts) {
+    const o = opts || {};
+    const rough = String(o.rough || "").trim();
+    const focus = o.focus === "general" ? "general" : "roblox";
+    const L = [];
+    L.push(ENHANCER_MARK + " Rewrite the user's rough request below into ONE precise, complete prompt" + (focus === "roblox" ? " for a Roblox Studio AI agent that will build it in the open place." : " for an AI assistant.") + " Do NOT do the task, do NOT run any command or tool, do NOT ask questions - write the improved prompt only." + (o.agentStarted ? " This is a writing step inside the current session: no command block in this reply." : ""));
+    L.push("Rules: keep the user's intent, scope and EVERY concrete detail (names, numbers, colours, paths, file names); never add requirements the user did not imply - where something needed is unknown, choose a sensible default and mark it \"(assumed)\" so the user can change it; write in the user's voice (first person, imperative), in the user's language; no preamble, no commentary, no title.");
+    if (focus === "roblox") {
+      L.push("Structure (use these headings, skip any that does not apply): GOAL - one sentence. SCOPE - exactly what to build or change and where (services, instance paths, script names, selected objects). BEHAVIOUR & RULES - gameplay logic, data and saving, server-authoritative where money / rewards / state are involved, edge cases. LOOK & FEEL - UI, VFX, lighting, modeling or animation expectations when they matter (style, colours, scale, mobile). CONSTRAINTS - performance, existing code and instances to keep, what must not be touched. DONE WHEN - observable checks the agent must verify in Studio before reporting (playtest with a clean console, screenshot, layout report, the exact behaviour to demonstrate).");
+    } else {
+      L.push("Structure (use these headings, skip any that does not apply): GOAL - one sentence. CONTEXT - who it is for and what already exists. REQUIREMENTS - the concrete things the answer must contain or do. CONSTRAINTS - length, tone, language, things to avoid. OUTPUT FORMAT - exactly how the answer should be laid out. DONE WHEN - how the user will judge the answer is complete.");
+    }
+    L.push(o.short ? "Length: compact - under 120 words." : "Length: as long as needed and no longer - a short request stays short.");
+    if (o.notes && String(o.notes).trim()) L.push("Extra guidance from the user for this rewrite: " + String(o.notes).trim());
+    L.push("Reply with ONLY the improved prompt between these two exact lines:");
+    L.push(ENHANCED_OPEN);
+    L.push("...");
+    L.push(ENHANCED_CLOSE);
+    L.push("");
+    L.push("ROUGH REQUEST:");
+    L.push('"""');
+    L.push(rough);
+    L.push('"""');
+    return L.join("\n");
+  }
+  // The reply → the prompt text. Markers first; a single fenced block second;
+  // otherwise the whole reply with an obvious lead-in line stripped. `command`
+  // is set when the model acted instead of rewriting (agent-mode reflex).
+  function parseEnhanced(reply) {
+    const raw = String(reply || "").replace(/\r\n?/g, "\n");
+    const out = { text: "", source: "none", command: false };
+    const cmd = /"(?:command|tool)"\s*:\s*"|###\s*(?:LUA|MCP_TOOL)\s*###/i.test(raw);
+    let text = "";
+    const a = raw.indexOf(ENHANCED_OPEN);
+    if (a >= 0) {
+      const from = a + ENHANCED_OPEN.length;
+      const b = raw.indexOf(ENHANCED_CLOSE, from);
+      text = raw.slice(from, b >= 0 ? b : undefined); out.source = b >= 0 ? "markers" : "markers-open";
+    } else {
+      const fence = raw.match(/```[a-z]*\n([\s\S]*?)```/i);
+      if (fence) { text = fence[1]; out.source = "fence"; }
+      else {
+        text = raw.replace(/^\s*(?:here(?:'s| is)[^\n]*prompt[^\n]*:|(?:improved|enhanced|rewritten) prompt:?)\s*\n/i, "");
+        out.source = text.trim() ? "raw" : "none";
+      }
+    }
+    // The model sometimes echoes the fences inside the markers.
+    text = text.replace(/^\s*```[a-z]*\s*\n/i, "").replace(/\n\s*```\s*$/i, "").trim();
+    out.text = text;
+    // A command anywhere in the reply counts unless the markers cleanly fenced a
+    // command-free prompt (the model acted AND rewrote - keep the rewrite).
+    out.command = cmd && (out.source !== "markers" || /"(?:command|tool)"\s*:\s*"|###\s*(?:LUA|MCP_TOOL)\s*###/i.test(text));
+    return out;
+  }
+
   return {
     REASONING_NOTES,
+    ENHANCER_MARK,
+    ENHANCED_OPEN,
+    ENHANCED_CLOSE,
+    enhancerFocus,
+    enhancerRequest,
+    parseEnhanced,
     GUI_BRIEF_MARK,
     detectGuiIntent,
     guiBrief,
