@@ -89,9 +89,7 @@
   B.checkpoint_track_build = function (a) {
     return "return ok({tool=" + q(a.name || 'checkpoint_track_build') + "},'checkpoint_track_build configured')";
   };
-  B.cutscene_camera_track = function (a) {
-    return "return ok({tool=" + q(a.name || 'cutscene_camera_track') + "},'cutscene_camera_track configured')";
-  };
+  // cutscene_camera_track: moved to src/core/skills/studio_cutscene.js (1.77.0) - it was a no-op stub here.
   B.character_emote_play = function (a) {
     return "return ok({tool=" + q(a.name || 'character_emote_play') + "},'character_emote_play configured')";
   };
@@ -351,7 +349,6 @@
     { name: "rail_grind_setup", description: "Wire a grind rail system that snaps characters along a path.", params: {"rail_part": {"type": "string", "req": false, "desc": "rail path"}, "speed": {"type": "number", "req": false, "desc": "grind speed"}} },
     { name: "launch_pad_create", description: "Create a launch pad with launch angle and velocity impulse.", params: {"force": {"type": "number", "req": false, "desc": "impulse force"}, "angle": {"type": "number", "req": false, "desc": "launch angle deg"}} },
     { name: "checkpoint_track_build", description: "Create a race track checkpoint sequence with lap counter.", params: {"laps": {"type": "number", "req": false, "desc": "total laps"}, "count": {"type": "number", "req": false, "desc": "checkpoint count"}} },
-    { name: "cutscene_camera_track", description: "Create a smooth multi-keyframe camera cutscene sequence.", params: {"duration": {"type": "number", "req": false, "desc": "cutscene seconds"}, "fov": {"type": "number", "req": false, "desc": "camera field of view"}} },
     { name: "character_emote_play", description: "Play an animation emote track on a player's character.", params: {"assetid": {"type": "string", "req": false, "desc": "animation asset id"}, "speed": {"type": "number", "req": false, "desc": "playback speed"}} },
     { name: "ik_control_setup", description: "Attach IKControl instances to character limbs for gun aiming or foot placement.", params: {"limb": {"type": "string", "req": false, "desc": "LeftArm|RightArm|LeftLeg|RightLeg"}, "target": {"type": "number", "req": false, "desc": "target part"}} },
     { name: "camera_shake_preset", description: "Apply realistic camera shake presets (Explosion, Earthquake, Gunfire).", params: {"preset": {"type": "string", "req": false, "desc": "Explosion|Earthquake|Gunfire"}, "intensity": {"type": "number", "req": false, "desc": "shake strength"}} },

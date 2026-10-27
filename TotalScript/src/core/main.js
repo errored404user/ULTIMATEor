@@ -2012,8 +2012,8 @@
         proof: /^(total_screenshot|gfx_capture|screen_capture|screenshot_frame|lighting_time_lapse)$/,
         nudge: "LOOK: you changed the look of the place in this run but never looked at it - take total_screenshot {target:\"studio\"} now, judge it as an art director (contrast, hierarchy, colour harmony, readability) and run one polish pass on what it shows." },
       { id: "motion",
-        did: /^(animation_(create|set_pose|add_keyframe|update_keyframe|motion_preset|stagger_parts|set_easing|mirror|retime|reverse|import|move_keyframe|clone_keyframe)|tween_(create|sequence)|spring_create|cutscene_camera_track|ik_control_setup)$/,
-        proof: /^(animation_preview|animation_test|animation_simulate|camera_orbit_preview|total_screenshot|start_stop_play|studio_playtest)$/,
+        did: /^(animation_(create|set_pose|add_keyframe|update_keyframe|motion_preset|stagger_parts|set_easing|mirror|retime|reverse|import|move_keyframe|clone_keyframe)|tween_(create|sequence)|spring_create|cutscene_(create|camera_track|shot_add|shot_from_camera|shots_from_path|trigger)|ik_control_setup)$/,
+        proof: /^(animation_preview|animation_test|animation_simulate|camera_orbit_preview|cutscene_preview|total_screenshot|start_stop_play|studio_playtest)$/,
         nudge: "MOTION: motion was created in this run but never previewed - run animation_preview now (animation_test for an exported clip, start_stop_play for tweens / camera work), judge timing, arcs, weight and loop seams, fix and preview again." },
       // 1.47.0: the QUALITY gate - substantial build / UI / system output that
       // was never scored. Deliberately narrow (generators and screens, not a
