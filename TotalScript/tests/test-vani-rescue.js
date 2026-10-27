@@ -34,7 +34,7 @@ ok("main: toasts stay up longer for long notes (capped at 12 s)", main.includes(
 
 // ── static pins: shaper ──
 ok("vani-net: pin tells the model it executes nothing itself and that Vani's tools cannot reach Studio", net.includes("You are NOT being asked to execute anything yourself and you do not need any tool for this") && net.includes("Vani's own tools (web search, Document, Slides, Design, code execution) cannot reach Roblox Studio"));
-ok("vani-net: publishes shaped / unshaped status attributes + a loaded marker, and routes every transport through shapeOrNote", net.includes('setAttribute("data-rs-vani-shaped"') && net.includes('setAttribute("data-rs-vani-unshaped"') && net.includes('setAttribute("data-rs-vani-net", "1.76")') && (net.match(/shapeOrNote\(/g) || []).length >= 4 && net.includes("noteUnshaped(\"body is \""));
+ok("vani-net: publishes shaped / unshaped status attributes + a loaded marker, and routes every transport through shapeOrNote", net.includes('setAttribute("data-rs-vani-shaped"') && net.includes('setAttribute("data-rs-vani-unshaped"') && net.includes('setAttribute("data-rs-vani-net", "1.78")') && (net.match(/shapeOrNote\(/g) || []).length >= 4 && net.includes("noteUnshaped(\"body is \""));
 
 // ── adapter contract (jsdom) ──
 if (!JSDOM) { console.log("SKIP jsdom not installed — adapter / shaper checks"); finish(); return; }
@@ -58,7 +58,7 @@ ok("adapter: promptExtra says Vani's tools cannot reach Studio", /Vani's own too
 const html = w.document.documentElement;
 let st = A.bridgeStatus();
 ok("bridgeStatus: shaper not loaded → says so", st.tapLoaded === false && /request shaper not loaded/.test(st.label) && st.shaped === false);
-html.setAttribute("data-rs-vani-net", "1.76");
+html.setAttribute("data-rs-vani-net", "1.78");
 st = A.bridgeStatus();
 ok("bridgeStatus: loaded, nothing seen yet", st.tapLoaded === true && /no chat request seen yet/.test(st.label) && st.shaped === false);
 html.setAttribute("data-rs-vani-shaped", JSON.stringify({ n: 1, pinned: true, trimmed: 0, messages: 3, url: "/api/chat/stream", at: 1000 }));
@@ -70,7 +70,7 @@ ok("bridgeStatus: a LATER unshaped request wins → NOT shaped ✗ with the reas
 html.setAttribute("data-rs-vani-shaped", JSON.stringify({ n: 2, pinned: true, trimmed: 5, messages: 15, url: "/api/chat/stream", at: 3000 }));
 st = A.bridgeStatus();
 ok("bridgeStatus: a newer shaped request wins again and shows the trim", st.shaped === true && /\(15 msgs, 5 trimmed\)/.test(st.label), st.label);
-ok("adapter: version marker bumped", vani.includes('setAttribute("data-rs-vani-ver", "2026-10d")'));
+ok("adapter: version marker bumped", vani.includes('setAttribute("data-rs-vani-ver", "2026-10e")'));
 
 // ── shaper in a page world (jsdom) ──
 (async () => {
@@ -83,7 +83,7 @@ ok("adapter: version marker bumped", vani.includes('setAttribute("data-rs-vani-v
   w2.eval(net);
   const h = w2.document.documentElement;
   const attr = (k) => { const raw = h.getAttribute(k); return raw ? JSON.parse(raw) : null; };
-  ok("shaper: marks itself loaded at document_start", h.getAttribute("data-rs-vani-net") === "1.76");
+  ok("shaper: marks itself loaded at document_start", h.getAttribute("data-rs-vani-net") === "1.78");
   const body = JSON.stringify({ model: "anthropic/claude", conversation_id: "c1", tool_execution: "confirm", vani_mode: "standard", messages: [{ role: "user", content: "bootstrap" }, { role: "assistant", content: "ok" }, { role: "user", content: "Result: fine. Continue." }] });
   h.setAttribute("data-rs-agent", "off");
   await w2.fetch("/api/chat/stream", { method: "POST", body });
@@ -115,6 +115,6 @@ ok("adapter: version marker bumped", vani.includes('setAttribute("data-rs-vani-v
   const readme = read("README.md");
   ok("README: 1.76.0 entry + test listed", /\*\*1\.76\.0 — Vani: commandless-reply rescue, visible bridge status\.\*\*/.test(readme) && /test-vani-rescue\.js/.test(readme));
   const manifest = JSON.parse(read("manifest.json"));
-  ok("version pins 1.78.0", manifest.version === "1.78.0" && /^version = "1\.78\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.78.0"'));
+  ok("version pins 1.78.1", manifest.version === "1.78.1" && /^version = "1\.78\.1"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.78.1"'));
   finish();
 })();

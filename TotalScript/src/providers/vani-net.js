@@ -44,6 +44,9 @@
     // the tools I was given" and write prose. Say it outright.
     "You are NOT being asked to execute anything yourself and you do not need any tool for this: the extension on this page runs the block the moment you post it. Vani's own tools (web search, Document, Slides, Design, code execution) cannot reach Roblox Studio - ignore them while this chat is linked.",
     "Do not search the web. Do not create a Document, Slides, Design, canvas or any side-panel artifact, and do not propose Vani tools - everything goes in this chat reply as text. One short line of prose at most; the command block is the work.",
+    // 1.78.1 — reported live: the model SHOWED the block (escaped backticks /
+    // quotes, visible as plain text on the page) instead of writing a fence.
+    "Write the fence as real markdown: a line that is only ```json, the object on the next line, a line that is only ```. Never escape backticks, quotes or braces with backslashes and never put the block inside quotation marks or inline code.",
   ].join(" ");
   // Head = bootstrap + first reply + the list_commands result + its reply (the
   // command catalogue must survive the cut or the model starts guessing names).
@@ -60,6 +63,14 @@
     if (typeof c === "string") return c;
     if (Array.isArray(c)) return c.map((p) => (p && typeof p.text === "string" ? p.text : "")).join("\n");
     if (c && typeof c === "object" && typeof c.text === "string") return c.text;
+    return "";
+  };
+  // 1.78.1 — the field a message keeps its text in: `content` (observed), or
+  // `text` / `message` / `parts` should the client change shape. Shaping a
+  // message we cannot read would otherwise silently stop ("request NOT shaped").
+  const textField = (m) => {
+    if (!m || typeof m !== "object") return "";
+    for (const k of ["content", "text", "message", "parts"]) if (m[k] != null && contentText(m[k])) return k;
     return "";
   };
   // Prepend `prefix` to a message's content whatever shape it has. Returns the
@@ -81,7 +92,7 @@
     if (!Array.isArray(messages) || !messages.length || !agentOn()) return res;
     let out = messages.slice();
     // 1. history trim (before pinning so the pin always lands on the live message)
-    const total = out.reduce((n, m) => n + contentText(m && m.content).length, 0);
+    const total = out.reduce((n, m) => n + contentText(m && m[textField(m) || "content"]).length, 0);
     if (out.length > HISTORY_KEEP_HEAD + HISTORY_KEEP_TAIL + 1 && total > HISTORY_TRIM_AT) {
       // The tail must start on a USER message so roles keep alternating.
       let cut = out.length - HISTORY_KEEP_TAIL;
@@ -90,9 +101,10 @@
         const dropped = cut - HISTORY_KEEP_HEAD;
         const note = `[TotalScript: ${dropped} earlier turn${dropped === 1 ? "" : "s"} omitted to keep this request fast - the task from the first message still stands; the latest results follow.]\n\n`;
         const first = Object.assign({}, out[cut]);
-        const nc = withPrefix(first.content, note);
+        const fk = textField(first) || "content";
+        const nc = withPrefix(first[fk], note);
         if (nc !== undefined) {
-          first.content = nc;
+          first[fk] = nc;
           out = out.slice(0, HISTORY_KEEP_HEAD).concat([first], out.slice(cut + 1));
           res.trimmed = dropped; res.changed = true;
         }
@@ -102,10 +114,11 @@
     let li = -1;
     for (let i = out.length - 1; i >= 0; i--) if (out[i] && out[i].role === "user") { li = i; break; }
     if (li >= 0) {
-      const text = contentText(out[li].content);
+      const lk = textField(out[li]) || "content";
+      const text = contentText(out[li][lk]);
       if (text && !text.includes(MARK)) {
-        const nc = withPrefix(out[li].content, PIN + "\n\n");
-        if (nc !== undefined) { out[li] = Object.assign({}, out[li], { content: nc }); res.pinned = true; res.changed = true; }
+        const nc = withPrefix(out[li][lk], PIN + "\n\n");
+        if (nc !== undefined) { out[li] = Object.assign({}, out[li], { [lk]: nc }); res.pinned = true; res.changed = true; }
       }
     }
     res.messages = out;
@@ -224,6 +237,6 @@
     }
   } catch {}
 
-  try { document.documentElement.setAttribute("data-rs-vani-net", "1.76"); } catch {}
+  try { document.documentElement.setAttribute("data-rs-vani-net", "1.78"); } catch {}
   try { console.log("[rs-vani-net] active"); } catch {}
 })();

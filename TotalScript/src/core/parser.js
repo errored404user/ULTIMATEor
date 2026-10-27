@@ -114,7 +114,8 @@ const RSParse = (() => {
       r.includes("MCP_TOOL") ||
       LUA_START_RE.test(r) ||
       CMD_KEY_RE.test(r) ||
-      NATIVE_TOOL_RE.test(r)
+      NATIVE_TOOL_RE.test(r) ||
+      relaxedShape(r)
     );
   }
 
@@ -254,6 +255,103 @@ const RSParse = (() => {
     } catch {
       return null;
     }
+  }
+
+  // ── 1.78.1 "shown, not fenced" commands ──────────────────────────────────
+  // Reported live on Vani (logged-in account): the model SHOWS the command as
+  // plain text instead of writing a real fence - the page then renders visible
+  // backticks and the raw reply carries the command in a shape the strict
+  // scanner (CMD_KEY_RE: "command" in double quotes) does not accept:
+  //   \`\`\`json {\"command\":\"x\",\"params\":{}} \`\`\`      markdown-escaped
+  //   {'command':'x','params':{}}                            single quotes
+  //   {command:"x", params:{}}                               JS object literal
+  //   {&quot;command&quot;:&quot;x&quot;}                    HTML entities
+  //   {"command":"list\_commands"}                           escaped underscore
+  // The relaxed pass normalises those into strict JSON and runs the SAME strict
+  // scanner again. It never parses looser than that: no brace span, no key in
+  // one of the shapes above → nothing. Only consulted when the strict pass found
+  // no command at all.
+  const RELAXED_KEY_RE = /\\"(?:command|tool)\\"\s*:\s*\\"|'(?:command|tool)'\s*:\s*['"]|&quot;(?:command|tool)&quot;\s*:\s*&quot;|[{,]\s*(?:command|tool)\s*:\s*["']/i;
+  const ESC_EVIDENCE_RE = /\\"(?:command|tool)\\"|\\`|\\_|\\\{|\\\*/;
+  const MD_ESCAPE_RE = /\\([\\"'`{}\[\]_*#~|<>])/g;
+  function decodeEntities(t) {
+    if (!/&(?:quot|#34|#x22|#39|apos|#x27|lt|gt|amp);/i.test(t)) return t;
+    return t.replace(/&quot;|&#34;|&#x22;/gi, '"').replace(/&#39;|&apos;|&#x27;/gi, "'").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&amp;/gi, "&");
+  }
+  // Matching brace that skips both "…" and '…' string literals.
+  function matchBraceLoose(text, start) {
+    let depth = 0, q = "", esc = false;
+    for (let i = start; i < text.length; i++) {
+      const c = text[i];
+      if (q) {
+        if (esc) esc = false;
+        else if (c === "\\") esc = true;
+        else if (c === q) q = "";
+      } else if (c === '"' || c === "'") q = c;
+      else if (c === "{") depth++;
+      else if (c === "}") { if (--depth === 0) return i; }
+    }
+    return -1;
+  }
+  // One brace span: single-quoted strings → double-quoted, bare object keys →
+  // quoted, literal "\n" / "\t" between tokens → whitespace. Returns the strict
+  // span, or null when nothing changed.
+  function strictifySpan(span) {
+    let out = "", i = 0, changed = false;
+    while (i < span.length) {
+      const c = span[i];
+      if (c === '"') {
+        let j = i + 1; out += c;
+        while (j < span.length) { const d = span[j]; out += d; if (d === "\\") { out += span[j + 1] || ""; j += 2; continue; } j++; if (d === '"') break; }
+        i = j; continue;
+      }
+      if (c === "'") {
+        changed = true; let j = i + 1, str = '"';
+        while (j < span.length) {
+          const d = span[j];
+          if (d === "\\") { const n = span[j + 1]; str += n === "'" ? "'" : d + (n || ""); j += 2; continue; }
+          if (d === "'") break;
+          str += d === '"' ? '\\"' : d; j++;
+        }
+        out += str + '"'; i = j + 1; continue;
+      }
+      if (c === "\\" && (span[i + 1] === "n" || span[i + 1] === "t" || span[i + 1] === "r")) { out += span[i + 1] === "n" ? "\n" : " "; changed = true; i += 2; continue; }
+      if (/[A-Za-z_$]/.test(c)) {
+        let j = i; while (j < span.length && /[\w$]/.test(span[j])) j++;
+        const word = span.slice(i, j);
+        let k = j; while (k < span.length && /[ \t\r\n]/.test(span[k])) k++;
+        const prev = out.replace(/[ \t\r\n]+$/, "").slice(-1);
+        if (span[k] === ":" && (prev === "{" || prev === ",")) { out += '"' + word + '"'; changed = true; } else out += word;
+        i = j; continue;
+      }
+      out += c; i++;
+    }
+    return changed ? out : null;
+  }
+  // A command key in one of the relaxed spellings (entity-encoded strict JSON included).
+  function relaxedShape(t) {
+    const d = decodeEntities(String(t == null ? "" : t));
+    return RELAXED_KEY_RE.test(d) || (d !== t && CMD_KEY_RE.test(d));
+  }
+  // Returns the normalised text, or null when the reply has none of the shapes.
+  function relaxCommandText(text) {
+    const t = normalizeTypography(text);
+    if (!t) return null;
+    let r = decodeEntities(t);
+    if (ESC_EVIDENCE_RE.test(r)) r = r.replace(MD_ESCAPE_RE, "$1");
+    if (!RELAXED_KEY_RE.test(r) && !CMD_KEY_RE.test(r)) return r !== t ? r : null;
+    const keyRe = /"(?:command|tool)"\s*:|'(?:command|tool)'\s*:|[{,]\s*(?:command|tool)\s*:/gi;
+    let m, guard = 0;
+    while ((m = keyRe.exec(r)) && guard++ < 8) {
+      const start = r.lastIndexOf("{", m.index + (m[0][0] === "{" ? 0 : m[0].length));
+      if (start === -1) continue;
+      const end = matchBraceLoose(r, start);
+      if (end === -1) continue;
+      const strict = strictifySpan(r.slice(start, end + 1));
+      if (strict) { r = r.slice(0, start) + strict + r.slice(end + 1); keyRe.lastIndex = start + strict.length; }
+      else keyRe.lastIndex = end + 1;
+    }
+    return r !== t ? r : null;
   }
 
   function extractToolAnywhere(text) {
@@ -414,7 +512,7 @@ const RSParse = (() => {
     return out;
   }
 
-  function parseToolCalls(r) {
+  function parseToolCalls(r, _relaxed) {
     r = normalizeTypography(r);
     // Lowercase for case-insensitive end-marker search. Models write
     // ###end_mcp_tool### (underscore) or ###end-mcp_tool### (dash).
@@ -473,6 +571,11 @@ const RSParse = (() => {
           pos = le + 1;
         }
       }
+    }
+    // 1.78.1: nothing strict - try the "shown, not fenced" normalisation once.
+    if (out.length === 0 && !_relaxed) {
+      const rx = relaxCommandText(r);
+      if (rx) return parseToolCalls(rx, true);
     }
     return out.map(cleanLuaCall);
   }
@@ -587,6 +690,10 @@ const RSParse = (() => {
     // through to the placeholder below instead.
     const m = txt.match(/"(?:command|tool)"\s*:\s*"([^"]*)/);
     if (m && m[1].trim()) return m[1].trim();
+    // 1.78.1: escaped / single-quoted / bare-key / entity-encoded spellings.
+    const dec = decodeEntities(txt);
+    const rx = dec.match(/"(?:command|tool)"\s*:\s*"([^"]*)|\\"(?:command|tool)\\"\s*:\s*\\"((?:[^"\\]|\\_)*)|'(?:command|tool)'\s*:\s*['"]([^'"]*)|[{,]\s*(?:command|tool)\s*:\s*["']([^"']*)/);
+    if (rx) { const v = (rx[1] || rx[2] || rx[3] || rx[4] || "").replace(/\\_/g, "_").trim(); if (v) return v; }
     const native = txt.match(new RegExp(LT + DSML_PFX + "invoke\\b[^>]*(?:name|tool)\\s*=\\s*[\"']?([^\\s\"'>]+)", "i"))
       || txt.match(/<function\s*=\s*["']?([^\s"'>]+)/i)
       || txt.match(/<tool_call\b[^>]*>\s*([A-Za-z_][\w./-]*)/i)
@@ -612,7 +719,8 @@ const RSParse = (() => {
     return txt.includes(START_M) ||
            LUA_START_RE.test(txt) ||
            CMD_KEY_RE.test(txt) ||
-           NATIVE_TOOL_RE.test(txt); // includes model-native tool envelopes
+           NATIVE_TOOL_RE.test(txt) || // includes model-native tool envelopes
+           relaxedShape(txt); // 1.78.1: "shown, not fenced" shapes
   }
 
   return {
@@ -620,5 +728,6 @@ const RSParse = (() => {
     findLuaStart, findLuaEnd, matchBrace, extractJson, normalizeCall,
     hasToolSignature, hasOpenToolBlock, parseToolCalls, parseAlternateToolCalls, salvageCutOff, toolNameFromText,
     isInjectedFeedback, hasCommandShape, normalizeTypography,
+    relaxCommandText, RELAXED_KEY_RE,
   };
 })();
