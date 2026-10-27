@@ -2008,7 +2008,7 @@
         proof: /^(script_read|script_check|script_analysis|script_lint|get_console_output|start_stop_play|total_debug|blueprint_verify|audit_script_errors|script_diff|project_index_changes|studio_playtest)$/,
         nudge: "SCRIPTS: you wrote or changed scripts in this run but never verified them - script_read the changed script(s) back, run script_check (or script_lint), then start_stop_play + get_console_output (or total_debug) and fix anything it reports." },
       { id: "look",
-        did: /^(fx_|vfx_|lighting|atmosphere|sky|clouds|bloom|blur|color_correction|postfx|sunrays|fog|ui_(?!list_tree|audit|inspect)|gui_(?!hide|show)|design_tokens_set|design_kit_install|beam|trail|point_light|spot_light|surface_light|fire_add|smoke_add|sparkles|highlight|portal_|gfx_(stage|subject|prop|overlay|fx|camera|lighting|pose))/,
+        did: /^(fx_|vfx_|lighting|atmosphere|sky|clouds|bloom|blur|color_correction|postfx|sunrays|fog|ui_(?!list_tree|audit|inspect|image_find|art_theme_get)|gui_(?!hide|show)|design_tokens_set|design_kit_install|beam|trail|point_light|spot_light|surface_light|fire_add|smoke_add|sparkles|highlight|portal_|gfx_(stage|subject|prop|overlay|fx|camera|lighting|pose))/,
         proof: /^(total_screenshot|gfx_capture|screen_capture|screenshot_frame|lighting_time_lapse)$/,
         nudge: "LOOK: you changed the look of the place in this run but never looked at it - take total_screenshot {target:\"studio\"} now, judge it as an art director (contrast, hierarchy, colour harmony, readability) and run one polish pass on what it shows." },
       { id: "motion",

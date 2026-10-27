@@ -9295,3 +9295,10 @@ html.rs-light #rs-bar .rs-donate-grid .rs-rbx-sub { color: #6b7280; }
 #rs-bar .rs-donate-grid .rs-tip-rbx:focus-visible { outline: 2px solid var(--total-accent, #22d3ee); outline-offset: 2px; }
 #rs-bar .rs-donate-foot { margin: 9px 0 0; font-size: 10px; color: #7a8a90; text-align: center; }
 html.rs-light #rs-bar .rs-donate-foot { color: #6b7280; }
+
+/* ── 1.78.0 — GUI STUDIO · ART DIRECTION section (Theme tab) ───────────── */
+.rsg-sec.rsg-art { border-top: 1px solid rgba(34,211,238,.25); padding-top: 8px; margin-top: 10px; }
+.rsg-sec.rsg-art h4 small { color: var(--total-accent, #22d3ee); }
+.rsg-art-flags { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 6px 0 4px; }
+.rsg-art-flags .rsg-chk { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: #c9c9d2; cursor: pointer; }
+.rsg-art-flags .rsg-chk input { margin: 0; accent-color: var(--total-accent, #22d3ee); }

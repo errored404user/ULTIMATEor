@@ -23,7 +23,7 @@ ok("24 prefab kinds exported", Array.isArray(S.PREFAB_KINDS) && S.PREFAB_KINDS.l
 ok("kind param lists every kind for the model", S.SKILL_COMMANDS.find((c) => c.name === "model_prefab").params.kind.desc.split("|").length === 24);
 const src = fs.readFileSync("src/core/skills/studio_modelcraft.js", "utf8");
 ok("no Luau-only syntax (so the simulator really executes it)", !/\+=|-=|\.\.=|\bcontinue\b|=\s*if\s/.test(src.replace(/\/\/.*$/gm, "")));
-ok("catalogue stays under the visible budget with the two new commands (two one-property duplicates hidden)", S.SKILL_COMMANDS.filter((c) => !c.hidden).length < 670 /* 1.77.0: +8 cutscene commands */ && S.hiddenCommandNames().has("physics_pivot_set") && S.hiddenCommandNames().has("cast_shadow_set") && S.SKILL_OPS.includes("physics_pivot_set"));
+ok("catalogue stays under the visible budget with the two new commands (two one-property duplicates hidden)", S.SKILL_COMMANDS.filter((c) => !c.hidden).length < 680 /* 1.77.0: +8 cutscene commands; 1.78.0: +7 art commands */ && S.hiddenCommandNames().has("physics_pivot_set") && S.hiddenCommandNames().has("cast_shadow_set") && S.SKILL_OPS.includes("physics_pivot_set"));
 
 // ── builders ──
 const K = S.PREFAB_KINDS;
@@ -119,7 +119,7 @@ if (rt && rt.skip) {
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README 1.70.0 changelog documents the pack and the removals", /\*\*1\.70\.0 — /.test(readme) && /model_prefab/.test(readme) && /model_check/.test(readme) && /roadmap/i.test(readme.slice(readme.indexOf("**1.70.0 — "), readme.indexOf("**1.70.0 — ") + 4000)));
 ok("test listed in README", readme.includes("tests/test-model-craft.js"));
-ok("version pins 1.77.0", manifest.version === "1.77.0" && /local VERSION = "1\.77\.0"/.test(fs.readFileSync("plugin/TotalScript.lua", "utf8")) && /^version = "1\.77\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
+ok("version pins 1.78.0", manifest.version === "1.78.0" && /local VERSION = "1\.78\.0"/.test(fs.readFileSync("plugin/TotalScript.lua", "utf8")) && /^version = "1\.78\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
 
 console.log((failed ? "FAIL  " : "OK    ") + "test-model-craft: " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

@@ -45,7 +45,8 @@ ok("no reference → no step 0", !base.includes("REFERENCE READ") && !/\n0\./.te
 ok("edit → read first with ui_export_spec and change only what was asked", edit.includes("1. READ FIRST: ui_list_tree / ui_export_spec {path}") && edit.includes("change ONLY what was asked") && !edit.includes("1. UNDERSTAND:"));
 ok("mobile → touch targets ≥ 44 px, TextScaled max, safe areas", mob.includes("THIS MUST WORK ON TOUCH / SMALL SCREENS") && mob.includes("≥ 44 px") && mob.includes("TextScaled with a max size"));
 // 1.51.2: +"reply with a command" header and the bounded verify loop (two fix rounds, errors are not restarts) - budget raised by exactly that much.
-ok("brief stays compact: base < 2200 chars, everything on < 3400", base.length < 2200 && RS.guiBrief({ reference: true, imageAttached: true, edit: true, mobile: true }).length < 3400, [base.length, RS.guiBrief({ reference: true, imageAttached: true, edit: true, mobile: true }).length]);
+// 1.78.0: the ART LAYER (ui_art_* / ui_text_fx / ui_decor_add / ui_texture_create / ui_image_find) joined step 2 + 3 and the CLONE protocol joined step 0 - budget raised by exactly that much (it is a per-request message, not system-prompt space).
+ok("brief stays compact: base < 3300 chars, everything on < 5100", base.length < 3300 && RS.guiBrief({ reference: true, imageAttached: true, edit: true, mobile: true }).length < 5100, [base.length, RS.guiBrief({ reference: true, imageAttached: true, edit: true, mobile: true }).length]);
 ok("brief never contains code fences or tool-call markup (plain user text)", !/```|<tool_call|DSML/.test(ref));
 
 // ── system prompt knows the brief ───────────────────────────────────────────

@@ -142,6 +142,8 @@
     nodes: [], sel: [], history: [], redo: [], clipboard: null, sideTab: "props", intent: "",
     studioScreens: [], issues: null, issuesOpen: false, pendingRestore: null, galleryOpen: false, galCat: "all", galQuery: "", thumb: false,
     gen: null, // 1.61: last prompt-generated design (TotalGuiGen) - drives Refine / Variation and the hand-off text
+    // 1.78: ART DIRECTION - rides into the hand-off / direct build as ui_art_theme_set + ui_art_restyle + ui_text_fx + ui_decor_add
+    art: { theme: "", font: "", font_asset_id: "", glow: true, vignette: true, particles: false, frames: false, markers: false, clone: false, images: { backdrop: "", logo: "", emblem: "" } },
     simple: (() => { try { return localStorage.getItem("rsg-mode") !== "advanced"; } catch { return true; } })(),
   };
   const byId = new Map();
@@ -300,10 +302,10 @@
   }
 
   // ───────────────────────── history ─────────────────────────
-  function snapshot() { return JSON.stringify({ nodes: S.nodes.map(strip), screen: S.screen, preset: S.preset, tokens: S.tokens, sel: S.sel.map((n) => pathOf(n)) }); }
+  function snapshot() { return JSON.stringify({ nodes: S.nodes.map(strip), screen: S.screen, preset: S.preset, tokens: S.tokens, art: S.art, sel: S.sel.map((n) => pathOf(n)) }); }
   function restore(json) {
     const d = JSON.parse(json);
-    S.nodes = d.nodes.map((r) => adopt(r, null)); S.screen = d.screen; S.preset = d.preset; S.tokens = d.tokens;
+    S.nodes = d.nodes.map((r) => adopt(r, null)); S.screen = d.screen; S.preset = d.preset; S.tokens = d.tokens; if (d.art) S.art = Object.assign({}, S.art, d.art, { images: Object.assign({}, S.art.images, d.art.images || {}) });
     reindex();
     S.sel = (d.sel || []).map((p) => findByPath(p)).filter(Boolean);
     renderAll();
@@ -735,7 +737,47 @@
         ${field("font", `<select data-tok="font">${FONTS.map((f) => `<option ${S.tokens.font === f ? "selected" : ""}>${f}</option>`).join("")}</select>`)}
         ${field("title_font", `<select data-tok="title_font">${FONTS.map((f) => `<option ${S.tokens.title_font === f ? "selected" : ""}>${f}</option>`).join("")}</select>`)}
         <p class="rsg-hint">Elements that reference a token (e.g. <code>primary</code>, <code>title_font</code>, <code>radius</code>) restyle live. Build sends the tokens along so <code>ui_tokens_apply</code> can re-skin later.</p>
-      </div>`;
+      </div>${artSectionHtml()}`;
+  }
+  // 1.78 ART DIRECTION panel: a named look (TotalScript art pack), typography, FX layers, image slots, exact-clone flag.
+  const ART_THEMES = [["", "none - tokens only"], ["hollow", "Hollow - pale serif caps, glow, ink motes"], ["dark_fantasy", "Dark fantasy - gold on black, embers"], ["arcane", "Arcane - violet runes, cyan glow"], ["scifi", "Sci-fi - thin tech sans, cyan edges"], ["cartoon", "Cartoon - chunky rounded, bright outline"], ["horror", "Horror - scratched serif, blood red, grain"], ["royal", "Royal - gold leaf on velvet"], ["minimal_lux", "Minimal luxury - hairline serif, ivory"], ["pixel", "Pixel - arcade bitmap, scanlines"]];
+  const ART_FONTS = ["", "Garamond", "Bodoni", "Antique", "Fantasy", "Merriweather", "Fondamento", "GrenzeGotisch", "Creepster", "SpecialElite", "Michroma", "Sarpanch", "Jura", "Oswald", "JosefinSans", "Nunito", "TitilliumWeb", "FredokaOne", "LuckiestGuy", "Bangers", "PermanentMarker", "AmaticSC", "Arcade", "Code", "SciFi", "GothamBold", "GothamBlack", "BuilderSansBold", "SourceSansBold"];
+  function artSectionHtml() {
+    const a = S.art; const chk = (k, label, hint) => `<label class="rsg-chk" title="${esc(hint || "")}"><input type="checkbox" data-art="${k}" ${a[k] ? "checked" : ""}> ${esc(label)}</label>`;
+    return `<div class="rsg-sec rsg-art"><h4>Art direction <small>cinematic layer (1.78)</small></h4>
+      ${field("Look", `<select data-art="theme">${ART_THEMES.map(([v, l]) => `<option value="${v}" ${a.theme === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`, "A named art theme from TotalScript's art pack - fonts, glow, ornaments, markers, backdrop colours. 'none' keeps the plain token look.")}
+      ${field("Title font", `<select data-art="font">${ART_FONTS.map((f) => `<option value="${f}" ${a.font === f ? "selected" : ""}>${f || "theme default"}</option>`).join("")}</select>`, "Any Roblox font family - applied through FontFace so weights work.")}
+      ${field("Custom font id", `<input data-art="font_asset_id" type="text" placeholder="rbxassetid of an uploaded TTF" value="${esc(a.font_asset_id)}">`, "Upload a TTF in the Creator Dashboard (Fonts) and paste its asset id for the exact typeface.")}
+      <div class="rsg-row rsg-art-flags">${chk("glow", "Title glow", "Layered UIStroke glow behind every title")}${chk("vignette", "Vignette", "Darkened screen edges")}${chk("particles", "Particles", "Ambient motes / embers (LocalScript)")}${chk("frames", "Ornate frames", "9-slice ornamental border on panels")}${chk("markers", "Menu markers", "Flourish / chevron selection ornaments beside buttons")}${chk("clone", "Clone reference exactly", "Tell the AI to match an attached reference image 1:1 - images, fonts, spacing")}</div>
+      ${field("Backdrop image", `<input data-art="images.backdrop" type="text" placeholder="asset id · store:dark cave · tex:fog" value="${esc(a.images.backdrop)}">`, "Full-bleed image behind the screen: an asset id, store:<query> (Creator Store) or tex:<kind> (generated).")}
+      ${field("Logo image", `<input data-art="images.logo" type="text" placeholder="asset id (bottom-right studio logo)" value="${esc(a.images.logo)}">`)}
+      ${field("Emblem image", `<input data-art="images.emblem" type="text" placeholder="asset id or store:<query> (under the title)" value="${esc(a.images.emblem)}">`)}
+      <p class="rsg-hint">Build / Send runs <code>ui_art_theme_set</code> + <code>ui_art_restyle</code> after the exact spec, so the layout you drew stays and the look gets the cinematic layer (glow text, textures, markers). Textures are generated with EditableImage and published; when Studio refuses publishing they stay live previews and the AI says so.</p>
+    </div>`;
+  }
+  function artActive() { const a = S.art; return !!(a.theme || a.font || a.font_asset_id || a.particles || a.frames || a.markers || a.clone || a.images.backdrop || a.images.logo || a.images.emblem); }
+  function artHandoffLines() {
+    if (!artActive()) return [];
+    const a = S.art; const path = "StarterGui." + S.screen.name; const out = [];
+    const ts = {}; if (a.theme) ts.theme = a.theme; if (a.font) ts.font = a.font; if (a.font_asset_id) ts.font_asset_id = String(a.font_asset_id).replace(/^rbxassetid:\/\//, "");
+    out.push("ART DIRECTION (GUI Studio): after step (1) run " + (Object.keys(ts).length ? "ui_art_theme_set " + JSON.stringify(ts) + " then " : "") + "ui_art_restyle " + JSON.stringify({ path, vignette: !!a.vignette, particles: !!a.particles, frames: !!a.frames }) + (a.glow ? "; ui_text_fx {path, glow:true, pulse:true} on the title labels" : "") + (a.markers ? "; ui_decor_add {parent:<each menu button>, kind:\"markers\"}" : "") + ".");
+    const imgs = []; if (a.images.backdrop) imgs.push("backdrop → ui_decor_add " + JSON.stringify({ parent: path, kind: "backdrop", image: a.images.backdrop })); if (a.images.logo) imgs.push("logo → an ImageLabel bottom-right with image " + JSON.stringify(a.images.logo)); if (a.images.emblem) imgs.push("emblem → an ImageLabel under the title with image " + JSON.stringify(a.images.emblem));
+    if (imgs.length) out.push("IMAGES: " + imgs.join("; ") + " (asset id, store:<query> = first free decal via ui_image_find, tex:<kind> = ui_texture_create).");
+    if (a.clone) out.push("CLONE EXACTLY: the user attached / described a reference - match it 1:1 (images via ui_image_find / ui_texture_create / the ids above, typeface via ui_font_set, letter spacing via tracking, markers, backdrop, particles); total_screenshot and list every remaining difference, fix them, repeat once.");
+    return out;
+  }
+  async function artApplyDirect(screenPath) {
+    // Direct build (no AI): give the drawn screen the cinematic layer through the art pack.
+    if (!artActive() || !S.hooks || !S.hooks.runTool) return "";
+    const a = S.art; const path = screenPath || ("StarterGui." + S.screen.name); const notes = [];
+    try {
+      const ts = {}; if (a.theme) ts.theme = a.theme; if (a.font) ts.font = a.font; if (a.font_asset_id) ts.font_asset_id = String(a.font_asset_id).replace(/^rbxassetid:\/\//, "");
+      if (Object.keys(ts).length) { const r = parseFeedback(await S.hooks.runTool("ui_art_theme_set", ts)); if (!r || !r.ok) notes.push("art theme: " + ((r && r.error) || "failed")); }
+      const r2 = parseFeedback(await S.hooks.runTool("ui_art_restyle", { path, vignette: !!a.vignette, particles: !!a.particles, frames: !!a.frames }));
+      if (r2 && r2.ok) notes.push("art layer " + (r2.data && r2.data.theme || "") + (r2.data && r2.data.textures && r2.data.textures.some((t) => /LIVE PREVIEW/.test(t)) ? " (some textures are live previews - publishing refused)" : "")); else notes.push("art restyle: " + ((r2 && r2.error) || "failed"));
+      if (a.images.backdrop) { const r3 = parseFeedback(await S.hooks.runTool("ui_decor_add", { parent: path, kind: "backdrop", image: a.images.backdrop })); if (!r3 || !r3.ok) notes.push("backdrop: " + ((r3 && r3.error) || "failed")); }
+    } catch (e) { notes.push("art: " + (e && e.message || e)); }
+    diag("artApplied", { notes }); return notes.join(" · ");
   }
   function syncTheme() { if (D && D.presetSel) D.presetSel.value = S.preset; }
 
@@ -1261,6 +1303,7 @@
       "GUI STUDIO HAND-OFF (TotalScript): the user designed a Roblox GUI visually. The JSON spec below is EXACT - do not redesign it, build it.",
       `Screen: ${spec.screen.name} · ${count} object(s) · tokens preset ${spec.preset} · behaviours ${countActions(S.nodes)}.`,
       ...genHandoffLines(),
+      ...artHandoffLines(),
       "Steps: (1) run ui_build_spec with EXACTLY this spec and replace:true; (2) run quality_audit {path:\"StarterGui." + spec.screen.name + "\"} and fix anything < 85; (3) then " + (intent && intent.trim() ? "do this: " + intent.trim() : "report the paths and what each behaviour does") + ".",
       "Use the spec verbatim as the `spec` param (one command, no splitting):",
       "```json",
@@ -1309,7 +1352,8 @@
         let msg = `Built ${r.data && r.data.count} object(s) in ${r.data && r.data.screen}${r.data && r.data.behaviours ? " · " + r.data.behaviours + " behaviours" : ""}${warns ? " · " + warns + " warning" + (warns === 1 ? "" : "s") + " (Check)" : ""}`;
         if (!S.builtScreens.includes(S.screen.name)) S.builtScreens.push(S.screen.name);
         setStatus(msg); toast("Built in Studio"); diag("built", { count: r.data && r.data.count, warnings: warns });
-        const v = await verifyInStudio(r.data && r.data.screen); if (v) setStatus(msg + " · " + v);
+        const art = await artApplyDirect(r.data && r.data.screen); if (art) msg += " · " + art;
+        const v = await verifyInStudio(r.data && r.data.screen); if (v) setStatus(msg + " · " + v); else setStatus(msg);
       }
       else { const err = (r && r.error) || String(fb || "").replace(/^Output of '[^']+':\s*/, "").slice(0, 240); setStatus("Studio said: " + err); toast("Build failed — " + err.slice(0, 80)); diag("buildFail", { err: err.slice(0, 120) }); }
     } catch (e) { setStatus("Build failed: " + (e && e.message || e)); }
@@ -1518,6 +1562,7 @@
       if (el.classList.contains("rsg-screen-name")) { S.screen.name = el.value.trim() || "TOTAL_UI"; renderCode(); return; }
       if (el.classList.contains("rsg-intent")) { S.intent = el.value; return; }
       if (el.classList.contains("rsg-import-sel")) return;
+      if (el.dataset.art) { const k = el.dataset.art; const v = el.type === "checkbox" ? el.checked : String(el.value || "").trim(); if (k.startsWith("images.")) S.art.images[k.slice(7)] = v; else S.art[k] = v; renderCode(); return; }
       if (el.dataset.tok) { pushUnlessLive("tok:" + el.dataset.tok); const k = el.dataset.tok; S.tokens[k] = el.type === "number" ? Number(el.value) : el.value; if (el.type === "color" || el.dataset.kind === "raw") { const peer = D.theme.querySelector(`[data-tok="${k}"]${el.type === "color" ? '[data-kind="raw"]' : ':not([data-kind])'}`); if (peer) peer.value = el.value; } renderAll(); return; }
       if (el.dataset.sk != null && S.sel.length === 1) { pushUnlessLive("sk:" + el.dataset.sk); applySimple(S.sel[0], el.dataset.sk, el); renderAll(); return; }
       if (el.dataset.ak != null && S.sel.length === 1) { pushHistory(); const i = Number(el.closest(".rsg-action").dataset.ai); const a = S.sel[0].actions[i]; const k = el.dataset.ak; if (k === "extra") { const v = el.value.trim(); delete a.effect; delete a.remote; delete a.message; delete a.seconds; if (v) { if (a.do === "remote") a.remote = v; else if (a.do === "print") a.message = v; else if (a.do === "auto_hide" || a.do === "pulse") a.seconds = Number(v) || 3; else a.effect = v; } } else if (k === "target") { if (el.value.trim()) a.target = el.value.trim(); else delete a.target; } else a[k] = el.value; renderAll(); return; }
@@ -1595,5 +1640,5 @@
   function close() { if (!S.open) return; closeGallery(); S.open = false; D.host.classList.remove("open"); document.documentElement.classList.remove("rs-gui-open"); diag("close", { nodes: byId.size }); }
   function isOpen() { return S.open; }
 
-  window.TotalGuiStudio = { open, close, isOpen, getSpec, loadSpec, toLuau, buildMessage, setMode, check, openGallery, closeGallery, generate: genGenerate, refine: genRefine, variation: genVariation, get lastDesign() { return S.gen; }, get TEMPLATES() { return templates(); }, get TEMPLATE_CATEGORIES() { return templateCats(); }, DEVICES, ELEMENT_TOOLS, SIMPLE_ELEMENTS, SIMPLE_COMPONENTS, _state: S, _geo: geo, _computeGeometry: computeGeometry, _setBox: setBox, _makeNode: makeNode, _adopt: adopt, _reindex: reindex, _rename: renameNode, _resolveTarget: resolveTarget, _fitTextSize: fitTextSize, _autosaveNow: autosaveNow, _loadAutosave: loadAutosave, _startInlineEdit: startInlineEdit, _endInlineEdit: endInlineEdit, _renderThumbHtml: renderThumbHtml, _thumbCache: thumbCache, _galleryFiltered: galleryFiltered };
+  window.TotalGuiStudio = { open, close, isOpen, getSpec, loadSpec, toLuau, buildMessage, setMode, check, getArt: () => JSON.parse(JSON.stringify(S.art)), setArt: (patch) => { const p = patch || {}; S.art = Object.assign({}, S.art, p, { images: Object.assign({}, S.art.images, p.images || {}) }); if (D) renderTheme(); }, ART_THEMES, ART_FONTS, _artHandoffLines: artHandoffLines, openGallery, closeGallery, generate: genGenerate, refine: genRefine, variation: genVariation, get lastDesign() { return S.gen; }, get TEMPLATES() { return templates(); }, get TEMPLATE_CATEGORIES() { return templateCats(); }, DEVICES, ELEMENT_TOOLS, SIMPLE_ELEMENTS, SIMPLE_COMPONENTS, _state: S, _geo: geo, _computeGeometry: computeGeometry, _setBox: setBox, _makeNode: makeNode, _adopt: adopt, _reindex: reindex, _rename: renameNode, _resolveTarget: resolveTarget, _fitTextSize: fitTextSize, _autosaveNow: autosaveNow, _loadAutosave: loadAutosave, _startInlineEdit: startInlineEdit, _endInlineEdit: endInlineEdit, _renderThumbHtml: renderThumbHtml, _thumbCache: thumbCache, _galleryFiltered: galleryFiltered };
 })();

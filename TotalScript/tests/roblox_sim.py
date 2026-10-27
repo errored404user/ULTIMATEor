@@ -33,7 +33,7 @@ local CLASSES = {
   UIBase={"Instance"}, UIComponent={"UIBase"}, UIConstraint={"UIComponent"}, UILayout={"UIComponent"}, UIGridStyleLayout={"UILayout"},
   UICorner={"UIComponent"}, UIStroke={"UIComponent"}, UIPadding={"UIComponent"}, UIListLayout={"UIGridStyleLayout"}, UIGridLayout={"UIGridStyleLayout"},
   UIAspectRatioConstraint={"UIConstraint"}, UISizeConstraint={"UIConstraint"}, UITextSizeConstraint={"UIConstraint"}, UIScale={"UIComponent"}, UIGradient={"UIComponent"},
-  Service={"Instance"},
+  Service={"Instance"}, EditableImage={"Instance"},
   SpawnLocation={"BasePart"}, Seat={"BasePart"}, StarterPlayerScripts={"Instance"}, StarterCharacterScripts={"Instance"}, Backpack={"Instance"}, StarterGear={"Instance"}, BillboardGui={"LayerCollector"}, Animation={"Instance"}, Team={"Instance"}, BoolValue={"ValueBase"}, ObjectValue={"ValueBase"}, Constraint={"Instance"}, AlignPosition={"Constraint"}, AlignOrientation={"Constraint"}, BodyVelocity={"Instance"}, Configuration={"Instance"}, Tags={"Instance"},
 }
 local function isa(cls, want)
@@ -193,7 +193,7 @@ M.firedSignals = 0
 -- instances
 local Instance = {}
 local Inst = {}
-local EVENTS = {Activated=1,MouseEnter=1,MouseLeave=1,MouseButton1Down=1,MouseButton1Up=1,MouseButton1Click=1,SelectionGained=1,SelectionLost=1,DescendantAdded=1,ChildAdded=1,ChildRemoved=1,Changed=1,CharacterAdded=1,HealthChanged=1,PlayerRemoving=1,PlayerAdded=1,Loaded=1,InputBegan=1,InputEnded=1,LastInputTypeChanged=1,Completed=1,OnClientEvent=1,OnServerEvent=1,Event=1,Focused=1,FocusLost=1,AncestryChanged=1,Destroying=1,Died=1,Touched=1,TouchEnded=1,Heartbeat=1,Stepped=1,RenderStepped=1,Chatted=1,StateChanged=1,Equipped=1,Unequipped=1,Running=1,Jumping=1,AttributeChanged=1,PromptGamePassPurchaseFinished=1,PromptProductPurchaseFinished=1,PromptPurchaseFinished=1,PlayerMembershipChanged=1,ProcessReceipt=0}
+local EVENTS = {Ended=1,Played=1,Stopped=1,Activated=1,MouseEnter=1,MouseLeave=1,MouseButton1Down=1,MouseButton1Up=1,MouseButton1Click=1,SelectionGained=1,SelectionLost=1,DescendantAdded=1,ChildAdded=1,ChildRemoved=1,Changed=1,CharacterAdded=1,HealthChanged=1,PlayerRemoving=1,PlayerAdded=1,Loaded=1,InputBegan=1,InputEnded=1,LastInputTypeChanged=1,Completed=1,OnClientEvent=1,OnServerEvent=1,Event=1,Focused=1,FocusLost=1,AncestryChanged=1,Destroying=1,Died=1,Touched=1,TouchEnded=1,Heartbeat=1,Stepped=1,RenderStepped=1,Chatted=1,StateChanged=1,Equipped=1,Unequipped=1,Running=1,Jumping=1,AttributeChanged=1,PromptGamePassPurchaseFinished=1,PromptProductPurchaseFinished=1,PromptPurchaseFinished=1,PlayerMembershipChanged=1,ProcessReceipt=0}
 local DEFAULTS = {Size=function() return UDim2.new(0,100,0,100) end, Position=function() return UDim2.new() end, AnchorPoint=function() return Vector2.new() end,
   BackgroundColor3=function() return Color3.new(1,1,1) end, BackgroundTransparency=0, BorderSizePixel=1, TextColor3=function() return Color3.new(0,0,0) end, TextTransparency=0, TextStrokeTransparency=1, TextSize=14, Text="", TextScaled=false, TextWrapped=false, RichText=false,
   Visible=true, ZIndex=1, Image="", ImageTransparency=0, ImageColor3=function() return Color3.new(1,1,1) end, Font=function() return Enum.Font.Legacy end, Enabled=true, Active=false, AutoButtonColor=true, ClipsDescendants=false,
@@ -420,6 +420,23 @@ function methods:RemoveDefaultLoadingScreen() end
 function methods:PreloadAsync(list, cb) if cb then for _,a in ipairs(list) do cb(a, Enum.AssetFetchStatus.Success) end end end
 function methods:IsLoaded() return true end
 function methods:FireServer(...) M.fired[#M.fired+1]={self.__props.Name, ...} end
+-- 1.78.0 art pack: EditableImage + CreateAssetAsync (AssetService) and TextService:GetTextSize
+function methods:CreateEditableImage(opts) local e = new("EditableImage", "EditableImage") e.Size = (opts and opts.Size) or Vector2.new(512,512) e.__pixels = nil return e end
+function methods:WritePixelsBuffer(pos, size, buf) self.__pixels = buf self.__pixelsSize = size M.pixelWrites = (M.pixelWrites or 0) + 1 end
+function methods:DrawCircle() end
+function methods:DrawLine() end
+function methods:DrawRectangle() end
+function methods:CreateAssetAsync(obj, assetType, opts)
+  M.createdAssets = M.createdAssets or {}
+  local id = 900000 + #M.createdAssets + 1
+  M.createdAssets[#M.createdAssets+1] = {object=obj, assetType=assetType and assetType.Name or nil, name=opts and opts.Name or nil, id=id}
+  if M.failCreateAsset then error("CreateAssetAsync is not permitted in this context") end
+  return Enum.CreateAssetResult.Success, id
+end
+function methods:GetFreeDecals(query, page) M.decalQueries = M.decalQueries or {} M.decalQueries[#M.decalQueries+1] = {query=tostring(query), page=page} if M.failDecals then error("HttpError: Forbidden") end if tostring(query):find("nothing") then return {{Results={}}} end return {{Results={{AssetId=1234567, Name="Ornate divider "..tostring(query), CreatorName="sim"}, {AssetId=7654321, Name="Soft glow", CreatorName="sim"}}}} end
+function methods:Play() self.IsPlaying = true self.Playing = true M.soundsPlayed = (M.soundsPlayed or 0) + 1 end
+function methods:Stop() self.IsPlaying = false self.Playing = false end
+function methods:GetTextSize(text, size, font, frame) return Vector2.new(#tostring(text) * size * 0.55, size) end
 function methods:FireClient(plr, ...) M.fired[#M.fired+1]={self.__props.Name, plr and plr.Name or "?", ...} end
 function methods:FireAllClients(...) M.fired[#M.fired+1]={self.__props.Name, "all", ...} end
 function methods:Fire(...) M.fired[#M.fired+1]={self.__props.Name, ...} if self.Event then self.Event:Fire(...) end end
@@ -550,6 +567,7 @@ M.selection = {}
 local ReplicatedStorage = service("ReplicatedStorage")
 service("ReplicatedFirst") service("ServerScriptService") service("DataStoreService") service("ServerStorage") service("StarterGui") service("StarterPlayer") service("SoundService") service("ContentProvider")
 local HttpService = service("HttpService")
+service("AssetService")
 local TweenService = service("TweenService")
 local RunService = service("RunService")
 local UIS = service("UserInputService") UIS.TouchEnabled = false UIS.KeyboardEnabled = true UIS.GamepadEnabled = false
@@ -633,6 +651,21 @@ _G.Random = {new = function(seed) local st = seed or os.time() local function nx
 _G.OverlapParams = {new = function() return {FilterDescendantsInstances = {}, FilterType = nil, MaxParts = 0} end}
 _G.RaycastParams = {new = function() return {FilterDescendantsInstances = {}} end}
 _G.utf8 = utf8
+-- 1.78.0: Font / buffer / Content for the art pack (data-only stand-ins)
+_G.Font = {
+  new = function(family, weight, style) return {Family=family, Weight=weight or Enum.FontWeight.Regular, Style=style or Enum.FontStyle.Normal, __font=true} end,
+  fromEnum = function(e) return {Family="rbxasset://fonts/families/"..tostring(e.Name)..".json", Weight=Enum.FontWeight.Regular, Style=Enum.FontStyle.Normal, __font=true} end,
+  fromName = function(name, weight, style) return {Family="rbxasset://fonts/families/"..tostring(name)..".json", Weight=weight or Enum.FontWeight.Regular, Style=style or Enum.FontStyle.Normal, __font=true} end,
+  fromId = function(id, weight, style) return {Family="rbxassetid://"..tostring(id), Weight=weight or Enum.FontWeight.Regular, Style=style or Enum.FontStyle.Normal, __font=true} end,
+}
+_G.buffer = {
+  create = function(n) return {__n=n, __b={}} end,
+  len = function(b) return b.__n end,
+  writeu8 = function(b, o, v) if o < 0 or o >= b.__n then error("buffer access out of bounds") end b.__b[o] = math.floor(v) % 256 end,
+  readu8 = function(b, o) if o < 0 or o >= b.__n then error("buffer access out of bounds") end return b.__b[o] or 0 end,
+  fill = function(b, o, v, n) for i = o, o + (n or (b.__n - o)) - 1 do b.__b[i] = v end end,
+}
+_G.Content = { fromObject = function(o) return {Object=o, SourceType="Object", __content=true} end, fromAssetId = function(id) return {Uri="rbxassetid://"..tostring(id), SourceType="Uri", __content=true} end, fromUri = function(u) return {Uri=u, SourceType="Uri", __content=true} end, none = {SourceType="None", __content=true} }
 string.split = function(s, sep) local out={} for piece in (s..sep):gmatch("(.-)"..sep:gsub("%p","%%%0")) do out[#out+1]=piece end return out end
 math.clamp = function(v,a,b) return math.max(a, math.min(b, v)) end
 math.round = math.round or function(x) if x >= 0 then return math.floor(x + 0.5) end return math.ceil(x - 0.5) end
