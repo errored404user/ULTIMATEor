@@ -9266,3 +9266,32 @@ html.rs-cards-window-open #rs-root { visibility: hidden !important; }
 #rs-bar .rs-donate-grid .rs-rbx-price { display: inline-flex; align-items: baseline; gap: 3px; font-weight: 800; font-size: 11.5px; color: var(--total-accent, #22d3ee); white-space: nowrap; }
 #rs-bar .rs-donate-grid .rs-rbx-cur { color: inherit !important; font-weight: 600 !important; opacity: .8; }
 #rs-bar .rs-donate-grid .rs-tip-rbx:hover { box-shadow: 0 0 0 1px rgba(34,211,238,.35), 0 0 18px rgba(34,211,238,.22) !important; transform: translateY(-1px); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   1.75.1 — DONATE (Settings tray): clearer copy, tiered buttons
+   ═══════════════════════════════════════════════════════════════════════ */
+#rs-bar .rs-donate-head { display: flex; flex-direction: column; gap: 3px; margin: 0 0 10px; }
+#rs-bar .rs-donate-title { font-size: 13px; font-weight: 800; letter-spacing: -.1px; color: var(--total-fg, #e6fffb); }
+#rs-bar .rs-donate-text { font-size: 10.5px; line-height: 1.5; color: #8d9aa0; }
+html.rs-light #rs-bar .rs-donate-title { color: #1f2430; }
+html.rs-light #rs-bar .rs-donate-text { color: #6b7280; }
+#rs-bar .rs-donate-grid .rs-tip-rbx { --dono-glow: 0; position: relative; margin: 0 !important; gap: 10px !important;
+  background: linear-gradient(135deg, rgba(34,211,238,calc(.05 + var(--dono-glow) * .10)), rgba(20,184,166,calc(.02 + var(--dono-glow) * .06))), rgba(255,255,255,.04) !important;
+  border: 1px solid rgba(34,211,238,calc(.16 + var(--dono-glow) * .34)) !important;
+  box-shadow: 0 0 calc(var(--dono-glow) * 18px) rgba(34,211,238,calc(var(--dono-glow) * .22));
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease !important; }
+#rs-bar .rs-donate-grid .rs-dono-1 { --dono-glow: 0; }
+#rs-bar .rs-donate-grid .rs-dono-2 { --dono-glow: .3; }
+#rs-bar .rs-donate-grid .rs-dono-3 { --dono-glow: .6; }
+#rs-bar .rs-donate-grid .rs-dono-4 { --dono-glow: 1; }
+#rs-bar .rs-donate-grid .rs-rbx-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+#rs-bar .rs-donate-grid .rs-rbx-name { font-weight: 800; font-size: 12.5px; }
+#rs-bar .rs-donate-grid .rs-rbx-sub { font-size: 10px; font-weight: 500; color: #8d9aa0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.rs-light #rs-bar .rs-donate-grid .rs-rbx-sub { color: #6b7280; }
+#rs-bar .rs-donate-grid .rs-rbx-price { padding: 4px 8px; border-radius: 999px; background: rgba(34,211,238,.10); border: 1px solid rgba(34,211,238,.28); flex: none; }
+#rs-bar .rs-donate-grid .rs-dono-4 .rs-rbx-price { color: #06222a !important; background: linear-gradient(135deg, #9ff3ff, #22d3ee); border-color: transparent; }
+#rs-bar .rs-donate-grid .rs-tip-rbx:hover { border-color: rgba(34,211,238,.6) !important; }
+#rs-bar .rs-donate-grid .rs-tip-rbx:active { transform: translateY(0) scale(.99); }
+#rs-bar .rs-donate-grid .rs-tip-rbx:focus-visible { outline: 2px solid var(--total-accent, #22d3ee); outline-offset: 2px; }
+#rs-bar .rs-donate-foot { margin: 9px 0 0; font-size: 10px; color: #7a8a90; text-align: center; }
+html.rs-light #rs-bar .rs-donate-foot { color: #6b7280; }

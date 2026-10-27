@@ -545,11 +545,14 @@
   // Roblox "tip" Game Passes - the native currency for the audience.
   // 1.74.0 — named donation passes (price shown immediately; the live lookup
   // below only corrects it if Roblox reports a different one).
+  // 1.75.1 — each pass also carries a human label + one-line meaning; the
+  // Roblox pass name stays visible as the small sub-line so the button matches
+  // the page that opens.
   const ROBUX_PASSES = [
-    { id: 1941336506, name: "SmallDono",  robux: 10 },
-    { id: 1941228530, name: "NormalDono", robux: 25 },
-    { id: 1940736510, name: "BigDono",    robux: 100 },
-    { id: 1941672495, name: "HUGEDONO",   robux: 500 },
+    { id: 1941336506, name: "SmallDono",  robux: 10,  label: "Small thanks", sub: "a quick thank-you" },
+    { id: 1941228530, name: "NormalDono", robux: 25,  label: "Supporter",    sub: "fuels the next update" },
+    { id: 1940736510, name: "BigDono",    robux: 100, label: "Big thanks",   sub: "keeps TotalScript free" },
+    { id: 1941672495, name: "HUGEDONO",   robux: 500, label: "Legend",       sub: "huge \u2014 thank you" },
   ];
   const passUrl = (id) => `https://www.roblox.com/game-pass/${id}`;
   function parseRobuxPrice(text) {
@@ -8976,7 +8979,7 @@
       }
       let passes = "";
       for (const p of ROBUX_PASSES) {
-        passes += `<button class="rs-tip-opt rs-tip-rbx" data-u="${passUrl(p.id)}" data-pass="${p.id}" title="${p.name} — ${p.robux} Robux game pass on roblox.com"><span class="rs-rbx-name">${p.name}</span><span class="rs-rbx-price"><span class="rs-rbx-cur">R$</span><span class="rs-rbx-amt">${p.robux}</span></span></button>`;
+        passes += `<button type="button" class="rs-tip-opt rs-tip-rbx rs-dono-${ROBUX_PASSES.indexOf(p) + 1}" data-u="${passUrl(p.id)}" data-pass="${p.id}" title="${p.label} \u2014 opens the ${p.name} game pass (${p.robux} Robux) on roblox.com"><span class="rs-rbx-info"><span class="rs-rbx-name">${p.label}</span><span class="rs-rbx-sub">${p.sub} \u00b7 ${p.name}</span></span><span class="rs-rbx-price"><span class="rs-rbx-cur">R$</span><span class="rs-rbx-amt">${p.robux}</span></span></button>`;
       }
       const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
       const mergedServers = mergedMcpServers();
@@ -9010,8 +9013,9 @@
           </section>
          <section class="rs-menu-sec rs-donate-sec">
            <div class="rs-sec-label"><span>Donate</span><span class="rs-sec-state">Robux game passes</span></div>
-             <div class="rs-menu-note">TotalScript is free. If it saves you time, a game-pass donation keeps it going — each button opens the pass on roblox.com.</div>
+             <div class="rs-donate-head"><span class="rs-donate-title">Enjoying TotalScript?</span><span class="rs-donate-text">It is free and stays free for everyone. If it saves you hours in Studio, you can say thanks with a Robux game pass \u2014 pick any amount, the pass page opens on roblox.com and you pay there, never here. Donations unlock nothing; they just keep the work going.</span></div>
              <div class="rs-rbx-grid rs-donate-grid">${passes}</div>
+             <div class="rs-donate-foot">Thank you to everyone who already chipped in.</div>
             </section>
             <section class="rs-menu-sec">
               <div class="rs-sec-label"><span>Work mode</span><span class="rs-sec-state">${(() => { const pm = publicMode(); return pm ? escRs(pm.title) + " · " + WORK_MODES[workMode].short : WORK_MODES[workMode].short; })()}</span></div>

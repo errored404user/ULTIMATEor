@@ -150,12 +150,22 @@
       opacity:.9;
     }
     .work{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:14px}
-    .donate-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px}
-    .dono{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 11px; border-radius:10px; cursor:pointer; font:inherit;
-      color:var(--text); background:var(--surface-2); border:1px solid var(--line-strong); transition:transform .12s ease, box-shadow .12s ease}
-    .dono span{font-weight:700; font-size:12px}
-    .dono b{font-size:11.5px; font-weight:800; color:var(--accent); white-space:nowrap}
-    .dono:hover{transform:translateY(-1px); box-shadow:0 0 0 1px rgba(34,211,238,.35), 0 0 16px rgba(34,211,238,.22)}
+    .donate-title{font-size:13px; font-weight:800; letter-spacing:-.1px; margin:2px 0 3px; color:var(--text)}
+    .donate-note{line-height:1.5}
+    .donate-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px}
+    .dono{--dono-glow:.0; position:relative; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border-radius:12px; cursor:pointer; font:inherit; text-align:left;
+      color:var(--text); background:linear-gradient(135deg, rgba(34,211,238,calc(.04 + var(--dono-glow) * .10)), rgba(20,184,166,calc(.02 + var(--dono-glow) * .06))), var(--surface-2);
+      border:1px solid rgba(34,211,238,calc(.16 + var(--dono-glow) * .34)); box-shadow:0 0 calc(var(--dono-glow) * 18px) rgba(34,211,238,calc(var(--dono-glow) * .22)); transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease}
+    .dono-1{--dono-glow:0} .dono-2{--dono-glow:.3} .dono-3{--dono-glow:.6} .dono-4{--dono-glow:1}
+    .dono-info{display:flex; flex-direction:column; gap:2px; min-width:0}
+    .dono-name{font-weight:800; font-size:12.5px; letter-spacing:-.1px}
+    .dono small{font-size:10px; font-weight:500; color:var(--text-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    .dono b{display:inline-flex; align-items:center; padding:4px 8px; border-radius:999px; font-size:11.5px; font-weight:800; color:var(--accent); background:rgba(34,211,238,.10); border:1px solid rgba(34,211,238,.28); white-space:nowrap; flex:none}
+    .dono-4 b{color:#06222a; background:linear-gradient(135deg,#9ff3ff,#22d3ee); border-color:transparent}
+    .dono:hover{transform:translateY(-1px); border-color:rgba(34,211,238,.6); box-shadow:0 0 0 1px rgba(34,211,238,.35), 0 0 18px rgba(34,211,238,.26)}
+    .dono:active{transform:translateY(0) scale(.99)}
+    .dono:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+    .donate-foot{margin-top:8px; opacity:.85}
     .work-card{
       display:flex; flex-direction:column; gap:4px; padding:12px 10px 11px; border-radius:4px;
       border:1px solid var(--line); background:rgba(0,0,0,.28); color:var(--text-dim); cursor:pointer;
@@ -327,13 +337,15 @@
 
     <div class="card" id="donate-card">
       <div class="sec-label">Donate</div>
-      <div class="row config-note">TotalScript is free. A Robux game-pass donation keeps it going — each opens on roblox.com.</div>
+      <div class="donate-title">Enjoying TotalScript?</div>
+      <div class="row config-note donate-note">It is free and stays free for everyone. If it saves you hours in Studio, say thanks with a Robux game pass — pick any amount; the pass page opens on roblox.com and you pay there, never here. Donations unlock nothing, they just keep the work going.</div>
       <div class="donate-grid">
-        <button type="button" class="dono" data-dono="https://www.roblox.com/game-pass/1941336506/SmallDono"><span>SmallDono</span><b>R$ 10</b></button>
-        <button type="button" class="dono" data-dono="https://www.roblox.com/game-pass/1941228530/NormalDono"><span>NormalDono</span><b>R$ 25</b></button>
-        <button type="button" class="dono" data-dono="https://www.roblox.com/game-pass/1940736510/BigDono"><span>BigDono</span><b>R$ 100</b></button>
-        <button type="button" class="dono" data-dono="https://www.roblox.com/game-pass/1941672495/HUGEDONO"><span>HUGEDONO</span><b>R$ 500</b></button>
+        <button type="button" class="dono dono-1" data-dono="https://www.roblox.com/game-pass/1941336506/SmallDono" title="Opens the SmallDono game pass (10 Robux) on roblox.com"><span class="dono-info"><span class="dono-name">Small thanks</span><small>a quick thank-you · SmallDono</small></span><b>R$ 10</b></button>
+        <button type="button" class="dono dono-2" data-dono="https://www.roblox.com/game-pass/1941228530/NormalDono" title="Opens the NormalDono game pass (25 Robux) on roblox.com"><span class="dono-info"><span class="dono-name">Supporter</span><small>fuels the next update · NormalDono</small></span><b>R$ 25</b></button>
+        <button type="button" class="dono dono-3" data-dono="https://www.roblox.com/game-pass/1940736510/BigDono" title="Opens the BigDono game pass (100 Robux) on roblox.com"><span class="dono-info"><span class="dono-name">Big thanks</span><small>keeps TotalScript free · BigDono</small></span><b>R$ 100</b></button>
+        <button type="button" class="dono dono-4" data-dono="https://www.roblox.com/game-pass/1941672495/HUGEDONO" title="Opens the HUGEDONO game pass (500 Robux) on roblox.com"><span class="dono-info"><span class="dono-name">Legend</span><small>huge — thank you · HUGEDONO</small></span><b>R$ 500</b></button>
       </div>
+      <div class="row config-note donate-foot">Thank you to everyone who already chipped in.</div>
     </div>
 
     <div class="acts">
