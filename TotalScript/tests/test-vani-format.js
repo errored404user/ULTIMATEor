@@ -109,7 +109,7 @@ ok("shaper marks itself 1.78", net.includes('setAttribute("data-rs-vani-net", "1
 const readme = read("README.md");
 ok("README: 1.78.1 entry + this test listed", /\*\*1\.78\.1 — Vani: "shown, not fenced" command blocks/.test(readme) && readme.includes("test-vani-format.js"));
 const manifest = JSON.parse(read("manifest.json"));
-ok("version pins 1.79.0", manifest.version === "1.79.0" && /^version = "1\.79\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.79.0"'));
+ok("version pins 1.80.0", manifest.version === "1.80.0" && /^version = "1\.80\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.80.0"'));
 
 console.log(`\n${pass}/${pass + fail} checks passed`);
 process.exit(fail ? 1 : 0);

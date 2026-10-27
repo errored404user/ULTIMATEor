@@ -104,7 +104,7 @@ function page(body) {
 
   // ── 5. wiring pins ──────────────────────────────────────────────────────────
   const lists = manifest.content_scripts.map((c) => c.js).filter((js) => js.includes("src/core/main.js"));
-  ok("manifest: reasoning.js loads after animstudio.js and before main.js in all 16 bundles", lists.length === 16 && lists.every((js) => { const a = js.indexOf("src/core/animstudio.js"), r = js.indexOf("src/core/reasoning.js"), m = js.indexOf("src/core/main.js"); return a >= 0 && r === a + 1 && m > r; }));
+  ok("manifest: reasoning.js loads after animstudio.js and before main.js in all 17 bundles", lists.length === 17 && lists.every((js) => { const a = js.indexOf("src/core/animstudio.js"), r = js.indexOf("src/core/reasoning.js"), m = js.indexOf("src/core/main.js"); return a >= 0 && r === a + 1 && m > r; }));
   ok("codecraft.html loads reasoning.js before main.js", html.indexOf('<script src="src/core/reasoning.js"></script>') > html.indexOf('<script src="src/core/animstudio.js"></script>') && html.indexOf('<script src="src/core/reasoning.js"></script>') < html.indexOf('<script src="src/core/main.js"></script>'));
   ok("codecraft.js exposes setReasoningMode → reasoning_effort setting", /async setReasoningMode\(modeId, rule\) \{/.test(cc) && /await saveSettings\(\{ reasoning: v \}\);/.test(cc) && /body\.reasoning_effort = settings\.reasoning/.test(cc));
   ok("config.js: ULTIMATE prompt block + header renamed to REASONING EFFORT", /ultimate: "ULTIMATE THINKING \(no shortcuts\): \(1\) PLAN/.test(cfg) && cfg.includes("━━━ REASONING EFFORT: ${lvl.toUpperCase()} (user setting) ━━━") && /start_stop_play \+ get_console_output \(or total_debug\), then quality_audit/.test(cfg));

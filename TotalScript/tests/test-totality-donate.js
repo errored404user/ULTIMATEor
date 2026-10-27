@@ -35,7 +35,7 @@ ok("css: badge + card are aqua now (no gold gradient left on the mode)", css.inc
 
 const readme = read("README.md");
 ok("README: 1.74.0 entry + Donate section + Totality in the mode paragraph", readme.includes("**1.74.0 — Totality, aqua; shorter Work mode; Donate.**") && readme.includes("## Donate") && readme.includes("there is one built-in mode, **Totality**") && PASSES.every(([n, r, id]) => readme.includes(`| ${n} | ${r} | https://www.roblox.com/game-pass/${id}/${n} |`)));
-ok("version pins 1.79.0 (manifest / crate / plugin)", JSON.parse(read("manifest.json")).version === "1.79.0" && /^version = "1\.79\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.79.0"'));
+ok("version pins 1.80.0 (manifest / crate / plugin)", JSON.parse(read("manifest.json")).version === "1.80.0" && /^version = "1\.80\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.80.0"'));
 
 // ── Donate ──
 const LABELS = { SmallDono: ["Small thanks", "a quick thank-you"], NormalDono: ["Supporter", "fuels the next update"], BigDono: ["Big thanks", "keeps TotalScript free"], HUGEDONO: ["Legend", "huge \u2014 thank you"] };

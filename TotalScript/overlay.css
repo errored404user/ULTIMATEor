@@ -306,6 +306,22 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-crax {
   border-color: rgba(217,138,91,0.18);
   color: #e8e8ec;
 }
+
+/* Xiaomi MiMo Studio (aistudio.xiaomimimo.com) - Xiaomi orange accent on a
+   neutral bar; the page is a plain light/dark SPA so the bar stays flat. */
+#rs-bar.rs-prov-mimo {
+  --accent: #ff6900;
+  --accent-strong: #ff8533;
+  --accent-soft: rgba(255, 105, 0, 0.14);
+  --accent-inv: #1a0d00;
+  font-family: "MiSans", "Inter", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+#rs-bar.rs-prov-mimo #rs-brand { font-weight: 700; letter-spacing: -0.15px; }
+#rs-bar.rs-prov-mimo #rs-dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+#rs-bar.rs-prov-mimo #rs-dot.warn { background: var(--accent-strong); box-shadow: 0 0 8px var(--accent-strong); }
+#rs-bar.rs-prov-mimo #rs-state b { color: var(--accent); }
+#rs-bar.rs-prov-mimo #rs-action[data-kind="start"],
+#rs-bar.rs-prov-mimo #rs-action[data-kind="start-degraded"] { background: var(--accent); color: var(--accent-inv); border-color: transparent; }
 #rs-bar.rs-prov-crax #rs-switch:hover,
 #rs-bar.rs-prov-crax #rs-discord:hover,
 #rs-bar.rs-prov-crax #rs-support:hover { background: rgba(217,138,91,0.14); }
@@ -335,6 +351,7 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-crax {
 #rs-bar.rs-bar-inline.rs-prov-overchat,
 #rs-bar.rs-bar-inline.rs-prov-huggingchat,
 #rs-bar.rs-bar-inline.rs-prov-crax,
+#rs-bar.rs-bar-inline.rs-prov-mimo,
 #rs-bar.rs-bar-anchored.rs-prov-deepseek,
 #rs-bar.rs-bar-anchored.rs-prov-chatgpt,
 #rs-bar.rs-bar-anchored.rs-prov-claude,
@@ -351,7 +368,8 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-crax {
 #rs-bar.rs-bar-anchored.rs-prov-minimax,
 #rs-bar.rs-bar-anchored.rs-prov-overchat,
 #rs-bar.rs-bar-anchored.rs-prov-huggingchat,
-#rs-bar.rs-bar-anchored.rs-prov-crax {
+#rs-bar.rs-bar-anchored.rs-prov-crax,
+#rs-bar.rs-bar-anchored.rs-prov-mimo {
   background: transparent;
   border: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -381,6 +399,7 @@ html.rs-light #rs-bar.rs-bar-inline.rs-prov-minimax,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-overchat,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-huggingchat,
 html.rs-light html.rs-light #rs-bar.rs-bar-inline.rs-prov-crax,
+html.rs-light #rs-bar.rs-bar-inline.rs-prov-mimo,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-deepseek,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-chatgpt,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-claude,
@@ -400,7 +419,8 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-huggingchat,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-minimax,
 #rs-bar.rs-bar-anchored.rs-prov-overchat,
 #rs-bar.rs-bar-anchored.rs-prov-huggingchat,
-html.rs-light #rs-bar.rs-bar-anchored.rs-prov-crax {
+html.rs-light #rs-bar.rs-bar-anchored.rs-prov-crax,
+html.rs-light #rs-bar.rs-bar-anchored.rs-prov-mimo {
   background: transparent;
   border-bottom-color: rgba(0, 0, 0, 0.08);
 }

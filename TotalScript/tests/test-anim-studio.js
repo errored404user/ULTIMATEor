@@ -10,7 +10,7 @@ let n = 0; const ok = (name, cond, detail) => { n++; if (!cond) { console.error(
 // ── registration ───────────────────────────────────────────────────────────
 const m = JSON.parse(manifest);
 const lists = m.content_scripts.map((c) => c.js).filter((js) => js.includes("src/core/main.js"));
-ok("16 provider lists load main.js", lists.length === 16, lists.length);
+ok("17 provider lists load main.js", lists.length === 17, lists.length);
 for (const js of lists) {
   const lib = js.indexOf("src/core/animlib.js"), eng = js.indexOf("src/core/animengine.js"), gs = js.indexOf("src/core/guistudio.js"), as = js.indexOf("src/core/animstudio.js"), mn = js.indexOf("src/core/main.js");
   ok("animengine.js loads right after animlib.js and before main.js", lib >= 0 && eng === lib + 1 && mn > eng, js);

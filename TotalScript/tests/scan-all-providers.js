@@ -7,6 +7,7 @@ const providerFiles = [
   'src/providers/deepseek.js', 'src/providers/gemini.js', 'src/providers/glm.js',
   'src/providers/kimi.js', 'src/providers/meta.js', 'src/providers/nvidia.js', 'src/providers/oxalpha.js', 'src/providers/vani.js', 'src/providers/clickup.js',
   'src/providers/qwen.js',
+  'src/providers/mimo.js',
   ['src/providers/multichat.js','agent.minimax.io'],
   ['src/providers/multichat.js','overchat.ai'],
   ['src/providers/multichat.js','huggingface.co'],

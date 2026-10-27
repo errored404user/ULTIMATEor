@@ -92,7 +92,7 @@ ok("brief: the looping animation clip tells the model to loop", /The clip loops:
 // ── 3. wiring ────────────────────────────────────────────────────────────────
 const manifest = JSON.parse(read("manifest.json"));
 const lists = manifest.content_scripts.filter((c) => c.js && c.js.includes("src/core/main.js")).map((c) => c.js);
-ok("manifest: videostudio.js loads after animstudio.js and right before main.js in all 16 provider lists", lists.length === 16 && lists.every((js) => js.indexOf("src/core/videostudio.js") > js.indexOf("src/core/animstudio.js") && js.indexOf("src/core/main.js") === js.indexOf("src/core/videostudio.js") + 1));
+ok("manifest: videostudio.js loads after animstudio.js and right before main.js in all 17 provider lists", lists.length === 17 && lists.every((js) => js.indexOf("src/core/videostudio.js") > js.indexOf("src/core/animstudio.js") && js.indexOf("src/core/main.js") === js.indexOf("src/core/videostudio.js") + 1));
 const codecraft = read("codecraft.html");
 ok("codecraft.html loads videostudio.js after animstudio.js", codecraft.indexOf('<script src="src/core/videostudio.js"></script>') > codecraft.indexOf('<script src="src/core/animstudio.js"></script>'));
 const main = read("src/core/main.js");
@@ -128,7 +128,7 @@ try {
 // ── 5. release bookkeeping ───────────────────────────────────────────────────
 const readme = read("README.md");
 ok("README: 1.79.0 entry + this test listed", /\*\*1\.79\.0 — Video Studio: show it a video/.test(readme) && readme.includes("test-video-studio.js"));
-ok("version pins 1.79.0", manifest.version === "1.79.0" && /^version = "1\.79\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.79.0"'));
+ok("version pins 1.80.0", manifest.version === "1.80.0" && /^version = "1\.80\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.80.0"'));
 
 console.log(`\n${pass}/${pass + fail} checks passed`);
 process.exit(fail ? 1 : 0);

@@ -123,9 +123,11 @@
     if (Array.isArray(o)) { for (const it of o) merge(out, extract(it, depth + 1)); return out; }
     const type = str(o.type) || str(o.event) || str(o.kind) || "";
     if (ERROR_TYPE_RE.test(type) || o.error) {
-      const e = o.error || o.message || o.detail || o;
-      out.error = typeof e === "string" ? e : (e && (e.message || e.detail || e.msg)) || (type ? type : "error");
+      // `content` carries the reason in some dialects (Xiaomi MiMo: `event: error` + {"type":"error","content":"请求过于频繁"}).
+      const e = o.error || o.message || o.detail || o.content || o;
+      out.error = typeof e === "string" ? e : (e && (e.message || e.detail || e.msg || e.content)) || (type ? type : "error");
       if (typeof out.error !== "string") { try { out.error = JSON.stringify(out.error).slice(0, 300); } catch { out.error = "error"; } }
+      if (ERROR_TYPE_RE.test(type)) return out; // an error frame carries no reply text
     }
     if (DONE_TYPE_RE.test(type)) out.done = true;
     if (o.done === true || o.is_final === true || o.finished === true || o.isFinal === true || o.final === true || o.is_end === true || o.end === true) out.done = true;
@@ -150,6 +152,8 @@
     // Generic objects: direct text-bearing keys first.
     const direct = str(o.delta) || str(o.textDelta) || str(o.token) || str(o.output_text) || str(o.text) || str(o.answer) || str(o.content) || str(o.response) || str(o.reply) || str(o.output) || str(o.result) || str(o.completion) || str(o.generated_text);
     if (direct != null) {
+      // Sentinel wrapped in JSON (Xiaomi MiMo: `event: finish` + `{"content":"[DONE]"}`).
+      if (direct.trim() === "[DONE]") { out.done = true; return out; }
       out.text += direct;
       // Keys that carry the WHOLE text so far rather than a piece.
       if (o.answer != null || o.response != null || o.reply != null || o.result != null || o.completion != null || o.generated_text != null || o.full_text != null || o.cumulative === true) out.cumulative = true;
@@ -205,7 +209,7 @@
     const o = tryJSON(s);
     if (o === undefined) { if (isData) fold(acc, { text: s }); else if (acc.kind === "text") fold(acc, { text: s + "\n" }); return; }
     const piece = extract(o, 0);
-    if (acc.pendingErr && !piece.error) piece.error = typeof o === "string" ? o : (o && (o.message || o.error)) || "stream error";
+    if (acc.pendingErr && !piece.error) piece.error = typeof o === "string" ? o : (o && (o.message || o.error || o.content)) || "stream error";
     if (acc.pendingDone) piece.done = true;
     acc.pendingDone = false; acc.pendingErr = false;
     fold(acc, piece);

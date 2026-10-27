@@ -922,6 +922,8 @@
     { name: "Crax GPT", url: "https://gpt.crax.lol/" },
     { name: "Ox Alpha", url: "https://oxalpha.com/" },
     { name: "Vani Chat", url: "https://c.vani.ai/chat" },
+    // Xiaomi MiMo Studio is a hash-routed SPA: the chat is /#/c, a thread /#/chat/<id>.
+    { name: "Xiaomi MiMo Studio", url: "https://aistudio.xiaomimimo.com/#/c" },
     // ClickUp Brain lives inside the ClickUp workspace app (sidebar AI / Ask AI).
     { name: "ClickUp Brain", url: "https://app.clickup.com/" },
     // CodeCraft is an OpenAI-compatible API with no web chat: TotalScript hosts
