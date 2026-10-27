@@ -39,6 +39,10 @@
     MARK + " This chat is live-linked to the user's Roblox Studio by a browser extension that EXECUTES the command you write and pastes the result back as the next user message.",
     "Reply with exactly ONE command as a fenced ```json block containing {\"command\":\"name\",\"params\":{...}} (execute_luau uses the ###LUA### form), then stop and wait for the result.",
     "Writing the block IS the tool call: never say you cannot run commands or use JSON blocks, never describe a command instead of writing it.",
+    // 1.76.0 — logged-in Vani hands the model its own tool list (web search,
+    // Document / Slides / Design, code runs). Models then answer "I can only use
+    // the tools I was given" and write prose. Say it outright.
+    "You are NOT being asked to execute anything yourself and you do not need any tool for this: the extension on this page runs the block the moment you post it. Vani's own tools (web search, Document, Slides, Design, code execution) cannot reach Roblox Studio - ignore them while this chat is linked.",
     "Do not search the web. Do not create a Document, Slides, Design, canvas or any side-panel artifact, and do not propose Vani tools - everything goes in this chat reply as text. One short line of prose at most; the command block is the work.",
   ].join(" ");
   // Head = bootstrap + first reply + the list_commands result + its reply (the
@@ -120,10 +124,45 @@
     if (!r.changed) return null;
     obj.messages = r.messages;
     try { console.log("[rs-vani-net] shaped chat request", { agent: agentState() || "off", pinned: r.pinned, trimmed: r.trimmed, messages: obj.messages.length }); } catch {}
+    noteShaped({ pinned: r.pinned, trimmed: r.trimmed, messages: obj.messages.length });
     return JSON.stringify(obj);
+  }
+  // 1.76.0 — visible shaping status. The adapter (isolated world) reads these
+  // two attributes and the core shows them in its toasts, so a user without
+  // the console can tell whether the protocol pin actually reached Vani:
+  //   data-rs-vani-shaped   = JSON {n, pinned, trimmed, messages, url, at}  (last shaped request)
+  //   data-rs-vani-unshaped = JSON {n, why, url, at}  (a chat-looking request passed while the
+  //                           agent was on but could not be shaped: not JSON, no messages[] …)
+  let shapedN = 0, unshapedN = 0, lastUrl = "";
+  const pathOf = (u) => { try { return new URL(String(u || ""), location.href).pathname; } catch { return String(u || "").slice(0, 80); } };
+  function noteShaped(info) {
+    try { document.documentElement.setAttribute("data-rs-vani-shaped", JSON.stringify(Object.assign({ n: ++shapedN, url: pathOf(lastUrl), at: Date.now() }, info))); } catch {}
+  }
+  function noteUnshaped(why, url) {
+    try { document.documentElement.setAttribute("data-rs-vani-unshaped", JSON.stringify({ n: ++unshapedN, why: String(why || "").slice(0, 80), url: pathOf(url), at: Date.now() })); } catch {}
+  }
+  // Why a chat-looking body could not be shaped (for the status attribute only).
+  function unshapedReason(body) {
+    if (typeof body !== "string" || !body.length) return "body not text";
+    if (body.length > 8 * 1024 * 1024) return "body too large";
+    if (body[0] !== "{") return "body not a JSON object";
+    if (!/"messages"\s*:/.test(body)) return "no messages field";
+    let obj; try { obj = JSON.parse(body); } catch { return "body not valid JSON"; }
+    if (!obj || !Array.isArray(obj.messages)) return "messages is not an array";
+    if (!obj.messages.some((m) => m && m.role === "user")) return "no user message";
+    return "";
+  }
+  // Shape a chat body and record the outcome; returns the patched string or null.
+  function shapeOrNote(url, body) {
+    lastUrl = url;
+    const patched = patchBody(body);
+    if (patched) return patched;
+    if (agentOn() && CHAT_URL_RE.test(String(url || ""))) { const why = unshapedReason(body); if (why) noteUnshaped(why, url); }
+    return null;
   }
   window.__rsVaniPatchBody = patchBody; // exposed for tests / console diagnosis
   window.__rsVaniPatchMessages = patchMessages;
+  window.__rsVaniShapeOrNote = (url, body) => shapeOrNote(url, body);
 
   const looksLikeChat = (url, body) =>
     CHAT_URL_RE.test(String(url || "")) || (typeof body === "string" && body[0] === "{" && /"messages"\s*:\s*\[/.test(body));
@@ -140,7 +179,7 @@
           if (method === "POST" && (CHAT_URL_RE.test(input.url || "") || /json/i.test((input.headers && input.headers.get("content-type")) || ""))) {
             const req = input;
             return req.clone().text().then((body) => {
-              const patched = looksLikeChat(req.url, body) ? patchBody(body) : null;
+              const patched = looksLikeChat(req.url, body) ? shapeOrNote(req.url, body) : null;
               if (!patched) return origFetch.call(this, req, init);
               return origFetch.call(this, new Request(req, { body: patched }));
             }).catch(() => origFetch.apply(this, args));
@@ -149,9 +188,15 @@
         }
         const url = input instanceof Request ? input.url : String(input || "");
         const method = String((init && init.method) || "GET").toUpperCase();
-        if (method === "POST" && init && typeof init.body === "string" && looksLikeChat(url, init.body)) {
-          const patched = patchBody(init.body);
-          if (patched) args[1] = Object.assign({}, init, { body: patched });
+        if (method === "POST" && init && looksLikeChat(url, typeof init.body === "string" ? init.body : "")) {
+          if (typeof init.body === "string") {
+            const patched = shapeOrNote(url, init.body);
+            if (patched) args[1] = Object.assign({}, init, { body: patched });
+          } else if (agentOn() && init.body != null) {
+            // A chat POST whose body is not a string (FormData, Blob, stream):
+            // we cannot pin it - say so instead of failing silently.
+            noteUnshaped("body is " + (init.body && init.body.constructor && init.body.constructor.name || typeof init.body), url);
+          }
         }
       } catch {}
       return origFetch.apply(this, args);
@@ -170,7 +215,7 @@
       XP.send = function (body) {
         try {
           if (agentOn() && this.__rsVMethod === "POST" && typeof body === "string" && looksLikeChat(this.__rsVUrl, body)) {
-            const patched = patchBody(body);
+            const patched = shapeOrNote(this.__rsVUrl, body);
             if (patched) body = patched;
           }
         } catch {}
@@ -179,5 +224,6 @@
     }
   } catch {}
 
+  try { document.documentElement.setAttribute("data-rs-vani-net", "1.76"); } catch {}
   try { console.log("[rs-vani-net] active"); } catch {}
 })();

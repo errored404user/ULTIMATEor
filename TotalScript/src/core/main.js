@@ -5134,6 +5134,7 @@
     // genuinely broken provider still stops after a single failed retry.
     let deadRetries = 0;
     let refuseRetries = 0;
+    let commandlessGaveUp = false; // 1.76.0: the give-up note fires once per run
     let parseRetries = 0;
     let providerRetries = 0; // 1.69: bounded re-send after a TRANSIENT provider error (rate limit / busy / network)
     let falseSuccessNudged = false; // 1.69: one "you said done but nothing ran" correction per run
@@ -5372,13 +5373,21 @@
             base = await submitAndGetBase(ORCH.FEEDBACK.falseSuccess + (state ? "\n" + state : ""));
             continue;
           }
-          if (refuseRetries < 1 && !A.stop && (isCapabilityRefuse(body) || providerCommandless)) {
+          // 1.76.0: a provider may ask for more than one rescue (Vani: 2, with an
+          // escalating second note) and can report its request-shaper status so
+          // the toast tells the user whether the protocol even reached the model.
+          const maxRefuse = Math.max(1, Math.min(3, Number(P.commandlessRetries) || 1));
+          const bridgeInfo = () => { try { return typeof P.bridgeStatus === "function" ? P.bridgeStatus() : null; } catch { return null; } };
+          if (refuseRetries < maxRefuse && !A.stop && (isCapabilityRefuse(body) || providerCommandless)) {
             refuseRetries++;
-            diag("loop.capabilityRefuse", { n: refuseRetries, providerCommandless });
-            try { ui.toast("Model replied without acting — requesting one command…"); } catch {}
-            let retryFeedback = providerCommandless && P.commandlessRetryFeedback
-              ? P.commandlessRetryFeedback
-              : RS.FEEDBACK.capabilityRefuse;
+            const bridge = bridgeInfo();
+            diag("loop.capabilityRefuse", { n: refuseRetries, max: maxRefuse, providerCommandless, bridge: bridge ? { shaped: bridge.shaped, pinned: bridge.pinned, label: bridge.label } : undefined });
+            try { ui.toast(`Model replied without acting — requesting one command… (${refuseRetries}/${maxRefuse})${bridge && bridge.label ? " · " + bridge.label : ""}`); } catch {}
+            let retryFeedback = refuseRetries > 1 && P.commandlessRetryFeedbackFinal
+              ? P.commandlessRetryFeedbackFinal
+              : providerCommandless && P.commandlessRetryFeedback
+                ? P.commandlessRetryFeedback
+                : RS.FEEDBACK.capabilityRefuse;
             if (providerCommandless) {
               // A refusal can be the first reply after Studio was closed. Probe
               // again so the rescue never insists on a command using yesterday's
@@ -5387,9 +5396,20 @@
               const state = asStateTag();
               if (state) retryFeedback += "\n" + state;
             }
-            ui.steeringProgress("correcting", "The model did not act — requesting a command", toolTurns);
+            ui.steeringProgress("correcting", refuseRetries > 1 ? `The model still did not act — final request for a command (${refuseRetries}/${maxRefuse})` : "The model did not act — requesting a command", toolTurns);
             base = await submitAndGetBase(retryFeedback);
             continue;
+          }
+          // 1.76.0: rescues exhausted and the reply is STILL commandless - say so
+          // plainly (what happened + what to do), instead of a bare "Reply finished".
+          if (!commandlessGaveUp && !A.stop && refuseRetries >= maxRefuse && toolTurns === 0 && (isCapabilityRefuse(body) || providerCommandless)) {
+            commandlessGaveUp = true;
+            const bridge = bridgeInfo();
+            diag("loop.commandlessGiveUp", { tries: refuseRetries, bridge: bridge ? { shaped: bridge.shaped, pinned: bridge.pinned, label: bridge.label } : undefined });
+            const note = P.commandlessGiveUpNote || "The model keeps replying without a command, so TotalScript stopped nudging. Start a new chat and press Start Agent again, or switch to another AI site from Settings → Switch AI.";
+            try { ui.toast(note + (bridge && bridge.label ? " (" + bridge.label + ")" : "")); } catch {}
+            ui.steeringProgress("complete", "Stopped: the model answered without a command", toolTurns);
+            break;
           }
           // 1.51.1: the model answered a GUI request without a command (plan,
           // questions, prose) - deliver the GUI BRIEF now as its own message.
@@ -11654,7 +11674,9 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       t.textContent = msg;
       root.appendChild(t);
       setTimeout(() => t.classList.add("show"), 10);
-      setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, 3500);
+      // 1.76.0: long notes (give-up guidance) stay up long enough to be read.
+      const ms = Math.min(12000, 3500 + Math.max(0, String(msg || "").length - 60) * 40);
+      setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, ms);
     }
 
     function banner(kind, title, msg) {

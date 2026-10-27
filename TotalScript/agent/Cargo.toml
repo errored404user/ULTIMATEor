@@ -1,6 +1,6 @@
 [package]
 name = "total-agent"
-version = "1.75.1"
+version = "1.76.0"
 edition = "2021"
 build = "build.rs"
 description = "TotalScript Desktop — native Roblox Studio MCP + AgentScript workspace bridge with a workspace window and tray"

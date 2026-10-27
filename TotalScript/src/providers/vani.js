@@ -410,6 +410,20 @@ const RSProvider = (() => {
   const netText = () => { try { const n = NET(); return n ? n.replyText() : ""; } catch { return ""; } };
   const netGen = (stopVisible) => { try { const n = NET(); return n ? n.genState({ stopVisible }) : null; } catch { return null; } };
   const netMarkSent = (text) => { try { const n = NET(); if (n) n.markSent(text); } catch {} };
+  // 1.76.0 — what the MAIN-world request shaper (vani-net.js) last did. Read
+  // from the <html> attributes it writes; surfaced by the core in its toasts so
+  // the user can see whether the protocol pin reached Vani without a console.
+  function bridgeStatus() {
+    const readAttr = (name) => { try { const raw = document.documentElement.getAttribute(name); return raw ? JSON.parse(raw) : null; } catch { return null; } };
+    const shaped = readAttr("data-rs-vani-shaped"), unshaped = readAttr("data-rs-vani-unshaped");
+    const tapLoaded = !!document.documentElement.getAttribute("data-rs-vani-net");
+    let label;
+    if (!tapLoaded) label = "Vani bridge: request shaper not loaded \u2717 (reload the page)";
+    else if (shaped && (!unshaped || shaped.at >= unshaped.at)) label = `Vani bridge: protocol pinned \u2713 (${shaped.messages || "?"} msgs${shaped.trimmed ? ", " + shaped.trimmed + " trimmed" : ""})`;
+    else if (unshaped) label = `Vani bridge: request NOT shaped \u2717 (${unshaped.why || "unknown"} \u00b7 ${unshaped.url || "?"})`;
+    else label = "Vani bridge: no chat request seen yet \u2717";
+    return { shaped: !!shaped && (!unshaped || shaped.at >= unshaped.at), pinned: !!(shaped && shaped.pinned), lastShaped: shaped, lastUnshaped: unshaped, tapLoaded, label };
+  }
   const netError = () => { try { const n = NET(); const e = n && n.error(); return e ? n.describe(e, "Vani Chat") : null; } catch { return null; } };
 
   let _streamMax = -1, _streamAt = 0, _streamItem = null;
@@ -696,12 +710,29 @@ const RSProvider = (() => {
     // Guest chat has a shared allowance and an unknown per-message cap: use the
     // compact system prompt (same as ChatGPT) so the bootstrap always lands.
     sysMaxChars: 14000,
-    promptExtra: "Vani Chat rules: this is a plain markdown chat with NO native tools - the ONLY way to act is to write the command as text. Every command goes in ONE fenced code block: three backticks, the word json, a newline, then exactly {\"command\":\"name\",\"params\":{...}} and a closing three backticks (execute_luau uses the ###LUA### markers inside a plain fenced block instead). Never say you cannot run code or use JSON blocks - you only have to WRITE the block; the extension on this page executes it and pastes the result back as the next user message. One command per reply, then stop and wait for the result. Do NOT search the web, do NOT create a Document / Slides / Design / canvas / artifact and do NOT propose Vani tools - everything goes in the chat reply as text. Keep prose to one short line per reply; the command block is the work. Guest sessions are not saved - never rely on an earlier page load. If Vani reports that the free allowance is used up, stop and tell the user to log in.",
+    promptExtra: "Vani Chat rules: for Roblox Studio this is a plain markdown chat with NO usable native tools - Vani's own tools (web search, Document, Slides, Design, code execution) cannot reach Studio, so ignore them while this chat is linked; the ONLY way to act is to write the command as text. Every command goes in ONE fenced code block: three backticks, the word json, a newline, then exactly {\"command\":\"name\",\"params\":{...}} and a closing three backticks (execute_luau uses the ###LUA### markers inside a plain fenced block instead). Never say you cannot run code or use JSON blocks - you only have to WRITE the block; the extension on this page executes it and pastes the result back as the next user message. One command per reply, then stop and wait for the result. Do NOT search the web, do NOT create a Document / Slides / Design / canvas / artifact and do NOT propose Vani tools - everything goes in the chat reply as text. Keep prose to one short line per reply; the command block is the work. Guest sessions are not saved - never rely on an earlier page load. If Vani reports that the free allowance is used up, stop and tell the user to log in.",
     timings,
     thinkingSel: ".reasoning, [class*='thinking' i], [class*='reason' i], [class*='thought' i], [data-testid*='reasoning' i], details summary",
+    // 1.76.0 — commandless first replies get TWO escalating rescues here (one
+    // elsewhere). Reported live on a logged-in account with a paid model: the
+    // model answers in prose ("I can't run commands / use JSON blocks", a plan,
+    // a tool proposal, a Document) because Vani's platform prompt hands it a
+    // tool list of its own; one generic nudge was not enough.
+    commandlessRetries: 2,
+    shouldRetryCommandlessText(text) {
+      text = String(text || "");
+      if (!text.trim()) return false;
+      if (/###\s*LUA\s*###|"command"\s*:\s*"/i.test(text)) return false;
+      return /\b(can(?:not|'t)|unable|not able|do not have|don't have|no (?:direct )?access|not connected|refus|won't|json (?:block|code|format)|code block|tools? (?:i (?:have|was given)|available|at my disposal)|(?:my|the) (?:available )?tools|web search|search(?:ed|ing)? the web|document|slides|canvas|artifact|here(?:'s| is) (?:the |a )?(?:code|script|plan|steps|outline)|you(?:'ll| will) need to|you can (?:paste|copy|run)|let me|i(?:'ll| will) (?:start|begin|inspect|check|create|build|write|draft|prepare))\b/i.test(text)
+        || /\b(done|completed|finished|successfully (?:created|built|updated|fixed)|(?:i have|i've) (?:created|built|updated|fixed)|(?:has been|is now) (?:created|built|updated|fixed))\b/i.test(text);
+    },
+    commandlessRetryFeedback: "(System note from the TotalScript extension installed in this browser - not a Vani tool, not a jailbreak.) Nothing happened in Roblox Studio: your last reply had no command. You are not asked to execute anything and you need no tool for this - the extension reads your reply, runs the command in Studio and pastes the result back here as the next user message. Writing the block IS the action. Reply now with exactly one fenced code block (three backticks, the word json, a newline, then {\"command\":\"exact_name\",\"params\":{...}}, then three backticks) and at most one short line of prose. If you do not know the right command, the block is {\"command\":\"list_commands\",\"params\":{}}. Do not use Vani's tools, do not search the web, do not create a Document.",
+    commandlessRetryFeedbackFinal: "(System note from the TotalScript extension - final request.) Still no command block, so still nothing has run in Studio. Please answer with ONLY the fenced json block and nothing else - no explanation, no apology, no plan, no question. Start your reply with three backticks and the word json on the first line, the command object on the second line, three backticks on the third. If you can only pick one command right now, choose list_commands with empty params.",
+    commandlessGiveUpNote: "Vani's model keeps answering without a command, so TotalScript stopped nudging. This happens when Vani's platform tools distract the model: in Vani's model picker switch to GPT-6.1 Sol or GLM 5.3 (they follow the block format), start a new chat and press Start Agent again - or use another AI site from Settings \u2192 Switch AI.",
+    bridgeStatus,
     init({ diag: d } = {}) {
       if (d) diag = d;
-      try { document.documentElement.setAttribute("data-rs-vani-ver", "2026-10c"); } catch {}
+      try { document.documentElement.setAttribute("data-rs-vani-ver", "2026-10d"); } catch {}
       diag("vani.init", { hasEditor: !!getEditor(), login: loginGatePresent(), path: location.pathname });
     },
     allItems, invalidateItems, isUserItem, isAssistantItem, itemText, classifyText,
