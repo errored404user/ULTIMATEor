@@ -65,7 +65,7 @@ for (const wm of ["creation"]) {
   ok(wm + ": without a catalogue the full skills list is kept", noCat.includes("STUDIO SKILLS & VIRTUAL TOOLS: In addition to core MCP tools") && noCat.includes("ANIMATION TOOLS: the animation_* tools"));
   const tight = RS.buildSystemPrompt({ siteName: "ChatGPT", providerId: "chatgpt", engine: "roblox", maxChars: 14000 });
   ok(wm + ": tight prompt within 14k", tight.length <= 14000, String(tight.length));
-  ok(wm + ": tight prompt carries the mode heading", tight.includes("━━━ " + RS.workModeLabel(wm).toUpperCase() + " WORK MODE")); // 1.74.0: id creation is labelled Totality
+  ok(wm + ": tight prompt carries the mode heading", tight.includes("━━━ " + RS.workModeLabel(wm).toUpperCase() + " WORK MODE")); // 1.75.0: id creation is labelled Totality
 }
 // mode switch rider replaces the whole-prompt restate on a mode change only
 ok("mode switch pending flag set by setWorkMode while a session runs", main.includes("try { if (A.started || A.running) { A.workModeSwitchPending = true; A.forceSysResend = true; } } catch {}"));
@@ -76,7 +76,7 @@ ok("reminder checklist is short (one merged line)", ["creation", "ultimate", "vi
 
 // ── help / popup copy ─────────────────────────────────────────────────────────
 ok("help topic explains the merged mode + quick starts", main.includes("Totality runs on the shared OPERATING LOOP") && main.includes("The mode card has Quick starts"));
-ok("popup no longer carries the long mode paragraph (1.74.0: removed on request); the card keeps its one-line sub", !/WORK_HELP/.test(fs.readFileSync("popup.js", "utf8")) && /Luau systems · Modeling · VFX &amp; Lighting · UI · Animation &amp; Camera/.test(fs.readFileSync("popup.html", "utf8")));
+ok("popup no longer carries the long mode paragraph (1.75.0: removed on request); the card keeps its one-line sub", !/WORK_HELP/.test(fs.readFileSync("popup.js", "utf8")) && /Luau systems · Modeling · VFX &amp; Lighting · UI · Animation &amp; Camera/.test(fs.readFileSync("popup.html", "utf8")));
 
 if (process.exitCode) { console.error(`test-v134: ${passed} passed, some FAILED`); process.exit(1); }
 console.log(`PASS  1.34.0: batched commands (parser ${calls.length} calls, loop, feedback, prompts), work modes 2.0 (loop + profiles, switch rider, checklist, quick starts), prompt diet — ${passed} checks`);

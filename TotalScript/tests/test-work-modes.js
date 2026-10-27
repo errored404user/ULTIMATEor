@@ -105,7 +105,7 @@ assert(main.includes("modeCheck = RS.workModeChecklist(normalizeWorkMode(window.
 assert(css.includes(".rs-work-starters") && css.includes(".rs-work-starter:hover { background: var(--totalx-grad); box-shadow: var(--totalx-glow);"), "quick-start pills styled with the theme pill tokens");
 
 // popup + css
-assert(popup.includes('const WORK_MODES = ["creation"]') && !popup.includes("WORK_HELP") && popup.includes('workMode: "creation"'), "popup modes"); // 1.74.0: long help paragraph removed
+assert(popup.includes('const WORK_MODES = ["creation"]') && !popup.includes("WORK_HELP") && popup.includes('workMode: "creation"'), "popup modes"); // 1.75.0: long help paragraph removed
 assert(popup.includes('const LEGACY_WORK_MODES = { ultimate: "creation", visualizer: "creation", animator: "creation", adaptive: "creation" };') && popup.includes("settings.workMode = normalizeWorkMode(r.rsWorkMode)"), "popup migrates legacy stored ids");
 assert(popupHtml.includes('id="work-creation"') && !popupHtml.includes('id="work-ultimate"') && !popupHtml.includes('id="work-visualizer"') && !popupHtml.includes('id="work-animator"'), "popup has exactly the creation card");
 assert(!popupHtml.includes('data-work="adaptive"') && !popup.includes('"adaptive"'), "popup has no adaptive leftovers");

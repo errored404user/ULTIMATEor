@@ -35,7 +35,7 @@ ok("css: badge + card are aqua now (no gold gradient left on the mode)", css.inc
 
 const readme = read("README.md");
 ok("README: 1.74.0 entry + Donate section + Totality in the mode paragraph", readme.includes("**1.74.0 — Totality, aqua; shorter Work mode; Donate.**") && readme.includes("## Donate") && readme.includes("there is one built-in mode, **Totality**") && PASSES.every(([n, r, id]) => readme.includes(`| ${n} | ${r} | https://www.roblox.com/game-pass/${id}/${n} |`)));
-ok("version pins 1.74.0 (manifest / crate / plugin)", JSON.parse(read("manifest.json")).version === "1.74.0" && /^version = "1\.74\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.74.0"'));
+ok("version pins 1.75.0 (manifest / crate / plugin)", JSON.parse(read("manifest.json")).version === "1.75.0" && /^version = "1\.75\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.75.0"'));
 
 // ── Donate ──
 ok("main: ROBUX_PASSES carry name + price for the four passes", PASSES.every(([n, r, id]) => new RegExp(`\\{ id: ${id}, name: "${n}",\\s+robux: ${r} \\}`).test(main)));

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hello from TotalScript</title>
+  <link rel="icon" href="assets/icon32.png" />
+  <style>
+    /* TotalScript hello page — shown ONCE, right after the extension is installed
+       (background.js → onInstalled reason "install", flag rsHelloShown). */
+    :root{
+      --bg:#03161c; --text:#e6fffb; --dim:#9fe8df; --faint:#5fb8ad; --accent:#22d3ee; --accent-2:#14b8a6;
+      --line:rgba(34,211,238,.22); --surface:rgba(34,211,238,.07); --surface-2:rgba(34,211,238,.13);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0; min-height:100%}
+    body{
+      font-family:"Inter","Segoe UI Variable","Segoe UI",system-ui,sans-serif; color:var(--text); background:var(--bg);
+      -webkit-font-smoothing:antialiased; display:flex; align-items:center; justify-content:center; padding:32px 16px;
+      background-image:radial-gradient(900px 420px at 50% -10%, rgba(34,211,238,.28), transparent 60%), radial-gradient(600px 300px at 90% 110%, rgba(20,184,166,.18), transparent 60%);
+    }
+    .card{
+      width:min(720px, 100%); background:linear-gradient(180deg, rgba(10,33,41,.96), rgba(6,22,28,.98));
+      border:1px solid rgba(34,211,238,.35); border-radius:20px; padding:30px 32px 26px;
+      box-shadow:0 30px 90px rgba(0,0,0,.6), 0 0 56px rgba(34,211,238,.12); animation:in .35s ease-out;
+    }
+    @keyframes in{from{opacity:0; transform:translateY(12px) scale(.985)} to{opacity:1; transform:none}}
+    .brand{display:flex; align-items:center; gap:14px}
+    .brand img{width:52px; height:52px; border-radius:14px; box-shadow:0 0 0 1px rgba(255,255,255,.25), 0 0 18px rgba(34,211,238,.4)}
+    .brand small{display:block; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); font-weight:800}
+    .brand b{font-size:22px; letter-spacing:-.2px}
+    h1{margin:22px 0 8px; font-size:28px; letter-spacing:-.4px}
+    h1 span{color:var(--accent)}
+    p.lead{margin:0 0 20px; color:var(--dim); font-size:15px; line-height:1.55}
+    ol{margin:0; padding:0; list-style:none; display:grid; gap:10px}
+    ol li{display:grid; grid-template-columns:30px 1fr; gap:12px; align-items:start; padding:12px 14px; border-radius:12px; background:var(--surface); border:1px solid var(--line)}
+    ol li i{font-style:normal; width:30px; height:30px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; font-weight:800; color:#03161c; background:linear-gradient(135deg, #9ff3ff, var(--accent) 55%, var(--accent-2))}
+    ol li b{display:block; font-size:14px; margin-bottom:2px}
+    ol li span{color:var(--dim); font-size:13px; line-height:1.45}
+    code{font:12px ui-monospace, Menlo, Consolas, monospace; background:rgba(0,0,0,.35); padding:2px 6px; border-radius:6px; color:#c8f5ff}
+    .acts{display:flex; flex-wrap:wrap; gap:10px; margin-top:22px}
+    button{font:inherit; cursor:pointer; border-radius:999px; padding:11px 18px; font-weight:700; border:1px solid var(--line); background:var(--surface-2); color:var(--text); transition:transform .12s ease, box-shadow .12s ease}
+    button:hover{transform:translateY(-1px); box-shadow:0 0 0 1px rgba(34,211,238,.35), 0 0 18px rgba(34,211,238,.22)}
+    button.primary{color:#03161c; border-color:transparent; background:linear-gradient(135deg, #9ff3ff, var(--accent) 55%, var(--accent-2)); box-shadow:0 8px 24px -8px rgba(34,211,238,.9)}
+    .foot{margin-top:18px; color:var(--faint); font-size:12px; line-height:1.5}
+  </style>
+</head>
+<body>
+  <main class="card" role="dialog" aria-labelledby="hello-title">
+    <div class="brand">
+      <img src="assets/icon128.png" alt="" />
+      <div><small>TotalScript</small><b>Roblox Studio, driven from your AI chat</b></div>
+    </div>
+    <h1 id="hello-title">Hello! <span>TotalScript is installed.</span></h1>
+    <p class="lead">Thanks for installing. You describe what you want in plain words on any supported AI site, and TotalScript builds, scripts, tests and screenshots it inside Roblox Studio. Four quick steps and you are building:</p>
+    <ol>
+      <li><i>1</i><div><b>Run the agent app</b><span>In your TotalScript folder, start <code id="run-cmd">bin/total-core.exe</code> and leave it open. It links the chat to Studio and keeps running in the background.</span></div></li>
+      <li><i>2</i><div><b>Link Roblox Studio</b><span>In Studio open the <b>Assistant</b> panel → <b>⋯</b> → <b>Manage MCP Servers</b> → turn on <b>Studio as MCP server</b>. Once per Studio install.</span></div></li>
+      <li><i>3</i><div><b>Open a place</b><span>Any place works — <b>File → New → Baseplate</b> is fine for a first try.</span></div></li>
+      <li><i>4</i><div><b>Open an AI chat and press Start Agent</b><span>The TotalScript bar sits above the chat box. Settings → Help has the full tutorial and a live setup checklist any time.</span></div></li>
+    </ol>
+    <div class="acts">
+      <button type="button" class="primary" id="open-ai">Open an AI chat</button>
+      <button type="button" id="open-discord">Join the Discord</button>
+      <button type="button" id="close">Close</button>
+    </div>
+    <p class="foot">This hello page is shown once, right after installation. You can always find the same steps under the extension icon and in the bar's Settings → Help.</p>
+  </main>
+  <script src="welcome.js"></script>
+</body>
+</html>

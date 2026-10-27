@@ -12,8 +12,8 @@ const m = JSON.parse(manifest);
 const lists = m.content_scripts.map((c) => c.js).filter((js) => js.includes("src/core/main.js"));
 ok("all 16 provider lists load guigen.js between the template library and the studio", lists.length === 16 && lists.every((js) => { const t = js.indexOf("src/core/guistudio_templates.js"), g = js.indexOf("src/core/guigen.js"), s = js.indexOf("src/core/guistudio.js"); return t >= 0 && g === t + 1 && s === g + 1; }));
 ok("codecraft.html loads guigen.js in the same order", codecraft.indexOf('<script src="src/core/guistudio_templates.js"></script>') < codecraft.indexOf('<script src="src/core/guigen.js"></script>') && codecraft.indexOf('<script src="src/core/guigen.js"></script>') < codecraft.indexOf('<script src="src/core/guistudio.js"></script>'));
-ok("engine pins its version", engineSrc.includes('const VERSION = "1.74.0";'));
-ok("README documents the feature", /\*\*1\.74\.0 — /.test(readme) && readme.includes("guigen.js"));
+ok("engine pins its version", engineSrc.includes('const VERSION = "1.75.0";'));
+ok("README documents the feature", /\*\*1\.75\.0 — /.test(readme) && readme.includes("guigen.js"));
 
 // ── engine in a vm sandbox (real component factory + template library) ──────
 const ctx = { window: {}, console }; ctx.RobloxScriptSkills = { SKILL_COMMANDS: [], CATEGORIES: {}, SKILLS: [] }; ctx.window.RobloxScriptSkills = ctx.RobloxScriptSkills; vm.createContext(ctx);

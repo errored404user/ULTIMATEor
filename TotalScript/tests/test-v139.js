@@ -101,13 +101,13 @@ for (const legacy of ["ultimate", "visualizer", "animator"]) {
 window.__rsWorkMode = () => "creation";
 
 // ── E. popup + css ──
-ok("popup: one mode, legacy map, normaliser used on load and on storage change", popup.includes('const WORK_MODES = ["creation"];') && popup.includes('const LEGACY_WORK_MODES = { ultimate: "creation", visualizer: "creation", animator: "creation", adaptive: "creation" };') && popup.includes('const normalizeWorkMode = (id) => (WORK_MODES.includes(id) ? id : (LEGACY_WORK_MODES[id] || "creation"));') && popup.includes("if (r.rsWorkMode) settings.workMode = normalizeWorkMode(r.rsWorkMode);") && popup.includes("settings.workMode = normalizeWorkMode(changes.rsWorkMode.newValue);") && popup.includes('workMode: "creation"') && !popup.includes("WORK_HELP")); // 1.74.0: long help paragraph removed
+ok("popup: one mode, legacy map, normaliser used on load and on storage change", popup.includes('const WORK_MODES = ["creation"];') && popup.includes('const LEGACY_WORK_MODES = { ultimate: "creation", visualizer: "creation", animator: "creation", adaptive: "creation" };') && popup.includes('const normalizeWorkMode = (id) => (WORK_MODES.includes(id) ? id : (LEGACY_WORK_MODES[id] || "creation"));') && popup.includes("if (r.rsWorkMode) settings.workMode = normalizeWorkMode(r.rsWorkMode);") && popup.includes("settings.workMode = normalizeWorkMode(changes.rsWorkMode.newValue);") && popup.includes('workMode: "creation"') && !popup.includes("WORK_HELP")); // 1.75.0: long help paragraph removed
 {
   const pctx = { console, settings: {}, document: undefined, chrome: undefined }; vm.createContext(pctx);
   vm.runInContext(cut(popup, "const WORK_MODES = [", "const WORK_PRESETS") + "\nthis.normalizeWorkMode = normalizeWorkMode;", pctx);
   ok("popup normaliser behaves", ["ultimate", "visualizer", "animator", "adaptive", "x", undefined].every((id) => pctx.normalizeWorkMode(id) === "creation") && pctx.normalizeWorkMode("creation") === "creation");
 }
-// 1.74.0: the card is named Totality and coloured aqua (was gold); the long mode help paragraph is gone.
+// 1.75.0: the card is named Totality and coloured aqua (was gold); the long mode help paragraph is gone.
 ok("popup.html: a single aqua Totality card, no long help paragraph", popupHtml.includes('<button type="button" class="work-card" data-work="creation" id="work-creation">') && (popupHtml.match(/class="work-card" data-work="/g) || []).length === 1 && popupHtml.includes("#work-creation.on{background:linear-gradient(135deg,#9ff3ff 0%,#22d3ee 45%,#0e7490 100%)") && popupHtml.includes('<span class="work-name">Totality</span>') && !popupHtml.includes('id="work-help"') && !popupHtml.includes("#work-visualizer") && !popupHtml.includes("#work-animator"));
 ok("overlay.css: creation badge / card / row, no legacy selectors", css.includes('#rs-work-badge[data-work="creation"]') && css.includes('.rs-work-modes .rs-work-card[data-work="creation"]::before') && css.includes('html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="creation"].on {') && css.includes(".rs-work-row.rs-work-creation{grid-template-columns:minmax(0,1fr)}") && !/data-work="(ultimate|visualizer|animator)"/.test(css) && !css.includes("rs-work-ultimate"));
 
@@ -129,9 +129,9 @@ ok("overlay.css: creation badge / card / row, no legacy selectors", css.includes
 
 // ── G. bookkeeping ──
 const mf = JSON.parse(read("manifest.json"));
-ok("manifest 1.74.0", mf.version === "1.74.0", mf.version);
-ok("plugin + crate pinned at 1.74.0", read("plugin/TotalScript.lua").includes('local VERSION = "1.74.0"') && read("plugin/TotalScript.lua").includes("(TotalScript 1.74.0)") && /^version = "1\.74\.0"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "1\.74\.0"/.test(read("agent/Cargo.lock")) && readme.includes("`total-agent` 1.74.0"));
-ok("README changelog 1.39.0 + mode paragraph + test listed", readme.includes("**1.39.0 — Creation: one work mode.**") && readme.includes("tests/test-v139.js") && readme.includes("there is one built-in mode, **Totality** (named Creation until 1.73; stored id `creation`)") /* 1.74.0 rename */);
+ok("manifest 1.75.0", mf.version === "1.75.0", mf.version);
+ok("plugin + crate pinned at 1.75.0", read("plugin/TotalScript.lua").includes('local VERSION = "1.75.0"') && read("plugin/TotalScript.lua").includes("(TotalScript 1.75.0)") && /^version = "1\.75\.0"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "1\.75\.0"/.test(read("agent/Cargo.lock")) && readme.includes("`total-agent` 1.75.0"));
+ok("README changelog 1.39.0 + mode paragraph + test listed", readme.includes("**1.39.0 — Creation: one work mode.**") && readme.includes("tests/test-v139.js") && readme.includes("there is one built-in mode, **Totality** (named Creation until 1.73; stored id `creation`)") /* 1.75.0 rename */);
 ok("tests pinned to the old ids were updated (no test expects three built-in modes)", !read("tests/test-work-modes.js").includes('for (const wm of ["ultimate", "visualizer", "animator"])') && !read("tests/test-v138.js").includes('WORK_MODE_IDS: ["ultimate", "visualizer", "animator"]') && !read("tests/test-public-skills.js").includes('const WORK_MODES = ["ultimate", "visualizer", "animator"]'));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall 1.39.0 checks passed");

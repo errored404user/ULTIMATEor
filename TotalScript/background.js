@@ -2279,6 +2279,21 @@ try {
     if (a && a.name === "total-keep") { try { connect(); } catch {} }
   });
 } catch {}
-chrome.runtime.onInstalled.addListener(connect);
+// 1.75.0 — hello page, exactly once: on a fresh install (reason "install" -
+// not on updates or browser updates) and only if the rsHelloShown flag is not
+// set yet. The flag is written BEFORE the tab opens so a reload / second
+// onInstalled can never show it twice.
+const HELLO_PAGE = "welcome.html";
+async function maybeShowHello(details) {
+  try {
+    if (!details || details.reason !== "install") return false;
+    const got = await chrome.storage.local.get("rsHelloShown");
+    if (got && got.rsHelloShown) return false;
+    await chrome.storage.local.set({ rsHelloShown: Date.now() });
+    await chrome.tabs.create({ url: chrome.runtime.getURL(HELLO_PAGE) });
+    return true;
+  } catch (e) { return false; }
+}
+chrome.runtime.onInstalled.addListener((details) => { connect(); maybeShowHello(details); });
 
 connect();
