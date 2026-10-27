@@ -59,7 +59,13 @@ for (const s of [
 ]) ok("main.js: " + s.slice(0, 70), main.includes(s), s);
 ok("bar: enhancer button sits right before Paint", main.indexOf('id="rs-enhance-btn"') < main.indexOf('id="rs-paint-btn"') && main.indexOf('id="rs-paint-btn"') < main.indexOf('id="rs-settings-btn"'));
 // The round trip is our own send: hooks must ignore it (A.injecting), and it must never start the agent or switch anything on the site.
-const body = main.slice(main.indexOf("async function enhancePromptViaAI"), main.indexOf("function openEnhancer()"));
+// 1.73.0: the visible round trip moved into aiRoundTrip(request, {cancelled, kind}, onStatus)
+// (shared with the Template Creator's AI draft); enhancePromptViaAI calls it. The body
+// slice therefore starts at aiRoundTrip - the pinned behaviour is unchanged.
+ok(main.indexOf("async function aiRoundTrip(request, opts, onStatus)") >= 0 && main.indexOf("async function aiRoundTrip") < main.indexOf("async function enhancePromptViaAI"), "aiRoundTrip is defined before enhancePromptViaAI");
+const enhBody = main.slice(main.indexOf("async function enhancePromptViaAI"), main.indexOf("async function draftTemplateViaAI"));
+ok(/return aiRoundTrip\(request, \{ cancelled: [^}]*kind: "enhance" \}, onStatus\)/.test(enhBody) || enhBody.includes("aiRoundTrip("), "enhancePromptViaAI delegates to aiRoundTrip");
+const body = main.slice(main.indexOf("async function aiRoundTrip"), main.indexOf("function openEnhancer()"));
 ok("round trip marks A.injecting around its own typeAndSend and releases it", body.includes("A.injecting = true;\n    let sent = false;\n    try {") && body.includes("sent = (await P.typeAndSend(request)) !== false;") && body.includes("setTimeout(() => { A.injecting = false; }, 400);"));
 ok("round trip waits for busy / starting agent instead of interleaving", body.includes("if (A.running || A.injecting) {") && body.includes("const free = await waitFor(() => (!A.running && !A.injecting) || cancelled(), 600000);") && body.includes("if (A.starting) {"));
 ok("round trip reads the NEW assistant turn only, waits for a stable non-generating read", body.includes("P.assistantCount() > base") && body.includes("if (!P.isGenerating() && cur.trim() && Date.now() - stableSince >= ENHANCE_STABLE_MS) { text = cur; break; }") && body.includes("if (cur && cur === prevText && P.assistantCount() <= base) continue;"));

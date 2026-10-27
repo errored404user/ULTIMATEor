@@ -965,7 +965,7 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
   function detectGuiIntent(text) {
     const t = String(text || "");
     const out = { gui: false, edit: false, reference: false, mobile: false, words: [] };
-    if (!t.trim() || t.includes(GUI_BRIEF_MARK) || t.includes(ENHANCER_MARK) || /GUI STUDIO HAND-OFF|ANIMATION STUDIO HAND-OFF/.test(t) || GUI_NEGATIVE.test(t)) return out;
+    if (!t.trim() || t.includes(GUI_BRIEF_MARK) || t.includes(ENHANCER_MARK) || t.includes(TEMPLATE_DRAFT_MARK) || /GUI STUDIO HAND-OFF|ANIMATION STUDIO HAND-OFF/.test(t) || GUI_NEGATIVE.test(t)) return out;
     const words = t.match(new RegExp(GUI_WORDS.source, "gi")) || [];
     if (!words.length) return out;
     // "write a script for the shop" is scripting, not GUI, unless a GUI word is explicit.
@@ -1082,8 +1082,70 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
     return out;
   }
 
+  // ── 1.73.0 TEMPLATE CREATOR: "Draft with AI" ─────────────────────────────
+  // One sentence → a template draft (name, description, category, prompt with
+  // {{blanks}}, the blanks, optional steps) returned as JSON between markers.
+  // Same visible round trip as the Prompt Enhancer; the user reviews the draft
+  // in the Creator form and nothing is saved until they press Save.
+  const TEMPLATE_DRAFT_MARK = "⟦TotalScript TEMPLATE DRAFT⟧";
+  const TEMPLATE_DRAFT_OPEN = "<<<TEMPLATE JSON>>>";
+  const TEMPLATE_DRAFT_CLOSE = "<<<END TEMPLATE JSON>>>";
+  const TEMPLATE_CATEGORIES = ["Building", "UI", "Scripting", "Systems", "Gameplay", "VFX", "Animation", "Planning", "Custom"];
+  function templateDraftRequest(opts) {
+    const o = opts || {};
+    const sentence = String(o.sentence || "").trim();
+    const roblox = o.engine !== "local";
+    const cats = (Array.isArray(o.categories) && o.categories.length ? o.categories : TEMPLATE_CATEGORIES).slice(0, 20);
+    const L = [];
+    L.push(TEMPLATE_DRAFT_MARK + " Design a reusable TotalScript template from the user's sentence below. A template is a prompt the user will send again and again" + (roblox ? " to a Roblox Studio AI agent" : " to an AI assistant") + ", with {{blanks}} for the parts that change each time. Do NOT do the task, do NOT run any command or tool, do NOT ask questions - return the draft only." + (o.agentStarted ? " This is a writing step inside the current session: no command block in this reply." : ""));
+    L.push("Rules: the prompt must be precise and complete in the user's voice (first person, imperative), keep every concrete detail from the sentence, and use {{snake_case}} blanks ONLY for values that genuinely change per use (names, counts, colours, paths) - 1 to 6 blanks, never zero-information blanks like {{details}}. Every blank used in the prompt or steps must appear in \"blanks\" with a short question to ask the user and a sensible default. Steps are optional: 0 to 8 short imperative sentences the agent follows in order, only when the task has a real sequence. Pick the category from: " + cats.join(", ") + ".");
+    L.push("Reply with ONLY this JSON object between the two exact marker lines (no comments, no trailing commas):");
+    L.push(TEMPLATE_DRAFT_OPEN);
+    L.push('{"name":"short title","description":"one line on what it does","category":"one of the categories","prompt":"the full prompt with {{blanks}}","blanks":[{"name":"blank_name","question":"what to ask the user","default":"sensible default","required":true}],"steps":["optional step 1"]}');
+    L.push(TEMPLATE_DRAFT_CLOSE);
+    L.push("");
+    L.push("USER'S SENTENCE:");
+    L.push('"""');
+    L.push(sentence);
+    L.push('"""');
+    return L.join("\n");
+  }
+  function parseTemplateDraft(reply) {
+    const raw = String(reply || "").replace(/\r\n?/g, "\n");
+    const out = { ok: false, draft: null, source: "none", command: /"(?:command|tool)"\s*:\s*"|###\s*(?:LUA|MCP_TOOL)\s*###/i.test(raw), error: "" };
+    let body = "";
+    const a = raw.indexOf(TEMPLATE_DRAFT_OPEN);
+    if (a >= 0) { const from = a + TEMPLATE_DRAFT_OPEN.length; const b = raw.indexOf(TEMPLATE_DRAFT_CLOSE, from); body = raw.slice(from, b >= 0 ? b : undefined); out.source = "markers"; }
+    else { const fence = raw.match(/```(?:json)?\s*\n([\s\S]*?)```/i); if (fence) { body = fence[1]; out.source = "fence"; } else { const i = raw.indexOf("{"), j = raw.lastIndexOf("}"); if (i >= 0 && j > i) { body = raw.slice(i, j + 1); out.source = "raw"; } } }
+    body = body.replace(/^\s*```(?:json)?\s*\n/i, "").replace(/\n\s*```\s*$/i, "").trim();
+    if (!body) { out.error = "no draft in the reply"; return out; }
+    let j;
+    try { j = JSON.parse(body); } catch (e) { out.error = "the draft is not valid JSON: " + String(e && e.message || e).slice(0, 80); return out; }
+    if (!j || typeof j !== "object" || Array.isArray(j)) { out.error = "the draft is not an object"; return out; }
+    const str = (v, n) => String(v == null ? "" : v).slice(0, n || 3000).trim();
+    const name = str(j.name, 120), prompt = str(j.prompt, 12000);
+    if (!name || !prompt) { out.error = "the draft needs at least a name and a prompt"; return out; }
+    const used = new Set(); for (const m of (prompt + " " + (Array.isArray(j.steps) ? j.steps.join(" ") : "")).matchAll(/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g)) used.add(m[1]);
+    const blanks = (Array.isArray(j.blanks) ? j.blanks : []).map((b) => (b && typeof b === "object") ? { name: str(b.name, 80).replace(/^\{\{|\}\}$/g, ""), question: str(b.question || b.description || b.label, 500), default: str(b.default, 500), required: b.required !== false } : null).filter((b) => b && /^[A-Za-z_][A-Za-z0-9_]*$/.test(b.name)).slice(0, 20);
+    for (const u of used) if (!blanks.some((b) => b.name === u)) blanks.push({ name: u, question: u.replace(/_/g, " "), default: "", required: true });
+    out.draft = {
+      name, description: str(j.description, 1000),
+      category: TEMPLATE_CATEGORIES.includes(str(j.category, 80)) ? str(j.category, 80) : (str(j.category, 80) || "Custom"),
+      prompt, blanks,
+      steps: (Array.isArray(j.steps) ? j.steps : []).map((s) => typeof s === "string" ? str(s, 3000) : (s && typeof s === "object") ? str(s.instruction || s.text || s.title, 3000) : "").filter(Boolean).slice(0, 20),
+    };
+    out.ok = true;
+    return out;
+  }
+
   return {
     REASONING_NOTES,
+    TEMPLATE_DRAFT_MARK,
+    TEMPLATE_DRAFT_OPEN,
+    TEMPLATE_DRAFT_CLOSE,
+    TEMPLATE_CATEGORIES,
+    templateDraftRequest,
+    parseTemplateDraft,
     ENHANCER_MARK,
     ENHANCED_OPEN,
     ENHANCED_CLOSE,

@@ -113,28 +113,44 @@ async function render() {
   cardsBtn.click(); await sleep(150);
   const panel = d.getElementById("rs-cards-panel");
   ok("render: cards panel opens", panel && !panel.hidden);
-  const lib = panel.querySelector(".rs-template-library");
-  const order = [...lib.children].map((el) => el.className.split(" ")[0] || el.id);
-  ok("render: Library order is controls → grid → idea generator", order[0] === "rs-template-controls" && order[1] === "" || order.join(",") === "rs-template-controls,rs-cards-grid-wrap,rs-idea-generator" || (lib.children[0].classList.contains("rs-template-controls") && lib.children[1].id === "rs-cards-grid-wrap" && lib.children[2].classList.contains("rs-idea-generator")), order.join(","));
-  const cards = panel.querySelectorAll(".rs-template-gallery > .rs-template-card");
-  ok("render: templates render as gallery cards with type tiles and badges", cards.length === 3 && [...cards].every((c) => c.querySelector(".rs-template-ico") && c.querySelector(".rs-tag-type") && c.querySelector(".rs-tag-env") && c.querySelector("time")), String(cards.length));
+  // 1.73.0 — the templates button opens the panel in the centred Templates
+  // window (#rs-cards-window) and the Library tab IS the embedded Template
+  // Creator (#rs-tcreator.rst-embedded): list of saved templates on the left,
+  // form on the right. The gallery/chips/idea-generator strip of 1.34.1 only
+  // remains in the bar-attached fallback tray.
+  const win = d.getElementById("rs-cards-window");
+  ok("render: panel lives inside the centred Templates window (not the bar)", win && win.classList.contains("open") && win.contains(panel) && !d.getElementById("rs-bar").contains(panel) && d.documentElement.classList.contains("rs-cards-window-open"));
+  const slot = panel.querySelector(".rs-cards-body > .rs-cards-creator-slot");
+  const creator = slot && slot.querySelector("#rs-tcreator.rst-embedded.open");
+  ok("render: Library tab = embedded Template Creator (rail + creator slot)", !!creator && panel.querySelector(":scope > .rs-cards-top .rs-cards-tab.on[data-tab=\"library\"]") && w.TotalTemplateCreator.isOpen() && w.TotalTemplateCreator.state().embedded === true);
+  await waitFor(() => creator.querySelectorAll(".rst-list > .rst-card").length === 3, 3000, "creator list");
+  const cards = creator.querySelectorAll(".rst-list > .rst-card");
+  ok("render: the three templates render as creator cards with name, category badge, meta and Run/Edit/Duplicate/Export/Archive/Delete", cards.length === 3 && [...cards].every((c) => c.querySelector(".rst-card-top b") && c.querySelector(".rst-badge") && c.querySelector(".rst-card-meta") && ["run","edit","duplicate","export","archive","delete"].every((a) => c.querySelector('.rst-card-actions [data-act="' + a + '"]'))), String(cards.length));
   const boss = [...cards].find((c) => /Boss arena/.test(c.textContent));
-  ok("render: roblox card → data-template-type=roblox, 'R' tile, 'Roblox' type badge, 'Roblox Studio' env badge", boss && boss.dataset.templateType === "roblox" && boss.querySelector(".rs-template-ico").textContent === "R" && boss.querySelector(".rs-tag-type").textContent === "Roblox" && boss.querySelector(".rs-tag-env").textContent === "Roblox Studio" && boss.querySelectorAll(".rs-tag").length >= 4, boss && boss.textContent.slice(0, 120));
-  ok("render: card footer = Run (primary) + Edit + ⋯ menu holding Improve with AI / Copy / Export / Archive / Delete", boss && boss.querySelector(".rs-template-actions > .rs-template-run") && boss.querySelector('.rs-template-actions > [data-template-action="open"]') && boss.querySelector(".rs-template-more > summary").textContent === "\u22EF" && [...boss.querySelectorAll(".rs-template-more > div button")].map((b) => b.dataset.templateAction).join(",") === "improve,duplicate,export,archive,delete");
-  const chips = panel.querySelectorAll(".rs-template-chips [data-template-chip]");
-  ok("render: category chips = All / Building / Planning / UI / Archived with counts, All active", [...chips].map((c) => c.dataset.templateChip).join(",") === "All,Building,Planning,UI,Archived" && chips[0].classList.contains("on") && chips[0].querySelector("i").textContent === "3", [...chips].map((c) => c.dataset.templateChip + ":" + c.querySelector("i").textContent).join(" "));
-  [...chips].find((c) => c.dataset.templateChip === "UI").click(); await sleep(60);
-  ok("render: clicking the UI chip filters the gallery to 1 card, syncs the select, count pill and chip state", panel.querySelectorAll(".rs-template-gallery > .rs-template-card").length === 1 && panel.querySelector("#rs-template-category").value === "UI" && panel.querySelector("[data-template-count]").textContent === "1" && [...chips].find((c) => c.dataset.templateChip === "UI").classList.contains("on") && !chips[0].classList.contains("on"));
-  [...chips].find((c) => c.dataset.templateChip === "Archived").click(); await sleep(60);
-  ok("render: Archived chip (empty) shows the 'No templates match' state", /No templates match/.test(panel.querySelector("#rs-cards-grid-wrap").textContent));
-  panel.querySelector("#rs-template-category").value = "All"; panel.querySelector("#rs-template-category").dispatchEvent(new w.Event("change", { bubbles: true })); await sleep(60);
-  ok("render: the select still works and re-activates the All chip", panel.querySelectorAll(".rs-template-gallery > .rs-template-card").length === 3 && chips[0].classList.contains("on"));
-  ok("render: Idea Generator strip sits under the gallery with its titled head", lib.lastElementChild.classList.contains("rs-idea-generator") && /Idea Generator/.test(lib.lastElementChild.querySelector(".rs-idea-head b").textContent));
+  ok("render: roblox card shows its category badge 'Building' and the blank/step counts", boss && boss.querySelector(".rst-badge").textContent === "Building" && /2 steps/.test(boss.querySelector(".rst-card-meta").textContent), boss && boss.querySelector(".rst-card-meta").textContent);
+  ok("render: list count pill = 3", creator.querySelector(".rst-count").textContent === "3");
+  const search = creator.querySelector(".rst-search");
+  search.value = "shop"; search.dispatchEvent(new w.Event("input", { bubbles: true })); await sleep(60);
+  ok("render: searching 'shop' filters the list to 1 card", creator.querySelectorAll(".rst-list > .rst-card").length === 1 && /Shop UI/.test(creator.querySelector(".rst-list").textContent));
+  search.value = ""; search.dispatchEvent(new w.Event("input", { bubbles: true })); await sleep(60);
+  const archived = creator.querySelector(".rst-archived");
+  archived.checked = true; archived.dispatchEvent(new w.Event("change", { bubbles: true })); await sleep(60);
+  ok("render: Archived toggle (empty) shows the 'Nothing archived' state", /Nothing archived/.test(creator.querySelector(".rst-list").textContent));
+  archived.checked = false; archived.dispatchEvent(new w.Event("change", { bubbles: true })); await sleep(60);
+  ok("render: toggling back restores the 3 cards", creator.querySelectorAll(".rst-list > .rst-card").length === 3);
+  const boss2 = [...creator.querySelectorAll(".rst-list > .rst-card")].find((c) => /Boss arena/.test(c.textContent)); // list re-rendered by the toggles
+  boss2.querySelector('[data-act="edit"]').click(); await sleep(60);
+  ok("render: Edit loads the template into the form (name field, selected card)", creator.querySelector(".rst-form").elements.name.value === "Boss arena" && creator.querySelector(".rst-list > .rst-card.on") && /Boss arena/.test(creator.querySelector(".rst-list > .rst-card.on").textContent));
+  ok("render: the AI-draft sentence row and the blank/step editors are part of the Library", !!creator.querySelector(".rst-sentence") && !!creator.querySelector(".rst-draft") && !!creator.querySelector(".rst-blank-rows") && !!creator.querySelector(".rst-step-rows"));
+  // panel re-renders (tab click, template sync, activity on this tab) rebuild
+  // the rail only - the creator host and the form survive
+  const hostBefore = creator;
+  panel.querySelector('[data-tab="library"]').click(); await sleep(80);
+  ok("render: a panel re-render keeps the same creator element mounted with its form intact (typing is never interrupted)", panel.querySelector("#rs-tcreator") === hostBefore && hostBefore.isConnected && creator.querySelector(".rst-form").elements.name.value === "Boss arena");
   const headTxt = () => (panel.querySelector(".rs-cards-heading") || {}).textContent;
   const subTxt = () => (panel.querySelector(".rs-cards-subheading") || {}).textContent || "";
   const shell = () => panel.querySelector(".rs-cards-body > .rs-template-library");
-  ok("render: Library tab → shell + heading 'Templates'", shell() && headTxt() === "Templates" && panel.dataset.cardsTab === "library", headTxt());
-  ok("render: Library head uses .rs-template-head with count pill", !!panel.querySelector(".rs-template-head .rs-template-count"));
+  ok("render: Library tab → rail heading 'Templates' + data-cards-tab=library", headTxt() === "Templates" && panel.dataset.cardsTab === "library", headTxt());
 
   panel.querySelector('[data-tab="activity"]').click(); await sleep(120);
   ok("render: Activity tab → same shell, heading 'Activity', data-cards-tab", shell() && shell().classList.contains("rs-activity") && headTxt() === "Activity" && panel.dataset.cardsTab === "activity" && /What the AI ran/.test(subTxt()), headTxt() + " / " + subTxt());
@@ -156,7 +172,12 @@ async function render() {
   ok("render: Public head uses the same .rs-template-head + head actions", !!panel.querySelector(".rs-public .rs-template-head .rs-template-head-actions button"));
 
   panel.querySelector('[data-tab="library"]').click(); await sleep(80);
-  ok("render: back to Library restores the Templates heading", headTxt() === "Templates" && panel.dataset.cardsTab === "library");
+  ok("render: back to Library restores the Templates heading and re-mounts the creator", headTxt() === "Templates" && panel.dataset.cardsTab === "library" && panel.querySelector(".rs-cards-creator-slot > #rs-tcreator.rst-embedded"));
+  // close: Esc → window closes, panel hidden, bar visible again
+  win.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await sleep(60);
+  ok("render: Escape closes the Templates window (panel hidden, html class cleared, creator closed)", !win.classList.contains("open") && panel.hidden && !d.documentElement.classList.contains("rs-cards-window-open") && !w.TotalTemplateCreator.isOpen());
+  cardsBtn.click(); await sleep(120);
+  ok("render: the templates button re-opens the window", win.classList.contains("open") && !panel.hidden);
   ok("render: no page errors while switching tabs", pageErrors.length === 0, pageErrors.slice(0, 2).join(" | "));
   finish();
   setTimeout(() => process.exit(process.exitCode || 0), 50);

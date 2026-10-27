@@ -6306,21 +6306,21 @@
   // ═════════════════════════════════════════════════════════════════
   const ENHANCE_TIMEOUT_MS = 180000;
   const ENHANCE_STABLE_MS = 1200;
-  async function enhancePromptViaAI(rough, opts, onStatus) {
+  // One visible "ask the AI, read the reply" turn shared by the Prompt
+  // Enhancer and the Template Creator's Draft with AI. Returns the reply text
+  // (null when cancelled); the caller parses it. Never starts the agent.
+  async function aiRoundTrip(request, opts, onStatus) {
     const say = (m) => { try { onStatus && onStatus(m); } catch {} };
     const o = opts || {};
     const cancelled = () => { try { return !!(o.cancelled && o.cancelled()); } catch { return false; } };
-    if (typeof RS === "undefined" || typeof RS.enhancerRequest !== "function") throw new Error("config module missing - reload the extension");
     if (!P.getEditor || !P.getEditor()) throw new Error(`${P.displayName || "the site"} has no chat box on this page`);
-    if (A.starting) { say("Agent is starting - the enhancer runs right after…"); const up = await waitFor(() => !A.starting, 240000); if (!up) throw new Error("the agent did not finish starting"); }
+    if (A.starting) { say("Agent is starting - this runs right after…"); const up = await waitFor(() => !A.starting, 240000); if (!up) throw new Error("the agent did not finish starting"); }
     if (A.running || A.injecting) {
-      say("Agent is busy - the enhancer runs as soon as this step finishes…");
+      say("Agent is busy - this runs as soon as this step finishes…");
       const free = await waitFor(() => (!A.running && !A.injecting) || cancelled(), 600000);
       if (cancelled()) return null;
       if (!free) throw new Error("the agent stayed busy - stop it and try again");
     }
-    const focus = (o.focus === "roblox" || o.focus === "general") ? o.focus : RS.enhancerFocus({ text: rough, engine: activeEngine() });
-    const request = RS.enhancerRequest({ rough, focus, notes: o.notes, short: !!o.short, agentStarted: !!A.started });
     const prevItem = P.lastAssistant();
     const prevId = (P.lastAssistantId && prevItem) ? P.lastAssistantId() : null;
     const prevText = prevItem ? String((P.readAssistant() || {}).reply || "") : "";
@@ -6330,14 +6330,14 @@
     A.injecting = true;
     let sent = false;
     try {
-      say(`Sending the rewrite request to ${P.displayName || "the AI"}…`);
+      say(`Sending the request to ${P.displayName || "the AI"}…`);
       sent = (await P.typeAndSend(request)) !== false;
     } finally {
       setTimeout(() => { A.injecting = false; }, 400);
     }
     if (!sent) throw new Error("the message was not sent");
-    diag("enhancer.sent", { focus, chars: request.length, roughChars: rough.length, agentStarted: !!A.started });
-    say(`Waiting for ${P.displayName || "the AI"}'s rewrite…`);
+    diag("roundTrip.sent", { kind: o.kind || "", chars: request.length, agentStarted: !!A.started });
+    say(`Waiting for ${P.displayName || "the AI"}'s reply…`);
     const t0 = Date.now();
     let text = "", lastLen = -1, stableSince = Date.now(), seenTurn = false;
     while (Date.now() - t0 < ENHANCE_TIMEOUT_MS) {
@@ -6360,11 +6360,37 @@
       if (P.isGenerating()) say(`${P.displayName || "The AI"} is writing… (${cur.length} chars)`);
     }
     if (!text.trim()) throw new Error(seenTurn ? "the AI returned an empty reply" : `no reply from ${P.displayName || "the site"} within ${Math.round(ENHANCE_TIMEOUT_MS / 1000)}s`);
+    diag("roundTrip.reply", { kind: o.kind || "", ms: Date.now() - t0, chars: text.length });
+    return text;
+  }
+  async function enhancePromptViaAI(rough, opts, onStatus) {
+    const o = opts || {};
+    if (typeof RS === "undefined" || typeof RS.enhancerRequest !== "function") throw new Error("config module missing - reload the extension");
+    const focus = (o.focus === "roblox" || o.focus === "general") ? o.focus : RS.enhancerFocus({ text: rough, engine: activeEngine() });
+    const request = RS.enhancerRequest({ rough, focus, notes: o.notes, short: !!o.short, agentStarted: !!A.started });
+    const text = await aiRoundTrip(request, { cancelled: o.cancelled, kind: "enhance" }, onStatus);
+    if (text == null) return null;
     const parsed = RS.parseEnhanced(text);
-    diag("enhancer.reply", { ms: Date.now() - t0, source: parsed.source, command: parsed.command, chars: text.length, outChars: parsed.text.length });
+    diag("enhancer.reply", { source: parsed.source, command: parsed.command, chars: text.length, outChars: parsed.text.length, focus });
     if (parsed.command) throw new Error("the AI answered with a command instead of a rewrite - try again (or switch the focus to General)");
     if (!parsed.text) throw new Error("the AI's reply had no prompt in it");
     return { text: parsed.text, focus, source: parsed.source, raw: text };
+  }
+  // 1.73.0 — Template Creator "Draft with AI": one sentence → a template draft
+  // (RS.templateDraftRequest / RS.parseTemplateDraft). Reviewed in the Creator;
+  // nothing is saved here.
+  async function draftTemplateViaAI(sentence, opts, onStatus) {
+    const o = opts || {};
+    if (typeof RS === "undefined" || typeof RS.templateDraftRequest !== "function") throw new Error("config module missing - reload the extension");
+    let categories = []; try { categories = TotalTemplateRegistry.categories(); } catch {}
+    const request = RS.templateDraftRequest({ sentence, engine: activeEngine(), categories: [...new Set([...RS.TEMPLATE_CATEGORIES, ...categories])], agentStarted: !!A.started });
+    const text = await aiRoundTrip(request, { cancelled: o.cancelled, kind: "templateDraft" }, onStatus);
+    if (text == null) return null;
+    const parsed = RS.parseTemplateDraft(text);
+    diag("templateDraft.reply", { ok: parsed.ok, source: parsed.source, command: parsed.command, error: parsed.error, chars: text.length });
+    if (parsed.command && !parsed.ok) throw new Error("the AI answered with a command instead of a draft - try again");
+    if (!parsed.ok) throw new Error(parsed.error || "the AI's reply had no draft in it");
+    return { draft: parsed.draft, source: parsed.source, raw: text };
   }
   // Send the reviewed prompt. A running session takes it through the same path
   // as Paint / GUI Studio hand-offs (the loop picks up the reply); with the
@@ -6417,6 +6443,34 @@
     });
   }
   window.__rsOpenEnhancer = openEnhancer;
+  // 1.73.0 — Template Creator (src/core/templatecreator.js): the templates
+  // button opens it; the classic tray (Tasks · Activity · Session · Public
+  // Skills) stays one click away from its title bar and from the task pill.
+  function openTemplateCreator(opts) {
+    const o = opts || {};
+    if (typeof TotalTemplateCreator === "undefined") { ui.toast("Template Creator module missing - reload the extension"); return false; }
+    if (typeof TotalTemplateRegistry === "undefined") { ui.toast("Template registry missing - reload the extension"); return false; }
+    // No mount given → open the Templates window on its Library tab; renderCards
+    // calls back here with the slot to mount into.
+    if (!o.mount) { pendingCreatorOpts = o; try { ui.openTray("library"); } catch {} return true; }
+    const extra = pendingCreatorOpts || {}; pendingCreatorOpts = null;
+    TotalTemplateCreator.open({
+      registry: TotalTemplateRegistry,
+      commandRegistry: () => globalThis.TotalCommandRegistry || null,
+      examples: () => { try { return typeof TotalTemplates !== "undefined" ? TotalTemplates.list() : []; } catch { return []; } },
+      run: (templateId, values) => ui.runTemplateById(templateId, values),
+      draft: draftTemplateViaAI,
+      openTray: (tab) => { try { ui.openTray(tab); } catch {} },
+      onClose: () => { try { ui.closeTray(); } catch {} },
+      engine: () => activeEngine(),
+      providerName: () => P.displayName || "the AI",
+      toast: (m) => ui.toast(m),
+      diag,
+    }, Object.assign({}, extra, { mount: o.mount }));
+    return true;
+  }
+  let pendingCreatorOpts = null;
+  window.__rsOpenTemplateCreator = openTemplateCreator;
 
   async function startSession(opts = {}) {
     const isRestart = !!(opts && opts.restart);
@@ -7418,31 +7472,62 @@
             renderCards(cardsPanel);
           }
         };
-        openCardsPanel = setCardsOpen; // reachable from the Public Skills modal (hoisted var)
+        // 1.73.0 — TEMPLATES WINDOW: the templates button (and the task pill,
+        // the Public Skills modal, Settings → Task list) open the cards panel in
+        // a centred window on top of the page instead of the strip above the
+        // bar. Same panel element, same tabs (Library · Activity · Public ·
+        // Tasks), same handlers - only the frame changes; the Library tab hosts
+        // the Template Creator (renderCards). The bar-attached tray remains the
+        // fallback when the window cannot be built.
+        let cardsWindow = null;
+        const ensureCardsWindow = () => {
+          if (cardsWindow && cardsWindow.isConnected) return cardsWindow;
+          cardsWindow = document.createElement("div");
+          cardsWindow.id = "rs-cards-window"; cardsWindow.setAttribute("role", "dialog"); cardsWindow.setAttribute("aria-label", "TotalScript Templates"); cardsWindow.tabIndex = -1;
+          cardsWindow.innerHTML = '<div class="rs-cw-shell"><div class="rs-cw-title"><span class="rs-cw-brand"><img class="rs-cw-logo" alt="" src="' + brandLogoUrl() + '">Templates</span><span class="rs-cw-sub">Library · Activity · Public Skills · Tasks — everything in one window</span><button type="button" class="rs-cw-close" data-cw-close title="Close (Esc)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div><div class="rs-cw-body"></div></div>';
+          cardsWindow.addEventListener("click", (e) => { if (e.target === cardsWindow || (e.target.closest && e.target.closest("[data-cw-close]"))) { e.stopPropagation(); closeCardsWindow(); } });
+          cardsWindow.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (typeof TotalTemplateCreator !== "undefined" && TotalTemplateCreator.isOpen() && TotalTemplateCreator.state().busy) return; e.preventDefault(); e.stopPropagation(); closeCardsWindow(); } });
+          document.documentElement.appendChild(cardsWindow);
+          return cardsWindow;
+        };
+        const cardsWindowOpen = () => !!(cardsWindow && cardsWindow.classList.contains("open"));
+        const openCardsWindow = (tab) => {
+          if (tab) cardsTab = tab;
+          const win = ensureCardsWindow();
+          setMenuOpen(false); hideCardEmbed(); hideSetup();
+          if (!cardsPanel.hidden && cardsPanel.parentElement === bar) setCardsOpen(false);
+          const body = win.querySelector(".rs-cw-body");
+          if (cardsPanel.parentElement !== body) body.appendChild(cardsPanel);
+          cardsPanel.classList.add("rs-cards-in-window");
+          cardsPanel.hidden = false;
+          win.classList.add("open");
+          document.documentElement.classList.add("rs-cards-window-open");
+          renderCards(cardsPanel);
+          try { win.focus({ preventScroll: true }); } catch {}
+          diag("cards.windowOpen", { tab: cardsTab });
+          return true;
+        };
+        const closeCardsWindow = () => {
+          if (!cardsWindow) return;
+          cardsWindow.classList.remove("open");
+          document.documentElement.classList.remove("rs-cards-window-open");
+          cardsPanel.hidden = true; cardsPanel.classList.remove("rs-cards-in-window");
+          try { cardsPanel.removeAttribute("data-cards-tab"); } catch {}
+          try { if (typeof TotalTemplateCreator !== "undefined" && TotalTemplateCreator.isOpen()) TotalTemplateCreator.close(); } catch {}
+          diag("cards.windowClose", {});
+        };
+        closeCardsWindowFn = closeCardsWindow;
+        openCardsPanel = (open, tab) => { if (open) openCardsWindow(tab); else { closeCardsWindow(); setCardsOpen(false); } }; // Public Skills modal / Settings → Task list (hoisted var)
+        openTrayFn = (tab) => openCardsWindow(tab);
         const taskPill = root.querySelector("#rs-task-pill");
-        if (taskPill) taskPill.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); const wasTasks = !cardsPanel.hidden && cardsTab === "tasks"; cardsTab = "tasks"; setCardsOpen(!wasTasks); });
+        if (taskPill) taskPill.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); const wasTasks = cardsWindowOpen() && cardsTab === "tasks"; if (wasTasks) closeCardsWindow(); else openCardsWindow("tasks"); });
         try { syncTaskPill(); } catch {}
         cardsBtn.addEventListener("click", (e)=>{
           e.stopPropagation();
-          setCardsOpen(cardsPanel.hidden);
+          if (cardsWindowOpen()) { closeCardsWindow(); return; }
+          if (!cardsPanel.hidden && cardsPanel.parentElement === bar) { setCardsOpen(false); return; }
+          try { openCardsWindow(); } catch (err) { diag("cards.windowFailed", { err: String(err && err.message || err).slice(0, 160) }); setCardsOpen(true); }
         });
-        // Don't close when scrolling inside the panel itself, or when the click
-        // target was detached by a re-render during this same event (tab switches).
-        window.addEventListener("scroll", (e) => {
-          if (cardsPanel.hidden) return;
-          try { if (cardsPanel._totalUiGuard && Date.now() < cardsPanel._totalUiGuard) return; } catch {}
-          try { if (e.target && (e.target === cardsPanel || cardsPanel.contains(e.target))) return; } catch {}
-          setCardsOpen(false);
-        }, true);
-        document.addEventListener("click", (e) => {
-          if (cardsPanel.hidden) return;
-          try { if (cardsPanel._totalUiGuard && Date.now() < cardsPanel._totalUiGuard) return; } catch {}
-          try { if (e.target && !e.target.isConnected) return; } catch {}
-          if (!cardsPanel.contains(e.target) && !cardsBtn.contains(e.target)) setCardsOpen(false);
-        });
-        // Capture tab activation before host-page handlers can cancel or retarget it.
-        // renderCards replaces the tab DOM, so do this on pointerdown and consume
-        // the later click rather than relying on bubbling through the host page.
         cardsPanel.addEventListener("pointerdown", (e)=>{
           const tab=e.target.closest&&e.target.closest(".rs-cards-tab");
           if(!tab||!cardsPanel.contains(tab)) return;
@@ -7569,8 +7654,8 @@
               renderCards(cardsPanel);return;}
             const pubTa=e.target.closest&&e.target.closest("#rs-public-prompt");if(pubTa){e.stopPropagation();return;}
           }
-          const add=e.target.closest&&e.target.closest("[data-template-add]");if(add){e.stopPropagation();openTemplateEditor();return;}
-          const aiCreate=e.target.closest&&e.target.closest("[data-template-ai-create]");if(aiCreate){e.stopPropagation();const request=prompt("Describe the reusable template you want TotalScript AI to create");if(!request)return;runLibraryCard({engine:"rs",icon:"T",cat:"Templates",title:"Create Template with AI",desc:"Draft for review",prompt:`Create a complete user-owned TotalScript template draft from this request: ${request}\nAnalyze required variables, workflow ordering, existing command IDs, validation, expected result, execution level, environment and safety. Submit the complete draft through template_create_draft. Do not save or execute it.`},true);return;}
+          const add=e.target.closest&&e.target.closest("[data-template-add]");if(add){e.stopPropagation();if(typeof TotalTemplateCreator!=="undefined"&&window.__rsOpenTemplateCreator){if(cardsPanel.parentElement===bar){cardsPanel.hidden=true;bar.classList.remove("rs-cards-open");}window.__rsOpenTemplateCreator();return;}openTemplateEditor();return;}
+          const aiCreate=e.target.closest&&e.target.closest("[data-template-ai-create]");if(aiCreate){e.stopPropagation();if(typeof TotalTemplateCreator!=="undefined"&&window.__rsOpenTemplateCreator){if(cardsPanel.parentElement===bar){cardsPanel.hidden=true;bar.classList.remove("rs-cards-open");}window.__rsOpenTemplateCreator();return;}const request=prompt("Describe the reusable template you want TotalScript AI to create");if(!request)return;runLibraryCard({engine:"rs",icon:"T",cat:"Templates",title:"Create Template with AI",desc:"Draft for review",prompt:`Create a complete user-owned TotalScript template draft from this request: ${request}\nAnalyze required variables, workflow ordering, existing command IDs, validation, expected result, execution level, environment and safety. Submit the complete draft through template_create_draft. Do not save or execute it.`},true);return;}
           const projectImport=e.target.closest&&e.target.closest("[data-project-import]");if(projectImport){e.stopPropagation();const input=document.createElement("input");input.type="file";input.accept=".rbxl,.rbxlx,.totalscript-project-reference.json";input.onchange=async()=>{const file=input.files&&input.files[0];if(!file)return;if(/\.json$/i.test(file.name)){try{const ref=JSON.parse(await file.text());if(!ref||!ref.analysis||!ref.analysis.project)return toast("INVALID_PROJECT_REFERENCE: not an exported TotalScript project reference");openTemplateEditor(null,{draft:true,projectReference:ref});}catch(err){toast(`INVALID_PROJECT_REFERENCE: ${String(err.message||err)}`);}return;}openTemplateEditor(null,{draft:true,projectFile:file});};input.click();return;}const exportAll=e.target.closest&&e.target.closest("[data-template-export-all]");if(exportAll){e.stopPropagation();const r=TotalTemplateRegistry.exportAllTemplates();if(!r.success)return toast(`${r.error.code}: ${r.error.message}`);if(!r.data.templates.length)return toast("No templates to export");const blob=new Blob([JSON.stringify(r.data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=r.filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(`Exported ${r.data.templates.length} templates`);return;}const importBtn=e.target.closest&&e.target.closest("[data-template-import]");if(importBtn){e.stopPropagation();const input=document.createElement("input");input.type="file";input.accept=".json,.totalscript-template.json";input.onchange=async()=>{const file=input.files&&input.files[0];if(!file)return;const r=await TotalTemplateRegistry.importTemplate(await file.text());toast(r.success?"Template imported":`${r.error.code}: ${r.error.message}`);renderCards(cardsPanel);};input.click();return;}
           const lib=e.target.closest&&e.target.closest(".rs-template-row");if(lib){const c=visibleLibCache[+lib.dataset.promptIndex];if(!c)return;const action=e.target.closest&&e.target.closest("[data-template-action]");if(!action)return;const kind=action.dataset.templateAction;e.stopPropagation();if(kind==="open")openTemplateEditor(TotalTemplateRegistry.getTemplate(c.templateId));else if(kind==="run")await runTemplateCard(c);else if(kind==="improve")requestTemplateAI("improve",c.templateId,"Full AI Review");else if(kind==="duplicate"){await TotalTemplateRegistry.duplicateTemplate(c.templateId);renderCards(cardsPanel);toast("Template copied");}else if(kind==="export"){const r=TotalTemplateRegistry.exportTemplate(c.templateId);if(r.success){const blob=new Blob([JSON.stringify(r.data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=r.filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast("Template exported");}}else if(kind==="archive"){await TotalTemplateRegistry.archiveTemplate(c.templateId,cardsCategory!=="Archived");renderCards(cardsPanel);toast(cardsCategory==="Archived"?"Template restored":"Template archived");}else if(kind==="delete"){const t=TotalTemplateRegistry.getTemplate(c.templateId);if(confirm(`Delete “${t?.name||"this template"}” and all of its versions?`)){await TotalTemplateRegistry.deleteTemplate(c.templateId);renderCards(cardsPanel);toast("Template deleted");}}}
 
@@ -9423,7 +9508,8 @@
 
     window.addEventListener("total-templates-synced",()=>{try{if(cardsPanel&&!cardsPanel.hidden)scheduleRenderCards();}catch{}});
     window.addEventListener("total-template-ai-result",e=>{const d=e.detail||{};if(d.kind==="template_create_draft")openTemplateEditor(d.template,{draft:true});else if(d.kind==="template_propose_improvement"){const original=TotalTemplateRegistry.getTemplate(d.originalId);if(original)showTemplateProposal(original,d.improved,d.summary);}else if(d.kind==="template_test_result"){const t=TotalTemplateRegistry.getTemplate(d.templateId);if(t)alert(`STATIC ANALYSIS — ${t.name}\n\n${d.summary||""}\n\n${JSON.stringify(d.findings||[],null,2)}`);}});
-    async function runTemplateCard(card){const t=TotalTemplateRegistry.getTemplate(card.templateId);if(!t)return toast("TEMPLATE_NOT_FOUND");const vars={};for(const spec of t.variables||[]){const value=prompt(`${spec.name}${spec.required?" (required)":""}`,spec.default??"");if(value===null)return;vars[spec.name]=spec.type==="number"?Number(value):spec.type==="boolean"?/^(true|1|yes)$/i.test(value):value;}const resolved=TotalTemplateRegistry.resolve(t.id,vars,t.environment,{registry:globalThis.TotalCommandRegistry});if(!resolved.success)return toast(`${resolved.error.code}: ${resolved.error.message}`);if(resolved.requiresConfirmation&&!await requestApproval(`Run template: ${t.name}`,{executionLevel:t.executionLevel,steps:resolved.plan.length},true))return;if(!resolved.plan.some(x=>x.command)){runLibraryCard({...card,prompt:`Execute this reviewed prompt template. Do not claim any operation without tool verification.\n\n${resolved.instructions.join("\n")}`},true);return;}const results=[];for(const step of resolved.plan){if(!step.command)continue;const output=await runTool({tool:step.command,arguments:step.parameters||{}});const text=String(output),rules=step.validation||{};let failed=text.startsWith("ERROR");if(rules.outputIncludes&&!text.includes(String(rules.outputIncludes)))failed=true;if(rules.outputExcludes&&text.includes(String(rules.outputExcludes)))failed=true;results.push({step:step.id,command:step.command,success:!failed,output:text.slice(0,2000),validation:Object.keys(rules).length?rules:undefined});if(failed&&(step.errorBehavior||"STOP")==="STOP")break;}const success=results.every(x=>x.success);recentCards.unshift({tool:`Template: ${t.name}`,detail:`${success?"Completed":"Failed"} · ${results.filter(x=>x.success).length}/${results.length} commands verified`,status:success?"ok":"err",category:"tool",at:Date.now()});renderCards(cardsPanel);toast(success?"Template completed":"Template stopped on a failed command");}
+    // 1.73.0: presetVars (from the Creator's fill-in form) skip the prompt() chain; instruction-only steps are sent to the AI as a numbered recipe instead of being dropped.
+    async function runTemplateCard(card,presetVars){const t=TotalTemplateRegistry.getTemplate(card.templateId);if(!t)return toast("TEMPLATE_NOT_FOUND"),false;const vars={};const preset=presetVars&&typeof presetVars==="object"?presetVars:null;for(const spec of t.variables||[]){let value;if(preset){value=preset[spec.name];if(value===undefined||value==="")value=spec.default??"";if(spec.required&&String(value)==="")return toast(`Fill in {{${spec.name}}} first`),false;}else{value=prompt(`${spec.name}${spec.required?" (required)":""}`,spec.default??"");if(value===null)return;}vars[spec.name]=spec.type==="number"?Number(value):spec.type==="boolean"?/^(true|1|yes)$/i.test(value):value;}const resolved=TotalTemplateRegistry.resolve(t.id,vars,t.environment,{registry:globalThis.TotalCommandRegistry});if(!resolved.success)return toast(`${resolved.error.code}: ${resolved.error.message}`),false;if(resolved.requiresConfirmation&&!await requestApproval(`Run template: ${t.name}`,{executionLevel:t.executionLevel,steps:resolved.plan.length},true))return false;const recipe=resolved.plan.filter(x=>!x.command&&(x.instruction||x.title)).map((x,i)=>`${i+1}. ${x.instruction||x.title}`);if(!resolved.plan.some(x=>x.command)){runLibraryCard({...card,prompt:`Execute this reviewed prompt template. Do not claim any operation without tool verification.\n\n${resolved.instructions.join("\n")}${recipe.length?"\n\nSteps, in order:\n"+recipe.join("\n"):""}`},true);return true;}const results=[];for(const step of resolved.plan){if(!step.command)continue;const output=await runTool({tool:step.command,arguments:step.parameters||{}});const text=String(output),rules=step.validation||{};let failed=text.startsWith("ERROR");if(rules.outputIncludes&&!text.includes(String(rules.outputIncludes)))failed=true;if(rules.outputExcludes&&text.includes(String(rules.outputExcludes)))failed=true;results.push({step:step.id,command:step.command,success:!failed,output:text.slice(0,2000),validation:Object.keys(rules).length?rules:undefined});if(failed&&(step.errorBehavior||"STOP")==="STOP")break;}const success=results.every(x=>x.success);recentCards.unshift({tool:`Template: ${t.name}`,detail:`${success?"Completed":"Failed"} · ${results.filter(x=>x.success).length}/${results.length} commands verified`,status:success?"ok":"err",category:"tool",at:Date.now()});renderCards(cardsPanel);toast(success?"Template completed":"Template stopped on a failed command");if(success&&(recipe.length||resolved.instructions.length)){runLibraryCard({...card,prompt:`Execute this reviewed prompt template. Do not claim any operation without tool verification.\n\n${resolved.instructions.join("\n")}${recipe.length?"\n\nSteps, in order:\n"+recipe.join("\n"):""}\n\nAlready executed by TotalScript (verified outputs):\n${results.map(r=>`- ${r.command}: ${r.success?"ok":"FAILED"} — ${r.output.slice(0,200).replace(/\s+/g," ")}`).join("\n")}`},true);}return success;}
     function templateCards(){if(!globalThis.TotalTemplateRegistry)return [];const opts=cardsCategory==="Archived"?{archived:true}:cardsCategory!=="All"?{category:cardsCategory}:{};return TotalTemplateRegistry.searchTemplates(cardsQuery,opts).map(t=>({templateId:t.id,engine:"rs",icon:"T",cat:t.category,title:t.name,desc:t.description,environment:t.environment,version:t.currentVersion,commands:t.commands.map(x=>x.command),updatedAt:t.updatedAt,type:t.type,executionLevel:t.executionLevel,projectReference:t.projectReference,prompt:(t.instructions||[]).join("\n")}));}
     function libFiltered(){return templateCards();}
     function templateEnvironmentLabel(value){return ({ROBLOX_STUDIO:"Roblox Studio",BLENDER:"Blender",WEB:"Web",GENERAL:"General"})[value]||String(value||"General").replace(/_/g," ").replace(/\b\w/g,x=>x.toUpperCase());}
@@ -9552,7 +9638,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       modal.querySelector("[data-public-editor-save]").onclick = () => { const p = parse(); if (p.err) { status.textContent = p.err; return; } const r = PS.upsert(Object.assign({}, p.def, item ? { id: item.id, kind: item.kind } : {}), { reserved: publicReserved(), source: item ? item.source : "manual" }); if (!r.ok) { status.textContent = r.errors.join("; "); status.style.color = ""; return; } toast(`${item ? "Saved" : "Installed"} ${r.item.kind} '${r.item.name}'${r.warnings.length ? " — " + r.warnings.length + " warning(s)" : ""}`); closePublicEditor(); };
       setTimeout(() => { try { ta.focus(); } catch {} }, 0);
     }
-    var publicEditorEl = null, openCardsPanel = null;
+    var publicEditorEl = null, openCardsPanel = null, openTrayFn = null, closeCardsWindowFn = null;
     function closePublicEditor(){ try { if (publicEditorEl) publicEditorEl.remove(); } catch {} publicEditorEl = null; }
     function showPublicInstalled(detail){
       const item = detail && detail.item; if (!item) return;
@@ -9756,8 +9842,13 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         : cardsTab === "public" ? "Drop a <b>.txt</b> prompt on the composer and it becomes a reusable skill."
         : cardsTab === "tasks" ? "The AI reads this list: <b>Run next</b> hands it the first open task."
         : local ? "Everything the agent did on this PC this session, with results." : "One click on <b>Run</b> executes a whole template with real commands.";
-      panel.innerHTML =
-        '<div class="rs-cards-top">'
+      // 1.73.0 — in the Templates window the Library tab IS the Template
+      // Creator (src/core/templatecreator.js). Its host element is kept across
+      // re-renders (activity bursts, template syncs) so typing is never
+      // interrupted: only the rail is rebuilt while the creator slot exists.
+      const creatorTab = panel.classList.contains("rs-cards-in-window") && cardsTab === "library" && !local && typeof TotalTemplateCreator !== "undefined";
+      const existingSlot = creatorTab ? panel.querySelector(".rs-cards-body > .rs-cards-creator-slot") : null;
+      const topHtml = '<div class="rs-cards-top">'
         + '<div class="rs-cards-brand"><img class="rs-logo rs-cards-logo' + (BRAND.logo ? " rs-logo-custom" : "") + '" alt="" aria-hidden="true" src="' + brandLogoUrl() + '"><span class="rs-cards-kicker" data-rs-brand-short>' + escRs(productName()) /* brand name (Customize) or the selected-skin default */ + '</span><span class="rs-cards-heading">' + tabHead[0] + '</span><span class="rs-cards-subheading">' + tabHead[1] + ' · v' + EXT_VERSION + '</span></div>'
         + '<div class="rs-cards-tabs">'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "library" ? " on" : "") + '" data-tab="library">' + mainLabel + '</button>'
@@ -9768,7 +9859,14 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         + '<div class="rs-cards-rail-foot"><span class="rs-cards-rail-tip">' + railTip + '</span>'
         + (taskListOn() ? '' : '<button type="button" class="rs-cards-rail-link" data-cards-enable-tasks>+ Turn on the task list</button>')
         + '</div></div>'
-        + '<div class="rs-cards-body">' + body + '</div>';
+        ;
+      if (existingSlot) {
+        const topEl = panel.querySelector(":scope > .rs-cards-top");
+        if (topEl) { const tmp = document.createElement("div"); tmp.innerHTML = topHtml; topEl.replaceWith(tmp.firstElementChild); }
+      } else {
+        panel.innerHTML = topHtml + '<div class="rs-cards-body">' + (creatorTab ? '<div class="rs-cards-creator-slot"></div>' : body) + '</div>';
+      }
+      if (creatorTab) { try { const slot = panel.querySelector(".rs-cards-body > .rs-cards-creator-slot"); if (slot && window.__rsOpenTemplateCreator) window.__rsOpenTemplateCreator({ mount: slot }); } catch (e) { diag("cards.creatorMountFailed", { err: String(e && e.message || e).slice(0, 160) }); } }
       const enableTasks = panel.querySelector("[data-cards-enable-tasks]");
       if (enableTasks) enableTasks.onclick = (e) => { e.preventDefault(); e.stopPropagation(); try { setTaskList(true); cardsTab = "tasks"; renderCards(panel); } catch {} };
       // Bind tabs on every render. The panel is re-created frequently, so a
@@ -9922,7 +10020,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     // several cards first.
     async function runLibraryCard(card, send = true) {
       if (!send) { pasteLibraryCard(card); return; }
-      try { cardsPanel.hidden = true; } catch {}
+      try { if (closeCardsWindowFn) closeCardsWindowFn(); cardsPanel.hidden = true; } catch {}
       hideCardEmbed();
       showCardEmbed(card, "run");
       let sent = false;
@@ -11032,7 +11130,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     // exact rendered height must participate in collision geometry.
     function expandedSurfaceHeight() {
       const menuOpen = !!(menuEl && !menuEl.hidden);
-      const cardsOpen = !!(cardsPanel && !cardsPanel.hidden);
+      const cardsOpen = !!(cardsPanel && !cardsPanel.hidden && cardsPanel.parentElement === bar); // 1.73.0: in the Templates window the panel is not a bar surface
       const embedOpen = !!(cardEmbedEl && !cardEmbedEl.hidden);
       const setupOpen = !!(setupCard && !setupCard.hidden);
       if (bar) {
@@ -11635,7 +11733,11 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     }
 
     build();
-    return { noteGuiRequest, composerHasImage, setStatus, staleExtensionAlert, setStarted, setStarting, showStop, markStopping, inputCover, toast, banner, showImages, nudgeStart, updateStartGate, refreshSetup, getCustomPrompt, getCustomMcpServers, trackCard, hideCardEmbed, steeringProgress, takeSteeringSteering, peekSteeringSteering, clearSteeringSteering, syncSteeringUi, openMenu: (toSupport) => openMenuFn && openMenuFn(toSupport) };
+    // 1.73.0 — Template Creator hooks: run a saved template with preset blanks; open the classic tray on a tab.
+    function runTemplateById(templateId, values) { const t = TotalTemplateRegistry.getTemplate(templateId); if (!t) { toast("TEMPLATE_NOT_FOUND"); return false; } const card = { templateId: t.id, engine: "rs", icon: "T", cat: t.category, title: t.name, desc: t.description, prompt: (t.instructions || []).join("\n") }; return runTemplateCard(card, values || {}); }
+    function openTray(tab) { if (openTrayFn) openTrayFn(tab); else if (openCardsPanel) { if (tab) cardsTab = tab; openCardsPanel(true); } }
+    function closeTray() { if (closeCardsWindowFn) closeCardsWindowFn(); }
+    return { runTemplateById, openTray, closeTray, noteGuiRequest, composerHasImage, setStatus, staleExtensionAlert, setStarted, setStarting, showStop, markStopping, inputCover, toast, banner, showImages, nudgeStart, updateStartGate, refreshSetup, getCustomPrompt, getCustomMcpServers, trackCard, hideCardEmbed, steeringProgress, takeSteeringSteering, peekSteeringSteering, clearSteeringSteering, syncSteeringUi, openMenu: (toSupport) => openMenuFn && openMenuFn(toSupport) };
   })();
 
   // ── Live token + timer, shown ONLY on a tool call's chip detail. The

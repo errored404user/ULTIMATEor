@@ -119,7 +119,7 @@ async function render() {
   const cardsBtn = await waitFor(() => d.getElementById("rs-cards-btn"), 4000, "cards button");
   cardsBtn.click(); await sleep(150);
   const panel = d.getElementById("rs-cards-panel");
-  ok("walk: panel opens with rail (brand + heading + nav + tip) and content column", panel && !panel.hidden && panel.querySelector(".rs-cards-top .rs-cards-brand .rs-cards-heading") && panel.querySelectorAll(".rs-cards-top .rs-cards-tabs .rs-cards-tab").length >= 3 && panel.querySelector(".rs-cards-top .rs-cards-rail-foot .rs-cards-rail-tip") && panel.querySelector(".rs-cards-body > .rs-template-library"));
+  ok("walk: panel opens with rail (brand + heading + nav + tip) and content column", panel && !panel.hidden && panel.querySelector(".rs-cards-top .rs-cards-brand .rs-cards-heading") && panel.querySelectorAll(".rs-cards-top .rs-cards-tabs .rs-cards-tab").length >= 3 && panel.querySelector(".rs-cards-top .rs-cards-rail-foot .rs-cards-rail-tip") && panel.querySelector(".rs-cards-body > .rs-cards-creator-slot > #rs-tcreator.rst-embedded")); // 1.73.0: Library = embedded Template Creator inside the centred window
   ok("walk: task list off → rail offers 'Turn on the task list' and there is no Tasks tab", !!panel.querySelector("[data-cards-enable-tasks]") && !panel.querySelector('.rs-cards-tab[data-tab="tasks"]'));
   const tab = (t) => { const b = panel.querySelector(`.rs-cards-tab[data-tab="${t}"]`); b.click(); };
   // Activity
@@ -175,7 +175,11 @@ async function render() {
   ok("walk: Open filter shows the two open rows", panel.querySelectorAll(".rs-task-list .rs-task-row").length === 2);
   // Library still intact
   tab("library"); await sleep(60);
-  ok("walk: Library tab still renders controls → grid → idea generator", panel.querySelector(".rs-cards-body > .rs-template-library > .rs-template-controls") && panel.querySelector("#rs-cards-grid-wrap") && panel.querySelector(".rs-idea-generator"));
+  // 1.73.0: in the Templates window the Library tab is the embedded Template Creator
+  // (list + form); the controls → grid → idea generator strip stays in libraryHtml()
+  // for the bar-attached fallback tray.
+  ok("walk: Library tab renders the embedded Template Creator (list + form) inside the window", panel.querySelector(".rs-cards-body > .rs-cards-creator-slot > #rs-tcreator.rst-embedded .rst-list") && panel.querySelector("#rs-tcreator.rst-embedded form.rst-form") && d.getElementById("rs-cards-window").contains(panel));
+  ok("walk: the fallback tray markup (controls → grid → idea generator) is still produced by libraryHtml()", /rs-template-controls/.test(main) && /rs-cards-grid-wrap/.test(main) && /rs-idea-generator/.test(main));
   ok("walk: no page errors", pageErrors.length === 0, pageErrors.slice(0, 2).join(" | "));
   finish();
 }

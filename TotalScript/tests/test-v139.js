@@ -128,8 +128,8 @@ ok("overlay.css: creation badge / card / row, no legacy selectors", css.includes
 
 // ── G. bookkeeping ──
 const mf = JSON.parse(read("manifest.json"));
-ok("manifest 1.72.0", mf.version === "1.72.0", mf.version);
-ok("plugin + crate pinned at 1.72.0", read("plugin/TotalScript.lua").includes('local VERSION = "1.72.0"') && read("plugin/TotalScript.lua").includes("(TotalScript 1.72.0)") && /^version = "1\.72\.0"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "1\.72\.0"/.test(read("agent/Cargo.lock")) && readme.includes("`total-agent` 1.72.0"));
+ok("manifest 1.73.0", mf.version === "1.73.0", mf.version);
+ok("plugin + crate pinned at 1.73.0", read("plugin/TotalScript.lua").includes('local VERSION = "1.73.0"') && read("plugin/TotalScript.lua").includes("(TotalScript 1.73.0)") && /^version = "1\.73\.0"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "1\.73\.0"/.test(read("agent/Cargo.lock")) && readme.includes("`total-agent` 1.73.0"));
 ok("README changelog 1.39.0 + mode paragraph + test listed", readme.includes("**1.39.0 — Creation: one work mode.**") && readme.includes("tests/test-v139.js") && readme.includes("there is one built-in mode, **Creation**"));
 ok("tests pinned to the old ids were updated (no test expects three built-in modes)", !read("tests/test-work-modes.js").includes('for (const wm of ["ultimate", "visualizer", "animator"])') && !read("tests/test-v138.js").includes('WORK_MODE_IDS: ["ultimate", "visualizer", "animator"]') && !read("tests/test-public-skills.js").includes('const WORK_MODES = ["ultimate", "visualizer", "animator"]'));
 
