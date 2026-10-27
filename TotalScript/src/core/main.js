@@ -6285,6 +6285,21 @@
     });
   }
   window.__rsOpenPaint = openPaint;
+  // 1.79.0 — Video Studio: the user's video is decoded in the browser into a
+  // contact sheet + keyframes + a VIDEO BRIEF and sent through the Paint path
+  // (agent auto-started, images where the site takes them, loop kicked).
+  function openVideoStudio() {
+    if (typeof TotalVideoStudio === "undefined") { ui.toast("Video Studio module missing — reload the extension"); return; }
+    TotalVideoStudio.open({
+      send: sendPainting,
+      engine: () => activeEngine(),
+      canAttachImages: () => (P.supportsVision !== false) && (typeof P.attachImages === "function" || /\bimages\b/.test(String(P.typeAndSend))),
+      maxImages: () => Number(P.maxImagesPerMessage) || 0,
+      toast: (m) => ui.toast(m),
+      diag,
+    });
+  }
+  window.__rsOpenVideoStudio = openVideoStudio;
   // 1.48.0 — GUI Studio: Paint-style visual builder for Roblox GUIs. Hand-off goes through the same
   // send path as Paint (text only); "Build in Studio" runs ui_build_spec directly through the tool runner.
   async function guiStudioRunTool(name, args) {
@@ -7375,6 +7390,7 @@
           <button id="rs-enhance-btn" aria-label="Prompt Enhancer" title="Prompt Enhancer — the AI rewrites your rough request into a precise prompt, you review and send it (Ctrl+Shift+E)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/><path d="M5 15l.6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6z"/></svg></button>
           <button id="rs-paint-btn" aria-label="Paint" title="Paint — draw it, the AI builds it (Ctrl+Shift+P)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 4c-3 1-8 6-10 9l2 2c3-2 8-7 9-10z"/><path d="M8 15c-2 0-4 1-4 4 0 1-1 1-1 1s4 1 6-1c1-1 1-2 1-2z"/></svg></button>
           <button id="rs-anim-btn" aria-label="Animation Studio" title="Animation Studio — describe a motion, preview the keys, build the KeyframeSequence in Studio (Ctrl+Shift+K)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="4.5" r="2"/><path d="M12 7v6"/><path d="M12 9l-4 3M12 9l4-2"/><path d="M12 13l-3 7M12 13l3 6"/></svg></button>
+          <button id="rs-video-btn" aria-label="Video Studio" title="Video Studio — show it a video, the AI builds something similar (Ctrl+Shift+V)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M16 10l6-3v10l-6-3z"/></svg></button>
           <button id="rs-gui-btn" aria-label="GUI Studio" title="GUI Studio — design a Roblox GUI visually, build it in Studio (Ctrl+Shift+G)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="17" height="15" rx="2"/><path d="M2.5 7.5h17M7.5 18.5v-11"/><rect x="10" y="12" width="7" height="3.5" rx="1.75" fill="currentColor" stroke="none"/><path d="M15 14.5l6.5 2.6-2.6 1 1.6 2.6-1.5.9-1.6-2.6-1.8 2.1z" fill="currentColor" stroke="none"/></svg></button>
           <button id="rs-settings-btn" aria-label="Settings" title="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
           </div>
@@ -7735,6 +7751,10 @@
       if (guiBtn) guiBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenGuiStudio) window.__rsOpenGuiStudio(); });
       const animBtn = root.querySelector("#rs-anim-btn");
       if (animBtn) animBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenAnimStudio) window.__rsOpenAnimStudio(); });
+      // 1.79.0 — Video Studio (Ctrl+Shift+V): a local video → keyframes + VIDEO BRIEF → the AI recreates it.
+      const videoBtn = root.querySelector("#rs-video-btn");
+      if (videoBtn) videoBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenVideoStudio) window.__rsOpenVideoStudio(); });
+      document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "V" || e.key === "v") && !e.altKey) { if (typeof TotalVideoStudio !== "undefined" && TotalVideoStudio.isOpen()) return; if (typeof TotalPaint !== "undefined" && TotalPaint.isOpen()) return; if (typeof TotalGuiStudio !== "undefined" && TotalGuiStudio.isOpen()) return; e.preventDefault(); if (window.__rsOpenVideoStudio) window.__rsOpenVideoStudio(); } }, true);
       document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "K" || e.key === "k") && !e.altKey) { if (typeof TotalAnimStudio !== "undefined" && TotalAnimStudio.isOpen()) return; if (typeof TotalGuiStudio !== "undefined" && TotalGuiStudio.isOpen()) return; if (typeof TotalPaint !== "undefined" && TotalPaint.isOpen()) return; e.preventDefault(); if (window.__rsOpenAnimStudio) window.__rsOpenAnimStudio(); } }, true);
       document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "G" || e.key === "g") && !e.altKey) { if (typeof TotalGuiStudio !== "undefined" && TotalGuiStudio.isOpen()) return; if (typeof TotalPaint !== "undefined" && TotalPaint.isOpen()) return; e.preventDefault(); if (window.__rsOpenGuiStudio) window.__rsOpenGuiStudio(); } }, true);
       document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "P" || e.key === "p") && !e.altKey) { if (typeof TotalPaint !== "undefined" && TotalPaint.isOpen()) return; e.preventDefault(); if (window.__rsOpenPaint) window.__rsOpenPaint(); } }, true);

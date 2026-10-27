@@ -2242,7 +2242,7 @@ html.rs-light #rs-state b { color: color-mix(in srgb, var(--rsa) 70%, #000000); 
   box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
 }
 #rs-cards-btn:hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.18); }
-:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn) {
+:is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn) {
   flex: none; width: 28px; height: 28px; padding: 0;
   display: flex; align-items: center; justify-content: center;
   background: rgba(255,255,255,0.07); color: #c8c8ce;
@@ -2251,7 +2251,7 @@ html.rs-light #rs-state b { color: color-mix(in srgb, var(--rsa) 70%, #000000); 
   transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
   box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
 }
-:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn):hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.18); }
+:is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn):hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.18); }
 /* ── Danger zone (AgentScript session panel) — FULL ACCESS toggle ──────── */
 .rs-danger-zone {
   margin-top: 10px; padding: 9px 10px;
@@ -3174,17 +3174,17 @@ html.rs-light .rs-mode-btn.on[data-mode="roblox"],
 html.rs-light .rs-mode-btn.on[data-mode="local"],
 html.rs-light .rs-mode-btn.on[data-mode="anim"] { color: #000000 !important; }
 
-#rs-action, #rs-stop, #rs-extra, :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-cards-btn,
+#rs-action, #rs-stop, #rs-extra, :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn), #rs-cards-btn,
 button.act, .rs-tgl-row, .rs-cards-tab, .rs-anim-btn {
   background: transparent !important;
   box-shadow: none !important;
 }
-#rs-action, #rs-stop, #rs-extra, :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn) {
+#rs-action, #rs-stop, #rs-extra, :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn) {
   border: 1px solid #ffffff !important;
   color: #ffffff !important;
   border-radius: 0 !important;
 }
-html.rs-light #rs-action, html.rs-light #rs-stop, html.rs-light #rs-extra, html.rs-light :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn) {
+html.rs-light #rs-action, html.rs-light #rs-stop, html.rs-light #rs-extra, html.rs-light :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn) {
   border-color: #000000 !important;
   color: #000000 !important;
 }
@@ -3312,7 +3312,7 @@ html.rs-light .rs-mode-btn.on[data-mode="roblox"],
 html.rs-light .rs-mode-btn.on[data-mode="local"],
 html.rs-light .rs-mode-btn.on[data-mode="anim"] { color: #111111 !important; }
 
-#rs-action, #rs-stop, #rs-extra, :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-cards-btn,
+#rs-action, #rs-stop, #rs-extra, :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn), #rs-cards-btn,
 #rs-discord, #rs-support, #rs-switch {
   background: rgba(255,255,255,0.06) !important;
   border: 1px solid var(--total-line) !important;
@@ -3321,13 +3321,13 @@ html.rs-light .rs-mode-btn.on[data-mode="anim"] { color: #111111 !important; }
   box-shadow: none !important;
   transition: background 0.16s var(--total-ease), border-color 0.16s var(--total-ease), transform 0.12s var(--total-ease) !important;
 }
-#rs-action:hover, #rs-stop:hover, #rs-extra:hover, :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn):hover,
+#rs-action:hover, #rs-stop:hover, #rs-extra:hover, :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn):hover,
 #rs-cards-btn:hover, #rs-discord:hover, #rs-support:hover, #rs-switch:hover {
   background: rgba(255,255,255,0.11) !important;
   transform: translateY(-0.5px);
 }
 html.rs-light #rs-action, html.rs-light #rs-stop, html.rs-light #rs-extra,
-html.rs-light :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), html.rs-light #rs-cards-btn,
+html.rs-light :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn), html.rs-light #rs-cards-btn,
 html.rs-light #rs-discord, html.rs-light #rs-support, html.rs-light #rs-switch {
   background: rgba(0,0,0,0.04) !important;
   border-color: var(--total-line) !important;
@@ -3543,7 +3543,7 @@ html[data-rs-theme]:not([data-rs-theme="night"]) #rs-action[data-kind="restart"]
   border-color: var(--total-accent) !important;
 }
 html[data-rs-theme]:not([data-rs-theme="night"]) #rs-discord,
-html[data-rs-theme]:not([data-rs-theme="night"]) :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn),
+html[data-rs-theme]:not([data-rs-theme="night"]) :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn),
 html[data-rs-theme]:not([data-rs-theme="night"]) #rs-extra {
   color: var(--total-accent) !important;
   border-color: var(--total-line) !important;
@@ -3990,7 +3990,7 @@ html[data-rs-theme] #rs-action[data-kind="start"] {
   background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 6px, rgba(255,255,255,0) 6px 12px) !important;
 }
 
-#rs-discord, :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn) {
+#rs-discord, :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn) {
   width: 30px !important;
   height: 30px !important;
   border-radius: 10px !important;
@@ -4000,13 +4000,13 @@ html[data-rs-theme] #rs-action[data-kind="start"] {
   box-shadow: none !important;
 }
 html[data-rs-theme]:not([data-rs-theme="night"]) #rs-discord,
-html[data-rs-theme]:not([data-rs-theme="night"]) :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn),
+html[data-rs-theme]:not([data-rs-theme="night"]) :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn),
 html[data-rs-theme]:not([data-rs-theme="night"]) #rs-extra {
   color: #ddd9d2 !important;
   border-color: rgba(255,255,255,.1) !important;
   background: rgba(255,255,255,.05) !important;
 }
-#rs-discord:hover, :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn):hover {
+#rs-discord:hover, :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn):hover {
   background: rgba(255,255,255,.12) !important;
   color: #fff !important;
 }
@@ -4858,7 +4858,7 @@ html[data-rs-theme="autumn"] #rs-bar.rs-bar-inline {
 .rs-menu-head, #rs-setup-head, #rs-tut-head, #rs-cards-panel::before {
   border-radius: 0 !important;
 }
-#rs-action, #rs-stop, #rs-extra, #rs-discord, :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn),
+#rs-action, #rs-stop, #rs-extra, #rs-discord, :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn),
 .rs-site-opt, .rs-tip-opt, .rs-work-card, .rs-lib-card, .rs-card,
 .rs-mcp-item, .rs-chip, .rs-lvl-btn, .rs-mode-btn,
 #rs-cards-search, #rs-cards-clear, #rs-approve-allow, #rs-approve-deny,
@@ -4874,7 +4874,7 @@ html[data-rs-theme="autumn"] #rs-bar.rs-bar-inline {
   font-size: 11px !important;
   letter-spacing: .02em !important;
 }
-#rs-discord, :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn) {
+#rs-discord, :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn) {
   width: 26px !important; height: 26px !important;
 }
 
@@ -5287,7 +5287,7 @@ html[data-rs-theme="autumn"] #rs-bar.rs-bar-inline {
 /* Settings tray: rotated 90° into a horizontal strip on top of the TotalScript bar. */
 #rs-bar.rs-bar-inline { position: relative !important; overflow: visible !important; }
 #rs-bar.rs-menu-open { overflow: visible !important; }
-:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn).on, :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn)[aria-expanded="true"] {
+:is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn).on, :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn)[aria-expanded="true"] {
   background: rgba(255,255,255,0.16);
   color: #fff;
 }
@@ -5554,7 +5554,7 @@ html[data-rs-theme] #rs-extra,
 html[data-rs-theme] #rs-undo,
 html[data-rs-theme] #rs-discord,
 html[data-rs-theme] #rs-settings-btn,
-html[data-rs-theme] :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn),
+html[data-rs-theme] :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn),
 html[data-rs-theme] .rs-mode-btn,
 html[data-rs-theme] #rs-approve-allow,
 html[data-rs-theme] #rs-approve-deny {
@@ -5929,7 +5929,7 @@ html[data-rs-theme="pixelated"] #rs-stop,
 html[data-rs-theme="pixelated"] #rs-extra,
 html[data-rs-theme="pixelated"] #rs-undo,
 html[data-rs-theme="pixelated"] #rs-discord,
-html[data-rs-theme="pixelated"] :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn) {
+html[data-rs-theme="pixelated"] :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn) {
   border-width: 2px !important;
   border-color: #2fae5f !important;
   box-shadow: 3px 3px 0 rgba(0,0,0,.6) !important;
@@ -6290,7 +6290,7 @@ html[data-rs-theme="void"] .rs-menu-sec{border-color:var(--void-line)!important}
 html[data-rs-theme="void"] .rs-work-card,html[data-rs-theme="void"] .rs-site-opt,html[data-rs-theme="void"] .rs-tip-opt,html[data-rs-theme="void"] .rs-mcp-item,html[data-rs-theme="void"] .rs-blender-card{position:relative;background:linear-gradient(145deg,rgba(24,31,44,.92),rgba(12,16,24,.96))!important;border:1px solid var(--void-line)!important;border-radius:7px!important;color:var(--void-text-2)!important;box-shadow:inset 0 1px rgba(255,255,255,.025)!important;transition:background-color .14s ease,border-color .14s ease,transform .14s ease!important}
 html[data-rs-theme="void"] .rs-work-card:hover,html[data-rs-theme="void"] .rs-site-opt:hover,html[data-rs-theme="void"] .rs-tip-opt:hover{background:var(--void-hover)!important;border-color:var(--void-line-strong)!important;transform:translateY(-1px)!important}html[data-rs-theme="void"] .rs-work-card.on{background:linear-gradient(100deg,var(--void-soft),rgba(16,22,32,.96) 58%)!important;border-color:rgba(255,112,72,.43)!important;box-shadow:inset 2px 0 var(--void-accent)!important}
 html[data-rs-theme="void"] input,html[data-rs-theme="void"] textarea,html[data-rs-theme="void"] select{background:#080b11!important;border-color:var(--void-line-strong)!important;color:var(--void-text)!important;caret-color:var(--void-accent)}html[data-rs-theme="void"] input::placeholder,html[data-rs-theme="void"] textarea::placeholder{color:var(--void-muted)!important}html[data-rs-theme="void"] :focus-visible{outline:2px solid var(--void-accent)!important;outline-offset:2px!important}
-html[data-rs-theme="void"] #rs-action{background:linear-gradient(180deg,#ff805b,#e95831)!important;border-color:#ff9678!important;color:#180b07!important;box-shadow:0 5px 16px rgba(255,112,72,.14)!important}html[data-rs-theme="void"] #rs-stop{border-color:rgba(230,108,120,.45)!important;color:#ffadb5!important}html[data-rs-theme="void"] #rs-extra,html[data-rs-theme="void"] #rs-steering,html[data-rs-theme="void"] :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn){background:var(--void-panel-2)!important;border-color:var(--void-line)!important;color:var(--void-text-2)!important}
+html[data-rs-theme="void"] #rs-action{background:linear-gradient(180deg,#ff805b,#e95831)!important;border-color:#ff9678!important;color:#180b07!important;box-shadow:0 5px 16px rgba(255,112,72,.14)!important}html[data-rs-theme="void"] #rs-stop{border-color:rgba(230,108,120,.45)!important;color:#ffadb5!important}html[data-rs-theme="void"] #rs-extra,html[data-rs-theme="void"] #rs-steering,html[data-rs-theme="void"] :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn){background:var(--void-panel-2)!important;border-color:var(--void-line)!important;color:var(--void-text-2)!important}
 html[data-rs-theme="void"] #rs-state{color:var(--void-text-2)!important}html[data-rs-theme="void"] #rs-state::before{content:"VOID";margin-right:6px;color:var(--void-muted);font:700 7px "Cascadia Mono",monospace;letter-spacing:.12em}html[data-rs-theme="void"] .rs-state-warn .rs-state-txt{color:var(--void-bad)!important}
 html[data-rs-theme="void"] .rs-template-row,html[data-rs-theme="void"] .rs-template-editor,html[data-rs-theme="void"] .rs-builder-row,html[data-rs-theme="void"] .rs-project-reference{background:linear-gradient(145deg,rgba(20,27,39,.97),rgba(9,13,20,.98))!important;border-color:var(--void-line)!important;border-radius:7px!important;color:var(--void-text-2)!important}html[data-rs-theme="void"] .rs-template-row:hover{border-color:var(--void-line-strong)!important;background:var(--void-panel-2)!important}html[data-rs-theme="void"] .rs-template-row b,html[data-rs-theme="void"] .rs-template-editor b{color:var(--void-text)!important}
 html[data-rs-theme="void"] .rs-template-modal{background:rgba(3,5,9,.8)!important}html[data-rs-theme="void"] .rs-template-editor{box-shadow:0 30px 80px rgba(0,0,0,.62)!important}html[data-rs-theme="void"] .rs-template-editor header,html[data-rs-theme="void"] .rs-template-editor footer,html[data-rs-theme="void"] .rs-template-editor nav{border-color:var(--void-line)!important}html[data-rs-theme="void"] .rs-template-editor nav button.on{background:var(--void-soft)!important;color:var(--void-text)!important;box-shadow:inset 0 -1px var(--void-accent)!important}
@@ -6738,7 +6738,7 @@ html[data-rs-theme] #rs-discord,
 html[data-rs-theme] #rs-support,
 html[data-rs-theme] #rs-switch,
 html[data-rs-theme] #rs-settings-btn,
-html[data-rs-theme] :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn),
+html[data-rs-theme] :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn),
 html[data-rs-theme] .rs-lvl-btn,
 html[data-rs-theme] #rs-approve-deny {
   background: linear-gradient(180deg, var(--totalx-ghost-hi), var(--totalx-ghost)) !important;
@@ -6752,7 +6752,7 @@ html[data-rs-theme] #rs-action[data-kind="restart"]:hover,
 html[data-rs-theme] #rs-discord:hover,
 html[data-rs-theme] #rs-support:hover,
 html[data-rs-theme] #rs-switch:hover,
-html[data-rs-theme] :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn):hover,
+html[data-rs-theme] :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn):hover,
 html[data-rs-theme] .rs-lvl-btn:hover,
 html[data-rs-theme] #rs-approve-deny:hover {
   background: linear-gradient(180deg, color-mix(in srgb, var(--totalx-a) 30%, transparent), var(--totalx-ghost-hi)) !important;
@@ -6762,13 +6762,13 @@ html[data-rs-theme] #rs-approve-deny:hover {
   box-shadow: 0 1px 0 rgba(255,255,255,.12) inset, 0 6px 18px var(--totalx-glow) !important;
 }
 html[data-rs-theme="npcenergy"] #rs-action[data-kind="restart"]:hover, html[data-rs-theme="npcenergy"] #rs-discord:hover, html[data-rs-theme="npcenergy"] #rs-support:hover,
-html[data-rs-theme="npcenergy"] #rs-switch:hover, html[data-rs-theme="npcenergy"] :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn):hover, html[data-rs-theme="npcenergy"] .rs-lvl-btn:hover,
+html[data-rs-theme="npcenergy"] #rs-switch:hover, html[data-rs-theme="npcenergy"] :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn):hover, html[data-rs-theme="npcenergy"] .rs-lvl-btn:hover,
 html[data-rs-theme="npcenergy"] #rs-approve-deny:hover { color: #111 !important; }
 html[data-rs-theme] #rs-action[data-kind="restart"]:active,
 html[data-rs-theme] #rs-discord:active,
 html[data-rs-theme] #rs-support:active,
 html[data-rs-theme] #rs-switch:active,
-html[data-rs-theme] :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn):active,
+html[data-rs-theme] :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn):active,
 html[data-rs-theme] .rs-lvl-btn:active,
 html[data-rs-theme] #rs-approve-deny:active { transform: translateY(0) scale(.97); }
 /* selected level reads as "lit" rather than a filled block */
@@ -8518,7 +8518,7 @@ html[data-rs-btn="flat"] #rs-extra,
 html[data-rs-btn="flat"] #rs-voice,
 html[data-rs-btn="flat"] #rs-undo,
 html[data-rs-btn="flat"] .rs-mode-btn,
-html[data-rs-btn="flat"] :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn),
+html[data-rs-btn="flat"] :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn),
 html[data-rs-btn="flat"] #rs-approve-deny {
   background: color-mix(in srgb, var(--totalx-a) 14%, transparent) !important;
   border-color: transparent !important;
@@ -8526,7 +8526,7 @@ html[data-rs-btn="flat"] #rs-approve-deny {
 }
 html[data-rs-btn="flat"] #rs-action[data-kind="restart"]:hover,
 html[data-rs-btn="flat"] #rs-discord:hover,
-html[data-rs-btn="flat"] :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn):hover,
+html[data-rs-btn="flat"] :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn):hover,
 html[data-rs-btn="flat"] #rs-approve-deny:hover { background: color-mix(in srgb, var(--totalx-a) 26%, transparent) !important; transform: none; box-shadow: none !important; }
 html[data-rs-btn="flat"] #rs-stop { background: #ef4444 !important; border-color: transparent !important; box-shadow: none !important; }
 
@@ -8552,7 +8552,7 @@ html[data-rs-btn="outline"] #rs-extra,
 html[data-rs-btn="outline"] #rs-voice,
 html[data-rs-btn="outline"] #rs-undo,
 html[data-rs-btn="outline"] .rs-mode-btn,
-html[data-rs-btn="outline"] :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn),
+html[data-rs-btn="outline"] :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn),
 html[data-rs-btn="outline"] #rs-approve-deny {
   background: transparent !important;
   border: 1px solid color-mix(in srgb, var(--totalx-a) 45%, transparent) !important;
@@ -8578,7 +8578,7 @@ html[data-rs-btn="glass"] #rs-extra,
 html[data-rs-btn="glass"] #rs-voice,
 html[data-rs-btn="glass"] #rs-undo,
 html[data-rs-btn="glass"] .rs-mode-btn,
-html[data-rs-btn="glass"] :is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn),
+html[data-rs-btn="glass"] :is(:is(:is(:is(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn), #rs-anim-btn), #rs-enhance-btn), #rs-video-btn),
 html[data-rs-btn="glass"] #rs-approve-deny {
   background: rgba(255,255,255,.08) !important;
   -webkit-backdrop-filter: blur(10px);
@@ -9302,3 +9302,63 @@ html.rs-light #rs-bar .rs-donate-foot { color: #6b7280; }
 .rsg-art-flags { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 6px 0 4px; }
 .rsg-art-flags .rsg-chk { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: #c9c9d2; cursor: pointer; }
 .rsg-art-flags .rsg-chk input { margin: 0; accent-color: var(--total-accent, #22d3ee); }
+
+/* ── 1.79.0 — VIDEO STUDIO (src/core/videostudio.js) ─────────────────────────── */
+#rs-video { position: fixed; inset: 0; z-index: 2147483600; display: none; background: rgba(6,6,9,.78); backdrop-filter: blur(8px) saturate(1.1); -webkit-backdrop-filter: blur(8px) saturate(1.1); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #e6edf3; }
+#rs-video.open { display: flex; align-items: center; justify-content: center; }
+html.rs-video-open #rs-root { visibility: hidden !important; }
+#rs-video .rsv-shell { width: min(1180px, 96vw); height: min(780px, 92vh); display: flex; flex-direction: column; border-radius: 16px; overflow: hidden; background: linear-gradient(180deg, #11151c, #0b0e14); border: 1px solid rgba(34,211,238,.22); box-shadow: 0 30px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04) inset; }
+#rs-video .rsv-title { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); }
+#rs-video .rsv-brand { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; }
+#rs-video .rsv-logo { width: 22px; height: 22px; border-radius: 6px; }
+#rs-video .rsv-sub { color: #8fa3b3; flex: 1; }
+#rs-video .rsv-ib { background: rgba(255,255,255,.06); color: #cfe3ee; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; width: 30px; height: 30px; cursor: pointer; }
+#rs-video .rsv-ib:hover { background: rgba(255,255,255,.12); color: #fff; }
+#rs-video .rsv-body { flex: 1; display: grid; grid-template-columns: 1.25fr 1fr; gap: 14px; padding: 14px; min-height: 0; }
+#rs-video .rsv-left, #rs-video .rsv-right { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; }
+#rs-video .rsv-drop { display: flex; align-items: center; justify-content: center; min-height: 120px; border: 2px dashed rgba(34,211,238,.35); border-radius: 14px; cursor: pointer; background: rgba(34,211,238,.04); transition: background .15s, border-color .15s; text-align: center; padding: 16px; }
+#rs-video .rsv-drop:hover, #rs-video .rsv-drop.over { background: rgba(34,211,238,.1); border-color: rgba(34,211,238,.7); }
+#rs-video .rsv-drop-ico { font-size: 26px; color: #22d3ee; }
+#rs-video .rsv-drop-t { font-weight: 600; margin-top: 4px; }
+#rs-video .rsv-drop-s { color: #8fa3b3; font-size: 12px; margin-top: 2px; }
+#rs-video .rsv-preview { border-radius: 12px; overflow: hidden; background: #000; border: 1px solid rgba(255,255,255,.08); }
+#rs-video .rsv-video { width: 100%; max-height: 300px; display: block; background: #000; }
+#rs-video .rsv-meta { padding: 6px 10px; color: #9fb4c4; font-size: 12px; background: rgba(255,255,255,.03); }
+#rs-video .rsv-progress { display: flex; align-items: center; gap: 10px; color: #9fb4c4; font-size: 12px; }
+#rs-video .rsv-bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+#rs-video .rsv-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #22d3ee, #67e8f9); transition: width .15s; }
+#rs-video .rsv-h { font-weight: 700; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: #9ad9e8; margin-bottom: 6px; }
+#rs-video .rsv-keygrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+#rs-video .rsv-key { position: relative; padding: 0; border: 2px solid rgba(255,255,255,.08); border-radius: 10px; overflow: hidden; background: #000; cursor: pointer; opacity: .45; }
+#rs-video .rsv-key.on { opacity: 1; border-color: #22d3ee; box-shadow: 0 0 0 2px rgba(34,211,238,.25); }
+#rs-video .rsv-key img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+#rs-video .rsv-key span { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 6px; font-size: 11px; background: rgba(0,0,0,.65); color: #e8f6ff; text-align: left; }
+#rs-video .rsv-sec { padding: 12px; border-radius: 12px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.06); }
+#rs-video .rsv-kind { padding: 8px 10px; border-radius: 10px; background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.18); margin-bottom: 8px; }
+#rs-video .rsv-pal { display: flex; gap: 4px; margin-top: 6px; }
+#rs-video .rsv-pal i { width: 22px; height: 14px; border-radius: 4px; border: 1px solid rgba(255,255,255,.15); }
+#rs-video .rsv-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+#rs-video .rsv-row.rsv-col { flex-direction: column; align-items: stretch; gap: 4px; }
+#rs-video select, #rs-video textarea { background: #0d1117; color: #e6edf3; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 6px 8px; font: inherit; }
+#rs-video textarea { resize: vertical; min-height: 54px; }
+#rs-video input[type="range"] { flex: 1; accent-color: #22d3ee; }
+#rs-video .rsv-chk { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: #cfe3ee; }
+#rs-video .rsv-chk input { accent-color: #22d3ee; }
+#rs-video .rsv-muted { color: #8fa3b3; font-size: 12px; }
+#rs-video .rsv-timeline { display: flex; flex-direction: column; gap: 4px; font-size: 12px; max-height: 160px; overflow: auto; }
+#rs-video .rsv-shot { display: flex; gap: 8px; align-items: baseline; padding: 4px 8px; border-radius: 8px; background: rgba(255,255,255,.04); }
+#rs-video .rsv-shot b { color: #22d3ee; }
+#rs-video .rsv-shot span { color: #9fb4c4; }
+#rs-video .rsv-actions { display: flex; align-items: center; gap: 10px; margin-top: auto; }
+#rs-video .rsv-btn { padding: 9px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.07); color: #e6edf3; font-weight: 600; cursor: pointer; }
+#rs-video .rsv-btn:disabled { opacity: .45; cursor: default; }
+#rs-video .rsv-primary { background: linear-gradient(135deg, #22d3ee, #0ea5e9); color: #04121a; border-color: transparent; box-shadow: 0 6px 18px rgba(34,211,238,.35); }
+#rs-video .rsv-primary:not(:disabled):hover { filter: brightness(1.08); }
+#rs-video .rsv-status { color: #9fb4c4; font-size: 12px; }
+html.rs-light #rs-video .rsv-shell { background: linear-gradient(180deg, #f7fafc, #eef2f6); color: #1f2933; border-color: rgba(14,165,233,.3); }
+html.rs-light #rs-video .rsv-sub, html.rs-light #rs-video .rsv-muted, html.rs-light #rs-video .rsv-meta, html.rs-light #rs-video .rsv-shot span { color: #52606d; }
+html.rs-light #rs-video .rsv-sec { background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.08); }
+html.rs-light #rs-video select, html.rs-light #rs-video textarea { background: #fff; color: #1f2933; border-color: rgba(0,0,0,.15); }
+html.rs-light #rs-video .rsv-chk { color: #1f2933; }
+html.rs-light #rs-video .rsv-btn { color: #1f2933; background: rgba(0,0,0,.05); border-color: rgba(0,0,0,.12); }
+@media (max-width: 860px) { #rs-video .rsv-body { grid-template-columns: 1fr; } }

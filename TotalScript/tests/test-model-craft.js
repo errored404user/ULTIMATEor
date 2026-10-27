@@ -119,7 +119,7 @@ if (rt && rt.skip) {
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README 1.70.0 changelog documents the pack and the removals", /\*\*1\.70\.0 — /.test(readme) && /model_prefab/.test(readme) && /model_check/.test(readme) && /roadmap/i.test(readme.slice(readme.indexOf("**1.70.0 — "), readme.indexOf("**1.70.0 — ") + 4000)));
 ok("test listed in README", readme.includes("tests/test-model-craft.js"));
-ok("version pins 1.78.1", manifest.version === "1.78.1" && /local VERSION = "1\.78\.1"/.test(fs.readFileSync("plugin/TotalScript.lua", "utf8")) && /^version = "1\.78\.1"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
+ok("version pins 1.79.0", manifest.version === "1.79.0" && /local VERSION = "1\.79\.0"/.test(fs.readFileSync("plugin/TotalScript.lua", "utf8")) && /^version = "1\.79\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
 
 console.log((failed ? "FAIL  " : "OK    ") + "test-model-craft: " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

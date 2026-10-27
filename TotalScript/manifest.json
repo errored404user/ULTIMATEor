@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TotalScript",
-  "version": "1.78.1",
+  "version": "1.79.0",
   "minimum_chrome_version": "111",
   "description": "Turn ChatGPT, Claude, DeepSeek, Gemini, Kimi, NVIDIA NIM Kimi K3, GLM, Qwen, Arena, Meta AI, Crax GPT, Notion AI or Ox Alpha into a Roblox Studio / AgentScript agent. Two engines (RS/AS), work modes, image-to-model, auto-fix playtest errors, and Extra Thinking.",
   "permissions": [
@@ -175,6 +175,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -247,6 +248,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -310,6 +312,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -370,6 +373,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -433,6 +437,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -503,6 +508,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -563,6 +569,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -623,6 +630,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -684,6 +692,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -754,6 +763,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -824,6 +834,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -888,6 +899,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -987,6 +999,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -1048,6 +1061,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -1121,6 +1135,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
@@ -1185,6 +1200,7 @@
         "src/core/tasklist.js",
         "src/core/enhancer.js",
         "src/core/templatecreator.js",
+        "src/core/videostudio.js",
         "src/core/main.js"
       ],
       "css": [
