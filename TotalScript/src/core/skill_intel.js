@@ -1,4 +1,4 @@
-// TotalScript — Skill Intelligence (1.92.0)
+// TotalScript — Skill Intelligence (1.93.0)
 //
 // One small, deterministic brain shared by three surfaces:
 //   · the `skill {name}` command (details on demand for the running agent),
@@ -18,7 +18,7 @@
 // DOM-free at top level (loaded in node by the tests).
 (function (root) {
   "use strict";
-  const VERSION = "1.92.0";
+  const VERSION = "1.93.0";
 
   // ───────────────────────── expert library ─────────────────────────
   // Fields: id, title, env (roblox | blender | general), summary (one line
@@ -319,10 +319,11 @@
     intents: [],
     procedure: [
       "Look before touching the user's scene: `get_scene_info`, then `blender_introspect` (version, objects, materials). The extension connects to Blender by itself on the first blender_ call - if that fails, say the Blender bridge is down instead of pretending.",
-      "Plan proportions and style BEFORE geometry: `blender_asset_plan` turns the brief into a spec (category, dimensions in metres, part roles, materials); edit the spec, then `blender_asset_build`.",
+      "Plan proportions and style BEFORE geometry: `blender_asset_plan` turns the brief into a spec (category, dimensions in metres, part roles, materials); edit the spec, then `blender_asset_build`. Seeded generators: tree_procedural, terrain_tile, rock_cluster, crystal_cluster, stairs, building, fence.",
       "Hand-modelling steps use named tools: primitives (`blender_add_cube`, `blender_add_cylinder` …), `blender_extrude` / `blender_inset` / `blender_bevel` / `blender_solidify`, `blender_boolean` sparingly, `blender_array` / `blender_mirror` for repetition, `blender_add_modifier` + `blender_apply_modifiers` when the shape is final.",
-      "Materials: `blender_principled_material` / `material_create` + `material_assign`; UVs with `blender_uv_unwrap` / `uv_pack` when textures or baking are expected.",
-      "Hygiene every time: `blender_apply_transforms`, `blender_origin_to_bottom` (or `blender_set_origin`), `blender_recalc_normals`, `blender_scene_cleanup`, `blender_stats` for counts.",
+      "Materials: built assets carry procedural texture graphs (`texture: flat` opts out); `blender_asset_bake` writes PNG maps. Hand-made: `blender_principled_material` / `material_assign`; UVs via `blender_uv_unwrap`.",
+      "Present: `blender_light_rig` + `blender_camera_rig` (presets fitted to the target), `blender_world_setup`, `blender_render_setup`, then `blender_render_shot` / `blender_turntable`; `blender_studio_clear` removes the rig.",
+      "Hygiene every time: `blender_apply_transforms`, `blender_origin_to_bottom`, `blender_recalc_normals`, `blender_scene_cleanup`, `blender_stats`.",
       "Validate structure with `blender_asset_validate` (non-manifold, loose, degenerate, inconsistent normals, unapplied scale) and look at it with `blender_asset_inspect` (front / side / top / iso renders) or `get_viewport_screenshot`.",
       "`execute_blender_code` only for what no named tool does, in small, idempotent snippets; report the exact stdout.",
       "Stop when validation is clean, dimensions match the plan and the inspection renders show the intended silhouette.",

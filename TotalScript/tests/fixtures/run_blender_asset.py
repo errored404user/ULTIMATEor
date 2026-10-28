@@ -19,8 +19,9 @@ import bpy  # noqa: E402  (the fake)
 steps = json.load(open(sys.argv[1], encoding="utf-8"))
 workdir = sys.argv[2] if len(sys.argv) > 2 else os.path.join("/tmp", "total_asset_test")
 os.makedirs(workdir, exist_ok=True)
-ASSET_CMDS = {"asset_build", "asset_validate", "asset_inspect", "asset_export"}
-SRC = {"asset": open(os.path.join(ROOT, "tools", "blender_asset.py"), encoding="utf-8").read(), "ops": open(os.path.join(ROOT, "tools", "blender_ops.py"), encoding="utf-8").read()}
+ASSET_CMDS = {"asset_build", "asset_validate", "asset_inspect", "asset_export", "asset_bake"}
+STUDIO_CMDS = {"light_rig", "camera_rig", "world_setup", "render_setup", "render_shot", "turntable", "studio_clear"}
+SRC = {"asset": open(os.path.join(ROOT, "tools", "blender_asset.py"), encoding="utf-8").read(), "ops": open(os.path.join(ROOT, "tools", "blender_ops.py"), encoding="utf-8").read(), "studio": open(os.path.join(ROOT, "tools", "blender_studio.py"), encoding="utf-8").read()}
 results = []
 def fake_step(args):
     """Mutate the mock scene the way a user / older file could: broken meshes,
@@ -57,7 +58,7 @@ for cmd, args in steps:
     if cmd == "__fake__":
         results.append({"cmd": cmd, "result": fake_step(args or {}), "exception": None, "stdout_len": 0})
         continue
-    src = SRC["asset"] if cmd in ASSET_CMDS else SRC["ops"]
+    src = SRC["asset"] if cmd in ASSET_CMDS else SRC["studio"] if cmd in STUDIO_CMDS else SRC["ops"]
     code = src.replace("__TOTAL_CMD__", cmd).replace("__TOTAL_ARGS__", json.dumps(args or {})).replace("__TOTAL_OUT__", json.dumps(os.path.join(workdir, "total_status.json"))).replace("__TOTAL_MESH__", json.dumps(os.path.join(workdir, "total_mesh.json")))
     buf = io.StringIO()
     err = None
@@ -76,4 +77,4 @@ for cmd, args in steps:
             except Exception:
                 parsed = {"ok": False, "error": "unparsable TOTAL_MESH_JSON"}
     results.append({"cmd": cmd, "result": parsed, "exception": err, "stdout_len": len(out)})
-print(json.dumps({"results": results, "log": bpy.LOG, "scene_engine": bpy.context.scene.render.engine, "scene_camera": bpy.context.scene.camera.name if bpy.context.scene.camera else None, "objects": [{"name": o.name, "type": o.type, "parent": o.parent.name if o.parent else None, "modifiers": [m.type for m in o.modifiers], "applied": list(o.data.applied_modifiers) if o.type == "MESH" else [], "props": dict(o._props), "mats": [m.name for m in o.data.materials] if o.type == "MESH" else [], "uv": bool(o.data.uv_layers) if o.type == "MESH" else None, "smooth": (sum(1 for p in o.data.polygons if p.use_smooth), len(o.data.polygons)) if o.type == "MESH" else None, "collections": [c.name for c in o.users_collection]} for o in bpy.data.objects], "collections": [c.name for c in bpy.data.collections]}, default=lambda o: sorted(o) if isinstance(o, set) else str(o)))
+print(json.dumps({"results": results, "log": bpy.LOG, "scene": {"world": bpy.context.scene.world.name if bpy.context.scene.world else None, "res": [bpy.context.scene.render.resolution_x, bpy.context.scene.render.resolution_y], "samples": bpy.context.scene.cycles.samples, "eevee_samples": bpy.context.scene.eevee.taa_render_samples, "transparent": bpy.context.scene.render.film_transparent, "view_transform": bpy.context.scene.view_settings.view_transform, "fps": bpy.context.scene.render.fps, "frames": [bpy.context.scene.frame_start, bpy.context.scene.frame_end], "lights": [{"name": o.name, "type": o.data.type, "energy": o.data.energy, "color": list(o.data.color), "props": dict(o._props)} for o in bpy.data.objects if o.type == "LIGHT"], "cameras": [{"name": o.name, "lens": o.data.lens, "dof": o.data.dof.use_dof, "focus": o.data.dof.focus_distance, "loc": list(o.location), "props": dict(o._props)} for o in bpy.data.objects if o.type == "CAMERA"]}, "scene_engine": bpy.context.scene.render.engine, "scene_camera": bpy.context.scene.camera.name if bpy.context.scene.camera else None, "objects": [{"name": o.name, "type": o.type, "parent": o.parent.name if o.parent else None, "modifiers": [m.type for m in o.modifiers], "applied": list(o.data.applied_modifiers) if o.type == "MESH" else [], "props": dict(o._props), "mats": [m.name for m in o.data.materials] if o.type == "MESH" else [], "uv": bool(o.data.uv_layers) if o.type == "MESH" else None, "smooth": (sum(1 for p in o.data.polygons if p.use_smooth), len(o.data.polygons)) if o.type == "MESH" else None, "collections": [c.name for c in o.users_collection]} for o in bpy.data.objects], "collections": [c.name for c in bpy.data.collections], "materials": [{"name": m.name, "nodes": [n.type for n in m.node_tree.nodes] if m.node_tree else [], "links": len(m.node_tree.links) if m.node_tree else 0, "props": dict(m._props), "images": [n.image.name for n in m.node_tree.nodes if n.type == "TEX_IMAGE" and n.image is not None] if m.node_tree else []} for m in bpy.data.materials]}, default=lambda o: sorted(o) if isinstance(o, set) else str(o)))

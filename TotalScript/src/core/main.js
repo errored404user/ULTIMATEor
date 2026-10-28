@@ -214,6 +214,7 @@
     "humanoid_set","lighting_set","folder_create","value_set","weld_constraint","instance_move","tag_remove",
     "append_file","copy_file","replace_in_files","patch_json","write_json","replace_once",
     "execute_blender_code","blender_export_fbx","blender_send_to_studio","asset_bridge_import","blender_asset_build","blender_asset_export",
+    "blender_asset_bake","blender_light_rig","blender_camera_rig","blender_world_setup","blender_render_setup","blender_turntable","blender_studio_clear",
     "size_set","color_set","cframe_set","rotation_set","massless_set","can_touch_set","can_query_set","cast_shadow_set","collision_group_set","brickcolor_set",
     "meshpart_create","wedge_create","spawn_box","ladder_create","trampoline_create","conveyor_create","ice_part","jump_pad","speed_pad",
     "attachment_create","hinge_create","spring_create","rope_create","vector_force_create","linear_velocity_create",

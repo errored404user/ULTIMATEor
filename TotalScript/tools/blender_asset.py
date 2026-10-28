@@ -1,4 +1,4 @@
-# TotalScript asset builder (1.91.0). Sent to Blender as execute_code like
+# TotalScript asset builder (1.93.0). Sent to Blender as execute_code like
 # blender_ops.py; tokens CMD / ARGS / OUT / MESH are filled by TotalScript.
 #
 # Commands
@@ -12,6 +12,13 @@
 #                                         front / side / top / iso PNGs, removes the scene again
 #   asset_export   {name, format, path}   explicit FBX / GLB / OBJ export with fixed settings, then
 #                                         checks the file (exists, size, header) and lists textures
+#   asset_bake     {name, size, maps, margin, samples, apply}   (1.93.0) Cycles-bakes the procedural
+#                                         family graphs to PNGs (base_color / roughness / metallic /
+#                                         normal / emission) in <workspace>/total_textures - local files
+#
+# 1.93.0: parts may use shape "generator" (tree_branches, canopy_cluster, terrain,
+# rock_cluster, crystal_cluster, stairs) and every material family gets a procedural
+# shader graph (texture: "flat" turns it off).
 #
 # Everything is plain bpy / bmesh so it also runs in background Blender
 # (blender_once.py). Nothing here uploads anything anywhere.
@@ -318,6 +325,392 @@ def bm_primitive(shape, size, segments=24, subdivisions=2):
     bm.faces.ensure_lookup_table()
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     return bm
+
+
+# ─────────────────────────── procedural generators (1.93.0) ─────────────────
+# part.shape == "generator" + part.generator = {kind, seed, ...}. Every generator
+# returns ONE bmesh in local space with the part's pos as BASE point (footprint
+# centre, z = 0 at ground contact; trees keep the trunk foot at the origin).
+# Deterministic per seed (random.Random), so rebuilding a spec gives the same asset.
+import random
+
+GENERATORS = ("tree_branches", "canopy_cluster", "terrain", "rock_cluster", "crystal_cluster", "stairs")
+
+
+def _basis(d):
+    d = Vector(d).normalized()
+    helper = Vector((0, 0, 1)) if abs(d.z) < 0.9 else Vector((1, 0, 0))
+    u = d.cross(helper).normalized()
+    v = d.cross(u).normalized()
+    return d, u, v
+
+
+def _ring(bm, centre, u, v, radius, segs):
+    out = []
+    for i in range(segs):
+        a = 2 * math.pi * i / segs
+        out.append(bm.verts.new(tuple(Vector(centre) + (u * math.cos(a) + v * math.sin(a)) * radius)))
+    return out
+
+
+def _bridge(bm, ring_a, ring_b):
+    n = len(ring_a)
+    for i in range(n):
+        try:
+            bm.faces.new((ring_a[i], ring_a[(i + 1) % n], ring_b[(i + 1) % n], ring_b[i]))
+        except ValueError:
+            pass
+
+
+def _fan(bm, ring, apex, flip=False):
+    n = len(ring)
+    for i in range(n):
+        tri = (ring[i], apex, ring[(i + 1) % n]) if not flip else (ring[i], ring[(i + 1) % n], apex)
+        try:
+            bm.faces.new(tri)
+        except ValueError:
+            pass
+
+
+def bm_append(dst, src, translate=(0, 0, 0), scale=1.0):
+    """Copy src's faces into dst (portable: no bmesh.ops needed)."""
+    t = Vector(translate)
+    lut = {}
+    for v in src.verts:
+        lut[v.index if hasattr(v, "index") else id(v)] = dst.verts.new(tuple(Vector(v.co) * scale + t))
+    for f in src.faces:
+        try:
+            dst.faces.new([lut[v.index if hasattr(v, "index") else id(v)] for v in f.verts])
+        except (ValueError, KeyError):
+            pass
+
+
+def _fbm(p, octaves, seed):
+    from mathutils import noise
+    offs = Vector((seed * 13.7, seed * 7.3, seed * 3.1))
+    n, amp, freq, tot = 0.0, 1.0, 1.0, 0.0
+    for _ in range(max(1, octaves)):
+        q = Vector(p) * freq + offs
+        try:
+            n += noise.noise(q) * amp
+        except TypeError:
+            n += noise.noise(q, noise_basis="PERLIN_ORIGINAL") * amp
+        tot += amp
+        amp *= 0.5
+        freq *= 2.07
+    return n / tot
+
+
+def _displace_bm(bm, strength, scale, octaves, seed):
+    bm.normal_update()
+    for v in bm.verts:
+        v.co += v.normal * _fbm(Vector(v.co) / max(1e-4, scale), octaves, seed) * strength
+
+
+def tree_skeleton(g, height, base_radius):
+    """Recursive branch list [(start, end, r0, r1, level)] shared by the trunk and
+    canopy generators so leaves sit on the real tips (same seed -> same tree)."""
+    rng = random.Random(int(fnum(g.get("seed"), 3)))
+    levels = int(max(1, min(5, fnum(g.get("levels"), 3))))
+    per = int(max(1, min(5, fnum(g.get("branches"), 3))))
+    spread = math.radians(max(5.0, min(80.0, fnum(g.get("spread"), 38.0))))
+    shrink = max(0.4, min(0.85, fnum(g.get("length_ratio"), 0.62)))
+    out = []
+    trunk_len = height * max(0.3, min(0.8, fnum(g.get("trunk_ratio"), 0.45)))
+
+    def grow(start, d, length, radius, level):
+        d = Vector(d).normalized()
+        # gentle wander + up bias so branches arc instead of pointing straight
+        steps = 3
+        cur = Vector(start)
+        segs = []
+        for i in range(steps):
+            wob = Vector((rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(-0.4, 0.8))) * (0.18 if level else 0.06)
+            d = (d + wob * 0.5 + Vector((0, 0, 0.08 if level == 0 else 0.03))).normalized()
+            nxt = cur + d * (length / steps)
+            segs.append((cur.copy(), nxt.copy()))
+            cur = nxt
+        r_end = radius * (0.35 if level < levels else 0.05)
+        for i, (a, b) in enumerate(segs):
+            t0 = i / float(steps)
+            t1 = (i + 1) / float(steps)
+            out.append((a, b, radius + (r_end - radius) * t0, radius + (r_end - radius) * t1, level))
+        if level >= levels:
+            return
+        # children of one node fan out evenly in azimuth; successive levels
+        # rotate the fan by a quarter turn so 2-branch trees fill a round crown,
+        # and the fork angle opens with the level (twigs lean out more than limbs)
+        az0 = rng.uniform(0, 2 * math.pi) + level * (math.pi / 2.0)
+        fork = min(math.radians(80.0), spread * (1.0 + 0.22 * level))
+        for k in range(per):
+            t = rng.uniform(0.45, 0.95) if level else rng.uniform(0.6, 1.0)
+            idx = min(steps - 1, int(t * steps))
+            a, b = segs[idx]
+            at = a + (b - a) * ((t * steps) - idx)
+            az = az0 + k * (2 * math.pi / per) + rng.uniform(-0.3, 0.3)
+            _, u, v = _basis(d)
+            nd = (d * math.cos(fork) + (u * math.cos(az) + v * math.sin(az)) * math.sin(fork)).normalized()
+            grow(at, nd, length * shrink * rng.uniform(0.85, 1.1), radius * 0.55, level + 1)
+
+    grow(Vector((0, 0, 0)), Vector((0, 0, 1)), trunk_len, base_radius, 0)
+    # fit the skeleton to the requested envelope (positions only, radii stay):
+    # the planner gives tree_height / tree_width so trunk + canopy agree exactly.
+    fit_h = fnum(g.get("tree_height"), height)
+    fit_w = fnum(g.get("tree_width"), 0.0)
+    pts = [p for seg in out for p in (seg[0], seg[1])]
+    if pts:
+        max_z = max(p.z for p in pts)
+        span_x = max(p.x for p in pts) - min(p.x for p in pts)
+        span_y = max(p.y for p in pts) - min(p.y for p in pts)
+        kz = fit_h / max_z if max_z > 1e-6 and fit_h > 0 else 1.0
+        # x and y are fitted separately (clamped) so a 2-branch skeleton still
+        # fills a round crown instead of a plane
+        kx = max(0.5, min(3.0, fit_w / span_x)) if span_x > 1e-6 and fit_w > 0 else 1.0
+        ky = max(0.5, min(3.0, fit_w / span_y)) if span_y > 1e-6 and fit_w > 0 else 1.0
+        if abs(kz - 1.0) > 1e-6 or abs(kx - 1.0) > 1e-6 or abs(ky - 1.0) > 1e-6:
+            out = [(Vector((a.x * kx, a.y * ky, a.z * kz)), Vector((b.x * kx, b.y * ky, b.z * kz)), r0, r1, lv) for (a, b, r0, r1, lv) in out]
+    return out
+
+
+def gen_tree_branches(g, size, segments):
+    bm = bmesh.new()
+    sx, sy, sz = size
+    base_r = max(0.01, min(sx, sy) / 2.0)
+    segs = max(5, min(16, int(segments) if segments else 8))
+    branches = tree_skeleton(g, sz, base_r)
+    # consecutive segments of one branch share their ring (continuous tube);
+    # every branch is capped at both ends so the mesh has no open boundary.
+    prev_b, prev_ring = None, None
+    n = len(branches)
+    for i, (a, b, r0, r1, level) in enumerate(branches):
+        d, u, v = _basis(b - a)
+        cont = prev_b is not None and (a - prev_b).length < 1e-6
+        ring_a = prev_ring if cont else _ring(bm, a, u, v, max(0.004, r0), segs)
+        ring_b = _ring(bm, b, u, v, max(0.003, r1), segs)
+        _bridge(bm, ring_a, ring_b)
+        if not cont:
+            _fan(bm, ring_a, bm.verts.new(tuple(a - d * r0 * 0.3)))
+        last = i + 1 >= n or (branches[i + 1][0] - b).length > 1e-6
+        if last:
+            _fan(bm, ring_b, bm.verts.new(tuple(b + d * max(r1, 0.003) * 1.5)), flip=True)
+        prev_b, prev_ring = b, ring_b
+    return bm, {"branches": len(branches)}
+
+
+def gen_canopy_cluster(g, size, subdivisions):
+    bm = bmesh.new()
+    sx, sy, sz = size
+    base_r = max(0.01, fnum(g.get("trunk_radius"), min(sx, sy) * 0.04))
+    branches = tree_skeleton(g, sz, base_r)
+    levels = int(max(1, min(5, fnum(g.get("levels"), 3))))
+    tips = [b for (a, b, r0, r1, level) in branches if level >= max(1, levels - 1)]
+    if not tips:
+        tips = [b for (a, b, r0, r1, level) in branches]
+    rng = random.Random(int(fnum(g.get("seed"), 3)) + 101)
+    rng.shuffle(tips)
+    tips = tips[:int(max(1, min(28, fnum(g.get("blobs"), 14))))]
+    leaf_r = max(0.05, fnum(g.get("leaf_radius"), sz * 0.16))
+    sub = int(max(1, min(3, subdivisions or 2)))
+    for t in tips:
+        tmp = bmesh.new()
+        r = leaf_r * rng.uniform(0.7, 1.25)
+        try:
+            bmesh.ops.create_icosphere(tmp, subdivisions=sub, radius=r)
+        except TypeError:
+            bmesh.ops.create_icosphere(tmp, subdivisions=sub, diameter=r * 2)
+        bmesh.ops.scale(tmp, vec=(1.0, 1.0, rng.uniform(0.65, 0.9)), verts=tmp.verts)
+        _displace_bm(tmp, r * 0.18, r * 0.9, 2, fnum(g.get("seed"), 3) + t.x)
+        bm_append(bm, tmp, translate=(t.x, t.y, t.z - r * 0.15))
+        tmp.free()
+    return bm, {"blobs": len(tips)}
+
+
+def gen_terrain(g, size):
+    bm = bmesh.new()
+    sx, sy, sz = size
+    n = int(max(4, min(96, fnum(g.get("resolution"), 24))))
+    octaves = int(max(1, min(8, fnum(g.get("octaves"), 4))))
+    seed = fnum(g.get("seed"), 3)
+    freq = max(0.2, fnum(g.get("frequency"), 1.6))
+    falloff = str(g.get("falloff") or "none")
+    plateau = fnum(g.get("plateau"), 0.0)
+    grid = []
+    hmin, hmax = 1e9, -1e9
+    heights = []
+    for j in range(n + 1):
+        row = []
+        for i in range(n + 1):
+            x = (i / float(n) - 0.5)
+            y = (j / float(n) - 0.5)
+            h = _fbm(Vector((x * freq, y * freq, 0.37)), octaves, seed)
+            h = (h + 1.0) * 0.5  # 0..1
+            if falloff == "island":
+                rr = min(1.0, math.sqrt(x * x + y * y) * 2.0)
+                h *= max(0.0, 1.0 - rr * rr)
+            elif falloff == "edges":
+                h *= max(0.0, 1.0 - max(abs(x), abs(y)) * 2.0) ** 0.5
+            if plateau > 0:
+                h = min(h, plateau)
+            row.append(h)
+            hmin, hmax = min(hmin, h), max(hmax, h)
+        heights.append(row)
+    span = max(1e-6, hmax - hmin)
+    for j in range(n + 1):
+        row = []
+        for i in range(n + 1):
+            h = (heights[j][i] - hmin) / span
+            row.append(bm.verts.new(((i / float(n) - 0.5) * sx, (j / float(n) - 0.5) * sy, h * sz)))
+        grid.append(row)
+    for j in range(n):
+        for i in range(n):
+            try:
+                bm.faces.new((grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i]))
+            except ValueError:
+                pass
+    if g.get("skirt", True):
+        # closed solid: side walls + bottom so Studio gets a manifold tile
+        base = -sz * 0.08
+        edge = [grid[0][i] for i in range(n + 1)] + [grid[j][n] for j in range(1, n + 1)] + [grid[n][i] for i in range(n - 1, -1, -1)] + [grid[j][0] for j in range(n - 1, 0, -1)]
+        bottom = [bm.verts.new((v.co.x, v.co.y, base)) for v in edge]
+        m = len(edge)
+        for k in range(m):
+            try:
+                bm.faces.new((edge[(k + 1) % m], edge[k], bottom[k], bottom[(k + 1) % m]))
+            except ValueError:
+                pass
+        try:
+            bm.faces.new(list(reversed(bottom)))
+        except ValueError:
+            pass
+    return bm, {"resolution": n, "octaves": octaves, "falloff": falloff}
+
+
+def gen_rock_cluster(g, size, subdivisions):
+    bm = bmesh.new()
+    sx, sy, sz = size
+    rng = random.Random(int(fnum(g.get("seed"), 3)) + 7)
+    count = int(max(1, min(24, fnum(g.get("count"), 6))))
+    sub = int(max(1, min(3, subdivisions or 2)))
+    rocks = []
+    for k in range(count):
+        big = k == 0
+        fz = rng.uniform(0.6, 0.9)
+        # hero boulder reaches the part height; satellites are 30-70 % of it
+        r = (sz / (2.0 * fz)) * (1.0 if big else rng.uniform(0.3, 0.7))
+        ang = rng.uniform(0, 2 * math.pi)
+        rad = 0.0 if big else rng.uniform(0.25, 0.5)
+        cx, cy = math.cos(ang) * rad * sx, math.sin(ang) * rad * sy
+        tmp = bmesh.new()
+        try:
+            bmesh.ops.create_icosphere(tmp, subdivisions=sub, radius=1.0)
+        except TypeError:
+            bmesh.ops.create_icosphere(tmp, subdivisions=sub, diameter=2.0)
+        bmesh.ops.scale(tmp, vec=(r * rng.uniform(0.9, 1.4), r * rng.uniform(0.8, 1.2), r * fz), verts=tmp.verts)
+        _displace_bm(tmp, r * 0.16, r * 1.1, 2, fnum(g.get("seed"), 3) + k)
+        # flatten the buried part so every rock sits on z = 0
+        lowest = min(v.co.z for v in tmp.verts)
+        for v in tmp.verts:
+            v.co.z -= lowest
+            if v.co.z < r * 0.12:
+                v.co.z = 0.0 if v.co.z < r * 0.04 else v.co.z
+        bm_append(bm, tmp, translate=(cx, cy, 0.0))
+        rocks.append({"r": round(r, 3), "pos": [round(cx, 3), round(cy, 3)]})
+        tmp.free()
+    return bm, {"rocks": len(rocks)}
+
+
+def gen_crystal_cluster(g, size):
+    bm = bmesh.new()
+    sx, sy, sz = size
+    rng = random.Random(int(fnum(g.get("seed"), 3)) + 11)
+    count = int(max(1, min(20, fnum(g.get("count"), 7))))
+    sides = int(max(4, min(8, fnum(g.get("sides"), 6))))
+    made = 0
+    for k in range(count):
+        main = k == 0
+        h = sz * (1.0 if main else rng.uniform(0.35, 0.8))
+        r = max(0.01, h * max(0.08, min(0.3, fnum(g.get("thickness"), 0.16))))
+        tilt = 0.0 if main else math.radians(rng.uniform(8, 28))
+        az = rng.uniform(0, 2 * math.pi)
+        d = Vector((math.sin(tilt) * math.cos(az), math.sin(tilt) * math.sin(az), math.cos(tilt)))
+        rad = 0.0 if main else rng.uniform(0.15, 0.45)
+        base = Vector((math.cos(az + 1.3) * rad * sx, math.sin(az + 1.3) * rad * sy, -h * 0.08))
+        _, u, v = _basis(d)
+        body = h * 0.72
+        ring0 = _ring(bm, base, u, v, r, sides)
+        ring1 = _ring(bm, base + d * body, u, v, r * 0.92, sides)
+        _bridge(bm, ring0, ring1)
+        apex = bm.verts.new(tuple(base + d * h))
+        _fan(bm, ring1, apex, flip=True)
+        try:
+            bm.faces.new(list(reversed(ring0)))
+        except ValueError:
+            pass
+        made += 1
+    return bm, {"crystals": made, "sides": sides}
+
+
+def gen_stairs(g, size):
+    bm = bmesh.new()
+    sx, sy, sz = size
+    steps = int(max(2, min(40, fnum(g.get("steps"), 8))))
+    rise = sz / steps
+    run = sy / steps
+    nosing = max(0.0, min(run * 0.3, fnum(g.get("nosing"), 0.0)))
+    prof = [(0.0, 0.0)]
+    for i in range(steps):
+        y0 = i * run
+        prof.append((y0 - (nosing if i else 0.0), (i + 1) * rise))
+        prof.append((y0 + run, (i + 1) * rise))
+    prof.append((sy, 0.0))
+    left = [bm.verts.new((-sx / 2.0, y, z)) for (y, z) in prof]
+    right = [bm.verts.new((sx / 2.0, y, z)) for (y, z) in prof]
+    m = len(prof)
+    for i in range(m):
+        try:
+            bm.faces.new((left[i], left[(i + 1) % m], right[(i + 1) % m], right[i]))
+        except ValueError:
+            pass
+    try:
+        bm.faces.new(list(reversed(left)))
+        bm.faces.new(right)
+    except ValueError:
+        pass
+    return bm, {"steps": steps, "rise": round(rise, 4), "run": round(run, 4)}
+
+
+def bm_generate(gen, size, segments, subdivisions):
+    g = gen if isinstance(gen, dict) else {}
+    kind = str(g.get("kind") or "")
+    size = [max(1e-4, float(x)) for x in size]
+    if kind == "tree_branches":
+        bm, info = gen_tree_branches(g, size, segments)
+    elif kind == "canopy_cluster":
+        bm, info = gen_canopy_cluster(g, size, subdivisions)
+    elif kind == "terrain":
+        bm, info = gen_terrain(g, size)
+    elif kind == "rock_cluster":
+        bm, info = gen_rock_cluster(g, size, subdivisions)
+    elif kind == "crystal_cluster":
+        bm, info = gen_crystal_cluster(g, size)
+    elif kind == "stairs":
+        bm, info = gen_stairs(g, size)
+    else:
+        raise ValueError("unknown generator kind '%s' (%s)" % (kind, ", ".join(GENERATORS)))
+    # pos of a generator part is its BASE point: x/y centred on the footprint,
+    # z = 0 at the ground contact. Tree kinds are left untouched so trunk and
+    # canopy (two parts, same skeleton) keep their shared origin at the foot.
+    lo, hi = bm_bounds(bm)
+    if kind not in ("tree_branches", "canopy_cluster"):
+        c = Vector(((lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0, lo[2]))
+        for v in bm.verts:
+            v.co -= c
+    bm.verts.ensure_lookup_table()
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    info["kind"] = kind
+    info["extent_m"] = [round(hi[i] - lo[i], 4) for i in range(3)]
+    return bm, info
 
 
 def bm_bounds(bm):
@@ -678,6 +1071,370 @@ def set_smoothing(obj, mode, angle_deg=30.0):
     return mode
 
 
+# ─────────────────────────── procedural materials (1.93.0) ──────────────────
+# Each material FAMILY gets a real shader graph instead of a flat Principled:
+# wood grain, stone / concrete / brick breakup, brushed metal, edge-worn paint,
+# leather / fabric micro-bump, glass transmission, energy pulse, foliage
+# variation, crystal. Everything is driven from Object texture coordinates so
+# it works before any unwrap, and Base Color's default_value keeps the flat
+# colour (what the Studio importer reads - Roblox cannot run these graphs; bake
+# them with blender_asset_bake when you need image textures).
+TEX_PREFIX = "Total_Tex_"
+
+
+def _node(nt, ntype, name, **props):
+    n = nt.nodes.new(ntype)
+    n.name = TEX_PREFIX + name
+    try:
+        n.label = name
+    except Exception:
+        pass
+    for k, v in props.items():
+        try:
+            setattr(n, k, v)
+        except Exception:
+            pass
+    return n
+
+
+def _set(n, key, value):
+    try:
+        n.inputs[key].default_value = value
+        return True
+    except Exception:
+        return False
+
+
+def _set_any(n, keys, value):
+    for k in keys:
+        if _set(n, k, value):
+            return k
+    return None
+
+
+_BASE_SRC = [None]
+
+
+def _lnk(nt, a, a_out, b, b_in):
+    try:
+        nt.links.new(a.outputs[a_out], b.inputs[b_in])
+        if b_in == "Base Color":
+            _BASE_SRC[0] = (a, a_out)
+        return True
+    except Exception:
+        return False
+
+
+def _drop_tex_nodes(nt):
+    for n in list(nt.nodes):
+        if str(getattr(n, "name", "")).startswith(TEX_PREFIX):
+            try:
+                nt.nodes.remove(n)
+            except Exception:
+                pass
+
+
+def _shade(col, k):
+    return tuple(max(0.0, min(1.0, c * k)) for c in col[:3]) + (1.0,)
+
+
+def _ramp(nt, name, dark, light, p0=0.3, p1=0.7):
+    r = _node(nt, "ShaderNodeValToRGB", name)
+    try:
+        el = r.color_ramp.elements
+        el[0].position = p0
+        el[0].color = dark
+        el[1].position = p1
+        el[1].color = light
+    except Exception:
+        pass
+    return r
+
+
+def _coords(nt, scale):
+    tc = _node(nt, "ShaderNodeTexCoord", "Coords")
+    mp = _node(nt, "ShaderNodeMapping", "Mapping")
+    try:
+        mp.vector_type = "POINT"
+    except Exception:
+        pass
+    _set(mp, "Scale", (scale, scale, scale))
+    _lnk(nt, tc, "Object", mp, "Vector")
+    return mp
+
+
+def _bump(nt, bsdf, src, src_out, strength, distance=0.01):
+    b = _node(nt, "ShaderNodeBump", "Bump")
+    _set(b, "Strength", strength)
+    _set(b, "Distance", distance)
+    _lnk(nt, src, src_out, b, "Height")
+    _lnk(nt, b, "Normal", bsdf, "Normal")
+    return b
+
+
+def _rough_var(nt, bsdf, src, src_out, lo, hi):
+    mr = _node(nt, "ShaderNodeMapRange", "RoughRange")
+    _set(mr, "From Min", 0.3)
+    _set(mr, "From Max", 0.7)
+    _set(mr, "To Min", max(0.02, lo))
+    _set(mr, "To Max", min(1.0, hi))
+    _lnk(nt, src, src_out, mr, "Value")
+    _lnk(nt, mr, "Result", bsdf, "Roughness")
+    return mr
+
+
+def texture_graph(mat, nt, bsdf, m, col):
+    """Build the family graph. Returns a short description (or None for flat)."""
+    family = str(m.get("family") or "")
+    rough = max(0.03, min(1.0, fnum(m.get("roughness"), 0.5)))
+    tscale = max(0.05, fnum(m.get("texture_scale"), 1.0))
+    _drop_tex_nodes(nt)
+    _BASE_SRC[0] = None
+    mp = _coords(nt, tscale)
+    used = []
+    if family in ("wood", "planks", "bark"):
+        wave = _node(nt, "ShaderNodeTexWave", "Grain")
+        try:
+            wave.wave_type = "BANDS"
+            wave.bands_direction = "Z" if family == "bark" else "X"
+            wave.wave_profile = "SIN"
+        except Exception:
+            pass
+        _set(wave, "Scale", 3.0 if family == "planks" else 4.5)
+        _set(wave, "Distortion", 6.0 if family == "bark" else 2.5)
+        _set(wave, "Detail", 3.0)
+        _set(wave, "Detail Scale", 1.4)
+        noise = _node(nt, "ShaderNodeTexNoise", "Fibre")
+        _set(noise, "Scale", 14.0)
+        _set(noise, "Detail", 6.0)
+        _set(noise, "Roughness", 0.6)
+        mix = _node(nt, "ShaderNodeMixRGB", "GrainMix")
+        try:
+            mix.blend_type = "MULTIPLY"
+        except Exception:
+            pass
+        _set(mix, "Fac", 0.5)
+        ramp = _ramp(nt, "GrainRamp", _shade(col, 0.5 if family == "bark" else 0.62), _shade(col, 1.12), 0.25, 0.75)
+        _lnk(nt, mp, "Vector", wave, "Vector")
+        _lnk(nt, mp, "Vector", noise, "Vector")
+        _lnk(nt, wave, "Fac", mix, "Color1")
+        _lnk(nt, noise, "Fac", mix, "Color2")
+        _lnk(nt, mix, "Color", ramp, "Fac")
+        _lnk(nt, ramp, "Color", bsdf, "Base Color")
+        _bump(nt, bsdf, mix, "Color", 0.55 if family == "bark" else 0.25, 0.02 if family == "bark" else 0.006)
+        _rough_var(nt, bsdf, noise, "Fac", rough - 0.12, rough + 0.1)
+        used = ["wave grain", "noise fibre", "ramp", "bump", "roughness variation"]
+    elif family in ("stone", "concrete", "brick"):
+        noise = _node(nt, "ShaderNodeTexNoise", "Breakup")
+        _set(noise, "Scale", 18.0 if family != "concrete" else 26.0)
+        _set(noise, "Detail", 7.0)
+        _set(noise, "Roughness", 0.65)
+        _lnk(nt, mp, "Vector", noise, "Vector")
+        if family == "brick":
+            brick = _node(nt, "ShaderNodeTexBrick", "Bricks")
+            _set(brick, "Scale", 4.0)
+            _set(brick, "Mortar Size", 0.02)
+            _set(brick, "Bias", 0.0)
+            _set(brick, "Color1", _shade(col, 1.0))
+            _set(brick, "Color2", _shade(col, 0.82))
+            _set(brick, "Mortar", (0.55, 0.53, 0.5, 1.0))
+            _lnk(nt, mp, "Vector", brick, "Vector")
+            mix = _node(nt, "ShaderNodeMixRGB", "DirtMix")
+            try:
+                mix.blend_type = "MULTIPLY"
+            except Exception:
+                pass
+            _set(mix, "Fac", 0.3)
+            _lnk(nt, brick, "Color", mix, "Color1")
+            _lnk(nt, noise, "Fac", mix, "Color2")
+            _lnk(nt, mix, "Color", bsdf, "Base Color")
+            _bump(nt, bsdf, brick, "Fac", 0.6, 0.02)
+            used = ["brick pattern", "dirt noise", "mortar bump"]
+        else:
+            vor = _node(nt, "ShaderNodeTexVoronoi", "Cells")
+            try:
+                vor.feature = "F1"
+                vor.distance = "EUCLIDEAN"
+            except Exception:
+                pass
+            _set(vor, "Scale", 6.0 if family == "stone" else 2.5)
+            _set(vor, "Randomness", 1.0)
+            mix = _node(nt, "ShaderNodeMixRGB", "CellMix")
+            try:
+                mix.blend_type = "OVERLAY"
+            except Exception:
+                pass
+            _set(mix, "Fac", 0.45 if family == "stone" else 0.2)
+            ramp = _ramp(nt, "StoneRamp", _shade(col, 0.7), _shade(col, 1.1), 0.3, 0.7)
+            _lnk(nt, mp, "Vector", vor, "Vector")
+            _lnk(nt, noise, "Fac", mix, "Color1")
+            _lnk(nt, vor, "Distance", mix, "Color2")
+            _lnk(nt, mix, "Color", ramp, "Fac")
+            _lnk(nt, ramp, "Color", bsdf, "Base Color")
+            _bump(nt, bsdf, mix, "Color", 0.4, 0.015)
+            _rough_var(nt, bsdf, noise, "Fac", rough - 0.1, min(1.0, rough + 0.08))
+            used = ["voronoi cells", "noise breakup", "ramp", "bump", "roughness variation"]
+    elif family in ("steel", "dark_steel", "chrome", "gold"):
+        brush = _node(nt, "ShaderNodeMapping", "BrushStretch")
+        _set(brush, "Scale", (1.0, 40.0, 1.0))
+        _lnk(nt, mp, "Vector", brush, "Vector")
+        noise = _node(nt, "ShaderNodeTexNoise", "Brushing")
+        _set(noise, "Scale", 30.0)
+        _set(noise, "Detail", 4.0)
+        _set(noise, "Roughness", 0.5)
+        _lnk(nt, brush, "Vector", noise, "Vector")
+        spot = _node(nt, "ShaderNodeTexNoise", "Smudge")
+        _set(spot, "Scale", 4.0)
+        _set(spot, "Detail", 2.0)
+        _lnk(nt, mp, "Vector", spot, "Vector")
+        mix = _node(nt, "ShaderNodeMixRGB", "RoughMix")
+        _set(mix, "Fac", 0.35)
+        _lnk(nt, noise, "Fac", mix, "Color1")
+        _lnk(nt, spot, "Fac", mix, "Color2")
+        spread = 0.04 if family == "chrome" else 0.12
+        _rough_var(nt, bsdf, mix, "Color", rough - spread, rough + spread)
+        tintr = _ramp(nt, "TintRamp", _shade(col, 0.93), _shade(col, 1.04), 0.35, 0.65)
+        _lnk(nt, spot, "Fac", tintr, "Fac")
+        _lnk(nt, tintr, "Color", bsdf, "Base Color")
+        _bump(nt, bsdf, noise, "Fac", 0.03, 0.002)
+        try:
+            _set_any(bsdf, ("Anisotropic", "Anisotropy"), 0.0 if family == "chrome" else 0.35)
+        except Exception:
+            pass
+        used = ["stretched brushing noise", "smudge", "roughness variation", "micro bump", "anisotropy"]
+    elif family == "painted_metal":
+        geo = _node(nt, "ShaderNodeNewGeometry", "Geometry")
+        wear = _ramp(nt, "EdgeWear", (0.0, 0.0, 0.0, 1.0), (1.0, 1.0, 1.0, 1.0), 0.52, 0.6)
+        _lnk(nt, geo, "Pointiness", wear, "Fac")
+        noise = _node(nt, "ShaderNodeTexNoise", "PaintNoise")
+        _set(noise, "Scale", 22.0)
+        _set(noise, "Detail", 5.0)
+        _lnk(nt, mp, "Vector", noise, "Vector")
+        gate = _node(nt, "ShaderNodeMixRGB", "WearGate")
+        try:
+            gate.blend_type = "MULTIPLY"
+        except Exception:
+            pass
+        _set(gate, "Fac", 1.0)
+        _lnk(nt, wear, "Color", gate, "Color1")
+        _lnk(nt, noise, "Fac", gate, "Color2")
+        mixc = _node(nt, "ShaderNodeMixRGB", "PaintMix")
+        _set(mixc, "Color1", _shade(col, 1.0))
+        _set(mixc, "Color2", (0.55, 0.56, 0.58, 1.0))
+        _lnk(nt, gate, "Color", mixc, "Fac")
+        _lnk(nt, mixc, "Color", bsdf, "Base Color")
+        mixm = _node(nt, "ShaderNodeMapRange", "MetalMix")
+        _set(mixm, "From Min", 0.0)
+        _set(mixm, "From Max", 1.0)
+        _set(mixm, "To Min", max(0.0, min(1.0, fnum(m.get("metallic"), 0.6))))
+        _set(mixm, "To Max", 1.0)
+        _lnk(nt, gate, "Color", mixm, "Value")
+        _lnk(nt, mixm, "Result", bsdf, "Metallic")
+        _rough_var(nt, bsdf, noise, "Fac", rough - 0.08, rough + 0.12)
+        _bump(nt, bsdf, noise, "Fac", 0.06, 0.003)
+        used = ["pointiness edge wear (Cycles; Eevee shows paint only)", "paint noise", "metal reveal", "roughness variation"]
+    elif family in ("leather", "fabric", "rubber"):
+        noise = _node(nt, "ShaderNodeTexNoise", "Grain")
+        _set(noise, "Scale", 80.0 if family == "fabric" else (45.0 if family == "leather" else 30.0))
+        _set(noise, "Detail", 8.0 if family != "rubber" else 3.0)
+        _set(noise, "Roughness", 0.7)
+        _lnk(nt, mp, "Vector", noise, "Vector")
+        if family == "fabric":
+            weave = _node(nt, "ShaderNodeTexWave", "Weave")
+            try:
+                weave.wave_type = "BANDS"
+                weave.bands_direction = "DIAGONAL"
+            except Exception:
+                pass
+            _set(weave, "Scale", 60.0)
+            _set(weave, "Distortion", 1.0)
+            _lnk(nt, mp, "Vector", weave, "Vector")
+            mix = _node(nt, "ShaderNodeMixRGB", "WeaveMix")
+            _set(mix, "Fac", 0.5)
+            _lnk(nt, weave, "Fac", mix, "Color1")
+            _lnk(nt, noise, "Fac", mix, "Color2")
+            _bump(nt, bsdf, mix, "Color", 0.25, 0.002)
+            _set_any(bsdf, ("Sheen Weight", "Sheen"), 0.6)
+        else:
+            _bump(nt, bsdf, noise, "Fac", 0.18 if family == "leather" else 0.08, 0.002)
+        ramp = _ramp(nt, "ToneRamp", _shade(col, 0.85), _shade(col, 1.08), 0.35, 0.65)
+        _lnk(nt, noise, "Fac", ramp, "Fac")
+        _lnk(nt, ramp, "Color", bsdf, "Base Color")
+        _rough_var(nt, bsdf, noise, "Fac", rough - 0.08, min(1.0, rough + 0.06))
+        used = ["micro-grain noise", "weave" if family == "fabric" else "bump", "tone ramp", "roughness variation"]
+    elif family in ("glass", "crystal"):
+        _set_any(bsdf, ("Transmission Weight", "Transmission"), 1.0 if family == "glass" else 0.7)
+        _set(bsdf, "IOR", 1.45 if family == "glass" else 1.6)
+        _set(bsdf, "Roughness", 0.04 if family == "glass" else rough)
+        try:
+            mat.use_screen_refraction = True
+        except Exception:
+            pass
+        try:
+            mat.blend_method = "BLEND"
+            mat.surface_render_method = "BLENDED"
+        except Exception:
+            pass
+        if family == "crystal":
+            noise = _node(nt, "ShaderNodeTexNoise", "Flaws")
+            _set(noise, "Scale", 9.0)
+            _set(noise, "Detail", 3.0)
+            _lnk(nt, mp, "Vector", noise, "Vector")
+            _bump(nt, bsdf, noise, "Fac", 0.08, 0.004)
+            em = m.get("emission") or col
+            e = [max(0.0, min(1.0, fnum(c, 0.0))) for c in list(em)[:3]]
+            _set_any(bsdf, ("Emission Color", "Emission"), (e[0], e[1], e[2], 1.0))
+            if fnum(m.get("emission_strength"), 0.0) <= 0:
+                _set(bsdf, "Emission Strength", 0.35)
+            used = ["transmission 0.7 / IOR 1.6", "internal flaw bump", "faint emission"]
+        else:
+            used = ["transmission 1.0 / IOR 1.45", "screen-space refraction"]
+    elif family == "energy":
+        noise = _node(nt, "ShaderNodeTexNoise", "Pulse")
+        _set(noise, "Scale", 3.0)
+        _set(noise, "Detail", 2.0)
+        _lnk(nt, mp, "Vector", noise, "Vector")
+        em = m.get("emission") or col
+        e = [max(0.0, min(1.0, fnum(c, 0.0))) for c in list(em)[:3]]
+        ramp = _ramp(nt, "PulseRamp", (e[0], e[1], e[2], 1.0), _shade(e, 1.6), 0.35, 0.7)
+        _lnk(nt, noise, "Fac", ramp, "Fac")
+        if not _lnk(nt, ramp, "Color", bsdf, "Emission Color"):
+            _lnk(nt, ramp, "Color", bsdf, "Emission")
+        used = ["noise pulse", "emission ramp"]
+    elif family == "foliage":
+        noise = _node(nt, "ShaderNodeTexNoise", "LeafVar")
+        _set(noise, "Scale", 25.0)
+        _set(noise, "Detail", 4.0)
+        _lnk(nt, mp, "Vector", noise, "Vector")
+        ramp = _ramp(nt, "LeafRamp", _shade(col, 0.78), _shade(col, 1.22), 0.3, 0.7)
+        _lnk(nt, noise, "Fac", ramp, "Fac")
+        _lnk(nt, ramp, "Color", bsdf, "Base Color")
+        _bump(nt, bsdf, noise, "Fac", 0.12, 0.003)
+        _set_any(bsdf, ("Subsurface Weight", "Subsurface"), 0.08)
+        try:
+            _set_any(bsdf, ("Subsurface Color",), (col[0], col[1], col[2], 1.0))
+        except Exception:
+            pass
+        used = ["colour variation", "leaf bump", "light subsurface"]
+    else:
+        noise = _node(nt, "ShaderNodeTexNoise", "Finish")
+        _set(noise, "Scale", 35.0)
+        _set(noise, "Detail", 3.0)
+        _lnk(nt, mp, "Vector", noise, "Vector")
+        _rough_var(nt, bsdf, noise, "Fac", rough - 0.05, min(1.0, rough + 0.05))
+        used = ["roughness variation"]
+    # tidy the editor a little (no effect on render)
+    try:
+        x = -1400
+        for n in nt.nodes:
+            if str(n.name).startswith(TEX_PREFIX):
+                n.location = (x, 300)
+                x += 180
+    except Exception:
+        pass
+    return {"family": family or "default", "scale": tscale, "features": used}, _BASE_SRC[0]
+
+
 def principled(mat_name, m):
     mat = bpy.data.materials.get(mat_name)
     if mat is None:
@@ -727,6 +1484,20 @@ def principled(mat_name, m):
             mat.surface_render_method = "BLENDED"
         except Exception:
             pass
+    # 1.93.0 family shader graph (procedural textures) unless the spec says flat.
+    # Blender-only: Base Color keeps the flat colour as default_value, which is what
+    # the Studio importer reads; blender_asset_bake turns the graph into PNGs.
+    tex_mode = str(m.get("texture") or "procedural")
+    base_src = None
+    if tex_mode != "flat":
+        try:
+            info, base_src = texture_graph(mat, nt, bsdf, m, col)
+            mat["total_texture"] = json.dumps(info)
+        except Exception as e:
+            mat["total_texture"] = json.dumps({"error": str(e)[:200]})
+    else:
+        _drop_tex_nodes(nt)
+        mat["total_texture"] = json.dumps({"family": str(m.get("family") or ""), "features": ["flat"]})
     # procedural wear (horror / worn styles): noise -> colour ramp -> mix into base colour.
     # Blender-only: Roblox receives the flat base colour (said in the import report).
     if m.get("wear"):
@@ -745,6 +1516,10 @@ def principled(mat_name, m):
                 nt.links.new(tex.outputs["Fac"], ramp.inputs["Fac"])
                 nt.links.new(ramp.outputs["Color"], mix.inputs["Color2"])
                 nt.links.new(mix.outputs["Color"], bsdf.inputs["Base Color"])
+            wear_mix = [n for n in nt.nodes if n.name == "TotalWearMix"]
+            if base_src and wear_mix:
+                # the family graph feeds the wear multiply instead of a flat colour
+                nt.links.new(base_src[0].outputs[base_src[1]], wear_mix[0].inputs["Color1"])
         except Exception:
             pass
     mat["total_roblox"] = str(m.get("roblox") or "Plastic")
@@ -767,7 +1542,11 @@ def build_part(spec, part, coll, mats, style):
     size = v3(part.get("size"), (0.1, 0.1, 0.1))
     segments = int(fnum(part.get("segments"), style.get("cylinder_segments", 24)))
     subdiv = int(fnum(part.get("subdivisions"), 2))
-    bm = bm_primitive(shape, size, segments=segments, subdivisions=subdiv)
+    gen_info = None
+    if shape == "generator":
+        bm, gen_info = bm_generate(part.get("generator"), size, segments if part.get("segments") else None, subdiv if part.get("subdivisions") else None)
+    else:
+        bm = bm_primitive(shape, size, segments=segments, subdivisions=subdiv)
     ops = [o for o in (part.get("ops") or []) if isinstance(o, dict)]
     applied = []
     # vertex-level ops first (they reshape the primitive before any boolean)
@@ -822,7 +1601,7 @@ def build_part(spec, part, coll, mats, style):
     # UVs
     uv_mode = None
     if spec.get("uv", True):
-        uv_mode = unwrap(obj, shape in ("ico", "sphere") or "displace" in applied)
+        uv_mode = unwrap(obj, shape in ("ico", "sphere", "generator") or "displace" in applied)
     # non-destructive finishing stack (kept live, exported with modifiers applied)
     mods = []
     bev = part.get("bevel")
@@ -878,7 +1657,9 @@ def build_part(spec, part, coll, mats, style):
     obj["total_material"] = mat_id
     if part.get("pivot_group"):
         obj["total_pivot_group"] = str(part["pivot_group"])
-    return obj, {"name": name, "object": obj.name, "shape": shape, "ops": applied, "modifiers": mods, "smooth": smooth_mode, "uv": uv_mode, "material": mat_id}
+    if gen_info:
+        obj["total_generator"] = str(gen_info.get("kind") or "")
+    return obj, {"name": name, "object": obj.name, "shape": shape, "generator": gen_info, "ops": applied, "modifiers": mods, "smooth": smooth_mode, "uv": uv_mode, "material": mat_id}
 
 
 def build_asset(spec):
@@ -945,6 +1726,17 @@ def build_asset(spec):
         a.parent = root
         a.matrix_parent_inverse = Matrix.Identity(4)
         attachments.append(a.name)
+    # leave the whole asset selected (smart_project left only the last organic
+    # part selected, so a bare blender_send_to_studio sent one part) - 1.93.0
+    try:
+        for o in bpy.context.view_layer.objects:
+            try:
+                o.select_set(o.get("total_asset") == name and o.type == "MESH")
+            except Exception:
+                pass
+        bpy.context.view_layer.objects.active = built[0][0] if built else root
+    except Exception:
+        pass
     bpy.context.view_layer.update()
     metrics = asset_metrics(name)
     budget = spec.get("budget") or {}
@@ -1251,6 +2043,251 @@ def inspect_asset(name, views, size):
     return {"ok": bool(good), "asset": name, "renders": renders, "render_files": [r["path"] for r in good], "dims_m": m["dims"], "total_tris": m["total_tris"], "checklist": ["silhouette readable in front / side / top?", "primary > secondary > tertiary mass hierarchy?", "bevels visible but not mushy at this distance?", "materials separate (metal / wood / glass / emissive) without reading as coloured plastic?", "any part floating, intersecting or hidden?"], "note": "Preview rig lived in Total_Inspect and was removed; the asset collection is untouched."}
 
 
+# ─────────────────────────── texture baking (1.93.0) ────────────────────────
+# Cycles bakes the procedural graphs into PNGs per material (base colour,
+# roughness, metallic, normal, emission) in <workspace>/total_textures. Local
+# files only: Roblox needs them uploaded by the user as image assets before a
+# SurfaceAppearance can use them - TotalScript never uploads.
+BAKE_MAPS = ("base_color", "roughness", "metallic", "normal", "emission")
+
+
+def _find_nodes(nt):
+    bsdf = out = None
+    for n in nt.nodes:
+        if n.type == "BSDF_PRINCIPLED" and bsdf is None:
+            bsdf = n
+        if n.type == "OUTPUT_MATERIAL":
+            out = n
+    return bsdf, out
+
+
+def _input_link(nt, node, key):
+    """(from_node, from_socket) feeding node.inputs[key], or None."""
+    try:
+        sock = node.inputs[key]
+        for l in nt.links:
+            if l.to_node == node and l.to_socket == sock:
+                return (l.from_node, l.from_socket)
+    except Exception:
+        pass
+    return None
+
+
+def _unlink_input(nt, node, key):
+    try:
+        sock = node.inputs[key]
+        for l in list(nt.links):
+            if l.to_node == node and l.to_socket == sock:
+                nt.links.remove(l)
+    except Exception:
+        pass
+
+
+def bake_asset(name, size, maps, margin, samples, apply):
+    root, coll, meshes = asset_objects(name)
+    if not meshes:
+        return {"ok": False, "error": "no mesh objects found for asset '%s'" % name, "error_class": "resource_missing"}
+    engines = set()
+    try:
+        engines = set(getattr(it, "identifier", str(it)) for it in scene().render.bl_rna.properties["engine"].enum_items)
+    except Exception:
+        pass
+    if engines and "CYCLES" not in engines:
+        return {"ok": False, "error": "texture baking needs the Cycles engine, which this Blender build does not list", "error_class": "api_version", "allowed": sorted(engines)}
+    no_uv = [o.name for o in meshes if not getattr(o.data, "uv_layers", None) or len(o.data.uv_layers) == 0]
+    if no_uv:
+        return {"ok": False, "error": "these meshes have no UV map, so there is nothing to bake into: %s" % ", ".join(no_uv), "error_class": "resource_missing", "fix": "Rebuild with spec.uv true (default) or run blender_uv_unwrap on them first."}
+    maps = [str(m) for m in (maps or list(BAKE_MAPS))]
+    if not maps or any(m not in BAKE_MAPS for m in maps):
+        return {"ok": False, "error": "maps must be a subset of %s" % ", ".join(BAKE_MAPS), "error_class": "invalid_enum", "allowed": list(BAKE_MAPS), "got": maps}
+    size = int(max(64, min(4096, fnum(size, 1024))))
+    margin = int(max(0, min(64, fnum(margin, 4))))
+    samples = int(max(1, min(256, fnum(samples, 16))))
+    sc = scene()
+    folder = os.path.join(workspace_dir(), "total_textures")
+    os.makedirs(folder, exist_ok=True)
+    saved = {"engine": sc.render.engine, "cy_samples": None, "cy_denoise": None}
+    cy = getattr(sc, "cycles", None)
+    if cy is not None:
+        saved["cy_samples"] = getattr(cy, "samples", None)
+        saved["cy_denoise"] = getattr(cy, "use_denoising", None)
+    sc.render.engine = "CYCLES"
+    if cy is not None:
+        try:
+            cy.samples = samples
+            cy.use_denoising = False
+        except Exception:
+            pass
+    # material -> objects using it
+    by_mat = {}
+    for o in meshes:
+        for mt in o.data.materials:
+            if mt is not None and getattr(mt, "use_nodes", False):
+                by_mat.setdefault(mt.name, (mt, []))[1].append(o)
+    if not by_mat:
+        sc.render.engine = saved["engine"]
+        return {"ok": False, "error": "the asset has no node materials to bake", "error_class": "resource_missing"}
+    baked = []
+    problems = []
+    try:
+        for mat_name, (mat, objs) in by_mat.items():
+            nt = mat.node_tree
+            bsdf, out = _find_nodes(nt)
+            if bsdf is None or out is None:
+                problems.append("%s: no Principled BSDF / output" % mat_name)
+                continue
+            target = nt.nodes.new("ShaderNodeTexImage")
+            target.name = "Total_Bake_Target"
+            try:
+                target.label = "Total bake target"
+            except Exception:
+                pass
+            images = {}
+            for mp in maps:
+                img_name = "Total_%s_%s_%s" % (ident(name, "Asset"), ident(mat_name.split("_")[-1], "Mat"), mp)
+                old = bpy.data.images.get(img_name)
+                if old is not None:
+                    try:
+                        bpy.data.images.remove(old)
+                    except Exception:
+                        pass
+                img = bpy.data.images.new(img_name, width=size, height=size, alpha=(mp == "base_color"))
+                if mp != "base_color":
+                    try:
+                        img.colorspace_settings.name = "Non-Color"
+                    except Exception:
+                        pass
+                target.image = img
+                nt.nodes.active = target
+                try:
+                    bpy.ops.object.select_all(action="DESELECT")
+                except Exception:
+                    pass
+                for o in objs:
+                    try:
+                        o.select_set(True)
+                    except Exception:
+                        pass
+                bpy.context.view_layer.objects.active = objs[0]
+                restore = []
+                try:
+                    if mp == "base_color":
+                        # metals have a black diffuse colour: bake with metallic forced to 0
+                        link = _input_link(nt, bsdf, "Metallic")
+                        val = bsdf.inputs["Metallic"].default_value
+                        _unlink_input(nt, bsdf, "Metallic")
+                        bsdf.inputs["Metallic"].default_value = 0.0
+                        restore.append(("metallic", link, val))
+                        bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"}, margin=margin, use_clear=True, use_selected_to_active=False)
+                    elif mp == "roughness":
+                        bpy.ops.object.bake(type="ROUGHNESS", margin=margin, use_clear=True, use_selected_to_active=False)
+                    elif mp == "normal":
+                        bpy.ops.object.bake(type="NORMAL", normal_space="TANGENT", margin=margin, use_clear=True, use_selected_to_active=False)
+                    elif mp == "emission":
+                        bpy.ops.object.bake(type="EMIT", margin=margin, use_clear=True, use_selected_to_active=False)
+                    elif mp == "metallic":
+                        # no METALLIC pass: route the metallic source through an emission shader
+                        emit_n = nt.nodes.new("ShaderNodeEmission")
+                        emit_n.name = "Total_Bake_Emit"
+                        link = _input_link(nt, bsdf, "Metallic")
+                        if link:
+                            nt.links.new(link[1], emit_n.inputs["Color"])
+                        else:
+                            v = float(bsdf.inputs["Metallic"].default_value)
+                            emit_n.inputs["Color"].default_value = (v, v, v, 1.0)
+                        emit_n.inputs["Strength"].default_value = 1.0
+                        surf = _input_link(nt, out, "Surface")
+                        nt.links.new(emit_n.outputs["Emission"], out.inputs["Surface"])
+                        restore.append(("surface", surf, emit_n))
+                        bpy.ops.object.bake(type="EMIT", margin=margin, use_clear=True, use_selected_to_active=False)
+                finally:
+                    for kind, link, extra in restore:
+                        if kind == "metallic":
+                            bsdf.inputs["Metallic"].default_value = extra
+                            if link:
+                                try:
+                                    nt.links.new(link[1], bsdf.inputs["Metallic"])
+                                except Exception:
+                                    pass
+                        elif kind == "surface":
+                            try:
+                                nt.nodes.remove(extra)
+                            except Exception:
+                                pass
+                            try:
+                                nt.links.new(bsdf.outputs[0], out.inputs["Surface"])
+                            except Exception:
+                                pass
+                path = os.path.join(folder, img_name + ".png")
+                img.filepath_raw = path
+                img.file_format = "PNG"
+                img.save()
+                ok = os.path.exists(path) and os.path.getsize(path) > 0
+                images[mp] = {"path": path, "ok": ok, "bytes": os.path.getsize(path) if ok else 0}
+                if ok:
+                    mat["total_tex_" + mp] = path
+            if apply:
+                # rewire the Principled inputs to the baked images (graph nodes stay, unlinked)
+                x = -600
+                for mp, info in images.items():
+                    if not info["ok"]:
+                        continue
+                    tex = nt.nodes.new("ShaderNodeTexImage")
+                    tex.name = "Total_Baked_" + mp
+                    tex.image = bpy.data.images.get(os.path.basename(info["path"])[:-4])
+                    try:
+                        tex.location = (x, -400)
+                    except Exception:
+                        pass
+                    x += 260
+                    if mp == "base_color":
+                        nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+                    elif mp == "roughness":
+                        nt.links.new(tex.outputs["Color"], bsdf.inputs["Roughness"])
+                    elif mp == "metallic":
+                        nt.links.new(tex.outputs["Color"], bsdf.inputs["Metallic"])
+                    elif mp == "emission":
+                        sock = bsdf.inputs.get("Emission Color") or bsdf.inputs.get("Emission")
+                        if sock is not None:
+                            nt.links.new(tex.outputs["Color"], sock)
+                    elif mp == "normal":
+                        nm = nt.nodes.new("ShaderNodeNormalMap")
+                        nm.name = "Total_Baked_NormalMap"
+                        nt.links.new(tex.outputs["Color"], nm.inputs["Color"])
+                        nt.links.new(nm.outputs["Normal"], bsdf.inputs["Normal"])
+                mat["total_baked"] = True
+            try:
+                nt.nodes.remove(target)
+            except Exception:
+                pass
+            baked.append({"material": mat_name, "objects": [o.name for o in objs], "images": images})
+    except Exception as e:
+        return {"ok": False, "error": "bake failed: %s" % e, "error_class": "runtime", "traceback": traceback.format_exc()[-1500:], "baked": baked}
+    finally:
+        try:
+            sc.render.engine = saved["engine"]
+            if cy is not None and saved["cy_samples"] is not None:
+                cy.samples = saved["cy_samples"]
+            if cy is not None and saved["cy_denoise"] is not None:
+                cy.use_denoising = saved["cy_denoise"]
+        except Exception:
+            pass
+    total_ok = sum(1 for b in baked for i in b["images"].values() if i["ok"])
+    return {
+        "ok": total_ok > 0 and not problems,
+        "asset": name,
+        "size": size,
+        "maps": maps,
+        "samples": samples,
+        "materials": baked,
+        "problems": problems,
+        "textures_dir": folder,
+        "files": [i["path"] for b in baked for i in b["images"].values() if i["ok"]],
+        "applied": bool(apply),
+        "roblox": "Local PNGs only. To use them in Studio: upload each map yourself (Creator Hub / Asset Manager -> image assets), then build a SurfaceAppearance (ColorMap / RoughnessMap / MetalnessMap / NormalMap) on the imported MeshPart with those asset ids. TotalScript does not upload and will not invent asset ids; the Studio import keeps the flat colours until you do.",
+    }
+
+
 # ─────────────────────────── export ─────────────────────────────────────────
 
 FBX_SETTINGS = dict(use_selection=True, apply_unit_scale=True, apply_scale_options="FBX_SCALE_ALL", global_scale=1.0, bake_space_transform=True, object_types={"MESH", "EMPTY"}, use_mesh_modifiers=True, mesh_smooth_type="FACE", use_triangles=False, use_custom_props=True, add_leaf_bones=False, bake_anim=False, path_mode="COPY", embed_textures=True, axis_forward="-Z", axis_up="Y")
@@ -1430,7 +2467,14 @@ def main():
             if not name:
                 return emit({"ok": False, "error": "asset_export needs name"})
             return emit(export_asset(name, ARGS.get("format") or "fbx", ARGS.get("path") or ARGS.get("filepath") or ""))
-        return emit({"ok": False, "error": "unknown asset command '%s' (asset_build, asset_validate, asset_inspect, asset_export)" % cmd})
+        if cmd == "asset_bake":
+            if not name:
+                return emit({"ok": False, "error": "asset_bake needs name"})
+            maps = ARGS.get("maps")
+            if isinstance(maps, str):
+                maps = [m.strip() for m in maps.split(",") if m.strip()]
+            return emit(bake_asset(name, ARGS.get("size"), maps if isinstance(maps, list) else None, ARGS.get("margin"), ARGS.get("samples"), ARGS.get("apply") is not False))
+        return emit({"ok": False, "error": "unknown asset command '%s' (asset_build, asset_validate, asset_inspect, asset_export, asset_bake)" % cmd})
     except Exception as e:
         return emit(classify_exception(e, CMD))
 

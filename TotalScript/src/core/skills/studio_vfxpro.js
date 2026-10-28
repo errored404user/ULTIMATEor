@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript production VFX pack (1.92.0) - spec-driven, staged, self-cleaning
+// TotalScript production VFX pack (1.93.0) - spec-driven, staged, self-cleaning
 // effect families, layered on RobloxScriptSkills like studio_cutscene.js.
 //
 // Why (Phase 115 audit): every earlier effect command assembled a handful of
@@ -26,7 +26,7 @@
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
 
-  const VERSION = "1.92.0";
+  const VERSION = "1.93.0";
   const q = (s) => '"' + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "\\r").replace(/\n/g, "\\n") + '"';
   const num = (v) => { const x = Number(v); return isFinite(x) ? x : null; };
   const ident = (v, d) => { const s = String(v || d || "Effect").replace(/[^A-Za-z0-9_]/g, ""); return /^[A-Za-z_]/.test(s) ? s : "_" + s; };

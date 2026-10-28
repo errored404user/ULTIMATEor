@@ -162,16 +162,34 @@ class _Input:
 
 
 class _Socket:
-    pass
+    def __init__(self, name="", node=None):
+        self.name = name
+        self.node = node
+
+
+class _Outputs(dict):
+    """Any output socket name resolves (Fac / Color / Vector / Distance / Result ...)."""
+    def __init__(self, node):
+        super().__init__()
+        self.node = node
+
+    def __missing__(self, k):
+        self[k] = _Socket(str(k), self.node)
+        return self[k]
 
 
 class _Node:
     def __init__(self, ntype):
-        self.type = {"ShaderNodeBsdfPrincipled": "BSDF_PRINCIPLED", "ShaderNodeOutputMaterial": "OUTPUT_MATERIAL", "ShaderNodeTexNoise": "TEX_NOISE", "ShaderNodeValToRGB": "VALTORGB", "ShaderNodeMixRGB": "MIX_RGB", "ShaderNodeTexImage": "TEX_IMAGE"}.get(ntype, ntype)
+        self.type = {"ShaderNodeBsdfPrincipled": "BSDF_PRINCIPLED", "ShaderNodeOutputMaterial": "OUTPUT_MATERIAL", "ShaderNodeTexNoise": "TEX_NOISE", "ShaderNodeValToRGB": "VALTORGB", "ShaderNodeMixRGB": "MIX_RGB", "ShaderNodeTexImage": "TEX_IMAGE", "ShaderNodeBackground": "BACKGROUND", "ShaderNodeOutputWorld": "OUTPUT_WORLD", "ShaderNodeEmission": "EMISSION", "ShaderNodeTexSky": "TEX_SKY", "ShaderNodeTexEnvironment": "TEX_ENVIRONMENT", "ShaderNodeTexWave": "TEX_WAVE", "ShaderNodeTexVoronoi": "TEX_VORONOI", "ShaderNodeTexBrick": "TEX_BRICK", "ShaderNodeBump": "BUMP", "ShaderNodeMapRange": "MAP_RANGE", "ShaderNodeMapping": "MAPPING", "ShaderNodeTexCoord": "TEX_COORD", "ShaderNodeNewGeometry": "NEW_GEOMETRY", "ShaderNodeNormalMap": "NORMAL_MAP"}.get(ntype, ntype)
         self.name = ntype
+        self.bl_idname = ntype
+        self.label = ""
+        self.location = (0, 0)
         self.image = None
-        self.inputs = _Inputs()
-        self.outputs = {0: _Socket(), "Fac": _Socket(), "Color": _Socket(), "BSDF": _Socket()}
+        self.inputs = _Inputs(self)
+        self.outputs = _Outputs(self)
+        for k in (0, "Fac", "Color", "BSDF"):
+            self.outputs[k]
         if self.type == "BSDF_PRINCIPLED":
             for k, v in (("Base Color", (0.8, 0.8, 0.8, 1.0)), ("Metallic", 0.0), ("Roughness", 0.5), ("Alpha", 1.0), ("Emission Color", (0.0, 0.0, 0.0, 1.0)), ("Emission Strength", 0.0)):
                 self.inputs[k] = _Input(v)
@@ -186,36 +204,129 @@ class _Node:
             class _E:
                 def __init__(self):
                     self.position = 0.0
+                    self.color = (0.0, 0.0, 0.0, 1.0)
 
             class _R:
                 elements = [_E(), _E()]
             self.color_ramp = _R()
+        for k, v in list(self.inputs.items()):
+            v.node = self
+            v.name = str(k)
 
 
 class _Inputs(dict):
+    """Known sockets are pre-filled; any other name is created on first access
+    (real Blender raises KeyError for unknown sockets - the tools use .get()/try
+    for version-dependent names, this mock stays permissive and records them)."""
+    def __init__(self, node=None):
+        super().__init__()
+        self.node = node
+
     def get(self, k, d=None):
         return dict.get(self, k, d)
 
+    def __missing__(self, k):
+        v = _Input(0.0)
+        v.name = str(k)
+        v.node = self.node
+        self[k] = v
+        return v
+
 
 class _Nodes(list):
+    def __init__(self):
+        super().__init__()
+        self.active = None
+
     def new(self, ntype):
         n = _Node(ntype)
         self.append(n)
         return n
 
+    def remove(self, n):
+        if n in self:
+            list.remove(self, n)
+            if self.active is n:
+                self.active = None
 
-class _Links:
-    def __init__(self):
-        self.count = 0
+
+class _Link:
+    def __init__(self, a, b):
+        self.from_socket = a
+        self.to_socket = b
+        self.from_node = getattr(a, "node", None)
+        self.to_node = getattr(b, "node", None)
+
+
+class _Links(list):
+    @property
+    def count(self):
+        return len(self)
 
     def new(self, a, b):
-        self.count += 1
+        # one link per input socket, like Blender
+        for l in list(self):
+            if l.to_socket is b:
+                list.remove(self, l)
+        l = _Link(a, b)
+        self.append(l)
+        return l
+
+    def remove(self, l):
+        if l in self:
+            list.remove(self, l)
 
 
 class _Tree:
     def __init__(self):
         self.nodes = _Nodes()
         self.links = _Links()
+
+
+class World(_IDBlock):
+    def __init__(self, name):
+        super().__init__(name)
+        self._use_nodes = False
+        self.node_tree = None
+
+    @property
+    def use_nodes(self):
+        return self._use_nodes
+
+    @use_nodes.setter
+    def use_nodes(self, v):
+        self._use_nodes = bool(v)
+        if v and self.node_tree is None:
+            self.node_tree = _Tree()
+            bg = self.node_tree.nodes.new("ShaderNodeBackground")
+            bg.inputs[0] = _Input((0.05, 0.05, 0.05, 1.0))
+            bg.inputs[1] = _Input(1.0)
+            out = self.node_tree.nodes.new("ShaderNodeOutputWorld")
+            self.node_tree.links.new(bg.outputs[0], out.inputs[0])
+
+
+class _ColorSpace:
+    name = "sRGB"
+
+
+class Image(_IDBlock):
+    def __init__(self, name, width=64, height=64, alpha=True):
+        super().__init__(name)
+        self.size = (width, height)
+        self.filepath_raw = ""
+        self.filepath = ""
+        self.file_format = "PNG"
+        self.colorspace_settings = _ColorSpace()
+        self.packed_file = None
+
+    def save(self):
+        fp = self.filepath_raw or self.filepath
+        if not fp:
+            raise RuntimeError("image has no filepath")
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        with open(fp, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n" + ("fake-image %dx%d %s" % (self.size[0], self.size[1], self.name)).encode())
+        LOG.setdefault("images", []).append({"name": self.name, "path": fp, "size": list(self.size), "colorspace": self.colorspace_settings.name})
 
 
 class Material(_IDBlock):
@@ -227,6 +338,7 @@ class Material(_IDBlock):
         self.metallic = 0.0
         self.roughness = 0.5
         self.blend_method = "OPAQUE"
+        self.use_screen_refraction = False
 
     @property
     def use_nodes(self):
@@ -237,8 +349,9 @@ class Material(_IDBlock):
         self._use_nodes = bool(v)
         if v and self.node_tree is None:
             self.node_tree = _Tree()
-            self.node_tree.nodes.new("ShaderNodeBsdfPrincipled")
-            self.node_tree.nodes.new("ShaderNodeOutputMaterial")
+            bsdf = self.node_tree.nodes.new("ShaderNodeBsdfPrincipled")
+            out = self.node_tree.nodes.new("ShaderNodeOutputMaterial")
+            self.node_tree.links.new(bsdf.outputs[0], out.inputs["Surface"])
 
 
 class _Modifier:
@@ -328,6 +441,33 @@ class Object(_IDBlock):
         self.users_collection = []
         self.active_material = None
         self.mode = "OBJECT"
+        self.animation_data = None
+        self.is_shadow_catcher = False
+
+    def keyframe_insert(self, data_path="", frame=1, **kw):
+        class _KP:
+            def __init__(self, fr, val):
+                self.co = (fr, val)
+                self.interpolation = "BEZIER"
+
+        class _FC:
+            def __init__(self):
+                self.keyframe_points = []
+
+        class _Action:
+            def __init__(self):
+                self.name = "Action"
+                self.fcurves = [_FC()]
+
+        class _AD:
+            def __init__(self):
+                self.action = _Action()
+        if self.animation_data is None:
+            self.animation_data = _AD()
+        val = getattr(self, data_path, None)
+        self.animation_data.action.fcurves[0].keyframe_points.append(_KP(frame, list(val) if val is not None else None))
+        LOG["ops"].append("keyframe_insert:%s@%d" % (data_path, frame))
+        return True
 
     @property
     def material_slots(self):
@@ -387,11 +527,34 @@ class Object(_IDBlock):
         self._selected = bool(v)
 
 
+class _DOF:
+    use_dof = False
+    focus_distance = 10.0
+    aperture_fstop = 2.8
+
+
 class Camera(_IDBlock):
     def __init__(self, name):
         super().__init__(name)
-        self.lens = 50
-        self.angle = math.radians(39.6)
+        self._lens = 50.0
+        self.sensor_width = 36.0
+        self.sensor_fit = "AUTO"
+        self.clip_start = 0.1
+        self.clip_end = 1000.0
+        self.type = "PERSP"
+        self.dof = _DOF()
+
+    @property
+    def lens(self):
+        return self._lens
+
+    @lens.setter
+    def lens(self, v):
+        self._lens = float(v)
+
+    @property
+    def angle(self):
+        return 2.0 * math.atan(self.sensor_width / (2.0 * self._lens))
 
 
 class Light(_IDBlock):
@@ -400,6 +563,7 @@ class Light(_IDBlock):
         self.type = ltype
         self.energy = 10
         self.size = 1
+        self.color = (1.0, 1.0, 1.0)
 
 
 class _CollObjects(list):
@@ -487,6 +651,27 @@ class _Data:
         self.collections = _Blocks(Collection, "collections")
         self.cameras = _Blocks(Camera, "cameras")
         self.lights = _Blocks(Light, "lights")
+        self.worlds = _Blocks(World, "worlds")
+        self.images = _ImageBlocks(Image, "images")
+
+
+class _ImageBlocks(_Blocks):
+    def new(self, name, width=64, height=64, alpha=True, **kw):
+        base = name
+        n = 1
+        while self.get(name) is not None:
+            name = "%s.%03d" % (base, n)
+            n += 1
+        b = Image(name, width, height, alpha)
+        self.append(b)
+        return b
+
+    def load(self, path, check_existing=False):
+        if not os.path.isfile(path):
+            raise RuntimeError("Error: Cannot read '%s'" % path)
+        img = self.new(os.path.basename(path))
+        img.filepath = path
+        return img
 
 
 data = _Data()
@@ -506,10 +691,19 @@ class _Render:
         self.resolution_percentage = 100
         self.filepath = "/tmp/render"
         self.film_transparent = False
+        self.fps = 24
 
         class _IS:
             file_format = "PNG"
+            color_mode = "RGBA"
         self.image_settings = _IS()
+
+        class _FF:
+            format = "MPEG4"
+            codec = "H264"
+            constant_rate_factor = "MEDIUM"
+            ffmpeg_preset = "GOOD"
+        self.ffmpeg = _FF()
 
         class _P:
             enum_items = [_EnumItem("BLENDER_WORKBENCH"), _EnumItem("BLENDER_EEVEE_NEXT"), _EnumItem("CYCLES")]
@@ -530,6 +724,33 @@ class _Display:
     shading = _Shading()
 
 
+class _Cycles:
+    samples = 128
+    use_denoising = True
+    use_adaptive_sampling = False
+
+
+class _Eevee:
+    taa_render_samples = 64
+    use_gtao = False
+    use_shadows = True
+
+
+class _VTProp:
+    enum_items = [_EnumItem("Standard"), _EnumItem("Filmic"), _EnumItem("AgX"), _EnumItem("Khronos PBR Neutral")]
+
+
+class _VTRna:
+    properties = {"view_transform": _VTProp()}
+
+
+class _ViewSettings:
+    view_transform = "AgX"
+    look = "None"
+    exposure = 0.0
+    bl_rna = _VTRna()
+
+
 class Scene(_IDBlock):
     def __init__(self, name):
         super().__init__(name)
@@ -537,6 +758,17 @@ class Scene(_IDBlock):
         self.camera = None
         self.render = _Render()
         self.display = _Display()
+        self.world = None
+        self.cycles = _Cycles()
+        self.eevee = _Eevee()
+        self.view_settings = _ViewSettings()
+        self.frame_start = 1
+        self.frame_end = 250
+        self.frame_current = 1
+
+    def frame_set(self, f):
+        self.frame_current = int(f)
+        LOG["ops"].append("frame_set:%d" % int(f))
 
 
 scene_block = Scene("Scene")
@@ -603,6 +835,24 @@ class _ObjectOps:
     def shade_smooth(**kw):
         return _finished()
 
+    @staticmethod
+    def bake(type="COMBINED", **kw):
+        if scene_block.render.engine != "CYCLES":
+            raise RuntimeError("Baking requires the Cycles render engine")
+        act = context.view_layer.objects.active
+        if act is None or not isinstance(act.data, Mesh):
+            raise RuntimeError("No active mesh object to bake")
+        if not act.data.uv_layers:
+            raise RuntimeError("No active UV layer found in the object \"%s\"" % act.name)
+        target = None
+        for m in act.data.materials:
+            if m is not None and m.node_tree is not None and m.node_tree.nodes.active is not None and m.node_tree.nodes.active.type == "TEX_IMAGE":
+                target = m.node_tree.nodes.active
+        if target is None or target.image is None:
+            raise RuntimeError("No active image found in material")
+        LOG.setdefault("bakes", []).append({"type": type, "object": act.name, "image": target.image.name, "kw": {k: (sorted(v) if isinstance(v, set) else v) for k, v in kw.items()}, "samples": scene_block.cycles.samples})
+        return _finished()
+
 
 class _MeshOps:
     @staticmethod
@@ -627,13 +877,25 @@ class _UVOps:
 
 class _RenderOps:
     @staticmethod
-    def render(write_still=False, **kw):
+    def render(write_still=False, animation=False, **kw):
         fp = scene_block.render.filepath
+        if scene_block.camera is None:
+            raise RuntimeError("No camera found in scene \"%s\"" % scene_block.name)
         if write_still:
             os.makedirs(os.path.dirname(fp), exist_ok=True)
             with open(fp, "wb") as f:
                 f.write(b"\x89PNG\r\n\x1a\n" + b"fake-render" * 8)
-        LOG["renders"].append({"filepath": fp, "engine": scene_block.render.engine, "res": (scene_block.render.resolution_x, scene_block.render.resolution_y), "camera": scene_block.camera.name if scene_block.camera else None})
+        if animation:
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+            fs, fe = scene_block.frame_start, scene_block.frame_end
+            if scene_block.render.image_settings.file_format == "FFMPEG":
+                with open("%s%04d-%04d.mp4" % (fp, fs, fe), "wb") as f:
+                    f.write(b"\x00\x00\x00\x18ftypmp42" + b"fake-video" * 16)
+            else:
+                for fr in range(fs, min(fe, fs + 400) + 1):
+                    with open("%s%04d.png" % (fp, fr), "wb") as f:
+                        f.write(b"\x89PNG\r\n\x1a\n" + b"frame" + str(fr).encode())
+        LOG["renders"].append({"filepath": fp, "engine": scene_block.render.engine, "res": (scene_block.render.resolution_x, scene_block.render.resolution_y), "camera": scene_block.camera.name if scene_block.camera else None, "animation": bool(animation), "frames": [scene_block.frame_start, scene_block.frame_end] if animation else None, "frame": scene_block.frame_current})
         return _finished()
 
 

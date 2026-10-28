@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript Asset Planner (1.92.0) - brief -> structured 3D asset spec.
+// TotalScript Asset Planner (1.93.0) - brief -> structured 3D asset spec.
 //
 // This is the "think before you add a cube" half of the Blender pipeline. A
 // natural-language brief ("detailed sci-fi sword, 1.2 m, teal accents") becomes
 // a SPEC: category, style profile, overall dimensions, a part list with
 // roles (primary / secondary / tertiary), per-part construction ops (bevel,
-// inset, boolean cut, grooves, taper, mirror, array, displace), smoothing
+// inset, boolean cut, grooves, taper, mirror, array, displace), seeded
+// procedural generators (1.93.0: branching trees, canopies, fBm terrain, rock
+// and crystal clusters, stairs), smoothing
 // policy, a material set with real PBR parameters + a Roblox material hint,
 // attachments, origin rule, and a tri / part / material budget. tools/
 // blender_asset.py builds the spec in Blender; the spec is also what the
@@ -16,7 +18,7 @@
 // extents; pos = part centre; rot = degrees.
 (function (root) {
   "use strict";
-  const VERSION = "1.92.0";
+  const VERSION = "1.93.0";
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
   const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -43,6 +45,8 @@
     vehicle: { tris: 12000, parts: 16, materials: 6, origin: "bottom", collision: "hull" },
     organic: { tris: 4000, parts: 6, materials: 3, origin: "bottom", collision: "hull" },
     scifi_prop: { tris: 5000, parts: 12, materials: 5, origin: "bottom", collision: "box" },
+    building: { tris: 9000, parts: 10, materials: 4, origin: "bottom", collision: "precise" },
+    environment: { tris: 9000, parts: 6, materials: 3, origin: "bottom", collision: "precise" },
     character_part: { tris: 8000, parts: 8, materials: 4, origin: "bottom", collision: "none", unsupported: "character meshes need sculpting, retopology, skinning and an R15 cage - the Blender pipeline builds hard-surface and simple organic props only; use the blocky R6/R15 rig builders or a hand-made mesh for characters" },
   };
 
@@ -68,6 +72,8 @@
     energy: { metallic: 0.0, roughness: 0.2, roblox: "Neon", emissive: true },
     foliage: { metallic: 0.0, roughness: 0.75, roblox: "Grass" },
     bark: { metallic: 0.0, roughness: 0.9, roblox: "Wood" },
+    crystal: { metallic: 0.0, roughness: 0.08, roblox: "Glass", alpha: 0.75, emissive: true, keep_roblox: true },
+    plaster: { metallic: 0.0, roughness: 0.75, roblox: "Concrete" },
   };
   const SWATCH = { teal: [0.1, 0.65, 0.65], cyan: [0.15, 0.8, 0.9], red: [0.7, 0.12, 0.1], crimson: [0.55, 0.05, 0.08], blue: [0.15, 0.3, 0.75], navy: [0.08, 0.12, 0.3], green: [0.2, 0.5, 0.2], purple: [0.4, 0.15, 0.6], gold: [0.85, 0.65, 0.2], orange: [0.9, 0.45, 0.1], white: [0.9, 0.9, 0.88], black: [0.05, 0.05, 0.06], grey: [0.45, 0.45, 0.47], gray: [0.45, 0.45, 0.47], brown: [0.4, 0.26, 0.14], pink: [0.9, 0.4, 0.6], yellow: [0.95, 0.85, 0.2] };
 
@@ -78,8 +84,10 @@
   }
   function material(id, family, color, st, extra) {
     const f = FAMILIES[family] || FAMILIES.plastic;
-    const o = Object.assign({ id, family, color: tint(color, st), metallic: clamp(f.metallic + st.metal_bias * (f.metallic > 0 ? 1 : 0), 0, 1), roughness: clamp(f.roughness + st.roughness_bias, 0.03, 1), alpha: f.alpha != null ? f.alpha : 1, emission: null, emission_strength: 0, roblox: f.roblox, wear: !!st.wear }, extra || {});
-    if (f.emissive) { o.emission = o.emission || o.color; o.emission_strength = st.emissive ? (o.emission_strength || 4) : 0; if (!st.emissive) o.roblox = "SmoothPlastic"; }
+    // texture: "procedural" = family shader graph in Blender (wood grain, stone breakup, brushed metal,
+    // edge wear, weave, glass, pulse ...); "flat" for faceted styles. texture_scale = metres per pattern tile.
+    const o = Object.assign({ id, family, color: tint(color, st), metallic: clamp(f.metallic + st.metal_bias * (f.metallic > 0 ? 1 : 0), 0, 1), roughness: clamp(f.roughness + st.roughness_bias, 0.03, 1), alpha: f.alpha != null ? f.alpha : 1, emission: null, emission_strength: 0, roblox: f.roblox, wear: !!st.wear, texture: st.facet ? "flat" : "procedural", texture_scale: 1 }, extra || {});
+    if (f.emissive) { o.emission = o.emission || o.color; o.emission_strength = st.emissive ? (o.emission_strength || (family === "crystal" ? 1.5 : 4)) : 0; if (!st.emissive && !f.keep_roblox) o.roblox = "SmoothPlastic"; }
     return o;
   }
   // bevel width relative to the part's smallest dimension (never a fixed 0.05)
@@ -250,8 +258,111 @@
     return { dims: [L, W, bodyZ + 0.55 + 0.5], parts, materials: mats, origin: "bottom", attachments: [{ name: "DriverSeat", pos: [-L * 0.02, W * 0.22, bodyZ + 0.5] }].concat(["FL", "FR", "RL", "RR"].map((k, i) => ({ name: "Wheel" + k + "Attachment", pos: [(i < 2 ? 1 : -1) * L * 0.31, (i % 2 === 0 ? 1 : -1) * (W / 2 - 0.08), wheelR] }))), notes: "body + cabin primary with tapered sides and boolean wheel arches; wheels keep their own centre pivot for spinning; glass / lamps are separate non-colliding parts" };
   };
 
-  const RECIPE_CATEGORY = { sword: "weapon", blaster: "weapon", crate: "prop", barrel: "prop", table: "furniture", chair: "furniture", lamp_post: "prop", pillar: "building_module", wall_module: "building_module", door_module: "building_module", window_module: "building_module", rock: "organic", tree: "organic", car: "vehicle" };
-  const RECIPE_WORDS = [["sword", /sword|blade|katana|sabre|saber|greatsword|dagger/i], ["blaster", /blaster|rifle|gun|pistol|smg|carbine|shotgun|launcher/i], ["crate", /crate|box|chest|container/i], ["barrel", /barrel|keg|drum/i], ["table", /table|desk|workbench/i], ["chair", /chair|stool|seat|throne/i], ["lamp_post", /lamp ?post|street ?light|lantern|lamp/i], ["pillar", /pillar|column|post\b/i], ["door_module", /door/i], ["window_module", /window/i], ["wall_module", /wall|module|kit|building|house|hut|fa[cç]ade/i], ["rock", /rock|boulder|stone|cliff/i], ["tree", /tree|oak|pine|bush|shrub/i], ["car", /car\b|vehicle|truck|jeep|buggy|van\b|sedan/i]];
+
+  // ── Procedural generators (1.93.0): shape "generator" parts are built by tools/blender_asset.py
+  // from a seed - same seed, same asset. pos of a generator part is its BASE point (ground
+  // contact / trunk foot), not its centre; the validator knows.
+  const GENERATORS = ["tree_branches", "canopy_cluster", "terrain", "rock_cluster", "crystal_cluster", "stairs"];
+  const G = (o) => Object.assign({ shape: "generator", pos: [0, 0, 0], smooth: "auto" }, o);
+
+  RECIPES.tree_procedural = (o, st) => {
+    const h = o.height || 6.0, ex = st.exaggerate, seed = o.seed || 3;
+    const levels = st.detail >= 0.8 ? 4 : st.detail >= 0.5 ? 3 : 2, branches = st.facet || levels === 4 ? 2 : 3;
+    const trunkD = r3(h * 0.07 * ex), skelH = r3(h * 0.85);
+    const skel = { seed, levels, branches, spread: 38, trunk_ratio: 0.45, length_ratio: 0.62, tree_height: skelH, tree_width: r3(h * 0.6) };
+    const mats = { bark: material("bark", "bark", o.secondary || [0.33, 0.22, 0.13], st, { texture_scale: 0.5 }), leaves: material("leaves", "foliage", o.primary || [0.2, 0.46, 0.18], st, { texture_scale: 0.7 }) };
+    const parts = [
+      P(G({ name: "Trunk", role: "primary", generator: Object.assign({ kind: "tree_branches" }, skel), size: [trunkD, trunkD, skelH], material: "bark", segments: st.facet ? 5 : 8, smooth: st.facet ? "flat" : "smooth" })),
+      P(G({ name: "Canopy", role: "secondary", generator: Object.assign({ kind: "canopy_cluster", trunk_radius: r3(trunkD / 2), blobs: st.facet ? 8 : 14, leaf_radius: r3(h * 0.14 * ex) }, skel), size: [h * 0.75, h * 0.75, h], material: "leaves", subdivisions: st.facet ? 1 : 2, smooth: st.facet ? "flat" : "auto", ops: [{ op: "displace", strength: r3(h * 0.02), scale: r3(h * 0.2), detail: 2, seed }] })),
+    ];
+    return { dims: [h * 0.9, h * 0.9, h], parts, materials: mats, origin: "bottom", attachments: [], notes: "recursive branch skeleton (" + levels + " levels x " + branches + " branches, seed " + seed + ") as one tapered tube mesh; leaf blobs sit on the real branch tips of the same skeleton, noise-broken so no two read alike; bark grain + leaf colour variation graphs" };
+  };
+
+  RECIPES.terrain_tile = (o, st) => {
+    const s = o.size || 24, ex = st.exaggerate, seed = o.seed || 3, fl = o.flags || {};
+    const h = r3(s * (fl.steep ? 0.28 : 0.14) * ex), res = st.facet ? 16 : st.detail >= 0.8 ? 40 : 28;
+    const mats = { ground: material("ground", "foliage", o.primary || [0.24, 0.45, 0.18], st, { texture_scale: 3 }), rock: material("rock", "stone", o.secondary || [0.42, 0.4, 0.37], st, { texture_scale: 1.5 }) };
+    const parts = [P(G({ name: "Ground", role: "primary", generator: { kind: "terrain", seed, resolution: res, octaves: st.facet ? 3 : 4, frequency: fl.steep ? 2.4 : 1.6, falloff: fl.island ? "island" : "none", plateau: fl.mesa ? 0.6 : 0, skirt: true }, size: [s, s, h], material: "ground", smooth: st.facet ? "flat" : "smooth" }))];
+    if (st.detail >= 0.5) parts.push(P(G({ name: "Rocks", role: "secondary", generator: { kind: "rock_cluster", seed: seed + 1, count: st.detail >= 0.8 ? 7 : 4 }, size: [s * 0.45, s * 0.4, h * 0.9], pos: [s * 0.18, -s * 0.12, h * 0.25], material: "rock", subdivisions: st.facet ? 1 : 2, smooth: st.facet ? "flat" : "auto" })));
+    return { dims: [s, s, h * 1.15], parts, materials: mats, origin: "bottom", attachments: [], notes: "fBm heightfield (" + res + "x" + res + ", " + (st.facet ? 3 : 4) + " octaves, seed " + seed + (fl.island ? ", island falloff" : "") + (fl.mesa ? ", mesa plateau" : "") + ") closed with a skirt so Studio gets a solid tile; rocks are sunk to a quarter of the height so they always meet the surface" };
+  };
+
+  RECIPES.rock_cluster = (o, st) => {
+    const s = o.size || 2.0, ex = st.exaggerate, seed = o.seed || 3;
+    const mats = { rock: material("rock", "stone", o.primary || [0.42, 0.4, 0.37], st, { texture_scale: s * 0.6 }) };
+    const parts = [P(G({ name: "Rocks", role: "primary", generator: { kind: "rock_cluster", seed, count: st.detail >= 0.8 ? 9 : st.detail >= 0.5 ? 6 : 4 }, size: [s * 1.6, s * 1.3, s * 0.7 * ex], material: "rock", subdivisions: st.facet ? 1 : 2, smooth: st.facet ? "flat" : "auto" }))];
+    return { dims: [s * 1.6, s * 1.3, s * 0.7 * ex], parts, materials: mats, origin: "bottom", attachments: [], notes: "one hero boulder + satellites scattered in the footprint, each noise-displaced with its own seed and buried to a flat contact; one mesh, one material" };
+  };
+
+  RECIPES.crystal_cluster = (o, st) => {
+    const s = o.size || 1.2, ex = st.exaggerate, seed = o.seed || 3;
+    const mats = { crystal: material("crystal", "crystal", o.accent || o.primary || [0.4, 0.75, 0.95], st), rock: material("rock", "stone", o.secondary || [0.3, 0.28, 0.27], st) };
+    const parts = [
+      P({ name: "Base", role: "secondary", shape: "ico", size: [s * 0.9, s * 0.8, s * 0.3], pos: [0, 0, s * 0.12], material: "rock", subdivisions: st.facet ? 1 : 2, smooth: st.facet ? "flat" : "auto", ops: [{ op: "displace", strength: r3(s * 0.04), scale: r3(s * 0.5), detail: 2, seed }, { op: "flatten_bottom", height: 0.3 }] }),
+      P(G({ name: "Crystals", role: "primary", generator: { kind: "crystal_cluster", seed, count: st.detail >= 0.8 ? 9 : st.detail >= 0.5 ? 7 : 5, sides: st.facet ? 5 : 6, thickness: 0.16 * ex }, size: [s * 0.8, s * 0.7, s], pos: [0, 0, s * 0.12], material: "crystal", smooth: "flat" })),
+    ];
+    return { dims: [s * 0.9, s * 0.8, s * 1.12], parts, materials: mats, origin: "bottom", attachments: [], notes: "tallest shard upright in the middle, satellites tilted 8-28 deg around it, all rooted in a displaced rock base; crystal family = transmission + faint emission (Roblox: Glass, emission lost)" };
+  };
+
+  RECIPES.stairs = (o, st) => {
+    const w = o.width || 1.2, ex = st.exaggerate, steps = st.detail >= 0.8 ? 12 : st.detail >= 0.5 ? 10 : 8, rise = 0.17 * ex, run = 0.28;
+    const sy = r3(steps * run), sz = r3(steps * rise);
+    const fam = st.label && /sci/i.test(st.label) ? "painted_metal" : (/cartoon|low/i.test(st.label || "") ? "plaster" : "stone");
+    const mats = { step: material("step", fam, o.primary || [0.6, 0.58, 0.54], st), rail: material("rail", "dark_steel", o.secondary || [0.12, 0.12, 0.14], st) };
+    const parts = [P(G({ name: "Steps", role: "primary", generator: { kind: "stairs", steps, nosing: st.detail >= 0.6 ? 0.02 : 0 }, size: [w, sy, sz], material: "step", smooth: "flat", bevel: bevel([w, run, rise], 0.08, st, 1) }))];
+    if (st.detail >= 0.5) {
+      parts.push(P({ name: "PostsL", role: "tertiary", shape: "box", size: [0.04, 0.04, 0.9], pos: [-w / 2 + 0.03, run / 2, rise + 0.45], material: "rail", array: { count: steps, offset: [0, run, rise] } }));
+      parts.push(P({ name: "PostsR", role: "tertiary", shape: "box", size: [0.04, 0.04, 0.9], pos: [w / 2 - 0.03, run / 2, rise + 0.45], material: "rail", array: { count: steps, offset: [0, run, rise] } }));
+    }
+    return { dims: [w, sy, st.detail >= 0.5 ? sz + 0.9 : sz], parts, materials: mats, origin: "bottom", attachments: [], notes: steps + " steps, rise " + r3(rise) + " m / run " + run + " m (comfortable 2R+G), one solid manifold profile mesh; balusters climb with an Array offset of exactly one step" };
+  };
+
+  RECIPES.building = (o, st) => {
+    const h = o.height || 9, ex = st.exaggerate, floors = clamp(Math.round(h / 3.1), 1, 6), fh = r3(h / floors);
+    const w = o.width || clamp(h * 0.9, 4, 14), d = r3(w * 0.75);
+    let bays = clamp(Math.round(w / 2.2), 1, 5);
+    while (floors * bays > 20) bays--;
+    const wallFam = /sci/i.test(st.label || "") ? "painted_metal" : /real/i.test(st.label || "") ? "brick" : /fantasy/i.test(st.label || "") ? "stone" : /horror/i.test(st.label || "") ? "concrete" : "plaster";
+    const mats = { wall: material("wall", wallFam, o.primary || [0.7, 0.66, 0.58], st, { texture_scale: 2 }), roof: material("roof", floors <= 2 ? "planks" : "dark_steel", o.secondary || (floors <= 2 ? [0.38, 0.2, 0.14] : [0.16, 0.17, 0.19]), st), trim: material("trim", "wood", o.accent || [0.3, 0.2, 0.12], st) };
+    const cuts = [];
+    const ww = r3(Math.min(1.2, (w / bays) * 0.5 * ex)), wh = r3(fh * 0.45);
+    for (let f = 0; f < floors; f++) for (let b = 0; b < bays; b++) {
+      const x = r3(-w / 2 + (b + 0.5) * (w / bays)), door = f === 0 && b === Math.floor(bays / 2);
+      cuts.push({ op: "cut", shape: "box", size: door ? [1.1, 0.5, 2.2] : [ww, 0.5, wh], pos: [x, r3(-d / 2), door ? 1.1 : r3(f * fh + fh * 0.55 - h / 2)], mirror: door ? undefined : "y" });
+    }
+    // cut positions are relative to the part centre (pos z = h/2): shift the door too
+    for (const c of cuts) if (c.size[2] === 2.2) c.pos[2] = r3(1.1 - h / 2);
+    const parts = [
+      P({ name: "Body", role: "primary", shape: "box", size: [w, d, h], pos: [0, 0, h / 2], material: "wall", bevel: bevel([w, d, h], 0.004, st, 1), ops: cuts }),
+      P({ name: "Plinth", role: "tertiary", shape: "box", size: [w * 1.04, d * 1.04, 0.3], pos: [0, 0, 0.15], material: "trim", bevel: bevel([w, d, 0.3], 0.1, st, 1) }),
+    ];
+    if (floors <= 2) {
+      parts.push(P({ name: "Roof", role: "secondary", shape: "cone", size: [w * 1.15, d * 1.15, h * 0.28], pos: [0, 0, h + h * 0.14], rot: [0, 0, 45], material: "roof", segments: 4, smooth: "flat" }));
+      if (st.detail >= 0.5) parts.push(P({ name: "Chimney", role: "tertiary", shape: "box", size: [0.6, 0.6, h * 0.32], pos: [w * 0.3, d * 0.2, h + h * 0.1], material: "wall" }));
+    } else {
+      parts.push(P({ name: "Roof", role: "secondary", shape: "box", size: [w * 1.05, d * 1.05, 0.3], pos: [0, 0, h + 0.15], material: "roof", bevel: bevel([w, d, 0.3], 0.1, st, 1) }));
+      if (st.detail >= 0.5) parts.push(P({ name: "Parapet", role: "tertiary", shape: "box", size: [w * 0.3, d * 0.3, 0.9], pos: [w * 0.25, -d * 0.2, h + 0.75], material: "wall" }));
+    }
+    if (st.detail >= 0.5) parts.push(P({ name: "DoorFrame", role: "tertiary", shape: "box", size: [1.3, 0.12, 2.35], pos: [0, -d / 2 - 0.02, 1.17], material: "trim", bevel: bevel([1.3, 0.12, 2.35], 0.2, st, 1) }));
+    return { dims: [w * 1.15, d * 1.15, h * 1.3], parts, materials: mats, origin: "bottom", attachments: [], notes: floors + " floors x " + bays + " bays = " + cuts.length + " recessed openings cut through front and back (mirror y), door in the middle bay, " + (floors <= 2 ? "pyramid roof + chimney" : "flat roof + parapet") + "; " + wallFam + " wall graph at 2 m tiling" };
+  };
+
+  RECIPES.fence = (o, st) => {
+    const L = o.length || 6, ex = st.exaggerate, n = clamp(Math.round(L / 1.5) + 1, 2, 10), spacing = r3(L / (n - 1));
+    const fam = /sci/i.test(st.label || "") ? "painted_metal" : "planks";
+    const mats = { wood: material("wood", fam, o.primary || [0.5, 0.36, 0.2], st, { texture_scale: 0.6 }) };
+    const pH = 1.2 * ex;
+    const parts = [
+      P({ name: "Posts", role: "primary", shape: "box", size: [0.1, 0.1, pH], pos: [-L / 2, -0.04, pH / 2], material: "wood", bevel: bevel([0.1, 0.1, pH], 0.15, st, 1), array: { count: n, offset: [spacing, 0, 0] } }),
+      P({ name: "RailTop", role: "secondary", shape: "box", size: [L, 0.05, 0.12], pos: [0, 0.03, pH * 0.82], material: "wood", bevel: bevel([L, 0.05, 0.12], 0.2, st, 1) }),
+      P({ name: "RailBottom", role: "secondary", shape: "box", size: [L, 0.05, 0.12], pos: [0, 0.03, pH * 0.35], material: "wood", bevel: bevel([L, 0.05, 0.12], 0.2, st, 1) }),
+    ];
+    if (st.detail >= 0.5) { const pk = Math.max(2, Math.round(L / 0.18)); parts.push(P({ name: "Pickets", role: "tertiary", shape: "box", size: [0.08, 0.03, pH * 0.85], pos: [-L / 2 + 0.09, 0.07, pH * 0.5], material: "wood", array: { count: pk, offset: [r3((L - 0.18) / (pk - 1)), 0, 0] } })); }
+    return { dims: [L + 0.1, 0.18, pH], parts, materials: mats, origin: "bottom", attachments: [], notes: n + " posts every " + spacing + " m (Array), two rails, " + (st.detail >= 0.5 ? "pickets" : "no pickets") + " - stretch by changing length, the arrays follow" };
+  };
+
+  const RECIPE_CATEGORY = { sword: "weapon", blaster: "weapon", crate: "prop", barrel: "prop", table: "furniture", chair: "furniture", lamp_post: "prop", pillar: "building_module", wall_module: "building_module", door_module: "building_module", window_module: "building_module", rock: "organic", tree: "organic", car: "vehicle", tree_procedural: "organic", terrain_tile: "environment", rock_cluster: "organic", crystal_cluster: "prop", stairs: "building_module", building: "building", fence: "prop" };
+  const RECIPE_WORDS = [["crystal_cluster", /crystal|gem ?cluster|shards?\b|geode/i], ["terrain_tile", /terrain|landscape|heightmap|island|hills?\b|mesa|ground tile|valley/i], ["rock_cluster", /boulder field|rock (?:cluster|field|pile|garden)|boulders|rocks\b|scattered rocks/i], ["stairs", /stairs?|staircase|stairway|steps\b/i], ["fence", /fence|railing|picket|palisade/i], ["building", /building|house|tower|apartment|skyscraper|cottage|cabin|hut|shop\b|office block|warehouse/i], ["tree_procedural", /branch|procedural tree|l-?system|dead tree|willow|birch|baobab|big tree|realistic tree/i], ["sword", /sword|blade|katana|sabre|saber|greatsword|dagger/i], ["blaster", /blaster|rifle|gun|pistol|smg|carbine|shotgun|launcher/i], ["crate", /crate|box|chest|container/i], ["barrel", /barrel|keg|drum/i], ["table", /table|desk|workbench/i], ["chair", /chair|stool|seat|throne/i], ["lamp_post", /lamp ?post|street ?light|lantern|lamp/i], ["pillar", /pillar|column|post\b/i], ["door_module", /door/i], ["window_module", /window/i], ["wall_module", /wall|module|kit|fa[cç]ade/i], ["rock", /rock|boulder|stone|cliff/i], ["tree", /tree|oak|pine|bush|shrub/i], ["car", /car\b|vehicle|truck|jeep|buggy|van\b|sedan/i]];
 
   // ── Brief interpretation ──────────────────────────────────────────────────
   function interpret(brief, opts) {
@@ -267,6 +378,7 @@
     if (cols[0]) out.palette.primary = SWATCH[cols[0]];
     if (cols[1]) out.palette.accent = SWATCH[cols[1]];
     if (/accent|glow|neon|emissive/i.test(b) && cols[1]) out.palette.accent = SWATCH[cols[1]];
+    out.flags = { island: /island/i.test(b), mesa: /mesa|plateau|flat[- ]top/i.test(b), steep: /steep|mountain|cliff|jagged/i.test(b) };
     return out;
   }
 
@@ -281,9 +393,9 @@
     if (o.style && !STYLES[o.style]) return { ok: false, error: "unknown style " + o.style + " (" + Object.keys(STYLES).join(", ") + ")" };
     const st = Object.assign({}, STYLES[styleId]);
     if (o.style2 && STYLES[o.style2]) { const s2 = STYLES[o.style2]; for (const k of Object.keys(st)) if (typeof st[k] === "number") st[k] = (st[k] + s2[k]) / 2; st.hybrid = o.style2; }
-    const ro = Object.assign({}, it.palette, o.palette || {}, { seed: it.seed });
+    const ro = Object.assign({}, it.palette, o.palette || {}, { seed: it.seed, flags: Object.assign({}, it.flags || {}, o.flags || {}) });
     const main = num(o.size, it.size.main);
-    if (main) { ({ sword: "length", blaster: "length", crate: "size", barrel: "height", table: "width", chair: "width", lamp_post: "height", pillar: "height", rock: "size", tree: "height", car: "length" }[recipeId] || "size").split(",").forEach((k) => { ro[k] = main; }); }
+    if (main) { ({ sword: "length", blaster: "length", crate: "size", barrel: "height", table: "width", chair: "width", lamp_post: "height", pillar: "height", rock: "size", tree: "height", car: "length", tree_procedural: "height", terrain_tile: "size", rock_cluster: "size", crystal_cluster: "size", stairs: "width", building: "height", fence: "length" }[recipeId] || "size").split(",").forEach((k) => { ro[k] = main; }); }
     if (o.primary) ro.primary = parseColor(o.primary) || ro.primary;
     if (o.accent) ro.accent = parseColor(o.accent) || ro.accent;
     if (o.secondary) ro.secondary = parseColor(o.secondary) || ro.secondary;
@@ -310,7 +422,7 @@
   }
 
   // ── Structural validation of a spec (JS side - before Blender runs) ───────
-  const SHAPES = ["box", "cylinder", "sphere", "cone", "torus", "ico"];
+  const SHAPES = ["box", "cylinder", "sphere", "cone", "torus", "ico", "generator"];
   const OPS = ["inset", "cut", "taper", "grooves", "displace", "flatten_bottom", "decimate", "bulge"];
   function validate(spec) {
     const issues = [];
@@ -335,6 +447,14 @@
       if (!p.name || !/^[A-Za-z][A-Za-z0-9_]*$/.test(String(p.name))) add("error", "part-name", tag + ": name must be an identifier - no Cube.001 style names");
       else if (names.has(p.name)) add("error", "part-dup", tag + ": duplicate part name"); else names.add(p.name);
       if (!SHAPES.includes(p.shape)) add("error", "part-shape", tag + ": shape must be one of " + SHAPES.join(", "));
+      if (p.shape === "generator") {
+        const g = p.generator && typeof p.generator === "object" ? p.generator : null;
+        if (!g || !GENERATORS.includes(g.kind)) add("error", "generator", tag + ": generator.kind must be one of " + GENERATORS.join(", "));
+        else if (g.kind === "terrain" && g.resolution != null && !(g.resolution >= 4 && g.resolution <= 96)) add("error", "generator-res", tag + ": terrain resolution must be 4..96");
+        else if (/cluster/.test(g.kind) && g.count != null && !(g.count >= 1 && g.count <= 24)) add("error", "generator-count", tag + ": cluster count must be 1..24");
+        else if (g.kind === "tree_branches" || g.kind === "canopy_cluster") { if (g.levels != null && !(g.levels >= 1 && g.levels <= 5)) add("error", "generator-levels", tag + ": levels must be 1..5"); if (g.branches != null && !(g.branches >= 1 && g.branches <= 5)) add("error", "generator-branches", tag + ": branches must be 1..5"); }
+        else if (g.kind === "stairs" && g.steps != null && !(g.steps >= 2 && g.steps <= 40)) add("error", "generator-steps", tag + ": steps must be 2..40");
+      }
       if (!Array.isArray(p.size) || p.size.length < 3 || !p.size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0)) add("error", "part-size", tag + ": size must be 3 positive numbers (metres)");
       if (!Array.isArray(p.pos) || p.pos.length < 3 || !p.pos.every((x) => Number.isFinite(Number(x)))) add("error", "part-pos", tag + ": pos must be [x, y, z]");
       if (!p.material || !mats[p.material]) add("error", "part-material", tag + ": material '" + p.material + "' is not defined in spec.materials");
@@ -352,9 +472,9 @@
       }
       if (dims && Array.isArray(p.size) && Array.isArray(p.pos)) {
         const ext = extents(p);
-        for (let a = 0; a < 3; a++) { const half = ext[a] / 2, c = Number(p.pos[a]); const lim = a === 2 ? [-(dims[2] * 0.15), dims[2] * 1.05] : [-(dims[a] / 2) * 1.1, (dims[a] / 2) * 1.1]; if (c + half > lim[1] + 1e-6 || c - half < lim[0] - 1e-6) { add("warning", "bounds", tag + ": extends outside spec.dims on axis " + "xyz"[a]); break; } }
+        for (let a = 0; a < 3; a++) { const half = ext[a] / 2, c = Number(p.pos[a]) + (p.shape === "generator" && a === 2 ? half : 0); const lim = a === 2 ? [-(dims[2] * 0.15), dims[2] * 1.05] : [-(dims[a] / 2) * 1.1, (dims[a] / 2) * 1.1]; if (c + half > lim[1] + 1e-6 || c - half < lim[0] - 1e-6) { add("warning", "bounds", tag + ": extends outside spec.dims on axis " + "xyz"[a]); break; } }
       }
-      if (Array.isArray(p.size)) { const seg = Number(p.segments) || 24; const base = p.shape === "box" ? 12 : p.shape === "cylinder" || p.shape === "cone" ? seg * 4 : p.shape === "sphere" ? seg * seg : p.shape === "torus" ? seg * 24 : 20 * Math.pow(4, Number(p.subdivisions) || 1); let t = base; if (p.bevel) t *= 1 + (Number(p.bevel.segments) || 2) * 1.5; for (const op of p.ops || []) { if (op.op === "grooves") t += 24 * (Number(op.count) || 1); if (op.op === "cut") t += 40; if (op.op === "inset") t += 12; if (op.op === "decimate") t *= Number(op.ratio) || 1; } if (p.mirror) t *= 2; if (p.array) t *= Number(p.array.count) || 1; estTris += t; }
+      if (Array.isArray(p.size)) { const seg = Number(p.segments) || 24; const base = p.shape === "box" ? 12 : p.shape === "cylinder" || p.shape === "cone" ? seg * 4 : p.shape === "sphere" ? seg * seg : p.shape === "torus" ? seg * 24 : p.shape === "generator" ? generatorTris(p) : 20 * Math.pow(4, Number(p.subdivisions) || 1); let t = base; if (p.bevel) t *= 1 + (Number(p.bevel.segments) || 2) * 1.5; for (const op of p.ops || []) { if (op.op === "grooves") t += 24 * (Number(op.count) || 1); if (op.op === "cut") t += 40; if (op.op === "inset") t += 12; if (op.op === "decimate") t *= Number(op.ratio) || 1; } if (p.mirror) t *= 2; if (p.array) t *= Number(p.array.count) || 1; estTris += t; }
     });
     if (parts.length && roles.primary === 0) add("error", "roles", "no part has role 'primary' - establish the silhouette before details");
     if (parts.length >= 4 && roles.tertiary === parts.length) add("warning", "roles", "every part is tertiary - the primary form is missing");
@@ -369,6 +489,19 @@
     for (const a of spec.attachments || []) if (!a.name || !Array.isArray(a.pos)) add("error", "attachment", "attachment needs name + pos");
     return finish();
     function finish() { const errors = issues.filter((i) => i.level === "error").length; return { ok: errors === 0, errors, warnings: issues.length - errors, issues, estimated_tris: Math.round(estTris) }; }
+  }
+
+  // triangle estimate of a generator part (mirrors the construction in tools/blender_asset.py)
+  function generatorTris(p) {
+    const g = p.generator || {}, k = g.kind, sub = Number(p.subdivisions) || 2, ico = 20 * Math.pow(4, Math.max(0, sub - 1));
+    const branchCount = () => { const L = Number(g.levels) || 3, B = Number(g.branches) || 3; let n = 0; for (let l = 0; l <= L; l++) n += Math.pow(B, l); return n; };
+    if (k === "tree_branches") return branchCount() * 3 * (Number(p.segments) || 8) * 2;
+    if (k === "canopy_cluster") return (Number(g.blobs) || 14) * ico;
+    if (k === "terrain") { const n = Number(g.resolution) || 24; return n * n * 2 + (g.skirt === false ? 0 : n * 8 + 2); }
+    if (k === "rock_cluster") return (Number(g.count) || 6) * ico;
+    if (k === "crystal_cluster") return (Number(g.count) || 7) * ((Number(g.sides) || 6) * 3 + 4);
+    if (k === "stairs") return (Number(g.steps) || 8) * 8 + 8;
+    return 100;
   }
 
   // world-axis extents of a part: 90-degree rotations swap axes (enough for the recipes' cylinders / tori)
@@ -387,7 +520,7 @@
     return spec.name + " (" + spec.recipe + ", " + spec.style + (spec.style_profile && spec.style_profile.hybrid ? "+" + spec.style_profile.hybrid : "") + "): " + spec.dims.join(" x ") + " m, " + (spec.parts || []).length + " parts [primary: " + byRole.primary.join(", ") + " | secondary: " + byRole.secondary.join(", ") + " | tertiary: " + byRole.tertiary.join(", ") + "], materials " + Object.keys(spec.materials || {}).map((k) => k + "=" + spec.materials[k].family + "->" + spec.materials[k].roblox).join(", ") + "; budget " + spec.budget.tris + " tris; origin " + spec.origin + "; " + spec.studs_per_meter + " studs/m";
   }
 
-  const api = { VERSION, extents, STYLES, CATEGORIES, FAMILIES, RECIPES, RECIPE_CATEGORY, RECIPE_WORDS, STYLE_WORDS, SWATCH, interpret, plan, validate, summary, parseColor, material, bevel };
+  const api = { VERSION, extents, STYLES, CATEGORIES, FAMILIES, GENERATORS, generatorTris, RECIPES, RECIPE_CATEGORY, RECIPE_WORDS, STYLE_WORDS, SWATCH, interpret, plan, validate, summary, parseColor, material, bevel };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (root) root.TotalAssetPlan = api;
 })(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : null));
