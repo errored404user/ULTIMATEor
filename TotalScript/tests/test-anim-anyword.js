@@ -9,7 +9,7 @@ let n = 0, failed = 0; const ok = (name, cond, detail) => { n++; if (!cond) { fa
 
 const ctx = {}; new Function("window", read("src/core/animengine.js"))(ctx);
 const E = ctx.TotalAnimEngine;
-ok("engine VERSION is 1.81.0", E.VERSION === "1.81.0", E.VERSION);
+ok("engine VERSION is 1.82.0", E.VERSION === "1.82.0", E.VERSION);
 ok("engine exports the any-word layer", typeof E.expandVocabulary === "function" && typeof E.classGesture === "function" && typeof E.vocabulary === "function" && typeof E.inspire === "function" && Array.isArray(E.THESAURUS) && Array.isArray(E.VERB_CLASSES));
 
 // ── 1. thesaurus: every target phrase is itself understood (no entry maps into the void) ──

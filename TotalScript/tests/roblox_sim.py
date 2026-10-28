@@ -21,7 +21,7 @@ local M = {}
 local CLASSES = {
   Instance={}, Folder={"Instance"}, LuaSourceContainer={"Instance"}, ModuleScript={"LuaSourceContainer"}, LocalScript={"LuaSourceContainer"}, Script={"LuaSourceContainer"},
   RemoteEvent={"Instance"}, RemoteFunction={"Instance"}, BindableEvent={"Instance"}, BindableFunction={"Instance"}, ValueBase={"Instance"}, IntValue={"ValueBase"}, NumberValue={"ValueBase"}, StringValue={"ValueBase"}, Color3Value={"ValueBase"},
-  Sound={"Instance"}, Camera={"Instance"}, Humanoid={"Instance"}, Player={"Instance"}, PlayerGui={"Instance"},
+  Sound={"Instance"}, SoundGroup={"Instance"}, Camera={"Instance"}, Humanoid={"Instance"}, Player={"Instance"}, PlayerGui={"Instance"},
   PVInstance={"Instance"}, Model={"PVInstance"}, Tool={"Model"}, Accessory={"Model"}, BasePart={"PVInstance"}, Part={"BasePart"}, MeshPart={"BasePart"}, WedgePart={"BasePart"}, UnionOperation={"BasePart"}, TrussPart={"BasePart"},
   KeyframeSequence={"Instance"}, Keyframe={"Instance"}, Pose={"Instance"}, KeyframeMarker={"Instance"}, Animation={"Instance"},
   Attachment={"Instance"}, Decal={"Instance"}, Texture={"Decal"}, JointInstance={"Instance"}, Motor6D={"JointInstance"}, Weld={"JointInstance"}, WeldConstraint={"Instance"}, HumanoidDescription={"Instance"}, FaceControls={"Instance"},
@@ -417,7 +417,7 @@ M.players = {}
 function methods:TryBeginRecording() return "rec" end
 function methods:FinishRecording() end
 function methods:RemoveDefaultLoadingScreen() end
-function methods:PreloadAsync(list, cb) if cb then for _,a in ipairs(list) do cb(a, Enum.AssetFetchStatus.Success) end end end
+function methods:PreloadAsync(list, cb) if cb then for _,a in ipairs(list) do local id = a if type(a) == "table" and rawget(a, "__props") then id = a.__props.SoundId or a.__props.Image or a.__props.Texture or a end local st = Enum.AssetFetchStatus.Success if type(id) == "string" and id:find("9999") then st = Enum.AssetFetchStatus.Failure end cb(id, st) end end end
 function methods:IsLoaded() return true end
 function methods:FireServer(...) M.fired[#M.fired+1]={self.__props.Name, ...} end
 -- 1.78.0 art pack: EditableImage + CreateAssetAsync (AssetService) and TextService:GetTextSize
@@ -435,6 +435,8 @@ function methods:CreateAssetAsync(obj, assetType, opts)
 end
 function methods:GetFreeDecals(query, page) M.decalQueries = M.decalQueries or {} M.decalQueries[#M.decalQueries+1] = {query=tostring(query), page=page} if M.failDecals then error("HttpError: Forbidden") end if tostring(query):find("nothing") then return {{Results={}}} end return {{Results={{AssetId=1234567, Name="Ornate divider "..tostring(query), CreatorName="sim"}, {AssetId=7654321, Name="Soft glow", CreatorName="sim"}}}} end
 function methods:Play() self.IsPlaying = true self.Playing = true M.soundsPlayed = (M.soundsPlayed or 0) + 1 end
+function methods:Emit(n) n = tonumber(n) or 16 self.__emitted = (self.__emitted or 0) + n M.emits = (M.emits or 0) + n M.emitLog = M.emitLog or {} M.emitLog[#M.emitLog+1] = {self.__props.Name, n} end
+function methods:GetEmitted() return self.__emitted or 0 end
 function methods:Stop() self.IsPlaying = false self.Playing = false end
 function methods:GetTextSize(text, size, font, frame) return Vector2.new(#tostring(text) * size * 0.55, size) end
 function methods:FireClient(plr, ...) M.fired[#M.fired+1]={self.__props.Name, plr and plr.Name or "?", ...} end
@@ -463,6 +465,7 @@ M.debris = {}
 function methods:GetPartBoundsInBox(cf, size, params) local out={} local half=size*0.5 for _,p in ipairs(M.services.Workspace:GetDescendants()) do if isa(p.__class,"BasePart") then local rel=cf:Inverse()*p.CFrame.Position if math.abs(rel.X)<=half.X and math.abs(rel.Y)<=half.Y and math.abs(rel.Z)<=half.Z then local skip=false if params and params.FilterDescendantsInstances then for _,f in ipairs(params.FilterDescendantsInstances) do if p==f or p:IsDescendantOf(f) then skip=true end end end if not skip then out[#out+1]=p end end end end return out end
 function methods:GetPartsInPart() return {} end
 function methods:UserOwnsGamePassAsync() return false end
+function methods:GetProductInfo(id, infoType) id = tonumber(id) or 0 if id == 404 then error("HTTP 404 (Not Found)") end if id == 500 then error("HTTP 500") end M.productInfoCalls = (M.productInfoCalls or 0) + 1 if id == 777 then return {Name = "Not A Sound", AssetTypeId = 13} end return {Name = "Sim Audio " .. tostring(id), AssetTypeId = 3} end
 function methods:PromptGamePassPurchase() M.prompts[#M.prompts+1]="gamepass" end
 function methods:PromptProductPurchase() M.prompts[#M.prompts+1]="product" end
 M.prompts = {}
@@ -490,6 +493,8 @@ M.datastores = {}
 M.dsCalls = 0
 
 Inst.__index = function(o, k)
+  if o.__class == "Sound" and k == "IsLoaded" then return not tostring(rawget(o, "__props").SoundId or ""):find("9999") end
+  if o.__class == "Sound" and k == "TimeLength" then return 1.5 end
   if methods[k] then return methods[k] end
   local v = rawget(o, "__props")[k]
   if v ~= nil then return v end
@@ -506,6 +511,11 @@ Inst.__index = function(o, k)
   end
   if o.__class == "Camera" and k == "CFrame" then return CFrame.new(0,10,20) end
   if o.__class == "Camera" and k == "Focus" then return CFrame.new() end
+  if o.__class == "Attachment" then
+    if k == "CFrame" then return CFrame.new() end
+    if k == "WorldCFrame" then local p = o.__props.Parent local base = (p and isa(p.__class, "BasePart")) and p.CFrame or CFrame.new() return base * o.CFrame end
+    if k == "WorldPosition" then return o.WorldCFrame.Position end
+  end
   if o.__class == "Model" and k == "PrimaryPart" then return nil end
   if EVENTS[k] then local s=o.__signals[k] if not s then s=Signal.new() o.__signals[k]=s end return s end
   if k == "Selectable" then return isa(o.__class, "GuiButton") end
@@ -543,7 +553,8 @@ Inst.__newindex = function(o, k, v)
   if isa(o.__class, "Light") and k == "Color" and getmetatable(v) ~= Color3 then error("Light.Color must be a Color3") end
   if o.__class == "ParticleEmitter" and k == "Color" and (type(v) ~= "table" or v.Keypoints == nil) then error("ParticleEmitter.Color must be a ColorSequence") end
   if (k == "C0" or k == "C1" or k == "Transform" or k == "WorldPivot" or k == "PivotOffset") and getmetatable(v) ~= CFrame then error(k .. " must be a CFrame") end
-  if k == "Lifetime" or k == "Speed" or k == "RotSpeed" then if type(v) ~= "table" or v.Min == nil then error(k .. " must be a NumberRange") end end
+  if (k == "Lifetime" or k == "Speed" or k == "RotSpeed") and o.__class == "ParticleEmitter" then if type(v) ~= "table" or v.Min == nil then error(k .. " must be a NumberRange") end end
+  if k == "Lifetime" and o.__class == "Trail" and type(v) ~= "number" then error("Trail.Lifetime must be a number") end
   if k == "AnchorPoint" and getmetatable(v) ~= Vector2 then error("AnchorPoint must be a Vector2") end
   if k == "LayoutOrder" or k == "ZIndex" then if type(v) ~= "number" then error(k .. " must be a number") end end
   if k == "Text" and type(v) ~= "string" then error("Text must be a string (got " .. type(v) .. ")") end
@@ -626,6 +637,8 @@ _G.UDim = UDim
 _G.UDim2 = UDim2
 _G.ColorSequence = {new = ColorSequence_new}
 _G.NumberSequence = {new = NumberSequence_new}
+-- 1.82.0: NumberRange + ParticleEmitter:Emit + Sound load state for the VFX / SFX / sequence runtimes
+_G.NumberRange = {new = function(a, b) return {Min = a, Max = b or a} end}
 _G.TweenInfo = {new = TweenInfo_new}
 _G.Rect = {new = Rect_new}
 _G.Enum = Enum
@@ -668,6 +681,7 @@ _G.buffer = {
 _G.Content = { fromObject = function(o) return {Object=o, SourceType="Object", __content=true} end, fromAssetId = function(id) return {Uri="rbxassetid://"..tostring(id), SourceType="Uri", __content=true} end, fromUri = function(u) return {Uri=u, SourceType="Uri", __content=true} end, none = {SourceType="None", __content=true} }
 string.split = function(s, sep) local out={} for piece in (s..sep):gmatch("(.-)"..sep:gsub("%p","%%%0")) do out[#out+1]=piece end return out end
 math.clamp = function(v,a,b) return math.max(a, math.min(b, v)) end
+table.find = table.find or function(t, v) for i, x in ipairs(t) do if x == v then return i end end return nil end
 math.round = math.round or function(x) if x >= 0 then return math.floor(x + 0.5) end return math.ceil(x - 0.5) end
 _G.warn = function(...) M.warnings[#M.warnings+1]=table.concat({...}," ") end
 M.warnings = {}

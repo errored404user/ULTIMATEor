@@ -109,7 +109,7 @@ ok("FEEDBACK.providerRetry(cls, attempt, seconds) tells the model the previous m
   ok("capabilities(): vision needs supportsVision + attachImages, tightPrompt from sysMaxChars/compact flag, timings copied", c.vision === true && c.tightPrompt === true && c.maxBatchCommands === 4 && c.timings.warmupMs === 10000 && c.timings.responseTimeoutMs === 300000 && c.errorScan && c.nativeContinue);
   ok("capabilities(): nothing is invented for a bare adapter", (() => { const b = O.capabilities({ id: "y", displayName: "Y" }); return b.vision === false && b.streamTap === false && !b.sysMaxChars && b.tightPrompt === false && b.nativeContinue === false; })());
 }
-ok("orchestrator VERSION pinned", O.VERSION === "1.81.0", O.VERSION);
+ok("orchestrator VERSION pinned", O.VERSION === "1.82.0", O.VERSION);
 
 // ── wiring pins ──
 const bundles = manifest.content_scripts.filter((c) => c.world !== "MAIN" && c.js.some((j) => j.includes("src/core/main.js")));

@@ -1215,21 +1215,27 @@
   B.sound_library = function (a) {
     return "local folder=ReplicatedStorage:FindFirstChild('Total_SoundLibrary') or Instance.new('Folder')\n" +
       "folder.Name='Total_SoundLibrary' folder.Parent=ReplicatedStorage\n" +
-      "local presets={{'Click','1837875052'},{'Pop','1837875053'},{'Win','1837875056'},{'Lose','1837875057'},{'Alert','1837875058'},{'Whoosh','1837875059'}}\n" +
-      "local made=0 for _,p in ipairs(presets) do if not folder:FindFirstChild(p[1]) then local s=Instance.new('Sound') s.Name=p[1] s.SoundId='rbxassetid://'..p[2] s.Parent=folder made+=1 end end\n" +
-      "return ok({created=made,folder=folder:GetFullName()},'sound library ready')";
+      // 1.82.0: engine-bundled files only (rbxasset://sounds shipped with the client); the
+      // previous consecutive rbxassetid numbers were invented and never resolved to audio.
+      "local presets={{'Click','rbxasset://sounds/button.wav'},{'Pop','rbxasset://sounds/clickfast.wav'},{'Win','rbxasset://sounds/victory.wav'},{'Lose','rbxasset://sounds/uuhhh.mp3'},{'Alert','rbxasset://sounds/electronicpingshort.wav'},{'Whoosh','rbxasset://sounds/swoosh.wav'}}\n" +
+      "local made=0 for _,p in ipairs(presets) do local s=folder:FindFirstChild(p[1]) if not s then s=Instance.new('Sound') s.Name=p[1] s.Parent=folder made+=1 end if tostring(s.SoundId):match('^rbxassetid://18378750') or s.SoundId=='' then s.SoundId=p[2] end end\n" +
+      "return ok({created=made,folder=folder:GetFullName(),source='engine-bundled rbxasset://sounds files (no uploaded ids); for licensed audio use sfx_event_define with your own asset ids'},'sound library ready (engine-bundled files; sfx_library_install gives you named events with mixing and verification)')";
   };
   B.jingle = function (a) {
-    var ids = { win: "1837875056", lose: "1837875057", click: "1837875052", pop: "1837875053", alert: "1837875058", whoosh: "1837875059" };
+    // 1.82.0: engine-bundled files, not invented rbxassetid numbers.
+    var ids = { win: "rbxasset://sounds/victory.wav", lose: "rbxasset://sounds/uuhhh.mp3", click: "rbxasset://sounds/button.wav", pop: "rbxasset://sounds/clickfast.wav", alert: "rbxasset://sounds/electronicpingshort.wav", whoosh: "rbxasset://sounds/swoosh.wav" };
     var kind = String(a.kind || "click").toLowerCase();
     var id = ids[kind] || ids.click;
-    return "local s=Instance.new('Sound') s.SoundId='rbxassetid://" + id + "' s.Parent=Lighting s:Play()\n" +
+    return "local s=Instance.new('Sound') s.SoundId='" + id + "' s.Parent=Lighting s:Play()\n" +
       "Debris:AddItem(s,4)\n" +
       "return ok({kind='" + kind + "'},'jingle playing')";
   };
   B.ambient_loop = function (a) {
+    // 1.82.0: no default id - an ambience loop is always an asset the user owns / verified.
+    var aid = String(a.assetid || a.asset_id || a.sound_id || "").replace(/^rbxassetid:\/\//, "").trim();
+    if (!/^\d+$/.test(aid)) return "return fail('assetid is required (a numeric audio asset id you own or that is public). TotalScript does not invent sound ids - sfx_event_define verifies one for you.')";
     return "local old=Lighting:FindFirstChild('Total_Ambient') if old then old:Destroy() end\n" +
-      "local s=Instance.new('Sound') s.Name='Total_Ambient' s.SoundId='rbxassetid://" + nn(a.assetid, 1837875060) + "' s.Looped=true s.Volume=" + nn(a.volume, 0.3) + " s.Parent=Lighting s:Play()\n" +
+      "local s=Instance.new('Sound') s.Name='Total_Ambient' s.SoundId='rbxassetid://" + aid + "' s.Looped=true s.Volume=" + nn(a.volume, 0.3) + " s.Parent=Lighting s:Play()\n" +
       "return ok({path=s:GetFullName()},'ambient loop playing')";
   };
   B.voice_radio = function (a) {

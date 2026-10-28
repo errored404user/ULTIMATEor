@@ -2965,7 +2965,7 @@
     { id: "ui", label: "UI & HUD", re: /^(ui_|gui_|design_|billboard_gui|notification_|loading_(screen|show)|progress_show|screen_gui|surface_gui|hud_|menu_|image_label|text_button|starter_gui|fps_counter|mini_map|radial_menu|scoreboard|status_bar|performance_monitor_gui|waypoint_arrow|colors_ui|crosshair|frame_create|text_label|toast_show|tooltip_)|_ui$/ },
     { id: "gfx", label: "THUMBNAIL & ICON STUDIO", re: /^gfx_/ },
     { id: "audio", label: "AUDIO", re: /^(audio_|sfx_|sound|ambient_|music_|background_music|directional_audio|jingle|radio_station|footstep_|impact_sound|voice_)/ },
-    { id: "animation", label: "ANIMATION", re: /^(animation_|anim_|rig_|ik_|motor6d|facial_|character_emote|eclipse_|keyframe|pose_|emote_)/ },
+    { id: "animation", label: "ANIMATION", re: /^(animation_|anim_|rig_|ik_|motor6d|facial_|character_emote|eclipse_|keyframe|pose_|emote_|sequence_|ability_sequence_)/ }, // 1.82.0: sequence_* / ability_sequence_* (anim + camera + VFX + SFX + UI timelines)
     { id: "motion", label: "TWEENS, SPRINGS & CAMERA", re: /^(tween|spring_|camera_|cutscene|walkspeed)/ },
     { id: "play", label: "PLAYTEST & DEBUG", re: /^(start_stop_play|get_console_output|total_debug|studio_playtest|audit_|wait_job_finished|studio_output|user_keyboard|user_mouse|debug_|profiler|benchmark|memory_get|script_stats|workspace_stats|perf_|diagnos)/ },
     { id: "studio", label: "STUDIO CONTROL, PLUGIN & TOTALSCRIPT", re: /^(studio_|plugin|plugins_|open_script|screenshot_frame|place_|selection_|total_status|total_agent|capture_id|list_roblox_studios|set_active_studio|screen_capture|total_screenshot|memory_|task_|public_|totalscript_help|total_)/ },
