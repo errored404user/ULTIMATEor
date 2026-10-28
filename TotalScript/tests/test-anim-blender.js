@@ -12,7 +12,7 @@ const E = require(path.join(ROOT, "src/core/animengine.js"));
 
 // ── engine: smoothing ──
 const walk = E.generate("natural walk cycle, loop", { quality: "balanced" });
-ok("engine VERSION is 1.83.0 and the report carries a smoothness metric", E.VERSION === "1.83.0" && Number.isFinite(walk.report.smoothness) && walk.report.smoothness >= 0 && walk.report.smoothness <= 100, [E.VERSION, walk.report.smoothness]);
+ok("engine VERSION is 1.84.0 and the report carries a smoothness metric", E.VERSION === "1.84.0" && Number.isFinite(walk.report.smoothness) && walk.report.smoothness >= 0 && walk.report.smoothness <= 100, [E.VERSION, walk.report.smoothness]);
 const sm = E.smooth(walk, { strength: 1 });
 ok("smooth() keeps the clip valid, keeps first/last/impact keys and reports what it did", sm.report.ok && sm.keys[0].t === 0 && Math.abs(sm.keys[sm.keys.length - 1].t - sm.duration) < 1e-6 && /smoothed \(strength 1/.test(sm.fixes[sm.fixes.length - 1]), sm.fixes);
 ok("smooth() does not lower smoothness and is deterministic", sm.report.smoothness >= walk.report.smoothness && JSON.stringify(E.smooth(walk, { strength: 1 }).keys) === JSON.stringify(sm.keys), [walk.report.smoothness, sm.report.smoothness]);

@@ -1,4 +1,4 @@
-# TotalScript asset builder (1.83.0). Sent to Blender as execute_code like
+# TotalScript asset builder (1.84.0). Sent to Blender as execute_code like
 # blender_ops.py; tokens CMD / ARGS / OUT / MESH are filled by TotalScript.
 #
 # Commands
@@ -61,6 +61,54 @@ def emit(payload):
     except Exception:
         pass
     return payload
+
+def blender_version():
+    try:
+        return ".".join(str(x) for x in bpy.app.version)
+    except Exception:
+        return ""
+
+
+def classify_exception(exc, cmd=""):
+    """Turn a bpy exception into a structured, actionable error (1.84.0).
+
+    Mirrors TotalCommandContract.classify on the extension side so the model sees
+    the SAME categories whether the failure was caught before or inside Blender.
+    """
+    import re as _re
+    msg = str(exc) or exc.__class__.__name__
+    out = {"ok": False, "error": msg[:700], "error_class": "runtime_error", "command": str(cmd), "blender": blender_version(), "deterministic": False}
+    m = _re.search(r'enum "([^"]*)" not found in \(([^)]*)\)', msg)
+    if m:
+        allowed = [a.strip().strip("'") for a in m.group(2).split(",") if a.strip()]
+        out.update({"error_class": "invalid_enum", "deterministic": True, "value": m.group(1), "allowed": allowed,
+                    "hint": "'" + m.group(1) + "' is not a valid choice here - use one of: " + ", ".join(allowed)})
+        return out
+    if isinstance(exc, TypeError) and "unexpected keyword" in msg:
+        m = _re.search(r"keyword argument '([^']+)'", msg)
+        out.update({"error_class": "unknown_parameter", "deterministic": True, "parameter": m.group(1) if m else "",
+                    "hint": "this Blender version does not accept that argument - drop it or use blender_introspect to see what exists"})
+        return out
+    if isinstance(exc, AttributeError):
+        m = _re.search(r"has no attribute '([^']+)'", msg)
+        out.update({"error_class": "api_incompatibility", "deterministic": True, "attribute": m.group(1) if m else "",
+                    "hint": "the property/operator does not exist in Blender " + (blender_version() or "?") + " - check blender_introspect before setting it"})
+        return out
+    if "context is incorrect" in msg or "poll() failed" in msg:
+        out.update({"error_class": "invalid_context", "deterministic": False,
+                    "hint": "the operator needs a different mode/selection - select the objects (blender_select) and make sure they are visible and in Object mode"})
+        return out
+    if isinstance(exc, KeyError):
+        out.update({"error_class": "resource_missing", "deterministic": False, "hint": "the named datablock does not exist - list objects/materials first and use the exact name"})
+        return out
+    if isinstance(exc, (ValueError, IndexError)):
+        out.update({"error_class": "invalid_parameter", "deterministic": True, "hint": "a parameter has the wrong shape or value - check the schema and the error text"})
+        return out
+    if isinstance(exc, (OSError, IOError)):
+        out.update({"error_class": "io_error", "deterministic": False, "hint": "file/path problem - make sure the folder exists and is writable"})
+        return out
+    out["trace"] = traceback.format_exc()[-600:]
+    return out
 
 
 def workspace_dir():
@@ -1384,7 +1432,7 @@ def main():
             return emit(export_asset(name, ARGS.get("format") or "fbx", ARGS.get("path") or ARGS.get("filepath") or ""))
         return emit({"ok": False, "error": "unknown asset command '%s' (asset_build, asset_validate, asset_inspect, asset_export)" % cmd})
     except Exception as e:
-        return emit({"ok": False, "error": "%s: %s" % (type(e).__name__, e), "traceback": traceback.format_exc()[-2000:]})
+        return emit(classify_exception(e, CMD))
 
 
 main()

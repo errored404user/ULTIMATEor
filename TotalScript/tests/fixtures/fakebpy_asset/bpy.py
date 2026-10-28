@@ -266,13 +266,42 @@ class _Modifier:
         self.levels = 0
         self.render_levels = 0
         self.keep_sharp = False
+        self.show_viewport = True
+        self.show_render = True
+        self._frozen = True
+
+    def __setattr__(self, key, value):
+        if getattr(self, "_frozen", False) and not key.startswith("_"):
+            if key not in self.__dict__:
+                raise AttributeError("'%sModifier' object has no attribute '%s'" % (self.type.title().replace("_", ""), key))
+            allowed = _MOD_ENUMS.get(key)
+            if allowed and value not in allowed:
+                raise TypeError('bpy_struct: item.attr = val: enum "%s" not found in (%s)' % (value, ", ".join("'" + a + "'" for a in allowed)))
+        object.__setattr__(self, key, value)
+
+
+# Blender's real modifier enum (subset) - modifiers.new() with anything else raises
+# the exact TypeError text bpy produces, so the error classifier can be tested.
+MODIFIER_TYPES = ("SUBSURF", "BEVEL", "SOLIDIFY", "MIRROR", "ARRAY", "BOOLEAN", "DECIMATE", "TRIANGULATE", "REMESH", "WELD", "DISPLACE", "WEIGHTED_NORMAL", "EDGE_SPLIT", "SHRINKWRAP", "SIMPLE_DEFORM", "WIREFRAME", "SCREW", "SKIN", "SMOOTH", "CAST", "CURVE", "LATTICE", "HOOK", "ARMATURE")
+_MOD_ENUMS = {"limit_method": ("NONE", "ANGLE", "WEIGHT", "VGROUP"), "operation": ("INTERSECT", "UNION", "DIFFERENCE"), "solver": ("FAST", "EXACT"), "miter_outer": ("MITER_SHARP", "MITER_PATCH", "MITER_ARC")}
 
 
 class _Modifiers(list):
     def new(self, name, type):
+        if type not in MODIFIER_TYPES:
+            raise TypeError('ObjectModifiers.new(): error with argument 2, "type" -  enum "%s" not found in (%s)' % (type, ", ".join("'" + t + "'" for t in MODIFIER_TYPES)))
         m = _Modifier(name, type)
         self.append(m)
         return m
+
+    def get(self, name):
+        for m in self:
+            if m.name == name:
+                return m
+        return None
+
+    def remove(self, m):
+        list.remove(self, m)
 
 
 class _Slot:

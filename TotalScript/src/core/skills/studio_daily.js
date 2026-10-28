@@ -54,8 +54,8 @@
       const anchored = a.anchored === false ? "false" : "true";
       return wrap(
         `local par=resolve(${parent}) or workspace\n` +
-        `local p=Instance.new("Part") p.Name=${name} p.Size=Vector3.new(${sz[0]},${sz[1]},${sz[2]}) p.Position=Vector3.new(${pos[0]},${pos[1]},${pos[2]}) p.Anchored=${anchored} p.CanCollide=true p.Color=Color3.fromRGB(${col[0]},${col[1]},${col[2]}) pcall(function() p.Material=Enum.Material.${mat} end) p.Parent=par\n` +
-        `return ok({path=p:GetFullName(),name=p.Name},"created Part "..p:GetFullName())`
+        `local p=Instance.new("Part") p.Name=${name} p.Size=Vector3.new(${sz[0]},${sz[1]},${sz[2]}) p.Position=Vector3.new(${pos[0]},${pos[1]},${pos[2]}) p.Anchored=${anchored} p.CanCollide=true p.Color=Color3.fromRGB(${col[0]},${col[1]},${col[2]}) local okm,em=pcall(function() p.Material=Enum.Material.${mat} end) p.Parent=par\n` +
+        `return ok({path=p:GetFullName(),name=p.Name,material=p.Material.Name,material_applied=okm},"created Part "..p:GetFullName()..(okm and "" or " (material '${mat}' is not a valid Enum.Material - kept "..p.Material.Name..")"))`
       );
     }
     if (op === "model_group") {
@@ -147,7 +147,7 @@
       const mat = String(a.material || "Plastic").replace(/[^A-Za-z]/g, "") || "Plastic";
       const col = Array.isArray(a.color) ? num3(a.color, [163, 162, 165]) : null;
       return wrap(
-        `local inst=resolve(${path}) if not inst then return fail("not found") end local n=0 local function apply(p) if p:IsA("BasePart") then pcall(function() p.Material=Enum.Material.${mat} end) ${col ? `p.Color=Color3.fromRGB(${col[0]},${col[1]},${col[2]})` : ""} n=n+1 end end apply(inst) for _,d in ipairs(inst:GetDescendants()) do apply(d) end return ok({count=n},"set material ${mat} on "..n.." parts")`
+        `local inst=resolve(${path}) if not inst then return fail("not found: ${a.path ? String(a.path).replace(/[\\"\n]/g, "") : ""}") end local okm,matv=pcall(function() return Enum.Material.${mat} end) if not okm or typeof(matv)~="EnumItem" then return fail("'${mat}' is not a valid Enum.Material - nothing was changed. Use a real Material name (e.g. SmoothPlastic, Metal, Neon, Wood, Glass, Concrete, Brick, Slate, Granite, Fabric, Ice)") end local n=0 local verified=0 local function apply(p) if p:IsA("BasePart") then p.Material=matv ${col ? `p.Color=Color3.fromRGB(${col[0]},${col[1]},${col[2]})` : ""} n=n+1 if p.Material==matv then verified=verified+1 end end end apply(inst) for _,d in ipairs(inst:GetDescendants()) do apply(d) end if n==0 then return fail("no BasePart under "..inst:GetFullName().." - material_set needs a Part/MeshPart or a Model containing parts") end return ok({count=n,verified=verified,material=matv.Name},"set material "..matv.Name.." on "..n.." parts ("..verified.." verified by read-back)")`
       );
     }
     if (op === "click_detector") {

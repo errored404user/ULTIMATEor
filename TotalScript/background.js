@@ -173,16 +173,17 @@ const BLENDER_TOOLS = [
   btool("get_object_info", "Details for one object in the Blender scene.", { name: { type: "string" } }, ["name"]),
   btool("execute_blender_code", "Run Python (bpy) inside Blender. Prefer the named blender_* tools.", { code: { type: "string" } }, ["code"]),
   btool("get_viewport_screenshot", "Capture the Blender 3D viewport.", { max_size: { type: "integer" } }, []),
+  btool("blender_introspect", "READ-ONLY self-check before fixing a failed Blender call: Blender version, render engines, every object (name/type), materials, collections and - for the named or active object - its real transform, dimensions, modifiers with their settable properties, material slots, mesh counts (verts/faces/tris/UV layers/smooth faces) and custom props. Changes nothing.", { name: { type: "string" }, object: { type: "string" } }, []),
   btool("blender_asset_plan", "PLAN BEFORE MODELLING (no Blender call): turn a brief into a structured asset SPEC - category, style profile, dimensions (m), parts with primary/secondary/tertiary roles, scale-relative bevels, cuts/grooves/insets/tapers, smoothing policy, PBR materials + Roblox material hint, attachments, origin, triangle budget. Recipes: sword, blaster, crate, barrel, table, chair, lamp_post, pillar, wall_module, door_module, window_module, rock, tree, car. Styles: stylized_fantasy, realistic, scifi, low_poly, cartoon, anime, horror. Characters are not supported (says so).", { brief: { type: "string" }, recipe: { type: "string" }, style: { type: "string" }, style2: { type: "string", description: "second style for a hybrid" }, size: { type: "number", description: "main dimension in metres" }, primary: { type: "string", description: "colour name or #hex" }, accent: { type: "string" }, studs_per_meter: { type: "number", description: "default 3.5 (Roblox human scale)" }, collision: { type: "string", description: "box | hull | precise | none" } }, ["brief"]),
   btool("blender_asset_build", "Build a planned asset in Blender from a spec (from blender_asset_plan, edited as needed) or straight from a brief (plans first). Creates a named collection + root empty, parts as separate named meshes (Asset_Part) with live Bevel / Mirror / Array / WeightedNormal stacks, baked boolean details, Principled materials, UVs, custom properties and ATT_* attachment empties. Returns per-part triangle counts, bounds, budget status and the structural validation report. Nothing reaches Studio until blender_send_to_studio.", { spec: { type: "object" }, brief: { type: "string" }, style: { type: "string" }, replace: { type: "boolean", description: "replace an existing asset of the same name (default true)" } }, []),
   btool("blender_asset_validate", "Structural check of an asset built by blender_asset_build (or any collection / object name): non-manifold + loose + degenerate geometry, inconsistent normals, unapplied scale, missing materials / UVs, default names, triangle budget, overlap estimate, dims vs spec. Structural only - run blender_asset_inspect for the visual read.", { name: { type: "string" }, spec: { type: "object" } }, ["name"]),
   btool("blender_asset_inspect", "Render front / side / top / iso (and closeup) previews of an asset with a neutral 3-light rig and grey backdrop in a temporary Total_Inspect collection (removed afterwards; the asset is untouched). The PNGs are attached to the reply so you can judge silhouette, proportions, bevel read, material separation and intersections.", { name: { type: "string" }, views: { type: "array", items: { type: "string" } }, size: { type: "integer", description: "pixels, default 640" }, keep: { type: "boolean" } }, ["name"]),
   btool("blender_asset_export", "Explicit, validated export of an asset: fbx (-Z forward, Y up, modifiers applied, FACE smoothing, custom props) | glb | obj. Refuses assets with structural errors unless force:true, then checks the file exists, is non-empty and has the right header, and lists referenced textures that are missing. Local file only - nothing is uploaded.", { name: { type: "string" }, format: { type: "string", description: "fbx | glb | obj" }, path: { type: "string" }, force: { type: "boolean" } }, ["name"]),
   btool("blender_send_to_studio", "ONE SHOT: read the live Blender meshes (selected objects, or objects[]; modifiers applied, world transforms, material base colour) and build them in Roblox Studio as real MeshParts (EditableMesh) under Workspace.Total_Imported. No file, no FBX. Limits per send: 20k triangles per mesh (blender_decimate first), 40k triangles total (send in groups). publish:true also uploads each mesh as a Mesh asset you own (permanent MeshId; asks for approval).", { objects: { type: "array", items: { type: "string" } }, dest: { type: "string", description: "parent in Workspace (default Workspace)" }, scale: { type: "number", description: "studs per Blender metre (default 20)" }, publish: { type: "boolean" }, append: { type: "boolean", description: "keep the previous Total_Imported and add to it" } }, []),
-  btool("blender_export_fbx", "Export meshes to an FBX (Forward -Z, Up Y). filepath optional. Also dumps meshes so blender_send_to_studio / asset_bridge_import can run with no path.", { filepath: { type: "string" }, objects: { type: "array", items: { type: "string" } } }, []),
-  btool("blender_import_fbx", "Import an FBX into the live Blender scene. filepath optional — defaults to the last TotalScript export.", { filepath: { type: "string" } }, []),
-  btool("blender_export_obj", "Export selected/all meshes to OBJ. filepath optional.", { filepath: { type: "string" }, objects: { type: "array", items: { type: "string" } } }, []),
-  btool("blender_import_obj", "Import an OBJ into the live Blender scene.", { filepath: { type: "string" } }, ["filepath"]),
+  btool("blender_export_fbx", "Export meshes to an FBX (Forward -Z, Up Y). filepath optional. Also dumps meshes so blender_send_to_studio / asset_bridge_import can run with no path.", { filepath: { type: "string" }, objects: { type: "array", items: { type: "string" } }, path: { type: "string" } }, []),
+  btool("blender_import_fbx", "Import an FBX into the live Blender scene. filepath optional — defaults to the last TotalScript export.", { filepath: { type: "string" }, path: { type: "string" } }, []),
+  btool("blender_export_obj", "Export selected/all meshes to OBJ. filepath optional.", { filepath: { type: "string" }, objects: { type: "array", items: { type: "string" } }, path: { type: "string" } }, []),
+  btool("blender_import_obj", "Import an OBJ into the live Blender scene.", { filepath: { type: "string" }, path: { type: "string" } }, ["filepath"]),
   btool("blender_add_cube", "Add a cube.", { name: { type: "string" }, size: { type: "number" }, location: { type: "array", items: { type: "number" } } }, []),
   btool("blender_add_sphere", "Add a UV sphere.", { name: { type: "string" }, radius: { type: "number" }, location: { type: "array" } }, []),
   btool("blender_add_cylinder", "Add a cylinder.", { name: { type: "string" }, radius: { type: "number" }, depth: { type: "number" }, location: { type: "array" } }, []),
@@ -192,40 +193,41 @@ const BLENDER_TOOLS = [
   btool("blender_add_monkey", "Add Suzanne (monkey head).", { name: { type: "string" }, location: { type: "array" } }, []),
   btool("blender_add_empty", "Add an Empty (use as a group parent).", { name: { type: "string" }, location: { type: "array" } }, []),
   btool("blender_add_camera", "Add a camera.", { name: { type: "string" }, location: { type: "array" } }, []),
-  btool("blender_add_light", "Add a light (SUN/POINT/SPOT/AREA).", { name: { type: "string" }, type: { type: "string" }, location: { type: "array" }, energy: { type: "number" } }, []),
+  btool("blender_add_light", "Add a light (SUN/POINT/SPOT/AREA).", { name: { type: "string" }, type: { type: "string", enum: ["SUN","POINT","SPOT","AREA"] }, location: { type: "array" }, energy: { type: "number" } }, []),
   btool("blender_group", "Group objects: parent them to a new Empty and put them in a collection of the same name.", { name: { type: "string", description: "Group name" }, objects: { type: "array", items: { type: "string" }, description: "Object names; omit = selected/all meshes" } }, []),
   btool("blender_ungroup", "Ungroup: clear parent, keep world transforms, remove the group Empty.", { name: { type: "string" } }, []),
-  btool("blender_parent", "Parent objects under an existing object/Empty.", { parent: { type: "string" }, objects: { type: "array", items: { type: "string" } } }, ["parent"]),
+  btool("blender_parent", "Parent objects under an existing object/Empty.", { parent: { type: "string" }, objects: { type: "array", items: { type: "string" } }, keep_transform: { type: "boolean" } }, ["parent"]),
   btool("blender_unparent", "Clear parent, keep world transforms.", { objects: { type: "array", items: { type: "string" } } }, []),
   btool("blender_join", "Join mesh objects into one.", { objects: { type: "array", items: { type: "string" } }, name: { type: "string" } }, []),
   btool("blender_move_to_collection", "Move objects into a collection (created if missing).", { collection: { type: "string" }, objects: { type: "array", items: { type: "string" } } }, []),
   btool("blender_list_collections", "List collections and their objects.", {}, []),
   btool("blender_list_objects", "List every object: type, location, parent, collections.", {}, []),
   btool("blender_delete", "Delete objects.", { name: { type: "string" }, objects: { type: "array", items: { type: "string" } } }, []),
-  btool("blender_duplicate", "Duplicate objects.", { name: { type: "string" }, objects: { type: "array", items: { type: "string" } } }, []),
-  btool("blender_rename", "Rename an object.", { name: { type: "string" }, new_name: { type: "string" } }, ["new_name"]),
+  btool("blender_duplicate", "Duplicate objects.", { name: { type: "string" }, objects: { type: "array", items: { type: "string" } }, offset: { type: "array", items: { type: "number" } } }, []),
+  btool("blender_rename", "Rename an object.", { name: { type: "string" }, new_name: { type: "string" }, object: { type: "string" }, to: { type: "string" } }, ["new_name"]),
   btool("blender_select", "Select objects by name.", { name: { type: "string" }, objects: { type: "array", items: { type: "string" } } }, []),
-  btool("blender_transform", "Set location / rotation (radians) / scale.", { name: { type: "string" }, objects: { type: "array" }, location: { type: "array" }, rotation: { type: "array" }, scale: { type: "array" } }, []),
+  btool("blender_transform", "Set location / rotation (radians) / scale.", { name: { type: "string" }, objects: { type: "array" }, location: { type: "array" }, rotation: { type: "array" }, scale: { type: "array" }, rotation_deg: { type: "array", items: { type: "number" } }, dimensions: { type: "array", items: { type: "number" } } }, []),
   btool("blender_apply_transforms", "Apply rotation/scale (and optional location).", { objects: { type: "array" }, location: { type: "boolean" }, rotation: { type: "boolean" }, scale: { type: "boolean" } }, []),
-  btool("blender_set_origin", "Set object origin (ORIGIN_GEOMETRY, ORIGIN_CURSOR, ORIGIN_CENTER_OF_MASS).", { name: { type: "string" }, type: { type: "string" } }, []),
+  btool("blender_set_origin", "Set object origin (ORIGIN_GEOMETRY, ORIGIN_CURSOR, ORIGIN_CENTER_OF_MASS).", { name: { type: "string" }, type: { type: "string", enum: ["ORIGIN_GEOMETRY","ORIGIN_CURSOR","ORIGIN_CENTER_OF_MASS","ORIGIN_CENTER_OF_VOLUME","GEOMETRY_ORIGIN"] } }, []),
   btool("blender_shade_smooth", "Shade smooth.", { name: { type: "string" }, objects: { type: "array" } }, []),
-  btool("blender_set_material", "Assign a Principled BSDF material. color = [r,g,b] or [r,g,b,a] 0–1.", { name: { type: "string" }, material: { type: "string" }, color: { type: "array" } }, []),
-  btool("blender_add_modifier", "Add a modifier: SUBSURF, BEVEL, SOLIDIFY, MIRROR, ARRAY, BOOLEAN, DECIMATE. apply=true to apply.", { name: { type: "string" }, type: { type: "string" }, levels: { type: "integer" }, apply: { type: "boolean" }, target: { type: "string" } }, []),
-  btool("blender_boolean", "Boolean one mesh with another (DIFFERENCE/UNION/INTERSECT) and apply.", { name: { type: "string" }, target: { type: "string" }, operation: { type: "string" } }, ["target"]),
+  btool("blender_set_material", "Assign a Principled BSDF material. color = [r,g,b] or [r,g,b,a] 0–1.", { name: { type: "string" }, material: { type: "string" }, color: { type: "array" }, object: { type: "string" } }, []),
+  btool("blender_add_modifier", "Add a modifier: SUBSURF, BEVEL, SOLIDIFY, MIRROR, ARRAY, BOOLEAN, DECIMATE. apply=true to apply.", { name: { type: "string" }, type: { type: "string", enum: ["SUBSURF","SUBDIVISION","BEVEL","SOLIDIFY","MIRROR","ARRAY","BOOLEAN","DECIMATE","TRIANGULATE","REMESH","WELD"] }, levels: { type: "integer" }, apply: { type: "boolean" }, target: { type: "string" }, width: { type: "number" }, segments: { type: "integer" }, thickness: { type: "number" }, count: { type: "integer" }, offset: { type: "array", items: { type: "number" } }, axis: { type: "string", enum: ["X","Y","Z"] }, ratio: { type: "number" }, operation: { type: "string", enum: ["DIFFERENCE","UNION","INTERSECT"] }, object: { type: "string" }, objects: { type: "array", items: { type: "string" } } }, []),
+  btool("blender_boolean", "Boolean one mesh with another (DIFFERENCE/UNION/INTERSECT) and apply.", { name: { type: "string" }, target: { type: "string" }, operation: { type: "string", enum: ["DIFFERENCE","UNION","INTERSECT"] }, apply: { type: "boolean" } }, ["target"]),
   btool("blender_clear_scene", "Delete objects. keep = names to leave.", { keep: { type: "array", items: { type: "string" } } }, []),
   btool("blender_add_grid", "Add a grid.", { name: { type: "string" }, size: { type: "number" }, location: { type: "array" } }, []),
-  btool("blender_add_text", "Add 3D text. text=string, extrude=thickness.", { name: { type: "string" }, text: { type: "string" }, extrude: { type: "number" }, location: { type: "array" } }, []),
+  btool("blender_add_text", "Add 3D text. text=string, extrude=thickness.", { name: { type: "string" }, text: { type: "string" }, extrude: { type: "number" }, location: { type: "array" }, body: { type: "string" } }, []),
   btool("blender_translate", "Move objects by offset [x,y,z] (relative).", { offset: { type: "array" }, name: { type: "string" }, objects: { type: "array" } }, []),
   btool("blender_rotate", "Set rotation in DEGREES [x,y,z]. add=true to add.", { rotation_deg: { type: "array" }, add: { type: "boolean" }, name: { type: "string" }, objects: { type: "array" } }, []),
-  btool("blender_set_dimensions", "Set object size in meters [x,y,z].", { dimensions: { type: "array" }, name: { type: "string" } }, []),
+  btool("blender_set_dimensions", "Set object size in meters [x,y,z].", { dimensions: { type: "array" }, name: { type: "string" }, size: { type: "array", items: { type: "number" } } }, []),
   btool("blender_origin_to_bottom", "Put origin at the lowest point (Roblox feet).", { name: { type: "string" }, objects: { type: "array" } }, []),
   btool("blender_drop_to_ground", "Move objects so the lowest vertex sits on Z=0.", { name: { type: "string" }, objects: { type: "array" } }, []),
-  btool("blender_array", "Duplicate along offset, count times.", { count: { type: "integer" }, offset: { type: "array" }, objects: { type: "array" } }, []),
-  btool("blender_mirror", "Mirror-duplicate across X/Y/Z.", { axis: { type: "string" }, objects: { type: "array" } }, []),
+  btool("blender_array", "Duplicate along offset, count times.", { count: { type: "integer" }, offset: { type: "array" }, objects: { type: "array" }, unique: { type: "boolean" }, name: { type: "string" } }, []),
+  btool("blender_mirror", "Mirror-duplicate across X/Y/Z.", { axis: { type: "string", enum: ["X","Y","Z"] }, objects: { type: "array" } }, []),
   btool("blender_triangulate", "Convert faces to triangles (needed before Studio).", { objects: { type: "array" } }, []),
   btool("blender_apply_modifiers", "Apply every modifier so dump/export sees the result.", { objects: { type: "array" } }, []),
+  btool("blender_remove_modifier", "Remove modifiers by type (BEVEL, SUBSURF, ...) or name from the named/selected objects; no type removes all.", { name: { type: "string" }, objects: { type: "array", items: { type: "string" } }, type: { type: "string" }, modifier: { type: "string" } }, []),
   btool("blender_merge", "Merge-by-distance (remove doubles).", { distance: { type: "number" }, objects: { type: "array" } }, []),
-  btool("blender_recalc_normals", "Recalculate outside normals.", { objects: { type: "array" } }, []),
+  btool("blender_recalc_normals", "Recalculate outside normals.", { objects: { type: "array" }, inside: { type: "boolean" }, name: { type: "string" } }, []),
   btool("blender_hide", "Hide objects.", { name: { type: "string" }, objects: { type: "array" } }, []),
   btool("blender_unhide", "Unhide objects (omit names = all).", { name: { type: "string" }, objects: { type: "array" } }, []),
   btool("blender_undo", "Undo last Blender action.", {}, []),
@@ -233,15 +235,15 @@ const BLENDER_TOOLS = [
   btool("blender_get_selection", "Names of selected objects.", {}, []),
   btool("blender_uv_unwrap", "Smart UV project.", { objects: { type: "array" } }, []),
   btool("blender_look_at", "Point an object/camera at a target or location.", { name: { type: "string" }, target: { type: "string" }, location: { type: "array" } }, []),
-  btool("blender_align_camera", "Align the scene camera to an axis (front/back/left/right/top/bottom/iso) looking at a target or the selection.", { axis: { type: "string" }, distance: { type: "number" }, target: { type: "string" }, name: { type: "string" } }, []),
-  btool("blender_align_camera_axis", "Same as blender_align_camera.", { axis: { type: "string" }, distance: { type: "number" }, target: { type: "string" }, name: { type: "string" } }, []),
-  btool("blender_view_axis", "Align the 3D viewport to FRONT/BACK/LEFT/RIGHT/TOP/BOTTOM (or iso via camera).", { axis: { type: "string" } }, []),
+  btool("blender_align_camera", "Align the scene camera to an axis (front/back/left/right/top/bottom/iso) looking at a target or the selection.", { axis: { type: "string", enum: ["front","back","left","right","top","bottom","iso"] }, distance: { type: "number" }, target: { type: "string" }, name: { type: "string" }, view: { type: "string" } }, []),
+  btool("blender_align_camera_axis", "Same as blender_align_camera.", { axis: { type: "string" }, distance: { type: "number" }, target: { type: "string" }, name: { type: "string" }, view: { type: "string" } }, []),
+  btool("blender_view_axis", "Align the 3D viewport to FRONT/BACK/LEFT/RIGHT/TOP/BOTTOM (or iso via camera).", { axis: { type: "string" }, view: { type: "string" } }, []),
   btool("blender_camera_to_view", "Move the scene camera to match the current 3D viewport.", {}, []),
   btool("blender_set_camera_lens", "Set camera focal length, clip planes, or orthographic mode.", { name: { type: "string" }, lens: { type: "number" }, clip_start: { type: "number" }, clip_end: { type: "number" }, ortho: { type: "boolean" }, ortho_scale: { type: "number" } }, []),
   btool("blender_scale", "Scale selected/named objects. scale:[x,y,z] or a number. multiply=true multiplies current scale.", { name: { type: "string" }, scale: { type: "array" }, factor: { type: "array" }, multiply: { type: "boolean" } }, []),
-  btool("blender_bevel", "Bevel mesh edges in edit mode.", { name: { type: "string" }, width: { type: "number" }, segments: { type: "number" } }, []),
+  btool("blender_bevel", "Bevel mesh edges in edit mode.", { name: { type: "string" }, width: { type: "number" }, segments: { type: "number" }, offset: { type: "number" }, objects: { type: "array", items: { type: "string" } } }, []),
   btool("blender_solidify", "Add a Solidify modifier (thickness).", { name: { type: "string" }, thickness: { type: "number" } }, []),
-  btool("blender_extrude", "Extrude the mesh along normals.", { name: { type: "string" }, distance: { type: "number" } }, []),
+  btool("blender_extrude", "Extrude the mesh along normals.", { name: { type: "string" }, distance: { type: "number" }, offset: { type: "number" } }, []),
   btool("blender_add_curve", "Add a Bezier curve.", { name: { type: "string" }, location: { type: "array" } }, []),
   btool("blender_add_armature", "Add an armature (single bone).", { name: { type: "string" }, location: { type: "array" } }, []),
   btool("blender_keyframe_insert", "Insert a keyframe on location/rotation/scale (or data_path) at frame.", { name: { type: "string" }, frame: { type: "number" }, data_path: { type: "string" } }, []),
@@ -271,33 +273,33 @@ const BLENDER_TOOLS = [
   btool("scene_duplicate", "Duplicate a Blender scene.", {name:{type:"string"},new_name:{type:"string"}}, []),
   btool("scene_set_active", "Set the active Blender scene.", {name:{type:"string"}}, ["name"]),
   btool("object_delete", "Delete selected or named objects.", {name:{type:"string"},objects:{type:"array"}}, []),
-  btool("object_duplicate", "Duplicate selected or named objects.", {name:{type:"string"},objects:{type:"array"}}, []),
+  btool("object_duplicate", "Duplicate selected or named objects.", {name:{type:"string"},objects:{type:"array"}, offset: { type: "array", items: { type: "number" } } }, []),
   btool("object_select", "Select named objects.", {name:{type:"string"},objects:{type:"array"}}, []),
   btool("object_deselect", "Deselect every object.", {}, []),
-  btool("object_rename", "Rename an object.", {name:{type:"string"},new_name:{type:"string"}}, ["name","new_name"]),
-  btool("object_parent", "Parent objects while preserving transforms.", {parent:{type:"string"},objects:{type:"array"}}, ["parent"]),
+  btool("object_rename", "Rename an object.", {name:{type:"string"},new_name:{type:"string"}, object: { type: "string" }, to: { type: "string" } }, ["name","new_name"]),
+  btool("object_parent", "Parent objects while preserving transforms.", {parent:{type:"string"},objects:{type:"array"}, keep_transform: { type: "boolean" } }, ["parent"]),
   btool("object_unparent", "Clear object parents while preserving transforms.", {objects:{type:"array"}}, []),
   btool("object_join", "Join mesh objects.", {objects:{type:"array"},name:{type:"string"}}, []),
   btool("object_separate", "Separate mesh loose parts.", {name:{type:"string"}}, []),
   btool("object_get_transform", "Read object location, rotation, scale and dimensions.", {name:{type:"string"}}, []),
-  btool("object_set_transform", "Set object location, rotation and scale.", {name:{type:"string"},location:{type:"array"},rotation:{type:"array"},scale:{type:"array"}}, []),
+  btool("object_set_transform", "Set object location, rotation and scale.", {name:{type:"string"},location:{type:"array"},rotation:{type:"array"},scale:{type:"array"}, rotation_deg: { type: "array", items: { type: "number" } }, dimensions: { type: "array", items: { type: "number" } } }, []),
   btool("object_apply_transform", "Apply object transforms.", {objects:{type:"array"},location:{type:"boolean"},rotation:{type:"boolean"},scale:{type:"boolean"}}, []),
-  btool("mesh_bevel", "Bevel mesh edges.", {name:{type:"string"},width:{type:"number"},segments:{type:"integer"}}, []),
-  btool("mesh_extrude", "Extrude selected mesh faces.", {name:{type:"string"},distance:{type:"number"}}, []),
+  btool("mesh_bevel", "Bevel mesh edges.", {name:{type:"string"},width:{type:"number"},segments:{type:"integer"}, offset: { type: "number" }, objects: { type: "array", items: { type: "string" } } }, []),
+  btool("mesh_extrude", "Extrude selected mesh faces.", {name:{type:"string"},distance:{type:"number"}, offset: { type: "number" } }, []),
   btool("mesh_inset", "Inset mesh faces.", {name:{type:"string"},thickness:{type:"number"},depth:{type:"number"}}, []),
-  btool("mesh_subdivide", "Subdivide mesh geometry.", {name:{type:"string"},cuts:{type:"integer"}}, []),
+  btool("mesh_subdivide", "Subdivide mesh geometry.", {name:{type:"string"},cuts:{type:"integer"}, levels: { type: "integer" } }, []),
   btool("mesh_merge", "Merge vertices by distance.", {objects:{type:"array"},distance:{type:"number"}}, []),
-  btool("mesh_decimate", "Decimate selected meshes.", {objects:{type:"array"},ratio:{type:"number"}}, []),
-  btool("mesh_cleanup", "Clean scene and mesh data.", {purge_orphans:{type:"boolean"},empty_collections:{type:"boolean"}}, []),
-  btool("modifier_add", "Add a supported Blender modifier.", {name:{type:"string"},type:{type:"string"},target:{type:"string"}}, ["type"]),
-  btool("modifier_remove", "Remove a named modifier.", {name:{type:"string"},modifier:{type:"string"}}, ["modifier"]),
+  btool("mesh_decimate", "Decimate selected meshes.", {objects:{type:"array"},ratio:{type:"number"}, apply: { type: "boolean" }, type: { type: "string", enum: ["COLLAPSE","UNSUBDIV","DISSOLVE"] } }, []),
+  btool("mesh_cleanup", "Clean scene and mesh data.", {purge_orphans:{type:"boolean"},empty_collections:{type:"boolean"}, unused_materials: { type: "boolean" } }, []),
+  btool("modifier_add", "Add a supported Blender modifier.", {name:{type:"string"},type: { type: "string", enum: ["SUBSURF","SUBDIVISION","BEVEL","SOLIDIFY","MIRROR","ARRAY","BOOLEAN","DECIMATE","TRIANGULATE","REMESH","WELD"] },target:{type:"string"}, width: { type: "number" }, segments: { type: "integer" }, thickness: { type: "number" }, count: { type: "integer" }, offset: { type: "array", items: { type: "number" } }, axis: { type: "string", enum: ["X","Y","Z"] }, ratio: { type: "number" }, operation: { type: "string", enum: ["DIFFERENCE","UNION","INTERSECT"] }, object: { type: "string" }, objects: { type: "array", items: { type: "string" } }, levels: { type: "integer" }, apply: { type: "boolean" } }, ["type"]),
+  btool("modifier_remove", "Remove a named modifier.", {name:{type:"string"},modifier:{type:"string"}, type: { type: "string" }}, ["modifier"]),
   btool("modifier_configure", "Set validated properties on a modifier.", {name:{type:"string"},modifier:{type:"string"},properties:{type:"object"}}, ["modifier","properties"]),
   btool("modifier_apply", "Apply all modifiers on selected objects.", {objects:{type:"array"}}, []),
   btool("modifier_list", "List modifiers on an object.", {name:{type:"string"}}, []),
-  btool("material_create", "Create a node-enabled material.", {material:{type:"string"}}, ["material"]),
-  btool("material_assign", "Assign or create a Principled material.", {name:{type:"string"},material:{type:"string"},color:{type:"array"}}, []),
-  btool("material_remove", "Remove and unlink a material.", {material:{type:"string"}}, ["material"]),
-  btool("material_duplicate", "Duplicate a material.", {material:{type:"string"},new_name:{type:"string"}}, ["material"]),
+  btool("material_create", "Create a node-enabled material.", {material:{type:"string"}, name: { type: "string" } }, ["material"]),
+  btool("material_assign", "Assign or create a Principled material.", {name:{type:"string"},material:{type:"string"},color:{type:"array"}, object: { type: "string" } }, []),
+  btool("material_remove", "Remove and unlink a material.", {material:{type:"string"}, name: { type: "string" } }, ["material"]),
+  btool("material_duplicate", "Duplicate a material.", {material:{type:"string"},new_name:{type:"string"}, name: { type: "string" } }, ["material"]),
   btool("node_create", "Create a shader node in a material.", {material:{type:"string"},type:{type:"string"},name:{type:"string"}}, ["material","type"]),
   btool("node_delete", "Delete a shader node.", {material:{type:"string"},name:{type:"string"}}, ["material","name"]),
   btool("node_inspect", "Inspect material nodes and links.", {material:{type:"string"}}, ["material"]),
@@ -309,7 +311,7 @@ const BLENDER_TOOLS = [
   btool("timeline_set", "Set current timeline frame.", {frame:{type:"integer"}}, ["frame"]),
   btool("camera_create", "Create a camera.", {name:{type:"string"},location:{type:"array"}}, []),
   btool("camera_set_active", "Set active scene camera.", {name:{type:"string"}}, ["name"]),
-  btool("light_create", "Create a light.", {name:{type:"string"},type:{type:"string"},location:{type:"array"},energy:{type:"number"}}, []),
+  btool("light_create", "Create a light.", {name:{type:"string"},type: { type: "string", enum: ["SUN","POINT","SPOT","AREA"] },location:{type:"array"},energy:{type:"number"}}, []),
   btool("world_set", "Set world color and strength.", {color:{type:"array"},strength:{type:"number"}}, []),
 ];
 for (const t of BLENDER_TOOLS) BLENDER_TOOL_NAMES.add(t.name);
@@ -1171,7 +1173,7 @@ const BLENDER_CMD = {
   blender_origin_to_bottom: "origin_to_bottom", blender_drop_to_ground: "drop_to_ground",
   blender_center: "center", blender_snap_to_grid: "snap_to_grid",
   blender_shade_flat: "shade_flat",
-  blender_apply_modifiers: "apply_modifiers", blender_remove_modifier: "remove_modifier",
+  blender_apply_modifiers: "apply_modifiers", blender_remove_modifier: "remove_modifier", blender_introspect: "introspect",
   blender_triangulate: "triangulate", blender_decimate: "decimate",
   blender_merge: "merge", blender_recalc_normals: "recalc_normals",
   blender_flip_normals: "flip_normals", blender_separate: "separate_loose",
@@ -1319,6 +1321,16 @@ function blenderInlinePayload(stdoutText) {
   return null;
 }
 
+// 1.84.0: keep the structured failure fields the tools scripts emit
+// (error_class / allowed / hint / parameter / blender version) instead of
+// flattening everything to one string - main.js renders them for the model.
+function blenderStructuredError(result, fallback) {
+  const out = { ok: false, error: String(result.error || fallback), skipped: result.skipped };
+  for (const k of ["error_class", "deterministic", "allowed", "hint", "value", "parameter", "attribute", "blender", "command", "available"]) {
+    if (result[k] !== undefined && result[k] !== null && result[k] !== "") out[k] = result[k];
+  }
+  return out;
+}
 async function blenderCall(name, args, timeout) {
   if (!blenderAddon) {
     return { ok: false, error: "Blender is not connected. Click Connect Blender (Blender: N → MCP for Blender → Start MCP Server)." };
@@ -1378,7 +1390,7 @@ async function blenderCall(name, args, timeout) {
     const inline = blenderInlinePayload(stdoutText);
     if (inline) result = inline;
     if (result && result.ok === false) {
-      return { ok: false, error: result.error || "Blender FBX failed", skipped: result.skipped };
+      return blenderStructuredError(result, "Blender FBX failed");
     }
     if (statusPath && !inline) {
       // Fallback only: the status file lives in the workspace when total-core told
@@ -1391,7 +1403,7 @@ async function blenderCall(name, args, timeout) {
       } catch {}
     }
     if (result && result.ok === false) {
-      return { ok: false, error: result.error || "Blender command failed" };
+      return blenderStructuredError(result, "Blender command failed");
     }
     let meshes = result && result.meshes;
     const mf = (result && result.mesh_file) || meshPath || "total_mesh.json";

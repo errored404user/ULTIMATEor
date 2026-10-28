@@ -26,6 +26,40 @@
   // argument validation, capability record, redaction). Optional: every use
   // below degrades to the pre-1.69 behaviour when the module is missing.
   const ORCH = (typeof TotalOrchestrator !== "undefined" && TotalOrchestrator) || null;
+  // 1.84.0: pre-execution command contract (aliases, types, enums, ranges) + failure classification.
+  const CONTRACT = (typeof TotalCommandContract !== "undefined" && TotalCommandContract) || null;
+  function contractPrepare(name, args) {
+    if (!CONTRACT) return { ok: true, args, corrections: [], warnings: [], problems: [] };
+    try {
+      const p = CONTRACT.prepare(name, args, { label: name });
+      if (!p.ok) diag("tool.contractRejected", { name, problems: p.problems.map((x) => x.code + ":" + x.param) });
+      else if (p.corrections.length) diag("tool.contractNormalized", { name, corrections: p.corrections.map((x) => x.kind + ":" + x.param) });
+      return p;
+    } catch (e) { diag("tool.contractError", { name, error: String(e && e.message || e) }); return { ok: true, args, corrections: [], warnings: [], problems: [] }; }
+  }
+  // 1.84.0: render the structured fields blender_ops.py / blender_asset.py emit
+  // (error_class, allowed values, hint, parameter, Blender version) so the model
+  // fixes the named thing instead of decoding a traceback tail.
+  function blenderErrorText(name, r) {
+    const base = `ERROR calling '${name}': ${(r && r.error) || "Blender call failed"}`;
+    if (!r || typeof r !== "object") return base;
+    const bits = [];
+    if (r.error_class) bits.push(`class=${r.error_class}${r.deterministic ? " (deterministic - the same call will fail again)" : ""}`);
+    if (r.parameter) bits.push(`parameter=${r.parameter}`);
+    if (r.attribute) bits.push(`attribute=${r.attribute}`);
+    if (r.value !== undefined && r.value !== null) bits.push(`value=${String(r.value).slice(0, 60)}`);
+    const allowed = Array.isArray(r.allowed) ? r.allowed : Array.isArray(r.available) ? r.available : null;
+    if (allowed && allowed.length) bits.push(`allowed=[${allowed.slice(0, 24).join(", ")}${allowed.length > 24 ? ", ..." : ""}]`);
+    if (r.blender) bits.push(`blender=${r.blender}`);
+    let out = base;
+    if (bits.length) out += `\n[blender] ${bits.join("; ")}`;
+    if (r.hint) out += `\nFix: ${String(r.hint).slice(0, 300)}`;
+    return out;
+  }
+  function contractAnnotate(name, res, prep) {
+    if (!CONTRACT || typeof res !== "string") return res;
+    try { return CONTRACT.annotate(name, res, prep); } catch { return res; }
+  }
   // Template storage is provider-independent and must hydrate on every page,
   // even when this conversation has never started an agent session.
   const templateRegistryReady=globalThis.TotalTemplateRegistry?TotalTemplateRegistry.initialize().then(r=>{try{dispatchEvent(new CustomEvent("total-templates-synced",{detail:{count:r.count}}));}catch{}return r;}):Promise.resolve({success:false,count:0});
@@ -4687,7 +4721,9 @@
     }
     // ── Virtual Studio Skills (Lighting, UI, FX, Audio, Terrain, Camera, Diagnostics) ──
     if (typeof AgentScriptSkills !== "undefined" && AgentScriptSkills.SKILL_OPS.includes(name)) {
-      return await AgentScriptSkills.run(name, args, runTool);
+      const prepA = contractPrepare(name, args);
+      if (!prepA.ok) return prepA.message;
+      return contractAnnotate(name, await AgentScriptSkills.run(name, prepA.args, runTool), prepA);
     }
     if (typeof RobloxScriptSkills !== "undefined" && RobloxScriptSkills.SKILL_OPS.includes(name)) {
       const preferMcp = /^(script_read|start_stop_play|get_console_output|wait_job_finished|list_roblox_studios|set_active_studio|user_keyboard_input|user_mouse_input|execute_luau|multi_edit)$/.test(name);
@@ -4695,6 +4731,13 @@
       if (preferMcp && mcpHas) {
         /* fall through to Studio MCP */
       } else {
+      // 1.84.0: the contract decides BEFORE any Luau is built - a call that
+      // cannot match the handler's real parameters is answered with the schema
+      // instead of a Studio round trip; aliases / enum spellings / vector
+      // shapes are normalized deterministically (recorded in diag + result).
+      const prepS = contractPrepare(name, args);
+      if (!prepS.ok) return prepS.message;
+      args = prepS.args;
       // createCheckpoint lives in the ui closure - reach it through the hook (a direct call was a silent ReferenceError).
       try { if (typeof window.__rsBeforeTool === "function") window.__rsBeforeTool(name, args); } catch {}
       if (name === "ui_create_component") {
@@ -4784,6 +4827,9 @@
         }
       } catch {}
       const ok = !String(res||"").startsWith("ERROR") && !String(res||"").includes("ERROR in execute_luau");
+      // 1.84.0: failure class + next step + the normalizations applied, so the
+      // model fixes the right thing (and the loop guard knows what can repeat).
+      res = contractAnnotate(name, res, prepS);
       // Session persistence, perf budget pill and next-step suggestions live in
       // the ui closure (see window.__rsAfterTool) - calling them by name from
       // here threw a swallowed ReferenceError, so none of them ever ran.
@@ -4812,6 +4858,27 @@
       if (bareName === "blender_asset_build" && planner && args && args.spec && typeof args.spec === "object") {
         const v = planner.validate(args.spec);
         if (!v.ok) return "ERROR in blender_asset_build: spec rejected before Blender ran - " + v.issues.filter((i) => i.level === "error").map((i) => i.msg).join("; ");
+      }
+      // 1.84.0: Blender tools carry a JSON schema (background BLENDER_TOOLS,
+      // mirrored into the command registry) but were never checked against it.
+      // Same pre-flight as native MCP tools: missing / wrong-typed / bad-enum
+      // arguments are answered with the schema BEFORE any Python is generated.
+      if (!(args && args._totalChunk)) {
+        let bt = A.toolList.find((t) => t && t.server === "blender" && (t.name === name || t.name === bareName)) || null;
+        if (!bt && typeof TotalCommandRegistry !== "undefined") {
+          try { const rc = TotalCommandRegistry.getCommand(bareName); if (rc && rc.inputSchema) bt = { name: bareName, inputSchema: rc.inputSchema, description: rc.description }; } catch {}
+        }
+        if (bt && bt.inputSchema) {
+          const missingB = requiredParamsMissing(bt, args || {});
+          if (missingB.length) return `ERROR MISSING_PARAMS calling '${name}': required parameter(s) not provided: ${missingB.join(", ")}.\nSchema:\n${toolDetailLine(bt)}\nFix the call and resend it - no lookup needed.`;
+          if (ORCH) {
+            try {
+              const v = ORCH.validateToolArgs(bt.inputSchema, args || {});
+              if (v.problems.length) { diag("tool.invalidArgs", { name: bareName, problems: v.problems.map((x) => x.key) }); return ORCH.argProblemsMessage(name, v, toolDetailLine(bt)); }
+              if (v.coerced.length || v.dropped.length) { diag("tool.argsCoerced", { name: bareName, coerced: v.coerced, dropped: v.dropped }); args = v.args; }
+            } catch {}
+          }
+        }
       }
       if (!(A.bridge && A.bridge.blender)) {
         let st = await bg({ type: "blender_status" });
@@ -4862,7 +4929,7 @@
         }
         return `Output of '${name}':\n${textOut}`;
       }
-      return `ERROR calling '${name}': ${r.error || "Blender call failed"}`;
+      return contractAnnotate(bareName, blenderErrorText(name, r), null);
     }
     if (A.toolNames.size && !A.toolNames.has(name) && !A.toolNames.has(bareName)) {
       // Append the callable signatures of the suggested names so the model can
@@ -5648,11 +5715,12 @@
           rememberExecuted(res.item);
           diag("tool.start", { name: call.tool,requestId:A.activeRequestId });
           try { ui.trackCard(call.tool, "run", "executing\u2026", category); } catch {}
-          feedback = await runTool(call);
+          const blocked = repeatBlocked(call);
+          feedback = blocked !== null ? blocked : await runTool(call);
           // Loop guard: the same command with the same parameters failing over
           // and over is the classic agent death spiral. Tag the result so the
           // model is told to change approach instead of resending it.
-          try { feedback = applyRepeatGuard(call, feedback); } catch {}
+          try { if (blocked === null) feedback = applyRepeatGuard(call, feedback); } catch {}
           try {
             const rawFb = String(feedback || "");
             const stripped = stripStudioNoise(rawFb);
@@ -6285,14 +6353,35 @@
   //  SESSION BOOTSTRAP  ("Starting Up" animated chip, shown in the conversation)
   // ════════════════════════════════════════════════════════════════════════
   // Repeat guard: the same failing call sent twice in a row gets a loop-guard rider.
-  const REPEAT = { sig: "", count: 0 };
+  const REPEAT = { sig: "", count: 0, text: "", klass: null };
+  function repeatSignature(call) {
+    try { if (CONTRACT) return CONTRACT.signature(call.tool, call.arguments || {}); } catch {}
+    try { return String(call.tool || "") + "|" + JSON.stringify(call.arguments || {}); } catch { return String(call.tool || ""); }
+  }
+  // 1.84.0: a call that is identical (after normalization) to the one that just
+  // failed for a DETERMINISTIC reason (schema / enum / syntax / unknown command)
+  // cannot succeed - answer it from the previous result instead of re-sending
+  // it to Studio / Blender. Timeouts, offline bridges and missing objects are
+  // never blocked: that state can change between two calls.
+  function repeatBlocked(call) {
+    if (!CONTRACT || !REPEAT.sig) return null;
+    try {
+      const sig = repeatSignature(call);
+      const d = CONTRACT.repeatDecision({ sig: REPEAT.sig, text: REPEAT.text, klass: REPEAT.klass }, sig, REPEAT.count);
+      if (!d.block) return null;
+      REPEAT.count++;
+      diag("tool.repeatBlocked", { name: call.tool, n: REPEAT.count, reason: d.reason.slice(0, 80) });
+      return String(REPEAT.text || "ERROR: the previous identical call failed.").replace(/\n\[LOOP GUARD\][\s\S]*$/, "") + `\n\n[LOOP GUARD] NOT RUN: ${d.reason}. Change the parameter the error names (or the approach) before sending again.${REPEAT.count >= 3 ? " Stop retrying this call." : ""}`;
+    } catch { return null; }
+  }
   function applyRepeatGuard(call, feedback) {
     const text = String(feedback || "");
     const failed = /^\s*ERROR\b/.test(text);
-    let sig = "";
-    try { sig = String(call.tool || "") + "|" + JSON.stringify(call.arguments || {}); } catch { sig = String(call.tool || ""); }
+    const sig = repeatSignature(call);
     if (failed && sig === REPEAT.sig) REPEAT.count++;
     else { REPEAT.sig = failed ? sig : ""; REPEAT.count = failed ? 1 : 0; }
+    REPEAT.text = failed ? text : "";
+    try { REPEAT.klass = failed && CONTRACT ? CONTRACT.classify(call.tool, text) : null; } catch { REPEAT.klass = null; }
     if (!failed || REPEAT.count < 2) return feedback;
     const n = REPEAT.count;
     diag("tool.repeatFail", { name: call.tool, n });

@@ -69,6 +69,55 @@ def emit(payload):
     return payload
 
 
+def blender_version():
+    try:
+        return ".".join(str(x) for x in bpy.app.version)
+    except Exception:
+        return ""
+
+
+def classify_exception(exc, cmd=""):
+    """Turn a bpy exception into a structured, actionable error (1.84.0).
+
+    Mirrors TotalCommandContract.classify on the extension side so the model sees
+    the SAME categories whether the failure was caught before or inside Blender.
+    """
+    import re as _re
+    msg = str(exc) or exc.__class__.__name__
+    out = {"ok": False, "error": msg[:700], "error_class": "runtime_error", "command": str(cmd), "blender": blender_version(), "deterministic": False}
+    m = _re.search(r'enum "([^"]*)" not found in \(([^)]*)\)', msg)
+    if m:
+        allowed = [a.strip().strip("'") for a in m.group(2).split(",") if a.strip()]
+        out.update({"error_class": "invalid_enum", "deterministic": True, "value": m.group(1), "allowed": allowed,
+                    "hint": "'" + m.group(1) + "' is not a valid choice here - use one of: " + ", ".join(allowed)})
+        return out
+    if isinstance(exc, TypeError) and "unexpected keyword" in msg:
+        m = _re.search(r"keyword argument '([^']+)'", msg)
+        out.update({"error_class": "unknown_parameter", "deterministic": True, "parameter": m.group(1) if m else "",
+                    "hint": "this Blender version does not accept that argument - drop it or use blender_introspect to see what exists"})
+        return out
+    if isinstance(exc, AttributeError):
+        m = _re.search(r"has no attribute '([^']+)'", msg)
+        out.update({"error_class": "api_incompatibility", "deterministic": True, "attribute": m.group(1) if m else "",
+                    "hint": "the property/operator does not exist in Blender " + (blender_version() or "?") + " - check blender_introspect before setting it"})
+        return out
+    if "context is incorrect" in msg or "poll() failed" in msg:
+        out.update({"error_class": "invalid_context", "deterministic": False,
+                    "hint": "the operator needs a different mode/selection - select the objects (blender_select) and make sure they are visible and in Object mode"})
+        return out
+    if isinstance(exc, KeyError):
+        out.update({"error_class": "resource_missing", "deterministic": False, "hint": "the named datablock does not exist - list objects/materials first and use the exact name"})
+        return out
+    if isinstance(exc, (ValueError, IndexError)):
+        out.update({"error_class": "invalid_parameter", "deterministic": True, "hint": "a parameter has the wrong shape or value - check the schema and the error text"})
+        return out
+    if isinstance(exc, (OSError, IOError)):
+        out.update({"error_class": "io_error", "deterministic": False, "hint": "file/path problem - make sure the folder exists and is writable"})
+        return out
+    out["trace"] = traceback.format_exc()[-600:]
+    return out
+
+
 def view_override():
     wm = bpy.context.window_manager
     if not wm:
@@ -1277,7 +1326,17 @@ def cmd_add_modifier():
              "MIRROR": "MIRROR", "ARRAY": "ARRAY", "BOOLEAN": "BOOLEAN", "DECIMATE": "DECIMATE",
              "TRIANGULATE": "TRIANGULATE", "REMESH": "REMESH", "WELD": "WELD"}
     kind = alias.get(kind, kind)
-    mod = obj.modifiers.new(name=kind.title(), type=kind)
+    if kind not in set(alias.values()):
+        return emit({"ok": False, "error": "unsupported modifier type: " + kind, "error_class": "invalid_enum", "deterministic": True,
+                     "value": kind, "allowed": sorted(set(alias.values())),
+                     "hint": "pick one of " + ", ".join(sorted(set(alias.values()))) + " (blender_add_modifier type) - other modifiers need blender_execute_code"})
+    try:
+        mod = obj.modifiers.new(name=kind.title(), type=kind)
+    except Exception as exc:
+        return emit(classify_exception(exc, "add_modifier"))
+    if mod is None:
+        return emit({"ok": False, "error": "Blender refused modifier " + kind + " on " + obj.name + " (" + obj.type + ")", "error_class": "invalid_context",
+                     "hint": "this modifier only applies to MESH objects - check the object type with blender_introspect"})
     if kind == "SUBSURF":
         mod.levels = int(ARGS.get("levels") or 1)
     if kind == "BEVEL":
@@ -2172,6 +2231,88 @@ def cmd_get_transform():
     if obj is None:return emit({"ok":False,"error":"object required"})
     return emit({"ok":True,"name":obj.name,"location":list(obj.location),"rotation":list(obj.rotation_euler),"scale":list(obj.scale),"dimensions":list(obj.dimensions)})
 
+def cmd_introspect():
+    """Read-only self-check: Blender version, what the named/active object really is,
+    its modifiers (with the settable properties), materials, dimensions and the
+    operators/enums the other commands depend on. Nothing is changed."""
+    info = {"ok": True, "blender": blender_version(), "mode": None, "object": None, "objects": [], "modifier_types": sorted(["SUBSURF", "BEVEL", "SOLIDIFY", "MIRROR", "ARRAY", "BOOLEAN", "DECIMATE", "TRIANGULATE", "REMESH", "WELD"]),
+            "light_types": ["SUN", "POINT", "SPOT", "AREA"], "origin_types": ["ORIGIN_GEOMETRY", "ORIGIN_CURSOR", "ORIGIN_CENTER_OF_MASS", "ORIGIN_CENTER_OF_VOLUME", "GEOMETRY_ORIGIN"], "note": "read-only"}
+    try:
+        info["mode"] = bpy.context.mode
+    except Exception:
+        pass
+    try:
+        scene = bpy.context.scene
+        info["render_engines"] = sorted({getattr(x, "identifier", str(x)) for x in scene.render.bl_rna.properties["engine"].enum_items})
+        info["engine"] = scene.render.engine
+        info["frame_range"] = [scene.frame_start, scene.frame_end]
+        info["unit_scale"] = getattr(scene.unit_settings, "scale_length", 1.0)
+    except Exception:
+        pass
+    try:
+        info["objects"] = [{"name": o.name, "type": o.type, "visible": bool(o.visible_get()) if hasattr(o, "visible_get") else True} for o in bpy.data.objects][:200]
+        info["materials"] = [m.name for m in bpy.data.materials][:200]
+        info["collections"] = [c.name for c in bpy.data.collections][:200]
+    except Exception:
+        pass
+    want = str(ARGS.get("name") or ARGS.get("object") or "")
+    obj = bpy.data.objects.get(want) if want else active()
+    if want and obj is None:
+        info["ok"] = False
+        info["error"] = "object not found: " + want
+        info["error_class"] = "resource_missing"
+        info["hint"] = "exact names only - pick one from objects[]"
+        return emit(info)
+    if obj is not None:
+        d = {"name": obj.name, "type": obj.type, "parent": obj.parent.name if obj.parent else None, "modifiers": [], "materials": [], "custom_props": {}}
+        for key, fn in (("location", lambda: [round(float(v), 4) for v in obj.location]), ("rotation_deg", lambda: [round(math.degrees(float(v)), 2) for v in obj.rotation_euler]),
+                        ("scale", lambda: [round(float(v), 4) for v in obj.scale]), ("dimensions", lambda: [round(float(v), 4) for v in obj.dimensions]),
+                        ("collections", lambda: [c.name for c in obj.users_collection])):
+            try:
+                d[key] = fn()
+            except Exception:
+                d[key] = None
+        for mod in obj.modifiers:
+            props = {}
+            try:
+                for pr in mod.bl_rna.properties:
+                    if pr.identifier in ("rna_type", "name", "type") or getattr(pr, "is_readonly", False):
+                        continue
+                    val = getattr(mod, pr.identifier, None)
+                    if isinstance(val, (int, float, bool, str)):
+                        props[pr.identifier] = val
+                    elif hasattr(val, "__len__") and not isinstance(val, (str, bytes)):
+                        try:
+                            props[pr.identifier] = [float(x) if isinstance(x, (int, float)) else str(x) for x in val][:4]
+                        except Exception:
+                            pass
+                    elif val is not None and hasattr(val, "name"):
+                        props[pr.identifier] = val.name
+                    if len(props) >= 40:
+                        break
+            except Exception:
+                pass
+            d["modifiers"].append({"name": mod.name, "type": mod.type, "properties": props})
+        if getattr(obj, "data", None) is not None and hasattr(obj.data, "materials"):
+            d["materials"] = [m.name if m else None for m in obj.data.materials]
+        if obj.type == "MESH":
+            me = obj.data
+            try:
+                d["mesh"] = {"vertices": len(me.vertices), "edges": len(getattr(me, "edges", [])), "faces": len(me.polygons), "tris": sum(max(0, len(pg.vertices) - 2) for pg in me.polygons),
+                             "uv_layers": [u.name for u in me.uv_layers], "smooth_faces": sum(1 for pg in me.polygons if getattr(pg, "use_smooth", False)), "has_custom_normals": bool(getattr(me, "has_custom_normals", False))}
+            except Exception as exc:
+                d["mesh"] = {"error": str(exc)[:200]}
+        try:
+            for k in obj.keys():
+                if not str(k).startswith("_"):
+                    v = obj[k]
+                    d["custom_props"][str(k)] = v if isinstance(v, (int, float, bool, str)) else str(v)
+        except Exception:
+            pass
+        info["object"] = d
+    return emit(info)
+
+
 def cmd_modifier_list():
     obj=bpy.data.objects.get(str(ARGS.get("name") or "")) or active()
     if obj is None:return emit({"ok":False,"error":"object required"})
@@ -2181,12 +2322,15 @@ def cmd_modifier_configure():
     obj=bpy.data.objects.get(str(ARGS.get("name") or "")) or active();mn=str(ARGS.get("modifier") or "")
     if obj is None:return emit({"ok":False,"error":"object required"})
     mod=obj.modifiers.get(mn)
-    if mod is None:return emit({"ok":False,"error":"modifier not found"})
+    if mod is None:return emit({"ok":False,"error":"modifier not found: "+mn,"error_class":"resource_missing","available":[m.name for m in obj.modifiers],"hint":"use one of the listed modifier names (blender_modifier_list / blender_introspect)"})
     changed={}
     for key,value in dict(ARGS.get("properties") or {}).items():
-        if key.startswith("_") or not hasattr(mod,key):return emit({"ok":False,"error":"invalid modifier property: "+str(key)})
+        if key.startswith("_") or not hasattr(mod,key):
+            props=[p.identifier for p in getattr(getattr(mod,"bl_rna",None),"properties",[]) if not getattr(p,"is_readonly",False) and p.identifier not in ("rna_type","name","type")] if hasattr(mod,"bl_rna") else []
+            return emit({"ok":False,"error":"invalid modifier property: "+str(key),"error_class":"unknown_parameter","deterministic":True,"parameter":str(key),"available":props[:40],"hint":"blender_introspect {name} lists the real settable properties of each modifier in this Blender version"})
         try:setattr(mod,key,value);changed[key]=value
-        except Exception as e:return emit({"ok":False,"error":str(e)})
+        except Exception as e:
+            info=classify_exception(e,"modifier_configure");info["parameter"]=str(key);return emit(info)
     return emit({"ok":True,"name":obj.name,"modifier":mod.name,"changed":changed})
 
 def cmd_material_create():
@@ -2249,7 +2393,7 @@ DISPATCH = {
     "get_transform": cmd_get_transform, "modifier_list": cmd_modifier_list, "modifier_configure": cmd_modifier_configure,
     "material_create": cmd_material_create, "material_duplicate": cmd_material_duplicate, "material_remove": cmd_material_remove,
     "node_inspect": cmd_node_inspect, "node_create": cmd_node_create, "node_delete": cmd_node_delete,
-    "uv_inspect": cmd_uv_inspect, "uv_pack": cmd_uv_pack, "animation_list": cmd_animation_list,
+    "uv_inspect": cmd_uv_inspect, "uv_pack": cmd_uv_pack, "animation_list": cmd_animation_list, "introspect": cmd_introspect,
     "export_gltf": cmd_export_gltf,
     "import_gltf": cmd_import_gltf,
     "scene_cleanup": cmd_scene_cleanup,
@@ -2363,5 +2507,5 @@ try:
         emit({"ok": False, "error": "unknown blender command: " + str(CMD)})
     else:
         fn()
-except Exception:
-    emit({"ok": False, "error": traceback.format_exc()[-900:]})
+except Exception as exc:  # structured failure classes (1.84.0) - never a bare traceback
+    emit(classify_exception(exc, CMD))
