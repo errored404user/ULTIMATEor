@@ -167,7 +167,9 @@ const PART = "TotalScript_ProviderParityTest";
       ok("the site's generation was stopped (native stop clicked) or finished", !generating || cancelled, { generating, cancelled });
       ok("NO command from the interrupted turn reached the bridge", !toolCalls.some((c) => c.name === "execute_luau" && new RegExp(PART).test(String(c.arguments.code || ""))), toolCalls.map((c) => c.name));
       ok("no tool result was typed back after Stop (3 sends total: bootstrap, catalogue, request)", userMessages.length === 3, userMessages.length);
-      // "Agent running - N tools" on the bar is the SESSION label (started), not the loop; the loop state is in the diag snapshots.
+      // "Agent running - N tools" on the bar is the SESSION label (started); since 1.87.0 it carries the loop phase too.
+      const barTxt = (bar.textContent || "").replace(/\s+/g, " ");
+      ok("the bar says the loop is stopped / idle after Stop (not 'running a command' / 'waiting for the AI')", /Agent running[^·]*· (stopped|idle|stopping)/.test(barTxt) && !/waiting for the AI|running a command|running execute_luau/.test(barTxt), barTxt.slice(0, 160));
       const dg = w.__rsDiag || [];
       ok("loop wound down after Stop (stopLoop → response:stopped → loop.end, final snapshot run:false)", dg.some((e) => e.event === "stopLoop") && dg.some((e) => e.event === "response" && e.data && e.data.kind === "stopped") && dg.some((e) => e.event === "loop.end") && dg[dg.length - 1].snap && dg[dg.length - 1].snap.run === false, dg.slice(-4).map((e) => e.event + ":" + (e.snap && e.snap.run)));
       ok("Stop was not re-run by the auto-resume watchdog within 2.5 s (userStopped honoured)", !dg.some((e) => /autoResume|resume\./.test(e.event) && e.t > (dg.find((x) => x.event === "stopLoop") || {}).t), dg.filter((e) => /resume/i.test(e.event)).map((e) => e.event));

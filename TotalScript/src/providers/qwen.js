@@ -124,9 +124,19 @@ const RSProvider = (() => {
     // the fire-rate, block count and worst single-pass duration - but only when
     // it's actually notable, so a quiet page stays silent.
     let _snCount = 0, _snMaxMs = 0, _snMaxBlocks = 0, _snWinStart = Date.now();
-    const snapAll = () => {
+    // 1.87.0: the observer no longer re-reads EVERY block on EVERY mutation.
+    // Each batch of records is reduced to the code blocks it actually touched
+    // (target inside a block, or a block being inserted); unrelated mutations
+    // (streamed prose, our own chips, the composer) cost one closest() each
+    // and nothing else. Bursts are coalesced into one pass per 120 ms - lines
+    // only disappear on a later scroll-out, so the longest-capture rule still
+    // sees the full source, and the network tap stays the authority anyway.
+    const SNAP_COALESCE_MS = 120;
+    const _snDirty = new Set();
+    let _snAll = false, _snTimer = 0;
+    const snapAll = (dirty) => {
       const t0 = (self.performance || Date).now();
-      const blocks = document.querySelectorAll(S.codeWrap);
+      const blocks = dirty ? [...dirty] : document.querySelectorAll(S.codeWrap);
       blocks.forEach(snapshotCode);
       const ms = (self.performance || Date).now() - t0;
       _snCount++;
@@ -141,7 +151,28 @@ const RSProvider = (() => {
         _snCount = 0; _snMaxMs = 0; _snMaxBlocks = 0; _snWinStart = now;
       }
     };
-    _codeObs = new MutationObserver(snapAll);
+    const flush = () => {
+      _snTimer = 0;
+      if (_snAll) { _snAll = false; _snDirty.clear(); snapAll(); return; }
+      if (_snDirty.size) { const d = new Set(_snDirty); _snDirty.clear(); snapAll(d); }
+    };
+    const onMutations = (muts) => {
+      for (const m of muts) {
+        const t = m.target;
+        const el = t && (t.nodeType === 1 ? t : t.parentElement);
+        const pre = el && el.closest ? el.closest(S.codeWrap) : null;
+        if (pre) { _snDirty.add(pre); continue; }
+        if (m.type === "childList" && m.addedNodes && m.addedNodes.length) {
+          for (const n of m.addedNodes) {
+            if (n.nodeType !== 1) continue;
+            if (n.matches && n.matches(S.codeWrap)) { _snDirty.add(n); continue; }
+            if (n.querySelector && n.querySelector(S.codeWrap)) { _snAll = true; break; }
+          }
+        }
+      }
+      if ((_snDirty.size || _snAll) && !_snTimer) _snTimer = setTimeout(flush, SNAP_COALESCE_MS);
+    };
+    _codeObs = new MutationObserver(onMutations);
     try {
       _codeObs.observe(document.body, { subtree: true, childList: true, characterData: true });
     } catch {}

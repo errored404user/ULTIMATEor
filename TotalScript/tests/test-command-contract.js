@@ -17,7 +17,7 @@ const C = require(path.join(process.cwd(), "src/core/command_contract.js"));
 const S = RobloxScriptSkills;
 
 // ── wiring ──────────────────────────────────────────────────────────────────
-ok("module version 1.86.0", C.VERSION === "1.86.0", C.VERSION);
+ok("module version 1.87.0", C.VERSION === "1.87.0", C.VERSION);
 const lists = manifest.content_scripts.filter((c) => c.js && c.js.includes("src/core/command_registry.js"));
 ok("command_contract.js follows command_registry.js in every manifest list (" + lists.length + ")", lists.length >= 12 && lists.every((c) => c.js.indexOf("src/core/command_contract.js") === c.js.indexOf("src/core/command_registry.js") + 1));
 ok("codecraft.html loads the contract", /command_registry\.js"><\/script>\s*<script src="src\/core\/command_contract\.js">/.test(fs.readFileSync("codecraft.html", "utf8")));
@@ -105,6 +105,17 @@ ok("repeatDecision blocks an identical call after a deterministic failure", C.re
 ok("repeatDecision lets a CHANGED call through", C.repeatDecision(prevDet, C.signature("material_set", { path: "Workspace.P", material: "Neon" }), 1).block === false);
 const prevTimeout = { sig: sigA, text: "ERROR STUDIO_TIMEOUT: timed out", klass: C.classify("x", "ERROR STUDIO_TIMEOUT: timed out") };
 ok("repeatDecision never blocks a transient failure (timeout / offline)", C.repeatDecision(prevTimeout, sigA, 2).block === false && C.repeatDecision(prevTimeout, sigA, 5).block === false);
+// 1.87.0: post-timeout hold for MUTATING calls (opt-in via prev.mutating) + transient budget.
+const prevTimeoutMut = Object.assign({}, prevTimeout, { mutating: true, at: Date.now() });
+const held = C.repeatDecision(prevTimeoutMut, sigA, 1);
+ok("repeatDecision HOLDS an identical MUTATING call once after a timeout (it may have run) and says to read the state back", held.block === true && held.hold === true && /MAY have run/.test(held.reason) && /inspect_instance|instance_find/.test(held.reason), JSON.stringify(held));
+ok("after the hold was delivered (uncertainHeld) the identical call goes through", C.repeatDecision(Object.assign({}, prevTimeoutMut, { uncertainHeld: true }), sigA, 2).block === false);
+ok("a READ call is never held after a timeout", C.repeatDecision(Object.assign({}, prevTimeout, { mutating: false, at: Date.now() }), sigA, 1).block === false);
+ok("the hold expires with the repeat window (an old timeout does not block a later retry)", C.repeatDecision(Object.assign({}, prevTimeoutMut, { at: Date.now() - C.REPEAT_WINDOW_MS - 1 }), sigA, 1).block === false);
+const offline = { sig: sigA, text: "ERROR MCP_CONNECTION_REFUSED: bridge not connected", klass: C.classify("x", "ERROR MCP_CONNECTION_REFUSED: bridge not connected"), at: Date.now() };
+ok("transient failures (offline bridge) are retried up to the budget, then blocked with a 'tell the user' reason", C.repeatDecision(offline, sigA, C.TRANSIENT_BUDGET - 1).block === false && C.repeatDecision(offline, sigA, C.TRANSIENT_BUDGET).block === true && /tell the user/.test(C.repeatDecision(offline, sigA, C.TRANSIENT_BUDGET).reason));
+ok("the transient budget block expires with the window too", C.repeatDecision(Object.assign({}, offline, { at: Date.now() - C.REPEAT_WINDOW_MS - 1 }), sigA, 9).block === false);
+ok("main.js feeds mutating / at / uncertainHeld into the decision and latches the hold once", main.includes("mutating: REPEAT.mutating, uncertainHeld: REPEAT.uncertainHeld") && main.includes("if (d.hold) REPEAT.uncertainHeld = true;") && main.includes("REPEAT.uncertainHeld = false;"));
 const prevRef = { sig: sigA, text: "ERROR in material_set: not found", klass: C.classify("x", "ERROR in material_set: not found") };
 ok("repeatDecision blocks a non-transient failure only from the 3rd identical attempt", C.repeatDecision(prevRef, sigA, 1).block === false && C.repeatDecision(prevRef, sigA, 2).block === false && C.repeatDecision(prevRef, sigA, 3).block === true);
 

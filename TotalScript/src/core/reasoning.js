@@ -1,4 +1,4 @@
-// TotalScript — Reasoning effort (1.86.0)
+// TotalScript — Reasoning effort (1.87.0)
 //
 // One setting, five levels: low · mid · high · max · ultimate. It does two things:
 //
@@ -320,8 +320,8 @@
   // Evidence gate for the agent loop (main.js): what a finishing run still owes
   // at this level. runTools = Set of bare tool names used in the run.
   const MUTATE_RE = /^(script_(create|set_source|replace|insert|append|module|new|delete_lines|rename_symbol|deprecations_fix|write|edit)|multi_edit|module_scaffold|blueprint_install|blueprint_configure|remote_scaffold|datastore_profile_scaffold|execute_luau|run_code|create_|insert_|set_property|set_properties|ui_(?!list_tree|audit|inspect|layout_report|export_spec)|gui_(?!hide|show)|fx_|vfx_|lighting_set|atmosphere|animation_(?!validate|compatibility|export)|tween_|write_file|edit_file|build_|place_|terrain_)/;
-  const VERIFY_RE = /^(script_read|script_check|script_analysis|script_lint|get_console_output|start_stop_play|total_debug|audit_script_errors|script_diff|project_index_changes|studio_playtest|inspect_instance|inspect|get_properties|total_screenshot|screen_capture|gfx_capture|screenshot_frame|ui_layout_report|ui_audit|quality_audit|read_file|list_children|get_children|playtest_)/;
-  const AUDIT_RE = /^(quality_audit|total_debug|start_stop_play|studio_playtest|get_console_output|audit_script_errors|script_analysis|playtest_)/;
+  const VERIFY_RE = /^(script_read|script_check|script_analysis|script_lint|get_console_output|start_stop_play|total_debug|script_diff|project_index_changes|studio_playtest|inspect_instance|inspect|get_properties|total_screenshot|screen_capture|gfx_capture|screenshot_frame|ui_layout_report|ui_audit|quality_audit|read_file|list_children|get_children|playtest_)/;
+  const AUDIT_RE = /^(quality_audit|total_debug|start_stop_play|studio_playtest|get_console_output|script_analysis|playtest_)/;
   function gate(level, runTools, state, extras) {
     const lvl = normalize(level);
     const st = state || {};
@@ -345,7 +345,7 @@
   }
 
   const api = {
-    PROFILE_KEYS, VERSION: "1.86.0", LEVELS, LEVEL_IDS, PROVIDERS, FOCUS, FOCUS_IDS, BOOST_TEXT, normalize, levelOf, rank, atLeast, providerOf, hasNative, modeFor, table, apply, gate, cleanExtras, effectiveProfile, promptExtras, extrasCount, _test: { pressed, shortLabel, findControl } };
+    PROFILE_KEYS, VERSION: "1.87.0", LEVELS, LEVEL_IDS, PROVIDERS, FOCUS, FOCUS_IDS, BOOST_TEXT, normalize, levelOf, rank, atLeast, providerOf, hasNative, modeFor, table, apply, gate, cleanExtras, effectiveProfile, promptExtras, extrasCount, _test: { pressed, shortLabel, findControl } };
   try { window.TotalReasoning = api; } catch {}
   try { if (typeof module !== "undefined" && module.exports) module.exports = api; } catch {}
 })();

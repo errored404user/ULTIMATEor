@@ -1,4 +1,5 @@
-// 100 extra Roblox Studio commands for TotalScript (x100 catalogue).
+// 100 extra Roblox Studio commands for TotalScript (x100 catalogue): 6 real
+// builders + 93 names kept only as hidden, explicit NOT_IMPLEMENTED stubs (1.87.0).
 // Patches RobloxScriptSkills after studio_skills.js loads.
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
@@ -28,15 +29,113 @@
     a = Array.isArray(a) ? a : d || [0, 0, 0];
     return "Vector3.new(" + nn(a[0]) + "," + nn(a[1]) + "," + nn(a[2]) + ")";
   };
+  // 1.87.0 — these 93 names NEVER did anything in Studio: their builders
+  // returned ok({...},'X configured') (or created an empty Script / looked a
+  // player up) and the agent reported success for work that did not happen.
+  // They stay callable so old transcripts, task lists and memories resolve,
+  // but they are hidden from the catalogue and FAIL before any Luau runs,
+  // naming the real command(s) that do the job. Do not add new entries here
+  // - implement the command or leave it out of the catalogue.
+  const NOT_IMPLEMENTED = {
+    projectile_launcher: "script_create (ServerScriptService) with the real launcher Luau, or execute_luau",
+    weapon_recoil_set: "a LocalScript via script_create that offsets Camera.CFrame on fire",
+    status_effect_apply: "player_damage / walkspeed_set / vfx_aura_create per effect, or execute_luau",
+    ammo_system_setup: "script_create for the weapon logic + ui_progress_bar / ui_create_screen for the HUD counter",
+    vehicle_chassis_create: "part_create (chassis + 4 wheels), seat_create, hinge_create / spring_create, or execute_luau",
+    plane_seat_setup: "seat_create + script_create for the flight controller",
+    boat_float_setup: "float_part / vector_force_create + seat_create",
+    teleport_pad_wire: "part_create for the pads + script_create (Touched -> character_teleport logic)",
+    zipline_create: "rope_create between two attachments + script_create",
+    conveyor_belt_create: "conveyor_create",
+    elevator_system_build: "part_create + tween_* commands or script_create",
+    rail_grind_setup: "execute_luau",
+    launch_pad_create: "jump_pad / speed_pad",
+    checkpoint_track_build: "spawn_location_create per checkpoint + script_create",
+    character_emote_play: "animation_motion_preset or the Animation Studio",
+    ik_control_setup: "execute_luau (IKControl instance)",
+    camera_shake_preset: "camera_shake / screen_shake",
+    ragdoll_death_enable: "ragdoll_make + script_create (Humanoid.Died)",
+    head_tracking_enable: "execute_luau (Neck Motor6D per RenderStepped)",
+    facial_animation_play: "execute_luau (FaceControls)",
+    footstep_sound_wire: "audio_create_sound + script_create (Humanoid.Running / FloorMaterial)",
+    anim_blend_space: "execute_luau (AnimationTrack weights)",
+    first_person_body_toggle: "execute_luau (LocalTransparencyModifier on the character parts)",
+    staircase_generate: "part_create per step (or execute_luau with a loop)",
+    fence_line_build: "part_create per post / rail (or execute_luau with a loop)",
+    bridge_suspension_make: "part_create + rope_create",
+    window_glass_install: "part_create with material Glass + transparency",
+    door_interactive_wire: "part_create + hinge_create + proximity_prompt_create + script_create",
+    archway_generate: "part_create (wedges / arcs) or execute_luau",
+    roof_structure_build: "part_create wedges or execute_luau",
+    dungeon_room_generate: "model_wall + part_create or execute_luau",
+    road_path_build: "part_create segments along the path or execute_luau",
+    tree_forest_scatter: "model_prefab (tree) + grid_clone / execute_luau scatter",
+    spring_constraint_set: "spring_create",
+    rope_pulley_setup: "rope_create",
+    gear_mechanism_build: "hinge_create (motor) + part_create",
+    destructible_wall_make: "model_wall + script_create (unanchor on hit)",
+    wind_force_zone: "vector_force_create or Workspace GlobalWind via set_property",
+    floating_water_craft: "float_part + seat_create",
+    magnetic_part_setup: "execute_luau (AlignPosition / LineForce)",
+    ragdoll_joint_tune: "ragdoll_make then set_property on the BallSocketConstraints",
+    gravity_zone_create: "gravity_set (global) or execute_luau (zone script)",
+    chain_constraint_build: "constraint_create (BallSocket chain) + part_create",
+    dialogue_tree_create: "dialog_create / dialog_confirm",
+    quest_tracker_wire: "ui_create_screen + datastore_setup + script_create",
+    item_drop_spawn: "part_create / model_prefab + proximity_prompt_create",
+    chest_loot_create: "model_prefab + proximity_prompt_create + script_create",
+    badge_award_setup: "script_create (BadgeService:AwardBadge)",
+    daily_reward_system: "datastore_setup + script_create",
+    shop_category_build: "shop_ui",
+    trading_system_setup: "remote_setup + ui_create_screen + script_create",
+    crafting_bench_wire: "proximity_prompt_create + ui_create_screen + script_create",
+    spin_wheel_create: "ui_create_screen + tween_* or execute_luau",
+    snowfall_weather_set: "weather_snow",
+    volcanic_eruption_fx: "vfx_burst_create / particle_emitter_create + fx_create_vfx",
+    rain_puddle_effect: "weather_rain + part_create (puddle decals)",
+    sandstorm_effect_set: "atmosphere_set + particle_emitter_create",
+    underwater_effect_enable: "atmosphere_set / lighting_set_preset + execute_luau (ColorCorrection)",
+    aurora_borealis_set: "beam_create / vfx_beam_arc_create + lighting_set_preset",
+    firefly_field_spawn: "particle_emitter_create",
+    portal_vfx_create: "fx_create_vfx / vfx_aura_create",
+    beam_laser_grid: "beam_create per laser (or execute_luau with a loop)",
+    cloud_layer_build: "clouds_set",
+    health_bar_boss_create: "ui_progress_bar + script_create",
+    mini_map_setup: "execute_luau (ViewportFrame camera)",
+    notification_toast_show: "toast_show",
+    radial_menu_build: "ui_create_screen (radial layout) or execute_luau",
+    damage_vignette_setup: "ui_create_screen (ImageLabel) + script_create",
+    level_up_ui_show: "ui_create_screen + toast_show",
+    crosshair_dynamic_wire: "crosshair_set",
+    scoreboard_tab_setup: "leaderboard_setup / leaderstats_add",
+    status_bar_custom: "ui_progress_bar",
+    loading_screen_build: "loading_show / ui_create_screen",
+    background_music_playlist: "audio_create_sound + script_create (Ended -> next track)",
+    sound_zone_reverb: "set_property SoundService.AmbientReverb or sfx_ambient_zone_create",
+    ui_sound_effects_wire: "audio_create_sound + script_create (MouseEnter / Activated)",
+    radio_station_setup: "voice_radio",
+    directional_audio_emitter: "audio_create_sound parented to a part (3D) + audio_volume",
+    voice_chat_proximity_set: "proximity_setup or set_property VoiceChatService",
+    footstep_surface_map: "audio_create_sound per material + script_create",
+    ambient_creature_sounds: "sfx_ambient_zone_create / ambient_loop",
+    impact_sound_effect: "sfx_event_define + sfx_event_play",
+    audio_muffler_underwater: "execute_luau (EqualizerSoundEffect on SoundService)",
+    anti_exploit_speed_check: "script_create (server-side HumanoidRootPart delta check)",
+    anti_exploit_fly_check: "script_create (server-side ground raycast check)",
+    admin_command_bar: "ui_create_screen + script_create (Players.Chatted)",
+    performance_monitor_gui: "ui_create_screen + script_create (Stats service)",
+    audit_unanchored_parts: "query_instances {kind:\"unanchored\"}",
+    audit_script_errors: "diagnostics_audit / script_analysis / get_console_output",
+    session_analytics_track: "script_create (AnalyticsService) + datastore_setup",
+    place_backup_save: "script_backup (per script) - whole-place saves need File > Save in Studio",
+    network_bandwidth_monitor: "network_ping or execute_luau (Stats.DataReceiveKbps)",
+    server_auto_restart: "script_create (TeleportService soft shutdown)",
+  };
+  const notImplementedError = (op) => "ERROR NOT_IMPLEMENTED calling '" + op + "': this command is not supported in this build - it was NOT run and nothing was created or changed. Use " + NOT_IMPLEMENTED[op] + " instead.";
+
   const B = {};
   B.weapon_hitbox_create = function (a) {
     return "local p=partOf(resolve(" + q(a.part || "Tool.Handle") + ")) if not p then return fail('weapon part not found') end\n" + "local h=Instance.new('Part') h.Name='Hitbox' h.Size=p.Size+Vector3.new(1,1,2) h.Transparency=1 h.CanCollide=false h.CFrame=p.CFrame h.Parent=p\n" + "return ok({path=h:GetFullName(),damage=" + nn(a.damage,20) + "},'hitbox created')";
-  };
-  B.projectile_launcher = function (a) {
-    return "local p=partOf(resolve(" + q(a.origin || "Workspace") + ")) or workspace\n" + "local s=Instance.new('Script') s.Name='ProjectileLauncher' s.Parent=ServerScriptService\n" + "return ok({script=s:GetFullName(),speed=" + nn(a.speed,120) + "},'projectile launcher wired')";
-  };
-  B.weapon_recoil_set = function (a) {
-    return "return ok({pitch=" + nn(a.recoil_pitch,3.5) + ",yaw=" + nn(a.recoil_yaw,1.2) + "},'weapon recoil set')";
   };
   B.shield_bubble_create = function (a) {
     return "local pl=firstPlayer() local hrp=hrpOf(pl) if not hrp then return fail('player hrp not found') end\n" + "local sh=Instance.new('Part') sh.Name='ShieldBubble' sh.Shape=Enum.PartType.Ball sh.Size=Vector3.new(" + nn(a.radius,12)*2 + "," + nn(a.radius,12)*2 + "," + nn(a.radius,12)*2 + ") sh.Color=" + cc(a.color,[100,200,255]) + " sh.Transparency=0.5 sh.Material=Enum.Material.ForceField sh.CFrame=hrp.CFrame sh.Anchored=true sh.Parent=workspace\n" + "return ok({path=sh:GetFullName(),radius=" + nn(a.radius,12) + "},'shield bubble created')";
@@ -44,289 +143,16 @@
   B.damage_indicator_show = function (a) {
     return "local pos=" + vv(a.position,[0,10,0]) + "\n" + "local bg=Instance.new('BillboardGui') bg.Name='DamageIndicator' bg.Size=UDim2.new(0,100,0,50) bg.AlwaysOnTop=true bg.StudsOffset=Vector3.new(0,3,0)\n" + "local txt=Instance.new('TextLabel') txt.Size=UDim2.new(1,0,1,0) txt.Text=tostring(" + nn(a.damage,50) + ") txt.TextColor3=" + (a.is_critical ? "Color3.fromRGB(255,50,50)" : "Color3.fromRGB(255,220,50)") + " txt.TextScaled=true txt.BackgroundTransparency=1 txt.Parent=bg\n" + "local p=Instance.new('Part') p.Transparency=1 p.Anchored=true p.Position=pos bg.Parent=p p.Parent=workspace Debris:AddItem(p,2)\n" + "return ok({damage=" + nn(a.damage,50) + "},'damage indicator spawned')";
   };
-  B.ammo_system_setup = function (a) {
-    return "return ok({clipSize=" + nn(a.clip_size,30) + ",maxAmmo=" + nn(a.max_ammo,120) + ",reloadTime=" + nn(a.reload_time,2.2) + "},'ammo system configured')";
-  };
   B.target_dummy_spawn = function (a) {
     return "local pos=" + vv(a.position,[0,5,0]) + "\n" + "local d=Instance.new('Model') d.Name='TargetDummy' local p=Instance.new('Part') p.Name='HumanoidRootPart' p.Size=Vector3.new(2,5,2) p.Position=pos p.Parent=d d.PrimaryPart=p local h=Instance.new('Humanoid') h.MaxHealth=" + nn(a.health,500) + " h.Health=" + nn(a.health,500) + " h.Parent=d d.Parent=workspace\n" + "return ok({path=d:GetFullName(),health=h.MaxHealth},'target dummy spawned')";
   };
   B.knockback_apply = function (a) {
     return "local p=partOf(resolve(" + q(a.target || "") + ")) or hrpOf(firstPlayer()) if not p then return fail('target part not found') end\n" + "local dir=" + vv(a.direction,[0,1,-1]) + ".Unit\n" + "p.AssemblyLinearVelocity=dir*" + nn(a.force,80) + "\n" + "return ok({target=p:GetFullName(),force=" + nn(a.force,80) + "},'knockback applied')";
   };
-  B.status_effect_apply = function (a) {
-    return "local pl=findPlayer(" + q(a.target || "") + ") if not pl then return fail('player not found') end\n" + "return ok({player=pl.Name,effect=" + q(a.effect || "Burn") + ",duration=" + nn(a.duration,5) + "},'status effect applied')";
-  };
   B.weapon_trail_enable = function (a) {
     return "local p=partOf(resolve(" + q(a.part || "") + ")) if not p then return fail('part not found') end\n" + "local a0=Instance.new('Attachment') a0.Name='TrailA0' a0.Position=Vector3.new(0,-1,0) a0.Parent=p\n" + "local a1=Instance.new('Attachment') a1.Name='TrailA1' a1.Position=Vector3.new(0,2,0) a1.Parent=p\n" + "local tr=Instance.new('Trail') tr.Name='SlashTrail' tr.Attachment0=a0 tr.Attachment1=a1 tr.Color=ColorSequence.new(" + cc(a.color,[255,200,100]) + ") tr.Lifetime=" + nn(a.lifetime,0.4) + " tr.Parent=p\n" + "return ok({path=tr:GetFullName()},'weapon trail attached')";
   };
-  B.vehicle_chassis_create = function (a) {
-    return "return ok({tool=" + q(a.name || 'vehicle_chassis_create') + "},'vehicle_chassis_create configured')";
-  };
-  B.plane_seat_setup = function (a) {
-    return "return ok({tool=" + q(a.name || 'plane_seat_setup') + "},'plane_seat_setup configured')";
-  };
-  B.boat_float_setup = function (a) {
-    return "return ok({tool=" + q(a.name || 'boat_float_setup') + "},'boat_float_setup configured')";
-  };
-  B.teleport_pad_wire = function (a) {
-    return "return ok({tool=" + q(a.name || 'teleport_pad_wire') + "},'teleport_pad_wire configured')";
-  };
-  B.zipline_create = function (a) {
-    return "return ok({tool=" + q(a.name || 'zipline_create') + "},'zipline_create configured')";
-  };
-  B.conveyor_belt_create = function (a) {
-    return "return ok({tool=" + q(a.name || 'conveyor_belt_create') + "},'conveyor_belt_create configured')";
-  };
-  B.elevator_system_build = function (a) {
-    return "return ok({tool=" + q(a.name || 'elevator_system_build') + "},'elevator_system_build configured')";
-  };
-  B.rail_grind_setup = function (a) {
-    return "return ok({tool=" + q(a.name || 'rail_grind_setup') + "},'rail_grind_setup configured')";
-  };
-  B.launch_pad_create = function (a) {
-    return "return ok({tool=" + q(a.name || 'launch_pad_create') + "},'launch_pad_create configured')";
-  };
-  B.checkpoint_track_build = function (a) {
-    return "return ok({tool=" + q(a.name || 'checkpoint_track_build') + "},'checkpoint_track_build configured')";
-  };
   // cutscene_camera_track: moved to src/core/skills/studio_cutscene.js (1.77.0) - it was a no-op stub here.
-  B.character_emote_play = function (a) {
-    return "return ok({tool=" + q(a.name || 'character_emote_play') + "},'character_emote_play configured')";
-  };
-  B.ik_control_setup = function (a) {
-    return "return ok({tool=" + q(a.name || 'ik_control_setup') + "},'ik_control_setup configured')";
-  };
-  B.camera_shake_preset = function (a) {
-    return "return ok({tool=" + q(a.name || 'camera_shake_preset') + "},'camera_shake_preset configured')";
-  };
-  B.ragdoll_death_enable = function (a) {
-    return "return ok({tool=" + q(a.name || 'ragdoll_death_enable') + "},'ragdoll_death_enable configured')";
-  };
-  B.head_tracking_enable = function (a) {
-    return "return ok({tool=" + q(a.name || 'head_tracking_enable') + "},'head_tracking_enable configured')";
-  };
-  B.facial_animation_play = function (a) {
-    return "return ok({tool=" + q(a.name || 'facial_animation_play') + "},'facial_animation_play configured')";
-  };
-  B.footstep_sound_wire = function (a) {
-    return "return ok({tool=" + q(a.name || 'footstep_sound_wire') + "},'footstep_sound_wire configured')";
-  };
-  B.anim_blend_space = function (a) {
-    return "return ok({tool=" + q(a.name || 'anim_blend_space') + "},'anim_blend_space configured')";
-  };
-  B.first_person_body_toggle = function (a) {
-    return "return ok({tool=" + q(a.name || 'first_person_body_toggle') + "},'first_person_body_toggle configured')";
-  };
-  B.staircase_generate = function (a) {
-    return "return ok({tool=" + q(a.name || 'staircase_generate') + "},'staircase_generate configured')";
-  };
-  B.fence_line_build = function (a) {
-    return "return ok({tool=" + q(a.name || 'fence_line_build') + "},'fence_line_build configured')";
-  };
-  B.bridge_suspension_make = function (a) {
-    return "return ok({tool=" + q(a.name || 'bridge_suspension_make') + "},'bridge_suspension_make configured')";
-  };
-  B.window_glass_install = function (a) {
-    return "return ok({tool=" + q(a.name || 'window_glass_install') + "},'window_glass_install configured')";
-  };
-  B.door_interactive_wire = function (a) {
-    return "return ok({tool=" + q(a.name || 'door_interactive_wire') + "},'door_interactive_wire configured')";
-  };
-  B.archway_generate = function (a) {
-    return "return ok({tool=" + q(a.name || 'archway_generate') + "},'archway_generate configured')";
-  };
-  B.roof_structure_build = function (a) {
-    return "return ok({tool=" + q(a.name || 'roof_structure_build') + "},'roof_structure_build configured')";
-  };
-  B.dungeon_room_generate = function (a) {
-    return "return ok({tool=" + q(a.name || 'dungeon_room_generate') + "},'dungeon_room_generate configured')";
-  };
-  B.road_path_build = function (a) {
-    return "return ok({tool=" + q(a.name || 'road_path_build') + "},'road_path_build configured')";
-  };
-  B.tree_forest_scatter = function (a) {
-    return "return ok({tool=" + q(a.name || 'tree_forest_scatter') + "},'tree_forest_scatter configured')";
-  };
-  B.spring_constraint_set = function (a) {
-    return "return ok({tool=" + q(a.name || 'spring_constraint_set') + "},'spring_constraint_set configured')";
-  };
-  B.rope_pulley_setup = function (a) {
-    return "return ok({tool=" + q(a.name || 'rope_pulley_setup') + "},'rope_pulley_setup configured')";
-  };
-  B.gear_mechanism_build = function (a) {
-    return "return ok({tool=" + q(a.name || 'gear_mechanism_build') + "},'gear_mechanism_build configured')";
-  };
-  B.destructible_wall_make = function (a) {
-    return "return ok({tool=" + q(a.name || 'destructible_wall_make') + "},'destructible_wall_make configured')";
-  };
-  B.wind_force_zone = function (a) {
-    return "return ok({tool=" + q(a.name || 'wind_force_zone') + "},'wind_force_zone configured')";
-  };
-  B.floating_water_craft = function (a) {
-    return "return ok({tool=" + q(a.name || 'floating_water_craft') + "},'floating_water_craft configured')";
-  };
-  B.magnetic_part_setup = function (a) {
-    return "return ok({tool=" + q(a.name || 'magnetic_part_setup') + "},'magnetic_part_setup configured')";
-  };
-  B.ragdoll_joint_tune = function (a) {
-    return "return ok({tool=" + q(a.name || 'ragdoll_joint_tune') + "},'ragdoll_joint_tune configured')";
-  };
-  B.gravity_zone_create = function (a) {
-    return "return ok({tool=" + q(a.name || 'gravity_zone_create') + "},'gravity_zone_create configured')";
-  };
-  B.chain_constraint_build = function (a) {
-    return "return ok({tool=" + q(a.name || 'chain_constraint_build') + "},'chain_constraint_build configured')";
-  };
-  B.dialogue_tree_create = function (a) {
-    return "return ok({tool=" + q(a.name || 'dialogue_tree_create') + "},'dialogue_tree_create configured')";
-  };
-  B.quest_tracker_wire = function (a) {
-    return "return ok({tool=" + q(a.name || 'quest_tracker_wire') + "},'quest_tracker_wire configured')";
-  };
-  B.item_drop_spawn = function (a) {
-    return "return ok({tool=" + q(a.name || 'item_drop_spawn') + "},'item_drop_spawn configured')";
-  };
-  B.chest_loot_create = function (a) {
-    return "return ok({tool=" + q(a.name || 'chest_loot_create') + "},'chest_loot_create configured')";
-  };
-  B.badge_award_setup = function (a) {
-    return "return ok({tool=" + q(a.name || 'badge_award_setup') + "},'badge_award_setup configured')";
-  };
-  B.daily_reward_system = function (a) {
-    return "return ok({tool=" + q(a.name || 'daily_reward_system') + "},'daily_reward_system configured')";
-  };
-  B.shop_category_build = function (a) {
-    return "return ok({tool=" + q(a.name || 'shop_category_build') + "},'shop_category_build configured')";
-  };
-  B.trading_system_setup = function (a) {
-    return "return ok({tool=" + q(a.name || 'trading_system_setup') + "},'trading_system_setup configured')";
-  };
-  B.crafting_bench_wire = function (a) {
-    return "return ok({tool=" + q(a.name || 'crafting_bench_wire') + "},'crafting_bench_wire configured')";
-  };
-  B.spin_wheel_create = function (a) {
-    return "return ok({tool=" + q(a.name || 'spin_wheel_create') + "},'spin_wheel_create configured')";
-  };
-  B.snowfall_weather_set = function (a) {
-    return "return ok({tool=" + q(a.name || 'snowfall_weather_set') + "},'snowfall_weather_set configured')";
-  };
-  B.volcanic_eruption_fx = function (a) {
-    return "return ok({tool=" + q(a.name || 'volcanic_eruption_fx') + "},'volcanic_eruption_fx configured')";
-  };
-  B.rain_puddle_effect = function (a) {
-    return "return ok({tool=" + q(a.name || 'rain_puddle_effect') + "},'rain_puddle_effect configured')";
-  };
-  B.sandstorm_effect_set = function (a) {
-    return "return ok({tool=" + q(a.name || 'sandstorm_effect_set') + "},'sandstorm_effect_set configured')";
-  };
-  B.underwater_effect_enable = function (a) {
-    return "return ok({tool=" + q(a.name || 'underwater_effect_enable') + "},'underwater_effect_enable configured')";
-  };
-  B.aurora_borealis_set = function (a) {
-    return "return ok({tool=" + q(a.name || 'aurora_borealis_set') + "},'aurora_borealis_set configured')";
-  };
-  B.firefly_field_spawn = function (a) {
-    return "return ok({tool=" + q(a.name || 'firefly_field_spawn') + "},'firefly_field_spawn configured')";
-  };
-  B.portal_vfx_create = function (a) {
-    return "return ok({tool=" + q(a.name || 'portal_vfx_create') + "},'portal_vfx_create configured')";
-  };
-  B.beam_laser_grid = function (a) {
-    return "return ok({tool=" + q(a.name || 'beam_laser_grid') + "},'beam_laser_grid configured')";
-  };
-  B.cloud_layer_build = function (a) {
-    return "return ok({tool=" + q(a.name || 'cloud_layer_build') + "},'cloud_layer_build configured')";
-  };
-  B.health_bar_boss_create = function (a) {
-    return "return ok({tool=" + q(a.name || 'health_bar_boss_create') + "},'health_bar_boss_create configured')";
-  };
-  B.mini_map_setup = function (a) {
-    return "return ok({tool=" + q(a.name || 'mini_map_setup') + "},'mini_map_setup configured')";
-  };
-  B.notification_toast_show = function (a) {
-    return "return ok({tool=" + q(a.name || 'notification_toast_show') + "},'notification_toast_show configured')";
-  };
-  B.radial_menu_build = function (a) {
-    return "return ok({tool=" + q(a.name || 'radial_menu_build') + "},'radial_menu_build configured')";
-  };
-  B.damage_vignette_setup = function (a) {
-    return "return ok({tool=" + q(a.name || 'damage_vignette_setup') + "},'damage_vignette_setup configured')";
-  };
-  B.level_up_ui_show = function (a) {
-    return "return ok({tool=" + q(a.name || 'level_up_ui_show') + "},'level_up_ui_show configured')";
-  };
-  B.crosshair_dynamic_wire = function (a) {
-    return "return ok({tool=" + q(a.name || 'crosshair_dynamic_wire') + "},'crosshair_dynamic_wire configured')";
-  };
-  B.scoreboard_tab_setup = function (a) {
-    return "return ok({tool=" + q(a.name || 'scoreboard_tab_setup') + "},'scoreboard_tab_setup configured')";
-  };
-  B.status_bar_custom = function (a) {
-    return "return ok({tool=" + q(a.name || 'status_bar_custom') + "},'status_bar_custom configured')";
-  };
-  B.loading_screen_build = function (a) {
-    return "return ok({tool=" + q(a.name || 'loading_screen_build') + "},'loading_screen_build configured')";
-  };
-  B.background_music_playlist = function (a) {
-    return "return ok({tool=" + q(a.name || 'background_music_playlist') + "},'background_music_playlist configured')";
-  };
-  B.sound_zone_reverb = function (a) {
-    return "return ok({tool=" + q(a.name || 'sound_zone_reverb') + "},'sound_zone_reverb configured')";
-  };
-  B.ui_sound_effects_wire = function (a) {
-    return "return ok({tool=" + q(a.name || 'ui_sound_effects_wire') + "},'ui_sound_effects_wire configured')";
-  };
-  B.radio_station_setup = function (a) {
-    return "return ok({tool=" + q(a.name || 'radio_station_setup') + "},'radio_station_setup configured')";
-  };
-  B.directional_audio_emitter = function (a) {
-    return "return ok({tool=" + q(a.name || 'directional_audio_emitter') + "},'directional_audio_emitter configured')";
-  };
-  B.voice_chat_proximity_set = function (a) {
-    return "return ok({tool=" + q(a.name || 'voice_chat_proximity_set') + "},'voice_chat_proximity_set configured')";
-  };
-  B.footstep_surface_map = function (a) {
-    return "return ok({tool=" + q(a.name || 'footstep_surface_map') + "},'footstep_surface_map configured')";
-  };
-  B.ambient_creature_sounds = function (a) {
-    return "return ok({tool=" + q(a.name || 'ambient_creature_sounds') + "},'ambient_creature_sounds configured')";
-  };
-  B.impact_sound_effect = function (a) {
-    return "return ok({tool=" + q(a.name || 'impact_sound_effect') + "},'impact_sound_effect configured')";
-  };
-  B.audio_muffler_underwater = function (a) {
-    return "return ok({tool=" + q(a.name || 'audio_muffler_underwater') + "},'audio_muffler_underwater configured')";
-  };
-  B.anti_exploit_speed_check = function (a) {
-    return "return ok({tool=" + q(a.name || 'anti_exploit_speed_check') + "},'anti_exploit_speed_check configured')";
-  };
-  B.anti_exploit_fly_check = function (a) {
-    return "return ok({tool=" + q(a.name || 'anti_exploit_fly_check') + "},'anti_exploit_fly_check configured')";
-  };
-  B.admin_command_bar = function (a) {
-    return "return ok({tool=" + q(a.name || 'admin_command_bar') + "},'admin_command_bar configured')";
-  };
-  B.performance_monitor_gui = function (a) {
-    return "return ok({tool=" + q(a.name || 'performance_monitor_gui') + "},'performance_monitor_gui configured')";
-  };
-  B.audit_unanchored_parts = function (a) {
-    return "return ok({tool=" + q(a.name || 'audit_unanchored_parts') + "},'audit_unanchored_parts configured')";
-  };
-  B.audit_script_errors = function (a) {
-    return "return ok({tool=" + q(a.name || 'audit_script_errors') + "},'audit_script_errors configured')";
-  };
-  B.session_analytics_track = function (a) {
-    return "return ok({tool=" + q(a.name || 'session_analytics_track') + "},'session_analytics_track configured')";
-  };
-  B.place_backup_save = function (a) {
-    return "return ok({tool=" + q(a.name || 'place_backup_save') + "},'place_backup_save configured')";
-  };
-  B.network_bandwidth_monitor = function (a) {
-    return "return ok({tool=" + q(a.name || 'network_bandwidth_monitor') + "},'network_bandwidth_monitor configured')";
-  };
-  B.server_auto_restart = function (a) {
-    return "return ok({tool=" + q(a.name || 'server_auto_restart') + "},'server_auto_restart configured')";
-  };
 
   const C = [
     { name: "weapon_hitbox_create", description: "Create an animated or raycast melee hitbox attached to a weapon part.", params: {"part": {"type": "string", "req": false, "desc": "weapon part path"}, "damage": {"type": "number", "req": false, "desc": "damage dealt"}, "cooldown": {"type": "number", "req": false, "desc": "hit cooldown seconds"}} },
@@ -448,6 +274,7 @@
   function head() { return (typeof RobloxScriptSkills.X200_HEAD === "string" && RobloxScriptSkills.X200_HEAD) || FALLBACK_HEAD; }
 
   function buildX100(op, args) {
+    if (Object.prototype.hasOwnProperty.call(NOT_IMPLEMENTED, op)) return { err: notImplementedError(op) };
     if (typeof B[op] === "function") {
       try {
         return { code: head() + "\n" + B[op](args || {}) };
@@ -467,6 +294,7 @@
   };
 
   for (const item of C) {
+    if (Object.prototype.hasOwnProperty.call(NOT_IMPLEMENTED, item.name)) { item.hidden = true; item.description = "Not implemented in this build (fails with a hint; use " + NOT_IMPLEMENTED[item.name] + ")."; }
     RobloxScriptSkills.SKILL_COMMANDS.push(item);
   }
   RobloxScriptSkills.SKILL_OPS = RobloxScriptSkills.SKILL_COMMANDS.map((c) => c.name);

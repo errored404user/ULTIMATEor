@@ -148,7 +148,7 @@ const SEND_D = "M.244 7.921 18.202.03c.254-.111.528.115.452.373L14.51 14.345a.33
   ok("overlay.css: .rs-prov-mimo skin (Xiaomi orange) + flat anchored/inline variants", /#rs-bar\.rs-prov-mimo \{[^}]*--accent: #ff6900/.test(css) && css.includes("#rs-bar.rs-bar-inline.rs-prov-mimo,") && css.includes("#rs-bar.rs-bar-anchored.rs-prov-mimo {") && css.includes("html.rs-light #rs-bar.rs-bar-anchored.rs-prov-mimo {"));
   const readme = read("README.md");
   ok("README: 1.80.0 entry, supported-site list, test listed", /\*\*1\.80\.0 — Xiaomi MiMo Studio/.test(readme) && /Xiaomi MiMo Studio/.test(readme.split("\n")[4] || "") && readme.includes("tests/test-mimo.js"));
-  ok("version pins 1.86.0", manifest.version === "1.86.0" && /^version = "1\.86\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.86.0"'));
+  ok("version pins 1.87.0", manifest.version === "1.87.0" && /^version = "1\.87\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.87.0"'));
 
   console.log(`\n${n - failed}/${n} checks passed`);
   process.exit(failed ? 1 : 0);

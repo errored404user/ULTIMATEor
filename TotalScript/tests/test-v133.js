@@ -39,7 +39,7 @@ for (const n of ["inspect_workspace", "query_scripts", "query_unanchored_parts",
 }
 for (const n of ["size_set", "color_set", "walkspeed_set", "anchored_set", "api_request", "set_property", "collision_set", "humanoid_health_set"]) assert(!hidden.has(n), n + " stays visible");
 const visible = S.SKILL_COMMANDS.filter((c) => !c.hidden).length;
-assert(visible < 700 && visible > 600, "visible Studio commands trimmed to ~" + visible); // 1.82.0: +15 VFX / SFX / sequence commands; 1.77.0: +8 real cutscene commands (the stub became 9 commands, one hidden alias); 1.78.0: +7 art-direction commands (2 more hidden)
+assert(visible < 700 && visible > 550, "visible Studio commands trimmed to ~" + visible); // 1.87.0: -93 (the x100 pack's fake-success stubs are hidden NOT_IMPLEMENTED names now - tests/test-not-implemented.js); 1.82.0: +15 VFX / SFX / sequence commands; 1.77.0: +8 real cutscene commands (the stub became 9 commands, one hidden alias); 1.78.0: +7 art-direction commands (2 more hidden)
 const described = S.describeCommands();
 assert(!described.some((l) => /^inspect_workspace:/.test(l)), "describeCommands hides legacy aliases by default");
 assert(described.some((l) => /^inspect_service:/.test(l)) && described.some((l) => /^query_instances:/.test(l)), "describeCommands lists the new commands");

@@ -2053,21 +2053,21 @@
     creation: [
       { id: "scripts",
         did: /^(script_create|script_set_source|multi_edit|script_replace|script_insert|script_append|script_module|script_new|module_scaffold|blueprint_install|blueprint_configure|remote_scaffold|datastore_profile_scaffold|script_delete_lines|script_rename_symbol|script_deprecations_fix)$/,
-        proof: /^(script_read|script_check|script_analysis|script_lint|get_console_output|start_stop_play|total_debug|blueprint_verify|audit_script_errors|script_diff|project_index_changes|studio_playtest)$/,
+        proof: /^(script_read|script_check|script_analysis|script_lint|get_console_output|start_stop_play|total_debug|blueprint_verify|script_diff|project_index_changes|studio_playtest)$/,
         nudge: "SCRIPTS: you wrote or changed scripts in this run but never verified them - script_read the changed script(s) back, run script_check (or script_lint), then start_stop_play + get_console_output (or total_debug) and fix anything it reports." },
       { id: "look",
         did: /^(fx_|vfx_|lighting|atmosphere|sky|clouds|bloom|blur|color_correction|postfx|sunrays|fog|ui_(?!list_tree|audit|inspect|image_find|art_theme_get)|gui_(?!hide|show)|design_tokens_set|design_kit_install|beam|trail|point_light|spot_light|surface_light|fire_add|smoke_add|sparkles|highlight|portal_|gfx_(stage|subject|prop|overlay|fx|camera|lighting|pose))/,
         proof: /^(total_screenshot|gfx_capture|screen_capture|screenshot_frame|lighting_time_lapse)$/,
         nudge: "LOOK: you changed the look of the place in this run but never looked at it - take total_screenshot {target:\"studio\"} now, judge it as an art director (contrast, hierarchy, colour harmony, readability) and run one polish pass on what it shows." },
       { id: "motion",
-        did: /^(animation_(create|set_pose|add_keyframe|update_keyframe|motion_preset|stagger_parts|set_easing|mirror|retime|reverse|import|move_keyframe|clone_keyframe)|tween_(create|sequence)|spring_create|cutscene_(create|camera_track|shot_add|shot_from_camera|shots_from_path|trigger)|ik_control_setup)$/,
+        did: /^(animation_(create|set_pose|add_keyframe|update_keyframe|motion_preset|stagger_parts|set_easing|mirror|retime|reverse|import|move_keyframe|clone_keyframe)|tween_(create|sequence)|spring_create|cutscene_(create|camera_track|shot_add|shot_from_camera|shots_from_path|trigger))$/,
         proof: /^(animation_preview|animation_test|animation_simulate|camera_orbit_preview|cutscene_preview|total_screenshot|start_stop_play|studio_playtest)$/,
         nudge: "MOTION: motion was created in this run but never previewed - run animation_preview now (animation_test for an exported clip, start_stop_play for tweens / camera work), judge timing, arcs, weight and loop seams, fix and preview again." },
       // 1.47.0: the QUALITY gate - substantial build / UI / system output that
       // was never scored. Deliberately narrow (generators and screens, not a
       // single part_create or a bug fix) so small edits never trip it.
       { id: "quality",
-        did: /^(model_build|model_wall|model_hollow_box|model_pipe|model_array_radial|model_union|model_subtract|staircase_generate|archway_generate|roof_structure_build|generate_procedural_model|ui_screen_generate|ui_from_spec|ui_design_system_create|ui_responsive_hud_create|ui_build|blueprint_install|design_kit_install)$/,
+        did: /^(model_build|model_wall|model_hollow_box|model_pipe|model_array_radial|model_union|model_subtract|generate_procedural_model|ui_screen_generate|ui_from_spec|ui_design_system_create|ui_responsive_hud_create|ui_build|blueprint_install|design_kit_install)$/,
         proof: /^(quality_audit)$/,
         nudge: "QUALITY: you built or generated content in this run but never scored it - run quality_audit {path} now (whole place when nothing else fits), quality_fix the mechanical findings, fix the high / medium ones yourself (palette from style_guide / brief_get, lighting, layout, scripts), re-run until the score is >= 85 and put the score in the report." },
     ],
@@ -4789,7 +4789,14 @@
         } catch {}
       }
       const built = RobloxScriptSkills.buildLuau(name, args);
-      if (built.err) return built.err;
+      if (built.err) {
+        // 1.87.0: a builder refusal (NOT_IMPLEMENTED stub, bad args) is a
+        // failed tool call: classify it like any other and record it in the
+        // session, so the activity feed / loop guard see it (nothing ran).
+        const errRes = contractAnnotate(name, String(built.err), prepS);
+        try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(name, args, false, errRes); } catch {}
+        return errRes;
+      }
       const slowBudget = SLOW_SKILL_RE.test(name) ? 90000 : 0;
       let res = await runSkillLuau(built, slowBudget);
       // A big place can push project_index_build past the transport budget on
@@ -6353,7 +6360,7 @@
   //  SESSION BOOTSTRAP  ("Starting Up" animated chip, shown in the conversation)
   // ════════════════════════════════════════════════════════════════════════
   // Repeat guard: the same failing call sent twice in a row gets a loop-guard rider.
-  const REPEAT = { sig: "", count: 0, text: "", klass: null };
+  const REPEAT = { sig: "", count: 0, text: "", klass: null, at: 0, mutating: false, uncertainHeld: false };
   function repeatSignature(call) {
     try { if (CONTRACT) return CONTRACT.signature(call.tool, call.arguments || {}); } catch {}
     try { return String(call.tool || "") + "|" + JSON.stringify(call.arguments || {}); } catch { return String(call.tool || ""); }
@@ -6367,11 +6374,15 @@
     if (!CONTRACT || !REPEAT.sig) return null;
     try {
       const sig = repeatSignature(call);
-      const d = CONTRACT.repeatDecision({ sig: REPEAT.sig, text: REPEAT.text, klass: REPEAT.klass }, sig, REPEAT.count);
+      const d = CONTRACT.repeatDecision({ sig: REPEAT.sig, text: REPEAT.text, klass: REPEAT.klass, at: REPEAT.at, mutating: REPEAT.mutating, uncertainHeld: REPEAT.uncertainHeld }, sig, REPEAT.count);
       if (!d.block) return null;
+      // 1.87.0: the post-timeout hold fires once per failure - the model is
+      // told to read the state back; its next identical call goes through.
+      if (d.hold) REPEAT.uncertainHeld = true;
       REPEAT.count++;
       diag("tool.repeatBlocked", { name: call.tool, n: REPEAT.count, reason: d.reason.slice(0, 80) });
-      return String(REPEAT.text || "ERROR: the previous identical call failed.").replace(/\n\[LOOP GUARD\][\s\S]*$/, "") + `\n\n[LOOP GUARD] NOT RUN: ${d.reason}. Change the parameter the error names (or the approach) before sending again.${REPEAT.count >= 3 ? " Stop retrying this call." : ""}`;
+      const tail = d.hold ? "" : ` Change the parameter the error names (or the approach) before sending again.${REPEAT.count >= 3 ? " Stop retrying this call." : ""}`;
+      return String(REPEAT.text || "ERROR: the previous identical call failed.").replace(/\n\[LOOP GUARD\][\s\S]*$/, "") + `\n\n[LOOP GUARD] NOT RUN: ${d.reason}.${tail}`;
     } catch { return null; }
   }
   function applyRepeatGuard(call, feedback) {
@@ -6381,7 +6392,10 @@
     if (failed && sig === REPEAT.sig) REPEAT.count++;
     else { REPEAT.sig = failed ? sig : ""; REPEAT.count = failed ? 1 : 0; }
     REPEAT.text = failed ? text : "";
+    REPEAT.at = failed ? Date.now() : 0;
+    REPEAT.uncertainHeld = false;
     try { REPEAT.klass = failed && CONTRACT ? CONTRACT.classify(call.tool, text) : null; } catch { REPEAT.klass = null; }
+    try { const c = failed && CONTRACT ? CONTRACT.contract(call.tool) : null; REPEAT.mutating = c ? !!c.mutating : failed && !/^(get_|list_|query_|inspect_|search_|find_)/.test(String(call.tool || "").split("/").pop()); } catch { REPEAT.mutating = failed; }
     if (!failed || REPEAT.count < 2) return feedback;
     const n = REPEAT.count;
     diag("tool.repeatFail", { name: call.tool, n });
@@ -8524,10 +8538,12 @@
       if (steeringSendBtn) steeringSendBtn.disabled = !canSteer;
     }
     function steeringProgress(phase, detail, step) {
+      const changed = A.steeringPhase !== (phase || "idle");
       A.steeringPhase = phase || "idle";
       A.steeringDetail = String(detail || "").slice(0, 180);
       if (Number.isFinite(step)) A.steeringStep = Math.max(0, step);
       syncSteeringUi();
+      if (changed) { try { renderBar(); } catch {} } // the bar carries the phase too (loopPhaseSuffix)
     }
     function enqueueSteeringSteering(raw) {
       if (!steeringMode) return;
@@ -8544,7 +8560,9 @@
       }
       A.steeringQueue.push({ text, at: Date.now() });
       if (steeringInput) steeringInput.value = "";
-      steeringProgress( "Queued for the next safe command boundary", A.steeringStep);
+      // 1.87.0: phase, detail, step - the old call passed the sentence as the
+      // PHASE (label fell back to "Steering") and the step number as the detail.
+      steeringProgress(A.steeringPhase || "running", "Queued for the next safe command boundary", A.steeringStep);
       diag("steering.queued", { count: A.steeringQueue.length, len: text.length });
       toast("Steering queued — it will apply before the next command");
     }
@@ -10562,6 +10580,25 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     //  • session active   → live dot, "Agent active · N tools" (no action)
     //  • fresh blank chat → "Standby…" (or a bridge/Studio warning), action = Start
     //  • existing chat    → "No agent in this chat" (informs only, no action)
+    // 1.87.0: "Agent running — N tools" is the SESSION label; it stayed the same
+    // whether the loop was executing a command, waiting for the model, stopped
+    // by the user or idle between tasks, so the bar read "running" after Stop.
+    // Append the loop phase (the steering strip already tracks it) so the state
+    // is visible without opening Steering.
+    function loopPhaseSuffix() {
+      try {
+        if (!A.started || A.starting) return "";
+        if (A.toolRunning && A.toolName) return ` · running ${String(A.toolName).split("/").pop()}`;
+        if (A.stopping) return " · stopping";
+        const lbl = {
+          waiting: "waiting for the AI", reviewing: "reviewing the reply", running: "running a command",
+          sending: "sending the result", steering: "applying steering", correcting: "correcting the reply",
+          complete: "idle", stopped: "stopped", error: "needs attention", idle: "idle", starting: "",
+        }[A.steeringPhase || "idle"];
+        if (!lbl && A.running) return " · working";
+        return lbl ? ` · ${lbl}` : "";
+      } catch { return ""; }
+    }
     function renderBar() {
       // Agent state for MAIN-world taps (crax-net.js reads it to decide whether a
       // chat request belongs to an TotalScript session). The DOM is shared across worlds.
@@ -10639,7 +10676,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
             msg = `<b>Agent running</b> — AgentScript is offline, start bin/total-core.exe`;
           } else {
             toneClass = "active";
-            msg = `<b>Agent running</b>${tools ?  ` — ${tools} tools` : ""}`;
+            msg = `<b>Agent running</b>${tools ?  ` — ${tools} tools` : ""}${loopPhaseSuffix()}`;
           }
         } else if (_isUnrealStarted) {
           if ((placeDown || appDown || studioDown) && addonOk) {
@@ -10650,7 +10687,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
             msg = `<b>Agent running</b> — open Roblox Studio and enable its MCP server`;
           } else {
             toneClass = "active";
-            msg = `<b>Agent running</b>${tools ?  ` — ${tools} tools` : ""}`;
+            msg = `<b>Agent running</b>${tools ?  ` — ${tools} tools` : ""}${loopPhaseSuffix()}`;
           }
         } else if ((placeDown || appDown || studioDown) && addonOk) {
           // DEGRADED session by CHOICE: the user started the agent with Roblox
@@ -10675,7 +10712,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
           // No inline dot here: the leading status dot already shows green, two
           // dots side by side looked cluttered. The green "Agent active" text
           // carries it.
-          msg = `<b>Agent running</b>${tools ?  ` — ${tools} tools` : ""}`;
+          msg = `<b>Agent running</b>${tools ?  ` — ${tools} tools` : ""}${loopPhaseSuffix()}`;
         }
         // Started chat — also offer Restart in the exact Start slot so user can
         // re-bootstrap mid-chat in either engine.

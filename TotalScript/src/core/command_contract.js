@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript command contract (1.86.0) - ONE pre-execution validation layer for
+// TotalScript command contract (1.87.0) - ONE pre-execution validation layer for
 // the virtual Studio / agent commands, built on the metadata the packs already
 // declare (SKILL_COMMANDS[].params = {type, req, desc}) instead of a second
 // registry. It resolves aliases, repairs only deterministic mistakes, rejects
@@ -13,7 +13,7 @@
 //   schemaLine(name)         -> compact callable signature for error messages
 const TotalCommandContract = (() => {
   "use strict";
-  const VERSION = "1.86.0";
+  const VERSION = "1.87.0";
 
   // ── authoritative Roblox enum lists (Enum.<Key>.<Item>; a wrong item is a Luau error or a silently swallowed pcall) ──
   const ROBLOX_ENUMS = {
@@ -360,6 +360,7 @@ const TotalCommandContract = (() => {
     return t + `\n[diagnosis] ${k.category}${k.deterministic ? " (deterministic: an identical resend will fail again)" : k.uncertain ? " (uncertain: the operation may have run)" : ""}; next: ${k.next}${c && c.verify && !k.deterministic ? "; verify: " + c.verify : ""}${extras.length ? "; " + extras.join("; ") : ""}`;
   }
 
+  const api_extra = {};
   // ── repeat detection ────────────────────────────────────────────────────────
   function stable(v) {
     if (Array.isArray(v)) return "[" + v.map(stable).join(",") + "]";
@@ -374,15 +375,36 @@ const TotalCommandContract = (() => {
   // Decide whether a call that is byte-identical (after normalization) to the
   // previous FAILED call should run again. Only deterministic failures are
   // blocked: a timeout / offline bridge / missing object can legitimately change.
+  // 1.87.0: two more rules, both opt-in through fields on `prev` so callers
+  // that only pass {sig,text,klass} keep the 1.84.0 behaviour:
+  //   prev.mutating + an UNCERTAIN failure (timeout: the command MAY have run)
+  //     -> the identical mutating call is held ONCE (prev.uncertainHeld) until
+  //        something else ran in between (a read-back clears the guard), so a
+  //        part / script is never created twice because Studio answered late;
+  //   transient failures (offline bridge, timeout) get a budget too: the 6th
+  //     identical attempt inside REPEAT_WINDOW_MS is blocked - the model must
+  //     stop and tell the user instead of hammering a backend that is down.
+  //     The window makes the block expire, so "retry" after the user fixed the
+  //     bridge goes through.
+  const REPEAT_WINDOW_MS = 120000;
+  const TRANSIENT_BUDGET = 5;
   function repeatDecision(prev, sig, attempts) {
     if (!prev || prev.sig !== sig) return { block: false };
     const k = prev.klass || classify("", prev.text);
     if (k.deterministic) return { block: true, reason: `identical to the call that just failed with ${k.category} - nothing in that call changed, so it was NOT re-sent` };
+    const recent = !prev.at || (Date.now() - prev.at) < REPEAT_WINDOW_MS;
+    const timed = !!prev.at && (Date.now() - prev.at) < REPEAT_WINDOW_MS; // budget needs a timestamp (opt-in)
+    if (k.uncertain && prev.mutating && !prev.uncertainHeld && recent) {
+      return { block: true, hold: true, reason: `identical to the call that just TIMED OUT - that call MAY have run, so re-sending it could create / change the same thing twice. Read the state back first (inspect_instance / instance_find / get_console_output); if it did not happen, send the call again after that` };
+    }
     if ((attempts || 0) >= 3 && !k.transient) return { block: true, reason: `the same call has failed ${attempts} times; retry budget exhausted` };
+    if ((attempts || 0) >= TRANSIENT_BUDGET && k.transient && timed) return { block: true, reason: `the same call has failed ${attempts} times in a row with ${k.category}; the backend has not come back - stop retrying, tell the user what to check (bridge / Studio / Blender) and wait` };
     return { block: false };
   }
+  api_extra.REPEAT_WINDOW_MS = REPEAT_WINDOW_MS;
+  api_extra.TRANSIENT_BUDGET = TRANSIENT_BUDGET;
 
-  const api = { VERSION, ROBLOX_ENUMS, ENUM_PARAMS, PARAM_ALIASES, RANGES, CLASSES: CLASSES.map((c) => c.category), configure, contract, invalidate, prepare, classify, annotate, signature, schemaLine, repeatDecision, enumMatch, toVector, toColor };
+  const api = { ...api_extra, VERSION, ROBLOX_ENUMS, ENUM_PARAMS, PARAM_ALIASES, RANGES, CLASSES: CLASSES.map((c) => c.category), configure, contract, invalidate, prepare, classify, annotate, signature, schemaLine, repeatDecision, enumMatch, toVector, toColor };
   return Object.freeze(api);
 })();
 if (typeof window !== "undefined") window.TotalCommandContract = TotalCommandContract;

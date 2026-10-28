@@ -34,6 +34,13 @@ const CLOSED = !!process.env.CLOSED;
 // command must go through the normal path and be verified.
 const BRIDGE_DROP = !!process.env.BRIDGE_DROP;
 let bridgeDrops = 0;
+// TIMEOUT=1 (1.87.0): the FIRST part_create "times out" (background shape for a
+// bridge that did not answer: kind:"timeout", sent:true - the command MAY have
+// run). The model resends the identical call: the loop guard must HOLD it
+// (never reaches the bridge) and ask for a read-back; after the read-back says
+// MISSING the identical call goes through and the part is created ONCE.
+const TIMEOUT = !!process.env.TIMEOUT;
+let timeouts = 0;
 const composer = `
     <form id="composer" class="composer rounded-3xl border" data-rect="320,690,900,90">
       <textarea id="ed" name="message" placeholder="Message" rows="1" data-rect="330,700,780,60"></textarea>
@@ -148,6 +155,10 @@ w.fetch = async (input, init) => {
 // ── Studio stand-in ──────────────────────────────────────────────────────
 async function onToolCall(msg) {
   if (msg.name !== "execute_luau") return null;
+  if (TIMEOUT && timeouts === 0 && new RegExp(PART).test(String(msg.arguments && msg.arguments.code || "")) && !/"EXISTS"|MISSING/.test(String(msg.arguments && msg.arguments.code || ""))) {
+    timeouts++;
+    return { ok: false, kind: "timeout", errorCode: "MCP_REQUEST_TIMEOUT", error: "bridge did not respond in time", sent: true };
+  }
   if (BRIDGE_DROP && bridgeDrops === 0 && new RegExp(PART).test(String(msg.arguments && msg.arguments.code || ""))) {
     bridgeDrops++;
     return { ok: false, kind: "disconnected", errorCode: "MCP_CONNECTION_REFUSED", error: "bridge not connected", sent: false };
@@ -195,6 +206,10 @@ const PART = "TotalScript_ProviderParityTest";
       if (n === 3) return `Creating the part now.\n\`\`\`\n###CMD part_create###\nname: ${PART}\nsize: [4, 2, 4]\nposition: [0, 5, 0]\nanchored: true\n###END_CMD###\n\`\`\``;
       if (BRIDGE_DROP && n === 4) { stageSeen.dropResult = userMessages[userMessages.length - 1]; return `The bridge was down - retrying the same command.\n\`\`\`\n###CMD part_create###\nname: ${PART}\nsize: [4, 2, 4]\nposition: [0, 5, 0]\nanchored: true\n###END_CMD###\n\`\`\``; }
       if (BRIDGE_DROP) n -= 1;
+      if (TIMEOUT && n === 4) { stageSeen.timeoutResult = userMessages[userMessages.length - 1]; return `Hmm, a timeout - sending the same command again.\n\`\`\`\n###CMD part_create###\nname: ${PART}\nsize: [4, 2, 4]\nposition: [0, 5, 0]\nanchored: true\n###END_CMD###\n\`\`\``; }
+      if (TIMEOUT && n === 5) { stageSeen.held = userMessages[userMessages.length - 1]; return `Right - reading the state back first.\n\`\`\`\n###LUA###\nreturn workspace:FindFirstChild("${PART}") and "EXISTS" or "MISSING"\n###END_LUA###\n\`\`\``; }
+      if (TIMEOUT && n === 6) { stageSeen.probe = userMessages[userMessages.length - 1]; return `It is missing, so the timed-out call never ran - sending it again.\n\`\`\`\n###CMD part_create###\nname: ${PART}\nsize: [4, 2, 4]\nposition: [0, 5, 0]\nanchored: true\n###END_CMD###\n\`\`\``; }
+      if (TIMEOUT) n -= 3;
       if (n === 4) { stageSeen.result = userMessages[userMessages.length - 1]; return `Checking it.\n\`\`\`\n###LUA###\nlocal p = workspace:FindFirstChild("${PART}")\nif not p then return "MISSING" end\nreturn string.format("%s size=%s anchored=%s", p:GetFullName(), tostring(p.Size), tostring(p.Anchored))\n###END_LUA###\n\`\`\``; }
       if (n === 5) { stageSeen.readback = userMessages[userMessages.length - 1]; return `Done - **${PART}** exists in Workspace, 4×2×4 studs, anchored.`; }
       return "Noted.";
@@ -238,6 +253,18 @@ const PART = "TotalScript_ProviderParityTest";
       // shift the remaining expectations by one message
       userMessages.splice(3, 1);
     }
+    if (TIMEOUT) {
+      await waitFor(() => userMessages.length >= 4, 40000, "timeout result");
+      ok("timeout: the model got a classified UNCERTAIN failure (timeout; 'MAY have run'), not a success", /ERROR/.test(userMessages[3]) && /\[diagnosis\] timeout/.test(userMessages[3]) && /MAY have run/.test(userMessages[3]) && !/"ok":\s*true/.test(userMessages[3]), userMessages[3].slice(0, 200).replace(/\n/g, " "));
+      await waitFor(() => userMessages.length >= 5, 40000, "loop-guard hold");
+      const partCalls = () => toolCalls.filter((c) => c.name === "execute_luau" && new RegExp(PART).test(String(c.arguments.code || "")) && !/"EXISTS"|MISSING/.test(String(c.arguments.code || ""))).length;
+      ok("the identical resend was HELD by the loop guard (NOT RUN, read the state back first) and never reached the bridge", /\[LOOP GUARD\] NOT RUN/.test(userMessages[4]) && /MAY have run/.test(userMessages[4]) && partCalls() === 1, partCalls() + " part_create calls; " + userMessages[4].slice(-260).replace(/\n/g, " "));
+      await waitFor(() => userMessages.length >= 6, 40000, "read-back probe");
+      ok("the read-back ran and reported MISSING (the timed-out call never executed in the sim)", simReady ? /MISSING/.test(userMessages[5]) : /Output of 'execute_luau'/.test(userMessages[5]), userMessages[5].slice(0, 120).replace(/\n/g, " "));
+      await waitFor(() => userMessages.length >= 7, 40000, "part_create after read-back");
+      ok("after the read-back the identical call went through and succeeded - created exactly once", /Output of 'part_create'/.test(userMessages[6]) && /"ok":\s*true/.test(userMessages[6]) && partCalls() === 2, partCalls() + " part_create calls");
+      userMessages.splice(3, 3);
+    }
     await waitFor(() => userMessages.length >= 4, 40000, "part_create result");
     ok("the REAL (simulated) result was typed back, not a canned OK", /Output of 'part_create'/.test(userMessages[3]) && (!simReady || /TotalScript_ProviderParityTest|"ok"\s*:\s*true|Workspace/.test(userMessages[3])), userMessages[3].slice(0, 120).replace(/\n/g, " "));
     await waitFor(() => userMessages.length >= 5, 40000, "read-back result");
@@ -246,7 +273,7 @@ const PART = "TotalScript_ProviderParityTest";
     ok("agent loop ended after the final prose reply", true);
     // The core's own post-command log scan (GetLogHistory) is internal, not a model command.
     const luauCalls = toolCalls.filter((c) => c.name === "execute_luau" && !/GetLogHistory/.test(String(c.arguments.code || "")));
-    ok("exactly two model commands reached the bridge (create + read-back) - the remembered turns were never re-run", luauCalls.length === (BRIDGE_DROP ? 3 : 2), luauCalls.length + " calls");
+    ok("exactly two model commands reached the bridge (create + read-back) - the remembered turns were never re-run", luauCalls.length === (BRIDGE_DROP ? 3 : TIMEOUT ? 4 : 2), luauCalls.length + " calls");
     ok("5 sends total: bootstrap, catalogue, request, 2 results" + (BRIDGE_DROP ? " (+1 bridge-down error, spliced out above)" : ""), userMessages.length === 5, userMessages.length + "");
     if (simReady) {
       const v = await sim.exec(`local p = workspace:FindFirstChild("${PART}") if not p then return "MISSING" end return { class = p.ClassName, size = { p.Size.X, p.Size.Y, p.Size.Z }, anchored = p.Anchored }`);
@@ -258,7 +285,7 @@ const PART = "TotalScript_ProviderParityTest";
     ok("adapter diagnostics present (init, send, landed)", vani.includes("vani.init") && vani.includes("vani.send") && vani.includes("vani.send.landed"), [...new Set(vani)].join(","));
     const landed = (w.__rsDiag || []).filter((e) => e.event === "vani.send.landed");
     // 4 adapter sends (bootstrap, catalogue, 2 results); the user's own Enter is the site's.
-    const adapterSends = userMessages.length - 1 + (BRIDGE_DROP ? 1 : 0);
+    const adapterSends = userMessages.length - 1 + (BRIDGE_DROP ? 1 : 0) + (TIMEOUT ? 3 : 0);
     ok("every adapter send was committed ONCE and confirmed by a landing proof", landed.length === adapterSends && landed.every((e) => e.data && e.data.proof), landed.map((e) => e.data && e.data.proof).join(","));
     ok("no 'send unconfirmed' diagnostics", !(w.__rsDiag || []).some((e) => e.event === "vani.send.unconfirmed"));
     // The Enter + form-submit pair above is 2 attempts by design (the site's own
@@ -269,5 +296,5 @@ const PART = "TotalScript_ProviderParityTest";
     ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || "));
   } catch (e) { console.error(e); process.exitCode = 1; }
   sim.close();
-  finish(BRIDGE_DROP ? "vani-e2e (BRIDGE_DROP)" : "vani-e2e", pageErrors);
+  finish(BRIDGE_DROP ? "vani-e2e (BRIDGE_DROP)" : TIMEOUT ? "vani-e2e (TIMEOUT)" : "vani-e2e", pageErrors);
 })();
