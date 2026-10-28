@@ -5303,6 +5303,12 @@
         let res = await waitForResponse(base);
         diag("response", { kind: res.kind });
         if (A.stop || res.kind === "stopped") break;
+        if (res.kind === "tool" && res.item && !res.native && isRememberedExecuted(res.item, P.itemText(res.item))) {
+          // 1.59: this exact turn already ran - treat as "no new reply".
+          // 1.85.0: must precede the `empty` handler (else: hot loop, ClickUp e2e).
+          diag("tool.alreadyRan", { requestId: A.activeRequestId });
+          res = { kind: "empty", stale: true };
+        }
         ui.steeringProgress("reviewing", `Checking ${res.kind === "tool" ? "the proposed command" : "the reply"}`, toolTurns);
 
         if (res.kind === "context_limit") {
@@ -5603,12 +5609,6 @@
           break;
         }
 
-        if (res.kind === "tool" && res.item && !res.native && isRememberedExecuted(res.item, P.itemText(res.item))) {
-          // 1.59: this exact turn (conversation + index + text prefix) was already
-          // dispatched. Re-running it is never right - treat as "no new reply".
-          diag("tool.alreadyRan", { requestId: A.activeRequestId });
-          res = { kind: "empty", stale: true };
-        }
         if (res.kind === "tool") {
           parseRetries = 0;
           // 1.34: identical repeats in one reply (a model "showing" the command
@@ -12681,7 +12681,12 @@ if (A.userStopped) return;                          // user halted → never rel
     if (item.dataset.zResume && Number(item.dataset.zResumeLen || 0) >= len) return;
     item.dataset.zResume = "1";
     item.dataset.zResumeLen = String(len);
-    rememberExecuted(item);
+    // 1.85.0: do NOT rememberExecuted() here. The loop below reads this very
+    // turn first and its "already ran" gate (isRememberedExecuted) matched the
+    // mark we had just written, so an auto-resumed command was NEVER dispatched
+    // (tool.alreadyRan → empty → hot loop). The dispatch path remembers the turn
+    // the moment it runs; until then A.running keeps this watchdog out, and the
+    // zResume marker above covers the node-bound case.
     diag("autoResume", { len });
     // The reply turn is ALREADY present - act on it immediately. Null token makes
     // the identity-based newReply test unconditionally true (any current id != null).

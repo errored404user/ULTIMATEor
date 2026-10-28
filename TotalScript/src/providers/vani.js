@@ -568,20 +568,44 @@ const RSProvider = (() => {
     };
     await waitFor(sendReady, 2500);
     diag("vani.send", { editorLen: editorText().length, textLen: text.length });
-    let sent = false;
-    for (let i = 0; i < 5 && !sent; i++) {
-      const b = sendButton();
-      if (b && !b.disabled && b.getAttribute("aria-disabled") !== "true") { try { b.click(); } catch {} }
-      else {
-        try {
-          const form = editor.closest("form");
-          if (form && typeof form.requestSubmit === "function") form.requestSubmit();
-          else pressEnter(editor);
-        } catch { pressEnter(editor); }
-      }
-      sent = await waitFor(() => editorText().trim() === "" || isHardGenerating(), 900);
-    }
-    if (!sent) diag("vani.send.unconfirmed", { editorLen: editorText().length });
+    const r = await commitSend(editor, text, { users: userCount() });
+    if (!r.sent) diag("vani.send.unconfirmed", { editorLen: editorText().length, how: r.how });
+    else diag("vani.send.landed", { how: r.how, proof: r.proof });
+  }
+
+  // 1.85.0 — commit a send EXACTLY ONCE (the ChatGPT / Gemini baseline rule:
+  // "a delayed receipt never authorizes another click"). The previous loop
+  // re-clicked up to five times whenever the composer had not emptied within
+  // 900 ms, which on a slow acceptance duplicated the message. Proof that the
+  // send landed is any of: our text left the composer, the stop control is up,
+  // a new user row, or the stream tap saw the request. A second attempt uses a
+  // DIFFERENT mechanism and only when our text is verifiably still typed.
+  const netSawRequest = () => { try { const n = NET(); const c = n && n.current(); return !!(c && c.matched); } catch { return false; } };
+  async function commitSend(editor, text, pre) {
+    const tail = String(text || "").replace(/\s+/g, " ").trim().slice(-60);
+    const stillTyped = () => {
+      const t = editorText().replace(/\s+/g, " ").trim();
+      if (!t) return false;
+      return t.length >= tail.length ? t.includes(tail) : tail.includes(t);
+    };
+    const proof = () => (!stillTyped() ? "cleared" : isHardGenerating() ? "generating" : userCount() > pre.users ? "userRow" : netSawRequest() ? "netRequest" : "");
+    const fire = (how) => {
+      try {
+        if (how === "click") { const b = sendButton(); if (b && !b.disabled && b.getAttribute("aria-disabled") !== "true") { b.click(); return true; } return false; }
+        const form = editor.closest("form");
+        if (form && typeof form.requestSubmit === "function") { form.requestSubmit(); return true; }
+        pressEnter(editor); return true;
+      } catch { return false; }
+    };
+    const plan = fire("click") ? ["click", "submit"] : ["submit", "click"];
+    if (plan[0] === "submit") fire("submit");
+    let p = "";
+    await waitFor(() => !!(p = proof()), 2500);
+    if (p) return { sent: true, how: plan[0], proof: p };
+    // No proof and the text is still sitting there: ONE alternate attempt.
+    if (!fire(plan[1])) return { sent: false, how: plan[0] };
+    await waitFor(() => !!(p = proof()), 2500);
+    return { sent: !!p, how: plan[1], proof: p };
   }
 
   function stopGeneration() {

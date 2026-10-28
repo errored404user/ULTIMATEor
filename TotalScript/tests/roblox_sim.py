@@ -178,7 +178,7 @@ local function ColorSequenceKeypoint_new(t,v) return {Time=t,Value=v} end
 local function NumberRange_new(a,b) return {Min=a,Max=b or a} end
 local function TweenInfo_new(t,style,dir) return {Time=t or 1,EasingStyle=style,EasingDirection=dir} end
 local function Rect_new(a,b,c,d) return {Min=Vector2.new(a,b),Max=Vector2.new(c,d)} end
-local Enum = setmetatable({}, {__index=function(t,k) local e=setmetatable({}, {__index=function(t2,k2) local v={Name=k2,EnumType=k} rawset(t2,k2,v) return v end}) rawset(t,k,e) return e end})
+local Enum = setmetatable({}, {__index=function(t,k) local e=setmetatable({}, {__index=function(t2,k2) local v=setmetatable({Name=k2,EnumType=k}, {__tostring=function(it) return "Enum."..tostring(it.EnumType).."."..tostring(it.Name) end}) rawset(t2,k2,v) return v end}) rawset(t,k,e) return e end})
 
 -- signals
 local Signal = {}

@@ -179,7 +179,7 @@ const RSProvider = (() => {
     const out = [];
     for (const s of sels) {
       for (const el of root.querySelectorAll(s)) {
-        if (seen.has(el) || !visible(el)) continue;
+        if (seen.has(el) || !visible(el) || looksLikeChrome(el)) continue;
         // Keep the OUTERMOST match of a nested pair (a message root that
         // contains another candidate), never both.
         if ([...seen].some((p) => p.contains(el))) continue;
@@ -199,10 +199,39 @@ const RSProvider = (() => {
     return out;
   }
 
+  // 1.85.0 — texts this extension (or the user) sent, by their first 160
+  // characters (same device as the Vani / ClickUp adapters). Without it a
+  // MiMo layout that ships no role markers made OUR OWN prompt the "last
+  // assistant row" the moment it rendered, so the DOM fallback could read the
+  // system prompt's command examples back as the reply.
+  const _sentKeys = [];
+  const sentKey = (t) => String(t || "").replace(/\s+/g, " ").trim().slice(0, 160);
+  function rememberSent(text) {
+    const k = sentKey(text);
+    if (k.length < 8) return;
+    if (!_sentKeys.includes(k)) { _sentKeys.push(k); if (_sentKeys.length > 40) _sentKeys.shift(); }
+  }
+  function looksSent(item) {
+    if (!_sentKeys.length) return false;
+    const k = sentKey(item && (item.innerText || item.textContent));
+    if (k.length < 8) return false;
+    const head = k.slice(0, 60);
+    return _sentKeys.some((sk) => sk.startsWith(head) || k.startsWith(sk.slice(0, 60)));
+  }
+  // 1.85.0 — composer / navigation / dialog chrome is never a transcript row
+  // (the broad `[class*='content']` body selector otherwise let a sidebar
+  // entry or the composer wrapper pose as the last assistant turn).
+  function looksLikeChrome(el) {
+    if (el.closest("nav, header, aside, footer, [role='navigation'], #rs-root")) return true;
+    const ed = getEditor();
+    if (ed && (el.contains(ed) || ed.contains(el))) return true;
+    return false;
+  }
   function isUserItem(item) {
     const r = roleOf(item);
     if (/user|human/.test(r)) return true;
     if (/assistant|agent|ai|bot|model|system/.test(r)) return false;
+    if (looksSent(item)) return true;
     return /\bml-auto\b|justify-end|items-end|self-end|text-right/.test(String(item && item.className || ""));
   }
   function isAssistantItem(item) {
@@ -460,6 +489,7 @@ const RSProvider = (() => {
     await sleep(40);
     text = truncateForSend(text);
     netMarkSent(text);
+    rememberSent(text);
     setRichText(editor, text);
     await sleep(80);
     if (images && images.length) {
@@ -471,20 +501,43 @@ const RSProvider = (() => {
     };
     await waitFor(sendReady, 2500);
     diag("mimo.send", { editorLen: editorText().length, textLen: text.length, hasSend: !!sendButton() });
-    let sent = false;
-    for (let i = 0; i < 5 && !sent; i++) {
-      const b = sendButton();
-      if (b && !b.disabled) { try { b.click(); } catch {} }
-      else {
-        try {
-          const form = editor.closest("form");
-          if (form && typeof form.requestSubmit === "function") form.requestSubmit();
-          else pressEnter(editor);
-        } catch { pressEnter(editor); }
-      }
-      sent = await waitFor(() => editorText().trim() === "" || isHardGenerating(), 800);
-    }
-    if (!sent) diag("mimo.send_unconfirmed", { editorLen: editorText().length });
+    const r = await commitSend(editor, text, { users: userCount() });
+    if (!r.sent) diag("mimo.send_unconfirmed", { editorLen: editorText().length, how: r.how });
+    else diag("mimo.send_landed", { how: r.how, proof: r.proof });
+  }
+
+  // 1.85.0 — commit a send EXACTLY ONCE (the ChatGPT / Gemini baseline rule:
+  // "a delayed receipt never authorizes another click"). The previous loop
+  // re-clicked the paper-plane up to five times whenever the textarea had not
+  // emptied within 800 ms, which on a slow acceptance duplicated the message.
+  // Proof that the send landed is any of: our text left the composer, the stop
+  // control is up, a new user row, or the stream tap saw the request. A second
+  // attempt uses a DIFFERENT mechanism and only while our text is still typed.
+  const netSawRequest = () => { try { const n = NET(); const c = n && n.current(); return !!(c && c.matched); } catch { return false; } };
+  async function commitSend(editor, text, pre) {
+    const tail = String(text || "").replace(/\s+/g, " ").trim().slice(-60);
+    const stillTyped = () => {
+      const t = editorText().replace(/\s+/g, " ").trim();
+      if (!t) return false;
+      return t.length >= tail.length ? t.includes(tail) : tail.includes(t);
+    };
+    const proof = () => (!stillTyped() ? "cleared" : isHardGenerating() ? "generating" : userCount() > pre.users ? "userRow" : netSawRequest() ? "netRequest" : "");
+    const fire = (how) => {
+      try {
+        if (how === "click") { const b = sendButton(); if (b && !b.disabled && b.getAttribute("aria-disabled") !== "true" && !/disabled/i.test(String(b.className || ""))) { b.click(); return true; } return false; }
+        const form = editor.closest("form");
+        if (form && typeof form.requestSubmit === "function") { form.requestSubmit(); return true; }
+        pressEnter(editor); return true;
+      } catch { return false; }
+    };
+    const plan = fire("click") ? ["click", "submit"] : ["submit", "click"];
+    if (plan[0] === "submit") fire("submit");
+    let p = "";
+    await waitFor(() => !!(p = proof()), 2500);
+    if (p) return { sent: true, how: plan[0], proof: p };
+    if (!fire(plan[1])) return { sent: false, how: plan[0] };
+    await waitFor(() => !!(p = proof()), 2500);
+    return { sent: !!p, how: plan[1], proof: p };
   }
 
   function stopGeneration() {
@@ -555,6 +608,7 @@ const RSProvider = (() => {
       const ed = getEditor();
       if (!ed || !ed.contains(e.target)) return;
       if (editorText().trim() === "") return;
+      rememberSent(editorText());
       netMarkSent(editorText());
       if (handlers.isBlocked()) return;
       if (!handlers.isStarted()) {
@@ -568,11 +622,15 @@ const RSProvider = (() => {
       if (!getEditor()) return;
       const t = e.target;
       const btn = t.closest && t.closest("button, [role='button']");
-      if (!btn) return;
+      // 1.85.0: TotalScript's own bar / tray buttons are never the site's send
+      // (the Vani / ClickUp hooks already exclude #rs-root; a bar button titled
+      // "Send" here counted as a user send and advanced the turn baseline).
+      if (!btn || btn.closest("#rs-root")) return;
       if (S.stopAria.test(ariaOf(btn)) || (inComposer(btn) && hasStopGlyph(btn) && !hasSendGlyph(btn) && isHardGenerating())) { handlers.onNativeStop(); return; }
       const isSend = hasSendGlyph(btn) || S.sendAria.test(ariaOf(btn)) || (btn.type === "submit" && !!btn.closest("form") && inComposer(btn));
       if (!isSend) return;
       if (btn.disabled) return;
+      rememberSent(editorText());
       netMarkSent(editorText());
       if (handlers.isBlocked()) return;
       if (!handlers.isStarted()) {
@@ -643,6 +701,10 @@ const RSProvider = (() => {
     isGenerating, isBusyNow, isHardGenerating,
     enforceComposer() { return { ready: true }; },
     async ensureComposerReady(reason) {
+      // Hash-routed SPA: after `/#/c` the textarea renders a beat later. Give
+      // it a bounded moment (Vani 4 s / ClickUp 5 s do the same) instead of
+      // declaring the page unusable on the first tick.
+      if (!getEditor()) await waitFor(() => !!getEditor(), 4000);
       diag("mimo.mode_ready", { reason, hasEditor: !!getEditor(), login: loginGatePresent() });
       return { ready: !!getEditor() && !loginGatePresent() };
     },
