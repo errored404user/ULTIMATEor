@@ -663,7 +663,7 @@ ANIMATION TOOLS: the animation_* tools (listed in list_commands as TotalScript a
         const wm = (window.__rsWorkMode && window.__rsWorkMode()) || "creation";
         // 1.34: one shared OPERATING LOOP + one distinct profile per mode
         // (see WORK_MODE_PROMPTS above). Providers with a hard system-prompt
-        // budget (ChatGPT 14k, Notion, NVIDIA) get the tight variants.
+        // budget (ChatGPT 14k, Notion) get the tight variants.
         const tightBudget = maxChars && maxChars < 16000;
         modeExtra += "\n\n" + workModePrompt(wm, { tight: !!tightBudget });
       } catch {}

@@ -18,9 +18,10 @@ ok(bundle.js.indexOf("src/providers/vani.js") < bundle.js.indexOf("src/core/main
 for (const f of ["src/core/config.js", "src/core/screenshot.js", "src/core/templates.js", "src/core/studio_bridge.js", "src/core/paint.js", "src/core/agent_crew.js", "src/core/main.js"]) {
   ok(bundle.js.includes(f), "bundle includes " + f);
 }
-const ox = manifest.content_scripts.find((c) => c.matches.includes("https://oxalpha.com/*") && c.world !== "MAIN");
-ok(JSON.stringify(ox.js.map((j) => j.replace("oxalpha.js", "vani.js"))) === JSON.stringify(bundle.js), "bundle mirrors the Ox Alpha bundle exactly");
-ok(JSON.stringify(ox.css || []) === JSON.stringify(bundle.css || []), "bundle css mirrors the Ox Alpha bundle");
+// 1.89.0: the Ox Alpha bundle (the former mirror) is gone; the MultiChat bundle has the same stream-reader + adapter + core shape.
+const mc = manifest.content_scripts.find((c) => c.js && c.js.includes("src/providers/multichat.js") && c.world !== "MAIN");
+ok(JSON.stringify(mc.js.map((j) => j.replace("multichat.js", "vani.js"))) === JSON.stringify(bundle.js), "bundle mirrors the MultiChat bundle exactly");
+ok(JSON.stringify(mc.css || []) === JSON.stringify(bundle.css || []), "bundle css mirrors the MultiChat bundle");
 for (const f of bundle.js) ok(fs.existsSync(path.join(root, f)), "bundle file exists: " + f);
 
 ok(bg.includes('"https://c.vani.ai/*"'), "background PROVIDER_URLS lists c.vani.ai");

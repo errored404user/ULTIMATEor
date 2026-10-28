@@ -3,13 +3,12 @@ const DISCORD_URL = "https://discord.gg/YqVZaZYuy";
 const SUPPORTED_HOSTS = [
   "chat.deepseek.com", "deepseek.com", "chatgpt.com", "chat.openai.com",
   "claude.ai", "claude.com",
-  "gemini.google.com", "www.kimi.com", "kimi.com", "kimi.ai", "www.kimi.ai", // 1.86.0: kimi.ai was injected (manifest) but the popup did not recognise the tab
-  "build.nvidia.com/moonshotai/kimi-k3", "chat.z.ai", "chat.qwen.ai", "arena.ai",
+  "gemini.google.com", "kimi.ai", "www.kimi.ai", // 1.86.0: kimi.ai was injected (manifest) but the popup did not recognise the tab; 1.89.0: kimi.com dropped
+  "chat.z.ai", "chat.qwen.ai", "arena.ai",
   "www.meta.ai", "meta.ai",
-  "gpt.crax.lol", "www.notion.so", "app.notion.so", "www.notion.com", "notion.com", "oxalpha.com", "www.oxalpha.com", "oxalpha.org", "www.oxalpha.org", "c.vani.ai", "aistudio.xiaomimimo.com", "app.clickup.com",
+  "www.notion.so", "app.notion.so", "www.notion.com", "notion.com", "c.vani.ai",
   "agent.minimax.io", "overchat.ai", "www.overchat.ai", "huggingface.co", "www.huggingface.co",
-  "chat.mistral.ai", "mistral.ai", "openrouter.ai", "www.openrouter.ai", "console.groq.com",
-  "dashboard.cohere.com", "api.together.ai", "fireworks.ai", "app.fireworks.ai",
+  "openrouter.ai", "www.openrouter.ai", "console.groq.com", "api.together.ai",
 ];
 const DEFAULT_AI_URL = "https://chat.deepseek.com/";
 // CodeCraft API (codecraftapi.com) is API-only; TotalScript hosts its chat page.
@@ -185,13 +184,12 @@ if (runHint) {
       "chatgpt.com": "ChatGPT", "chat.openai.com": "ChatGPT",
       "claude.ai": "Claude", "claude.com": "Claude",
       "gemini.google.com": "Gemini",
-      "kimi.com": "Kimi", "kimi.ai": "Kimi",
-      "build.nvidia.com": "NVIDIA NIM · Kimi K3",
+      "kimi.ai": "Kimi",
       "chat.z.ai": "GLM", "chat.qwen.ai": "Qwen",
       "arena.ai": "Arena",
       "meta.ai": "Meta AI",
-      "gpt.crax.lol": "Crax", "www.notion.so": "Notion", "app.notion.so": "Notion", "www.notion.com": "Notion", "notion.com": "Notion",
-      "oxalpha.com": "Ox Alpha", "www.oxalpha.com": "Ox Alpha", "c.vani.ai": "Vani Chat", "aistudio.xiaomimimo.com": "Xiaomi MiMo Studio", "app.clickup.com": "ClickUp Brain",
+      "www.notion.so": "Notion", "app.notion.so": "Notion", "www.notion.com": "Notion", "notion.com": "Notion",
+      "c.vani.ai": "Vani Chat",
     };
     el.textContent = isCodeCraftTab(url) ? "CodeCraft API" : (names[host] || (SUPPORTED_HOSTS.some((h) => url.includes(h)) ? (host || "Chat") : "Idle"));
   } catch {}

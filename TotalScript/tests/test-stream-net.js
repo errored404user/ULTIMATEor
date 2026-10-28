@@ -1,6 +1,6 @@
 // 1.65.0 — universal chat-stream tap (src/providers/stream-net.js, MAIN world) +
 // isolated reader (src/providers/stream-reader.js) + their use by the adaptive
-// adapters (Vani Chat, ClickUp Brain, Ox Alpha, MultiChat): the model's reply is
+// adapters (Vani Chat, MultiChat; ClickUp Brain and Ox Alpha until 1.89.0): the model's reply is
 // read verbatim off the network in every common stream dialect, the turn ends
 // the instant the stream closes, HTTP failures surface at once, and the DOM
 // stays the fallback. Run with NODE_PATH pointing at a jsdom install.
@@ -178,7 +178,7 @@ Promise.all(pending).then(async () => {
   w2.eval(read("src/providers/stream-reader.js"));
   const fakeNode = (obj) => { let el = w2.document.getElementById("rs-stream-net"); if (!el) { el = w2.document.createElement("script"); el.type = "application/json"; el.id = "rs-stream-net"; w2.document.body.appendChild(el); } el.textContent = JSON.stringify(obj); };
   const diags = [];
-  for (const prov of ["vani", "clickup", "oxalpha", "multichat"]) {
+  for (const prov of ["vani", "multichat"]) {
     const src = read(`src/providers/${prov}.js`);
     ok(`${prov}.js consumes the tap (netText / netGen / netMarkSent / netError / invalidateItems) and prefers it in readAssistant`, /const NET = \(\) =>/.test(src) && /const nt = netText\(\)\.trim\(\);\s*if \(nt\) return \{ present: true, reply: nt, thinking: "", item, net: true \};/.test(src) && /const g = netGen\(stop\);\s*if \(g === "streaming"\) return true;\s*if \(g === "done" && !stop\) return false;/.test(src) && /netMarkSent\(text\);/.test(src) && /const ne = netError\(\);\s*if \(ne\) return ne;/.test(src) && /allItems, invalidateItems,/.test(src) && /function allItemsUncached\(\)/.test(src));
   }
@@ -205,8 +205,8 @@ Promise.all(pending).then(async () => {
   // ── 4. wiring ──
   const manifest = JSON.parse(read("manifest.json"));
   const tap = manifest.content_scripts.find((c) => c.world === "MAIN" && c.js.includes("src/providers/stream-net.js"));
-  ok("manifest: stream-net.js runs in the MAIN world at document_start for the adaptive hosts (Vani, ClickUp, Ox Alpha, MultiChat sites)", tap && tap.run_at === "document_start" && ["https://c.vani.ai/*", "https://app.clickup.com/*", "https://oxalpha.com/*", "https://chat.mistral.ai/*", "https://openrouter.ai/*"].every((h) => tap.matches.includes(h)));
-  for (const prov of ["vani", "clickup", "oxalpha", "multichat"]) {
+  ok("manifest: stream-net.js runs in the MAIN world at document_start for the adaptive hosts (Vani, MultiChat sites)", tap && tap.run_at === "document_start" && ["https://c.vani.ai/*", "https://agent.minimax.io/*", "https://openrouter.ai/*", "https://console.groq.com/*"].every((h) => tap.matches.includes(h)));
+  for (const prov of ["vani", "multichat"]) {
     const b = manifest.content_scripts.find((c) => c.world !== "MAIN" && c.js.includes(`src/providers/${prov}.js`));
     ok(`manifest: the ${prov} bundle loads stream-reader.js right before the adapter and every one of its hosts has the tap`, b && b.js.indexOf("src/providers/stream-reader.js") === b.js.indexOf(`src/providers/${prov}.js`) - 1 && b.matches.every((m) => tap.matches.includes(m)));
   }

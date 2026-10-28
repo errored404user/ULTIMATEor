@@ -1,12 +1,11 @@
 // Quick Node smoke tests for the v1.12 features (run: node test-v112.js). Not shipped.
-// Covers: background-tab mode plumbing, the crax redesign fix, the dead-turn
-// retry, MCP auto-heal, card copy, and the popup contract.
+// Covers: background-tab mode plumbing, the dead-turn retry, MCP auto-heal,
+// card copy, and the popup contract. (The Crax GPT provider was removed in 1.89.0.)
 const fs = require("fs");
 const ok = (name, cond) => { console.log((cond ? "PASS" : "FAIL") + "  " + name); if (!cond) process.exitCode = 1; };
 
 const mainSrc = fs.readFileSync(__dirname + "/../src/core/main.js", "utf8");
 const bgSrc = fs.readFileSync(__dirname + "/../background.js", "utf8");
-const craxSrc = fs.readFileSync(__dirname + "/../src/providers/crax.js", "utf8");
 const cfgSrc = fs.readFileSync(__dirname + "/../src/core/config.js", "utf8");
 const popupHtml = fs.readFileSync(__dirname + "/../popup.html", "utf8");
 const cssSrc = fs.readFileSync(__dirname + "/../overlay.css", "utf8");
@@ -37,13 +36,6 @@ ok("deadTurn feedback exists", cfgSrc.includes("deadTurn:"));
 ok("loop retries dead turns once", /deadRetries < 1/.test(mainSrc) && mainSrc.includes("loop.deadRetry"));
 ok("retry budget refills on healthy turn", /deadRetries = 0; \/\/ healthy turn/.test(mainSrc));
 ok("late-reply rescue before empty", mainSrc.includes("empty.lateRescue"));
-
-// ── Crax redesign fix ────────────────────────────────────────────────────────
-ok("crax targets new composer", craxSrc.includes('"#promptInput, #chatField"'));
-ok("crax targets composer-bar/form", craxSrc.includes('.composer-bar, #composer, #chatInput'));
-ok("crax detects auth gate", craxSrc.includes("authGatePresent") && craxSrc.includes("section.auth"));
-ok("crax modeWarning gates start", craxSrc.includes("modeWarning()") && craxSrc.includes("log in with your access key"));
-ok("crax exports modeWarning", /modeWarning, authGatePresent,/.test(craxSrc));
 
 // ── MCP auto-heal + repair ───────────────────────────────────────────────────
 ok("background auto-heals dead MCP helper", bgSrc.includes("auto-restarting Studio MCP") && bgSrc.includes("mcpDownStreak"));
@@ -79,9 +71,3 @@ ok("agentLoop swallows SendAbortedError", mainSrc.includes("loop.sendAborted"));
 ok("startSession swallows SendAbortedError", mainSrc.includes("start.sendAborted"));
 ok("composer-unlock failsafe in meter loop", mainSrc.includes("_lastUnlockSweep") && mainSrc.includes("P.setInputLock(false); } catch {}"));
 ok("error hook filters on chrome-extension origin", mainSrc.includes("chrome-extension://"));
-// crax v1.12.1: the redesigned site (verified against its own script.js)
-ok("crax targets .msg/.bubble turns", craxSrc.includes('".msg, .chat-msg"') && craxSrc.includes('".bubble, .chat-msg__text"'));
-ok("crax generation via is-streaming", craxSrc.includes("is-streaming"));
-ok("crax stop clicks the send button", /stopGeneration\(\)[\s\S]{0,400}is-streaming/.test(craxSrc));
-ok("crax excludes reasoning from parsing", craxSrc.includes('thinkingSel: ".reasoning-bubble"'));
-ok("crax form-submit fallback", craxSrc.includes("requestSubmit"));

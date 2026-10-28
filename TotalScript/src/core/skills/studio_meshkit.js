@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript mesh kit (1.88.0) - Studio-side verification for Blender imports.
+// TotalScript mesh kit (1.89.0) - Studio-side verification for Blender imports.
 //
 // Phase 116 audit: blender_send_to_studio reported "N real MeshParts" from the
 // same Luau that built them and nothing could read the result back, so an
@@ -12,7 +12,7 @@
 // definition of "what a good import looks like".
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
-  const VERSION = "1.88.0";
+  const VERSION = "1.89.0";
   const MI = (typeof TotalMeshImport !== "undefined" && TotalMeshImport) || (typeof window !== "undefined" && window.TotalMeshImport) || null;
 
   const C = [

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // src/providers/stream-net.js - universal chat-stream tap (runs in the MAIN world).
 //
-// WHY THIS EXISTS (1.65.0): the adaptive adapters (Vani Chat, ClickUp Brain,
-// Ox Alpha, MultiChat) discover transcript rows by SHAPE because those sites
+// WHY THIS EXISTS (1.65.0): the adaptive adapters (Vani Chat, MultiChat; until
+// 1.89.0 also ClickUp Brain and Ox Alpha) discover transcript rows by SHAPE because those sites
 // ship no stable role markers and we have no live DOM in the build sandbox.
 // Shape reads are fragile: a reskin, a virtualised list or a syntax
 // highlighter that re-renders the reply makes the extension read the wrong

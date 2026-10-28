@@ -1,7 +1,7 @@
 "use strict";
 // End-to-end simulation of the WHOLE TotalScript bundle on a Gemini-shaped
 // page (1.86.0) - the BASELINE provider run through the same harness as the
-// repaired ones (vani-e2e / mimo-e2e / clickup-e2e), so "parity" has a
+// repaired ones (vani-e2e; mimo-e2e / clickup-e2e were removed with their providers in 1.89.0), so "parity" has a
 // reference measured the same way. Optional (needs jsdom; lupa for Studio):
 //
 //   cd TotalScript && npm i --no-save jsdom && node tests/gemini-e2e.js

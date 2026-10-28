@@ -11,7 +11,7 @@
 //   B. streaming: an open ###CMD### block keeps the watcher waiting;
 //   C. the loop-side contract in main.js / config.js (parse_error reasons,
 //      the one-shot "shown, not run" correction, diagnostics stage names);
-//   D. the Vani and MiMo adapters run the Luau-first protocol: prompt notes
+//   D. the Vani adapter (MiMo too, until its removal in 1.89.0) runs the Luau-first protocol: prompt notes
 //      built from the parser's own grammar note, rescue notes without a JSON
 //      demand, tool-block masking of ###CMD### <pre>s, DOM / network reads that
 //      hand the parser a parseable reply, SPA key changes, no duplicate sends;
@@ -120,45 +120,6 @@ function adapterChecks(label, P, w, items) {
 (async () => {
   if (!JSDOM) { console.log("SKIP jsdom not installed — adapter checks (D)"); } else {
     const vc = new VirtualConsole(); vc.on("error", () => {}); vc.on("jsdomError", () => {});
-    // D-MiMo
-    {
-      const SEND_D = "M.244 7.921 18.202.03c.254-.111.528.115.452.373L14.51 14.345";
-      const html = `<!doctype html><html><head><style>button,textarea,div{display:block}</style></head><body>
-        <div class="dialogue-container"><div class="message-list">
-          <div class="message-item user-message"><div class="content">Use this: ###CMD inspect_instance### path: x ###END_CMD###</div></div>
-          <div class="message-item assistant-message"><div class="markdown-body"><p>Let me inspect it.</p><pre><code>###CMD inspect_instance###\npath: game.Workspace.TotalScript_Vani_SmokeTest\ndepth: 1\n###END_CMD###</code></pre></div></div>
-        </div><div class="input-area"><textarea placeholder="给 MiMo 发消息"></textarea><button class="send-btn"><svg><path d="${SEND_D}"/></svg></button></div></div></body></html>`;
-      const dom = new JSDOM(html, { runScripts: "outside-only", pretendToBeVisual: true, url: "https://aistudio.xiaomimimo.com/#/chat/abc123", virtualConsole: vc });
-      const w = dom.window;
-      w.Element.prototype.getBoundingClientRect = function () { return { width: 200, height: 40, top: 0, left: 0, right: 200, bottom: 40 }; };
-      w.eval(read("src/core/parser.js") + ";window.RSParse = RSParse;"); // classic content scripts share one global lexical scope
-      w.eval(read("src/providers/stream-reader.js"));
-      w.eval(read("src/providers/mimo.js"));
-      const P = w.RSProvider;
-      const items = P.allItems();
-      adapterChecks("MiMo", P, w, { userItem: items[0], cmdItem: items[1] });
-      ok("MiMo D7 a bare ```lua reply IS a commandless reply for the rescue (shown code is not an action)", P.shouldRetryCommandlessText("Here you go:\n```lua\nlocal p = Instance.new('Part')\n```") === true);
-      // network path: the tap publishes a <think> + CMD reply; readAssistant hands the parser a clean reply
-      const node = w.document.createElement("div"); node.id = "rs-stream-net"; w.document.documentElement.appendChild(node);
-      const pub = (o) => { node.textContent = JSON.stringify(Object.assign({ rid: 3, t: Date.now(), matched: true, kind: "sse", url: "/open-apis/bot/chat", status: 200, err: "", startedAt: Date.now(), sentAt: Date.now(), chunks: 1 }, o)); };
-      w.RSStreamNet.markSent("inspect it");
-      pub({ text: "<think>I should use a CMD block ###CMD delete_instance### path: game.Workspace ###END_CMD###</think>" + CMD_REPLY, done: true });
-      const ra = P.readAssistant();
-      const netCalls = R.parseToolCalls(ra.reply || "");
-      ok("MiMo D8 network read: the <think> part (which held a DIFFERENT command) is dropped; only the final answer's CMD block parses", ra.net === true && netCalls.length === 1 && netCalls[0].tool === "inspect_instance" && !/delete_instance/.test(ra.reply) && P.commandsMayAppearInThinking === false, { reply: ra.reply, thinking: (ra.thinking || "").slice(0, 60) });
-      pub({ text: "<think>planning", done: false });
-      ok("MiMo D9 while still generating (open <think>, stream not done) the reply is empty → nothing to parse yet", P.readAssistant().reply === "" && P.isGenerating() === true);
-      // SPA: hash change → new conversation key, items re-scanned
-      w.location.hash = "#/chat/zzz999";
-      ok("MiMo D10 SPA navigation (hash) changes the conversation key without re-injection", P.conversationKey() === "zzz999");
-      // duplicate send guard: one Enter → exactly one onUserMessage even with hooks installed once per page
-      const calls = [];
-      P.installSendHooks({ isBlocked: () => false, isStarted: () => true, onBlockedAttempt: () => calls.push("blocked"), onUserMessage: (c) => calls.push("msg"), onNativeStop: () => calls.push("stop") });
-      const ed = P.getEditor(); ed.value = "hello";
-      ed.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-      ok("MiMo D11 one Enter → one onUserMessage (no duplicate send signal)", calls.length === 1, calls);
-      ok("MiMo D12 adapter version marker bumped for 1.81.0", read("src/providers/mimo.js").includes('setAttribute("data-rs-mimo-ver", "2026-10b")'));
-    }
     // D-Vani
     {
       const html = `<!doctype html><html><head><style>button,textarea,div{display:block}</style></head><body><main>

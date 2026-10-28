@@ -14,7 +14,7 @@ for (const cs of manifest.content_scripts) {
   assert(pi < mi, `paint.js must load before main.js in ${cs.matches[0]}`);
   bundles += 1;
 }
-assert(bundles >= 14, `expected >=14 bundles with paint.js, got ${bundles}`);
+assert(bundles >= 12, `expected >=12 bundles with paint.js, got ${bundles}`); // 1.89.0: 12 main.js bundles after the provider removal
 assert(fs.existsSync(path.join(root, "src/core/paint.js")), "paint.js missing");
 
 const main = read("src/core/main.js");

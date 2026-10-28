@@ -91,8 +91,8 @@ const sizes = { full: RS.workModePrompt("creation").length, tight: RS.workModePr
 ok(`budgets: full loop+profile+playbooks ${sizes.full} < 18500, tight ${sizes.tight} < 3600`, sizes.full < 18500 && sizes.full > 12000 && sizes.tight < 3600 && sizes.tight > 2500);
 window.__rsWorkMode = () => "creation";
 const byProvider = {};
-for (const [id, mx] of [["chatgpt", 14000], ["clickup", 14000], ["vani", 14000], ["nvidia", 12000], ["notion", 8000], ["codecraft", 20000], ["gemini", 0], ["claude", 0]]) byProvider[id] = RS.buildSystemPrompt({ siteName: id, providerId: id, engine: "roblox", maxChars: mx }).length;
-ok("ChatGPT / ClickUp / Vani (14k budget) stay within 14k with the merged tight profile", byProvider.chatgpt <= 14000 && byProvider.clickup <= 14000 && byProvider.vani <= 14000, JSON.stringify(byProvider));
+for (const [id, mx] of [["chatgpt", 14000], ["vani", 14000], ["notion", 8000], ["codecraft", 20000], ["gemini", 0], ["claude", 0]]) byProvider[id] = RS.buildSystemPrompt({ siteName: id, providerId: id, engine: "roblox", maxChars: mx }).length;
+ok("ChatGPT / Vani (14k budget) stay within 14k with the merged tight profile", byProvider.chatgpt <= 14000 && byProvider.vani <= 14000, JSON.stringify(byProvider));
 ok("full providers stay under 48k without the catalogue", byProvider.gemini < 48000 && byProvider.claude < 48000, JSON.stringify(byProvider));
 for (const legacy of ["ultimate", "visualizer", "animator"]) {
   window.__rsWorkMode = () => legacy;
@@ -129,8 +129,8 @@ ok("overlay.css: creation badge / card / row, no legacy selectors", css.includes
 
 // ── G. bookkeeping ──
 const mf = JSON.parse(read("manifest.json"));
-ok("manifest 1.88.0", mf.version === "1.88.0", mf.version);
-ok("plugin + crate pinned at 1.88.0", read("plugin/TotalScript.lua").includes('local VERSION = "1.88.0"') && read("plugin/TotalScript.lua").includes("(TotalScript 1.88.0)") && /^version = "1\.88\.0"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "1\.88\.0"/.test(read("agent/Cargo.lock")) && readme.includes("`total-agent` 1.88.0"));
+ok("manifest 1.89.0", mf.version === "1.89.0", mf.version);
+ok("plugin + crate pinned at 1.89.0", read("plugin/TotalScript.lua").includes('local VERSION = "1.89.0"') && read("plugin/TotalScript.lua").includes("(TotalScript 1.89.0)") && /^version = "1\.89\.0"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "1\.89\.0"/.test(read("agent/Cargo.lock")) && readme.includes("`total-agent` 1.89.0"));
 ok("README changelog 1.39.0 + mode paragraph + test listed", readme.includes("**1.39.0 — Creation: one work mode.**") && readme.includes("tests/test-v139.js") && readme.includes("there is one built-in mode, **Totality** (named Creation until 1.73; stored id `creation`)") /* 1.75.0 rename */);
 ok("tests pinned to the old ids were updated (no test expects three built-in modes)", !read("tests/test-work-modes.js").includes('for (const wm of ["ultimate", "visualizer", "animator"])') && !read("tests/test-v138.js").includes('WORK_MODE_IDS: ["ultimate", "visualizer", "animator"]') && !read("tests/test-public-skills.js").includes('const WORK_MODES = ["ultimate", "visualizer", "animator"]'));
 

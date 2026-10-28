@@ -1,5 +1,5 @@
 "use strict";
-// 1.85.0 — provider PARITY suite: ClickUp Brain, Vani Chat and Xiaomi MiMo
+// 1.85.0 — provider PARITY suite: Vani Chat (1.89.0: ClickUp Brain and Xiaomi MiMo removed)
 // against the Gemini / ChatGPT baseline (the adapters whose send path commits
 // exactly once and whose row counts the core trusts).
 //
@@ -40,14 +40,6 @@ const PAGES = {
     editorIsTextarea: true,
     userRow(d, text) { const r = d.createElement("div"); r.className = "flex justify-end"; r.setAttribute("data-rect", "700,100,480,40"); r.textContent = text; d.getElementById("thread").appendChild(r); },
   },
-  mimo: {
-    host: "aistudio.xiaomimimo.com", path: "/#/c", diagPrefix: "mimo.send", landed: "mimo.send_landed", unconfirmed: "mimo.send_unconfirmed",
-    html: `<div class="dialogue-container" data-rect="280,0,1000,800"><div class="message-list" id="thread" data-rect="280,0,1000,660"></div>
-      <div class="input-area" data-rect="320,690,920,90"><textarea id="ed" placeholder="给 MiMo 发消息" data-rect="330,700,800,60"></textarea>
-      <button class="send-btn" id="send" data-rect="1190,700,40,40"><svg viewBox="0 0 19 18"><path d="M.244 7.921 18.202.03a.5.5 0 0 1 .668.668L10.98 18.5a.5.5 0 0 1-.93-.052L8.1 11.9.552 9.95a.5.5 0 0 1-.308-.929Z"/></svg></button></div></div>`,
-    editorIsTextarea: true,
-    userRow(d, text) { const r = d.createElement("div"); r.className = "message-item user-message"; r.setAttribute("data-rect", "760,100,500,44"); const c = d.createElement("div"); c.className = "content"; c.textContent = text; r.appendChild(c); d.getElementById("thread").appendChild(r); },
-  },
   // 1.86.0 - the four adapter families that still carried the multi-click loop
   // (Arena x8, Meta x6, Ox Alpha x5, MultiChat x5 for 11 provider ids).
   arena: {
@@ -64,14 +56,6 @@ const PAGES = {
       <button id="send" data-testid="composer-send-button" aria-label="Send" data-rect="1140,690,40,40"></button></div></main>`,
     editorIsTextarea: true, userRow: null,
   },
-  oxalpha: {
-    host: "oxalpha.com", path: "/chat", diagPrefix: "oxalpha.send", landed: "oxalpha.send.landed", unconfirmed: "oxalpha.send.unconfirmed",
-    html: `<main data-rect="0,0,1280,800"><div id="thread" data-rect="300,0,900,640"></div>
-      <form data-rect="300,660,900,120"><textarea id="ed" placeholder="Message" data-rect="310,670,800,80"></textarea>
-      <button id="send" type="submit" aria-label="Send" data-rect="1140,690,40,40"></button></form></main>`,
-    editorIsTextarea: true,
-    userRow(d, text) { const r = d.createElement("div"); r.setAttribute("data-message-role", "user"); r.setAttribute("data-rect", "700,100,480,40"); r.textContent = text; d.getElementById("thread").appendChild(r); },
-  },
   multichat: {
     host: "huggingface.co", path: "/chat/", diagPrefix: "huggingchat.send", landed: "huggingchat.send.landed", unconfirmed: "huggingchat.send.unconfirmed",
     html: `<main data-rect="0,0,1280,800"><div id="thread" data-rect="300,0,900,640"></div>
@@ -79,15 +63,6 @@ const PAGES = {
       <button id="send" type="submit" aria-label="Send message" data-rect="1140,690,40,40"></button></form></main>`,
     editorIsTextarea: true,
     userRow(d, text) { const r = d.createElement("div"); r.setAttribute("data-message-role", "user"); r.setAttribute("data-rect", "700,100,480,40"); r.textContent = text; d.getElementById("thread").appendChild(r); },
-  },
-  clickup: {
-    host: "app.clickup.com", path: "/9012/v/l/li/901", diagPrefix: "clickup.send", landed: "clickup.send.landed", unconfirmed: "clickup.send.unconfirmed",
-    html: `<cu-ai-side-panel class="ai-chat-panel" role="dialog" aria-label="ClickUp Brain" data-rect="760,0,440,800">
-      <div class="ai-chat__messages" id="thread" data-rect="760,40,440,600"></div>
-      <div class="ai-chat__composer" data-rect="760,650,440,150"><div class="ai-chat__editor cu-ai-editor" data-rect="776,666,408,60"><div id="ed" class="ql-editor" contenteditable="true" data-placeholder="Ask AI anything..." data-rect="776,666,408,60"><p><br></p></div></div>
-      <button type="button" id="send" data-test="ai-chat__send-button" aria-label="Send" data-rect="1150,730,30,30"><svg></svg></button></div></cu-ai-side-panel>`,
-    editorIsTextarea: false,
-    userRow(d, text) { const r = d.createElement("div"); r.className = "ai-chat-message ai-chat-message--user"; r.setAttribute("data-rect", "800,100,380,44"); r.textContent = text; d.getElementById("thread").appendChild(r); },
   },
 };
 
@@ -109,7 +84,7 @@ function loadAdapter(id) {
 const SEND_PATH_FNS = ["getEditor", "typeAndSend", "ensureComposerReady", "enforceComposer", "installSendHooks", "readAssistant", "lastAssistant", "isGenerating", "isHardGenerating", "isBusyNow", "userCount", "assistantCount", "allItems", "chatIsEmpty", "conversationKey", "scanError", "findToolBlockSpot", "classifyText", "snapshot", "stopGeneration", "isTooLongMsg", "findContinueBtn", "clickContinueBtn", "editorText"];
 const base = loadAdapter("gemini").P;
 const table = [];
-const REPAIRED = ["vani", "mimo", "clickup", "arena", "meta", "oxalpha", "multichat"];
+const REPAIRED = ["vani", "arena", "meta", "multichat"]; // 1.89.0: mimo / clickup / oxalpha providers removed
 for (const id of REPAIRED) {
   const { P } = loadAdapter(id);
   const missing = SEND_PATH_FNS.filter((f) => typeof base[f] === "function" && typeof P[f] !== "function");
@@ -121,11 +96,10 @@ for (const id of REPAIRED) {
   probe("editorText", (p) => p.editorText()); probe("readAssistant(null)", (p) => p.readAssistant(null)); probe("snapshot", (p) => p.snapshot());
   probe("scanError", (p) => p.scanError() || ""); probe("isTooLongMsg", (p) => p.isTooLongMsg("x"));
   ok(`${id}: return types match the baseline on an empty page`, typeMismatch.length === 0, typeMismatch);
-  // Vani / MiMo carry the shared PLAIN_FORMAT_NOTE (evidence: both mangle JSON
-  // fences); ClickUp keeps the baseline json + ###LUA### wording - the shared
-  // parser accepts ###CMD everywhere regardless (clickup-e2e proves it).
+  // Vani carries the shared PLAIN_FORMAT_NOTE (evidence: it mangles JSON
+  // fences); the shared parser accepts ###CMD everywhere regardless.
   ok(`${id}: promptExtra (if any) never calls JSON the only accepted form`, P.promptExtra == null || (typeof P.promptExtra === "string" && !/must be JSON|JSON only|only JSON/i.test(P.promptExtra)));
-  if (["vani", "mimo", "clickup"].includes(id)) ok(`${id}: promptExtra teaches the fenced command protocol`, typeof P.promptExtra === "string" && /###LUA###|###CMD/.test(P.promptExtra));
+  if (["vani"].includes(id)) ok(`${id}: promptExtra teaches the fenced command protocol`, typeof P.promptExtra === "string" && /###LUA###|###CMD/.test(P.promptExtra));
   ok(`${id}: commandlessRetries is unset (core default 1) or a small bounded integer (no endless nudging)`, P.commandlessRetries == null || (Number.isInteger(P.commandlessRetries) && P.commandlessRetries >= 1 && P.commandlessRetries <= 3), P.commandlessRetries);
   ok(`${id}: timings carry the four keys the core waits on, all finite`, ["WARMUP_MS", "REASON_NOREPLY_MS", "STABLE_MS", "RESPONSE_TIMEOUT_MS"].every((k) => Number.isFinite(P.timings[k])));
   const src = read(`src/providers/${id}.js`);
@@ -135,10 +109,10 @@ for (const id of REPAIRED) {
 }
 console.table(table);
 
-// CMD_SHAPE parity: the three adapters mask the same shapes the shared parser executes.
+// CMD_SHAPE parity: the adapter masks the same shapes the shared parser executes.
 {
   const shapes = ["###CMD part_create###\nname: X\n###END_CMD###", "###LUA###\nprint(1)\n###END_LUA###", '{"command":"part_create","args":{}}', '{\\"command\\":\\"x\\"}', "{ command: 'x' }", "###MCP_TOOL###"];
-  for (const id of ["vani", "mimo", "clickup"]) {
+  for (const id of ["vani"]) {
     const { d, P } = loadAdapter(id);
     const hits = shapes.map((s) => { const item = d.createElement("div"); const pre = d.createElement("pre"); pre.textContent = s; item.appendChild(pre); d.body.appendChild(item); const spot = P.findToolBlockSpot(item); item.remove(); return !!spot; });
     ok(`${id}: findToolBlockSpot masks ###CMD, ###LUA, JSON and ###MCP_TOOL### blocks (prose pre untouched)`, hits[0] && hits[1] && hits[2] && hits[5] && (() => { const item = d.createElement("div"); const pre = d.createElement("pre"); pre.textContent = "local x = 1 -- just code"; item.appendChild(pre); d.body.appendChild(item); const r = P.findToolBlockSpot(item); item.remove(); return !r; })(), hits);

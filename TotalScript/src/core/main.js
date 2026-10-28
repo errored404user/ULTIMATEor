@@ -946,20 +946,12 @@
     { name: "ChatGPT", url: "https://chatgpt.com/" },
     { name: "Claude", url: "https://claude.ai/new" },
     { name: "Gemini", url: "https://gemini.google.com/app" },
-    { name: "Kimi", url: "https://www.kimi.com/" },
-    { name: "Kimi AI", url: "https://kimi.ai/" },
-    { name: "Kimi K3 · NVIDIA NIM", url: "https://build.nvidia.com/moonshotai/kimi-k3/playground" },
+    { name: "Kimi", url: "https://kimi.ai/" },
     { name: "GLM", url: "https://chat.z.ai/" },
     { name: "Qwen", url: "https://chat.qwen.ai/" },
     { name: "Arena", url: "https://arena.ai/text/direct" },
     { name: "Meta AI", url: "https://www.meta.ai/" },
-    { name: "Crax GPT", url: "https://gpt.crax.lol/" },
-    { name: "Ox Alpha", url: "https://oxalpha.com/" },
     { name: "Vani Chat", url: "https://c.vani.ai/chat" },
-    // Xiaomi MiMo Studio is a hash-routed SPA: the chat is /#/c, a thread /#/chat/<id>.
-    { name: "Xiaomi MiMo Studio", url: "https://aistudio.xiaomimimo.com/#/c" },
-    // ClickUp Brain lives inside the ClickUp workspace app (sidebar AI / Ask AI).
-    { name: "ClickUp Brain", url: "https://app.clickup.com/" },
     // CodeCraft is an OpenAI-compatible API with no web chat: TotalScript hosts
     // the chat itself (codecraft.html, bring-your-own cc_ key). The page URL
     // is extension-local, so it opens through the background worker.
@@ -968,12 +960,9 @@
     { name: "MiniMax Agent", url: "https://agent.minimax.io/" },
     { name: "Overchat", url: "https://overchat.ai/" },
     { name: "HuggingChat", url: "https://huggingface.co/chat/" },
-    { name: "Mistral Le Chat", url: "https://chat.mistral.ai/" },
     { name: "OpenRouter Chat", url: "https://openrouter.ai/chat" },
     { name: "Groq Playground", url: "https://console.groq.com/playground" },
-    { name: "Cohere Playground", url: "https://dashboard.cohere.com/" },
     { name: "Together AI", url: "https://api.together.ai/" },
-    { name: "Fireworks AI", url: "https://fireworks.ai/" },
   ];
 
   const A = {
@@ -1112,7 +1101,7 @@
     workmode:{title:"Work mode: Totality",summary:"There is ONE built-in work mode, Totality (named Creation until 1.73): the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. Custom Public-Skill modes layer their own mandate on top of it.",details:["Totality runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → total_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Totality automatically; custom modes created on an old base keep working on Totality.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send."],howTo:["TotalScript menu → Work mode → Totality (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
     projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .totalscript-project-reference.json you can re-import."],howTo:["TotalScript menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
     permissions:{title:"Permissions",summary:"Sandbox (Studio + workspace only, no prompts), Ask (confirm writes, publishes and PC access with an approval card) or Full (entire PC via total-core).",details:["Sandbox is the default and never asks - ideal for Studio-only work.","Ask shows an approval card above the page for execute_luau, file writes, publishes and marketplace changes; it auto-denies after 120 s so a hidden card cannot stall the agent.","Full unlocks PC-wide file/terminal tools (TOTAL_FULL_ACCESS in total-core). Publish/marketplace automation additionally requires the 'Allow publish automation' switch."],howTo:["TotalScript menu → Permissions → Sandbox / Ask / Full"]},
-    providers:{title:"Chat providers",summary:"TotalScript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Meta, NVIDIA, Arena, Notion, Vani, ClickUp Brain, Crax, OxAlpha, MultiChat and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["ClickUp Brain (app.clickup.com) is the AI inside the ClickUp workspace: open Brain (sidebar AI / Ask AI) so its message box is visible - TotalScript attaches to that box only, never to task, comment or Doc editors - then press Start. Brain gets the compact catalogue and is told to answer in chat only (no ClickUp task/doc actions).","CodeCraft API (codecraftapi.com) has no web chat, so TotalScript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","Compact composers (Notion, Vani, ClickUp Brain, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the TotalScript bar appears above the composer"]},
+    providers:{title:"Chat providers",summary:"TotalScript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Meta, Arena, Notion, Vani, MultiChat and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["CodeCraft API (codecraftapi.com) has no web chat, so TotalScript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","Compact composers (Notion, Vani, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the TotalScript bar appears above the composer"]},
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for the approval card (Ask mode) or switch Permissions to Sandbox; cards auto-deny after 120 s.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
@@ -5872,7 +5861,7 @@
               // needs the primary Roblox set; addon commands were listed on demand
               // and the bridge routes by name regardless.
               const roblox = A.toolList.filter((t) => (t.server || "roblox") === "roblox");
-              // Compact providers (Notion, NVIDIA playground) cannot take the
+              // Compact providers (Notion) cannot take the
               // full one-line-per-command reminder either: with ~750 commands it
               // is ~75k characters, far above what their composer delivers. Give
               // them the same bounded name index list_commands gave them.
@@ -10647,7 +10636,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       } catch { return ""; }
     }
     function renderBar() {
-      // Agent state for MAIN-world taps (crax-net.js reads it to decide whether a
+      // Agent state for MAIN-world taps (a MAIN-world tap can read it to decide whether a
       // chat request belongs to an TotalScript session). The DOM is shared across worlds.
       try { document.documentElement.setAttribute("data-rs-agent", A.started ? "on" : (A.starting ? "starting" : "off")); } catch {}
       if (!bar) return;

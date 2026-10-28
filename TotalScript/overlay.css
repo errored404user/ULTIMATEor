@@ -198,7 +198,6 @@ html.rs-light #rs-bar.rs-bar-anchored {
 #rs-bar.rs-prov-chatgpt #rs-brand { letter-spacing: -0.15px; }
 #rs-bar.rs-prov-deepseek { font-variant-ligatures: none; }
 #rs-bar.rs-prov-kimi { font-family: "Inter", ui-sans-serif, -apple-system, sans-serif; letter-spacing: 0.08px; }
-#rs-bar.rs-prov-nvidia { font-family: "NVIDIA Sans", "Inter", ui-sans-serif, sans-serif; letter-spacing: 0.04px; }
 #rs-bar.rs-prov-qwen { font-family: "Inter", ui-sans-serif, sans-serif; }
 #rs-bar.rs-prov-arena { font-family: "Inter", ui-sans-serif, sans-serif; }
 #rs-bar.rs-prov-glm { font-family: "Inter", ui-sans-serif, sans-serif; }
@@ -210,17 +209,11 @@ html.rs-light #rs-bar.rs-bar-anchored {
     radius so both edges clear the corners cleanly. */
 #rs-bar.rs-bar-anchored.rs-prov-meta { padding-left: 30px; padding-right: 30px; }
 
-/* Microsoft Copilot + Crax GPT + every inline-inside site share one unified
+/* Microsoft Copilot + every inline-inside site share one unified
    clean header treatment: NO negative margins, NO custom widths — the bar is
    simply the first row of the composer card, full card width, with a hairline
    divider. Negative-margin variants used to overlap the textarea/attach row
-   (the Crax "bar over Ask anything" bug). */
-/* Crax GPT — warm ember accent only (fonts/dot/state/start button); layout
-   comes from the anchored header rules (bar hugs the chatbox top edge).
-   IMPORTANT: we DEFINE --accent/--accent-strong/etc. HERE, scoped to our bar.
-   Crax's own site CSS sets a teal --accent on <html>/body; without this
-   re-definition every var(--accent, ember) inside our rules resolved to THEIR
-   teal (the green Start button bug). Defining on #rs-bar wins by inheritance. */
+   (the old "bar over Ask anything" bug). */
 /* Notion AI: the bar floats just ABOVE Notion's full-page AI composer
    (provider `barOutside`), so it carries its own rounded shell; palette
    follows Notion's warm neutral ink + blue accent. */
@@ -243,92 +236,9 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-notion {
 #rs-bar.rs-prov-notion #rs-dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 #rs-bar.rs-prov-notion #rs-state b { color: var(--accent); }
 
-#rs-bar.rs-prov-crax {
-  --accent: #d98a5b;
-  --accent-strong: #e89a6b;
-  --accent-soft: rgba(217, 138, 91, 0.14);
-  --accent-inv: #14100c;
-  font-family: "Inter", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-#rs-bar.rs-bar-anchored.rs-prov-crax {
-  border-bottom-color: var(--accent-soft);
-}
-html.rs-light #rs-bar.rs-bar-anchored.rs-prov-crax {
-  border-bottom-color: rgba(180, 110, 60, 0.14);
-}
-#rs-bar.rs-prov-crax #rs-brand {
-  font-family: "Outfit", "Inter", sans-serif;
-  font-weight: 700;
-  letter-spacing: -0.2px;
-}
-#rs-bar.rs-prov-crax #rs-dot.on {
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
-}
-#rs-bar.rs-prov-crax #rs-dot.warn { background: var(--accent-strong); box-shadow: 0 0 8px var(--accent-strong); }
-#rs-bar.rs-prov-crax #rs-state b { color: var(--accent); }
-/* Warn text (bridge offline etc.) — ember instead of generic red */
-#rs-bar.rs-prov-crax #rs-state.rs-state-warn,
-#rs-bar.rs-prov-crax #rs-state.rs-state-warn b { color: var(--accent-strong); }
-#rs-bar.rs-prov-crax #rs-action[data-kind="start"],
-#rs-bar.rs-prov-crax #rs-action[data-kind="start-degraded"] {
-  background: var(--accent);
-  color: var(--accent-inv);
-  border-color: transparent;
-  box-shadow: none;
-  font-family: "Inter", sans-serif;
-  font-weight: 600;
-  border-radius: 20px;
-  padding: 7px 14px;
-}
-/* Restart stays a quiet ember ghost on Crax too - same hierarchy as every
-   other site (Start is the only filled CTA), just in the site's palette. */
-#rs-bar.rs-prov-crax #rs-action[data-kind="restart"] {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  border: 1px solid rgba(217, 138, 91, 0.38);
-  box-shadow: none;
-  font-family: "Inter", sans-serif;
-  font-weight: 600;
-  border-radius: 20px;
-  padding: 7px 14px;
-}
-#rs-bar.rs-prov-crax #rs-action[data-kind="restart"]:hover {
-  background: rgba(217, 138, 91, 0.26);
-  border-color: rgba(217, 138, 91, 0.55);
-}
-#rs-bar.rs-prov-crax #rs-action[data-kind="start"]:hover,
-#rs-bar.rs-prov-crax #rs-action[data-kind="start-degraded"]:hover { filter: brightness(1.05); }
-#rs-bar.rs-prov-crax #rs-switch,
-#rs-bar.rs-prov-crax #rs-discord,
-#rs-bar.rs-prov-crax #rs-support {
-  background: rgba(255,255,255,0.06);
-  border-color: rgba(217,138,91,0.18);
-  color: #e8e8ec;
-}
-
-/* Xiaomi MiMo Studio (aistudio.xiaomimimo.com) - Xiaomi orange accent on a
-   neutral bar; the page is a plain light/dark SPA so the bar stays flat. */
-#rs-bar.rs-prov-mimo {
-  --accent: #ff6900;
-  --accent-strong: #ff8533;
-  --accent-soft: rgba(255, 105, 0, 0.14);
-  --accent-inv: #1a0d00;
-  font-family: "MiSans", "Inter", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-#rs-bar.rs-prov-mimo #rs-brand { font-weight: 700; letter-spacing: -0.15px; }
-#rs-bar.rs-prov-mimo #rs-dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
-#rs-bar.rs-prov-mimo #rs-dot.warn { background: var(--accent-strong); box-shadow: 0 0 8px var(--accent-strong); }
-#rs-bar.rs-prov-mimo #rs-state b { color: var(--accent); }
-#rs-bar.rs-prov-mimo #rs-action[data-kind="start"],
-#rs-bar.rs-prov-mimo #rs-action[data-kind="start-degraded"] { background: var(--accent); color: var(--accent-inv); border-color: transparent; }
-#rs-bar.rs-prov-crax #rs-switch:hover,
-#rs-bar.rs-prov-crax #rs-discord:hover,
-#rs-bar.rs-prov-crax #rs-support:hover { background: rgba(217,138,91,0.14); }
-
 /* ── Unified subtle header for every provider (anchored + inline-above) ─────
    Ensures every rs-prov-* has both an anchored and an inline-above
-   transparent header with subtle divider, matching the Crax/Copilot anchored
+   transparent header with subtle divider, matching the Copilot anchored
    look on both light/dark themes. DeepSeek and ChatGPT were moved from
    inside:true (first child of the padded input card) to inside:false above
    the card, so they now use the inline-above path and need the transparent
@@ -338,38 +248,28 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-crax {
 #rs-bar.rs-bar-inline.rs-prov-claude,
 #rs-bar.rs-bar-inline.rs-prov-gemini,
 #rs-bar.rs-bar-inline.rs-prov-kimi,
-#rs-bar.rs-bar-inline.rs-prov-nvidia,
 #rs-bar.rs-bar-inline.rs-prov-glm,
 #rs-bar.rs-bar-inline.rs-prov-arena,
 #rs-bar.rs-bar-inline.rs-prov-meta,
 #rs-bar.rs-bar-inline.rs-prov-qwen,
-#rs-bar.rs-bar-inline.rs-prov-oxalpha,
 #rs-bar.rs-bar-inline.rs-prov-vani,
-#rs-bar.rs-bar-inline.rs-prov-clickup,
 #rs-bar.rs-bar-inline.rs-prov-codecraft,
 #rs-bar.rs-bar-inline.rs-prov-minimax,
 #rs-bar.rs-bar-inline.rs-prov-overchat,
 #rs-bar.rs-bar-inline.rs-prov-huggingchat,
-#rs-bar.rs-bar-inline.rs-prov-crax,
-#rs-bar.rs-bar-inline.rs-prov-mimo,
 #rs-bar.rs-bar-anchored.rs-prov-deepseek,
 #rs-bar.rs-bar-anchored.rs-prov-chatgpt,
 #rs-bar.rs-bar-anchored.rs-prov-claude,
 #rs-bar.rs-bar-anchored.rs-prov-gemini,
 #rs-bar.rs-bar-anchored.rs-prov-kimi,
-#rs-bar.rs-bar-anchored.rs-prov-nvidia,
 #rs-bar.rs-bar-anchored.rs-prov-glm,
 #rs-bar.rs-bar-anchored.rs-prov-arena,
 #rs-bar.rs-bar-anchored.rs-prov-meta,
 #rs-bar.rs-bar-anchored.rs-prov-qwen,
-#rs-bar.rs-bar-anchored.rs-prov-oxalpha,
 #rs-bar.rs-bar-anchored.rs-prov-vani,
-#rs-bar.rs-bar-anchored.rs-prov-clickup,
 #rs-bar.rs-bar-anchored.rs-prov-minimax,
 #rs-bar.rs-bar-anchored.rs-prov-overchat,
-#rs-bar.rs-bar-anchored.rs-prov-huggingchat,
-#rs-bar.rs-bar-anchored.rs-prov-crax,
-#rs-bar.rs-bar-anchored.rs-prov-mimo {
+#rs-bar.rs-bar-anchored.rs-prov-huggingchat {
   background: transparent;
   border: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -386,41 +286,31 @@ html.rs-light #rs-bar.rs-bar-inline.rs-prov-chatgpt,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-claude,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-gemini,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-kimi,
-html.rs-light #rs-bar.rs-bar-inline.rs-prov-nvidia,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-glm,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-arena,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-meta,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-qwen,
-html.rs-light #rs-bar.rs-bar-inline.rs-prov-oxalpha,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-vani,
-html.rs-light #rs-bar.rs-bar-inline.rs-prov-clickup,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-codecraft,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-minimax,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-overchat,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-huggingchat,
-html.rs-light html.rs-light #rs-bar.rs-bar-inline.rs-prov-crax,
-html.rs-light #rs-bar.rs-bar-inline.rs-prov-mimo,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-deepseek,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-chatgpt,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-claude,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-gemini,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-kimi,
-html.rs-light #rs-bar.rs-bar-anchored.rs-prov-nvidia,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-glm,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-arena,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-meta,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-qwen,
-html.rs-light #rs-bar.rs-bar-anchored.rs-prov-oxalpha,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-vani,
-html.rs-light #rs-bar.rs-bar-anchored.rs-prov-clickup,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-minimax,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-overchat,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-huggingchat,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-minimax,
 #rs-bar.rs-bar-anchored.rs-prov-overchat,
-#rs-bar.rs-bar-anchored.rs-prov-huggingchat,
-html.rs-light #rs-bar.rs-bar-anchored.rs-prov-crax,
-html.rs-light #rs-bar.rs-bar-anchored.rs-prov-mimo {
+#rs-bar.rs-bar-anchored.rs-prov-huggingchat {
   background: transparent;
   border-bottom-color: rgba(0, 0, 0, 0.08);
 }
@@ -1533,7 +1423,6 @@ html {
 
 /* ── brand: quiet lift, version as a machined micro-badge ── */
 #rs-brand { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.07); }
-#rs-bar.rs-prov-crax #rs-brand { text-shadow: none; }
 .rs-free {
   display: inline-block;
   margin-left: 6px; padding: 1.5px 7px;
@@ -1825,55 +1714,6 @@ html.rs-light #rs-setup-steps li::before {
    ══════════════════════════════════════════════════════════════ */
 
 /* ══════════════════════════════════════════════════════════════
-   CRAX BLEND — chips speak the site's warm ember language
-   gpt.crax.lol renders code embeds as warm dark cards with an
-   ember header ("JSON · Copy · Download"). Our tool chips sit in
-   the same conversation, so on this site only they adopt the same
-   surface/palette instead of neutral grey. Structure is untouched
-   - every other site keeps the standard look.
-   ══════════════════════════════════════════════════════════════ */
-html.rs-site-crax .rs-chip {
-  background: rgba(33, 24, 17, 0.78);
-  border-color: rgba(217, 138, 91, 0.18);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
-  font-family: "Inter", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
-}
-html.rs-site-crax .rs-chip:hover {
-  background: rgba(43, 31, 22, 0.85);
-  border-color: rgba(217, 138, 91, 0.32);
-}
-/* result/sys/idle stripes go ember (neutral grey reads cold here) */
-html.rs-site-crax .rs-chip.result,
-html.rs-site-crax .rs-chip.sys,
-html.rs-site-crax .rs-chip.idle {
-  --cat: #d98a5b;
-  color: #c9b3a4;
-  box-shadow: inset 2px 0 0 rgba(217, 138, 91, 0.45);
-}
-/* done green warms up slightly to sit next to ember without clashing */
-html.rs-site-crax .rs-chip.done { --cat: #74c69d; }
-html.rs-site-crax .rs-chip.err { border-color: rgba(239, 68, 68, 0.32); }
-html.rs-site-crax .rs-chip-body pre { color: #d8c7ba; }
-html.rs-site-crax .rs-toast {
-  background: rgba(33, 24, 17, 0.94);
-  border-color: rgba(217, 138, 91, 0.2);
-}
-html.rs-site-crax .rs-banner {
-  background: rgba(30, 21, 15, 0.95);
-  border-color: rgba(217, 138, 91, 0.2);
-}
-/* active Extra pill joins the palette too (purple clashed on this site) */
-html.rs-site-crax #rs-extra[data-on="1"] {
-  background: rgba(217, 138, 91, 0.16);
-  color: #f0c3a0;
-  border-color: rgba(217, 138, 91, 0.38);
-}
-html.rs-site-crax #rs-extra[data-on="1"]:hover {
-  background: rgba(217, 138, 91, 0.26);
-  border-color: rgba(217, 138, 91, 0.5);
-}
-
-/* ══════════════════════════════════════════════════════════════
    SITE THEME LAYER
    One identical UI on every site - same components, same physics,
    same layout - but the accent hue follows each site's brand.
@@ -1886,8 +1726,6 @@ html.rs-site-crax #rs-extra[data-on="1"]:hover {
 /* Per-site brand accents — matched to each AI's live identity (light+dark).
    Default: refined sky for unknown/dark-mode sites. */
 html { --rsa: #ffffff; }
-
-/* Crax GPT: signature orange on black */
 
 /* primary CTA: top-lit gradient derived from any hue */
 #rs-action[data-kind="start"] {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/providers/kimi.js - the Kimi (www.kimi.com, Moonshot AI) provider.
+// src/providers/kimi.js - the Kimi (kimi.ai, Moonshot AI) provider. 1.89.0: kimi.com hosts dropped from the manifest.
 // Exports the same RSProvider interface as src/providers/deepseek.js and gemini.js;
 // the core (src/core/main.js) is provider-agnostic. To DISABLE Kimi support, remove
 // this file from manifest.json (and its URL from background.js PROVIDER_URLS +

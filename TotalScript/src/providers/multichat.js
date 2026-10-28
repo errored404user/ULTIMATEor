@@ -13,15 +13,10 @@ const RSProvider = (() => {
     // These are browser chat/playground surfaces, not direct API clients. TotalScript
     // never asks for or stores provider credentials; API-only pages fail visibly
     // with the adapter's normal "open a text chat" warning.
-    "chat.mistral.ai":{id:"mistral",name:"Mistral Le Chat",chat:"https://chat.mistral.ai/"},
-    "mistral.ai":{id:"mistral",name:"Mistral Le Chat",chat:"https://chat.mistral.ai/"},
     "openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"},
     "www.openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"},
     "console.groq.com":{id:"groq",name:"Groq Playground",chat:"https://console.groq.com/playground"},
-    "dashboard.cohere.com":{id:"cohere",name:"Cohere Playground",chat:"https://dashboard.cohere.com/"},
-    "api.together.ai":{id:"together",name:"Together AI",chat:"https://api.together.ai/"},
-    "fireworks.ai":{id:"fireworks",name:"Fireworks AI",chat:"https://fireworks.ai/"},
-    "app.fireworks.ai":{id:"fireworks",name:"Fireworks AI",chat:"https://app.fireworks.ai/"}
+    "api.together.ai":{id:"together",name:"Together AI",chat:"https://api.together.ai/"}
   };
   const SITE=HOSTS[location.hostname]||{id:"multichat",name:"AI Chat",chat:location.origin};
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

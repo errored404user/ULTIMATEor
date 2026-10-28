@@ -4,8 +4,8 @@
 //
 // The tap publishes the latest chat response as JSON on #rs-stream-net:
 //   { rid, text, done, t, matched, kind, url, status, err, startedAt, sentAt }
-// This helper gives the adaptive providers (Vani, ClickUp Brain, Ox Alpha,
-// MultiChat) one small API on top of it:
+// This helper gives the adaptive providers (Vani, MultiChat; until 1.89.0 also
+// ClickUp Brain and Ox Alpha) one small API on top of it:
 //   markSent(text)  - call right before a send: publishes a fragment of the
 //                     outgoing message on <html data-rs-sent> so the tap can
 //                     recognise OUR request, and marks whatever the tap holds

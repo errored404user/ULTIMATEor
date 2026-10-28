@@ -122,10 +122,8 @@ ok("salvage handles escaped quotes", cutEsc && cutEsc.tool === "execute_luau" &&
   const mainSrc = fs.readFileSync(path.join(__dirname, "..", "src", "core", "main.js"), "utf8");
   const cfgSrc = fs.readFileSync(path.join(__dirname, "..", "src", "core", "config.js"), "utf8");
   const dsSrc = fs.readFileSync(path.join(__dirname, "..", "src", "providers", "deepseek.js"), "utf8");
-  const nvSrc = fs.readFileSync(path.join(__dirname, "..", "src", "providers", "nvidia.js"), "utf8");
   ok("main flags alternate-envelope commands as native", mainSrc.includes('return { kind: "tool", calls: alternateCalls, item: d.item, native: true };'));
   ok("main appends the format note to a native envelope's result", mainSrc.includes('if (res.native) { try { toSend += "\\n\\n" + RS.FEEDBACK.nativeEnvelope;'));
   ok("config carries FEEDBACK.nativeEnvelope asking for fenced JSON", /nativeEnvelope:\s*\n\s*"\(Format note from TotalScript/.test(cfgSrc) && cfgSrc.includes("never the DSML / <tool_call> envelope.)"));
   ok("DeepSeek provider note forbids native DSML markup", dsSrc.includes("NEVER emit your native tool-call markup (<｜DSML｜function_calls>"));
-  ok("NVIDIA CMD_SHAPE accepts the spaced / escaped DSML spelling", nvSrc.includes("(?:<|&lt;)\\s*(?:[｜|]{1,2}\\s*DSML\\s*[｜|]{1,2}\\s*)?invoke\\b"));
 }

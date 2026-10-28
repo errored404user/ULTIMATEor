@@ -1,4 +1,4 @@
-// TotalScript — Reasoning effort (1.88.0)
+// TotalScript — Reasoning effort (1.89.0)
 //
 // One setting, five levels: low · mid · high · max · ultimate. It does two things:
 //
@@ -137,12 +137,6 @@
     arena: {
       name: "Arena",
       note: "No global switch - the reasoning depth is the model you pick in Arena's model picker (o-series / Thinking models think more). Effort applies through the prompt.",
-      modes: [{ id: "model", label: "Current model (prompt only)", rule: { kind: "none" } }],
-      map: { low: "model", mid: "model", high: "model", max: "model", ultimate: "model" },
-    },
-    nvidia: {
-      name: "NVIDIA NIM",
-      note: "Reasoning depends on the selected NIM model; effort applies through the prompt.",
       modes: [{ id: "model", label: "Current model (prompt only)", rule: { kind: "none" } }],
       map: { low: "model", mid: "model", high: "model", max: "model", ultimate: "model" },
     },
@@ -345,7 +339,7 @@
   }
 
   const api = {
-    PROFILE_KEYS, VERSION: "1.88.0", LEVELS, LEVEL_IDS, PROVIDERS, FOCUS, FOCUS_IDS, BOOST_TEXT, normalize, levelOf, rank, atLeast, providerOf, hasNative, modeFor, table, apply, gate, cleanExtras, effectiveProfile, promptExtras, extrasCount, _test: { pressed, shortLabel, findControl } };
+    PROFILE_KEYS, VERSION: "1.89.0", LEVELS, LEVEL_IDS, PROVIDERS, FOCUS, FOCUS_IDS, BOOST_TEXT, normalize, levelOf, rank, atLeast, providerOf, hasNative, modeFor, table, apply, gate, cleanExtras, effectiveProfile, promptExtras, extrasCount, _test: { pressed, shortLabel, findControl } };
   try { window.TotalReasoning = api; } catch {}
   try { if (typeof module !== "undefined" && module.exports) module.exports = api; } catch {}
 })();

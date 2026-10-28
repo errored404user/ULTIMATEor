@@ -19,9 +19,6 @@
     chatgpt: ['[data-testid*="modal"]', '[data-testid*="popover"]', '[role="dialog"]'],
     deepseek: ['.ds-modal', '[class*="modal"]', '[role="dialog"]'],
     gemini: ['mat-dialog-container', '.cdk-overlay-pane', '[role="dialog"]'],
-    // ClickUp (Angular CDK): menus/modals in .cdk-overlay-pane; the Brain panel itself
-    // holds the composer and is skipped by the editor rule.
-    clickup: ['.cdk-overlay-pane [role="dialog"]', 'cu-modal', '[role="dialog"]'],
     claude: ['[data-radix-popper-content-wrapper]', '[role="dialog"]'],
     qwen: ['.ant-modal', '.ant-drawer', '.ant-dropdown', '[role="dialog"]'],
     kimi: ['.n-modal', '.n-drawer', '.v-binder-follower-content', '[role="dialog"]'],

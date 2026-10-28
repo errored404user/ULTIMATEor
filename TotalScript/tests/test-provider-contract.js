@@ -64,7 +64,7 @@ const seenProviders = new Set();
 for (const b of bundles) {
   const providerFile = b.js.find((j) => /src\/providers\//.test(j) && !/stream-reader\.js$/.test(j));
   const host = hostOf(b.matches[0]);
-  const pathname = host === "huggingface.co" ? "/chat/" : host === "www.notion.so" ? "/ai" : host === "build.nvidia.com" ? "/moonshotai/kimi-k3" : "/";
+  const pathname = host === "huggingface.co" ? "/chat/" : host === "www.notion.so" ? "/ai" : "/";
   const win = mockWindow(host, pathname);
   const ctx = vm.createContext(win);
   let P = null, loadErr = null;
@@ -94,7 +94,7 @@ for (const b of bundles) {
   rows.push({ id, name: caps ? caps.name : "?", file: providerFile, caps, problems });
   ok(`${id}: adapter honours the read-side contract on an empty page (${PROBES.length} probes, ${REQUIRED_FNS.length} required functions)`, problems.length === 0, problems);
 }
-ok("every manifest bundle produced one adapter (" + rows.length + " distinct providers)", rows.length >= 16, rows.map((r) => r.id));
+ok("every manifest bundle produced one adapter (" + rows.length + " distinct providers)", rows.length >= 12, rows.map((r) => r.id)); // 1.89.0: 12 bundles after the provider removal
 
 // ── capability table (offline) ──
 console.log("\nPROVIDER CAPABILITY REPORT — offline, mocked DOM; NOT a live-provider result");

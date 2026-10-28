@@ -91,7 +91,7 @@ const { ok, waitFor, finish } = makeReporter();
   try {
     page.loadBundle();
     const P = w.RSProvider, SI = w.TotalSkillIntel;
-    ok("TotalSkillIntel is part of the bundle (loaded before main.js)", !!SI && SI.VERSION === "1.88.0" && typeof SI.answer === "function");
+    ok("TotalSkillIntel is part of the bundle (loaded before main.js)", !!SI && SI.VERSION === "1.89.0" && typeof SI.answer === "function");
     await waitFor(() => d.getElementById("rs-bar"), 8000, "#rs-bar");
     await sleep(1200);
     const bar = d.getElementById("rs-bar");

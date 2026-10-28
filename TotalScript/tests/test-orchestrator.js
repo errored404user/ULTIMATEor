@@ -109,11 +109,11 @@ ok("FEEDBACK.providerRetry(cls, attempt, seconds) tells the model the previous m
   ok("capabilities(): vision needs supportsVision + attachImages, tightPrompt from sysMaxChars/compact flag, timings copied", c.vision === true && c.tightPrompt === true && c.maxBatchCommands === 4 && c.timings.warmupMs === 10000 && c.timings.responseTimeoutMs === 300000 && c.errorScan && c.nativeContinue);
   ok("capabilities(): nothing is invented for a bare adapter", (() => { const b = O.capabilities({ id: "y", displayName: "Y" }); return b.vision === false && b.streamTap === false && !b.sysMaxChars && b.tightPrompt === false && b.nativeContinue === false; })());
 }
-ok("orchestrator VERSION pinned", O.VERSION === "1.88.0", O.VERSION);
+ok("orchestrator VERSION pinned", O.VERSION === "1.89.0", O.VERSION);
 
 // ── wiring pins ──
 const bundles = manifest.content_scripts.filter((c) => c.world !== "MAIN" && c.js.some((j) => j.includes("src/core/main.js")));
-ok("manifest: orchestrator.js precedes main.js in every core bundle (" + bundles.length + ")", bundles.length >= 16 && bundles.every((b) => b.js.indexOf("src/core/orchestrator.js") > 0 && b.js.indexOf("src/core/orchestrator.js") < b.js.indexOf("src/core/main.js") && b.js.indexOf("src/core/reasoning.js") < b.js.indexOf("src/core/orchestrator.js")));
+ok("manifest: orchestrator.js precedes main.js in every core bundle (" + bundles.length + ")", bundles.length >= 12 && bundles.every((b) => b.js.indexOf("src/core/orchestrator.js") > 0 && b.js.indexOf("src/core/orchestrator.js") < b.js.indexOf("src/core/main.js") && b.js.indexOf("src/core/reasoning.js") < b.js.indexOf("src/core/orchestrator.js")));
 ok("codecraft.html loads orchestrator.js after reasoning.js and before main.js", html.indexOf('src="src/core/reasoning.js"') < html.indexOf('src="src/core/orchestrator.js"') && html.indexOf('src="src/core/orchestrator.js"') < html.indexOf('src="src/core/main.js"'));
 const PINS = [
   ["ORCH handle", /const ORCH = \(typeof TotalOrchestrator !== "undefined" && TotalOrchestrator\) \|\| null;/],

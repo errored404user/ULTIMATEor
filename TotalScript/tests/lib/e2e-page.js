@@ -1,7 +1,6 @@
 "use strict";
 // Shared scaffolding for the whole-bundle provider e2e harnesses (1.85.0):
-// tests/vani-e2e.js and tests/mimo-e2e.js (tests/clickup-e2e.js predates this
-// file and keeps its own inline copy).
+// tests/vani-e2e.js, tests/gemini-e2e.js and tests/skill-intel-e2e.js.
 //
 // What it gives a harness:
 //   createPage({ html, url, host, mainWorld })  - a jsdom page with the layout

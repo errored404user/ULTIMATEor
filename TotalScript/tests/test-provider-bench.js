@@ -39,7 +39,7 @@ const seen = new Set();
 for (const b of manifest.content_scripts.filter((c) => c.world !== "MAIN" && c.js.some((j) => j.includes("src/core/main.js")))) {
   const file = b.js.find((j) => /src\/providers\//.test(j) && !/stream-reader\.js$/.test(j));
   const host = hostOf(b.matches[0]);
-  const pathname = host === "huggingface.co" ? "/chat/" : host === "www.notion.so" ? "/ai" : host === "build.nvidia.com" ? "/moonshotai/kimi-k3" : "/";
+  const pathname = host === "huggingface.co" ? "/chat/" : host === "www.notion.so" ? "/ai" : "/";
   const win = mockWindow(host, pathname), ctx = vm.createContext(win);
   try {
     if (b.js.includes("src/providers/stream-reader.js")) vm.runInContext(read("src/providers/stream-reader.js"), ctx);
@@ -51,7 +51,7 @@ for (const b of manifest.content_scripts.filter((c) => c.world !== "MAIN" && c.j
   providers.push({ id: P.id, P, caps: O.capabilities(P), file });
 }
 providers.sort((a, b) => a.id.localeCompare(b.id));
-ok("adapters loaded for the benchmark: " + providers.map((p) => p.id).join(", "), providers.length >= 16);
+ok("adapters loaded for the benchmark: " + providers.map((p) => p.id).join(", "), providers.length >= 12); // 1.89.0: 12 bundles after the provider removal
 // The desktop app (total-agent, OpenAI-compatible HTTP) is benchmarked from its source pins.
 providers.push({ id: "total-agent", P: null, caps: { id: "total-agent", name: "total-agent (HTTP tools)", vision: false, tightPrompt: false, sysMaxChars: 0, sendCharBudget: 0, maxBatchCommands: 8, timings: {} }, rust: true });
 

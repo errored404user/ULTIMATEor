@@ -53,7 +53,6 @@ ok("gui mutation suite", guiSrc.includes("ui_set_image") && guiSrc.includes("ui_
 ok("agentscript extras suite", agentSrc.includes("append_file") && agentSrc.includes("replace_in_files") && agentSrc.includes("AgentScriptSkills") && manJs.includes("agent_skills.js"));
 ok("gui mutation in system prompt", cfgSrc.includes("GUI MUTATION") && cfgSrc.includes("ui_set_image"));
 ok("create prompt uses texture tools", mainSrc.includes("ui_set_image") && mainSrc.includes("ui_set_texture"));
-ok("oxalpha provider", manJs.includes("oxalpha.com") && manJs.includes("src/providers/oxalpha.js"));
 ok("blender camera align", fs.readFileSync(path.join(root, "tools", "blender_ops.py"), "utf8").includes("cmd_align_camera_axis") && fs.readFileSync(path.join(root, "background.js"), "utf8").includes("blender_align_camera"));
 ok("ui_build daily", guiSrc.includes("ui_build") && guiSrc.includes("BUILTIN"));
 ok("no leftover template backticks in lua lib", !/`plugin`/.test(skillSrc));
