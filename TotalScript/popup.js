@@ -7,8 +7,8 @@ const SUPPORTED_HOSTS = [
   "chat.z.ai", "chat.qwen.ai", "arena.ai",
   "www.meta.ai", "meta.ai",
   "www.notion.so", "app.notion.so", "www.notion.com", "notion.com", "c.vani.ai",
-  "agent.minimax.io", "overchat.ai", "www.overchat.ai", "huggingface.co", "www.huggingface.co",
-  "openrouter.ai", "www.openrouter.ai", "api.together.ai",
+  "overchat.ai", "www.overchat.ai", "huggingface.co", "www.huggingface.co",
+  "openrouter.ai", "www.openrouter.ai",
 ];
 const DEFAULT_AI_URL = "https://chat.deepseek.com/";
 // CodeCraft API (codecraftapi.com) is API-only; TotalScript hosts its chat page.

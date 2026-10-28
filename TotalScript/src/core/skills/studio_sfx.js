@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript production SFX pack (1.90.0) - sound EVENTS instead of loose
+// TotalScript production SFX pack (1.91.0) - sound EVENTS instead of loose
 // Sound instances, layered on RobloxScriptSkills like studio_cutscene.js.
 //
 // Why (Phase 115 audit): sound_library / jingle / ambient_loop shipped
@@ -24,7 +24,7 @@
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
 
-  const VERSION = "1.90.0";
+  const VERSION = "1.91.0";
   const q = (s) => '"' + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "\\r").replace(/\n/g, "\\n") + '"';
   const num = (v) => { const x = Number(v); return isFinite(x) ? x : null; };
   const lua = RobloxScriptSkills.luaLiteral || function lua(v) {

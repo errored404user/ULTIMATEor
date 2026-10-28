@@ -1,5 +1,5 @@
 --!nocheck
--- TotalScript Studio plugin  (TotalScript 1.90.0)
+-- TotalScript Studio plugin  (TotalScript 1.91.0)
 -- SPDX-License-Identifier: GPL-3.0-or-later
 --
 -- A tiny worker that lives INSIDE Roblox Studio and lets TotalScript (the browser
@@ -50,7 +50,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 if not plugin then return end
 if RunService:IsRunning() then return end -- edit mode only; play-test DataModels do not run the worker
 
-local VERSION = "1.90.0"
+local VERSION = "1.91.0"
 local DEFAULT_BRIDGE = "http://127.0.0.1:3000"
 local CLIENT_ID = "studio-plugin-" .. tostring(math.random(100000, 999999))
 local CAPABILITIES = {

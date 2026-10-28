@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TotalScript",
-  "version": "1.90.0",
+  "version": "1.91.0",
   "minimum_chrome_version": "111",
   "description": "Turn ChatGPT, Claude, DeepSeek, Gemini, Kimi, GLM, Qwen, Arena, Meta AI, Vani, Notion AI or the MultiChat sites into a Roblox Studio / AgentScript agent. Two engines (RS/AS), work modes, image-to-model, auto-fix playtest errors, and Extra Thinking.",
   "permissions": [
@@ -42,13 +42,11 @@
     "https://develop.roblox.com/*",
     "https://auth.roblox.com/*",
     "https://users.roblox.com/*",
-    "https://agent.minimax.io/*",
     "https://overchat.ai/*",
     "https://*.overchat.ai/*",
     "https://huggingface.co/chat/*",
     "https://openrouter.ai/*",
     "https://www.openrouter.ai/*",
-    "https://api.together.ai/*",
     "https://www.notion.so/*",
     "https://app.notion.so/*",
     "https://www.notion.com/*",
@@ -731,13 +729,11 @@
     {
       "matches": [
         "https://c.vani.ai/*",
-        "https://agent.minimax.io/*",
         "https://overchat.ai/*",
         "https://*.overchat.ai/*",
         "https://huggingface.co/chat/*",
         "https://openrouter.ai/*",
-        "https://www.openrouter.ai/*",
-        "https://api.together.ai/*"
+        "https://www.openrouter.ai/*"
       ],
       "js": [
         "src/providers/stream-net.js"
@@ -824,13 +820,11 @@
     },
     {
       "matches": [
-        "https://agent.minimax.io/*",
         "https://overchat.ai/*",
         "https://*.overchat.ai/*",
         "https://huggingface.co/chat/*",
         "https://openrouter.ai/*",
-        "https://www.openrouter.ai/*",
-        "https://api.together.ai/*"
+        "https://www.openrouter.ai/*"
       ],
       "js": [
         "src/core/config.js",

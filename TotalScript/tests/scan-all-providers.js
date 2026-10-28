@@ -7,7 +7,7 @@ const providerFiles = [
   'src/providers/deepseek.js', 'src/providers/gemini.js', 'src/providers/glm.js',
   'src/providers/kimi.js', 'src/providers/meta.js', 'src/providers/vani.js',
   'src/providers/qwen.js',
-  ['src/providers/multichat.js','agent.minimax.io'],
+  ['src/providers/multichat.js','overchat.ai'],
   ['src/providers/multichat.js','overchat.ai'],
   ['src/providers/multichat.js','huggingface.co'],
   // Extension-hosted chat page (no content_scripts entry: loaded by codecraft.html).

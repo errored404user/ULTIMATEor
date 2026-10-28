@@ -957,11 +957,9 @@
     // is extension-local, so it opens through the background worker.
     { name: "CodeCraft API", url: CODECRAFT_PAGE_URL, host: "codecraftapi.com · in TotalScript", extensionPage: "codecraft.html" },
     { name: "Notion AI", url: "https://www.notion.so/chat" },
-    { name: "MiniMax Agent", url: "https://agent.minimax.io/" },
     { name: "Overchat", url: "https://overchat.ai/" },
     { name: "HuggingChat", url: "https://huggingface.co/chat/" },
     { name: "OpenRouter Chat", url: "https://openrouter.ai/chat" },
-    { name: "Together AI", url: "https://api.together.ai/" },
   ];
 
   const A = {

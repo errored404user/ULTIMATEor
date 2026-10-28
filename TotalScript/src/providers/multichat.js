@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/providers/multichat.js — adaptive provider for MiniMax Agent, Overchat, and HuggingChat.
+// src/providers/multichat.js — adaptive provider for Overchat, HuggingChat and OpenRouter Chat.
 // Each host is isolated to its plain text chat surface. DOM assumptions are semantic and fail visibly when the composer is unavailable.
 // eslint-disable-next-line no-unused-vars
 const RSProvider = (() => {
   "use strict";
   const HOSTS={
-    "agent.minimax.io":{id:"minimax",name:"MiniMax Agent",chat:"https://agent.minimax.io/"},
     "overchat.ai":{id:"overchat",name:"Overchat",chat:"https://overchat.ai/"},
     "www.overchat.ai":{id:"overchat",name:"Overchat",chat:"https://overchat.ai/"},
     "huggingface.co":{id:"huggingchat",name:"HuggingChat",chat:"https://huggingface.co/chat/"},
@@ -14,8 +13,7 @@ const RSProvider = (() => {
     // never asks for or stores provider credentials; API-only pages fail visibly
     // with the adapter's normal "open a text chat" warning.
     "openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"},
-    "www.openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"},
-    "api.together.ai":{id:"together",name:"Together AI",chat:"https://api.together.ai/"}
+    "www.openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"}
   };
   const SITE=HOSTS[location.hostname]||{id:"multichat",name:"AI Chat",chat:location.origin};
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
