@@ -22,7 +22,7 @@ for (const f of bundle.js.filter((f) => /src\/core\/(skills\/|studio_bridge\.js|
 vm.runInThisContext(read("src/core/skill_intel.js"), { filename: "skill_intel.js" });
 vm.runInThisContext(read("src/core/public_skills.js"), { filename: "public_skills.js" });
 const SI = window.TotalSkillIntel, PS = window.PublicSkills, PACK = RobloxScriptSkills;
-ok("module exposes window.TotalSkillIntel (analyze / select / answer / rider / plan / validateEnhanced)", SI && ["analyze", "select", "answer", "rider", "plan", "validateEnhanced", "rankPublic", "expertText", "listText"].every((k) => typeof SI[k] === "function") && SI.VERSION === "1.91.0");
+ok("module exposes window.TotalSkillIntel (analyze / select / answer / rider / plan / validateEnhanced)", SI && ["analyze", "select", "answer", "rider", "plan", "validateEnhanced", "rankPublic", "expertText", "listText"].every((k) => typeof SI[k] === "function") && SI.VERSION === "1.92.0");
 ok("module is DOM-free at top level", !/^\s*(const|let|var)?\s*\w*\s*=?\s*document\./m.test(read("src/core/skill_intel.js")) && !/\bdocument\./.test(read("src/core/skill_intel.js")));
 
 // ── 1. catalogue integrity ──

@@ -101,6 +101,56 @@ const RSProvider = (() => {
     STABLE_MS: 2800,
     RESPONSE_TIMEOUT_MS: 240000,
   };
+  // ── Coexistence with Better DeepSeek (1.92.0) ─────────────────────────────
+  // github.com/EdgeTypE/better-deepseek runs on the same page. Audited from its
+  // source (v0.1.16): every node it injects carries a `bds-` class prefix or
+  // lives under #bds-root (its own composer-dom.js relies on that too). What
+  // collides with this adapter: (a) "Run Lua" / "Download" buttons inside the
+  // code-block banner of EVERY Lua-looking block, (b) when a reply carries a
+  // <BDS:...> tag it hides the native .ds-markdown and mounts a SECOND
+  // `.ds-markdown.bds-sanitized-text` copy inside `.bds-host-wrapper` (reading
+  // both duplicated every command), (c) its DeepResearch chip is a
+  // `.ds-toggle-button` whose label matches RE.searchMode, (d) its overlay
+  // spinner is `.bds-loading-wrapper` which matches [class*='ds-loading'],
+  // (e) its drawer has textareas / primary buttons and a "+" attach menu next
+  // to the composer. Everything below filters those out; without BDS on the
+  // page every helper returns exactly what it did before.
+  const FOREIGN_SEL = '#bds-root, [class*="bds-"]';
+  const foreign = (n) => !!(n && n.closest && n.closest(FOREIGN_SEL));
+  const isForeignEl = (el) => el.id === "bds-root" || /(?:^|\s)bds-/.test((el.getAttribute && el.getAttribute("class")) || "");
+  let _foreignSeen = false, _foreignCheckedAt = 0;
+  function foreignActive() {
+    if (_foreignSeen) return true;
+    const now = Date.now();
+    if (now - _foreignCheckedAt < 1500) return false;
+    _foreignCheckedAt = now;
+    try { _foreignSeen = !!document.querySelector("#bds-root, .bds-host-wrapper, .bds-run-btn, .bds-deep-research-toggle, [data-bds-mounted]"); } catch { _foreignSeen = false; }
+    if (_foreignSeen) {
+      try { document.documentElement.setAttribute("data-rs-ds-coexist", "bds"); } catch {}
+      diag("coexist", { ext: "better-deepseek" });
+    }
+    return _foreignSeen;
+  }
+  // textContent of a reply container MINUS nodes another extension injected
+  // (button captions like "Run Lua" would otherwise land inside the Luau).
+  function mdText(m) {
+    if (!m) return "";
+    if (!foreignActive()) return m.textContent || "";
+    const out = [];
+    (function walk(n) {
+      for (const c of n.childNodes || []) {
+        if (c.nodeType === 3) out.push(c.nodeValue || "");
+        else if (c.nodeType === 1 && !isForeignEl(c)) walk(c);
+      }
+    })(m);
+    return out.join("");
+  }
+  // The reply markdown containers of a turn: never the reasoning area, never a
+  // copy rendered by another extension.
+  const replyMds = (item) => [...item.querySelectorAll(S.markdown)].filter((m) => !m.closest(S.thinking) && !foreign(m));
+  const BDS_RULES =
+    `- Better DeepSeek is installed in this chat. Its <BDS:...> tags (create_file, LONG_WORK, AUTO:CODE_RUNNER, ask_question, todo, VISUALIZER, chart, memory_write, AUTO:SEARCH, AUTO:MCP) are a DIFFERENT tool layer: they download files or run code in the browser sandbox, never in Roblox Studio, and they hide your reply from TotalScript. While TotalScript runs: never wrap Luau or a command in a <BDS:...> tag, never answer with <BDS:ask_question> (ask in plain text), never open <BDS:LONG_WORK> for Roblox work - everything reaches Studio only through TotalScript commands written as plain text exactly as above. The "You are Better DeepSeek" project-delivery protocol does not apply to Roblox requests.`;
+
   function isFlashModel() {
     try {
       for (const el of document.querySelectorAll("button, [role='radio'], [class*='model'], [class*='badge']")) {
@@ -123,7 +173,7 @@ const RSProvider = (() => {
     if (role === "user" || role === "human") return true;
     if (role === "assistant" || role === "ai" || role === "model") return false;
     if (S.userMod && item.classList.contains(S.userMod)) return true;
-    if (item.querySelector && (item.querySelector(S.markdown) || item.querySelector(S.thinking) || item.querySelector(S.generating))) return false;
+    if (item.querySelector && ([...item.querySelectorAll(S.markdown)].some((m) => !foreign(m)) || item.querySelector(S.thinking) || [...item.querySelectorAll(S.generating)].some((el) => !foreign(el)))) return false;
     if (S.userBubble && item.querySelector(S.userBubble)) return true;
     const cls = String(item.className || "");
     if (/\buser\b/i.test(cls) && !/assistant|model/i.test(cls)) return true;
@@ -146,8 +196,7 @@ const RSProvider = (() => {
   // its reasoning are never detected, shown, or executed.
   function itemText(item) {
     if (isAssistantItem(item)) {
-      const mds = [...item.querySelectorAll(S.markdown)].filter((m) => !m.closest(S.thinking));
-      return mds.map((m) => m.textContent).join("\n");
+      return replyMds(item).map(mdText).join("\n");
     }
     return item.textContent || "";
   }
@@ -157,9 +206,9 @@ const RSProvider = (() => {
   // so a recycled (virtualized) node wearing a stale chip is never mis-detected.
   function classifyText(item, excludeSel) {
     if (isAssistantItem(item)) {
-      return [...item.querySelectorAll(S.markdown)]
-        .filter((m) => !m.closest(S.thinking) && !(excludeSel && m.closest(excludeSel)))
-        .map((m) => m.textContent).join("\n");
+      return replyMds(item)
+        .filter((m) => !(excludeSel && m.closest(excludeSel)))
+        .map(mdText).join("\n");
     }
     let t = "";
     for (const n of item.childNodes) {
@@ -171,7 +220,7 @@ const RSProvider = (() => {
 
   // ── DOM primitives ────────────────────────────────────────────────────────
   const allItems = () => {
-    const rootSkip = (n) => n && !n.closest("#rs-root");
+    const rootSkip = (n) => n && !n.closest("#rs-root") && !foreign(n);
     let nodes = [...document.querySelectorAll(".ds-message")].filter(rootSkip);
     if (nodes.length) return nodes;
     return [...document.querySelectorAll(S.chatItem)].filter(rootSkip);
@@ -187,7 +236,7 @@ const RSProvider = (() => {
   // itself a .ds-button--primary, the same selector as the send button).
   const getEditor = () => {
     const site = [...document.querySelectorAll(S.editor)].filter(
-      (e) => !e.closest("#rs-root") && e.offsetParent !== null
+      (e) => !e.closest("#rs-root") && e.offsetParent !== null && !foreign(e)
     );
     // Prefer the bottom composer over the inline message-EDIT box. When the user
     // edits a turn, DeepSeek mounts a bordered .ds-textarea up in the turn list;
@@ -211,7 +260,7 @@ const RSProvider = (() => {
   function getSendBtn() {
     const sel = S.sendBtn + ", " + S.stopBtn + ", button.ds-icon-button";
     const cand = [...document.querySelectorAll(sel)].filter((b) =>
-      b.offsetParent !== null && !b.closest("#rs-root") && !b.closest(".ds-message"));
+      b.offsetParent !== null && !b.closest("#rs-root") && !b.closest(".ds-message") && !foreign(b));
     if (!cand.length) return document.querySelector(".ds-button--primary");
     const ed = getEditor();
     if (!ed) return cand[0];
@@ -410,7 +459,7 @@ const RSProvider = (() => {
   const isVisionSelected = () => detectVision();
 
   function findToggleBy(re) {
-    return [...document.querySelectorAll(S.deepThinkToggle)].find((t) => re.test(nodeText(t))) || null;
+    return [...document.querySelectorAll(S.deepThinkToggle)].find((t) => !foreign(t) && re.test(nodeText(t))) || null;
   }
 
   function composerModeState() {
@@ -519,9 +568,9 @@ const RSProvider = (() => {
     if (!item) return "";
     const think = item.querySelector(S.thinking);
     const thinkTxt = think ? think.textContent || "" : "";
-    const replyTxt = [...item.querySelectorAll(S.markdown)]
-      .filter((m) => !m.closest(S.thinking) && !m.closest(".rs-chip"))
-      .map((m) => m.textContent)
+    const replyTxt = replyMds(item)
+      .filter((m) => !m.closest(".rs-chip"))
+      .map(mdText)
       .join("");
     return thinkTxt + "\n" + replyTxt;
   }
@@ -554,9 +603,9 @@ const RSProvider = (() => {
     const think = item.querySelector(S.thinking);
     const thinkTxt = think ? (think.textContent || "") : "";
     if (!thinkTxt.trim().length) return false; // not reasoning
-    const replyLen = [...item.querySelectorAll(S.markdown)]
-      .filter((m) => !m.closest(S.thinking) && !m.closest(".rs-chip"))
-      .reduce((n, m) => n + (m.textContent || "").length, 0);
+    const replyLen = replyMds(item)
+      .filter((m) => !m.closest(".rs-chip"))
+      .reduce((n, m) => n + mdText(m).length, 0);
     if (replyLen !== 0) return false; // already answering
     if (turnHalted(item)) return false; // halted (manual / forced stop)
     return true;
@@ -578,7 +627,7 @@ const RSProvider = (() => {
     const ed = getEditor();
     const er = ed ? ed.getBoundingClientRect() : null;
     for (const el of document.querySelectorAll(S.generating)) {
-      if (el.closest("#rs-root")) continue;
+      if (el.closest("#rs-root") || foreign(el)) continue;
       const r = el.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) continue;
       if (!el.closest(S.chatItem)) {
@@ -638,7 +687,7 @@ const RSProvider = (() => {
       const path = btn && btn.querySelector("path");
       const rp = btn && btn.querySelector("rect");
       return {
-        spinner: !!document.querySelector(S.generating),
+        spinner: liveSpinner(),
         stopBtn: isStopBtn(btn),
         btnGlyph: rp ? "rect" : (path ? (path.getAttribute("d") || "").slice(0, 6) : "none"),
         reasoning: reasoningInProgress(lastAssistant()),
@@ -657,9 +706,9 @@ const RSProvider = (() => {
       const it = lastAssistant();
       if (!it) return { th: 0, rp: 0 };
       const th = it.querySelector(S.thinking);
-      const rp = [...it.querySelectorAll(S.markdown)]
-        .filter((m) => !m.closest(S.thinking) && !m.closest(".rs-chip"))
-        .reduce((n, m) => n + (m.textContent || "").length, 0);
+      const rp = replyMds(it)
+        .filter((m) => !m.closest(".rs-chip"))
+        .reduce((n, m) => n + mdText(m).length, 0);
       return { th: th ? (th.textContent || "").trim().length : 0, rp };
     } catch { return {}; }
   }
@@ -667,7 +716,7 @@ const RSProvider = (() => {
   // ── Truncation "Continue" button ──────────────────────────────────────────
   function findContinueBtn() {
     for (const b of document.querySelectorAll(".ds-button")) {
-      if (b.offsetParent === null) continue; // not visible
+      if (b.offsetParent === null || foreign(b)) continue; // not visible / another extension's card
       if (RE.continueBtn.test((b.innerText || "").trim())) return b;
     }
     return null;
@@ -683,10 +732,10 @@ const RSProvider = (() => {
     const item = lastAssistant();
     if (!item) return { present: false, reply: "", thinking: "", item: null };
     const th = item.querySelector(`${S.thinking} ${S.markdown}`);
-    const mds = [...item.querySelectorAll(S.markdown)].filter((m) => !m.closest(S.thinking));
+    const mds = replyMds(item);
     return {
       present: true,
-      reply: mds.map((m) => m.textContent).join("\n").trim(),
+      reply: mds.map(mdText).join("\n").trim(),
       thinking: th ? th.textContent.trim() : "",
       item,
     };
@@ -821,7 +870,7 @@ const RSProvider = (() => {
     try {
       for (const el of document.querySelectorAll(S.errorSurfaces)) {
         if (el.offsetParent === null) continue;
-        if (el.closest(S.chatItem)) continue; // inside a chat turn ⇒ model content, not UI
+        if (el.closest(S.chatItem) || foreign(el)) continue; // inside a chat turn ⇒ model content, not UI; BDS toasts are not DeepSeek's
         const t = (el.innerText || "").trim();
         if (t.length > 8 && t.length < 600 && RE.contextLimit.test(t)) return t.slice(0, 240);
       }
@@ -857,7 +906,7 @@ const RSProvider = (() => {
       const ed = getEditor();
       const er = ed ? ed.getBoundingClientRect() : null;
       return [...document.querySelectorAll("img")].filter((im) => {
-        if (im.closest(S.chatItem) || im.closest("#rs-root")) return false;
+        if (im.closest(S.chatItem) || im.closest("#rs-root") || foreign(im)) return false;
         const src = im.getAttribute("src") || "";
         const alt = im.getAttribute("alt") || "";
         if (/^blob:/.test(src) || /^robloxscript_/.test(alt) || /screenshot|preview|upload/i.test(alt)) return true;
@@ -892,14 +941,14 @@ const RSProvider = (() => {
     if (!dt.items.length) return false;
     editor.focus();
     const pickFileInput = () =>
-      document.querySelector('input[type="file"][accept*="image"]') ||
-      [...document.querySelectorAll('input[type="file"]')].find((el) => !el.closest("#rs-root")) ||
+      [...document.querySelectorAll('input[type="file"][accept*="image"]')].find((el) => !foreign(el)) ||
+      [...document.querySelectorAll('input[type="file"]')].find((el) => !el.closest("#rs-root") && !foreign(el) && !el.hasAttribute("webkitdirectory")) ||
       null;
     let fileInput = pickFileInput();
     if (!fileInput) {
       const er = editor.getBoundingClientRect();
       const btns = [...document.querySelectorAll("button, [role='button'], label")].filter((el) => {
-        if (el.closest("#rs-root") || el.offsetParent === null) return false;
+        if (el.closest("#rs-root") || el.offsetParent === null || foreign(el)) return false; // BDS's own "+" attach menu is not DeepSeek's
         const t = (el.getAttribute("aria-label") || el.getAttribute("title") || el.textContent || "");
         return /attach|upload|image|photo|file|picture|图片|附件|上传|\+/i.test(t) || (el.getAttribute("aria-label") || "").length === 0 && /plus|paperclip|clip/i.test(el.className || "");
       });
@@ -1019,7 +1068,7 @@ const RSProvider = (() => {
     const hasEnd = (t) => P.LUA_END_RE.test(t) || t.includes("###end_mcp_tool###") || t.includes("###end-mcp_tool###");
     const isJson = (t) => /\{\s*"(?:command|tool)"\s*:/.test(t);
     // The reply markdown containers (never the reasoning/think area).
-    const containers = [...item.querySelectorAll(S.markdown)].filter((m) => !m.closest(S.thinking));
+    const containers = replyMds(item);
     if (!containers.length) return null;
     let parent = null, ref = null;
     for (const container of containers) {
@@ -1067,7 +1116,9 @@ const RSProvider = (() => {
   return {
     id: "deepseek",
     displayName: "DeepSeek",
-    promptExtra: PROMPT_EXTRA,
+    // Site rules; when Better DeepSeek is on the page its tag layer is fenced off
+    // (BDS_RULES) so the model keeps answering TotalScript in plain text.
+    get promptExtra() { return PROMPT_EXTRA + (foreignActive() ? "\n" + BDS_RULES : ""); },
     // DYNAMIC: DeepSeek's Instant/Expert models are text-only, but the V4 UI has a
     // dedicated "Vision" model tab. When the user selects Vision we honour it (see
     // enforceComposer) and this getter flips true, so main.js stops blocking
@@ -1087,6 +1138,8 @@ const RSProvider = (() => {
       // confirmed from the page (read document.documentElement.dataset.rsDsVer).
       // BUMP DS_VER on meaningful deepseek.js changes worth verifying live.
       try { document.documentElement.setAttribute("data-rs-ds-ver", "2026-09_flash41"); } catch {}
+      // 1.92.0: Better DeepSeek coexistence - detect once at init (and lazily later).
+      try { foreignActive(); } catch {}
     },
     // turns
     allItems, isUserItem, isAssistantItem, itemText, classifyText,
