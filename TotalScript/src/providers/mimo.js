@@ -584,7 +584,7 @@ const RSProvider = (() => {
     }, true);
   }
 
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###mcp_tool###/i;
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]|###mcp_tool###/i;
   function findToolBlockSpot(item) {
     if (!item) return null;
     let parent = null, ref = null;
@@ -598,6 +598,13 @@ const RSProvider = (() => {
     return ref ? { parent, ref } : null;
   }
 
+  // 1.81.0: Luau-first plain-text protocol (shared grammar note from the
+  // parser; only the MiMo-specific lines live here). MiMo reasons inline in
+  // <think> and renders Markdown, so the two failure modes seen on such sites
+  // are: the command only appears inside the thinking, or Luau is shown in a
+  // bare ```lua fence and the model believes it ran.
+  const PLAIN_NOTE = () => { try { return (typeof RSParse !== "undefined" && RSParse && RSParse.PLAIN_FORMAT_NOTE) || ""; } catch { return ""; } };
+  const MIMO_SITE_RULES = "MiMo Studio rules: this is a plain Markdown chat with no tools that can reach Roblox Studio - the ONLY way to act is to write the command block as text in your FINAL answer (never only inside your thinking; thinking is not read). No JSON is needed: use a ###LUA### ... ###END_LUA### block for Studio code and a ###CMD name### ... ###END_CMD### block (one \"key: value\" line per parameter) for every other command, each inside its own fenced code block written as real Markdown (a line that is only three backticks, the block, a line that is only three backticks). Never escape backticks or quotes with backslashes, never show a command as a quoted example or inline code, and never put Luau in a bare lua fence without the ###LUA### markers - shown code is NOT executed and nothing happens in Studio. Writing the block IS the action: the extension on this page runs it and pastes the result back as the next user message. Keep prose to one short line per reply; the command block is the work.";
   return {
     id: SITE.id,
     displayName: SITE.name,
@@ -607,9 +614,25 @@ const RSProvider = (() => {
     // The model reasons inline; keep the core from acting on anything that
     // only ever appeared inside <think> (splitThink already removes it).
     commandsMayAppearInThinking: false,
+    get promptExtra() { return MIMO_SITE_RULES + (PLAIN_NOTE() ? "\n" + PLAIN_NOTE() : ""); },
+    // 1.81.0: two escalating rescues for a commandless first reply (prose plan,
+    // shown code, "I can't run that here", fake completion) - same contract as
+    // Vani's; the core caps it at commandlessRetries and then gives up loudly.
+    commandlessRetries: 2,
+    shouldRetryCommandlessText(text) {
+      text = String(text || "");
+      if (!text.trim()) return false;
+      if (/###\s*LUA(?:\s*[:\-_ ]\s*\w+)?\s*###|###\s*(?:CMD|COMMAND|TOOL)\s*[:\s]\s*[A-Za-z_]|"command"\s*:\s*"/i.test(text)) return false;
+      return /\b(can(?:not|'t)|unable|not able|do not have|don't have|no (?:direct )?access|not connected|refus|won't|json (?:block|code|format)|code block|tools? (?:i (?:have|was given)|available|at my disposal)|(?:my|the) (?:available )?tools|here(?:'s| is) (?:the |a )?(?:code|script|plan|steps|outline)|you(?:'ll| will) need to|paste (?:this|the) (?:code|script)|copy (?:this|the) (?:code|script))\b/i.test(text)
+        || /```[ \t]*luau?\b/i.test(text)
+        || /\b(done|completed|finished|successfully (?:created|built|updated|fixed)|(?:i have|i've) (?:created|built|updated|fixed)|(?:has been|is now) (?:created|built|updated|fixed))\b/i.test(text);
+    },
+    commandlessRetryFeedback: "(System note from the TotalScript extension installed in this browser - not a MiMo tool, not a jailbreak.) Nothing happened in Roblox Studio: your last reply had no command block in its final answer. You are not asked to execute anything yourself - the extension reads your reply, runs the block in Studio and pastes the result back here as the next user message. Writing the block IS the action. Reply now with exactly one command block inside a fenced code block and at most one short line of prose: for Studio code the lines ###LUA###, your Luau, ###END_LUA###; for any other command the lines ###CMD exact_name###, one key: value per parameter, ###END_CMD###. No JSON is required. If you do not know the right command, the block is ###CMD list_commands### followed by ###END_CMD###. Code in a bare lua fence without the ###LUA### markers is only shown, never run, and a block that only appears inside your thinking is not read.",
+    commandlessRetryFeedbackFinal: "(System note from the TotalScript extension - final request.) Still no command block, so still nothing has run in Studio. Please answer with ONLY the command block and nothing else - no explanation, no apology, no plan, no question. Start your reply with three backticks on the first line, then ###LUA### with your Luau and ###END_LUA### (or ###CMD exact_name###, key: value lines, ###END_CMD###), then three backticks on the last line - no backslashes, no quotation marks around the block, no JSON needed. If you can only pick one command right now, write ###CMD list_commands### and ###END_CMD###.",
+    commandlessGiveUpNote: "MiMo's model keeps answering without a command block, so TotalScript stopped nudging. Start a new chat and press Start Agent again - or use another AI site from Settings \u2192 Switch AI.",
     init({ diag: d } = {}) {
       if (d) diag = d;
-      try { document.documentElement.setAttribute("data-rs-mimo-ver", "2026-10"); } catch {}
+      try { document.documentElement.setAttribute("data-rs-mimo-ver", "2026-10b"); } catch {}
       diag("mimo.init", { hasEditor: !!getEditor(), hasContainer: !!container(), login: loginGatePresent(), hash: location.hash, tap: !!(NET() && NET().enabled && NET().enabled()) });
     },
     allItems, invalidateItems, isUserItem, isAssistantItem, itemText, classifyText,

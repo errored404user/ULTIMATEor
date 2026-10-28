@@ -1862,6 +1862,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse(await blenderCall(msg.name, msg.arguments, timeout));
           break;
         }
+        // 1.81.0: the page states which engine it believes it is on. If the
+        // worker's socket is bound to the OTHER engine (storage race, worker
+        // restart, stale tab), refuse: a Roblox command must never travel down
+        // the AgentScript socket (17615) and touch workspace files, nor the
+        // reverse. Legacy callers that send no engine are routed as before.
+        if (msg.engine && normalizeEngine(msg.engine) !== engine) {
+          log(`call_tool refused: page on ${normalizeEngine(msg.engine)}, worker on ${engine} (${String(msg.name||"")})`);
+          sendResponse({ok:false,kind:"engine",errorCode:"ENGINE_MISMATCH",workerEngine:engine,error:`this page is on the ${normalizeEngine(msg.engine)==="local"?"AgentScript":"Roblox"} engine but the extension worker is bound to ${engineLabel()} (ws ${engine==="local"?PORT_LOCAL:PORT_ROBLOX}).`});
+          break;
+        }
         if (engine === "roblox" || engine === "anim") {
           if (!connected || robloxEditorConnected !== true) await refreshStudioStatus();
           if (!connected || robloxEditorConnected !== true) {

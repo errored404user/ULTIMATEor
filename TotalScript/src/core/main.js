@@ -1775,8 +1775,16 @@
         // Only fire parse_error if explicit markers were present. Native XML/DSML
         // is also explicit: once alternate parsing failed, treating it as prose
         // silently drops a real hidden tool call.
+        // 1.81.0: a plain-text ###CMD name### block that is closed but unreadable
+        // (stray line / unterminated <<< value) gets its own, exact feedback.
+        // An UNCLOSED one falls through to the open-block branch below.
+        if (RSParse.cmdBlockProblems && RSParse.CMD_START_RE && RSParse.CMD_START_RE.test(r) && !RSParse.hasOpenToolBlock(r)) {
+          const probs = RSParse.cmdBlockProblems(r);
+          if (probs.length) { diag("parse.cmdBlock", { problems: probs }); return { kind: "parse_error", reason: "cmdBlock", raw: r, item: d.item }; }
+        }
         if (r.includes(RSParse.START_M) || RSParse.LUA_START_RE.test(r) ||
             (RSParse.CMD_KEY_RE && RSParse.CMD_KEY_RE.test(r)) ||
+            (RSParse.CMD_START_RE && RSParse.CMD_START_RE.test(r) && !RSParse.hasOpenToolBlock(r)) ||
             (RSParse.NATIVE_TOOL_RE && RSParse.NATIVE_TOOL_RE.test(r))) {
           return { kind: "parse_error", reason: "malformed", raw: r, item: d.item };
         }
@@ -1914,6 +1922,10 @@
         error: m,
       });
       const budget = bgTimeoutFor(msg);
+      // 1.81.0: every call_tool carries the engine THIS page is on. The worker
+      // refuses the call (ENGINE_MISMATCH) instead of sending a Roblox command
+      // down the AgentScript socket (or vice versa) when the two ever disagree.
+      try { if (msg && msg.type === "call_tool" && !msg.engine) msg.engine = activeEngine(); } catch {}
       const timer = setTimeout(() => {
         try { diag("bg.hung", { type: msg && msg.type, name: msg && msg.name, afterMs: budget }); } catch {}
         done({ ok: false, kind: "timeout", errorCode: "BACKGROUND_TIMEOUT", error: `background did not answer '${msg && msg.type}' within ${Math.round(budget / 1000)}s` });
@@ -4986,6 +4998,12 @@
       return fallback;
     };
     if (r.kind === "disconnected") return `ERROR ${r.errorCode||"STUDIO_BRIDGE_OFFLINE"}: ${bridgeErrorText(r.error,"Roblox Studio bridge is offline.")}`;
+    // 1.81.0: the worker refused to route this call because its engine differs
+    // from this page's. Nothing ran anywhere - never the wrong backend.
+    if (r.errorCode === "ENGINE_MISMATCH") {
+      diag("bridge.engineMismatch", { name: bareName, page: activeEngine(), worker: r.workerEngine });
+      return `ERROR ENGINE_MISMATCH: ${bridgeErrorText(r.error, "the extension worker is on a different engine than this page")} The command did NOT run. Call total_status {} and continue on the engine it reports.`;
+    }
     if (r.kind === "timeout") {
       return `ERROR ${r.errorCode||"STUDIO_TIMEOUT"}: tool '${name}' timed out after ${name === "execute_luau" ? 20 : 120}s.\n${r.error}\nThe request was not silently reported as successful. Check Studio responsiveness before retrying.`;
     }
@@ -5140,6 +5158,7 @@
     let parseRetries = 0;
     let providerRetries = 0; // 1.69: bounded re-send after a TRANSIENT provider error (rate limit / busy / network)
     let falseSuccessNudged = false; // 1.69: one "you said done but nothing ran" correction per run
+    let luaFenceNudged = false; // 1.81.0: one "shown ```lua is not executed" correction per run
     let modeGateSent = false; // 1.38.0: one evidence gate per run
     const effortGate = { verify: false, audit: false, review: false }; // 1.60: one of each per run
     A.runTools = new Set();
@@ -5324,6 +5343,7 @@
             const detail = res.reason === "unclosed" ? "cut off"
               : res.reason === "luaOpener" ? "missing ###LUA###"
               : res.reason === "envelope" ? "bad format"
+              : res.reason === "cmdBlock" ? "bad ###CMD### block"
               : "bad JSON";
             decorate.toolBox(res.item, failName, "err", detail, true, "", RS.toolCategory(failName));
           }
@@ -5373,6 +5393,22 @@
             ui.steeringProgress("correcting", "Claimed done without acting — requesting the real commands", toolTurns);
             const state = asStateTag();
             base = await submitAndGetBase(ORCH.FEEDBACK.falseSuccess + (state ? "\n" + state : ""));
+            continue;
+          }
+          // 1.81.0: the reply SHOWS Luau in a plain ```lua fence (no ###LUA###
+          // markers) while nothing has run for this task. Shown code is never
+          // executed by design (examples must not run) - but on providers that
+          // reason in plain text the model often believes it just acted. One
+          // explicit correction per run, mutating tasks only, then the normal
+          // commandless path takes over. Stage is logged, content is not.
+          const fenceShapes = RSParse.describeShapes ? RSParse.describeShapes(body) : null;
+          if (fenceShapes && (fenceShapes.luaFence || fenceShapes.luaCloserOnly || fenceShapes.cmdBlock)) diag("reply.shownNotRun", fenceShapes);
+          if (!luaFenceNudged && !A.stop && toolTurns === 0 && A.task && A.task.mutates && !A.task.explainOnly && fenceShapes && fenceShapes.luaFence > 0) {
+            luaFenceNudged = true;
+            try { ui.toast("The model showed Luau in a plain code block (not executed) — asking for the runnable ###LUA### form"); } catch {}
+            ui.steeringProgress("correcting", "Code was shown, not run — requesting the ###LUA### block", toolTurns);
+            const state = asStateTag();
+            base = await submitAndGetBase(RS.FEEDBACK.luaFence + (state ? "\n" + state : ""));
             continue;
           }
           // 1.76.0: a provider may ask for more than one rescue (Vani: 2, with an

@@ -37,8 +37,8 @@
   const CHAT_URL_RE = /\/api\/(public\/chat|chat\/stream|chat\/completions|chat|conversations\/[^/]+\/messages|messages)(\?|$)/i;
   const PIN = [
     MARK + " This chat is live-linked to the user's Roblox Studio by a browser extension that EXECUTES the command you write and pastes the result back as the next user message.",
-    "Reply with exactly ONE command as a fenced ```json block containing {\"command\":\"name\",\"params\":{...}} (execute_luau uses the ###LUA### form), then stop and wait for the result.",
-    "Writing the block IS the tool call: never say you cannot run commands or use JSON blocks, never describe a command instead of writing it.",
+    "Reply with exactly ONE command block inside a fenced code block - no JSON needed: ###LUA### + your Luau + ###END_LUA### for Studio code, or ###CMD name### + one key: value line per parameter + ###END_CMD### for any other command (a fenced ```json {\"command\":\"name\",\"params\":{...}} block also works) - then stop and wait for the result.",
+    "Writing the block IS the tool call: never say you cannot run commands or use command blocks, never describe a command instead of writing it, and never show Luau in a bare lua fence without the ###LUA### markers - shown code is not executed.",
     // 1.76.0 — logged-in Vani hands the model its own tool list (web search,
     // Document / Slides / Design, code runs). Models then answer "I can only use
     // the tools I was given" and write prose. Say it outright.
@@ -46,7 +46,7 @@
     "Do not search the web. Do not create a Document, Slides, Design, canvas or any side-panel artifact, and do not propose Vani tools - everything goes in this chat reply as text. One short line of prose at most; the command block is the work.",
     // 1.78.1 — reported live: the model SHOWED the block (escaped backticks /
     // quotes, visible as plain text on the page) instead of writing a fence.
-    "Write the fence as real markdown: a line that is only ```json, the object on the next line, a line that is only ```. Never escape backticks, quotes or braces with backslashes and never put the block inside quotation marks or inline code.",
+    "Write the fence as real markdown: a line that is only ```, the block lines, a line that is only ```. Never escape backticks, quotes or braces with backslashes and never put the block inside quotation marks or inline code.",
   ].join(" ");
   // Head = bootstrap + first reply + the list_commands result + its reply (the
   // command catalogue must survive the cut or the model starts guessing names).
@@ -237,6 +237,6 @@
     }
   } catch {}
 
-  try { document.documentElement.setAttribute("data-rs-vani-net", "1.78"); } catch {}
+  try { document.documentElement.setAttribute("data-rs-vani-net", "1.81"); } catch {}
   try { console.log("[rs-vani-net] active"); } catch {}
 })();

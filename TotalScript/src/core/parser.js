@@ -23,6 +23,157 @@ const RSParse = (() => {
   const LUA_DEFAULT_DM = "Edit";
   const dmName = (m) => (m ? m[0].toUpperCase() + m.slice(1).toLowerCase() : LUA_DEFAULT_DM);
 
+  // 1.81.0: plain-text command envelope - the non-JSON form for every command
+  // that is not execute_luau (which already has ###LUA###). Grammar:
+  //   ###CMD <name>###            opener: CMD | COMMAND | TOOL, then the exact
+  //                               command name (letters, digits, _ . / -)
+  //   key: value                  one parameter per line (":" or "=")
+  //   key: <<<                    multi-line value: everything up to a line
+  //   ...raw lines...             that is only ">>>" - no escaping inside
+  //   >>>
+  //   ###END_CMD###               closer (END_CMD | END_COMMAND | END_TOOL)
+  // Values: true/false/null, numbers, "quoted strings", [arrays] and {objects}
+  // are read as JSON; anything else is the literal text. A JSON object as the
+  // whole body is accepted too. execute_luau may carry the raw code as its
+  // body (no key lines) - the markers are whitespace/dash tolerant like LUA's.
+  // No args → opener + closer only. A block with a stray line, an unterminated
+  // heredoc or no closer is MALFORMED and never executes (parseToolCalls then
+  // returns [] so the caller reports a parse error instead of running half).
+  const CMD_START_RE = /###\s*(?:cmd|command|tool)\s*[:\s]\s*([A-Za-z_][A-Za-z0-9_.\/-]*)\s*(?:###|---)/i;
+  const CMD_END_RE = /###\s*end[_\- ]?(?:cmd|command|tool)\s*(?:###|---)/i;
+  const CMD_KEY_LINE_RE = /^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*[:=][ \t]?(.*)$/;
+  const CMD_CHROME_LINE_RE = /^[ \t]*(?:```[\w-]*|~~~[\w-]*|Copy(?: code)?|json|yaml|text|lua|luau)[ \t]*$/i;
+  function findCmdStart(text, from = 0) {
+    const m = CMD_START_RE.exec(text.slice(from));
+    return m ? { pos: from + m.index, len: m[0].length, name: m[1] } : { pos: -1, len: 0, name: "" };
+  }
+  function findCmdEnd(text, from = 0) {
+    const m = CMD_END_RE.exec(text.slice(from));
+    return m ? { pos: from + m.index, len: m[0].length } : { pos: -1, len: 0 };
+  }
+  function coerceCmdValue(raw) {
+    const v = String(raw == null ? "" : raw).trim();
+    if (v === "") return "";
+    if (/^(?:true|false|null)$/i.test(v)) return v.toLowerCase() === "true" ? true : v.toLowerCase() === "false" ? false : null;
+    if (/^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(v)) return Number(v);
+    if (/^[\[{]/.test(v)) { try { return parseLoose(v); } catch { return v; } }
+    if (/^"[\s\S]*"$/.test(v)) { try { return JSON.parse(v); } catch { return v.slice(1, -1); } }
+    return v;
+  }
+  // Parse one ###CMD### body into an arguments object; null when malformed.
+  function parseCmdArgs(name, rawBody) {
+    const lines = String(rawBody == null ? "" : rawBody).replace(/\r/g, "").split("\n");
+    const meaningful = lines.filter((l) => l.trim() && !CMD_CHROME_LINE_RE.test(l));
+    if (!meaningful.length) return {};
+    const joined = meaningful.join("\n").trim();
+    if (/^\{[\s\S]*\}$/.test(joined)) {
+      try { const o = parseLoose(joined); if (o && typeof o === "object" && !Array.isArray(o)) return o; } catch {}
+    }
+    if (name === "execute_luau" && !meaningful.some((l) => /^[ \t]*(?:code|datamodel_type|datamodel)[ \t]*[:=]/.test(l))) {
+      const code = stripCodeChrome(joined);
+      return code ? { code, datamodel_type: LUA_DEFAULT_DM } : null;
+    }
+    const args = {};
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line.trim() || CMD_CHROME_LINE_RE.test(line)) { i++; continue; }
+      const m = CMD_KEY_LINE_RE.exec(line);
+      if (!m) return null; // stray line: refuse rather than guess
+      const key = m[1];
+      if (/^<<<[ \t]*$/.test(m[2].trim()) || m[2].trim() === "<<<") {
+        const buf = [];
+        i++;
+        while (i < lines.length && !/^[ \t]*>>>[ \t]*$/.test(lines[i])) { buf.push(lines[i]); i++; }
+        if (i >= lines.length) return null; // unterminated heredoc
+        const raw = buf.join("\n");
+        // A heredoc that IS a JSON array/object (multi_edit edits, specs) is
+        // decoded; anything else - code, prose - stays the literal text.
+        let val = raw;
+        if (/^\s*[\[{][\s\S]*[\]}]\s*$/.test(raw)) { try { val = parseLoose(raw.trim()); } catch { val = raw; } }
+        args[key] = val;
+        i++;
+        continue;
+      }
+      args[key] = coerceCmdValue(m[2]);
+      i++;
+    }
+    if (name === "execute_luau") {
+      if (args.datamodel && !args.datamodel_type) { args.datamodel_type = args.datamodel; delete args.datamodel; }
+      if (typeof args.code === "string") args.code = stripCodeChrome(args.code);
+      if (!args.datamodel_type) args.datamodel_type = LUA_DEFAULT_DM;
+    }
+    return args;
+  }
+  // Next ###CMD### block at or after `from`: { call, start, end, malformed }.
+  function nextCmdCall(text, from) {
+    const s = findCmdStart(text, from);
+    if (s.pos === -1) return null;
+    const e = findCmdEnd(text, s.pos + s.len);
+    if (e.pos === -1) return { call: null, start: s.pos, end: text.length - 1, name: s.name, malformed: "unclosed" };
+    const args = parseCmdArgs(s.name, text.slice(s.pos + s.len, e.pos));
+    if (!args) return { call: null, start: s.pos, end: e.pos + e.len - 1, name: s.name, malformed: "body" };
+    return { call: { tool: s.name, arguments: args }, start: s.pos, end: e.pos + e.len - 1, name: s.name };
+  }
+  // Problems in the reply's ###CMD### blocks (for feedback text): [{name, reason}].
+  function cmdBlockProblems(text) {
+    text = normalizeTypography(text);
+    const out = [];
+    let pos = 0, guard = 0;
+    while (guard++ < 32) {
+      const n = nextCmdCall(text, pos);
+      if (!n) break;
+      if (n.malformed) out.push({ name: n.name, reason: n.malformed });
+      pos = n.end + 1;
+    }
+    return out;
+  }
+  // Fenced ```lua / ```luau blocks that carry NO ###LUA### markers anywhere in
+  // the reply. Such code is shown, never executed (by design - examples and
+  // explanations must not run). Callers use the count to nudge the model once.
+  function bareLuaFences(text) {
+    text = normalizeTypography(text);
+    if (!text || LUA_START_RE.test(text) || LUA_END_RE.test(text)) return 0;
+    const m = text.match(/```[ \t]*luau?\b/gi);
+    return m ? m.length : 0;
+  }
+  // Which command-like shapes a reply contains (diagnostics only - no content).
+  function describeShapes(text) {
+    const t = normalizeTypography(text);
+    return {
+      len: t.length,
+      luaBlock: LUA_START_RE.test(t),
+      luaCloserOnly: !LUA_START_RE.test(t) && LUA_END_RE.test(t),
+      luaFence: bareLuaFences(t),
+      cmdBlock: CMD_START_RE.test(t),
+      json: CMD_KEY_RE.test(t),
+      relaxed: relaxedShape(t),
+      native: NATIVE_TOOL_RE.test(t),
+      mcp: t.includes(START_M),
+      fences: (t.match(/```/g) || []).length,
+    };
+  }
+  // Format note for providers that run the plain-text protocol (no JSON
+  // required). Kept next to the grammar so prompt and parser cannot drift.
+  const PLAIN_FORMAT_NOTE = [
+    "COMMAND FORMAT ON THIS SITE - plain text, no JSON needed. Put each command in its own fenced code block (a line with three backticks, the block, a line with three backticks) and write it in one of these two forms:",
+    "1) Studio Luau (execute_luau):",
+    "###LUA###",
+    "local p = Instance.new(\"Part\")",
+    "p.Name = \"Demo\"",
+    "p.Parent = workspace",
+    "return p:GetFullName()",
+    "###END_LUA###",
+    "(use ###LUA:Server### or ###LUA:Client### while the game is playing; bare ###LUA### is Edit mode.)",
+    "2) Any other command - a CMD block: the exact command name in the opener, one \"key: value\" line per parameter, then the closer:",
+    "###CMD inspect_instance###",
+    "path: game.Workspace.Demo",
+    "depth: 2",
+    "###END_CMD###",
+    "Values: plain text stays text; numbers, true/false, [lists] and {objects} are read as such; a multi-line value goes between a line \"key: <<<\" and a line \">>>\" (nothing is escaped inside). A command without parameters is just the opener and the closer.",
+    "The JSON form {\"command\": \"name\", \"params\": {...}} is still accepted but never required. Up to 6 independent commands per reply, each in its own block, in the order they must run. Never escape backticks, quotes or braces with backslashes, never show a command as a quoted example or inline code, and never write a bare ```lua block without the ###LUA### markers - code without the markers is NOT executed.",
+  ].join("\n");
+
   // Find the first LUA start marker at or after `from`. Returns { pos, len, dm }
   // where len is the marker's own length to skip past it and dm the requested
   // datamodel ("Edit" when unspecified).
@@ -113,6 +264,7 @@ const RSParse = (() => {
       r.includes(START_M) ||
       r.includes("MCP_TOOL") ||
       LUA_START_RE.test(r) ||
+      CMD_START_RE.test(r) ||
       CMD_KEY_RE.test(r) ||
       NATIVE_TOOL_RE.test(r) ||
       relaxedShape(r)
@@ -148,6 +300,9 @@ const RSParse = (() => {
     // second one that is still being written.
     const lastLua = (() => { let p = -1, from = 0; while (true) { const m = findLuaStart(r, from); if (m.pos === -1) return p; p = m.pos; from = m.pos + m.len; } })();
     if (lastLua !== -1) { const m = findLuaStart(r, lastLua); if (findLuaEnd(r, lastLua + m.len) === -1) return true; }
+    // 1.81.0: the LAST ###CMD name### opener with no ###END_CMD### after it.
+    const lastCmd = (() => { let p = null, from = 0; while (true) { const m = findCmdStart(r, from); if (m.pos === -1) return p; p = m; from = m.pos + m.len; } })();
+    if (lastCmd && findCmdEnd(r, lastCmd.pos + lastCmd.len).pos === -1) return true;
     return false;
   }
 
@@ -562,8 +717,17 @@ const RSParse = (() => {
         const { pos: ls, len: luaLen, dm } = findLuaStart(r, pos);
         const le = ls === -1 ? -1 : findLuaEnd(r, ls + luaLen);
         const luaOk = ls !== -1 && le !== -1 && le > ls;
-        if (!j && !luaOk) break;
-        if (j && (!luaOk || j.start < ls)) {
+        // 1.81.0: ###CMD name### plain-text blocks take part in the same
+        // document-order walk. One malformed block voids the WHOLE reply: the
+        // caller then reports a parse error and nothing runs half-batched.
+        const c = nextCmdCall(r, pos);
+        if (!j && !luaOk && !c) break;
+        const jAt = j ? j.start : Infinity, lAt = luaOk ? ls : Infinity, cAt = c ? c.start : Infinity;
+        if (cAt <= jAt && cAt <= lAt) {
+          if (c.malformed) return [];
+          out.push(c.call);
+          pos = c.end + 1;
+        } else if (jAt <= lAt) {
           out.push(j.call);
           pos = j.end + 1;
         } else {
@@ -699,6 +863,8 @@ const RSParse = (() => {
       || txt.match(/<tool_call\b[^>]*>\s*([A-Za-z_][\w./-]*)/i)
       || txt.match(/<｜tool call begin｜>\s*(?:function\s*=\s*)?([A-Za-z_][\w./-]*)/i);
     if (native && native[1]) return native[1].trim();
+    const cmd = CMD_START_RE.exec(txt);
+    if (cmd && cmd[1]) return cmd[1].trim();
     if (txt.includes("execute_luau") || LUA_START_RE.test(txt)) return "execute_luau";
     return "command";
   }
@@ -718,6 +884,7 @@ const RSParse = (() => {
     txt = normalizeTypography(txt);
     return txt.includes(START_M) ||
            LUA_START_RE.test(txt) ||
+           CMD_START_RE.test(txt) ||
            CMD_KEY_RE.test(txt) ||
            NATIVE_TOOL_RE.test(txt) || // includes model-native tool envelopes
            relaxedShape(txt); // 1.78.1: "shown, not fenced" shapes
@@ -725,6 +892,7 @@ const RSParse = (() => {
 
   return {
     START_M, END_M, LUA_START_RE, LUA_END_RE, CMD_KEY_RE, NATIVE_TOOL_RE, unescapeDsml,
+    CMD_START_RE, CMD_END_RE, findCmdStart, findCmdEnd, parseCmdArgs, cmdBlockProblems, bareLuaFences, describeShapes, PLAIN_FORMAT_NOTE,
     findLuaStart, findLuaEnd, matchBrace, extractJson, normalizeCall,
     hasToolSignature, hasOpenToolBlock, parseToolCalls, parseAlternateToolCalls, salvageCutOff, toolNameFromText,
     isInjectedFeedback, hasCommandShape, normalizeTypography,

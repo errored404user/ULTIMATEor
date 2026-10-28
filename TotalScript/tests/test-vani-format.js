@@ -79,15 +79,15 @@ const V = globalThis.__V;
 const vani = read("src/providers/vani.js");
 ok("promptExtra: real markdown fence, never escaped, never quoted / inline / Document / tool proposal", /Write the fence as REAL markdown/.test(V.promptExtra) && /never escape the backticks, quotes or braces with backslashes/.test(V.promptExtra) && /never put the block inside quotes, inline code, a Document or a tool proposal/.test(V.promptExtra));
 ok("first rescue note names the escaped / quoted / inline / Document mistake as the reason nothing ran", /showed the block with backslashes before the backticks or quotes, inside quotation marks, as inline code, or inside a Document, that is exactly why nothing ran/.test(V.commandlessRetryFeedback));
-ok("final rescue note forbids backslashes outside JSON strings and quotation marks around the block", /no backslashes anywhere outside JSON strings, no quotation marks around the block/.test(V.commandlessRetryFeedbackFinal));
-ok("adapter version marker bumped to 2026-10e", vani.includes('setAttribute("data-rs-vani-ver", "2026-10e")'));
+ok("final rescue note forbids backslashes outside the code and quotation marks around the block (1.81.0: plain ###LUA### / ###CMD### blocks, no JSON needed)", /no backslashes anywhere outside the code itself, no quotation marks around the block, no JSON needed/.test(V.commandlessRetryFeedbackFinal));
+ok("adapter version marker bumped to 2026-10f", vani.includes('setAttribute("data-rs-vani-ver", "2026-10f")'));
 ok("CMD_SHAPE (tool-block masking) accepts the relaxed spellings", /CMD_SHAPE = \/.*\\\\"\(\?:command\|tool\)\\\\"\\s\*:.*'\(\?:command\|tool\)'\\s\*:/.test(vani));
 ok("an escaped block is no longer a 'commandless' reply for the rescue logic", V.shouldRetryCommandlessText("\\`\\`\\`json\n{\\\"command\\\":\\\"list_commands\\\",\\\"params\\\":{}}\n\\`\\`\\`") === false || P.parseToolCalls("\\`\\`\\`json\n{\\\"command\\\":\\\"list_commands\\\",\\\"params\\\":{}}\n\\`\\`\\`").length === 1);
 
 // ── 6. request shaper: pin wording + message-shape fallbacks ────────────────
 const net = read("src/providers/vani-net.js");
-ok("PIN tells the model to write a real unescaped fence", /Write the fence as real markdown: a line that is only ```json/.test(net) && /Never escape backticks, quotes or braces with backslashes/.test(net));
-ok("shaper marks itself 1.78", net.includes('setAttribute("data-rs-vani-net", "1.78")'));
+ok("PIN tells the model to write a real unescaped fence (1.81.0: plain fence, block lines inside)", /Write the fence as real markdown: a line that is only ```, the block lines/.test(net) && /Never escape backticks, quotes or braces with backslashes/.test(net));
+ok("shaper marks itself 1.81", net.includes('setAttribute("data-rs-vani-net", "1.81")'));
 {
   const html = { attrs: { "data-rs-agent": "on" }, getAttribute(n) { return this.attrs[n] || null; }, setAttribute(n, v) { this.attrs[n] = v; } };
   const ctx = { window: {}, document: { documentElement: html }, console: { log() {} }, location: { href: "https://c.vani.ai/chat" }, URL, JSON, Object, Array, String, Number, RegExp, Math, Date, Error };
@@ -109,7 +109,7 @@ ok("shaper marks itself 1.78", net.includes('setAttribute("data-rs-vani-net", "1
 const readme = read("README.md");
 ok("README: 1.78.1 entry + this test listed", /\*\*1\.78\.1 — Vani: "shown, not fenced" command blocks/.test(readme) && readme.includes("test-vani-format.js"));
 const manifest = JSON.parse(read("manifest.json"));
-ok("version pins 1.80.0", manifest.version === "1.80.0" && /^version = "1\.80\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.80.0"'));
+ok("version pins 1.81.0", manifest.version === "1.81.0" && /^version = "1\.81\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.81.0"'));
 
 console.log(`\n${pass}/${pass + fail} checks passed`);
 process.exit(fail ? 1 : 0);

@@ -77,7 +77,7 @@ assert(vani.includes("const CODE_CHROME_SEL ="), "vani skips code-block gutters/
 assert(vani.includes("function codeText(node)"), "vani reads <pre> verbatim");
 assert(vani.includes("function rememberSent(text)") && vani.includes("if (looksSent(item)) return true;"), "vani recognises its own sent messages as user rows");
 assert(vani.includes("sysMaxChars: 14000"), "vani uses the compact system prompt");
-assert(/promptExtra: "Vani Chat rules: [^"]*ONE fenced code block/.test(vani), "vani prompt explains the json block");
+assert(/VANI_SITE_RULES = "Vani Chat rules: [^"]*No JSON is needed: use a ###LUA###/.test(vani.replace(/\\"/g, "")) && /get promptExtra\(\) \{ return VANI_SITE_RULES/.test(vani), "vani prompt explains the plain ###LUA### / ###CMD### blocks (1.81.0: no JSON required)");
 console.log("PASS  mode skills (" + built + " commands build), signature catalogue, provider fixes");
 
 // UNIVERSAL set: every mode's focus includes the navigation/inspection core.

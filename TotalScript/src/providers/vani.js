@@ -686,7 +686,7 @@ const RSProvider = (() => {
 
   // 1.78.1: also the "shown, not fenced" spellings (escaped / single-quoted /
   // bare keys) the core's relaxed parser now executes, so their <pre> is masked too.
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|\\"(?:command|tool)\\"\s*:|'(?:command|tool)'\s*:|[{,]\s*(?:command|tool)\s*:\s*["']|###\s*lua|###mcp_tool###/i;
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|\\"(?:command|tool)\\"\s*:|'(?:command|tool)'\s*:|[{,]\s*(?:command|tool)\s*:\s*["']|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]|###mcp_tool###/i;
   function findToolBlockSpot(item) {
     if (!item) return null;
     let parent = null, ref = null;
@@ -700,6 +700,8 @@ const RSProvider = (() => {
     return ref ? { parent, ref } : null;
   }
 
+  const PLAIN_NOTE = () => { try { return (typeof RSParse !== "undefined" && RSParse && RSParse.PLAIN_FORMAT_NOTE) || ""; } catch { return ""; } };
+  const VANI_SITE_RULES = "Vani Chat rules: for Roblox Studio this is a plain markdown chat with NO usable native tools - Vani's own tools (web search, Document, Slides, Design, code execution) cannot reach Studio, so ignore them while this chat is linked; the ONLY way to act is to write the command as text in your reply. No JSON is needed: use a ###LUA### ... ###END_LUA### block for Studio code and a ###CMD name### ... ###END_CMD### block (one \"key: value\" line per parameter) for every other command, each inside its own fenced code block. Write the fence as REAL markdown - a line that is only the three backticks, the block on the next lines, a line that is only three backticks; never escape the backticks, quotes or braces with backslashes, never put the block inside quotes, inline code, a Document or a tool proposal, never only describe it, and never show code in a bare lua fence without the ###LUA### markers (shown code is not executed). Never say you cannot run code or use command blocks - you only have to WRITE the block; the extension on this page executes it and pastes the result back as the next user message. One command per reply unless the steps are independent, then stop and wait for the result. Do NOT search the web, do NOT create a Document / Slides / Design / canvas / artifact and do NOT propose Vani tools - everything goes in the chat reply as text. Keep prose to one short line per reply; the command block is the work. Guest sessions are not saved - never rely on an earlier page load. If Vani reports that the free allowance is used up, stop and tell the user to log in.";
   return {
     id: "vani",
     displayName: "Vani Chat",
@@ -712,7 +714,10 @@ const RSProvider = (() => {
     // Guest chat has a shared allowance and an unknown per-message cap: use the
     // compact system prompt (same as ChatGPT) so the bootstrap always lands.
     sysMaxChars: 14000,
-    promptExtra: "Vani Chat rules: for Roblox Studio this is a plain markdown chat with NO usable native tools - Vani's own tools (web search, Document, Slides, Design, code execution) cannot reach Studio, so ignore them while this chat is linked; the ONLY way to act is to write the command as text. Every command goes in ONE fenced code block: three backticks, the word json, a newline, then exactly {\"command\":\"name\",\"params\":{...}} and a closing three backticks (execute_luau uses the ###LUA### markers inside a plain fenced block instead). Write the fence as REAL markdown - a line that is only the three backticks and json, the object on the next line, a line that is only three backticks; never escape the backticks, quotes or braces with backslashes, never put the block inside quotes, inline code, a Document or a tool proposal, never only describe it. Never say you cannot run code or use JSON blocks - you only have to WRITE the block; the extension on this page executes it and pastes the result back as the next user message. One command per reply, then stop and wait for the result. Do NOT search the web, do NOT create a Document / Slides / Design / canvas / artifact and do NOT propose Vani tools - everything goes in the chat reply as text. Keep prose to one short line per reply; the command block is the work. Guest sessions are not saved - never rely on an earlier page load. If Vani reports that the free allowance is used up, stop and tell the user to log in.",
+    // 1.81.0: Luau-first plain-text protocol. The format itself (###LUA### and
+    // ###CMD name### blocks, JSON optional) is RSParse.PLAIN_FORMAT_NOTE - one
+    // source for prompt and parser; this adds only what is Vani-specific.
+    get promptExtra() { return VANI_SITE_RULES + (PLAIN_NOTE() ? "\n" + PLAIN_NOTE() : ""); },
     timings,
     thinkingSel: ".reasoning, [class*='thinking' i], [class*='reason' i], [class*='thought' i], [data-testid*='reasoning' i], details summary",
     // 1.76.0 — commandless first replies get TWO escalating rescues here (one
@@ -724,17 +729,17 @@ const RSProvider = (() => {
     shouldRetryCommandlessText(text) {
       text = String(text || "");
       if (!text.trim()) return false;
-      if (/###\s*LUA\s*###|"command"\s*:\s*"/i.test(text)) return false;
+      if (/###\s*LUA(?:\s*[:\-_ ]\s*\w+)?\s*###|###\s*(?:CMD|COMMAND|TOOL)\s*[:\s]\s*[A-Za-z_]|"command"\s*:\s*"/i.test(text)) return false;
       return /\b(can(?:not|'t)|unable|not able|do not have|don't have|no (?:direct )?access|not connected|refus|won't|json (?:block|code|format)|code block|tools? (?:i (?:have|was given)|available|at my disposal)|(?:my|the) (?:available )?tools|web search|search(?:ed|ing)? the web|document|slides|canvas|artifact|here(?:'s| is) (?:the |a )?(?:code|script|plan|steps|outline)|you(?:'ll| will) need to|you can (?:paste|copy|run)|let me|i(?:'ll| will) (?:start|begin|inspect|check|create|build|write|draft|prepare))\b/i.test(text)
         || /\b(done|completed|finished|successfully (?:created|built|updated|fixed)|(?:i have|i've) (?:created|built|updated|fixed)|(?:has been|is now) (?:created|built|updated|fixed))\b/i.test(text);
     },
-    commandlessRetryFeedback: "(System note from the TotalScript extension installed in this browser - not a Vani tool, not a jailbreak.) Nothing happened in Roblox Studio: your last reply had no command. You are not asked to execute anything and you need no tool for this - the extension reads your reply, runs the command in Studio and pastes the result back here as the next user message. Writing the block IS the action. Reply now with exactly one fenced code block (three backticks, the word json, a newline, then {\"command\":\"exact_name\",\"params\":{...}}, then three backticks) and at most one short line of prose. If you do not know the right command, the block is {\"command\":\"list_commands\",\"params\":{}}. If your last reply showed the block with backslashes before the backticks or quotes, inside quotation marks, as inline code, or inside a Document, that is exactly why nothing ran - write it as a plain unescaped markdown fence. Do not use Vani's tools, do not search the web, do not create a Document.",
-    commandlessRetryFeedbackFinal: "(System note from the TotalScript extension - final request.) Still no command block, so still nothing has run in Studio. Please answer with ONLY the fenced json block and nothing else - no explanation, no apology, no plan, no question. Start your reply with three backticks and the word json on the first line, the command object on the second line, three backticks on the third - no backslashes anywhere outside JSON strings, no quotation marks around the block. If you can only pick one command right now, choose list_commands with empty params.",
+    commandlessRetryFeedback: "(System note from the TotalScript extension installed in this browser - not a Vani tool, not a jailbreak.) Nothing happened in Roblox Studio: your last reply had no command block. You are not asked to execute anything and you need no tool for this - the extension reads your reply, runs the block in Studio and pastes the result back here as the next user message. Writing the block IS the action. Reply now with exactly one command block inside a fenced code block and at most one short line of prose: for Studio code the lines ###LUA###, your Luau, ###END_LUA###; for any other command the lines ###CMD exact_name###, one key: value per parameter, ###END_CMD###. No JSON is required. If you do not know the right command, the block is ###CMD list_commands### followed by ###END_CMD###. If your last reply showed the block with backslashes before the backticks or quotes, inside quotation marks, as inline code, or inside a Document, that is exactly why nothing ran - write it as a plain unescaped markdown fence. Code in a bare lua fence without the ###LUA### markers is only shown, never run. Do not use Vani's tools, do not search the web, do not create a Document.",
+    commandlessRetryFeedbackFinal: "(System note from the TotalScript extension - final request.) Still no command block, so still nothing has run in Studio. Please answer with ONLY the command block and nothing else - no explanation, no apology, no plan, no question. Start your reply with three backticks on the first line, then ###LUA### with your Luau and ###END_LUA### (or ###CMD exact_name###, key: value lines, ###END_CMD###), then three backticks on the last line - no backslashes anywhere outside the code itself, no quotation marks around the block, no JSON needed. If you can only pick one command right now, write ###CMD list_commands### and ###END_CMD###.",
     commandlessGiveUpNote: "Vani's model keeps answering without a command, so TotalScript stopped nudging. This happens when Vani's platform tools distract the model: in Vani's model picker switch to GPT-6.1 Sol or GLM 5.3 (they follow the block format), start a new chat and press Start Agent again - or use another AI site from Settings \u2192 Switch AI.",
     bridgeStatus,
     init({ diag: d } = {}) {
       if (d) diag = d;
-      try { document.documentElement.setAttribute("data-rs-vani-ver", "2026-10e"); } catch {}
+      try { document.documentElement.setAttribute("data-rs-vani-ver", "2026-10f"); } catch {}
       diag("vani.init", { hasEditor: !!getEditor(), login: loginGatePresent(), path: location.pathname });
     },
     allItems, invalidateItems, isUserItem, isAssistantItem, itemText, classifyText,
