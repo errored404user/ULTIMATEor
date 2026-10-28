@@ -278,6 +278,112 @@ def mesh_color(obj):
         return None
 
 
+def material_pbr(mat):
+    """Principled BSDF parameters of a material as plain numbers plus the
+    Roblox material hint stored by blender_asset.py (mat["total_roblox"]).
+    Roblox cannot reproduce a node tree - the importer maps these values to
+    Enum.Material / Color / Reflectance / Transparency and says so."""
+    if mat is None:
+        return None
+    out = {"name": str(getattr(mat, "name", "Material")), "color": None, "metallic": 0.0, "roughness": 0.5, "alpha": 1.0, "emission": None, "emission_strength": 0.0}
+    try:
+        bsdf = None
+        if mat.use_nodes and mat.node_tree:
+            for node in mat.node_tree.nodes:
+                if node.type == "BSDF_PRINCIPLED":
+                    bsdf = node
+                    break
+        if bsdf is not None:
+            def val(key, default):
+                inp = bsdf.inputs.get(key)
+                if inp is None:
+                    return default
+                v = inp.default_value
+                try:
+                    return [round(float(x), 3) for x in v][:4]
+                except TypeError:
+                    return round(float(v), 3)
+            c = val("Base Color", None)
+            out["color"] = c[:3] if c else None
+            out["metallic"] = val("Metallic", 0.0)
+            out["roughness"] = val("Roughness", 0.5)
+            out["alpha"] = val("Alpha", 1.0)
+            em = val("Emission Color", None) or val("Emission", None)
+            strength = val("Emission Strength", 0.0)
+            if em and strength and strength > 0 and max(em[:3]) > 0.01:
+                out["emission"] = em[:3]
+                out["emission_strength"] = strength
+            tex = []
+            for node in mat.node_tree.nodes:
+                if node.type == "TEX_IMAGE" and node.image is not None:
+                    fp = ""
+                    try:
+                        fp = bpy.path.abspath(node.image.filepath) if node.image.filepath else ""
+                    except Exception:
+                        fp = ""
+                    tex.append({"image": node.image.name, "filepath": fp, "exists": bool(fp and os.path.exists(fp)), "packed": bool(getattr(node.image, "packed_file", None))})
+            if tex:
+                out["textures"] = tex
+        if out["color"] is None:
+            c = mat.diffuse_color
+            out["color"] = [round(float(c[0]), 3), round(float(c[1]), 3), round(float(c[2]), 3)]
+        try:
+            if mat.get("total_roblox"):
+                out["roblox"] = str(mat["total_roblox"])
+        except Exception:
+            pass
+        try:
+            if mat.blend_method in ("BLEND", "HASHED") and out["alpha"] >= 1.0:
+                out["alpha"] = 0.999
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return out
+
+
+def total_props(obj):
+    """Custom properties written by blender_asset.py (total_role, total_collision ...)."""
+    props = {}
+    try:
+        for k in obj.keys():
+            if str(k).startswith("total_"):
+                v = obj[k]
+                if isinstance(v, (int, float, str, bool)):
+                    props[str(k)[6:]] = v
+    except Exception:
+        pass
+    return props
+
+
+def dump_attachments(root_names=None):
+    """Empties named ATT_* (or flagged total_attachment) -> Roblox attachments,
+    positions converted to Y-up like the vertices."""
+    out = []
+    for o in bpy.data.objects:
+        if o.type != "EMPTY":
+            continue
+        is_att = str(o.name).startswith("ATT_")
+        try:
+            is_att = is_att or bool(o.get("total_attachment"))
+        except Exception:
+            pass
+        if not is_att:
+            continue
+        c = o.matrix_world.translation
+        parent = o.parent.name if o.parent is not None else None
+        if root_names and parent not in root_names and o.name not in root_names:
+            continue
+        name = str(o.name)[4:] if str(o.name).startswith("ATT_") else str(o.name)
+        try:
+            if o.get("total_attachment_name"):
+                name = str(o.get("total_attachment_name"))
+        except Exception:
+            pass
+        out.append({"name": name, "pos": [round(float(c.x), 4), round(float(c.z), 4), round(float(-c.y), 4)], "parent": parent, "asset": str(o.get("total_asset") or "") if hasattr(o, "get") else ""})
+    return out
+
+
 def mesh_triangles(mesh):
     """Triangle corner indices (flat, 0-based) using Blender's own
     triangulation when available (handles concave n-gons), else a fan."""
@@ -310,6 +416,8 @@ def dump_meshes(names, skipped=None):
     objs = [o for o in resolve_objects(names) if o.type == "MESH" and o.data]
     if not objs:
         objs = [o for o in bpy.data.objects if o.type == "MESH" and o.data]
+    want_normals = ARGS.get("normals") is not False
+    want_uvs = ARGS.get("uvs") is not False
     depsgraph = bpy.context.evaluated_depsgraph_get()
     for obj in objs:
         if len(meshes) >= MAX_MESHES:
@@ -366,18 +474,120 @@ def dump_meshes(names, skipped=None):
         except Exception:
             flat = False
         color = mesh_color(obj)
+        # 1.83.0: per-corner split normals + UVs + per-material groups so the
+        # Studio importer can build smooth shading, UV sets and one MeshPart
+        # per material instead of one flat, single-colour blob per object.
+        corner_normals, corner_uvs, tri_mats = dump_corners(obj, mesh, mw, want_normals and not flat, want_uvs)
+        try:
+            pv = mw.translation if hasattr(mw, "translation") else (mw @ Vector((0.0, 0.0, 0.0)))
+            pivot = [round(float(pv.x), 4), round(float(pv.z), 4), round(float(-pv.y), 4)]
+        except Exception:
+            pivot = None
+        try:
+            slots = [slot.material for slot in obj.material_slots]
+        except Exception:
+            slots = []
+        if not slots and getattr(obj, "active_material", None) is not None:
+            slots = [obj.active_material]
+        props = total_props(obj)
+        par = getattr(obj, "parent", None)
+        parent = par.name if par is not None else None
         if eval_obj is not None:
             try:
                 eval_obj.to_mesh_clear()
             except Exception:
                 pass
-        entry = {"name": obj.name, "verts": verts, "faces": tris, "tris": tri_count, "flat": flat}
-        if color:
-            entry["color"] = color
-        meshes.append(entry)
+        groups = {}
+        order = []
+        for ti in range(tri_count):
+            mi = tri_mats[ti] if tri_mats else 0
+            if mi not in groups:
+                groups[mi] = []
+                order.append(mi)
+            groups[mi].append(ti)
+        multi = len(order) > 1
+        for mi in order:
+            tri_ids = groups[mi]
+            if multi:
+                remap = {}
+                g_verts = []
+                g_faces = []
+                for ti in tri_ids:
+                    for k in range(3):
+                        vi = tris[ti * 3 + k]
+                        if vi not in remap:
+                            remap[vi] = len(g_verts)
+                            g_verts.append(verts[vi])
+                        g_faces.append(remap[vi])
+            else:
+                g_verts, g_faces = verts, tris
+            mat = slots[mi] if 0 <= mi < len(slots) else None
+            name = obj.name if not multi else "%s_%s" % (obj.name, (mat.name if mat is not None else "Slot%d" % mi))
+            entry = {"name": name, "object": obj.name, "verts": g_verts, "faces": g_faces, "tris": len(tri_ids), "flat": flat}
+            if pivot:
+                entry["pivot"] = pivot
+            pbr = material_pbr(mat)
+            if pbr:
+                entry["material"] = pbr
+                if pbr.get("color"):
+                    entry["color"] = pbr["color"]
+            elif color:
+                entry["color"] = color
+            if corner_normals:
+                entry["normals"] = [corner_normals[ti] for ti in tri_ids] if multi else corner_normals
+            if corner_uvs:
+                entry["uvs"] = [corner_uvs[ti] for ti in tri_ids] if multi else corner_uvs
+            if props:
+                entry["props"] = props
+            if parent:
+                entry["parent"] = parent
+            meshes.append(entry)
         total_v += vert_count
         total_t += tri_count
     return meshes
+
+
+def dump_corners(obj, mesh, mw, want_normals, want_uvs):
+    """Per-triangle corner normals ([[nx,ny,nz]*3] per tri, Y-up, rounded) and
+    UVs ([[u,v]*3] per tri) plus the material index per triangle, all in
+    loop_triangles order (the order mesh_triangles() emits)."""
+    normals = []
+    uvs = []
+    mats = []
+    try:
+        lt = getattr(mesh, "loop_triangles", None)
+        if lt is None or len(lt) == 0:
+            return [], [], []
+        nmat = None
+        if want_normals:
+            try:
+                nmat = mw.to_3x3().inverted_safe().transposed()
+            except Exception:
+                nmat = mw.to_3x3()
+        uv_layer = None
+        if want_uvs:
+            try:
+                uv_layer = mesh.uv_layers.active
+            except Exception:
+                uv_layer = None
+        uv_data = uv_layer.data if uv_layer is not None else None
+        for t in lt:
+            mats.append(int(getattr(t, "material_index", 0)))
+            if nmat is not None:
+                tri_n = []
+                for n in t.split_normals:
+                    w = (nmat @ Vector(n)).normalized()
+                    tri_n.append([round(float(w.x), 3), round(float(w.z), 3), round(float(-w.y), 3)])
+                normals.append(tri_n)
+            if uv_data is not None:
+                tri_uv = []
+                for li in t.loops:
+                    uv = uv_data[li].uv
+                    tri_uv.append([round(float(uv[0]), 4), round(float(uv[1]), 4)])
+                uvs.append(tri_uv)
+    except Exception:
+        return [], [], mats
+    return normals, uvs, mats
 
 
 def write_mesh_file(meshes):
@@ -572,6 +782,22 @@ def cmd_dump():
             why = "no mesh could be sent: " + "; ".join("%s (%s)" % (k["name"], k["reason"]) for k in skipped[:6])
         return emit({"ok": False, "error": why, "skipped": skipped})
     mesh_path = write_mesh_file(meshes)
+    roots = {}
+    for o in bpy.data.objects:
+        try:
+            if o.type == "EMPTY" and o.get("total_asset"):
+                pv = o.matrix_world.translation
+                roots[o.name] = {"name": o.name, "studs_per_meter": float(o.get("total_studs_per_meter") or 0) or None, "origin": str(o.get("total_origin") or ""), "pivot": [round(float(pv.x), 4), round(float(pv.z), 4), round(float(-pv.y), 4)]}
+        except Exception:
+            pass
+    parents = set(m.get("parent") for m in meshes if m.get("parent"))
+    used_roots = [roots[n] for n in parents if n in roots]
+    suggested = None
+    for r in used_roots:
+        if r.get("studs_per_meter"):
+            suggested = r["studs_per_meter"]
+            break
+    attachments = dump_attachments(parents or None)
     return emit({
         "ok": True,
         "objects": [m["name"] for m in meshes],
@@ -579,6 +805,12 @@ def cmd_dump():
         "mesh_file": mesh_path,
         "tris": sum(m["tris"] for m in meshes),
         "verts": sum(len(m["verts"]) for m in meshes),
+        "materials": sorted(set((m.get("material") or {}).get("name") for m in meshes if m.get("material"))),
+        "with_uvs": sum(1 for m in meshes if m.get("uvs")),
+        "with_normals": sum(1 for m in meshes if m.get("normals")),
+        "assets": used_roots,
+        "attachments": attachments,
+        "suggested_scale": suggested,
         "skipped": skipped,
         "meshes": meshes,
     })

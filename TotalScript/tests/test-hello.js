@@ -21,7 +21,7 @@ ok("welcome.js: buttons open the AI chat / Discord via chrome.tabs.create, Close
 ok("manifest: extension-page CSP allows the page (script-src 'self', inline styles) and the icon is shipped", /script-src 'self'/.test(manifest.content_security_policy.extension_pages) && /style-src 'self' 'unsafe-inline'/.test(manifest.content_security_policy.extension_pages) && fs.existsSync(path.join(ROOT, "assets/icon128.png")) && fs.existsSync(path.join(ROOT, "assets/icon32.png")));
 
 ok("README: 1.75.0 entry", /\*\*1\.75\.0 — Hello page after install, shown exactly once\.\*\*/.test(read("README.md")));
-ok("version pins 1.82.0", manifest.version === "1.82.0" && /^version = "1\.82\.0"/m.test(read("agent/Cargo.toml")));
+ok("version pins 1.83.0", manifest.version === "1.83.0" && /^version = "1\.83\.0"/m.test(read("agent/Cargo.toml")));
 
 // ── behaviour: run maybeShowHello against a fake chrome ──
 const fnSrc = bg.slice(bg.indexOf("const HELLO_PAGE ="), bg.indexOf("chrome.runtime.onInstalled.addListener((details)"));

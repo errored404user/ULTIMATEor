@@ -173,6 +173,11 @@ const BLENDER_TOOLS = [
   btool("get_object_info", "Details for one object in the Blender scene.", { name: { type: "string" } }, ["name"]),
   btool("execute_blender_code", "Run Python (bpy) inside Blender. Prefer the named blender_* tools.", { code: { type: "string" } }, ["code"]),
   btool("get_viewport_screenshot", "Capture the Blender 3D viewport.", { max_size: { type: "integer" } }, []),
+  btool("blender_asset_plan", "PLAN BEFORE MODELLING (no Blender call): turn a brief into a structured asset SPEC - category, style profile, dimensions (m), parts with primary/secondary/tertiary roles, scale-relative bevels, cuts/grooves/insets/tapers, smoothing policy, PBR materials + Roblox material hint, attachments, origin, triangle budget. Recipes: sword, blaster, crate, barrel, table, chair, lamp_post, pillar, wall_module, door_module, window_module, rock, tree, car. Styles: stylized_fantasy, realistic, scifi, low_poly, cartoon, anime, horror. Characters are not supported (says so).", { brief: { type: "string" }, recipe: { type: "string" }, style: { type: "string" }, style2: { type: "string", description: "second style for a hybrid" }, size: { type: "number", description: "main dimension in metres" }, primary: { type: "string", description: "colour name or #hex" }, accent: { type: "string" }, studs_per_meter: { type: "number", description: "default 3.5 (Roblox human scale)" }, collision: { type: "string", description: "box | hull | precise | none" } }, ["brief"]),
+  btool("blender_asset_build", "Build a planned asset in Blender from a spec (from blender_asset_plan, edited as needed) or straight from a brief (plans first). Creates a named collection + root empty, parts as separate named meshes (Asset_Part) with live Bevel / Mirror / Array / WeightedNormal stacks, baked boolean details, Principled materials, UVs, custom properties and ATT_* attachment empties. Returns per-part triangle counts, bounds, budget status and the structural validation report. Nothing reaches Studio until blender_send_to_studio.", { spec: { type: "object" }, brief: { type: "string" }, style: { type: "string" }, replace: { type: "boolean", description: "replace an existing asset of the same name (default true)" } }, []),
+  btool("blender_asset_validate", "Structural check of an asset built by blender_asset_build (or any collection / object name): non-manifold + loose + degenerate geometry, inconsistent normals, unapplied scale, missing materials / UVs, default names, triangle budget, overlap estimate, dims vs spec. Structural only - run blender_asset_inspect for the visual read.", { name: { type: "string" }, spec: { type: "object" } }, ["name"]),
+  btool("blender_asset_inspect", "Render front / side / top / iso (and closeup) previews of an asset with a neutral 3-light rig and grey backdrop in a temporary Total_Inspect collection (removed afterwards; the asset is untouched). The PNGs are attached to the reply so you can judge silhouette, proportions, bevel read, material separation and intersections.", { name: { type: "string" }, views: { type: "array", items: { type: "string" } }, size: { type: "integer", description: "pixels, default 640" }, keep: { type: "boolean" } }, ["name"]),
+  btool("blender_asset_export", "Explicit, validated export of an asset: fbx (-Z forward, Y up, modifiers applied, FACE smoothing, custom props) | glb | obj. Refuses assets with structural errors unless force:true, then checks the file exists, is non-empty and has the right header, and lists referenced textures that are missing. Local file only - nothing is uploaded.", { name: { type: "string" }, format: { type: "string", description: "fbx | glb | obj" }, path: { type: "string" }, force: { type: "boolean" } }, ["name"]),
   btool("blender_send_to_studio", "ONE SHOT: read the live Blender meshes (selected objects, or objects[]; modifiers applied, world transforms, material base colour) and build them in Roblox Studio as real MeshParts (EditableMesh) under Workspace.Total_Imported. No file, no FBX. Limits per send: 20k triangles per mesh (blender_decimate first), 40k triangles total (send in groups). publish:true also uploads each mesh as a Mesh asset you own (permanent MeshId; asks for approval).", { objects: { type: "array", items: { type: "string" } }, dest: { type: "string", description: "parent in Workspace (default Workspace)" }, scale: { type: "number", description: "studs per Blender metre (default 20)" }, publish: { type: "boolean" }, append: { type: "boolean", description: "keep the previous Total_Imported and add to it" } }, []),
   btool("blender_export_fbx", "Export meshes to an FBX (Forward -Z, Up Y). filepath optional. Also dumps meshes so blender_send_to_studio / asset_bridge_import can run with no path.", { filepath: { type: "string" }, objects: { type: "array", items: { type: "string" } } }, []),
   btool("blender_import_fbx", "Import an FBX into the live Blender scene. filepath optional — defaults to the last TotalScript export.", { filepath: { type: "string" } }, []),
@@ -1135,6 +1140,8 @@ async function agentWorkspaceRoot() {
 }
 
 const BLENDER_CMD = {
+  // 1.83.0 spec-driven asset pipeline (tools/blender_asset.py)
+  blender_asset_build: "asset_build", blender_asset_validate: "asset_validate", blender_asset_inspect: "asset_inspect", blender_asset_export: "asset_export",
   blender_export_fbx: "export_fbx", export_blender_fbx: "export_fbx",
   blender_import_fbx: "import_fbx", import_blender_fbx: "import_fbx",
   blender_export_obj: "export_obj", blender_import_obj: "import_obj",
@@ -1202,8 +1209,9 @@ const BLENDER_CMD = {
   animation_list:"animation_list",keyframe_insert:"keyframe_insert",timeline_set:"set_frame",camera_create:"add_camera",camera_set_active:"set_active_camera",light_create:"add_light",world_set:"set_world",
 };
 
+const BLENDER_ASSET_CMDS = new Set(["asset_build", "asset_validate", "asset_inspect", "asset_export"]);
 async function blenderOpsCode(cmd, args) {
-  let py = await extText("tools/blender_ops.py");
+  let py = await extText(BLENDER_ASSET_CMDS.has(String(cmd || "")) ? "tools/blender_asset.py" : "tools/blender_ops.py");
   const status = "total_status.json";
   const mesh = "total_mesh.json";
   // Blender's working directory is its install folder (often read-only) and
@@ -1406,6 +1414,18 @@ async function blenderCall(name, args, timeout) {
       catch(e){return {ok:false,error:`Blender created the viewport capture, but TotalScript could not attach it: ${String(e&&e.message||e)}`};}
     }
     if(payload.type==="get_viewport_screenshot"&&!screenshotImages.length)return {ok:false,error:"Blender returned no viewport image data"};
+    // 1.83.0: asset_inspect renders several PNGs (front / side / top / iso) into
+    // the workspace; attach every file that really exists so the model judges
+    // the asset from more than one angle. Missing files are reported, not faked.
+    if(result&&typeof result==="object"&&Array.isArray(result.render_files)&&result.render_files.length){
+      const missing=[];
+      for(const fp of result.render_files.slice(0,7)){
+        try{screenshotImages.push({mimeType:"image/png",data:await localImageBase64(String(fp))});}
+        catch(e){missing.push(String(fp)+": "+String(e&&e.message||e));}
+      }
+      if(missing.length)result.render_attach_errors=missing;
+      if(!screenshotImages.length)return {ok:false,error:"Blender rendered the inspection views but TotalScript could not attach them: "+missing.join("; ")};
+    }
     let textResult = result;
     if (result && typeof result === "object" && Array.isArray(result.meshes)) {
       textResult = Object.assign({}, result);

@@ -179,7 +179,7 @@
     "script_set_source","script_disable","anchored_set","collision_set","transparency_set",
     "humanoid_set","lighting_set","folder_create","value_set","weld_constraint","instance_move","tag_remove",
     "append_file","copy_file","replace_in_files","patch_json","write_json","replace_once",
-    "execute_blender_code","blender_export_fbx","blender_send_to_studio","asset_bridge_import",
+    "execute_blender_code","blender_export_fbx","blender_send_to_studio","asset_bridge_import","blender_asset_build","blender_asset_export",
     "size_set","color_set","cframe_set","rotation_set","massless_set","can_touch_set","can_query_set","cast_shadow_set","collision_group_set","brickcolor_set",
     "meshpart_create","wedge_create","spawn_box","ladder_create","trampoline_create","conveyor_create","ice_part","jump_pad","speed_pad",
     "attachment_create","hinge_create","spring_create","rope_create","vector_force_create","linear_velocity_create",
@@ -2560,8 +2560,15 @@
   // base colour becomes Part.Color. publish=true additionally uploads each
   // EditableMesh as a Mesh asset (AssetService:CreateAssetAsync - plugin-only,
   // approval-gated in runAssetBridgeImport) so the import survives a save.
+  // 1.83.0: per-material MeshParts, split normals, UVs, PBR -> Enum.Material,
+  // Model per asset with pivot + attachments live in src/core/meshimport.js;
+  // this function stays as the fallback when that module is not loaded.
+  let meshImportInfo = null;
   function studioMeshLuau(meshes, dest, scale, opts) {
     const o = opts || {};
+    if (typeof window !== "undefined" && window.TotalMeshImport && o.legacy !== true) {
+      return window.TotalMeshImport.luau(meshes, dest, scale, Object.assign({}, meshImportInfo || {}, o));
+    }
     const json = JSON.stringify({ meshes: meshes || [], dest: dest || "Workspace", scale: Number(scale) || 20, append: !!o.append, publish: !!o.publish })
       .replace(/\]==\]/g, "] == ]");
     // The JSON goes in as many ONE-LINE long strings of <= 3000 chars: when the
@@ -2773,7 +2780,7 @@
     const a = args || {};
     const asset = String(a.asset || a.filepath || a.path || "").trim();
     const dest = String(a.dest || a.parent || "Workspace");
-    const scale = Number(a.scale) || 20;
+    let scale = Number(a.scale) || 20;
     const assetLower = asset.toLowerCase();
     let assetId = "";
     const prefix = "rbxassetid://";
@@ -2823,6 +2830,11 @@
     }
     meshes = meshes.filter((m) => m && Array.isArray(m.verts) && m.verts.length && Array.isArray(m.faces) && m.faces.length);
     if (!meshes.length) return "ERROR in asset_bridge_import: every Blender mesh was empty (no faces)." + skippedText;
+    // 1.83.0: asset roots carry their studs-per-metre scale, attachments and
+    // pivots; hand them to the importer (and use the asset's scale unless the
+    // caller forced one).
+    if (!Number(a.scale) && info && Number(info.suggested_scale) > 0) scale = Number(info.suggested_scale);
+    meshImportInfo = { assets: info && Array.isArray(info.assets) ? info.assets : [], attachments: info && Array.isArray(info.attachments) ? info.attachments : [], collision: a.collision || null };
     // Publishing uploads Mesh assets to the user's account: same gate as the
     // other publish commands (Allow publish automation, or an explicit Allow).
     let publish = a.publish === true || a.publish === "true";
@@ -4781,6 +4793,26 @@
     }
     const BLENDER_OPS = new Set(["get_scene_info","get_object_info","execute_blender_code","get_viewport_screenshot","blender_export_fbx","blender_execute_code","blender_screenshot"]);
     if (BLENDER_OPS.has(bareName) || /^blender_/.test(bareName)) {
+      // 1.83.0 asset pipeline: the plan is pure JS (no Blender needed), and a
+      // build called with only a brief plans first so proportions / style /
+      // materials are decided before a single primitive exists.
+      const planner = (typeof window !== "undefined" && window.TotalAssetPlan) || null;
+      if (bareName === "blender_asset_plan") {
+        if (!planner) return "ERROR calling 'blender_asset_plan': asset planner module not loaded";
+        const a = args || {};
+        const p = planner.plan(a.brief || a.prompt || a.description || "", a);
+        if (!p.ok && !p.spec) return "ERROR in blender_asset_plan: " + p.error;
+        return "Output of 'blender_asset_plan':\n" + JSON.stringify({ ok: p.ok, summary: p.summary, validation: p.validation, spec: p.spec, next: p.ok ? "review proportions / materials, adjust the spec if needed, then blender_asset_build {spec}" : "fix the validation errors before building" }, null, 1);
+      }
+      if (bareName === "blender_asset_build" && planner && args && !args.spec && (args.brief || args.prompt || args.description)) {
+        const p = planner.plan(args.brief || args.prompt || args.description, args);
+        if (!p.ok) return "ERROR in blender_asset_build: planning failed - " + (p.error || JSON.stringify(p.validation && p.validation.issues));
+        args = Object.assign({}, args, { spec: p.spec });
+      }
+      if (bareName === "blender_asset_build" && planner && args && args.spec && typeof args.spec === "object") {
+        const v = planner.validate(args.spec);
+        if (!v.ok) return "ERROR in blender_asset_build: spec rejected before Blender ran - " + v.issues.filter((i) => i.level === "error").map((i) => i.msg).join("; ");
+      }
       if (!(A.bridge && A.bridge.blender)) {
         let st = await bg({ type: "blender_status" });
         if (!(st && (st.blender || st.ok))) st = await bg({ type: "blender_connect" });
