@@ -550,25 +550,38 @@ const RSProvider = (() => {
       return !!b && !b.disabled && b.getAttribute("aria-disabled") !== "true";
     };
     await waitFor(sendReady, 30000);
-    // Click and CONFIRM the send took (the composer clears - text AND any staged
-    // image - the instant Meta accepts it). Re-click / fall back to Enter until it
-    // clears so a swallowed click can't strand the message.
-    let sent = false;
-    for (let i = 0; i < 6 && !sent; i++) {
-      if (sendReady()) {
-        try { sendButton().click(); } catch {}
-      } else if (!isHardGenerating()) {
-        // Fallback: Enter on the on-screen editor (the send button click is the
-        // primary path; this only covers a swallowed click).
+    // 1.86.0 - commit EXACTLY ONCE (baseline rule, see chatgpt.js / gemini.js):
+    // the previous loop re-clicked up to six times whenever the composer had
+    // not emptied within 700 ms, duplicating the message on slow acceptance.
+    // Proof the send landed: text + staged image left the composer, the stop
+    // control is up, or a new user turn appeared. ONE alternate mechanism
+    // (Enter on the visible editor - covers a swallowed click) only while our
+    // text is verifiably still typed and nothing is generating.
+    const usersBefore = userCount();
+    const tail = String(text || "").replace(/\s+/g, " ").trim().slice(-60);
+    const stillTyped = () => { const t = editorText().replace(/\s+/g, " ").trim(); if (!t) return false; return t.length >= tail.length ? t.includes(tail) : tail.includes(t); };
+    const cleared = () => !stillTyped() && !hasPendingAttachment();
+    const proof = () => (cleared() ? "cleared" : isHardGenerating() ? "generating" : userCount() > usersBefore ? "userRow" : "");
+    const fire = (how) => {
+      try {
+        if (how === "click") { if (!sendReady()) return false; sendButton().click(); return true; }
+        if (isHardGenerating()) return false;
         const target = visibleEditor() || editor;
         const o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
         target.dispatchEvent(new KeyboardEvent("keydown", o));
         target.dispatchEvent(new KeyboardEvent("keyup", o));
-      }
-      sent = await waitFor(() => editorText().trim() === "" && !hasPendingAttachment(), 700);
-    }
-    if (sent) _attachedImages = null;
-    diag("meta.tas.sent", { sent, editorLen: editorText().length });
+        return true;
+      } catch { return false; }
+    };
+    const plan = fire("click") ? ["click", "enter"] : ["enter", "click"];
+    if (plan[0] === "enter") fire("enter");
+    let p = "";
+    await waitFor(() => !!(p = proof()), 2500);
+    let how = plan[0];
+    if (!p && fire(plan[1])) { how = plan[1]; await waitFor(() => !!(p = proof()), 2500); }
+    const sent = !!p;
+    if (sent) _attachedImages = null; // accepted (any proof) = the staged image was consumed with the message
+    diag("meta.tas.sent", { sent, how, proof: p, editorLen: editorText().length });
   }
 
   function stopGeneration() {

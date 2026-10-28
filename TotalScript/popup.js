@@ -3,7 +3,7 @@ const DISCORD_URL = "https://discord.gg/YqVZaZYuy";
 const SUPPORTED_HOSTS = [
   "chat.deepseek.com", "deepseek.com", "chatgpt.com", "chat.openai.com",
   "claude.ai", "claude.com",
-  "gemini.google.com", "www.kimi.com", "kimi.com",
+  "gemini.google.com", "www.kimi.com", "kimi.com", "kimi.ai", "www.kimi.ai", // 1.86.0: kimi.ai was injected (manifest) but the popup did not recognise the tab
   "build.nvidia.com/moonshotai/kimi-k3", "chat.z.ai", "chat.qwen.ai", "arena.ai",
   "www.meta.ai", "meta.ai",
   "gpt.crax.lol", "www.notion.so", "app.notion.so", "www.notion.com", "notion.com", "oxalpha.com", "www.oxalpha.com", "oxalpha.org", "www.oxalpha.org", "c.vani.ai", "aistudio.xiaomimimo.com", "app.clickup.com",

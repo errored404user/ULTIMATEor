@@ -27,6 +27,13 @@
 const { createPage, studioSim, sse, makeReporter, sleep, log } = require("./lib/e2e-page.js");
 
 const CLOSED = !!process.env.CLOSED;
+// BRIDGE_DROP=1: the Studio bridge is down for the FIRST command (background
+// answers exactly like background.js does on a dead socket: ok:false,
+// kind:"disconnected", errorCode, "bridge not connected", sent:false). The
+// model must see a real ERROR, nothing may be marked done, and the retried
+// command must go through the normal path and be verified.
+const BRIDGE_DROP = !!process.env.BRIDGE_DROP;
+let bridgeDrops = 0;
 const composer = `
     <form id="composer" class="composer rounded-3xl border" data-rect="320,690,900,90">
       <textarea id="ed" name="message" placeholder="Message" rows="1" data-rect="330,700,780,60"></textarea>
@@ -141,6 +148,10 @@ w.fetch = async (input, init) => {
 // ── Studio stand-in ──────────────────────────────────────────────────────
 async function onToolCall(msg) {
   if (msg.name !== "execute_luau") return null;
+  if (BRIDGE_DROP && bridgeDrops === 0 && new RegExp(PART).test(String(msg.arguments && msg.arguments.code || ""))) {
+    bridgeDrops++;
+    return { ok: false, kind: "disconnected", errorCode: "MCP_CONNECTION_REFUSED", error: "bridge not connected", sent: false };
+  }
   if (!sim.available()) return { ok: true, text: "OK (studio sim unavailable - lupa not installed)" };
   const r = await sim.exec(String(msg.arguments && msg.arguments.code || ""));
   return r.ok ? { ok: true, text: r.text } : { ok: false, error: r.text, text: r.text };
@@ -182,6 +193,8 @@ const PART = "TotalScript_ProviderParityTest";
       if (n === 1) return "Loading the catalogue first.\n```\n###CMD list_commands###\n###END_CMD###\n```";
       if (n === 2) return "Ready. Tell me what to build in Roblox Studio.";
       if (n === 3) return `Creating the part now.\n\`\`\`\n###CMD part_create###\nname: ${PART}\nsize: [4, 2, 4]\nposition: [0, 5, 0]\nanchored: true\n###END_CMD###\n\`\`\``;
+      if (BRIDGE_DROP && n === 4) { stageSeen.dropResult = userMessages[userMessages.length - 1]; return `The bridge was down - retrying the same command.\n\`\`\`\n###CMD part_create###\nname: ${PART}\nsize: [4, 2, 4]\nposition: [0, 5, 0]\nanchored: true\n###END_CMD###\n\`\`\``; }
+      if (BRIDGE_DROP) n -= 1;
       if (n === 4) { stageSeen.result = userMessages[userMessages.length - 1]; return `Checking it.\n\`\`\`\n###LUA###\nlocal p = workspace:FindFirstChild("${PART}")\nif not p then return "MISSING" end\nreturn string.format("%s size=%s anchored=%s", p:GetFullName(), tostring(p.Size), tostring(p.Anchored))\n###END_LUA###\n\`\`\``; }
       if (n === 5) { stageSeen.readback = userMessages[userMessages.length - 1]; return `Done - **${PART}** exists in Workspace, 4×2×4 studs, anchored.`; }
       return "Noted.";
@@ -215,6 +228,16 @@ const PART = "TotalScript_ProviderParityTest";
     const ex = toolCalls.find((c) => c.name === "execute_luau" && new RegExp(PART).test(String(c.arguments.code || "")));
     ok("###CMD part_create### went through the shared parser → contract → skill → execute_luau", /\n/.test(ex.arguments.code) && !/```/.test(ex.arguments.code) && !/###/.test(ex.arguments.code), String(ex.arguments.code).slice(0, 80).replace(/\n/g, "\\n"));
     ok("no TotalScript-internal flags leaked to the bridge", !Object.keys(ex.arguments).some((k) => /^_total/.test(k)));
+    if (BRIDGE_DROP) {
+      await waitFor(() => userMessages.length >= 4, 40000, "bridge-down result");
+      const dropMsg = userMessages[3];
+      ok("bridge down: a REAL classified error reached the model (ERROR + [diagnosis] backend_unavailable; no 'ok': true, no 'created')", /ERROR/.test(dropMsg) && /backend_unavailable|not connected/i.test(dropMsg) && !/"ok":\s*true|created Part/.test(dropMsg), dropMsg.slice(0, 200).replace(/\n/g, " "));
+      if (simReady) { const v0 = await sim.exec(`return workspace:FindFirstChild("${PART}") and "EXISTS" or "MISSING"`); ok("bridge down: nothing was created while the bridge was down", v0.text === "MISSING", v0.text); }
+      await waitFor(() => userMessages.length >= 5, 40000, "retried part_create result");
+      ok("the retried command went through the normal path and succeeded (transient failure is not loop-guarded)", /Output of 'part_create'/.test(userMessages[4]) && /"ok":\s*true/.test(userMessages[4]), userMessages[4].slice(0, 160).replace(/\n/g, " "));
+      // shift the remaining expectations by one message
+      userMessages.splice(3, 1);
+    }
     await waitFor(() => userMessages.length >= 4, 40000, "part_create result");
     ok("the REAL (simulated) result was typed back, not a canned OK", /Output of 'part_create'/.test(userMessages[3]) && (!simReady || /TotalScript_ProviderParityTest|"ok"\s*:\s*true|Workspace/.test(userMessages[3])), userMessages[3].slice(0, 120).replace(/\n/g, " "));
     await waitFor(() => userMessages.length >= 5, 40000, "read-back result");
@@ -223,8 +246,8 @@ const PART = "TotalScript_ProviderParityTest";
     ok("agent loop ended after the final prose reply", true);
     // The core's own post-command log scan (GetLogHistory) is internal, not a model command.
     const luauCalls = toolCalls.filter((c) => c.name === "execute_luau" && !/GetLogHistory/.test(String(c.arguments.code || "")));
-    ok("exactly two model commands reached the bridge (create + read-back) - the remembered turns were never re-run", luauCalls.length === 2, luauCalls.length + " calls");
-    ok("5 sends total: bootstrap, catalogue, request, 2 results", userMessages.length === 5, userMessages.length + "");
+    ok("exactly two model commands reached the bridge (create + read-back) - the remembered turns were never re-run", luauCalls.length === (BRIDGE_DROP ? 3 : 2), luauCalls.length + " calls");
+    ok("5 sends total: bootstrap, catalogue, request, 2 results" + (BRIDGE_DROP ? " (+1 bridge-down error, spliced out above)" : ""), userMessages.length === 5, userMessages.length + "");
     if (simReady) {
       const v = await sim.exec(`local p = workspace:FindFirstChild("${PART}") if not p then return "MISSING" end return { class = p.ClassName, size = { p.Size.X, p.Size.Y, p.Size.Z }, anchored = p.Anchored }`);
       let o = null; try { o = JSON.parse(v.text); } catch {}
@@ -235,15 +258,16 @@ const PART = "TotalScript_ProviderParityTest";
     ok("adapter diagnostics present (init, send, landed)", vani.includes("vani.init") && vani.includes("vani.send") && vani.includes("vani.send.landed"), [...new Set(vani)].join(","));
     const landed = (w.__rsDiag || []).filter((e) => e.event === "vani.send.landed");
     // 4 adapter sends (bootstrap, catalogue, 2 results); the user's own Enter is the site's.
-    ok("every adapter send was committed ONCE and confirmed by a landing proof", landed.length === userMessages.length - 1 && landed.every((e) => e.data && e.data.proof), landed.map((e) => e.data && e.data.proof).join(","));
+    const adapterSends = userMessages.length - 1 + (BRIDGE_DROP ? 1 : 0);
+    ok("every adapter send was committed ONCE and confirmed by a landing proof", landed.length === adapterSends && landed.every((e) => e.data && e.data.proof), landed.map((e) => e.data && e.data.proof).join(","));
     ok("no 'send unconfirmed' diagnostics", !(w.__rsDiag || []).some((e) => e.event === "vani.send.unconfirmed"));
     // The Enter + form-submit pair above is 2 attempts by design (the site's own
     // duplicate event); every ADAPTER send must be exactly one attempt.
-    ok("the adapter fired exactly one submit per message during the slow 1.2 s acceptance (pre-1.85 adapters re-clicked)", submitAttempts === userMessages.length + 1, submitAttempts + " attempts for " + userMessages.length + " messages");
+    ok("the adapter fired exactly one submit per message during the slow 1.2 s acceptance (pre-1.85 adapters re-clicked)", submitAttempts === adapterSends + 2, submitAttempts + " attempts for " + (adapterSends + 1) + " messages");
     ok("the model never saw the JSON-only wording", !userMessages.some((m) => /must be JSON|only JSON/i.test(m)));
     await sleep(600);
     ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || "));
   } catch (e) { console.error(e); process.exitCode = 1; }
   sim.close();
-  finish("vani-e2e", pageErrors);
+  finish(BRIDGE_DROP ? "vani-e2e (BRIDGE_DROP)" : "vani-e2e", pageErrors);
 })();

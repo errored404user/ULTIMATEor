@@ -48,6 +48,38 @@ const PAGES = {
     editorIsTextarea: true,
     userRow(d, text) { const r = d.createElement("div"); r.className = "message-item user-message"; r.setAttribute("data-rect", "760,100,500,44"); const c = d.createElement("div"); c.className = "content"; c.textContent = text; r.appendChild(c); d.getElementById("thread").appendChild(r); },
   },
+  // 1.86.0 - the four adapter families that still carried the multi-click loop
+  // (Arena x8, Meta x6, Ox Alpha x5, MultiChat x5 for 11 provider ids).
+  arena: {
+    host: "arena.ai", path: "/", diagPrefix: "arena.tas", landed: "arena.tas.sent", unconfirmed: "arena.tas.sent", sentFlag: true,
+    html: `<main data-rect="0,0,1280,800"><ol class="flex-col-reverse" id="thread" data-rect="300,0,900,640"></ol>
+      <form data-rect="300,660,900,120"><textarea id="ed" placeholder="Ask anything" data-rect="310,670,800,80"></textarea>
+      <button id="send" type="submit" aria-label="Send message" data-rect="1140,690,40,40"><svg><path d="M1 1"/></svg></button></form></main>`,
+    editorIsTextarea: true, userRow: null,
+  },
+  meta: {
+    host: "www.meta.ai", path: "/", diagPrefix: "meta.tas", landed: "meta.tas.sent", unconfirmed: "meta.tas.sent", sentFlag: true,
+    html: `<main data-rect="0,0,1280,800"><div id="thread" data-rect="300,0,900,640"></div>
+      <div class="composer" data-rect="300,660,900,120"><textarea id="ed" data-testid="composer-input" data-rect="310,670,800,80"></textarea>
+      <button id="send" data-testid="composer-send-button" aria-label="Send" data-rect="1140,690,40,40"></button></div></main>`,
+    editorIsTextarea: true, userRow: null,
+  },
+  oxalpha: {
+    host: "oxalpha.com", path: "/chat", diagPrefix: "oxalpha.send", landed: "oxalpha.send.landed", unconfirmed: "oxalpha.send.unconfirmed",
+    html: `<main data-rect="0,0,1280,800"><div id="thread" data-rect="300,0,900,640"></div>
+      <form data-rect="300,660,900,120"><textarea id="ed" placeholder="Message" data-rect="310,670,800,80"></textarea>
+      <button id="send" type="submit" aria-label="Send" data-rect="1140,690,40,40"></button></form></main>`,
+    editorIsTextarea: true,
+    userRow(d, text) { const r = d.createElement("div"); r.setAttribute("data-message-role", "user"); r.setAttribute("data-rect", "700,100,480,40"); r.textContent = text; d.getElementById("thread").appendChild(r); },
+  },
+  multichat: {
+    host: "huggingface.co", path: "/chat/", diagPrefix: "huggingchat.send", landed: "huggingchat.send.landed", unconfirmed: "huggingchat.send.unconfirmed",
+    html: `<main data-rect="0,0,1280,800"><div id="thread" data-rect="300,0,900,640"></div>
+      <form data-rect="300,660,900,120"><textarea id="ed" placeholder="Ask anything" data-rect="310,670,800,80"></textarea>
+      <button id="send" type="submit" aria-label="Send message" data-rect="1140,690,40,40"></button></form></main>`,
+    editorIsTextarea: true,
+    userRow(d, text) { const r = d.createElement("div"); r.setAttribute("data-message-role", "user"); r.setAttribute("data-rect", "700,100,480,40"); r.textContent = text; d.getElementById("thread").appendChild(r); },
+  },
   clickup: {
     host: "app.clickup.com", path: "/9012/v/l/li/901", diagPrefix: "clickup.send", landed: "clickup.send.landed", unconfirmed: "clickup.send.unconfirmed",
     html: `<cu-ai-side-panel class="ai-chat-panel" role="dialog" aria-label="ClickUp Brain" data-rect="760,0,440,800">
@@ -77,7 +109,8 @@ function loadAdapter(id) {
 const SEND_PATH_FNS = ["getEditor", "typeAndSend", "ensureComposerReady", "enforceComposer", "installSendHooks", "readAssistant", "lastAssistant", "isGenerating", "isHardGenerating", "isBusyNow", "userCount", "assistantCount", "allItems", "chatIsEmpty", "conversationKey", "scanError", "findToolBlockSpot", "classifyText", "snapshot", "stopGeneration", "isTooLongMsg", "findContinueBtn", "clickContinueBtn", "editorText"];
 const base = loadAdapter("gemini").P;
 const table = [];
-for (const id of ["vani", "mimo", "clickup"]) {
+const REPAIRED = ["vani", "mimo", "clickup", "arena", "meta", "oxalpha", "multichat"];
+for (const id of REPAIRED) {
   const { P } = loadAdapter(id);
   const missing = SEND_PATH_FNS.filter((f) => typeof base[f] === "function" && typeof P[f] !== "function");
   ok(`${id}: every send/read method of the Gemini baseline exists with the same name`, missing.length === 0, missing);
@@ -91,12 +124,14 @@ for (const id of ["vani", "mimo", "clickup"]) {
   // Vani / MiMo carry the shared PLAIN_FORMAT_NOTE (evidence: both mangle JSON
   // fences); ClickUp keeps the baseline json + ###LUA### wording - the shared
   // parser accepts ###CMD everywhere regardless (clickup-e2e proves it).
-  ok(`${id}: promptExtra is a string that teaches the fenced command protocol and never calls JSON the only accepted form`, typeof P.promptExtra === "string" && /###LUA###|###CMD/.test(P.promptExtra) && !/must be JSON|JSON only|only JSON/i.test(P.promptExtra));
+  ok(`${id}: promptExtra (if any) never calls JSON the only accepted form`, P.promptExtra == null || (typeof P.promptExtra === "string" && !/must be JSON|JSON only|only JSON/i.test(P.promptExtra)));
+  if (["vani", "mimo", "clickup"].includes(id)) ok(`${id}: promptExtra teaches the fenced command protocol`, typeof P.promptExtra === "string" && /###LUA###|###CMD/.test(P.promptExtra));
   ok(`${id}: commandlessRetries is unset (core default 1) or a small bounded integer (no endless nudging)`, P.commandlessRetries == null || (Number.isInteger(P.commandlessRetries) && P.commandlessRetries >= 1 && P.commandlessRetries <= 3), P.commandlessRetries);
   ok(`${id}: timings carry the four keys the core waits on, all finite`, ["WARMUP_MS", "REASON_NOREPLY_MS", "STABLE_MS", "RESPONSE_TIMEOUT_MS"].every((k) => Number.isFinite(P.timings[k])));
   const src = read(`src/providers/${id}.js`);
-  ok(`${id}: no ≤5-click resend loop left in typeAndSend (commitSend is the only submit path)`, /commitSend\(/.test(src) && !/for \(let i = 0; i < 5; i\+\+\)[\s\S]{0,400}sendButton\(\)/.test(src));
-  table.push({ id, methods: SEND_PATH_FNS.filter((f) => typeof P[f] === "function").length + "/" + SEND_PATH_FNS.length, promptExtra: P.promptExtra.length, commandlessRetries: P.commandlessRetries, reliableCounts: !!P.reliableCounts });
+  const tas = src.slice(src.indexOf("async function typeAndSend"), src.indexOf("async function typeAndSend") + 4000);
+  ok(`${id}: no multi-click resend loop left in typeAndSend (one commit + one alternate is the only submit path)`, !/for \(let i = 0; i < \d+ && !sent; i\+\+\)/.test(tas) && /proof\(\)/.test(src));
+  table.push({ id, methods: SEND_PATH_FNS.filter((f) => typeof P[f] === "function").length + "/" + SEND_PATH_FNS.length, promptExtra: (P.promptExtra || "").length, commandlessRetries: P.commandlessRetries, reliableCounts: !!P.reliableCounts });
 }
 console.table(table);
 
@@ -125,7 +160,7 @@ function wireSite({ d, w, spec }, mode) {
     if (mode === "never") return; // the site swallows the submit
     state.captured.push(t);
     setTimeout(clear, 1200);                       // slow acceptance: box stays filled 1.2 s
-    setTimeout(() => { spec.userRow(d, t); state.rows++; }, 1500);
+    if (spec.userRow) setTimeout(() => { spec.userRow(d, t); state.rows++; }, 1500);
   };
   // One real handler per site: a <form> site accepts on submit (a click on its
   // submit button and Enter both end there); a form-less site accepts on click
@@ -139,7 +174,9 @@ function wireSite({ d, w, spec }, mode) {
 }
 
 (async () => {
-  for (const id of ["vani", "mimo", "clickup"]) {
+  const landedOf = (w, spec) => w.__rsDiag.filter((e) => e.event === spec.landed && (!spec.sentFlag || (e.data && e.data.sent === true)));
+  const unconfirmedOf = (w, spec) => w.__rsDiag.filter((e) => e.event === spec.unconfirmed && (!spec.sentFlag || (e.data && e.data.sent === false)));
+  for (const id of REPAIRED) {
     // (a) slow acceptance
     {
       const page = loadAdapter(id); const { w, P, spec } = page;
@@ -151,11 +188,11 @@ function wireSite({ d, w, spec }, mode) {
       const got = site.captured[0] || "";
       const norm = (s) => s.replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n+$/, "");
       ok(`${id}: multiline / indented / code / Turkish / Chinese text delivered intact`, norm(got) === norm(TEXT), JSON.stringify(got.slice(0, 160)));
-      const landed = w.__rsDiag.filter((e) => e.event === spec.landed);
-      ok(`${id}: one '${spec.landed}' diag with a landing proof, no 'unconfirmed'`, landed.length === 1 && !!(landed[0].data && landed[0].data.proof) && !w.__rsDiag.some((e) => e.event === spec.unconfirmed), landed.map((e) => e.data && e.data.proof));
+      const landed = landedOf(w, spec);
+      ok(`${id}: one '${spec.landed}' diag with a landing proof, no 'unconfirmed'`, landed.length === 1 && !!(landed[0].data && landed[0].data.proof) && unconfirmedOf(w, spec).length === 0, landed.map((e) => e.data && e.data.proof));
       ok(`${id}: typeAndSend waited for the proof but no longer than the bounded window`, dt >= 1000 && dt < 6000, dt + " ms");
       await sleep(1700);
-      ok(`${id}: the user row that arrived late was counted once (userCount=1)`, P.userCount() === 1 && site.rows === 1, P.userCount());
+      if (spec.userRow) ok(`${id}: the user row that arrived late was counted once (userCount=1)`, P.userCount() === 1 && site.rows === 1, P.userCount());
     }
     // (b) disabled send button → alternate mechanism, still one attempt
     {
@@ -163,7 +200,7 @@ function wireSite({ d, w, spec }, mode) {
       const site = wireSite(page, "disabled-button");
       await P.typeAndSend("second message\nwith two lines");
       ok(`${id}: disabled send button → form/Enter fallback, still exactly one submit`, site.attempts === 1 && /second message\s+with two lines/.test(site.captured[0] || ""), { attempts: site.attempts, got: site.captured[0] });
-      const landed = w.__rsDiag.filter((e) => e.event === spec.landed);
+      const landed = landedOf(w, spec);
       ok(`${id}: fallback send still reports a landing proof`, landed.length === 1 && landed[0].data && landed[0].data.how !== "click", landed.map((e) => e.data));
     }
     // (c) never accepted → bounded, at most two attempts, honest diag
@@ -175,7 +212,7 @@ function wireSite({ d, w, spec }, mode) {
       const dt = Date.now() - t0;
       ok(`${id}: a send the site swallows → at most 2 attempts (click + ONE alternate), never a loop`, site.attempts >= 1 && site.attempts <= 2, site.attempts);
       ok(`${id}: typeAndSend returns within the bounded window (~5 s) instead of hanging`, dt < 7000, dt + " ms");
-      ok(`${id}: '${spec.unconfirmed}' diag emitted and no false 'landed'`, w.__rsDiag.some((e) => e.event === spec.unconfirmed) && !w.__rsDiag.some((e) => e.event === spec.landed), w.__rsDiag.filter((e) => /send/.test(e.event)).map((e) => e.event));
+      ok(`${id}: '${spec.unconfirmed}' diag emitted and no false 'landed'`, unconfirmedOf(w, spec).length >= 1 && landedOf(w, spec).length === 0, w.__rsDiag.filter((e) => /send|tas/.test(e.event)).map((e) => e.event + ":" + JSON.stringify(e.data)));
     }
   }
   console.log(`\ntest-provider-parity: ${pass} passed, ${fail} failed (jsdom adapter-level simulation; no live site)`);

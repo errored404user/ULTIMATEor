@@ -687,25 +687,43 @@ const RSProvider = (() => {
     // Click and CONFIRM the send took (editor clears the instant Arena accepts
     // it, image AND text paths). Re-click until it clears so a single swallowed
     // click can't strand the message/attachment. No re-attach here.
-    let sent = false;
     const pressEnter = () => {
       const o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
       try { editor.dispatchEvent(new KeyboardEvent("keydown", o)); } catch {}
       try { editor.dispatchEvent(new KeyboardEvent("keyup", o)); } catch {}
     };
-    for (let i = 0; i < 8 && !sent; i++) {
-      if (sendReady()) {
-        try { sendButton().click(); } catch {}
-      } else if (!isHardGenerating()) {
-        pressEnter();
-        try {
-          const form = editor.closest("form");
-          if (form && typeof form.requestSubmit === "function") form.requestSubmit();
-        } catch {}
-      }
-      sent = await waitFor(() => editorText().trim() === "" || isHardGenerating(), 800);
-    }
-    diag("arena.tas.sent", { sent, editorLen: editorText().length, pendingAfterSend: pendingCount() });
+    // 1.86.0 - commit EXACTLY ONCE (baseline rule, see chatgpt.js / gemini.js):
+    // the previous loop re-clicked up to eight times whenever the composer had
+    // not emptied within 800 ms, duplicating the message on slow acceptance.
+    // Proof the send landed: text left the composer, stop control up, or a new
+    // user turn. ONE alternate mechanism (Enter + form submit, the pair Arena's
+    // composer answers to) only while our text is verifiably still typed and
+    // nothing is generating.
+    const usersBefore = userCount();
+    const tail = String(text || "").replace(/\s+/g, " ").trim().slice(-60);
+    const stillTyped = () => { const t = editorText().replace(/\s+/g, " ").trim(); if (!t) return false; return t.length >= tail.length ? t.includes(tail) : tail.includes(t); };
+    const proof = () => (!stillTyped() ? "cleared" : isHardGenerating() ? "generating" : userCount() > usersBefore ? "userRow" : "");
+    let p = "";
+    const fire = async (how) => {
+      try {
+        if (how === "click") { if (!sendReady()) return false; sendButton().click(); return true; }
+        if (isHardGenerating()) return false;
+        // ONE mechanism: the composer's own <form> submit when there is one
+        // (Enter only on the form-less agent route). The old loop fired Enter
+        // AND requestSubmit together - two submissions on a form site.
+        const form = editor.closest("form");
+        if (form && typeof form.requestSubmit === "function") form.requestSubmit();
+        else pressEnter();
+        return true;
+      } catch { return false; }
+    };
+    const plan = (await fire("click")) ? ["click", "submit"] : ["submit", "click"];
+    if (plan[0] === "submit") await fire("submit");
+    await waitFor(() => !!(p = proof()), 2500);
+    let how = plan[0];
+    if (!p && (await fire(plan[1]))) { how = plan[1]; await waitFor(() => !!(p = proof()), 2500); }
+    const sent = !!p;
+    diag("arena.tas.sent", { sent, how, proof: p, editorLen: editorText().length, pendingAfterSend: pendingCount() });
   }
 
   // Arena shows "Generating…" for a beat BEFORE the native "Stop generation"

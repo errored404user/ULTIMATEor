@@ -399,19 +399,43 @@ const RSProvider = (() => {
     };
     await waitFor(sendReady, 2500);
     diag("oxalpha.send", { editorLen: editorText().length, textLen: text.length });
-    let sent = false;
-    for (let i = 0; i < 5 && !sent; i++) {
-      const b = sendButton();
-      if (b && !b.disabled) { try { b.click(); } catch {} }
-      else {
-        try {
-          const form = editor.closest("form");
-          if (form && typeof form.requestSubmit === "function") form.requestSubmit();
-          else pressEnter(editor);
-        } catch { pressEnter(editor); }
-      }
-      sent = await waitFor(() => editorText().trim() === "" || isHardGenerating(), 800);
-    }
+    const r = await commitSend(editor, text, { users: userCount() });
+    if (!r.sent) diag("oxalpha" + ".send.unconfirmed", { editorLen: editorText().length, how: r.how });
+    else diag("oxalpha" + ".send.landed", { how: r.how, proof: r.proof });
+  }
+
+  // 1.86.0 - commit a send EXACTLY ONCE (the ChatGPT / Gemini baseline rule and
+  // the 1.85.0 Vani / MiMo / ClickUp repair): the previous loop re-clicked up
+  // to five times whenever the composer had not emptied within 800 ms, which
+  // duplicates the message on any site with slow acceptance. Proof that the
+  // send landed: our text left the composer, the stop control is up, a new
+  // user row, or the stream tap saw the request. ONE alternate mechanism, only
+  // when our text is verifiably still typed.
+  const netSawRequest = () => { try { const n = NET(); const c = n && n.current(); return !!(c && c.matched); } catch { return false; } };
+  async function commitSend(editor, text, pre) {
+    const tail = String(text || "").replace(/\s+/g, " ").trim().slice(-60);
+    const stillTyped = () => {
+      const t = editorText().replace(/\s+/g, " ").trim();
+      if (!t) return false;
+      return t.length >= tail.length ? t.includes(tail) : tail.includes(t);
+    };
+    const proof = () => (!stillTyped() ? "cleared" : isHardGenerating() ? "generating" : userCount() > pre.users ? "userRow" : netSawRequest() ? "netRequest" : "");
+    const fire = (how) => {
+      try {
+        if (how === "click") { const b = sendButton(); if (b && !b.disabled && b.getAttribute("aria-disabled") !== "true") { b.click(); return true; } return false; }
+        const form = editor.closest("form");
+        if (form && typeof form.requestSubmit === "function") { form.requestSubmit(); return true; }
+        pressEnter(editor); return true;
+      } catch { return false; }
+    };
+    const plan = fire("click") ? ["click", "submit"] : ["submit", "click"];
+    if (plan[0] === "submit") fire("submit");
+    let p = "";
+    await waitFor(() => !!(p = proof()), 2500);
+    if (p) return { sent: true, how: plan[0], proof: p };
+    if (!fire(plan[1])) return { sent: false, how: plan[0] };
+    await waitFor(() => !!(p = proof()), 2500);
+    return { sent: !!p, how: plan[1], proof: p };
   }
 
   function stopGeneration() {
