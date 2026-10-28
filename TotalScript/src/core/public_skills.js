@@ -157,6 +157,9 @@
       version: Math.max(1, parseInt(def.version, 10) || 1),
       author: str(def.author, 60).trim() || "you",
       tags: stringList(def.tags, 10, true),
+      // 1.88.0: optional "when to use" words / phrases (ranking only; never
+      // required - items saved before this field simply have none).
+      triggers: stringList(def.triggers || def.when || def.use_when, 12, true),
       enabled: def.enabled !== false,
       source: ["ai", "import", "manual"].includes(def.source) ? def.source : "manual",
       createdAt: Number(def.createdAt) || Date.now(),
@@ -393,16 +396,56 @@
       virtual: true,
     }));
   }
+  // relevant(text, max) → installed commands ranked for a request (1.88.0):
+  // name / title / tags / triggers / description words against the text.
+  // Delegates to TotalSkillIntel.rankPublic when it is loaded (same scoring
+  // the enhancer uses), else a local token overlap. Deterministic.
+  function relevant(text, max) {
+    const cmds = items.filter((i) => i.enabled && i.kind !== "mode");
+    const t = " " + String(text || "").toLowerCase().replace(/[^a-z0-9_\s]+/g, " ").replace(/\s+/g, " ").trim() + " ";
+    if (!cmds.length || t.trim().length < 3) return [];
+    try {
+      const SI = root.TotalSkillIntel;
+      if (SI && typeof SI.rankPublic === "function") return SI.rankPublic({ text: String(text || "") }, cmds, max || 5).map((r) => ({ name: r.name, score: r.score, why: r.why }));
+    } catch {}
+    const toks = new Set(t.split(" ").filter((w) => w.length > 2));
+    const out = [];
+    for (const i of cmds) {
+      let score = 0; const why = [];
+      for (const w of [].concat(i.name.split("_"), i.tags || [], i.triggers || [], String(i.title || "").toLowerCase().split(/\W+/))) { const k = String(w || "").toLowerCase(); if (k.length > 2 && toks.has(k) && !why.includes(k)) { score += 3; why.push(k); } }
+      for (const tr of i.triggers || []) if (tr.includes(" ") && t.includes(" " + tr + " ")) { score += 4; why.push(tr); }
+      let dh = 0; for (const w of String(i.description || "").toLowerCase().split(/\W+/)) if (w.length > 4 && toks.has(w)) dh++;
+      score += Math.min(4, dh);
+      if (score >= 5) out.push({ name: i.name, score, why: why.slice(0, 4) });
+    }
+    return out.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)).slice(0, max || 5);
+  }
+  // catalogueBlock({compact, task, max}) - the PUBLIC SKILLS block of the
+  // system prompt. Up to `max` (default 12) commands are listed in full; with
+  // more installed, the ones relevant to `task` come first and the rest are
+  // counted (public_skill_list shows them), so a big library never floods
+  // every prompt.
   function catalogueBlock(opts) {
     const cmds = items.filter((i) => i.enabled && i.kind !== "mode");
     if (!cmds.length) return "";
     const compact = !!(opts && opts.compact);
-    const rows = cmds.map((i) => compact ? `${signature(i)} - ${i.description.slice(0, 90)}` : `${signature(i)} - [${i.kind}] ${i.description.slice(0, 200)}`);
-    return `PUBLIC SKILLS - ${cmds.length} user-made command${cmds.length === 1 ? "" : "s"} installed on this device (call them like any command; skills run Luau in Studio, abilities return a procedure to follow):\n${rows.join("\n")}\nManage them with public_skill_list / public_skill_get / public_skill_update / public_skill_delete / public_skill_export; create new ones with public_skill_create.\n\n`;
+    const max = Math.max(3, (opts && opts.max) || 12);
+    let shown = cmds, hidden = 0;
+    if (cmds.length > max) {
+      let task = opts && opts.task; if (!task) { try { task = typeof root.__rsTaskText === "function" ? root.__rsTaskText() : ""; } catch { task = ""; } }
+      const ranked = relevant(task, max).map((r) => r.name);
+      const byName = new Map(cmds.map((i) => [i.name, i]));
+      shown = ranked.map((n) => byName.get(n)).filter(Boolean);
+      for (const i of cmds) { if (shown.length >= max) break; if (!shown.includes(i)) shown.push(i); }
+      hidden = cmds.length - shown.length;
+    }
+    const rows = shown.map((i) => compact ? `${signature(i)} - ${i.description.slice(0, 90)}` : `${signature(i)} - [${i.kind}] ${i.description.slice(0, 200)}${i.triggers && i.triggers.length ? ` (when: ${i.triggers.slice(0, 4).join(", ")})` : ""}`);
+    const more = hidden ? `\n…and ${hidden} more installed - public_skill_list {} shows all of them with signatures.` : "";
+    return `PUBLIC SKILLS - ${cmds.length} user-made command${cmds.length === 1 ? "" : "s"} installed on this device (call them like any command; skills run Luau in Studio, abilities return a procedure to follow):\n${rows.join("\n")}${more}\nManage them with public_skill_list / public_skill_get / public_skill_update / public_skill_delete / public_skill_export; create new ones with public_skill_create.\n\n`;
   }
 
   const DEFINITION_DOC = [
-    "DEFINITION OBJECT (JSON) - common fields: kind ('skill'|'ability'|'mode'), name (snake_case, unique, 3-41 chars; modes may use a title instead), title, description (10-600 chars: what it does, when to use it), version (int), author, tags[], usage (one example call).",
+    "DEFINITION OBJECT (JSON) - common fields: kind ('skill'|'ability'|'mode'), name (snake_case, unique, 3-41 chars; modes may use a title instead), title, description (10-600 chars: what it does, when to use it), version (int), author, tags[], triggers[] (optional: words / short phrases that say WHEN to use it - used for ranking), usage (one example call).",
     "SKILL fields: params[{name, type: string|number|boolean|array|object, description, required, default?, enum?}], luau (the program; max 24000 chars). Every param is available in Luau BOTH as the Lua literal {{param}} and as args.param. The program runs in Studio through execute_luau in the Edit DataModel (plugin-level API, no `plugin` global, no yields over 5 s). Resolve instance paths first (walk game by name, fail with a clear error), wrap risky work in pcall, keep work idempotent, name created instances, record ChangeHistoryService waypoints for big edits, and RETURN A TABLE such as {ok=true, created=3, path='Workspace.X'} (it is JSON-encoded for the agent). Use `return {ok=false, error='...'}` for failures.",
     "ABILITY fields: params[] (optional), instructions (imperative procedure; may use {{param}}), steps[] (3-15 concrete steps), commands[] (real command names from list_commands). Calling an ability returns these instructions to the agent, which then performs them with real commands.",
     "MODE fields: title, badge (<=12 chars, uppercase), base ('creation' - the only built-in mode; legacy 'ultimate'|'visualizer'|'animator' map to it), sub (one line), note (menu blurb), mandate (80-9000 chars: priorities, quality bar, pipeline, verification rules - written like a senior specialist's standing orders), focus[] (10-40 real command names the mode leans on), toast.",
@@ -522,7 +565,7 @@
   //   local n = {{count}}
   //   ...
   const SECTION_RE = /^\s*(?:-{3,}|={3,}|#{2,3})\s*([a-zA-Z][a-zA-Z _-]{1,30}?)\s*(?:-{3,}|={3,})?\s*$/;
-  const HEADER_KEYS = { kind: "kind", type: "kind", name: "name", command: "name", title: "title", description: "description", desc: "description", summary: "description", tags: "tags", tag: "tags", params: "params", param: "params", parameters: "params", args: "params", base: "base", badge: "badge", focus: "focus", commands: "commands", uses: "commands", author: "author", by: "author", usage: "usage", example: "usage", sub: "sub", subtitle: "sub", note: "note", toast: "toast", version: "version", executionmode: "executionMode", mode: "executionMode" };
+  const HEADER_KEYS = { kind: "kind", type: "kind", name: "name", command: "name", title: "title", description: "description", desc: "description", summary: "description", tags: "tags", tag: "tags", triggers: "triggers", trigger: "triggers", when: "triggers", params: "params", param: "params", parameters: "params", args: "params", base: "base", badge: "badge", focus: "focus", commands: "commands", uses: "commands", author: "author", by: "author", usage: "usage", example: "usage", sub: "sub", subtitle: "sub", note: "note", toast: "toast", version: "version", executionmode: "executionMode", mode: "executionMode" };
   const SECTION_KEYS = { luau: "luau", lua: "luau", code: "luau", script: "luau", program: "luau", instructions: "instructions", instruction: "instructions", procedure: "instructions", prompt: "instructions", steps: "steps", step: "steps", workflow: "steps", mandate: "mandate", "system prompt": "mandate", systemprompt: "mandate", rules: "mandate", description: "description", about: "description", notes: "note" };
   // `count:number=4 "how many"` | `name (string, required): what it is` | `color string`
   function parseParamSpec(spec) {
@@ -600,6 +643,7 @@
     L.push(`name: ${i.name}`);
     L.push(`description: ${i.description.replace(/\s+/g, " ")}`);
     if (i.tags && i.tags.length) L.push(`tags: ${i.tags.join(", ")}`);
+    if (i.triggers && i.triggers.length) L.push(`triggers: ${i.triggers.join(", ")}`);
     if (i.author) L.push(`author: ${i.author}`);
     L.push(`version: ${i.version}`);
     if (i.usage) L.push(`usage: ${i.usage}`);
@@ -717,7 +761,7 @@
     load, isLoaded: () => loaded, onChange,
     validate, list, get, has, find, isCommand, upsert, update, remove, setEnabled, replaceAll,
     modes, activeMode, setActiveMode, modePrompt,
-    buildLuau, syntaxCheckLuau, abilityText, resolveArgs, signature, schema, toolEntries, catalogueBlock,
+    buildLuau, syntaxCheckLuau, abilityText, resolveArgs, signature, schema, toolEntries, catalogueBlock, relevant,
     managementTools: () => clone(MANAGEMENT_TOOLS), generationPrompt,
     exportObject, exportJson, fileName, shareCode, parseShared, importShared, importPack, luauLiteral, snake,
     exportPackObject, exportPackJson, packFileName, packShareCode, PACK_FORMAT,

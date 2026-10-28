@@ -979,6 +979,7 @@
   const A = {
     guiBrief: null, // 1.51.1: pending GUI BRIEF for the current user request ({ text, intent, imageAttached, sent })
     task: null, // 1.69: TotalOrchestrator.classifyTask record of the current user request (+ riderSent)
+    skillSel: null, // 1.88.0: TotalSkillIntel.select() result for the current request (expert rider)
     lastSent: null, // 1.69: { text, images, at } of the last message TotalScript injected - re-sent after a transient provider error
     running: false,
     stop: false,
@@ -4375,6 +4376,13 @@
       }
     }
     if (name === "skill") {
+      // 1.88.0: the built-in EXPERT library (TotalSkillIntel) - full procedures
+      // with real commands, pitfalls and verification, a catalogue when no
+      // name is given, best matches for a topic. The one-line packs below stay
+      // only as the fallback when the module is not loaded.
+      if (typeof TotalSkillIntel !== "undefined" && typeof TotalSkillIntel.answer === "function") {
+        return "Output of 'skill':\n" + TotalSkillIntel.answer(args || {});
+      }
       const key = String(args.name || args.id || args.topic || args.q || "debug").toLowerCase();
       const packs = {
         debug: "Studio debug: read Output via total_debug / get_console_output. Fix the FIRST error only. Prefer script_analysis, then the smallest script_set_source / set_property. WaitForChild needs a timeout. Never loadstring.",
@@ -5901,6 +5909,15 @@
               const cap = P.sendCharBudget || Infinity;
               if (rider && toSend.length + rider.length + 2 <= cap) { toSend += "\n\n" + rider; diag("task.riderSent", { chars: rider.length, tight, intent: A.task.intent, primary: A.task.primary }); }
               else if (rider) diag("task.riderSkipped", { chars: rider.length, cap });
+              // 1.88.0: the EXPERT note (TotalSkillIntel) rides with the task
+              // brief - primary specialist's first steps + verify + the `skill`
+              // pointer. Only when a specialist matched clearly, never for
+              // explain-only turns, always within the same send budget.
+              if (rider && A.skillSel && A.skillSel.picked && A.skillSel.picked.length && !A.task.explainOnly && typeof TotalSkillIntel !== "undefined") {
+                const note = TotalSkillIntel.rider(A.skillSel, { tight });
+                if (note && toSend.length + note.length + 2 <= cap) { toSend += "\n\n" + note; diag("skill.riderSent", { chars: note.length, tight, experts: A.skillSel.picked.map((p) => p.id) }); }
+                else if (note) diag("skill.riderSkipped", { chars: note.length, cap });
+              }
             } catch {}
           }
           // This result becomes a turn, so it counts toward the re-statement
@@ -6576,18 +6593,47 @@
     diag("roundTrip.reply", { kind: o.kind || "", ms: Date.now() - t0, chars: text.length });
     return text;
   }
+  // 1.88.0 — the deterministic part of the enhancer (TotalSkillIntel): intent /
+  // constraint analysis, mode strategy, expert excerpts. Pure, synchronous,
+  // and optional: without the module the request is exactly the 1.72 one.
+  function enhancerPlan(rough, o) {
+    if (typeof TotalSkillIntel === "undefined") return null;
+    try {
+      let publicItems = []; try { publicItems = typeof PublicSkills !== "undefined" ? PublicSkills.list({ enabled: true }) : []; } catch {}
+      const focus = (o.focus === "roblox" || o.focus === "general") ? o.focus : RS.enhancerFocus({ text: rough, engine: activeEngine() });
+      return TotalSkillIntel.plan(rough, { engine: activeEngine(), focus, mode: o.mode || "auto", publicItems });
+    } catch (e) { diag("enhancer.planFail", { err: String(e && e.message || e).slice(0, 160) }); return null; }
+  }
+  function enhancerKnownCommands() {
+    let known = new Set();
+    try { known = typeof window.__rsBuiltinToolNames === "function" ? window.__rsBuiltinToolNames() : new Set(); } catch {}
+    try { if (typeof PublicSkills !== "undefined") for (const t of PublicSkills.toolEntries()) known.add(t.name); } catch {}
+    return known;
+  }
   async function enhancePromptViaAI(rough, opts, onStatus) {
     const o = opts || {};
     if (typeof RS === "undefined" || typeof RS.enhancerRequest !== "function") throw new Error("config module missing - reload the extension");
     const focus = (o.focus === "roblox" || o.focus === "general") ? o.focus : RS.enhancerFocus({ text: rough, engine: activeEngine() });
-    const request = RS.enhancerRequest({ rough, focus, notes: o.notes, short: !!o.short, agentStarted: !!A.started });
+    const plan = enhancerPlan(rough, o);
+    const request = plan
+      ? RS.enhancerRequest({ rough, focus, notes: o.notes, short: !!o.short, agentStarted: !!A.started, strategy: plan.strategy, preserve: plan.preserve, expertise: plan.expertise })
+      : RS.enhancerRequest({ rough, focus, notes: o.notes, short: !!o.short, agentStarted: !!A.started });
+    diag("enhancer.plan", plan ? { mode: plan.mode, auto: plan.modeAuto, env: plan.analysis.env, intent: plan.analysis.intent, complexity: plan.analysis.complexity, experts: plan.selection.picked.map((p) => p.id), reqChars: request.length } : { mode: "none" });
     const text = await aiRoundTrip(request, { cancelled: o.cancelled, kind: "enhance" }, onStatus);
     if (text == null) return null;
     const parsed = RS.parseEnhanced(text);
     diag("enhancer.reply", { source: parsed.source, command: parsed.command, chars: text.length, outChars: parsed.text.length, focus });
     if (parsed.command) throw new Error("the AI answered with a command instead of a rewrite - try again (or switch the focus to General)");
     if (!parsed.text) throw new Error("the AI's reply had no prompt in it");
-    return { text: parsed.text, focus, source: parsed.source, raw: text };
+    // Post-rewrite checks: dropped numbers / strings / paths, inverted
+    // exclusions, changed code blocks, phantom command names. Advisory - the
+    // user sees them next to the preview; nothing is auto-sent.
+    let checks = null;
+    if (plan) { try { checks = TotalSkillIntel.validateEnhanced(rough, parsed.text, { analysis: plan.analysis, knownCommands: enhancerKnownCommands(), mode: plan.mode }); } catch {} }
+    if (checks) diag("enhancer.checks", { ok: checks.ok, issues: checks.issues.map((i) => i.kind), dropped: checks.dropped });
+    return { text: parsed.text, focus, source: parsed.source, raw: text, mode: plan ? plan.mode : "", modeAuto: plan ? plan.modeAuto : false,
+      experts: plan ? plan.selection.picked.map((p) => ({ id: p.id, title: p.title, role: p.role, why: p.why })) : [], explain: plan ? plan.selection.explain : "",
+      checks: checks ? { ok: checks.ok, issues: checks.issues, repaired: checks.dropped ? checks.repaired : "" } : null };
   }
   // 1.73.0 — Template Creator "Draft with AI": one sentence → a template draft
   // (RS.templateDraftRequest / RS.parseTemplateDraft). Reviewed in the Creator;
@@ -6646,6 +6692,7 @@
     TotalEnhancer.open({
       draft: () => { try { return String((P.editorText && P.editorText()) || ""); } catch { return ""; } },
       enhance: enhancePromptViaAI,
+      analyze: (rough, o) => { const p = enhancerPlan(rough, o || {}); return p ? { mode: p.mode, modeAuto: p.modeAuto, env: p.analysis.env, intent: p.analysis.intent, complexity: p.analysis.complexity, experts: p.selection.picked.map((x) => ({ id: x.id, title: x.title, role: x.role, why: x.why })), explain: p.selection.explain, preserve: p.preserve } : null; },
       send: sendEnhancedPrompt,
       insert: fillComposer,
       engine: () => activeEngine(),
@@ -12572,7 +12619,13 @@ statusTimer = rsInterval(() => bg({ type: "status" }).then(onStatus), 5000);
       // newest user turn a moment later when the site already cleared it.
       try {
         const txt = String((P.editorText && P.editorText()) || "").trim();
-        const classify = (text) => { if (!ORCH || !text) return; const prev = A.task && A.task.v ? A.task : null; A.task = ORCH.classifyTask(text, { prev }); A.task.riderSent = false; diag("task.classified", { primary: A.task.primary, intent: A.task.intent, followUp: A.task.followUp, constraints: A.task.constraints.length, words: A.task.words }); };
+        const classify = (text) => { if (!ORCH || !text) return; const prev = A.task && A.task.v ? A.task : null; A.task = ORCH.classifyTask(text, { prev }); A.task.riderSent = false; diag("task.classified", { primary: A.task.primary, intent: A.task.intent, followUp: A.task.followUp, constraints: A.task.constraints.length, words: A.task.words });
+          // 1.88.0: pick the specialist(s) for this request from the same text
+          // (reuses the task record's intent, so the two layers never disagree).
+          // Follow-ups ("make it faster") keep the specialist of the request they refer to.
+          try { window.__rsTaskText = () => String(text || "").slice(0, 2000); } catch {}
+          if (!(A.task.followUp || A.task.isContinue) || !A.skillSel) A.skillSel = null;
+          try { if (typeof TotalSkillIntel !== "undefined" && !A.skillSel) { A.skillSel = TotalSkillIntel.select(TotalSkillIntel.analyze(text, { engine: activeEngine(), task: A.task }), { max: 2 }); diag("skill.selected", { experts: A.skillSel.picked.map((p) => p.id + ":" + p.score), explain: A.skillSel.explain.slice(0, 160) }); } } catch {} };
         if (txt) classify(txt);
         else setTimeout(() => { try { const items = P.allItems(); for (let i = items.length - 1; i >= 0; i--) if (P.isUserItem(items[i])) { classify(String(P.itemText(items[i]) || "").trim()); break; } } catch {} }, 900);
       } catch {}

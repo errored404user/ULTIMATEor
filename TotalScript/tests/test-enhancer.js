@@ -85,7 +85,8 @@ ok("README documents the enhancer", read("README.md").includes("**1.72.0 — Pro
 const { JSDOM } = require("jsdom");
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { runScripts: "dangerously", pretendToBeVisual: true, url: "https://chatgpt.com/" });
 const w = dom.window;
-w.chrome = { runtime: { getURL: (p) => "chrome-extension://x/" + p }, storage: { local: { get: (k, cb) => cb && cb({ rsEnhancer: { focus: "general", short: true } }), set() {} } } };
+const store = {};
+w.chrome = { runtime: { getURL: (p) => "chrome-extension://x/" + p }, storage: { local: { get: (k, cb) => cb && cb({ rsEnhancer: { focus: "general", short: true } }), set(o) { Object.assign(store, o || {}); } } } };
 const errors = []; w.addEventListener("error", (e) => errors.push(String(e.message)));
 const el = w.document.createElement("script"); el.textContent = mod; w.document.head.appendChild(el);
 ok("enhancer.js loads without window errors", errors.length === 0, errors);
@@ -157,6 +158,37 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 0));
   enhanceImpl = async () => ({ text: "   ", focus: "general", source: "none" });
   q(".rse-go").click(); await tick(10);
   ok("an empty rewrite is reported as a failure, not shown as a result", /returned nothing usable/.test(q(".rse-status").textContent) && q(".rse-result").value === before);
+
+  // ── 1.88.0: modes, insight (hooks.analyze), previous version, checks + repair ──
+  E.open(hooks);
+  ok("mode chips: six radios (Auto default), hint line, insight hidden when there is no analyze hook", E.MODES.map((m) => m.id).join(",") === "auto,quick,expert,deep,creative,debug" && host.querySelectorAll('.rse-chip[data-mode]').length === 6 && q('.rse-chip[data-mode="auto"]').getAttribute("aria-checked") === "true" && E.state().mode === "auto" && q(".rse-insight").hidden);
+  let analyzeCalls = [];
+  hooks.analyze = (rough, o) => { analyzeCalls.push([rough, o]); return { mode: o.mode === "auto" ? "expert" : o.mode, modeAuto: o.mode === "auto", experts: [{ id: "gameplay_systems", title: "Gameplay systems", why: ["sword", "damage"] }], explain: "x", preserve: "MUST KEEP (found in the rough request; restate each one, never drop or invert): numbers: 25." };
+  };
+  q('.rse-chip[data-mode="debug"]').click();
+  ok("picking a mode: chip + state + prefs persisted ({focus, short, mode}); analyze re-run with the mode; insight shows it as explicit (no '(auto)')", E.state().mode === "debug" && q('.rse-chip[data-mode="debug"]').classList.contains("on") && store.rsEnhancer && store.rsEnhancer.mode === "debug" && analyzeCalls.length >= 1 && analyzeCalls[analyzeCalls.length - 1][1].mode === "debug" && !q(".rse-insight").hidden && /^Mode: Debug & Repair  —  Expertise: Gameplay systems \(sword, damage\)  —  Will keep: numbers: 25\.$/.test(q(".rse-insight").textContent), q(".rse-insight").textContent);
+  q('.rse-chip[data-mode="auto"]').click();
+  ok("back to Auto: insight says '(auto)' and the resolved mode", /^Mode: Expert \(auto\)/.test(q(".rse-insight").textContent) && E.state().insight && E.state().insight.mode === "expert");
+  const firstResult = q(".rse-result").value;
+  enhanceImpl = async (rough, opts) => { seenOpts = opts; return { text: "GOAL - sword\nLOOK - include a gui", focus: "roblox", source: "markers", mode: "expert", experts: [{ id: "gameplay_systems", title: "Gameplay systems" }], checks: { ok: false, issues: [{ kind: "numbers", severity: "warn", text: "dropped numbers: 25" }, { kind: "preamble", severity: "info", text: "chatter" }], repaired: "GOAL - sword\nLOOK - include a gui\n\nCODE FROM MY REQUEST (keep exactly as written):\n```lua\nprint(1)\n```" } }; };
+  q(".rse-go").click(); await tick(30);
+  ok("hooks.enhance receives the mode; Re-enhance keeps the previous result (Previous version enabled)", seenOpts.mode === "auto" && E.state().prev === firstResult && !q(".rse-prev").disabled && q(".rse-result").value === "GOAL - sword\nLOOK - include a gui");
+  ok("checks rendered next to the preview (severity per item, head says review), status points at them, meta names the mode", !q(".rse-checks").hidden && q(".rse-check-head").textContent === "Checks: review before sending" && host.querySelectorAll('.rse-check-list li[data-severity="warn"]').length === 1 && host.querySelectorAll('.rse-check-list li[data-severity="info"]').length === 1 && /see the checks, review, edit, then Send/.test(q(".rse-status").textContent) && q(".rse-status").dataset.kind === "warn" && /Expert/.test(q(".rse-meta").textContent) && E.state().last.checks.ok === false && E.state().last.experts[0].id === "gameplay_systems");
+  q(".rse-repair").click();
+  ok("Restore dropped code swaps in the repaired text, keeps the unrepaired one as Previous version, removes the repair button", /CODE FROM MY REQUEST/.test(q(".rse-result").value) && E.state().prev === "GOAL - sword\nLOOK - include a gui" && !q(".rse-repair") && !q(".rse-prev").disabled);
+  q(".rse-prev").click();
+  ok("Previous version swaps back (and forth) without touching the rough text", q(".rse-result").value === "GOAL - sword\nLOOK - include a gui" && /CODE FROM MY REQUEST/.test(E.state().prev) && q(".rse-rough").value === E.state().rough);
+  q(".rse-result").value = "GOAL - sword, 25 damage, no gui"; q(".rse-result").dispatchEvent(new w.Event("input", { bubbles: true }));
+  enhanceImpl = async () => { throw new Error("timed out"); };
+  q(".rse-go").click(); await tick(10);
+  ok("a failed Re-enhance keeps the edited result (status says so) and the rough text", /Enhance failed: timed out - your previous result is still here\./.test(q(".rse-status").textContent) && q(".rse-result").value === "GOAL - sword, 25 damage, no gui" && q(".rse-rough").value === E.state().rough);
+  hooks.analyze = () => { throw new Error("boom"); };
+  q('.rse-chip[data-mode="quick"]').click();
+  ok("a throwing analyze hook is contained: insight hidden, dialog alive, mode still switches", q(".rse-insight").hidden && E.isOpen() && E.state().mode === "quick");
+  delete hooks.analyze; q('.rse-chip[data-mode="auto"]').click();
+  enhanceImpl = async () => ({ text: before, focus: "roblox", source: "markers" });
+  q(".rse-go").click(); await tick(20);
+  ok("a result without mode / experts / checks (older main.js shape) renders cleanly: no checks panel, plain Ready status", q(".rse-checks").hidden && /^Ready in [\d.]+s - review, edit, then Send\.$/.test(q(".rse-status").textContent) && q(".rse-result").value === before);
 
   // keyboard: Esc closes; Ctrl+Enter in the result = send
   host.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));

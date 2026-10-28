@@ -1060,6 +1060,12 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
     } else {
       L.push("Structure (use these headings, skip any that does not apply): GOAL - one sentence. CONTEXT - who it is for and what already exists. REQUIREMENTS - the concrete things the answer must contain or do. CONSTRAINTS - length, tone, language, things to avoid. OUTPUT FORMAT - exactly how the answer should be laid out. DONE WHEN - how the user will judge the answer is complete.");
     }
+    // 1.88.0: optional layers from TotalSkillIntel.plan() - mode strategy
+    // (what the rewrite does differently), the deterministic MUST-KEEP list
+    // and short expert excerpts. Absent → the request is exactly as before.
+    if (o.strategy && String(o.strategy).trim()) L.push(String(o.strategy).trim());
+    if (o.preserve && String(o.preserve).trim()) L.push(String(o.preserve).trim());
+    if (o.expertise && String(o.expertise).trim()) L.push(String(o.expertise).trim());
     L.push(o.short ? "Length: compact - under 120 words." : "Length: as long as needed and no longer - a short request stays short.");
     if (o.notes && String(o.notes).trim()) L.push("Extra guidance from the user for this rewrite: " + String(o.notes).trim());
     L.push("Reply with ONLY the improved prompt between these two exact lines:");
