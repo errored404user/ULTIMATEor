@@ -12,7 +12,7 @@
  *     enhance(rough, opts, onStatus) -> Promise<{text, focus, source, raw, mode?, experts?, checks?}>
  *                                                         // opts = {focus:"auto"|"roblox"|"general", mode:"auto"|..., short, notes, cancelled()}
  *     analyze(rough, opts) -> {mode, experts[], explain, preserve} | null   // 1.88.0 optional, sync (TotalSkillIntel)
- *     send(text, onStatus) -> Promise<boolean>           // same path as Paint / GUI Studio hand-offs
+ *     send(text, onStatus) -> Promise<boolean>           // same path as Paint / Animation Studio hand-offs
  *     insert(text) -> Promise<boolean>                   // write into the site's composer, no send
  *     engine() -> "roblox" | "local", agentStarted() -> boolean, providerName() -> string
  *     toast(msg), diag(event, data)

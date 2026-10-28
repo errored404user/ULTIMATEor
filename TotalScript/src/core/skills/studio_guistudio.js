@@ -1,6 +1,5 @@
-// TotalScript — GUI Studio pack (1.48.0)
-//
-// The command side of the visual GUI builder (src/core/guistudio.js). One
+// TotalScript — GUI spec pack (1.48.0; 1.90.0: the GUI Studio window that
+// fronted it was removed - the AI drives these commands directly). One
 // Luau "spec engine" turns a nested JSON tree - classes, UDim2 arrays, hex
 // colours, modifiers (corner / stroke / gradient / padding / layout / aspect /
 // text-fit) and behaviours (click → toggle / open / close / tween / sound /

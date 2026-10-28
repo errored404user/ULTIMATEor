@@ -205,7 +205,7 @@ Promise.all(pending).then(async () => {
   // ── 4. wiring ──
   const manifest = JSON.parse(read("manifest.json"));
   const tap = manifest.content_scripts.find((c) => c.world === "MAIN" && c.js.includes("src/providers/stream-net.js"));
-  ok("manifest: stream-net.js runs in the MAIN world at document_start for the adaptive hosts (Vani, MultiChat sites)", tap && tap.run_at === "document_start" && ["https://c.vani.ai/*", "https://agent.minimax.io/*", "https://openrouter.ai/*", "https://console.groq.com/*"].every((h) => tap.matches.includes(h)));
+  ok("manifest: stream-net.js runs in the MAIN world at document_start for the adaptive hosts (Vani, MultiChat sites)", tap && tap.run_at === "document_start" && ["https://c.vani.ai/*", "https://agent.minimax.io/*", "https://openrouter.ai/*", "https://api.together.ai/*"].every((h) => tap.matches.includes(h)));
   for (const prov of ["vani", "multichat"]) {
     const b = manifest.content_scripts.find((c) => c.world !== "MAIN" && c.js.includes(`src/providers/${prov}.js`));
     ok(`manifest: the ${prov} bundle loads stream-reader.js right before the adapter and every one of its hosts has the tap`, b && b.js.indexOf("src/providers/stream-reader.js") === b.js.indexOf(`src/providers/${prov}.js`) - 1 && b.matches.every((m) => tap.matches.includes(m)));

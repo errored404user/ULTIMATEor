@@ -12,11 +12,11 @@ const m = JSON.parse(manifest);
 const lists = m.content_scripts.map((c) => c.js).filter((js) => js.includes("src/core/main.js"));
 ok("12 provider lists load main.js (1.89.0: 17 before the provider removal)", lists.length === 12, lists.length);
 for (const js of lists) {
-  const lib = js.indexOf("src/core/animlib.js"), eng = js.indexOf("src/core/animengine.js"), gs = js.indexOf("src/core/guistudio.js"), as = js.indexOf("src/core/animstudio.js"), mn = js.indexOf("src/core/main.js");
+  const lib = js.indexOf("src/core/animlib.js"), eng = js.indexOf("src/core/animengine.js"), gs = js.indexOf("src/core/paint.js"), as = js.indexOf("src/core/animstudio.js"), mn = js.indexOf("src/core/main.js");
   ok("animengine.js loads right after animlib.js and before main.js", lib >= 0 && eng === lib + 1 && mn > eng, js);
-  ok("animstudio.js loads right after guistudio.js and before main.js", gs >= 0 && as === gs + 1 && mn > as, js);
+  ok("animstudio.js loads right after paint.js (1.90.0: GUI Studio bundle removed) and before main.js", gs >= 0 && as === gs + 1 && mn > as, js);
 }
-ok("codecraft.html loads the engine and the studio in order", codecraft.indexOf('<script src="src/core/animengine.js"></script>') > codecraft.indexOf('<script src="src/core/animlib.js"></script>') && codecraft.indexOf('<script src="src/core/animstudio.js"></script>') > codecraft.indexOf('<script src="src/core/guistudio.js"></script>') && codecraft.indexOf('<script src="src/core/animstudio.js"></script>') < codecraft.indexOf('<script src="src/core/main.js"></script>'));
+ok("codecraft.html loads the engine and the studio in order", codecraft.indexOf('<script src="src/core/animengine.js"></script>') > codecraft.indexOf('<script src="src/core/animlib.js"></script>') && codecraft.indexOf('<script src="src/core/animstudio.js"></script>') > codecraft.indexOf('<script src="src/core/paint.js"></script>') && codecraft.indexOf('<script src="src/core/animstudio.js"></script>') < codecraft.indexOf('<script src="src/core/main.js"></script>'));
 
 // ── main.js wiring ──────────────────────────────────────────────────────────
 for (const s of [
@@ -29,7 +29,7 @@ for (const s of [
   'if (typeof TotalAnimStudio === "undefined" || typeof TotalAnimEngine === "undefined") { ui.toast("Animation Studio module missing — reload the extension"); return; }',
   "TotalAnimStudio.open({",
   "send: (text, onStatus) => sendPainting(text, null, onStatus),",
-  "runTool: guiStudioRunTool,",
+  "runTool: studioRunTool,",
   "studioReady: () => { try { return currentEngineIsLive(); } catch { return false; } },",
   "window.__rsOpenAnimStudio = openAnimStudio;",
   'const ANIM_ENGINE_OPS = new Set(["generate", "refine", "sequence", "validate", "export_rbxmx", "build", "set", "compatibility", "polish", "layer"]);',
@@ -46,8 +46,8 @@ for (const s of [
   "This is a file on the user's machine - no asset id exists until it is published.",
 ]) ok("main.js wiring: " + s.slice(0, 70), main.includes(s), s);
 ok("engine ops are intercepted BEFORE the generic animation_* Luau branch", main.indexOf("ANIM_ENGINE_OPS.has(name.slice") < main.indexOf('if (!RSAnim.ANIM_OPS.includes(op)) {'));
-ok("the Animation Studio reuses the GUI Studio tool runner (internal, no AI turn)", main.includes("return runTool({ tool: name, arguments: Object.assign({}, args || {}, { _totalInternal: true }) });"));
-ok("the shortcut yields to an open GUI Studio / Paint", /e\.key === "K"[^\n]*TotalGuiStudio\.isOpen\(\)\) return;[^\n]*TotalPaint\.isOpen\(\)\) return;/.test(main));
+ok("the Animation Studio reuses the internal studio tool runner (no AI turn)", main.includes("return runTool({ tool: name, arguments: Object.assign({}, args || {}, { _totalInternal: true }) });"));
+ok("the shortcut yields to an open Paint", /e\.key === "K"[^\n]*TotalPaint\.isOpen\(\)\) return;/.test(main) && !/TotalGuiStudio/.test(main));
 
 // ── CSS ─────────────────────────────────────────────────────────────────────
 for (const s of [
@@ -61,7 +61,7 @@ for (const s of [
   ".rsa-empty {", "pointer-events: none;",
   ".rsa-score.good", ".rsa-issue.error", ".rsa-joint.on", ".rsa-btn.primary",
 ]) ok("overlay.css: " + s.slice(0, 60), css.includes(s), s);
-ok("bar button styled with the other bar buttons (nested :is keeps the pinned selector intact for test-paint / test-gui-studio)", (css.match(/:is\(:is\(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn\), #rs-anim-btn\)/g) || []).length >= 20 && !/#rs-gui-btn, #rs-anim-btn\)/.test(css));
+ok("bar button styled with the other bar buttons (nested :is keeps the pinned selector intact for test-paint)", (css.match(/:is\(:is\(#rs-settings-btn, #rs-paint-btn\), #rs-anim-btn\)/g) || []).length >= 20 && !/#rs-gui-btn, #rs-anim-btn\)/.test(css));
 
 // ── overlay in jsdom ───────────────────────────────────────────────────────
 const { JSDOM } = require("jsdom");

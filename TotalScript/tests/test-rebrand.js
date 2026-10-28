@@ -23,7 +23,7 @@ ok("scan covers the shipped tree", files.length > 80, String(files.length));
 const ALLOW = [
   /plugin:GetSetting\("ORscript" \.\. key\)/,                 // plugin settings carry-over
   /support\.join\("ORscript"\)/, /ORscript-era/, /old `?ORscript`?/, /from the ORscript-era/,  // comments / docs about the migration
-  /"orscript-animation"/, /"orscript-gui-design"/, /\^orscript-/,  // old export formats still import
+  /"orscript-animation"/, /\^orscript-/,  // old export formats still import
   /FindFirstChild\(['"]OR_UI(?:Bindings|Behaviours|Events)['"]\)/, /'OR_UIBindings'\}/, /match\('\^OR_'\)/, /sub\(1,3\)=='OR_'/,  // old GUI binding store / behaviour script / events folder / OR_-prefixed effects still recognised
   /ORscript\*? (keys|settings|folder)/, /ORscript → TotalScript/, /ORscript is now/, /was ORscript/, /ORscript\*/,
 ];
@@ -56,7 +56,7 @@ ok("manifest name / title", manifest.name === "TotalScript" && manifest.action.d
 const main = read("src/core/main.js"), config = read("src/core/config.js"), lua = read("plugin/TotalScript.lua"), gui = read("agent/src/gui.rs");
 ok("product name + APP_NAME", main.includes('totalTheme==="void"?"VoidScript":"TotalScript"') && config.includes('const APP_NAME = "TotalScript";') && gui.includes('pub const APP_NAME: &str = "TotalScript";'));
 ok("plugin toolbar + kind id", lua.includes('plugin:CreateToolbar("TotalScript")') && lua.includes('{ id = "totalscript", name = "TotalScript", match = { "totalscript" }, kind = "agent" }'));
-ok("module globals renamed", ["TotalPaint", "TotalGuiStudio", "TotalOrchestrator", "TotalTaskList", "TotalReasoning", "TotalAgentCrew", "TotalAnimStudio"].every((g) => main.includes(g)));
+ok("module globals renamed", ["TotalPaint", "TotalOrchestrator", "TotalTaskList", "TotalReasoning", "TotalAgentCrew", "TotalAnimStudio"].every((g) => main.includes(g)));
 ok("internal-arg prefix is _total (wire filter + validator agree)", main.includes("if (!/^_total/.test(k)) o[k] = args[k];") && read("src/core/orchestrator.js").includes("if (/^_total/.test(k)) continue;") && main.includes("_totalInternal"));
 ok("workflow builds TotalScript/agent and uploads total-core artefacts", (() => { const w = fs.readFileSync(path.join(root, "..", ".github", "workflows", "desktop.yml"), "utf8"); return w.includes("working-directory: TotalScript/agent") && w.includes("total-core-windows-x64") && w.includes("./target/release/total-core.exe --help") && !/ORscript|or-core/.test(w); })());
 ok("mesh marker parsing is length-based, not a hard-coded 13", read("background.js").includes('lines[i].slice("TOTAL_MESH_JSON:".length)') && main.includes('textOut.slice(mark + "TOTAL_MESH_JSON:".length)'));
@@ -64,7 +64,7 @@ ok("mesh marker parsing is length-based, not a hard-coded 13", read("background.
 // ── 3. nothing saved is lost ──────────────────────────────────────────────────
 ok("plugin reads TotalScript* settings, falls back to ORscript*", lua.includes('local v = plugin:GetSetting("TotalScript" .. key)') && lua.includes('if v == nil then v = plugin:GetSetting("ORscript" .. key) end') && lua.includes('settingWithLegacy("OpenCloudKey")') && lua.includes('settingWithLegacy("Macros")'));
 ok("macOS data dir keeps the old folder until a new one exists", gui.includes('let legacy = support.join("ORscript");') && gui.includes("if !new_dir.exists() && legacy.exists() { legacy } else { new_dir }"));
-ok("old export formats still import", read("src/core/animengine.js").includes('j.format === "orscript-animation"') && read("src/core/guigen.js").includes('o.format === "orscript-gui-design"') && read("src/core/public_skills.js").includes('f.replace(/^orscript-/, "totalscript-") === want'));
+ok("old export formats still import", read("src/core/animengine.js").includes('j.format === "orscript-animation"') && read("src/core/public_skills.js").includes('f.replace(/^orscript-/, "totalscript-") === want'));
 ok("GUI behaviours read Total_UIBindings or the old OR_UIBindings; legacy behaviour script / events folder are adopted, not duplicated", (() => { const g = read("src/core/skills/studio_guistudio.js"); return g.includes("gui:FindFirstChild(\"Total_UIBindings\") or gui:FindFirstChild(\"OR_UIBindings\")") && g.includes("sv.Name='Total_UIBindings'") && g.includes("or sg:FindFirstChild('OR_UIBehaviours') if not ls then ls=Instance.new('LocalScript') ls.Parent=sg end ls.Name='Total_UIBehaviours'") && g.includes('or ReplicatedStorage:FindFirstChild("OR_UIEvents")'); })());
 ok("generated Luau uses the Total_ instance / attribute prefix (OR_Systems, OR_Version, OR_Controller … are gone)", (() => { const all = fs.readdirSync(path.join(root, "src/core/skills")).map((f) => read("src/core/skills/" + f)).join("\n"); return all.includes("Total_Systems") && all.includes("Total_Version") && !/\bOR_(?:Systems|Version|Controller|Blueprint|Design|Notify|Toggle|Window|Progress|Imported|ProjectIndex)\b/.test(all); })());
 ok("token attributes / post-FX cleanup accept both prefixes (places built before the rename still export + reset)", read("src/core/skills/studio_guistudio.js").includes("local pre=(k:sub(1,6)=='Total_' and 6) or (k:sub(1,3)=='OR_' and 3) or nil") && read("src/core/skills/studio_modes.js").includes("if c.Name:sub(1,6)=='Total_' or c.Name:sub(1,3)=='OR_' then c:Destroy()") && read("src/core/skills/studio_200.js").includes("not (sg.Name:match('^Total_') or sg.Name:match('^OR_'))"));
@@ -84,7 +84,7 @@ ok("night skin still exists as a selectable style", css.includes('html[data-rs-t
 // ── 5. release pins ───────────────────────────────────────────────────────────
 const readme = read("README.md");
 ok("README 1.71.0 entry + title", /\*\*1\.71\.0 — TotalScript: the rename, and Aqua as the default skin\.\*\*/.test(readme) && readme.startsWith("# TotalScript — "));
-ok("version pins 1.89.0", manifest.version === "1.89.0" && /^version = "1\.89\.0"/m.test(cargo) && lua.includes('local VERSION = "1.89.0"') && lock.includes('name = "total-agent"\nversion = "1.89.0"'));
+ok("version pins 1.90.0", manifest.version === "1.90.0" && /^version = "1\.90\.0"/m.test(cargo) && lua.includes('local VERSION = "1.90.0"') && lock.includes('name = "total-agent"\nversion = "1.90.0"'));
 
 console.log((failed ? "FAIL  " : "OK    ") + "test-rebrand: " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

@@ -57,7 +57,7 @@ const main = fs.readFileSync("src/core/main.js", "utf8");
 ok("roadmap subsystem gone from main.js / overlay.css", !/ROADMAP_KEY|roadmapHtml|rsRoadmapV2/.test(main) && !/\.rs-roadmap/.test(fs.readFileSync("overlay.css", "utf8")) && !fs.existsSync("tests/test-roadmap.js"));
 ok("runTool uses toolName (roadmapName rename)", !/roadmapName/.test(main) && /const toolName = bareToolName\(name\)/.test(main));
 ok("seven unreferenced forwarder files removed", ["agent_skills", "studio_100", "studio_200", "studio_daily", "studio_gui", "studio_plus", "studio_skills"].every((n) => !fs.existsSync("src/core/" + n + ".js")));
-ok("dead symbols removed", !/function keybindLabel|function setReasoningModeOverride|const BRAND_NAME\b|COMMAND_LOOKUP_TOOLS/.test(main) && !/function pyLiteral/.test(fs.readFileSync("background.js", "utf8")) && !/function scalePose/.test(fs.readFileSync("src/core/animengine.js", "utf8")) && !/setRichTextChunked|activityItemKey/.test(fs.readFileSync("src/providers/notion.js", "utf8")) && !/TEXT_DELTA_TYPE_RE/.test(fs.readFileSync("src/providers/stream-net.js", "utf8")) && !/ITEM_NOUN/.test(fs.readFileSync("src/core/guigen.js", "utf8")) && !/function iconText/.test(fs.readFileSync("src/core/guistudio_templates.js", "utf8")));
+ok("dead symbols removed", !/function keybindLabel|function setReasoningModeOverride|const BRAND_NAME\b|COMMAND_LOOKUP_TOOLS/.test(main) && !/function pyLiteral/.test(fs.readFileSync("background.js", "utf8")) && !/function scalePose/.test(fs.readFileSync("src/core/animengine.js", "utf8")) && !/setRichTextChunked|activityItemKey/.test(fs.readFileSync("src/providers/notion.js", "utf8")) && !/TEXT_DELTA_TYPE_RE/.test(fs.readFileSync("src/providers/stream-net.js", "utf8")));
 
 // ── runtime (python3 + lupa) ──
 fs.writeFileSync(path.join(require("os").tmpdir(), "total-modelcraft-programs.json"), JSON.stringify(programs));
@@ -119,7 +119,7 @@ if (rt && rt.skip) {
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README 1.70.0 changelog documents the pack and the removals", /\*\*1\.70\.0 — /.test(readme) && /model_prefab/.test(readme) && /model_check/.test(readme) && /roadmap/i.test(readme.slice(readme.indexOf("**1.70.0 — "), readme.indexOf("**1.70.0 — ") + 4000)));
 ok("test listed in README", readme.includes("tests/test-model-craft.js"));
-ok("version pins 1.89.0", manifest.version === "1.89.0" && /local VERSION = "1\.89\.0"/.test(fs.readFileSync("plugin/TotalScript.lua", "utf8")) && /^version = "1\.89\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
+ok("version pins 1.90.0", manifest.version === "1.90.0" && /local VERSION = "1\.90\.0"/.test(fs.readFileSync("plugin/TotalScript.lua", "utf8")) && /^version = "1\.90\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
 
 console.log((failed ? "FAIL  " : "OK    ") + "test-model-craft: " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

@@ -1,4 +1,4 @@
-// TotalScript — Reasoning effort (1.89.0)
+// TotalScript — Reasoning effort (1.90.0)
 //
 // One setting, five levels: low · mid · high · max · ultimate. It does two things:
 //
@@ -339,7 +339,7 @@
   }
 
   const api = {
-    PROFILE_KEYS, VERSION: "1.89.0", LEVELS, LEVEL_IDS, PROVIDERS, FOCUS, FOCUS_IDS, BOOST_TEXT, normalize, levelOf, rank, atLeast, providerOf, hasNative, modeFor, table, apply, gate, cleanExtras, effectiveProfile, promptExtras, extrasCount, _test: { pressed, shortLabel, findControl } };
+    PROFILE_KEYS, VERSION: "1.90.0", LEVELS, LEVEL_IDS, PROVIDERS, FOCUS, FOCUS_IDS, BOOST_TEXT, normalize, levelOf, rank, atLeast, providerOf, hasNative, modeFor, table, apply, gate, cleanExtras, effectiveProfile, promptExtras, extrasCount, _test: { pressed, shortLabel, findControl } };
   try { window.TotalReasoning = api; } catch {}
   try { if (typeof module !== "undefined" && module.exports) module.exports = api; } catch {}
 })();

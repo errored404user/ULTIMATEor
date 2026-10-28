@@ -3,7 +3,7 @@
 // GUIs (Hollow-Knight-class title screens, glowing serif titles, ornaments,
 // generated + published textures, Creator Store images, custom fonts,
 // particles) instead of flat app panels. Static checks on the pack, the
-// catalogue, the prompts, the gates and the GUI Studio art panel.
+// catalogue, the prompts and the gates.
 // tests/artui-sim.py executes the generated Luau and the LocalScripts.
 const fs = require("fs"), vm = require("vm");
 let n = 0;
@@ -68,36 +68,13 @@ ok("prompt budgets still hold after the art lines (v134 < 38000 without catalogu
 ok("look gate: art commands count as 'did' but the read-only ui_image_find / ui_art_theme_get do not", (() => { const m = main.match(/id: "look",\s*did: (\/[^\n]*\/),/); if (!m) return false; const re = eval(m[1]); return re.test("ui_art_build") && re.test("ui_text_fx") && re.test("ui_decor_add") && re.test("ui_texture_create") && !re.test("ui_image_find") && !re.test("ui_art_theme_get") && !re.test("ui_list_tree"); })());
 ok("UI family regex groups ui_art_* / ui_text_fx / ui_decor_add under UI & HUD", (() => { const m = main.match(/id: "ui", label: "UI & HUD", re: (\/[^\n]*?\/) \}/); if (!m) return false; const re = eval(m[1]); return re.test("ui_art_build") && re.test("ui_decor_add") && re.test("ui_texture_create"); })());
 
-// ── GUI Studio art panel ──
-const gs = fs.readFileSync("src/core/guistudio.js", "utf8");
-ok("GUI Studio: art state (theme, font, font_asset_id, glow / vignette / particles / frames / markers / clone, image slots) + snapshot / restore", /art: \{ theme: "", font: "", font_asset_id: "", glow: true, vignette: true, particles: false, frames: false, markers: false, clone: false, images: \{ backdrop: "", logo: "", emblem: "" \} \}/.test(gs) && /art: S\.art, sel:/.test(gs) && /if \(d\.art\) S\.art = Object\.assign/.test(gs));
-ok("GUI Studio: Theme tab renders the Art direction section (9 looks, fonts, custom font id, FX flags, three image slots) and the change handler stores data-art fields", /function artSectionHtml\(\)/.test(gs) && /<select data-art="theme">/.test(gs) && /data-art="font_asset_id"/.test(gs) && /data-art="images\.backdrop"/.test(gs) && /chk\("clone", "Clone reference exactly"/.test(gs) && /if \(el\.dataset\.art\) \{/.test(gs) && /\$\{artSectionHtml\(\)\}`;/.test(gs));
-ok("GUI Studio: hand-off carries ART DIRECTION / IMAGES / CLONE EXACTLY lines; direct build applies ui_art_theme_set + ui_art_restyle (+ backdrop) after ui_build_spec", /\.\.\.artHandoffLines\(\),/.test(gs) && /"ART DIRECTION \(GUI Studio\): after step \(1\) run "/.test(gs) && /"CLONE EXACTLY: the user attached/.test(gs) && /async function artApplyDirect\(screenPath\)/.test(gs) && /runTool\("ui_art_restyle", \{ path, vignette/.test(gs) && /const art = await artApplyDirect\(r\.data && r\.data\.screen\)/.test(gs));
-ok("GUI Studio: public getArt / setArt / ART_THEMES / ART_FONTS; version pin untouched (1.48.0 catalogue contract)", /getArt: \(\) => JSON\.parse\(JSON\.stringify\(S\.art\)\)/.test(gs) && /setArt: \(patch\)/.test(gs) && fs.readFileSync("src/core/skills/studio_guistudio.js", "utf8").includes('const GUISTUDIO_VERSION = "1.48.0";'));
-ok("overlay.css styles the art section", /1\.78\.0 — GUI STUDIO · ART DIRECTION/.test(fs.readFileSync("overlay.css", "utf8")) && /\.rsg-art-flags \.rsg-chk/.test(fs.readFileSync("overlay.css", "utf8")));
-// hand-off lines in a jsdom-free way: evaluate the pure helper through a tiny harness
-(() => {
-  try {
-    const ctx = { window: {}, document: undefined, localStorage: undefined, console, chrome: global.chrome, setTimeout, clearTimeout };
-    ctx.window = ctx; vm.createContext(ctx);
-    vm.runInContext(fs.readFileSync("src/core/guistudio_templates.js", "utf8"), ctx);
-    vm.runInContext(gs, ctx);
-    const G = ctx.window.TotalGuiStudio;
-    G.setArt({ theme: "hollow", font: "Garamond", font_asset_id: "rbxassetid://5551234", markers: true, particles: true, clone: true, images: { backdrop: "store:dark cave", logo: "123456" } });
-    const lines = G._artHandoffLines();
-    ok("GUI Studio hand-off lines: theme + font + custom font id → ui_art_theme_set, restyle with the flags, text fx, markers, images, clone protocol", lines.length === 3 && lines[0].includes('ui_art_theme_set {"theme":"hollow","font":"Garamond","font_asset_id":"5551234"} then ui_art_restyle {"path":"StarterGui.TOTAL_UI","vignette":true,"particles":true,"frames":false}') && lines[0].includes("ui_text_fx {path, glow:true, pulse:true}") && lines[0].includes('kind:"markers"') && lines[1].includes('"kind":"backdrop","image":"store:dark cave"') && lines[1].includes('image "123456"') && lines[2].startsWith("CLONE EXACTLY"), JSON.stringify(lines).slice(0, 300));
-    const msg = G.buildMessage("");
-    ok("buildMessage includes the art lines before the Steps line, header unchanged", msg.startsWith("GUI STUDIO HAND-OFF (TotalScript)") && msg.indexOf("ART DIRECTION (GUI Studio)") > 0 && msg.indexOf("ART DIRECTION (GUI Studio)") < msg.indexOf("Steps: (1) run ui_build_spec"));
-    G.setArt({ theme: "", font: "", font_asset_id: "", markers: false, particles: false, clone: false, images: { backdrop: "", logo: "", emblem: "" } });
-    ok("no art settings → no art lines (plain hand-off exactly as before)", G._artHandoffLines().length === 0 && !G.buildMessage("").includes("ART DIRECTION (GUI Studio)"));
-  } catch (e) { ok("GUI Studio helper harness", false, e && e.stack || e); }
-})();
+// (1.90.0: the GUI Studio window and its art panel were removed; the art pack + GUI brief above are the whole art route)
 
 // ── docs, tests, versions ──
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README changelog + test list", /\*\*1\.78\.0 — Art direction engine/.test(readme) && /test-artui\.js/.test(readme) && /artui-sim\.py/.test(readme) && names.filter((x) => !/theme_get/.test(x)).every((x) => readme.includes("`" + x)));
 ok("test-command-dedup.js scans the art pack", /"studio_artui\.js"/.test(fs.readFileSync("tests/test-command-dedup.js", "utf8")));
 ok("simulator stubs for the pack are real stand-ins (EditableImage buffer, CreateAssetAsync ids, GetFreeDecals, Font / buffer / Content)", (() => { const sim = fs.readFileSync("tests/roblox_sim.py", "utf8"); return /function methods:CreateEditableImage/.test(sim) && /function methods:WritePixelsBuffer/.test(sim) && /function methods:CreateAssetAsync/.test(sim) && /function methods:GetFreeDecals/.test(sim) && /_G\.Font = \{/.test(sim) && /_G\.buffer = \{/.test(sim) && /_G\.Content = \{/.test(sim); })());
-ok("version pins 1.89.0 (manifest, plugin, crate, guigen)", manifest.version === "1.89.0" && fs.readFileSync("plugin/TotalScript.lua", "utf8").includes('local VERSION = "1.89.0"') && /^version = "1\.89\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /VERSION = "1\.89\.0"/.test(fs.readFileSync("src/core/guigen.js", "utf8")));
+ok("version pins 1.90.0 (manifest, plugin, crate)", manifest.version === "1.90.0" && fs.readFileSync("plugin/TotalScript.lua", "utf8").includes('local VERSION = "1.90.0"') && /^version = "1\.90\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
 
 console.log(`\n${n} checks, exit ${process.exitCode || 0}`);

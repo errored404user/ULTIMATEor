@@ -96,11 +96,11 @@ ok("manifest: videostudio.js loads after animstudio.js and right before main.js 
 const codecraft = read("codecraft.html");
 ok("codecraft.html loads videostudio.js after animstudio.js", codecraft.indexOf('<script src="src/core/videostudio.js"></script>') > codecraft.indexOf('<script src="src/core/animstudio.js"></script>'));
 const main = read("src/core/main.js");
-ok("bar: Video button between Animation Studio and GUI Studio, Ctrl+Shift+V shortcut, opener exported", main.indexOf('id="rs-video-btn"') > main.indexOf('id="rs-anim-btn"') && main.indexOf('id="rs-video-btn"') < main.indexOf('id="rs-gui-btn"') && main.includes("(Ctrl+Shift+V)") && main.includes('root.querySelector("#rs-video-btn")') && main.includes("window.__rsOpenVideoStudio = openVideoStudio;") && /e\.key === "V" \|\| e\.key === "v"/.test(main));
+ok("bar: Video button between Animation Studio and Settings (1.90.0: GUI Studio button removed), Ctrl+Shift+V shortcut, opener exported", main.indexOf('id="rs-video-btn"') > main.indexOf('id="rs-anim-btn"') && main.indexOf('id="rs-video-btn"') < main.indexOf('id="rs-settings-btn"') && main.includes("(Ctrl+Shift+V)") && main.includes('root.querySelector("#rs-video-btn")') && main.includes("window.__rsOpenVideoStudio = openVideoStudio;") && /e\.key === "V" \|\| e\.key === "v"/.test(main));
 ok("opener rides the Paint send path (agent auto-start, images where accepted) and passes engine / canAttachImages / maxImages / toast / diag", /TotalVideoStudio\.open\(\{\s*send: sendPainting,\s*engine: \(\) => activeEngine\(\),\s*canAttachImages:[\s\S]*?maxImages:[\s\S]*?toast:[\s\S]*?diag,\s*\}\)/.test(main));
 const css = read("overlay.css");
 ok("overlay.css: Video Studio window styles + hides the bar while open", ["#rs-video {", "#rs-video.open {", "html.rs-video-open #rs-root { visibility: hidden !important; }", ".rsv-drop {", ".rsv-keygrid {", ".rsv-primary {", "html.rs-light #rs-video .rsv-shell"].every((s) => css.includes(s)));
-ok("overlay.css: bar button styled with the others by nesting the pinned selectors (older pins stay intact)", (css.match(/:is\(:is\(:is\(:is\(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn\), #rs-anim-btn\), #rs-enhance-btn\), #rs-video-btn\)/g) || []).length >= 20 && (css.match(/:is\(:is\(:is\(#rs-settings-btn, #rs-paint-btn, #rs-gui-btn\), #rs-anim-btn\), #rs-enhance-btn\)/g) || []).length >= 20);
+ok("overlay.css: bar button styled with the others by nesting the pinned selectors (older pins stay intact)", (css.match(/:is\(:is\(:is\(:is\(#rs-settings-btn, #rs-paint-btn\), #rs-anim-btn\), #rs-enhance-btn\), #rs-video-btn\)/g) || []).length >= 20 && (css.match(/:is\(:is\(:is\(#rs-settings-btn, #rs-paint-btn\), #rs-anim-btn\), #rs-enhance-btn\)/g) || []).length >= 20);
 
 // ── 4. window smoke test (jsdom; no canvas) ──────────────────────────────────
 try {
@@ -128,7 +128,7 @@ try {
 // ── 5. release bookkeeping ───────────────────────────────────────────────────
 const readme = read("README.md");
 ok("README: 1.79.0 entry + this test listed", /\*\*1\.79\.0 — Video Studio: show it a video/.test(readme) && readme.includes("test-video-studio.js"));
-ok("version pins 1.89.0", manifest.version === "1.89.0" && /^version = "1\.89\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.89.0"'));
+ok("version pins 1.90.0", manifest.version === "1.90.0" && /^version = "1\.90\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.90.0"'));
 
 console.log(`\n${pass}/${pass + fail} checks passed`);
 process.exit(fail ? 1 : 0);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript sequence pack (1.89.0) - ONE timeline for camera, animation,
+// TotalScript sequence pack (1.90.0) - ONE timeline for camera, animation,
 // VFX, SFX, lighting, UI and gameplay signals, layered on RobloxScriptSkills
 // like studio_cutscene.js.
 //
@@ -32,7 +32,7 @@
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
 
-  const VERSION = "1.89.0";
+  const VERSION = "1.90.0";
   const q = (s) => '"' + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "\\r").replace(/\n/g, "\\n") + '"';
   const num = (v) => { const x = Number(v); return isFinite(x) ? x : null; };
   const ident = (v, d) => { const s = String(v || d || "Sequence").replace(/[^A-Za-z0-9_]/g, ""); return /^[A-Za-z_]/.test(s) ? s : "_" + s; };

@@ -15,7 +15,6 @@ const RSProvider = (() => {
     // with the adapter's normal "open a text chat" warning.
     "openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"},
     "www.openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"},
-    "console.groq.com":{id:"groq",name:"Groq Playground",chat:"https://console.groq.com/playground"},
     "api.together.ai":{id:"together",name:"Together AI",chat:"https://api.together.ai/"}
   };
   const SITE=HOSTS[location.hostname]||{id:"multichat",name:"AI Chat",chat:location.origin};
