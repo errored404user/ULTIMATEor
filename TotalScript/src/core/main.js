@@ -1257,11 +1257,19 @@
     const _sig = images
       ? "img:" + Date.now()
       : String(text).length + ":" + String(text).slice(0, 120) + ":" + String(text).slice(-60);
-    if (!images && A._lastSubmit && A._lastSubmit.sig === _sig && Date.now() - A._lastSubmit.at < 2500) {
+    // 1.97.0: a duplicate is a RACE (same prompt while the previous one is still
+    // unanswered) - never a legitimately identical follow-up. Two byte-identical
+    // tool results in a row are normal (an offline bridge or a deterministic
+    // error answers in milliseconds with the same text + the same state tag);
+    // suppressing the second one returned a base nobody would ever reply to and
+    // parked the loop until the response timeout (recovery-e2e, scenario D).
+    // waitForResponse() marks the previous submit `answered` as soon as a reply
+    // (or a provider error) arrives for it, which re-arms a same-text send.
+    if (!images && A._lastSubmit && A._lastSubmit.sig === _sig && !A._lastSubmit.answered && Date.now() - A._lastSubmit.at < 2500) {
       diag("send.duplicateSuppressed", {});
       return P.assistantCount();
     }
-    A._lastSubmit = { sig: _sig, at: Date.now() };
+    A._lastSubmit = { sig: _sig, at: Date.now(), answered: false };
     A.lastSent = { text: String(text), images: images || null, at: Date.now() }; // 1.69: re-sent verbatim after a transient provider error
 
     const requestId=`chat-${Date.now().toString(36)}-${++A.requestSeq}`;A.activeRequestId=requestId;A.requestStartedAt=performance.now();
@@ -1371,6 +1379,13 @@
   //  RESPONSE WATCHER  (generating-flag driven - robust to DOM churn)
   // ════════════════════════════════════════════════════════════════════════
   async function waitForResponse(base) {
+    const res = await waitForResponseInner(base);
+    // 1.97.0: the submit that produced this read is answered (any verdict except
+    // a genuinely dead turn) - see the duplicate-submit guard in submitAndGetBase.
+    try { if (A._lastSubmit && res && res.kind !== "empty" && res.kind !== "timeout") A._lastSubmit.answered = true; } catch {}
+    return res;
+  }
+  async function waitForResponseInner(base) {
     const t0 = Date.now();
     // INACTIVITY timeout (not total-elapsed): the loop only gives up after this
     // long with NO streaming AND no text change. lastActiveAt is refreshed every
@@ -5149,7 +5164,9 @@
       if (value && typeof value === "object") return value.message || value.error || JSON.stringify(value);
       return fallback;
     };
-    if (r.kind === "disconnected") return `ERROR ${r.errorCode||"STUDIO_BRIDGE_OFFLINE"}: ${bridgeErrorText(r.error,"Roblox Studio bridge is offline.")}`;
+    // 1.97.0: say plainly whether the command ran. kind:"disconnected" means the
+    // worker never had a socket to send on - nothing reached Studio.
+    if (r.kind === "disconnected") return `ERROR ${r.errorCode||"STUDIO_BRIDGE_OFFLINE"}: ${bridgeErrorText(r.error,"Roblox Studio bridge is offline.")}\nThe command did NOT run - nothing reached Studio. Do not resend it unchanged while the bridge is down: tell the user to reopen Studio / the desktop app, or call total_status {} to re-check.`;
     // 1.81.0: the worker refused to route this call because its engine differs
     // from this page's. Nothing ran anywhere - never the wrong backend.
     if (r.errorCode === "ENGINE_MISMATCH") {
@@ -5157,7 +5174,13 @@
       return `ERROR ENGINE_MISMATCH: ${bridgeErrorText(r.error, "the extension worker is on a different engine than this page")} The command did NOT run. Call total_status {} and continue on the engine it reports.`;
     }
     if (r.kind === "timeout") {
-      return `ERROR ${r.errorCode||"STUDIO_TIMEOUT"}: tool '${name}' timed out after ${name === "execute_luau" ? 20 : 120}s.\n${r.error}\nThe request was not silently reported as successful. Check Studio responsiveness before retrying.`;
+      // 1.97.0: `sent` comes from the worker - true when the request was written
+      // to the bridge socket (Studio may still have executed it), false when it
+      // never left. The model must not re-run a mutation that may have happened.
+      const fate = r.sent === false
+        ? "The request never reached the bridge, so the command did NOT run."
+        : "The request reached the bridge, so the command MAY have run even though no result came back. Read the state back (inspect_instance / instance_find / get_console_output) before you resend a command that creates or changes something.";
+      return `ERROR ${r.errorCode||"STUDIO_TIMEOUT"}: tool '${name}' timed out after ${name === "execute_luau" ? 20 : 120}s.\n${r.error}\n${fate} Check Studio responsiveness before retrying.`;
     }
     if (r.errorCode) {
       const detail = bridgeErrorText(r.error);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript command contract (1.96.0) - ONE pre-execution validation layer for
+// TotalScript command contract (1.97.0) - ONE pre-execution validation layer for
 // the virtual Studio / agent commands, built on the metadata the packs already
 // declare (SKILL_COMMANDS[].params = {type, req, desc}) instead of a second
 // registry. It resolves aliases, repairs only deterministic mistakes, rejects
@@ -13,7 +13,7 @@
 //   schemaLine(name)         -> compact callable signature for error messages
 const TotalCommandContract = (() => {
   "use strict";
-  const VERSION = "1.96.0";
+  const VERSION = "1.97.0";
 
   // ── authoritative Roblox enum lists (Enum.<Key>.<Item>; a wrong item is a Luau error or a silently swallowed pcall) ──
   const ROBLOX_ENUMS = {
@@ -213,6 +213,35 @@ const TotalCommandContract = (() => {
     if (hits.length === 1) return { ok: true, value: hits[0], changed: true };
     return { ok: false };
   }
+  // 1.97.0: deterministic "did you mean" for enum misses - substring either way,
+  // then a small edit distance. Pure string logic; at most 3 names.
+  function editDistance(a, b) {
+    const m = a.length, n = b.length;
+    if (!m) return n; if (!n) return m;
+    let prev = Array.from({ length: n + 1 }, (_, j) => j);
+    for (let i = 1; i <= m; i++) {
+      const cur = [i];
+      for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return prev[n];
+  }
+  function closest(list, v) {
+    if (typeof v !== "string" || !v.trim()) return [];
+    const f = fold(v.replace(/^Enum\.[A-Za-z]+\./, ""));
+    if (!f) return [];
+    const scored = [];
+    for (const e of list) {
+      const fe = fold(e);
+      let score = null;
+      if (fe === f) score = 0;
+      else if (fe.startsWith(f) || f.startsWith(fe)) score = 1;
+      else if (fe.includes(f) || f.includes(fe)) score = 2;
+      else { const d = editDistance(fe, f); if (d <= Math.max(2, Math.floor(f.length / 3))) score = 3 + d; }
+      if (score !== null) scored.push({ e, score });
+    }
+    return scored.sort((a, b) => a.score - b.score || a.e.localeCompare(b.e)).slice(0, 3).map((x) => x.e);
+  }
   function coerce(entry, v) {
     const t = entry.type;
     if (t === "string" && typeof v === "number" && Number.isFinite(v)) return { ok: true, value: String(v) };
@@ -235,7 +264,11 @@ const TotalCommandContract = (() => {
     if (t === "object") return isObj(v);
     return true;
   }
-  const expected = (entry) => entry.enumKey && entry.enumKey !== "desc" ? `one of Enum.${entry.enumKey} (${entry.enum.slice(0, 8).join(", ")}${entry.enum.length > 8 ? ", ..." : ""})` : entry.enum ? `one of ${entry.enum.join(", ")}` : entry.vector ? "an array of numbers [x,y,z]" : entry.color ? "a colour [r,g,b] 0-255 (or #rrggbb)" : entry.integer ? "an integer" : entry.type;
+  // 1.97.0: list the WHOLE enum (every Roblox enum here is <= 50 items, ~400
+  // chars for Material). Eight names + "..." left the model guessing a second
+  // time when its first guess was not a prefix of the list (recovery-e2e B).
+  const ENUM_LIST_MAX = 50;
+  const expected = (entry) => entry.enumKey && entry.enumKey !== "desc" ? `one of Enum.${entry.enumKey} (${entry.enum.slice(0, ENUM_LIST_MAX).join(", ")}${entry.enum.length > ENUM_LIST_MAX ? ", ..." : ""})` : entry.enum ? `one of ${entry.enum.join(", ")}` : entry.vector ? "an array of numbers [x,y,z]" : entry.color ? "a colour [r,g,b] 0-255 (or #rrggbb)" : entry.integer ? "an integer" : entry.type;
 
   // prepare(name, args) - never throws; a command without a contract passes through untouched.
   function prepare(name, rawArgs, opts) {
@@ -301,7 +334,11 @@ const TotalCommandContract = (() => {
       if (entry.enum) {
         const m = enumMatch(entry.enum, v, entry.enumKey);
         if (m.ok) { if (m.changed) { correct("enum", k, v, m.value); args[k] = m.value; v = m.value; } }
-        else problem("invalid_enum", k, expected(entry), short(v), m.known_bad ? `'${short(v)}' is not a Roblox ${entry.enumKey} - pick the closest real item from the list` : `use one of the listed ${entry.enumKey === "desc" ? "values" : "Enum." + entry.enumKey + " items"}`);
+        else {
+          const near = closest(entry.enum, v);
+          const hint = near.length ? ` closest: ${near.join(" / ")}.` : "";
+          problem("invalid_enum", k, expected(entry), short(v), (m.known_bad ? `'${short(v)}' is not a Roblox ${entry.enumKey} - pick the closest real item from the list.` : `use one of the listed ${entry.enumKey === "desc" ? "values" : "Enum." + entry.enumKey + " items"}.`) + hint);
+        }
       }
       if (entry.integer && typeof v === "number" && !Number.isInteger(v)) {
         if (Math.abs(v - Math.round(v)) < 1e-9) { args[k] = Math.round(v); correct("type", k, v, args[k]); }
@@ -404,6 +441,7 @@ const TotalCommandContract = (() => {
   api_extra.REPEAT_WINDOW_MS = REPEAT_WINDOW_MS;
   api_extra.TRANSIENT_BUDGET = TRANSIENT_BUDGET;
 
+  api_extra.closest = closest;
   const api = { ...api_extra, VERSION, ROBLOX_ENUMS, ENUM_PARAMS, PARAM_ALIASES, RANGES, CLASSES: CLASSES.map((c) => c.category), configure, contract, invalidate, prepare, classify, annotate, signature, schemaLine, repeatDecision, enumMatch, toVector, toColor };
   return Object.freeze(api);
 })();

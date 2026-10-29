@@ -1,4 +1,4 @@
-# TotalScript asset builder (1.96.0). Sent to Blender as execute_code like
+# TotalScript asset builder (1.97.0). Sent to Blender as execute_code like
 # blender_ops.py; tokens CMD / ARGS / OUT / MESH are filled by TotalScript.
 #
 # Commands
@@ -12,7 +12,7 @@
 #                                         front / side / top / iso PNGs, removes the scene again
 #   asset_export   {name, format, path}   explicit FBX / GLB / OBJ export with fixed settings, then
 #                                         checks the file (exists, size, header) and lists textures
-#   asset_bake     {name, size, maps, margin, samples, apply}   (1.96.0) Cycles-bakes the procedural
+#   asset_bake     {name, size, maps, margin, samples, apply}   (1.97.0) Cycles-bakes the procedural
 #                                         family graphs to PNGs (base_color / roughness / metallic /
 #                                         normal / emission) in <workspace>/total_textures - local files
 #
@@ -327,7 +327,7 @@ def bm_primitive(shape, size, segments=24, subdivisions=2):
     return bm
 
 
-# ─────────────────────────── procedural generators (1.96.0) ─────────────────
+# ─────────────────────────── procedural generators (1.97.0) ─────────────────
 # part.shape == "generator" + part.generator = {kind, seed, ...}. Every generator
 # returns ONE bmesh in local space with the part's pos as BASE point (footprint
 # centre, z = 0 at ground contact; trees keep the trunk foot at the origin).
@@ -1071,7 +1071,7 @@ def set_smoothing(obj, mode, angle_deg=30.0):
     return mode
 
 
-# ─────────────────────────── procedural materials (1.96.0) ──────────────────
+# ─────────────────────────── procedural materials (1.97.0) ──────────────────
 # Each material FAMILY gets a real shader graph instead of a flat Principled:
 # wood grain, stone / concrete / brick breakup, brushed metal, edge-worn paint,
 # leather / fabric micro-bump, glass transmission, energy pulse, foliage
@@ -1484,7 +1484,7 @@ def principled(mat_name, m):
             mat.surface_render_method = "BLENDED"
         except Exception:
             pass
-    # 1.96.0 family shader graph (procedural textures) unless the spec says flat.
+    # 1.97.0 family shader graph (procedural textures) unless the spec says flat.
     # Blender-only: Base Color keeps the flat colour as default_value, which is what
     # the Studio importer reads; blender_asset_bake turns the graph into PNGs.
     tex_mode = str(m.get("texture") or "procedural")
@@ -1727,7 +1727,7 @@ def build_asset(spec):
         a.matrix_parent_inverse = Matrix.Identity(4)
         attachments.append(a.name)
     # leave the whole asset selected (smart_project left only the last organic
-    # part selected, so a bare blender_send_to_studio sent one part) - 1.96.0
+    # part selected, so a bare blender_send_to_studio sent one part) - 1.97.0
     try:
         for o in bpy.context.view_layer.objects:
             try:
@@ -2043,7 +2043,7 @@ def inspect_asset(name, views, size):
     return {"ok": bool(good), "asset": name, "renders": renders, "render_files": [r["path"] for r in good], "dims_m": m["dims"], "total_tris": m["total_tris"], "checklist": ["silhouette readable in front / side / top?", "primary > secondary > tertiary mass hierarchy?", "bevels visible but not mushy at this distance?", "materials separate (metal / wood / glass / emissive) without reading as coloured plastic?", "any part floating, intersecting or hidden?"], "note": "Preview rig lived in Total_Inspect and was removed; the asset collection is untouched."}
 
 
-# ─────────────────────────── texture baking (1.96.0) ────────────────────────
+# ─────────────────────────── texture baking (1.97.0) ────────────────────────
 # Cycles bakes the procedural graphs into PNGs per material (base colour,
 # roughness, metallic, normal, emission) in <workspace>/total_textures. Local
 # files only: Roblox needs them uploaded by the user as image assets before a
