@@ -81,7 +81,7 @@ ok("DailyServer persists through a DataStore (pcall-guarded, memory fallback) + 
 ok("embedded Luau has no JS template leftovers (${ or `)", Object.values(LUA).every((src) => !src.includes("${") && !src.includes("`")));
 
 // ── every screen kind builds ─────────────────────────────────────────────────
-ok("11 screen kinds", S.DESIGN_SCREENS.length === 11 && ["main_menu", "hud", "shop", "inventory", "settings", "leaderboard", "daily_rewards", "quest_log", "loading", "dialog", "notification_stack"].every((k) => S.DESIGN_SCREENS.includes(k)));
+ok("12 screen kinds (ability_bar added in 1.98.0)", S.DESIGN_SCREENS.length === 12 && ["main_menu", "hud", "shop", "inventory", "settings", "leaderboard", "daily_rewards", "quest_log", "loading", "dialog", "notification_stack", "ability_bar"].every((k) => S.DESIGN_SCREENS.includes(k)));
 for (const kind of S.DESIGN_SCREENS) {
   const r = S.buildLuau("ui_screen_generate", { kind, title: "T", items: ["A", "B"], buttons: ["Play"] });
   ok("ui_screen_generate " + kind + " generates Luau with the kit header", !r.err && r.code.includes("local function kit()") && r.code.includes("buildScreen(") && r.code.includes("pcall(function()"), r.err);
@@ -114,7 +114,7 @@ ok("feature help has a 'design' topic", /design:\s*\{/.test(mainSrc) || /"design
 ok("creation mandate teaches the DESIGN workflow (tokens -> screen -> audit)", configSrc.includes("DESIGN MANDATE") && configSrc.includes("design_tokens_set") && configSrc.includes("ui_screen_generate") && configSrc.includes("ui_audit") && configSrc.includes("ui_from_spec"));
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README documents the design pack", readme.includes("ui_screen_generate") && readme.includes("design_tokens_set") && readme.includes("1.29.0"));
-ok("manifest version is 1.97.0", manifest.version === "1.97.0", manifest.version);
+ok("manifest version is 1.98.0", manifest.version === "1.98.0", manifest.version);
 
 // ── ChatGPT catalogue line budget ────────────────────────────────────────────
 const CATALOG_MAX = 560;

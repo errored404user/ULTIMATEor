@@ -54,6 +54,10 @@ PROGRAMS = {
     "loading": ["ui_screen_generate", {"kind": "loading", "title": "Blade Realms", "tips": ["a", "b"]}],
     "dialog": ["ui_screen_generate", {"kind": "dialog", "speaker": "Guard", "text": "Halt!", "choices": ["Yes", "No", "Bye"]}],
     "notify": ["ui_screen_generate", {"kind": "notification_stack"}],
+    "ability": ["ui_screen_generate", {"kind": "ability_bar", "abilities": [{"name": "Fireball", "key": "Q", "cooldown": 6, "sequence": "Fireball"}, {"name": "Dash", "key": "Shift", "cooldown": 3}, "Shield"]}],
+    "ability_bad": ["ui_screen_generate", {"kind": "ability_bar", "abilities": [], "replace": False}],
+    "sfx_install": ["sfx_library_install", {}],
+    "ability_dmg": ["ui_screen_generate", {"kind": "ability_bar", "name": "MeleeBar", "abilities": [{"name": "Slash", "key": "E", "cooldown": 1, "damage": 20, "range": 8}, {"name": "Taunt", "key": "T", "cooldown": 1}], "replace": True}],
     "from_spec": ["ui_from_spec", {"name": "Custom", "open_key": "M", "spec": {"children": [
         {"kind": "Window", "name": "Win", "title": "Custom", "size": [600, 400], "start_hidden": True, "children": [
             {"kind": "Tabs", "name": "T", "tabs": ["One", "Two"], "size": ["fill", "fill"], "pages": [
@@ -381,6 +385,109 @@ M.waits = 0  # the leaderboard poll loop above deliberately spent the main-threa
 resL = L.eval("function(M,s) local okR, err = pcall(M.runScript, s, true) return {okR, err} end")(M, loadingScript)
 okL, errL = resL[1], resL[2]
 ok("Total_Loading runs end-to-end (preload, progress, fade, destroy)", okL and pgui.FindFirstChild(pgui, "LoadingScreen") is None, errL)
+
+# ───────────────────────── 8. 1.98.0: ability bar + button hotkeys ─────────────────────────
+M.waits = 0
+r = run("ability")
+abar = SG().FindFirstChild(SG(), "AbilityBar")
+ok("ui_screen_generate ability_bar builds StarterGui.AbilityBar + Total_AbilityClient + Total_AbilityServer", r.get("ok") and abar is not None and abar.FindFirstChild(abar, "Total_AbilityClient") is not None and SSS.FindFirstChild(SSS, "Total_AbilityServer") is not None, r)
+aslots = [d for d in abar.GetDescendants(abar).values() if d.GetAttribute(d, "Total_Ability")] if abar else []
+ok("  3 ability slots carry Total_Ability / Total_Hotkey (Q, Shift, R default) / Total_Cooldown and the cast action", len(aslots) == 3 and [x.GetAttribute(x, "Total_Hotkey") for x in aslots] == ["Q", "Shift", "R"] and all(x.GetAttribute(x, "Total_Action") == "remote:Total_Ability_Cast" for x in aslots) and aslots[0].GetAttribute(aslots[0], "Total_Cooldown") == 6, [(x.GetAttribute(x, "Total_Hotkey"), x.GetAttribute(x, "Total_Action")) for x in aslots])
+ok("  remotes Total_Ability_Cast + Total_Ability_State created", remotes.FindFirstChild(remotes, "Total_Ability_Cast") is not None and remotes.FindFirstChild(remotes, "Total_Ability_State") is not None)
+srvSrc = SSS.FindFirstChild(SSS, "Total_AbilityServer").Source
+ok("  server config table lists the abilities with cooldowns + sequence hook", 'Fireball = { cooldown = 6, sequence = "Fireball" }' in srvSrc and "Dash = { cooldown = 3 }" in srvSrc and "Shield = { cooldown = 10 }" in srvSrc, srvSrc[:400])
+# client side
+pab, ran, errs = clone_run(M, abar, pgui)
+ok("  AbilityBar LocalScripts run on a client (controller + ability client)", ran == 2 and len(list(errs.values())) == 0, list(errs.values()))
+pslot = [d for d in pab.GetDescendants(pab).values() if d.GetAttribute(d, "Total_Ability") == "Fireball"][0]
+ok("  client decorates each slot with Cooldown overlay (hidden), CdText and AbilityName", pslot.FindFirstChild(pslot, "Cooldown") is not None and pslot.FindFirstChild(pslot, "Cooldown").Visible is False and pslot.FindFirstChild(pslot, "CdText") is not None and pslot.FindFirstChild(pslot, "AbilityName").Text == "Fireball")
+# hotkey Q -> the controller fires the slot's action exactly like a click
+before = len(list(M.fired.values()))
+UIS.InputBegan.Fire(UIS.InputBegan, py_to_lua({"KeyCode": {"Name": "Q"}, "UserInputType": {"Name": "Keyboard"}}), False)
+fired = list(M.fired.values())
+last = lua_to_py(fired[-1]) if len(fired) > before else None
+ok("  hotkey Q fires Total_Ability_Cast {item=Fireball} through the controller", last is not None and last[0] == "Total_Ability_Cast" and last[1]["item"] == "Fireball", last)
+before = len(list(M.fired.values()))
+UIS.InputBegan.Fire(UIS.InputBegan, py_to_lua({"KeyCode": {"Name": "Q"}, "UserInputType": {"Name": "Keyboard"}}), True)
+ok("  a key the game already processed (chat / textbox) is ignored", len(list(M.fired.values())) == before)
+# server side: validated cooldown, answers the client, second cast refused
+M.runScript(SSS.FindFirstChild(SSS, "Total_AbilityServer"), False)
+castR = remotes.FindFirstChild(remotes, "Total_Ability_Cast")
+before = len(list(M.fired.values()))
+castR.OnServerEvent.Fire(castR.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Fireball"}))
+dead = [lua_to_py(f) for f in list(M.fired.values())[before:]]
+ok("  Total_AbilityServer: a player without a living character is refused", len(dead) == 1 and dead[0][2]["ok"] is False and "cannot cast" in dead[0][2]["message"], dead)
+M.fakePlayer.Character = M.buildRig(None, "Tester")
+before = len(list(M.fired.values()))
+castR.OnServerEvent.Fire(castR.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Fireball"}))
+castR.OnServerEvent.Fire(castR.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Fireball"}))
+castR.OnServerEvent.Fire(castR.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Nope"}))
+answers = [lua_to_py(f) for f in list(M.fired.values())[before:] if f[1] == "Total_Ability_State"]  # script.Casted also fires (with the player Instance)
+ok("  Total_AbilityServer: script.Casted fired once for the accepted cast (gameplay hook)", sum(1 for f in list(M.fired.values())[before:] if f[1] == "Casted") == 1)
+ok("  Total_AbilityServer: first cast ok (cooldown 6), identical second cast refused 'on cooldown', unknown ability refused", len(answers) == 3 and answers[0][2]["ok"] is True and answers[0][2]["cooldown"] == 6 and answers[1][2]["ok"] is False and "cooldown" in answers[1][2]["message"] and answers[2][2]["ok"] is False and answers[2][2]["message"] == "Unknown ability", answers)
+# client applies the server state: sweep visible + slot disabled, then finished -> re-enabled
+stateR = remotes.FindFirstChild(remotes, "Total_Ability_State")
+stateR.OnClientEvent.Fire(stateR.OnClientEvent, py_to_lua({"ability": "Fireball", "ok": True, "cooldown": 6, "remaining": 6}))
+ov = pslot.FindFirstChild(pslot, "Cooldown")
+ok("  client: state event starts the sweep (overlay visible, full height, slot disabled)", ov.Visible is True and ov.Size.Y.Scale > 0.95 and pslot.GetAttribute(pslot, "Total_Disabled") is True, (ov.Visible, ov.Size.Y.Scale))
+stateR.OnClientEvent.Fire(stateR.OnClientEvent, py_to_lua({"ability": "Fireball", "ok": True, "cooldown": 6, "remaining": 0}))
+ok("  client: remaining 0 clears the sweep and re-enables the slot", ov.Visible is False and pslot.GetAttribute(pslot, "Total_Disabled") is None, (ov.Visible, pslot.GetAttribute(pslot, "Total_Disabled")))
+# ── §9 (1.98.0) server hit detection: damage/range -> frontal cone -> Humanoid:TakeDamage (no combat blueprint installed) ──
+r = run("ability_dmg")
+ok("ability_bar with damage/range generates (MeleeBar)", r.get("ok"), r)
+srvSrc = SSS.FindFirstChild(SSS, "Total_AbilityServer").Source
+ok("  server table carries damage + range; Taunt has no damage entry", "Slash = { cooldown = 1, damage = 20, range = 8 }" in srvSrc and "Taunt = { cooldown = 1 }" in srvSrc, srvSrc[:600])
+ok("  hit detection reuses Total_Systems.Combat.Service when installed, else TakeDamage only when damage is set", "Total_Systems" in srvSrc and "Combat.Damage(model, def.damage, player, key)" in srvSrc and 'if def.damage == nil then' in srvSrc)
+L.execute("""
+local function dummy(name, x, z)
+    local m = Instance.new('Model') m.Name = name m.Parent = workspace
+    local root = Instance.new('Part') root.Name = 'HumanoidRootPart' root.CFrame = CFrame.new(x, 3, z) root.Parent = m
+    local hum = Instance.new('Humanoid') hum.Health = 100 hum.MaxHealth = 100 hum.Parent = m
+    m.PrimaryPart = root
+    return m
+end
+dummy('InFront', 0, -4)   -- 4 studs ahead (rig looks down -Z)
+dummy('Behind', 0, 6)     -- behind the caster
+dummy('FarAway', 0, -30)  -- out of range
+""")
+M.delayed = L.table()
+M.fakePlayer.Character.Parent = L.eval("workspace")
+M.runScript(SSS.FindFirstChild(SSS, "Total_AbilityServer"), False)
+castR = remotes.FindFirstChild(remotes, "Total_Ability_Cast")
+before = len(list(M.fired.values()))
+castR.OnServerEvent.Fire(castR.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Slash"}))
+# the first (Fireball/Dash/Shield) server script from §8 is still connected in this simulator and answers "Unknown ability" - only the new one matters
+answers = [lua_to_py(f) for f in list(M.fired.values())[before:] if f[1] == "Total_Ability_State" and lua_to_py(f)[2].get("ok") is True]
+ok("  Slash accepted by the server", len(answers) == 1 and answers[0][2]["cooldown"] == 1, answers)
+ok("  without a sequence the hit is scheduled after hit_delay (task.delay), not applied instantly", len(list(M.delayed.values())) == 1 and L.eval("workspace.InFront.Humanoid.Health") == 100)
+for d in list(M.delayed.values()):
+    d.f(*list(d.args.values()))
+hp = lambda n: L.eval("workspace." + n + ".Humanoid.Health")  # noqa: E731
+ok("  only the dummy in the frontal cone and in range took 20 damage (Behind + FarAway untouched)", hp("InFront") == 80 and hp("Behind") == 100 and hp("FarAway") == 100, (hp("InFront"), hp("Behind"), hp("FarAway")))
+M.delayed = L.table()
+castR.OnServerEvent.Fire(castR.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Taunt"}))
+for d in list(M.delayed.values()):
+    d.f(*list(d.args.values()))
+ok("  an ability without damage never touches Humanoids", hp("InFront") == 80)
+
+# UIKit.setLoading busy state
+K2 = M.runModule(design.FindFirstChild(design, "UIKit"))
+loadBtn = pwin.FindFirstChild(pwin, "Close", True)
+K2.setLoading(loadBtn, True)
+ok("UIKit.setLoading(btn, true) disables the button and animates its label", loadBtn.GetAttribute(loadBtn, "Total_Disabled") is True and loadBtn.GetAttribute(loadBtn, "Total_Loading") is True)
+K2.setLoading(loadBtn, False)
+ok("UIKit.setLoading(btn, false) restores text and enables it", loadBtn.GetAttribute(loadBtn, "Total_Loading") is None and loadBtn.GetAttribute(loadBtn, "Total_Disabled") is None)
+# UI sounds come from TotalSFX once it is installed (tokens carry no sound ids by default)
+played0 = M.soundsPlayed or 0
+loadBtn.Activated.Fire(loadBtn.Activated)
+ok("button click without TotalSFX installed plays nothing (no fabricated sound id)", (M.soundsPlayed or 0) == played0)
+r = run("sfx_install")
+ok("sfx_library_install (for the UI sound bridge)", r.get("ok"), r)
+played0 = M.soundsPlayed or 0
+loadBtn.Activated.Fire(loadBtn.Activated)
+ok("button click with TotalSFX installed plays the ui_click event through UIKit.sfx", (M.soundsPlayed or 0) == played0 + 1, (M.soundsPlayed, played0))
+r = run("ability_bad")
+ok("ability_bar with no abilities falls back to the 4 defaults (Strike/Dash/Shield/Ultimate)", r.get("ok") and r["data"]["count"] >= 4, r)
 
 failed = results.count(False)
 print("\n%d passed, %d failed" % (len(results) - failed, failed))

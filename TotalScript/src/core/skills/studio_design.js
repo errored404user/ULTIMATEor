@@ -280,8 +280,33 @@ function UIKit.layout(inst, direction, gap, hAlign, vAlign)
 	return l
 end
 
-local function sound(id, volume)
+-- 1.98.0: when the tokens carry no sound id, UI feedback comes from the TotalSFX
+-- event library when it is installed (ui_click / ui_toggle / ui_confirm / ui_error),
+-- so buttons built by the design pack and sounds built by sfx_library_install agree.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local sfxLib = nil
+local function sfx(event, volume)
+	if not sfxLib then
+		local m = ReplicatedStorage:FindFirstChild("TotalSFX")
+		if not (m and m:IsA("ModuleScript")) then
+			return false -- not installed (yet): cheap lookup, re-checked next time
+		end
+		local okR, lib = pcall(require, m)
+		if not (okR and type(lib) == "table" and type(lib.play) == "function") then
+			return false
+		end
+		sfxLib = lib
+	end
+	local okP, s = pcall(sfxLib.play, event, nil, { volume = volume })
+	return okP and s ~= nil
+end
+UIKit.sfx = sfx
+
+local function sound(id, volume, event)
 	if not id or id == "" then
+		if event then
+			sfx(event, volume)
+		end
 		return
 	end
 	local s = Instance.new("Sound")
@@ -357,7 +382,7 @@ function UIKit.wireButton(btn)
 	end)
 	btn.MouseButton1Up:Connect(restore)
 	btn.Activated:Connect(function()
-		sound(t.sounds.click, 0.5)
+		sound(t.sounds.click, 0.5, btn:GetAttribute("Total_Toggle") ~= nil and "ui_toggle" or "ui_click")
 	end)
 	btn.SelectionGained:Connect(function()
 		tween(scale, { Scale = 1.04 }, t.motion.fast)
@@ -370,6 +395,42 @@ function UIKit.setDisabled(btn, disabled)
 	btn.Active = not disabled
 	btn.AutoButtonColor = false
 	tween(btn, { BackgroundTransparency = disabled and 0.5 or 0 }, T().motion.fast)
+end
+
+-- Loading / busy state: disables the button, swaps its label for an animated
+-- ellipsis and restores the original text when cleared. Safe to call twice.
+function UIKit.setLoading(btn, loading)
+	local label = btn:FindFirstChild("Label") or (btn:IsA("TextButton") and btn or nil)
+	if loading then
+		if btn:GetAttribute("Total_Loading") then
+			return
+		end
+		btn:SetAttribute("Total_Loading", true)
+		if label then
+			btn:SetAttribute("Total_LoadingText", label.Text)
+		end
+		UIKit.setDisabled(btn, true)
+		task.spawn(function()
+			local dots = 0
+			while btn.Parent and btn:GetAttribute("Total_Loading") do
+				dots = dots % 3 + 1
+				if label then
+					label.Text = string.rep(".", dots)
+				end
+				task.wait(0.35)
+			end
+		end)
+	else
+		if not btn:GetAttribute("Total_Loading") then
+			return
+		end
+		btn:SetAttribute("Total_Loading", nil)
+		if label then
+			label.Text = btn:GetAttribute("Total_LoadingText") or label.Text
+		end
+		btn:SetAttribute("Total_LoadingText", nil)
+		UIKit.setDisabled(btn, false)
+	end
 end
 
 function UIKit.selectionCursor()
@@ -639,6 +700,9 @@ function UIKit.Button(props)
 	end
 	if props.item then
 		b:SetAttribute("Total_Item", props.item)
+	end
+	if props.hotkey then
+		b:SetAttribute("Total_Hotkey", tostring(props.hotkey))
 	end
 	b.LayoutOrder = props.order or 0
 	b.ZIndex = props.z or 1
@@ -977,6 +1041,7 @@ function UIKit.Slot(props)
 	end
 	if props.hotkey then
 		UIKit.Label({ name = "Hotkey", text = tostring(props.hotkey), role = "caption", muted = true, size = UDim2.new(0, 20, 0, 14), position = UDim2.new(0, 0, 0, 0), parent = slot, maxSize = 12 })
+		slot:SetAttribute("Total_Hotkey", tostring(props.hotkey))
 	end
 	slot.Parent = props.parent
 	UIKit.wireButton(slot)
@@ -1476,6 +1541,40 @@ for _, w in ipairs(windows()) do
 	end
 end
 
+-- Button hotkeys: any GuiButton with a Total_Hotkey attribute ("1".."9", "0", "Q", "E",
+-- "Space", "LeftShift", "F", ...) fires its Total_Action when that key is pressed while the
+-- button is visible and enabled - the same path a click takes, so the hotkey label is honest.
+local HOTKEY_ALIASES = { ["1"] = "One", ["2"] = "Two", ["3"] = "Three", ["4"] = "Four", ["5"] = "Five", ["6"] = "Six", ["7"] = "Seven", ["8"] = "Eight", ["9"] = "Nine", ["0"] = "Zero", SPACE = "Space", SHIFT = "LeftShift", CTRL = "LeftControl", ALT = "LeftAlt", TAB = "Tab", ESC = "Escape", ENTER = "Return" }
+local function hotkeyName(v)
+	local s = tostring(v or "")
+	return HOTKEY_ALIASES[string.upper(s)] or s
+end
+local function isShown(inst)
+	local n = inst
+	while n and n ~= gui do
+		if n:IsA("GuiObject") and not n.Visible then
+			return false
+		end
+		n = n.Parent
+	end
+	return n == gui and gui.Enabled
+end
+local function pressHotkey(btn)
+	if btn:GetAttribute("Total_Disabled") or not isShown(btn) then
+		return false
+	end
+	local scale = btn:FindFirstChild("Total_PressScale")
+	if scale then
+		UIKit.tween(scale, { Scale = 0.94 }, 0.06)
+		task.delay(0.08, function()
+			if scale.Parent then
+				UIKit.tween(scale, { Scale = 1 }, 0.12)
+			end
+		end)
+	end
+	runAction(btn)
+	return true
+end
 local keyName = gui:GetAttribute("Total_OpenKey")
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then
@@ -1485,7 +1584,17 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		for _, w in ipairs(windows()) do
 			UIKit.setWindowOpen(w, not w.Visible)
 		end
-	elseif input.KeyCode == Enum.KeyCode.ButtonB then
+	elseif input.UserInputType.Name == "Keyboard" and input.KeyCode.Name ~= "Unknown" then
+		local pressed = input.KeyCode.Name
+		for _, d in ipairs(gui:GetDescendants()) do
+			if d:IsA("GuiButton") and d:GetAttribute("Total_Hotkey") and hotkeyName(d:GetAttribute("Total_Hotkey")) == pressed then
+				if pressHotkey(d) then
+					break
+				end
+			end
+		end
+	end
+	if input.KeyCode == Enum.KeyCode.ButtonB then
 		for _, w in ipairs(windows()) do
 			if w.Visible and w:GetAttribute("Total_StartHidden") then
 				UIKit.setWindowOpen(w, false)
@@ -2100,7 +2209,7 @@ player:GetAttributeChangedSignal("DailyDay"):Connect(paint)
     a = a || {};
     const title = a.title || "";
     const currency = String(a.currency || "Coins");
-    const name = ident(a.name || ({ main_menu: "MainMenu", hud: "HUD", shop: "Shop", inventory: "Inventory", settings: "Settings", leaderboard: "Leaderboard", daily_rewards: "DailyRewards", quest_log: "QuestLog", loading: "LoadingScreen", dialog: "Dialog", notification_stack: "Notifications" }[kind] || "Screen"));
+    const name = ident(a.name || ({ main_menu: "MainMenu", hud: "HUD", shop: "Shop", inventory: "Inventory", settings: "Settings", leaderboard: "Leaderboard", daily_rewards: "DailyRewards", quest_log: "QuestLog", loading: "LoadingScreen", dialog: "Dialog", notification_stack: "Notifications", ability_bar: "AbilityBar" }[kind] || "Screen"));
     const extras = { scripts: [], server: null, replicatedFirst: false, remotes: [] };
     let spec = null;
     if (kind === "shop") {
@@ -2262,9 +2371,358 @@ player:GetAttributeChangedSignal("DailyDay"):Connect(paint)
       spec = { name, children: [{ kind: "Toasts", name: "Toasts", size: [340, 400], anchor: a.anchor || "top-right", margin: [16, 16], aspect: false }] };
       extras.scripts.push({ name: "Total_NotifyFeed", source: NOTIFY_FEED_SRC });
       extras.remotes = ["Total_Notify"];
+    } else if (kind === "ability_bar") {
+      const abilities = normAbilities(a.abilities || a.items);
+      const size = Math.max(48, Math.min(96, Number(a.slot_size) || 68));
+      spec = { name, children: [
+        { kind: "Row", name: "AbilityBar", size: [abilities.length * size + (abilities.length - 1) * 10, size], anchor: a.anchor || "bottom", margin: [0, Number(a.margin) || 24], gap: 10, align: "center", aspect: false, children: abilities.map((ab, i) => ({ kind: "Slot", name: ab.key, index: i + 1, hotkey: ab.hotkey, icon: ab.icon, item: ab.name, size: [size, size], action: "remote:Total_Ability_Cast", attributes: { Total_Ability: ab.name, Total_AbilityLabel: ab.label, Total_Cooldown: ab.cooldown } })) },
+        { kind: "Toasts", name: "Toasts", size: [340, 200], anchor: "bottom-right", margin: [16, 16], aspect: false },
+      ] };
+      extras.scripts.push({ name: "Total_AbilityClient", source: ABILITY_CLIENT_SRC });
+      extras.remotes = ["Total_Ability_Cast", "Total_Ability_State"];
+      const table = "{\n" + abilities.map((ab) => "\t" + ab.key + " = { cooldown = " + ab.cooldown + (ab.sequence ? ", sequence = " + JSON.stringify(ab.sequence) : "") + (ab.damage != null ? ", damage = " + ab.damage : "") + (ab.range != null ? ", range = " + ab.range : "") + " }, -- " + ab.label + " [" + ab.hotkey + "]").join("\n") + "\n}";
+      extras.server = { name: "Total_AbilityServer", source: ABILITY_SERVER_SRC.replace("__ABILITIES__", table) };
+      extras.abilities = abilities;
     }
     return { spec, extras };
   }
+
+  // 1.98.0 - ability bar runtime. Cooldowns are SERVER-authoritative: the slot's
+  // Total_Action (remote:Total_Ability_Cast) asks, the server answers on
+  // Total_Ability_State and only then the sweep starts. One Heartbeat loop for
+  // every running cooldown, disconnected when the screen goes away.
+  const ABILITY_CLIENT_SRC = `-- Total_AbilityClient (generated). Cooldown sweeps + ready flashes for ability slots (Total_Ability attribute).
+-- Server -> client: ReplicatedStorage.Remotes.Total_Ability_State:FireClient(player, {ability=, cooldown=, remaining=, ok=, message=})
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local gui = script.Parent
+while gui and not gui:IsA("LayerCollector") do
+	gui = gui.Parent
+end
+if not gui then
+	return
+end
+local design = ReplicatedStorage:WaitForChild("Total_Design", 10)
+local UIKit = design and require(design:WaitForChild("UIKit"))
+if not UIKit then
+	warn("[Total_AbilityClient] ReplicatedStorage.Total_Design.UIKit missing - run design_kit_install")
+	return
+end
+local t = UIKit.tokens()
+
+local slots = {}
+local function slotFor(name)
+	return slots[string.lower(tostring(name or ""))]
+end
+local function decorate(slot)
+	local ability = slot:GetAttribute("Total_Ability")
+	if not ability or slots[string.lower(ability)] then
+		return
+	end
+	local overlay = slot:FindFirstChild("Cooldown")
+	if not overlay then
+		overlay = Instance.new("Frame")
+		overlay.Name = "Cooldown"
+		overlay.BackgroundColor3 = Color3.new(0, 0, 0)
+		overlay.BackgroundTransparency = 0.55
+		overlay.BorderSizePixel = 0
+		overlay.AnchorPoint = Vector2.new(0, 1)
+		overlay.Position = UDim2.new(0, 0, 1, 0)
+		overlay.Size = UDim2.new(1, 0, 0, 0)
+		overlay.Visible = false
+		overlay.ZIndex = slot.ZIndex + 3
+		UIKit.corner(overlay, t.radius.sm)
+		overlay.Parent = slot
+	end
+	local cd = slot:FindFirstChild("CdText")
+	if not cd then
+		cd = UIKit.Label({ name = "CdText", text = "", role = "h2", bold = true, align = Enum.TextXAlignment.Center, size = UDim2.new(1, 0, 1, 0), parent = slot, maxSize = 26 })
+		cd.TextStrokeTransparency = 0.4
+		cd.ZIndex = slot.ZIndex + 4
+		cd.Visible = false
+	end
+	if not slot:FindFirstChild("AbilityName") then
+		local nm = UIKit.Label({ name = "AbilityName", text = tostring(slot:GetAttribute("Total_AbilityLabel") or ability), role = "caption", align = Enum.TextXAlignment.Center, size = UDim2.new(1, 0, 0, 14), position = UDim2.new(0, 0, 1, -14), parent = slot, maxSize = 11 })
+		nm.TextStrokeTransparency = 0.5
+		nm.ZIndex = slot.ZIndex + 2
+	end
+	slots[string.lower(ability)] = { slot = slot, overlay = overlay, cd = cd, until_ = 0, duration = 0 }
+end
+
+local running = {}
+local heartbeat = nil
+local function stopLoop()
+	if heartbeat then
+		heartbeat:Disconnect()
+		heartbeat = nil
+	end
+end
+local function step()
+	local now = os.clock()
+	local alive = 0
+	for key, rec in pairs(running) do
+		local remaining = rec.until_ - now
+		if remaining <= 0 or not rec.slot.Parent then
+			running[key] = nil
+			rec.overlay.Visible = false
+			rec.cd.Visible = false
+			if rec.slot.Parent then
+				UIKit.setDisabled(rec.slot, false)
+				local stroke = rec.slot:FindFirstChildOfClass("UIStroke")
+				if stroke then
+					local base = stroke.Color
+					stroke.Color = t.palette.Primary
+					UIKit.tween(stroke, { Color = base }, 0.5)
+				end
+			end
+		else
+			alive = alive + 1
+			rec.overlay.Size = UDim2.new(1, 0, math.clamp(remaining / math.max(rec.duration, 0.01), 0, 1), 0)
+			rec.cd.Text = remaining >= 10 and tostring(math.ceil(remaining)) or string.format("%.1f", remaining)
+		end
+	end
+	if alive == 0 then
+		stopLoop()
+	end
+end
+local function startCooldown(rec, duration, remaining)
+	duration = math.max(tonumber(duration) or 0, 0.05)
+	remaining = math.clamp(tonumber(remaining) or duration, 0, duration)
+	rec.duration = duration
+	rec.until_ = os.clock() + remaining
+	rec.overlay.Visible = true
+	rec.cd.Visible = true
+	UIKit.setDisabled(rec.slot, true)
+	running[rec.slot] = rec
+	if not heartbeat then
+		heartbeat = RunService.Heartbeat:Connect(step)
+	end
+	step()
+end
+
+for _, d in ipairs(gui:GetDescendants()) do
+	if d:IsA("GuiButton") then
+		decorate(d)
+	end
+end
+gui.DescendantAdded:Connect(function(d)
+	if d:IsA("GuiButton") then
+		task.defer(decorate, d)
+	end
+end)
+
+local remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
+local state = remotes and remotes:WaitForChild("Total_Ability_State", 10)
+if state and state:IsA("RemoteEvent") then
+	state.OnClientEvent:Connect(function(payload)
+		if type(payload) ~= "table" then
+			return
+		end
+		local rec = slotFor(payload.ability)
+		if payload.ok == false then
+			local stack = gui:FindFirstChild("Toasts", true)
+			if stack and payload.message then
+				UIKit.Toast({ parent = stack, text = tostring(payload.message), kind = "error" })
+			end
+			if rec and payload.remaining and payload.cooldown then
+				startCooldown(rec, payload.cooldown, payload.remaining)
+			end
+			return
+		end
+		if rec and payload.cooldown then
+			startCooldown(rec, payload.cooldown, payload.remaining)
+		end
+	end)
+else
+	warn("[Total_AbilityClient] ReplicatedStorage.Remotes.Total_Ability_State missing - cooldowns will not display")
+end
+gui.Destroying:Connect(stopLoop)
+`;
+
+  // Server half: validates every cast (known ability, alive character, cooldown
+  // not elapsed), answers the client, then hands off to gameplay - a TotalSequence
+  // of the same name when one exists, plus a Casted BindableEvent for custom code.
+  // It deliberately does NOT deal damage: that stays with the combat blueprint /
+  // the sequence's "hit" signal, so there is one damage path, not two.
+  const ABILITY_SERVER_SRC = `-- Total_AbilityServer (generated). Server-authoritative ability casts + cooldowns.
+-- Edit ABILITIES below (cooldown seconds, optional sequence name). Hook gameplay with
+--   script.Casted.Event:Connect(function(player, ability, def) ... end)
+-- Per ability: cooldown (s), sequence (TotalSequences module name), damage (nil = none), range (studs, 8), cone (dot, 0.3), hit_delay (s, no-sequence casts).
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
+
+local ABILITIES = __ABILITIES__
+
+local remotes = ReplicatedStorage:FindFirstChild("Remotes") or Instance.new("Folder")
+remotes.Name = "Remotes"
+remotes.Parent = ReplicatedStorage
+local function remote(name)
+	local r = remotes:FindFirstChild(name)
+	if not r then
+		r = Instance.new("RemoteEvent")
+		r.Name = name
+		r.Parent = remotes
+	end
+	return r
+end
+local cast = remote("Total_Ability_Cast")
+local state = remote("Total_Ability_State")
+local casted = script:FindFirstChild("Casted") or Instance.new("BindableEvent")
+casted.Name = "Casted"
+casted.Parent = script
+
+local cooldowns = {}
+Players.PlayerRemoving:Connect(function(player)
+	cooldowns[player] = nil
+end)
+
+local function lookup(name)
+	name = string.lower(tostring(name or ""))
+	for key, def in pairs(ABILITIES) do
+		if string.lower(key) == name then
+			return key, def
+		end
+	end
+	return nil
+end
+
+local sequences = ReplicatedStorage:FindFirstChild("TotalSequences")
+local runner = sequences and sequences:FindFirstChild("SequenceRunner")
+local Runner = nil
+if runner then
+	local okR, lib = pcall(require, runner)
+	if okR then
+		Runner = lib
+	end
+end
+
+-- Hit detection + damage. Targets: living Humanoid models (not the caster) within def.range studs
+-- and a frontal cone. Damage goes through the combat blueprint (Total_Systems.Combat.Damage - one
+-- damage path, its rules apply) when it is installed; otherwise Humanoid:TakeDamage, and only when
+-- def.damage is set. Nothing is applied when def.damage is nil.
+local Combat = nil
+do
+	-- blueprint_install combat -> ServerScriptService.Total_Systems.Combat.Service (ModuleScript)
+	local systems = game:GetService("ServerScriptService"):FindFirstChild("Total_Systems")
+	local combatFolder = systems and systems:FindFirstChild("Combat")
+	local mod = combatFolder and combatFolder:FindFirstChild("Service")
+	if mod and mod:IsA("ModuleScript") then
+		local okC, lib = pcall(require, mod)
+		if okC and type(lib) == "table" and type(lib.Damage) == "function" then
+			Combat = lib
+		end
+	end
+end
+local function targetsInFront(character, range, cone)
+	local root = character and (character.PrimaryPart or character:FindFirstChild("HumanoidRootPart"))
+	if not root then
+		return {}
+	end
+	local origin = root.Position
+	local look = root.CFrame.LookVector
+	local out = {}
+	for _, model in ipairs(workspace:GetChildren()) do
+		if model:IsA("Model") and model ~= character then
+			local hum = model:FindFirstChildOfClass("Humanoid")
+			local part = model.PrimaryPart or model:FindFirstChild("HumanoidRootPart")
+			if hum and hum.Health > 0 and part then
+				local d = part.Position - origin
+				local dist = d.Magnitude
+				if dist <= range and (dist < 2 or d.Unit:Dot(look) >= cone) then
+					out[#out + 1] = model
+				end
+			end
+		end
+	end
+	return out
+end
+local function applyHit(player, key, def, character)
+	if def.damage == nil then
+		return 0
+	end
+	local hits = 0
+	for _, model in ipairs(targetsInFront(character, tonumber(def.range) or 8, tonumber(def.cone) or 0.3)) do
+		if Combat then
+			local dealt = Combat.Damage(model, def.damage, player, key)
+			if dealt and dealt > 0 then
+				hits = hits + 1
+			end
+		else
+			local hum = model:FindFirstChildOfClass("Humanoid")
+			hum:TakeDamage(def.damage)
+			hits = hits + 1
+		end
+	end
+	return hits
+end
+
+local pendingHits = {}
+local function onCast(player, key, def, character)
+	local playedSequence = false
+	if def.sequence and Runner and sequences:FindFirstChild(def.sequence) then
+		local okC, err = pcall(function()
+			return Runner.cast(def.sequence, player, { target = nil })
+		end)
+		if okC then
+			playedSequence = true
+			-- the sequence's "hit" signal (server side) decides WHEN the hit lands
+			pendingHits[player] = { key = key, def = def, character = character, at = os.clock() }
+		else
+			warn("[Total_AbilityServer] sequence " .. tostring(def.sequence) .. " failed: " .. tostring(err))
+		end
+	end
+	if not playedSequence then
+		-- no sequence: the hit lands after def.hit_delay seconds (default 0.25 = a swing's anticipation)
+		task.delay(tonumber(def.hit_delay) or 0.25, function()
+			local hum = character.Parent and character:FindFirstChildOfClass("Humanoid")
+			if hum and hum.Health > 0 then -- caster left / died during the wind-up: no hit
+				applyHit(player, key, def, character)
+			end
+		end)
+	end
+	casted:Fire(player, key, def)
+end
+if sequences and sequences:FindFirstChild("Signal") then
+	sequences.Signal.Event:Connect(function(seqName, signalName, value, player)
+		local rec = player and pendingHits[player]
+		if rec and signalName == "hit" and rec.def.sequence == seqName and os.clock() - rec.at < 10 then
+			pendingHits[player] = nil
+			applyHit(player, rec.key, rec.def, rec.character)
+		end
+	end)
+end
+
+cast.OnServerEvent:Connect(function(player, payload)
+	local name = type(payload) == "table" and (payload.item or payload.ability) or payload
+	local key, def = lookup(name)
+	if not key then
+		state:FireClient(player, { ability = tostring(name), ok = false, message = "Unknown ability" })
+		return
+	end
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then
+		state:FireClient(player, { ability = key, ok = false, message = "You cannot cast right now" })
+		return
+	end
+	local now = os.clock()
+	local mine = cooldowns[player]
+	if not mine then
+		mine = {}
+		cooldowns[player] = mine
+	end
+	local readyAt = mine[key] or 0
+	if now < readyAt then
+		state:FireClient(player, { ability = key, ok = false, cooldown = def.cooldown, remaining = readyAt - now, message = key .. " is on cooldown" })
+		return
+	end
+	mine[key] = now + (tonumber(def.cooldown) or 0)
+	state:FireClient(player, { ability = key, ok = true, cooldown = def.cooldown, remaining = def.cooldown })
+	onCast(player, key, def, character)
+end)
+`;
 
   const SETTINGS_STORE_SRC = `-- Total_SettingsStore (generated). Persists every Total_Setting toggle to player attributes (Setting_<name>) and restores them on join.
 local Players = game:GetService("Players")
@@ -2290,7 +2748,17 @@ for _, d in ipairs(gui:GetDescendants()) do
 end
 `;
 
-  const SCREEN_KINDS = ["main_menu", "hud", "shop", "inventory", "settings", "leaderboard", "daily_rewards", "quest_log", "loading", "dialog", "notification_stack"];
+  const SCREEN_KINDS = ["main_menu", "hud", "shop", "inventory", "settings", "leaderboard", "daily_rewards", "quest_log", "loading", "dialog", "notification_stack", "ability_bar"];
+  // 1.98.0: default keys for an ability bar (Q E R F then digits), matching common Roblox combat games.
+  const ABILITY_KEYS = ["Q", "E", "R", "F", "1", "2", "3", "4", "5", "6"];
+  function normAbilities(list) {
+    const src = Array.isArray(list) && list.length ? list : ["Strike", "Dash", "Shield", "Ultimate"];
+    return src.slice(0, 10).map((it, i) => {
+      const o = typeof it === "object" && it ? it : { name: String(it) };
+      const name = String(o.name || o.ability || o.title || "Ability" + (i + 1));
+      return { key: ident(name), name, label: String(o.label || o.title || name), hotkey: String(o.key || o.hotkey || ABILITY_KEYS[i] || ""), cooldown: Math.max(0, Number(o.cooldown ?? o.cd ?? [4, 6, 10, 30][i] ?? 8) || 0), icon: o.icon ? String(o.icon) : "", sequence: o.sequence ? ident(o.sequence) : undefined, damage: Number.isFinite(Number(o.damage)) && o.damage !== "" && o.damage != null ? Number(o.damage) : undefined, range: Number.isFinite(Number(o.range)) && o.range != null ? Number(o.range) : undefined };
+    });
+  }
 
   // ───────────────────────── COMMAND BODIES ─────────────────────────
   const B = {};
@@ -2558,7 +3026,7 @@ end
     { name: "design_tokens_get", description: "Read the active design tokens (palette as hex, font, radius, spacing, kit version) or the defaults when no design system exists yet. Call before designing so new screens match.", params: {} },
     { name: "design_kit_install", description: "Install/refresh the runtime UI kit: ReplicatedStorage.Total_Design.UIKit (Button, IconButton, Panel, Window, Row, Column, Grid, ScrollList, Label, Image, ItemCard, Slot, CurrencyPill, ProgressBar, Toggle, Input, Tabs, Toast, wireButton, bindAll, setWindowOpen, contrast helpers) + Responsive (safe insets, touch targets, text floors) + default Tokens. Idempotent; force=true overwrites user edits. Other commands install it automatically.", params: { force: S("boolean", false) } },
     { name: "ui_from_spec", description: "Build a complete, responsive ScreenGui from a declarative tree - THE way to turn a reference image, Paint sketch or layout description into real UI. Measure the design on a 1280x720 canvas and write nodes in px; the builder converts to scale, adds aspect/size constraints, kit styling (tokens), header/close for Window, and one generic Total_Controller LocalScript (hover/press, open/close tweens, Total_Action buttons, keybind, gamepad). " + SPEC_DOC, params: { spec: S("object", true, "the tree (see description)"), name: S("string", false, "ScreenGui name (overrides spec.name)"), parent: S("string", false, "default StarterGui"), open_key: S("string", false, "Enum.KeyCode name that toggles the windows"), replace: S("boolean", false, "replace an existing ScreenGui of the same name (default true)"), controller: S("boolean", false, "write Total_Controller (default true)") } },
-    { name: "ui_screen_generate", description: "Generate a complete production screen with its runtime scripts in one call: kind = " + SCREEN_KINDS.join("|") + ". shop: window + category tabs + item cards + Total_Shop_Buy RemoteEvent + validated Total_ShopServer (charges leaderstats) + toasts. inventory: slot grid + detail panel + Equip/Drop remotes. hud: currency pills bound to leaderstats, health/XP bars bound to the Humanoid, hotbar, quick buttons that toggle Shop/Inventory/Settings, toast stack. main_menu: backdrop, title, buttons, currency, version. settings: persisted toggles + volume row. leaderboard: live top-10 from leaderstats. daily_rewards: 7 day cards + Total_Daily_Claim RemoteFunction server. quest_log, loading (ReplicatedFirst with preload progress), dialog (typewriter + choices), notification_stack (Total_Notify remote -> toasts). Everything uses the design tokens; edit afterwards with ui_set_* or ui_export_spec -> ui_from_spec.", params: { kind: S("string", true, SCREEN_KINDS.join("|")), name: S("string", false, "ScreenGui name"), title: S("string", false), subtitle: S("string", false), currency: S("string", false, "leaderstats name (default Coins)"), items: S("array", false, "shop/inventory items [{item,title,price,currency,rarity,icon,subtitle,badge}] or names"), tabs: S("array", false, "shop categories"), slots: S("number", false, "inventory slot count (default 20)"), stats: S("array", false, "hud currency stats"), buttons: S("array", false, "main_menu button labels"), toggles: S("array", false, "settings toggle labels"), rewards: S("array", false, "daily reward amounts (7)"), quests: S("array", false, "[{title,progress,reward,description}]"), tips: S("array", false, "loading tips"), speaker: S("string", false, "dialog speaker"), text: S("string", false, "dialog line"), choices: S("array", false, "dialog choices"), portrait: S("string", false, "dialog portrait image"), background_image: S("string", false, "main_menu art"), background_gradient: S("array", false), version: S("string", false), open_key: S("string", false, "toggle key (defaults: shop B, inventory E, settings P, quests Q, daily R)"), start_hidden: S("boolean", false, "windows start closed (default true)"), anchor: S("string", false, "notification_stack corner"), parent: S("string", false), replace: S("boolean", false), overwrite_server: S("boolean", false, "overwrite an existing server Script (default false)") } },
+    { name: "ui_screen_generate", description: "Generate a complete production screen with its runtime scripts in one call: kind = " + SCREEN_KINDS.join("|") + ". shop: window + category tabs + item cards + Total_Shop_Buy RemoteEvent + validated Total_ShopServer (charges leaderstats) + toasts. inventory: slot grid + detail panel + Equip/Drop remotes. hud: currency pills bound to leaderstats, health/XP bars bound to the Humanoid, hotbar, quick buttons that toggle Shop/Inventory/Settings, toast stack. main_menu: backdrop, title, buttons, currency, version. settings: persisted toggles + volume row. leaderboard: live top-10 from leaderstats. daily_rewards: 7 day cards + Total_Daily_Claim RemoteFunction server. quest_log, loading (ReplicatedFirst with preload progress), dialog (typewriter + choices), notification_stack (Total_Notify remote -> toasts). ability_bar (1.98.0): hotkey slots (Q E R F 1-9) + Total_AbilityClient cooldown sweeps + validated Total_AbilityServer (server-authoritative cooldowns, casts a TotalSequence of the same name when one exists, fires script.Casted for gameplay) - pass abilities [{name,key,cooldown,icon,sequence}]. Everything uses the design tokens; edit afterwards with ui_set_* or ui_export_spec -> ui_from_spec.", params: { kind: S("string", true, SCREEN_KINDS.join("|")), name: S("string", false, "ScreenGui name"), title: S("string", false), subtitle: S("string", false), currency: S("string", false, "leaderstats name (default Coins)"), items: S("array", false, "shop/inventory items [{item,title,price,currency,rarity,icon,subtitle,badge}] or names"), tabs: S("array", false, "shop categories"), slots: S("number", false, "inventory slot count (default 20)"), stats: S("array", false, "hud currency stats"), buttons: S("array", false, "main_menu button labels"), toggles: S("array", false, "settings toggle labels"), rewards: S("array", false, "daily reward amounts (7)"), abilities: S("array", false, "ability_bar [{name,key,cooldown,icon,sequence,damage,range}] or names - damage/range enable server hit detection (Combat.Damage when the combat blueprint is installed)"), slot_size: S("number", false, "ability_bar slot px (48-96, default 68)"), quests: S("array", false, "[{title,progress,reward,description}]"), tips: S("array", false, "loading tips"), speaker: S("string", false, "dialog speaker"), text: S("string", false, "dialog line"), choices: S("array", false, "dialog choices"), portrait: S("string", false, "dialog portrait image"), background_image: S("string", false, "main_menu art"), background_gradient: S("array", false), version: S("string", false), open_key: S("string", false, "toggle key (defaults: shop B, inventory E, settings P, quests Q, daily R)"), start_hidden: S("boolean", false, "windows start closed (default true)"), anchor: S("string", false, "notification_stack corner"), parent: S("string", false), replace: S("boolean", false), overwrite_server: S("boolean", false, "overwrite an existing server Script (default false)") } },
     { name: "ui_component_place", description: "Place ONE kit component into an existing GUI (same node schema as ui_from_spec: kind, text, size px, position/anchor, action, variant, children...). Sizes are relative to the parent's current size; parents with a layout ignore position.", params: { kind: S("string", true, "Button|IconButton|Panel|Window|Row|Column|Grid|ScrollList|Label|Title|Image|ItemCard|Slot|CurrencyPill|ProgressBar|Toggle|Input|Tabs|Divider|Spacer|Toasts"), parent: S("string", true, "GuiObject or ScreenGui path"), name: S("string", false), text: S("string", false), size: S("array", false, "[w,h] px"), position: S("array", false, "[x,y] px"), anchor: S("string", false), action: S("string", false), variant: S("string", false), image: S("string", false), value: S("number", false), item: S("string", false), children: S("array", false, "child nodes"), props: S("object", false, "extra node fields (rarity, price, tabs, placeholder, ...)") } },
     { name: "ui_apply_tokens", description: "Restyle an EXISTING GUI tree (any origin) to the design tokens: surfaces by luminance, buttons to Primary with contrast-safe text, labels to Text/TextMuted, fonts, corner radii, strokes, scrollbars. Images are kept unless keep_images=false.", params: { path: S("string", true, "ScreenGui or frame path"), keep_images: S("boolean", false, "default true") } },
     { name: "ui_make_responsive", description: "Make existing UI survive every screen: offset-only roots -> scale sizes (measured on 1280x720), UIAspectRatioConstraint + UISizeConstraint on roots, TextScaled + UITextSizeConstraint on every text, and an Total_Responsive LocalScript (safe insets, 44px touch targets, text floors on phones).", params: { path: S("string", false, "ScreenGui/frame/StarterGui (default StarterGui)"), max_scale: S("number", false, "max growth of roots on huge screens (default 1.5)") } },

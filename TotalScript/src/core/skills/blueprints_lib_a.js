@@ -1473,18 +1473,48 @@ local tool = script.Parent
 local remotes = ReplicatedStorage:WaitForChild("Total_Systems"):WaitForChild("Combat"):WaitForChild("Remotes")
 local attack = remotes:WaitForChild("Attack")
 local busy = false
+-- 1.98.0: one cached AnimationTrack per character (TotalAnimations.AnimPlayer when installed,
+-- else Animator:LoadAnimation once) instead of Humanoid:LoadAnimation on every swing.
+local animFolder = ReplicatedStorage:FindFirstChild("TotalAnimations")
+local AnimPlayer = animFolder and animFolder:FindFirstChild("AnimPlayer") and require(animFolder.AnimPlayer) or nil
+local cachedTrack, cachedFor = nil, nil
+local function playSwing(character)
+	local anim = tool:FindFirstChildOfClass("Animation")
+	if not anim then return end
+	if anim.AnimationId == "" then
+		warn("[Total_Systems] " .. tool.Name .. ": its Animation has no AnimationId - publish the clip (animation_publish) or set the id")
+		return
+	end
+	if AnimPlayer then
+		local p = AnimPlayer.forCharacter(character)
+		local track, err = p and p:play(anim, { priority = "Action", fade = 0.08, exclusive = true })
+		if not track and err then warn("[Total_Systems] " .. tool.Name .. ": " .. err) end
+		return
+	end
+	local hum = character:FindFirstChildOfClass("Humanoid")
+	local animator = hum and (hum:FindFirstChildOfClass("Animator") or Instance.new("Animator", hum))
+	if not animator then return end
+	if not cachedTrack or cachedFor ~= character then
+		local okA, track = pcall(function() return animator:LoadAnimation(anim) end)
+		if not okA or not track then warn("[Total_Systems] " .. tool.Name .. ": LoadAnimation failed: " .. tostring(track)) return end
+		track.Priority = Enum.AnimationPriority.Action
+		cachedTrack, cachedFor = track, character
+	end
+	cachedTrack:Play(0.08)
+end
 tool.Activated:Connect(function()
 	if busy then return end
 	busy = true
 	attack:FireServer(tool.Name)
-	local hum = tool.Parent and tool.Parent:FindFirstChildOfClass("Humanoid")
-	local anim = tool:FindFirstChildOfClass("Animation")
-	if hum and anim then
-		local okA, track = pcall(function() return hum:LoadAnimation(anim) end)
-		if okA and track then track:Play() end
+	local character = tool.Parent
+	if character and character:FindFirstChildOfClass("Humanoid") then
+		playSwing(character)
 	end
 	task.wait(tool:GetAttribute("Cooldown") or 0.5)
 	busy = false
+end)
+tool.Unequipped:Connect(function()
+	if cachedTrack then cachedTrack:Stop(0.1) end
 end)
 `,
   };

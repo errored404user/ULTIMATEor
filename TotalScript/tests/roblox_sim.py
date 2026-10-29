@@ -21,7 +21,7 @@ local M = {}
 local CLASSES = {
   Instance={}, Folder={"Instance"}, LuaSourceContainer={"Instance"}, ModuleScript={"LuaSourceContainer"}, LocalScript={"LuaSourceContainer"}, Script={"LuaSourceContainer"},
   RemoteEvent={"Instance"}, RemoteFunction={"Instance"}, BindableEvent={"Instance"}, BindableFunction={"Instance"}, ValueBase={"Instance"}, IntValue={"ValueBase"}, NumberValue={"ValueBase"}, StringValue={"ValueBase"}, Color3Value={"ValueBase"},
-  Sound={"Instance"}, SoundGroup={"Instance"}, Camera={"Instance"}, Humanoid={"Instance"}, Player={"Instance"}, PlayerGui={"Instance"},
+  Sound={"Instance"}, SoundGroup={"Instance"}, Camera={"Instance"}, Humanoid={"Instance"}, Animator={"Instance"}, AnimationController={"Instance"}, Player={"Instance"}, PlayerGui={"Instance"},
   PVInstance={"Instance"}, Model={"PVInstance"}, Tool={"Model"}, Accessory={"Model"}, BasePart={"PVInstance"}, Part={"BasePart"}, MeshPart={"BasePart"}, WedgePart={"BasePart"}, UnionOperation={"BasePart"}, TrussPart={"BasePart"},
   KeyframeSequence={"Instance"}, Keyframe={"Instance"}, Pose={"Instance"}, KeyframeMarker={"Instance"}, Animation={"Instance"},
   Attachment={"Instance"}, Decal={"Instance"}, Texture={"Decal"}, JointInstance={"Instance"}, Motor6D={"JointInstance"}, Weld={"JointInstance"}, WeldConstraint={"Instance"}, HumanoidDescription={"Instance"}, FaceControls={"Instance"},
@@ -476,7 +476,20 @@ function methods:BindAction() end
 function methods:UnbindAction() end
 function methods:SetTitle() end
 function methods:SetPosition() end
-function methods:LoadAnimation() return {Play=function() end, Stop=function() end} end
+-- 1.98.0: a track that remembers state so AnimPlayer / sequence playback can be asserted on
+M.tracks = {}
+function methods:LoadAnimation(anim)
+  local id = anim and anim.AnimationId or ""
+  if id == "rbxassetid://0" then error("Animation failed to load: invalid asset id") end
+  local t = {Animation = anim, IsPlaying = false, Priority = Enum.AnimationPriority.Action, Looped = false, Length = 1, Speed = 1, plays = 0, stops = 0, destroyed = false}
+  function t:Play(fade, weight, speed) self.IsPlaying = true self.plays = self.plays + 1 self.Speed = speed or 1 end
+  function t:Stop(fade) if self.IsPlaying then self.stops = self.stops + 1 end self.IsPlaying = false end
+  function t:Destroy() self.destroyed = true self.IsPlaying = false end
+  function t:AdjustSpeed(sp) self.Speed = sp end
+  function t:GetMarkerReachedSignal() return {Connect = function() return {Disconnect = function() end} end} end
+  M.tracks[#M.tracks + 1] = t
+  return t
+end
 function methods:GetOrderedDataStore(name)
   M.ordered[name] = M.ordered[name] or {}
   local data = M.ordered[name]

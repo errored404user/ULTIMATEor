@@ -12,7 +12,7 @@ function ok(name, cond, detail) { if (cond) { pass++; console.log("PASS  " + nam
 
 const src = fs.readFileSync("src/core/skills/studio_vfxpro.js", "utf8");
 ok("pack registered in every isolated-world list + codecraft.html", manifest.content_scripts.filter((c) => c.js && c.js.includes("src/core/main.js")).every((c) => c.js.includes("src/core/skills/studio_vfxpro.js")) && /studio_vfxpro\.js/.test(fs.readFileSync("codecraft.html", "utf8")));
-ok("version pinned", S.VFX_VERSION === "1.97.0" && /TotalVFX/.test(S.VFX_RUNTIME_SRC));
+ok("version pinned", S.VFX_VERSION === "1.98.0" && /TotalVFX/.test(S.VFX_RUNTIME_SRC));
 ok("the 17 requested effect families exist", ["impact", "hit_confirm", "slash", "projectile", "explosion", "fire", "smoke", "electric", "aura", "heal", "shield", "teleport", "dash", "dust", "charge", "release", "transition"].every((f) => S.VFX_FAMILY_NAMES.includes(f)) && S.VFX_FAMILY_NAMES.length === 17);
 ok("commands: install / play / theme / validate visible, families hidden", ["vfx_library_install", "vfx_play", "vfx_theme_set", "vfx_validate"].every((n) => S.SKILL_COMMANDS.some((c) => c.name === n && !c.hidden)) && S.SKILL_COMMANDS.some((c) => c.name === "vfx_families" && c.hidden));
 

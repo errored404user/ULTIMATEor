@@ -36,6 +36,7 @@ programs.prefab_alias = S.buildLuau("model_prefab", { kind: "street light", posi
 programs.check_expect = S.buildLuau("model_check", { path: "Workspace.P_table", expect_size: [6, 3, 3], expect_parts: 4 }).code;
 programs.check_bad = S.buildLuau("model_check", { path: "Workspace.Bad", expect_size: [10, 10, 10] }).code;
 programs.check_missing = S.buildLuau("model_check", { path: "Workspace.Nope" }).code;
+programs.check_budget = S.buildLuau("model_check", { path: "Workspace.P_table", max_parts: 3 }).code;
 // model_build (studio_ultimate) uses Luau `+=` which the Lua 5.4 simulator cannot parse - desugar it for the runtime half only.
 programs.model_build = S.buildLuau("model_build", { name: "MB", parts: [{ name: "Pole", size: [8, 1, 1], position: [0, 4, 0], rotation: [0, 0, 90], shape: "Cylinder", color: "#333333", material: "Metal" }, { name: "Base", size: [3, 0.5, 3], position: [0, 0.25, 0], color: "#555555", material: "Metal" }], primary: "Pole", position: [50, 10, 20] }).code.replace(/([A-Za-z_][\w.]*)\s*\+=\s*/g, "$1=$1+");
 ok("unknown kind is a build error that lists the kinds", /unknown prefab kind 'spaceship'/.test(S.buildLuau("model_prefab", { kind: "spaceship", position: [0, 0, 0] }).err || ""));
@@ -44,6 +45,7 @@ ok("colour override reaches the palette", /a=Color3\.fromRGB\(170,102,51\)/.test
 ok("pivot goes through PrimaryPart.PivotOffset (WorldPivot is ignored once PrimaryPart is set)", /M\.PrimaryPart\.PivotOffset=M\.PrimaryPart\.CFrame:ToObjectSpace\(CFrame\.new\(foot\)\)/.test(programs.prefab_tree));
 const ult = fs.readFileSync("src/core/skills/studio_ultimate.js", "utf8");
 ok("model_build / model_center_pivot / model_hollow_box got the same PivotOffset fix", (ult.match(/PrimaryPart\.PivotOffset=m\.PrimaryPart\.CFrame:ToObjectSpace\(/g) || []).length >= 3);
+ok("model_check 1.98.0 rules present in the Luau (default-names, part-budget, pivot-off, collide-clutter) + max_parts param", ["'default-names'", "'part-budget'", "'pivot-off'", "'collide-clutter'"].every((k) => fs.readFileSync("src/core/skills/studio_modelcraft.js", "utf8").includes(k)) && S.SKILL_COMMANDS.find((c) => c.name === "model_check").params.max_parts);
 ok("model_check scores floating / buried / sliver / unanchored / unstyled / scale / primary", ["'floating'", "'buried'", "'sliver'", "'unanchored'", "'unstyled'", "'flat-material'", "'palette-sprawl'", "'no-primary'", "'scale'", "'too-few-parts'"].every((k) => programs.check_bad.includes(k)));
 
 // ── prompts ──
@@ -76,6 +78,9 @@ local a=Instance.new('Part') a.Size=Vector3.new(4,1,4) a.CFrame=CFrame.new(0,0.5
 local b=Instance.new('Part') b.Size=Vector3.new(1,1,1) b.CFrame=CFrame.new(0,5,0) b.Anchored=true b.Parent=m
 local c=Instance.new('Part') c.Size=Vector3.new(0.9,0.9,0.9) c.CFrame=CFrame.new(0,0.5,0) c.Anchored=true c.Parent=m
 local d=Instance.new('Part') d.Size=Vector3.new(0.02,2,2) d.CFrame=CFrame.new(2,1,0) d.Anchored=true d.Parent=m
+-- 1.98.0: default names, pivot high above the base, tiny colliding trims
+for i=1,4 do local e=Instance.new('Part') e.Name='Part' e.Size=Vector3.new(0.3,0.3,0.3) e.CFrame=CFrame.new(-1.5+i*0.4,1.1,0) e.Anchored=true e.CanCollide=true e.Parent=m end
+m.PrimaryPart=b
 """)
 out = {}
 for k in P:
@@ -112,6 +117,9 @@ if (rt && rt.skip) {
   const kinds = (bad.issues || []).map((x) => x.kind);
   ok("sim: the critic catches a deliberately bad model (floating, buried, sliver, unanchored, unstyled, scale) and fails it", bad.ok === true && bad.verdict === "fail" && bad.score < 50 && ["floating", "buried", "sliver", "unanchored", "unstyled", "scale"].every((k) => kinds.includes(k)), JSON.stringify(kinds));
   ok("sim: every issue carries a concrete fix", (bad.issues || []).every((x) => typeof x.fix === "string" && x.fix.length > 10));
+  ok("sim: 1.98.0 rules fire on the bad model - default-names (4x 'Part'), pivot-off (PrimaryPart 5 studs up), collide-clutter (4 tiny colliders)", ["default-names", "pivot-off", "collide-clutter"].every((k) => kinds.includes(k)), JSON.stringify(kinds));
+  ok("sim: pivot-off message names the bottom-centre to move to", /bottom-centre is \(/.test((bad.issues || []).find((x) => x.kind === "pivot-off")?.message || ""), JSON.stringify((bad.issues || []).find((x) => x.kind === "pivot-off")));
+  ok("sim: part-budget respects max_parts", (rt.check_budget || {}).issues && rt.check_budget.issues.some((x) => x.kind === "part-budget" && /budget 3\)/.test(x.message)), JSON.stringify(rt.check_budget || {}).slice(0, 300));
   ok("sim: missing path is a clean fail()", rt.check_missing.ok === false && /not found/.test(rt.check_missing.error));
 }
 
@@ -119,7 +127,7 @@ if (rt && rt.skip) {
 const readme = fs.readFileSync("README.md", "utf8");
 ok("README 1.70.0 changelog documents the pack and the removals", /\*\*1\.70\.0 — /.test(readme) && /model_prefab/.test(readme) && /model_check/.test(readme) && /roadmap/i.test(readme.slice(readme.indexOf("**1.70.0 — "), readme.indexOf("**1.70.0 — ") + 4000)));
 ok("test listed in README", readme.includes("tests/test-model-craft.js"));
-ok("version pins 1.97.0", manifest.version === "1.97.0" && /local VERSION = "1\.97\.0"/.test(fs.readFileSync("plugin/TotalScript.lua", "utf8")) && /^version = "1\.97\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
+ok("version pins 1.98.0", manifest.version === "1.98.0" && /local VERSION = "1\.98\.0"/.test(fs.readFileSync("plugin/TotalScript.lua", "utf8")) && /^version = "1\.98\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
 
 console.log((failed ? "FAIL  " : "OK    ") + "test-model-craft: " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);
