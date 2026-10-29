@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 1.94.0 — DeepSeek adapter × Better DeepSeek (github.com/EdgeTypE/better-deepseek)
+// 1.95.0 — DeepSeek adapter × Better DeepSeek (github.com/EdgeTypE/better-deepseek)
 // coexistence. BDS v0.1.16 was audited from source; this test rebuilds the DOM
 // footprint it leaves on chat.deepseek.com (every injected node carries a
 // `bds-` class or sits under #bds-root — see its src/lib/composer-dom.js) and

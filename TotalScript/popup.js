@@ -17,7 +17,7 @@ const isCodeCraftTab = (url) => !!(url && CODECRAFT_PAGE_URL && url.startsWith(C
 const isSupportedTab = (url) => !!url && (SUPPORTED_HOSTS.some((h) => url.includes(h)) || isCodeCraftTab(url));
 const ENGINE_KEY = "rs-engine"; // "roblox" | "local"
 const ENGINES = ["roblox", "local"];
-const WORK_MODES = ["creation"];
+const WORK_MODES = ["creation", "blender"]; // 1.95.0: + Blender (Blender-first 3D)
 const BRAND_LOGO_RE = /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i;
 function sanitizeBrandLite(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
@@ -25,13 +25,15 @@ function sanitizeBrandLite(raw) {
   const logo = typeof src.logo === "string" && src.logo.length <= 400000 && BRAND_LOGO_RE.test(src.logo.trim()) ? src.logo.trim() : "";
   return { name, logo };
 }
-// 1.39.0: ONE built-in work mode. Totality (id "creation") = the former Ultimate (Luau
-// engineering + modeling), Visualizer (VFX / lighting / UI) and Animator
-// (rigs, keyframes, tweens, camera) merged; legacy stored ids migrate to it.
+// 1.39.0: Totality (id "creation") = the former Ultimate (Luau engineering +
+// modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes,
+// tweens, camera) merged; legacy stored ids migrate to it. 1.95.0 adds the
+// Blender mode (id "blender"); unknown ids still fall back to creation.
 const LEGACY_WORK_MODES = { ultimate: "creation", visualizer: "creation", animator: "creation", adaptive: "creation" };
 const normalizeWorkMode = (id) => (WORK_MODES.includes(id) ? id : (LEGACY_WORK_MODES[id] || "creation"));
 const WORK_PRESETS = {
   creation: { thinking: "max", extra: false },
+  blender: { thinking: "max", extra: false },
 };
 
 const PERM_MODES = ["sandbox", "ask", "full"];

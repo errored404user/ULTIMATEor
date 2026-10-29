@@ -2000,8 +2000,43 @@
       focus: /^(script_|model_|memory_|blueprint_|project_index_|execute_luau|multi_edit|module_scaffold|remote_scaffold|datastore_profile_scaffold|tag_scaffold|project_health_report|search_game_tree|search_files|inspect_instance|get_studio_state|get_console_output|audit_(script_errors|unanchored_parts)|instance_|part_(create|at|above)|meshpart_create|wedge_create|model_group|(scale|rotate|mirror|flatten|raise|ungroup)_model|set_primary_part|pivot_(set|to)|cframe_set|rotation_set|size_set|snap_(position|to_grid)|grid_clone|duplicate_n|weld_(assemble|constraint)|constraint_create|constraints_clear|rigid_constraint_create|hinge_create|rope_create|attachment_create|align_(position|orientation)_create|material_set|color_set|brickcolor_set|transparency_set|reflectance_set|texture_add|decal_(add|set)|mesh_set_texture|generate_(mesh|material|procedural_model)|terrain_|staircase_generate|archway_generate|roof_structure_build|fence_line_build|road_path_build|bridge_suspension_make|window_glass_install|tree_forest_scatter|dungeon_room_generate|ground_make|water_body|folder_create|attribute_(get|set)|tag_(add|remove)|remote_|bindable_|datastore_setup|ds_|leaderstats_|collision_(set|group_set)|physics_|anchored_set|get_(children|descendants|property|service|template)|set_property|property_copy|selection_(info|set)|script_analysis|total_debug|total_screenshot|start_stop_play|place_backup_save|workspace_(stats|list|export|import)|fx_|design_|gfx_|vfx_|sfx_|ui_|gui_|lighting|light_|postfx_|atmosphere|sky_|bloom|blur|color_correction|fog_|film_|weather_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|point_light|spot_light|surface_light|explosion|shadows|cast_shadow|set_future_lighting|snowfall|volcanic|firefly|portal_vfx|screen_shake|toast_show|notification_toast|radial_menu|level_up_ui|loading_screen|performance_monitor_gui|surface_gui|billboard_gui|starter_gui|text_label|text_button|image_label|frame_create|directional_audio|animation_|anim_|tween|spring_|motor6d|rig_|ik_|character_emote|facial_animation|camera_|cutscene|walkspeed)/,
     },
   };
+  // 1.95.0 BLENDER: Blender-first 3D artist. Geometry is planned, built,
+  // validated, inspected, textured and rendered in Blender (asset pipeline +
+  // studio rig), then sent to Studio as real MeshParts and read back with
+  // mesh_import_verify. Studio part assembly is a fallback the user agrees to.
+  // The profile lives in config.js (WORK_MODE_PROMPTS.blender); `focus` puts the
+  // Blender family first in list_commands and blenderModeTools() folds the
+  // Blender server's tools into the default catalogue while this mode is on.
+  WORK_MODES.blender = {
+    name: "Blender", badge: "BLENDER", short: "Blender",
+    sub: "Blender-first 3D: plan → build → validate → inspect → texture → render → send to Studio, verified",
+    note: "Blender is the modeling engine, Studio the destination. Every prop, weapon, vehicle, kit piece, rock, tree, terrain tile or building goes through blender_asset_plan → build → validate → inspect (renders you judge) → bake → light / camera / render → blender_send_to_studio → mesh_import_verify. Needs Blender connected (Settings → MCP servers → Connect Blender); when it is not, the AI asks you to connect it instead of building primitives in Studio.",
+    toast: "Blender Work Mode — Blender builds the geometry, Studio receives it; every pass validated, inspected and verified",
+    starters: [
+      { label: "Hero sword", prompt: "In Blender, design a stylized fantasy hero longsword (1.2 m, worn steel blade with a fuller, bronze crossguard, leather-wrapped grip, gem pommel). Plan the spec, build it, validate, inspect it from iso / front / closeup and fix what the renders show, bake textures, render a product shot, then send it to Studio and verify the import." },
+      { label: "Modular dungeon kit", prompt: "Build a modular stone dungeon kit in Blender on a 4 m × 3 m grid: wall, wall with door, wall with window, corner pillar, stairs and a fence / railing piece, all stylized_fantasy with matching materials. Validate each piece, inspect one assembled bay, send the set to Studio, verify the import and assemble one 2-bay corridor in a named Model." },
+      { label: "Island terrain set", prompt: "Create an island environment set in Blender: a terrain_tile island, two rock clusters, a crystal cluster and three procedural trees in one low_poly palette. Keep the whole set under 40k triangles, send it to Studio, verify the import, set an outdoor lighting preset and screenshot it from two angles." },
+      { label: "Sci-fi crate", prompt: "Model a scifi supply crate in Blender (1 m cube footprint, panel insets, bevelled frame, emissive status strip, painted metal with wear). Validate, inspect, bake the textures, render a turntable, send it to Studio with hull collision and verify." },
+      { label: "Vehicle blockout", prompt: "Build a stylized buggy in Blender from the car recipe: body, separate wheels with ATT_ attachment empties, roll cage and seat. Validate and inspect from side / front / iso, fix proportions, send it to Studio with the spec's collision and run mesh_import_verify + model_report." },
+      { label: "Product render", prompt: "Take the selected asset in Blender and give me a product render: studio_grey world, three_point light rig, product camera with depth of field, an Eevee preview to check framing, then a final Cycles shot and a 360° turntable. Clear the rig afterwards." },
+      { label: "Bake + export", prompt: "Bake base colour, roughness, metallic and normal maps for the asset currently in Blender at 2048, export it as GLB and FBX, tell me the local file paths and exactly how to attach the maps as SurfaceAppearance in Studio. Do not upload anything." },
+      { label: "Fix my import", prompt: "Run mesh_import_verify on the last Blender import in Studio, explain every problem it reports (placeholders, scale, pivot, materials), fix the cause in Blender, resend and verify again until the report is clean." },
+    ],
+    focus: /^(blender_|get_scene_info$|get_object_info$|execute_blender_code$|get_viewport_screenshot$|mesh_|uv_|material_(create|assign|duplicate|remove)$|modifier_|object_|scene_|model_report$|style_guide$|brief_(set|get)$|quality_audit$|lighting_set_preset$|atmosphere_set$|instance_(move|clone)$|rotate_model$|scale_model$|set_property$|attribute_set$|total_screenshot$)/,
+  };
   const WORK_MODE_IDS = Object.keys(WORK_MODES);
-  const normalizeWorkMode = (id) => (WORK_MODE_IDS.includes(id) ? id : "creation"); // ultimate/visualizer/animator (and older fast/balanced/thorough/adaptive) → creation
+  const normalizeWorkMode = (id) => (WORK_MODE_IDS.includes(id) ? id : "creation");
+  // 1.95.0: in Blender mode the Blender server's tools ride in the DEFAULT
+  // (Studio) list_commands / embedded catalogue, so the model never has to
+  // know about list_commands {server:"blender"}; FAMILY_ORDER.blender lists
+  // them first. Empty in every other mode and when Blender is not connected.
+  function blenderModeTools(requested) {
+    try {
+      if (requested === "blender") return [];
+      if (normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()) !== "blender") return [];
+      return (A.toolList || []).filter((t) => t && t.server === "blender" && !t.hidden);
+    } catch { return []; }
+  } // ultimate/visualizer/animator (and older fast/balanced/thorough/adaptive) → creation
   // UNIVERSAL commands: the navigation / inspection / scripting / verification
   // core that EVERY work mode gets with full schemas, ahead of the mode's own
   // family. A VFX pass still has to find the part, an animation pass still has
@@ -2058,7 +2093,21 @@
         proof: /^(quality_audit)$/,
         nudge: "QUALITY: you built or generated content in this run but never scored it - run quality_audit {path} now (whole place when nothing else fits), quality_fix the mechanical findings, fix the high / medium ones yourself (palette from style_guide / brief_get, lighting, layout, scripts), re-run until the score is >= 85 and put the score in the report." },
     ],
+    // 1.95.0 BLENDER: geometry built in Blender must be validated AND looked at;
+    // a send to Studio must be read back. The scripts / look gates are shared
+    // with creation (pushed below) so Studio-side work keeps its proof too.
+    blender: [
+      { id: "asset",
+        did: /^(blender_asset_build|blender_add_|blender_extrude|blender_inset|blender_bevel|blender_boolean|blender_solidify|blender_array|blender_mirror|blender_subdivision|blender_join|blender_set_material|blender_principled_material|blender_import_|blender_set_dimensions|execute_blender_code|mesh_(bevel|extrude|inset|merge|subdivide|decimate))/,
+        proof: /^(blender_asset_validate|blender_asset_inspect|blender_render_shot|blender_turntable|get_viewport_screenshot)$/,
+        nudge: "ASSET: geometry was built or changed in Blender this run but never checked - run blender_asset_validate {name}, then blender_asset_inspect {name, views:[\"iso\",\"front\",\"closeup\"]} (or a render shot), judge the images as an art director and fix what they show." },
+      { id: "import",
+        did: /^blender_send_to_studio$/,
+        proof: /^mesh_import_verify$/,
+        nudge: "IMPORT: you sent meshes to Studio but never read them back - run mesh_import_verify now (parts, placeholders, scale, materials, pivot, attachments) and fix anything it reports before the final report." },
+    ],
   };
+  MODE_GATES.blender.push(...MODE_GATES.creation.filter((g) => g.id === "scripts" || g.id === "look"));
   // Returns the gate nudge for the active mode when this run mutated without
   // proving, else "". `runTools` = bare names of every command executed this run.
   function modeGateNudge(runTools) {
@@ -2986,6 +3035,7 @@
   // (1.39.0 Creation: scripting, blueprints, data, build, physics, lighting,
   // VFX, UI, animation, motion, ...). Order = catalogue order.
   const COMMAND_FAMILIES = [
+    { id: "blender", label: "BLENDER (3D ASSET PIPELINE → STUDIO)", re: /^(blender_|get_scene_info$|get_object_info$|execute_blender_code$|get_viewport_screenshot$|mesh_import_verify$)/ }, // 1.95.0: the Blender server's tools + the Studio read-back
     { id: "script", label: "SCRIPTING", re: /^(script_|multi_edit|module_scaffold|execute_luau|project_health_report|project_index_|tag_scaffold|tag_add|tag_remove|get_service|wait_for_child|log_tag|gc_run)/ },
     { id: "blueprint", label: "SYSTEM BLUEPRINTS", re: /^blueprint_/ },
     { id: "data", label: "DATA, REMOTES, NETWORK & MONETIZATION", re: /^(ds_|datastore_|get_datastore|ordered_(get|set)|session_lock_|session_analytics|remote_|remotes_list|bindable_|leaderstats_|profile_|gamepass_|developer_product|devproduct_|marketplace_|badge_|value_set|replicated_first|server_auto_restart|network_(ping|bandwidth)|premium_check)/ },
@@ -3006,7 +3056,8 @@
     { id: "other", label: "OTHER", re: /./ },
   ];
   const FAMILY_ORDER = {
-    creation: ["script", "blueprint", "data", "build", "physics", "lighting", "vfx", "ui", "animation", "motion", "gameplay", "terrain", "gfx", "audio", "play", "studio", "web", "other"],
+    creation: ["script", "blueprint", "data", "build", "physics", "lighting", "vfx", "ui", "animation", "motion", "gameplay", "terrain", "gfx", "blender", "audio", "play", "studio", "web", "other"],
+    blender: ["blender", "build", "script", "studio", "play", "lighting", "gfx", "physics", "terrain", "data", "blueprint", "vfx", "ui", "animation", "motion", "gameplay", "audio", "web", "other"],
   };
   const commandFamily = (name) => { const b = String(name || "").replace(/^[^.]*\./, ""); for (const f of COMMAND_FAMILIES) if (f.re.test(b)) return f.id; return "other"; };
   function familyOrderFor(modeId) { return FAMILY_ORDER[modeId] || FAMILY_ORDER.creation; }
@@ -4569,6 +4620,7 @@
       // Hidden entries (legacy aliases, duplicate setters) stay callable but are
       // only listed when asked for by exact name.
       const allScoped = A.toolList.filter((t) => (t.server || curEng) === requested && (!t.hidden || String(t.name || "").toLowerCase() === commandQuery));
+      allScoped.push(...blenderModeTools(requested)); // 1.95.0: Blender mode lists the Blender family in the default catalogue
       const queryTerms = commandQuery.split(/\s+/).filter(Boolean);
       const queryMatches = (value) => !queryTerms.length
         || queryTerms.every((term) => String(value || "").toLowerCase().includes(term));
@@ -6108,6 +6160,7 @@
         if (!budget || !A.toolList || !A.toolList.length) return "";
         const requested = engine === "local" ? "local" : "roblox";
         const allScoped = A.toolList.filter((t) => t && (t.server || requested) === requested && !t.hidden);
+        allScoped.push(...blenderModeTools(requested)); // 1.95.0: Blender mode embeds the Blender family too
         if (!allScoped.length) return "";
         const animLines = requested === "roblox" && typeof RSAnim !== "undefined" ? RSAnim.describeCommands() : [];
         const skillLines = requested === "roblox" && typeof RobloxScriptSkills !== "undefined" ? RobloxScriptSkills.describeCommands() : [];

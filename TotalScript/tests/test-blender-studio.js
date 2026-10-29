@@ -1,5 +1,5 @@
 "use strict";
-// 1.94.0 - Phase 126 "Blender upgrade":
+// 1.95.0 - Phase 126 "Blender upgrade":
 //   src/core/assetplan.js    procedural generator recipes (tree_procedural, terrain_tile, rock_cluster,
 //                            crystal_cluster, stairs, building, fence) + material texture flags
 //   tools/blender_asset.py   generators (bmesh), per-family procedural texture graphs, asset_bake
@@ -140,8 +140,8 @@ ok("E: config.js Blender block (gated on the live connection) teaches the genera
 ok("E: the Blender-gated prompt block stays under 9000 chars (budget: only shown when Blender is connected)", (() => { const i = config.indexOf("if (isBlender) modeExtra +="); const j = config.indexOf("`;", i); return j - i < 9000; })(), String(config.indexOf("`;", config.indexOf("if (isBlender) modeExtra +=")) - config.indexOf("if (isBlender) modeExtra +=")));
 ok("E: blender_studio.py is standalone (plain bpy, no imports from the other tools), classifies exceptions and never downloads", /^import bpy$/m.test(studioPy) && !/import blender_|from blender_/.test(studioPy) && /def classify_exception/.test(studioPy) && studioPy.includes("return emit(classify_exception(e, CMD))") && !/urllib|requests\.|http:\/\/|https:\/\/www\.poly/.test(studioPy));
 ok("E: skill_intel blender_modeling teaches generators, bake and the presentation loop", (() => { const s = fs.readFileSync("src/core/skill_intel.js", "utf8"); return /tree_procedural, terrain_tile, rock_cluster, crystal_cluster, stairs, building, fence/.test(s) && /`blender_asset_bake`/.test(s) && /`blender_light_rig`/.test(s) && /`blender_studio_clear`/.test(s); })());
-ok("E: version 1.94.0 pinned (planner, asset tool header, studio tool header, manifest)", A.VERSION === "1.94.0" && /1\.94\.0/.test(assetPy.slice(0, 400)) && /1\.94\.0/.test(studioPy.slice(0, 200)) && JSON.parse(fs.readFileSync("manifest.json", "utf8")).version === "1.94.0");
-ok("E: README documents 1.94.0 and this test", /1\.94\.0/.test(fs.readFileSync("README.md", "utf8")) && /test-blender-studio\.js/.test(fs.readFileSync("README.md", "utf8")));
+ok("E: version 1.95.0 pinned (planner, asset tool header, studio tool header, manifest)", A.VERSION === "1.95.0" && /1\.95\.0/.test(assetPy.slice(0, 400)) && /1\.95\.0/.test(studioPy.slice(0, 200)) && JSON.parse(fs.readFileSync("manifest.json", "utf8")).version === "1.95.0");
+ok("E: README documents 1.95.0 and this test", /1\.95\.0/.test(fs.readFileSync("README.md", "utf8")) && /test-blender-studio\.js/.test(fs.readFileSync("README.md", "utf8")));
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
 console.log(fail ? "FAIL  test-blender-studio: " + pass + " passed, " + fail + " failed" : "OK    test-blender-studio: " + pass + " passed");

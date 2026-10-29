@@ -150,6 +150,7 @@
       opacity:.9;
     }
     .work{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:14px}
+    .work.work-modes{grid-template-columns:1fr 1fr} /* 1.95.0: two built-in modes */
     .donate-title{font-size:13px; font-weight:800; letter-spacing:-.1px; margin:2px 0 3px; color:var(--text)}
     .donate-note{line-height:1.5}
     .donate-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px}
@@ -181,6 +182,8 @@
     .work-card.on .work-sub{color:#5c4e3d}
     #work-creation.on{background:linear-gradient(135deg,#9ff3ff 0%,#22d3ee 45%,#0e7490 100%); color:#03161c}
     #work-creation.on .work-sub{color:rgba(3,22,28,.72)}
+    #work-blender.on{background:linear-gradient(135deg,#ffd9a8 0%,#f5792a 45%,#a63d12 100%); color:#1c0d04}
+    #work-blender.on .work-sub{color:rgba(28,13,4,.72)}
 
 
     .tgl-well{
@@ -289,10 +292,14 @@
 
     <div class="card" id="settings-card">
       <div class="sec-label">Session</div>
-      <div class="work">
+      <div class="work work-modes">
         <button type="button" class="work-card" data-work="creation" id="work-creation">
           <span class="work-name">Totality</span>
           <span class="work-sub">Luau systems · Modeling · VFX &amp; Lighting · UI · Animation &amp; Camera — everything, verified</span>
+        </button>
+        <button type="button" class="work-card" data-work="blender" id="work-blender">
+          <span class="work-name">Blender</span>
+          <span class="work-sub">Blender-first 3D: plan → build → validate → inspect → texture → render → send to Studio, verified</span>
         </button>
       </div>
       <div class="sec-label">Access</div>

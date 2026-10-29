@@ -6905,6 +6905,8 @@ html[data-rs-theme] .rs-menu-glyph { font-size: 0 !important; width: 14px; heigh
 #rs-work-badge[hidden] { display: none !important; }
 /* 1.74.0: one built-in mode (Totality, id "creation") - aqua like the T logo (was gold). */
 #rs-work-badge[data-work="creation"]   { background: linear-gradient(135deg, #9ff3ff 0%, #22d3ee 45%, #0e7490 100%); color: #03161c; border-color: rgba(159,243,255,.6); text-shadow: 0 1px 0 rgba(255,255,255,.25); }
+/* 1.95.0: Blender work mode - Blender orange. */
+#rs-work-badge[data-work="blender"]    { background: linear-gradient(135deg, #ffd9a8 0%, #f5792a 45%, #a63d12 100%); color: #1c0d04; border-color: rgba(255,217,168,.6); text-shadow: 0 1px 0 rgba(255,255,255,.25); }
 @media (max-width: 760px) { #rs-work-badge { display: none !important; } }
 
 /* Multi-Agent crew badge: the specialist currently holding the board. */
@@ -6937,6 +6939,7 @@ html[data-rs-theme] .rs-menu-glyph { font-size: 0 !important; width: 14px; heigh
   border-radius: 0 0 2px 2px; opacity: 0; transition: opacity .18s ease;
 }
 .rs-work-modes .rs-work-card[data-work="creation"]::before   { background: linear-gradient(90deg, #9ff3ff, #22d3ee, #0e7490); }
+.rs-work-modes .rs-work-card[data-work="blender"]::before    { background: linear-gradient(90deg, #ffd9a8, #f5792a, #a63d12); }
 .rs-work-modes .rs-work-card:hover::before, .rs-work-modes .rs-work-card.on::before { opacity: 1; }
 html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="creation"].on {
   background: linear-gradient(135deg, rgba(34,211,238,.40), rgba(14,116,144,.28)) !important;
@@ -6945,6 +6948,13 @@ html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="creation"].on {
   color: #fff !important;
 }
 html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="creation"].on .rs-work-sub { color: rgba(255,255,255,.8) !important; }
+html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="blender"].on {
+  background: linear-gradient(135deg, rgba(245,121,42,.42), rgba(166,61,18,.30)) !important;
+  border-color: rgba(255,217,168,.62) !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.08) inset, 0 10px 24px -10px rgba(245,121,42,.9) !important;
+  color: #fff !important;
+}
+html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="blender"].on .rs-work-sub { color: rgba(255,255,255,.82) !important; }
 
 /* ═══════════════════════════════════════════════════════════════════════
    TotalScript Paint (src/core/paint.js) — full-screen studio overlay

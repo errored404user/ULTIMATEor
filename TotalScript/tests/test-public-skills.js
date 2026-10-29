@@ -192,7 +192,7 @@ ok("Create button auto-routes: full prompt → conversionPrompt, description →
 ok("import: prose files load into the composer instead of failing", main.includes("if (!r.ok && r.prompt) {") && main.includes('input.accept = ".json,.orskill.json,.orskills.json,.txt,.md,text/plain,application/json"'));
 ok("runTool handles public_skill_from_prompt", main.includes('if (op === "from_prompt") {') && main.includes("PS.installFromPrompt(text, { kind: args.kind, title: args.title, name: args.name, description: args.description, reserved: reserved(), source: \"ai\" })") && main.includes("Available: public_skill_create/from_prompt/list/get/update/delete/enable/test/export/import."));
 ok("help topic + config prompt blocks explain prompt → skill and .txt", /Prompt → skill: paste a whole prompt/.test(main) && /Plain-text format \(\.txt\)/.test(main) && config.includes("PROMPT → SKILL: when the user pastes a full prompt") && config.includes("public_skill_from_prompt {prompt}") && css.includes(".rs-public-ways") && css.includes(".rs-public-hint-convert") && css.includes(".rs-public-dragover"));
-ok("popup work-mode literal untouched", read("popup.js").includes('const WORK_MODES = ["creation"]'));
+ok("popup work-mode literal untouched by public skills (built-in ids only: creation + blender since 1.95.0)", read("popup.js").includes('const WORK_MODES = ["creation", "blender"]'));
 ok("BASES = [creation] with legacy mapping exported", Array.isArray(PS.BASES) && PS.BASES.length === 1 && PS.BASES[0] === "creation" && PS.normalizeBase("animator") === "creation" && PS.normalizeBase("ULTIMATE") === "creation" && PS.normalizeBase("creation") === "creation" && PS.normalizeBase("") === "creation");
 
 console.log(`\n${pass} passed, ${fail} failed`);
