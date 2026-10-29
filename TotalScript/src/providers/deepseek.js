@@ -73,6 +73,11 @@ const RSProvider = (() => {
       "i"
     ),
     tooLong: /conversation .{0,20}(too long|getting too long|trop longue)/i,
+    // 1.99.0: ACCOUNT-level notices. DeepSeek suspends web-chat accounts for
+    // bot-like cadence ("Due to violation of user policies, your account has been
+    // suspended until <date>") and throttles with "sending messages too
+    // frequently". Both must stop the loop at once - never be retried.
+    accountBlock: /account (has been |is |was )?(temporarily )?(suspended|banned|restricted|locked|disabled|blocked)|suspended until|violation of (the )?user polic|(sending|sent) (messages |requests )?too (frequently|often|fast|quickly)|too frequently|compte (a été |est )?(suspendu|bloqué)|trop fréquemment|请求过于频繁|操作过于频繁|账号.{0,8}(封禁|暂停|冻结|异常)/i,
     busy: /server is busy|serveur est occup|please try again|réessayer plus tard|system is currently busy/i,
     continueBtn: /^(continue|continuer|继续(生成)?|fortfahren|continuar|seguir|続行)$/i,
     stopped: /(arrêté|arrété|stopped|已停止|停止生成|已暂停)/i,
@@ -866,7 +871,33 @@ const RSProvider = (() => {
   }
 
   // ── Error / limit detection (site chrome only, never model output) ───────
+  // 1.99.0: suspension / throttle notice visible anywhere outside the chat turns
+  // (toast, modal, dialog, full-page interstitial). Returns the text or null.
+  function scanAccountBlock() {
+    try {
+      const nodes = document.querySelectorAll(S.errorSurfaces + ',[role="dialog"],[class*="dialog"],[class*="banner"],[class*="notice"]');
+      for (const el of nodes) {
+        if (el.offsetParent === null && el.getClientRects().length === 0) continue;
+        if (el.closest(S.chatItem) || foreign(el)) continue;
+        const t = (el.innerText || "").trim();
+        if (t.length > 8 && t.length < 800 && RE.accountBlock.test(t)) return t.slice(0, 300);
+      }
+      // the login / interstitial page replaces the chat entirely
+      if (!getEditor() && document.body) {
+        const t = (document.body.innerText || "").trim();
+        if (t.length < 4000 && RE.accountBlock.test(t)) {
+          const m = t.match(RE.accountBlock);
+          const i = Math.max(0, t.indexOf(m[0]) - 80);
+          return t.slice(i, i + 300);
+        }
+      }
+    } catch {}
+    return null;
+  }
+
   function scanError() {
+    const blocked = scanAccountBlock();
+    if (blocked) return blocked;
     try {
       for (const el of document.querySelectorAll(S.errorSurfaces)) {
         if (el.offsetParent === null) continue;
@@ -1132,6 +1163,16 @@ const RSProvider = (() => {
     // this exclusion those quotes read as "raw block still visible" forever
     // (seen live: 60Hz chip rebuild spam + done→run→done chip flapping).
     thinkingSel: S.thinking,
+    // 1.99.0 gentle mode. DeepSeek's abuse detection suspends web-chat accounts
+    // (typically 48 h - 3 days) for bot-like cadence: dozens of messages per hour,
+    // instant follow-ups, stop/edit/regenerate loops, "using the chat as an API
+    // through an extension". The core paces every automatic send through this
+    // contract (orchestrator.paceDelay), caps sends per rolling hour, never
+    // re-sends after a dead or failed turn here, and stops on scanAccountBlock().
+    // Nothing in this contract hides TotalScript from the site - it only makes
+    // the extension behave like a person typing.
+    pacing: { minGapMs: 6000, maxGapMs: 15000, perHour: 40, noResend: true, label: "DeepSeek gentle mode", apiHint: "For long unattended runs use the TotalScript desktop app with your own DeepSeek API key (platform.deepseek.com) - the official API is not subject to web-chat account suspension." },
+    scanAccountBlock,
     init({ diag: d } = {}) {
       if (d) diag = d;
       // Version beacon: stamp the loaded build onto <html> so a reload can be

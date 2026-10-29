@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript command contract (1.98.0) - ONE pre-execution validation layer for
+// TotalScript command contract (1.99.0) - ONE pre-execution validation layer for
 // the virtual Studio / agent commands, built on the metadata the packs already
 // declare (SKILL_COMMANDS[].params = {type, req, desc}) instead of a second
 // registry. It resolves aliases, repairs only deterministic mistakes, rejects
@@ -13,7 +13,7 @@
 //   schemaLine(name)         -> compact callable signature for error messages
 const TotalCommandContract = (() => {
   "use strict";
-  const VERSION = "1.98.0";
+  const VERSION = "1.99.0";
 
   // ── authoritative Roblox enum lists (Enum.<Key>.<Item>; a wrong item is a Luau error or a silently swallowed pcall) ──
   const ROBLOX_ENUMS = {

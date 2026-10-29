@@ -1249,6 +1249,26 @@
     return txt.length > 0 && (txt === snap.text || txt === snap.reply);
   }
 
+  // 1.99.0: gentle pacing switch (settings tray → "Gentle pacing", default ON;
+  // only shown for providers that publish a P.pacing contract).
+  function gentlePacingOn() {
+    try { return !(window.__rsGentlePacing && window.__rsGentlePacing() === false); } catch { return true; }
+  }
+  // One-time explanation of WHY the loop is paced on this site + the official
+  // API route for heavy automation. Shown once per install (storage flag).
+  function gentleNoticeOnce() {
+    if (A._gentleNoticed || !P.pacing) return;
+    A._gentleNoticed = true;
+    try {
+      chrome.storage.local.get(["rsGentleNoticeShown"], (r) => {
+        if (r && r.rsGentleNoticeShown) return;
+        try { chrome.storage.local.set({ rsGentleNoticeShown: Date.now() }); } catch {}
+        ui.banner("info", P.pacing.label || "Gentle mode",
+          `${P.displayName} suspends web-chat accounts for bot-like use (dozens of messages per hour, instant follow-ups). TotalScript paces its automatic messages here (${Math.round((P.pacing.minGapMs || 0) / 1000)}–${Math.round((P.pacing.maxGapMs || 0) / 1000)} s apart, at most ${P.pacing.perHour}/hour) and never re-sends after a failed turn. ${P.pacing.apiHint || ""} You can switch this off in Settings → Gentle pacing.`);
+      });
+    } catch {}
+  }
+
   async function submitAndGetBase(text, images) {
     // ── Duplicate-submit suppression ──
     // The retry loop below can legitimately resend when a send clearly didn't
@@ -1268,6 +1288,29 @@
     if (!images && A._lastSubmit && A._lastSubmit.sig === _sig && !A._lastSubmit.answered && Date.now() - A._lastSubmit.at < 2500) {
       diag("send.duplicateSuppressed", {});
       return P.assistantCount();
+    }
+    // ── 1.99.0 gentle pacing (per-provider contract P.pacing, e.g. DeepSeek) ──
+    // Automatic turns are held to a human cadence (random gap inside
+    // [minGapMs, maxGapMs]) and to perHour sends per rolling hour. The user's own
+    // message (A.userSend, set by the start paths) never waits for the hourly
+    // budget - a person pressing Send is exactly the behaviour the site expects.
+    // Pure math lives in orchestrator.paceDelay; this only waits and reports.
+    const userSend = !!A.userSend; A.userSend = false;
+    if (P.pacing && gentlePacingOn() && ORCH && ORCH.paceDelay) {
+      A.sendLog = (A.sendLog || []).filter((t) => Date.now() - t < 3600000);
+      let plan = ORCH.paceDelay(A.sendLog, Date.now(), P.pacing, Math.random());
+      if (userSend && plan.reason === "budget") plan = ORCH.paceDelay(A.sendLog, Date.now(), { minGapMs: P.pacing.minGapMs, maxGapMs: P.pacing.maxGapMs }, Math.random());
+      if (plan.waitMs > 0 && !A.stop) {
+        diag("send.paced", { waitMs: plan.waitMs, reason: plan.reason, sentLastHour: plan.sentLastHour });
+        const secs = Math.ceil(plan.waitMs / 1000);
+        if (plan.reason === "budget") ui.toast(`${P.pacing.label || P.displayName}: ${plan.sentLastHour} messages this hour — next one in ${secs >= 90 ? Math.ceil(secs / 60) + " min" : secs + " s"} (Stop to cancel)`);
+        try { ui.steeringProgress("sending", plan.reason === "budget" ? `Hourly budget reached (${plan.sentLastHour}/${P.pacing.perHour}) — waiting ${secs >= 90 ? Math.ceil(secs / 60) + " min" : secs + " s"}` : `Pacing — next message in ${secs} s`, 0); } catch {}
+        const t0 = Date.now();
+        while (Date.now() - t0 < plan.waitMs && !A.stop) await sleep(250);
+        if (A.stop) { diag("send.pacedCancelled", {}); return P.assistantCount(); }
+      }
+      A._pacedSend = true; // stamped into A.sendLog when the message actually lands (below)
+      gentleNoticeOnce();
     }
     A._lastSubmit = { sig: _sig, at: Date.now(), answered: false };
     A.lastSent = { text: String(text), images: images || null, at: Date.now() }; // 1.69: re-sent verbatim after a transient provider error
@@ -1345,6 +1388,7 @@
         tries++;
       }
       if (messageSent) diag("send.cleared", { tries });
+      if (A._pacedSend && (messageSent || landed())) { A._pacedSend = false; (A.sendLog = A.sendLog || []).push(Date.now()); }
       // All retries exhausted with NO evidence the message landed (textarea never
       // cleared, no new turn). Silently returning here left the loop waiting for
       // a reply that will never come (~60s "empty" timeout) with zero explanation
@@ -5332,6 +5376,10 @@
     let commandlessGaveUp = false; // 1.76.0: the give-up note fires once per run
     let parseRetries = 0;
     let providerRetries = 0; // 1.69: bounded re-send after a TRANSIENT provider error (rate limit / busy / network)
+    // 1.99.0: on a gentle-mode provider (P.pacing.noResend) a dead, empty or
+    // transiently failed turn is NOT re-sent - a second copy of the same message
+    // is the stop/regenerate pattern DeepSeek's abuse detection scores.
+    const resendAllowed = () => !(P.pacing && P.pacing.noResend && gentlePacingOn());
     let falseSuccessNudged = false; // 1.69: one "you said done but nothing ran" correction per run
     let luaFenceNudged = false; // 1.81.0: one "shown ```lua is not executed" correction per run
     let modeGateSent = false; // 1.38.0: one evidence gate per run
@@ -5400,7 +5448,7 @@
           // twice); permanent classes (auth, quota, moderation, invalid request)
           // stop at once with an actionable hint instead of a generic banner.
           const cls = res.cls || (ORCH ? ORCH.classifyProviderError(res.detail) : null);
-          const wait = cls && cls.retryable && ORCH && A.lastSent && !A.stop && A.started ? ORCH.retryDelay(cls.cls, providerRetries + 1, cls.waitMs) : null;
+          const wait = cls && cls.retryable && resendAllowed() && ORCH && A.lastSent && !A.stop && A.started ? ORCH.retryDelay(cls.cls, providerRetries + 1, cls.waitMs) : null;
           if (wait != null) {
             providerRetries++;
             diag("loop.providerRetry", { cls: cls.cls, n: providerRetries, waitMs: wait });
@@ -5412,6 +5460,16 @@
             const again = A.lastSent;
             base = await submitAndGetBase(again.text + "\n\n" + ORCH.FEEDBACK.providerRetry(cls.cls, providerRetries, Math.round(wait / 1000)), again.images);
             continue;
+          }
+          if (cls && cls.cls === "account_block") {
+            // 1.99.0: the ACCOUNT is suspended / throttled. Stop cold, say until when, point at the API route.
+            const until = ORCH && ORCH.suspendedUntil ? ORCH.suspendedUntil(res.detail) : null;
+            A.accountBlockedUntil = until ? until.getTime() : Date.now() + 3600000;
+            diag("loop.accountBlock", { until: A.accountBlockedUntil, detail: String(res.detail || "").slice(0, 120) });
+            ui.steeringProgress("error", `${P.displayName} suspended or throttled this account`, toolTurns);
+            ui.banner("warn", `${P.displayName} blocked this account${until ? " until " + until.toLocaleString() : ""}`,
+              `${P.displayName} said: "${String(res.detail || "").slice(0, 200)}". TotalScript stopped and will not resend anything. ${(P.pacing && P.pacing.apiHint) || ""}`.trim());
+            break;
           }
           ui.steeringProgress("error", "The provider request failed", toolTurns);
           ui.banner("warn", `${P.displayName} request failed${cls && cls.cls !== "unknown" ? " (" + cls.cls.replace("_", " ") + ")" : ""}`,
@@ -5428,7 +5486,7 @@
           // One automatic retry (v1.12): flaky providers (GLM under load, Arena
           // busy pages, Qwen cold caches) sometimes just DROP a turn. A single
           // "continue" nudge rescues the run; a second failure still stops.
-          if (deadRetries < 1 && !A.stop && A.started) {
+          if (deadRetries < 1 && resendAllowed() && !A.stop && A.started) {
             deadRetries++;
             diag("loop.deadRetry", { kind: "timeout", n: deadRetries });
             ui.toast(P.displayName + " went quiet — retrying once…");
@@ -5450,7 +5508,7 @@
         if (res.kind === "empty") {
           diag("empty.end", { stale: !!res.stale });
           if (res.stale) ui.toast(P.displayName + " showed the previous reply again - it was NOT re-run");
-          if (deadRetries < 1 && !A.stop && A.started) {
+          if (deadRetries < 1 && resendAllowed() && !A.stop && A.started) {
             deadRetries++;
             diag("loop.deadRetry", { kind: "empty", n: deadRetries });
             ui.toast(P.displayName + " sent nothing — retrying once…");
@@ -6871,6 +6929,7 @@
         return;
       }
       const prompt = systemPrompt();
+      A.userSend = true; // 1.99.0: the person's own message - gap-paced, never budget-blocked
       const base = await submitAndGetBase(prompt);
       if (!alive()) return;
       // (syncSessionState pins A.startingKey to the conversation id once the chat
@@ -8209,6 +8268,8 @@
     // reload - they used to silently reset to these defaults on every page
     // refresh because only the setters ever touched chrome.storage.
     let autoFixEnabled = true, extraThinking = false, planMode = false, steeringMode = false, forgeMode = false, autoFixStopPlay = true, autoDebugEnabled = true, multiAgent = false, guiBriefEnabled = true;
+    let gentlePacing = true; // 1.99.0: human-cadence sends on providers with a P.pacing contract (DeepSeek)
+    try { window.__rsGentlePacing = () => gentlePacing; } catch {}
     try { window.__rsGuiBrief = () => guiBriefEnabled; window.__rsNoteGuiRequest = () => noteGuiRequest(); } catch {}
     try { chrome.storage.local.get("rsGuiBrief", (r) => { if (r && typeof r.rsGuiBrief === "boolean") { guiBriefEnabled = r.rsGuiBrief; try { window.__rsGuiBrief = () => guiBriefEnabled; } catch {} } }); } catch {}
     let workMode = "creation";
@@ -8219,7 +8280,8 @@
     try { window.__rsAutoDebug = () => autoDebugEnabled; } catch {}
     try { window.__rsMultiAgent = () => multiAgent; } catch {}
     try {
-      chrome.storage.local.get(["rsAutoFix", "rsExtraThinking", "rsPlanMode", "rsForgeMode", "rsAutoFixStopPlay", "rsWorkMode", "rsAutoDebug", "rsMultiAgent"], (r) => {
+      chrome.storage.local.get(["rsAutoFix", "rsExtraThinking", "rsPlanMode", "rsForgeMode", "rsAutoFixStopPlay", "rsWorkMode", "rsAutoDebug", "rsMultiAgent", "rsGentlePacing"], (r) => {
+        if (typeof r.rsGentlePacing === "boolean") gentlePacing = r.rsGentlePacing;
         if (!r) return;
         if (typeof r.rsAutoFix === "boolean") autoFixEnabled = r.rsAutoFix;
         if (typeof r.rsExtraThinking === "boolean") {
@@ -8364,6 +8426,7 @@
           try { window.__rsAutoDebug = () => autoDebugEnabled; } catch {}
           dirty = true;
         }
+        if (changes.rsGentlePacing && typeof changes.rsGentlePacing.newValue === "boolean") { gentlePacing = changes.rsGentlePacing.newValue; dirty = true; }
         if (changes.rsGuiBrief && typeof changes.rsGuiBrief.newValue === "boolean") {
           guiBriefEnabled = changes.rsGuiBrief.newValue;
           try { window.__rsGuiBrief = () => guiBriefEnabled; } catch {}
@@ -8533,6 +8596,9 @@
     setTimeout(tryResumeSession, 1800);
     function setAutoFix(v){ autoFixEnabled=!!v; try{chrome.storage.local.set({rsAutoFix: autoFixEnabled});}catch{}; buildMenu(); }
     function setAutoFixStopPlay(v){ autoFixStopPlay=!!v; try{chrome.storage.local.set({rsAutoFixStopPlay: autoFixStopPlay});}catch{}; buildMenu(); }
+    function setGentlePacing(v){ gentlePacing=!!v; try{chrome.storage.local.set({rsGentlePacing: gentlePacing});}catch{}; buildMenu(); }
+    // the row only renders for providers that publish a pacing contract
+    const pacingContract = () => { try { return (window.RSProvider && window.RSProvider.pacing) || null; } catch { return null; } };
     // ── Background mode (v1.12): keep working on other sites ──
     function setBgMode(v){
       bgMode = !!v;
@@ -9366,6 +9432,11 @@
               <span class="rs-tgl-sub">Stop Play when an error is caught (off = keep playing while the AI fixes it).</span></span>
               <span class="rs-tgl ${autoFixStopPlay ? "on" : ""}"></span>
             </div>
+            ${pacingContract() ? `<div class="rs-tgl-row rs-adv" data-mode="gentle" role="switch" aria-checked="${gentlePacing}" tabindex="0">
+              <span class="rs-tgl-info"><span class="rs-tgl-name">Gentle pacing (${pacingContract().label || "account protection"})</span>
+              <span class="rs-tgl-sub">Automatic messages ${Math.round((pacingContract().minGapMs || 0) / 1000)}–${Math.round((pacingContract().maxGapMs || 0) / 1000)} s apart, max ${pacingContract().perHour}/hour, no re-sends — this site suspends accounts for bot-like cadence. Off = full speed at your own risk.</span></span>
+              <span class="rs-tgl ${gentlePacing ? "on" : ""}"></span>
+            </div>` : ""}
             <div class="rs-tgl-row rs-adv" data-mode="autodebug" role="switch" aria-checked="${autoDebugEnabled}" tabindex="0">
               <span class="rs-tgl-info"><span class="rs-tgl-name">Automatic Debugger</span><span class="rs-tgl-sub">After Studio edits, new Output errors are sent to the AI to fix.</span></span>
               <span class="rs-tgl ${autoDebugEnabled ? "on" : ""}"></span>
@@ -9464,6 +9535,7 @@
           else if(m==="extra") setExtraThinking(!extraThinking);
           else if(m==="plan") setPlanMode(!planMode);
           else if(m==="autodebug") setAutoDebug(!autoDebugEnabled);
+          else if(m==="gentle") setGentlePacing(!gentlePacing);
           else if(m==="guibrief") setGuiBrief(!guiBriefEnabled);
           else if(m==="multiagent") setMultiAgent(!multiAgent);
           else if(m==="tasklist") setTaskList(!taskListOn());
@@ -12680,6 +12752,7 @@ statusTimer = rsInterval(() => bg({ type: "status" }).then(onStatus), 5000);
       // A fresh user message = fresh intent: clear any previous manual stop so
       // the loop is allowed to run again.
       A.userStopped = false;
+      if (P.pacing) (A.sendLog = A.sendLog || []).push(Date.now()); // 1.99.0: the person's own send counts toward the cadence / hourly budget too
       bumpSys("users");
       A.steeringStep = 0;
       ui.steeringProgress("waiting", "Request sent — waiting for the first action", 0);
@@ -12863,6 +12936,7 @@ if ((document.hidden && !bgMode) || A.userStopped) return;
     A.forceSysResend = false;
     diag("sys.resend", { via: "ownTurn", ...spent });
     try {
+      A.userSend = true;
       const base = await submitAndGetBase(systemPrompt({ embedCatalogue: false }));
       await waitForResponse(base);
     } catch (e) {

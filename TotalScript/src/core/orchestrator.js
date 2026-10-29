@@ -33,7 +33,7 @@
 // content script (window.TotalOrchestrator).
 const TotalOrchestrator = (() => {
   "use strict";
-  const VERSION = "1.98.0";
+  const VERSION = "1.99.0";
 
   // ───────────────────────── 1. task understanding ─────────────────────────
   const CATEGORY_RE = {
@@ -180,6 +180,9 @@ const TotalOrchestrator = (() => {
   // succeed later without any change"; everything else needs the user.
   const ERROR_CLASSES = {
     context_limit: { retryable: false, hint: "The conversation is too long for this model - open a fresh chat and continue there." },
+    // 1.99.0: the ACCOUNT (not this request) was suspended or throttled for bot-like
+    // use of the web chat. Never retried - every extra message lengthens the ban.
+    account_block: { retryable: false, hint: "The provider suspended or throttled this ACCOUNT for bot-like use of its web chat. TotalScript stopped and will not resend. Wait the stated time out, keep automatic messages paced (gentle mode), and for heavy automation use the desktop app with your own official API key." },
     rate_limit: { retryable: true, hint: "The provider is rate limiting this account - TotalScript waits and retries, then stops if it persists." },
     quota: { retryable: false, hint: "The account's usage allowance / credits are exhausted - wait for the reset or switch provider." },
     auth: { retryable: false, hint: "The session or API key is not accepted - sign in again / check the key, then press Start." },
@@ -200,6 +203,7 @@ const TotalOrchestrator = (() => {
     const ra = l.match(/retry[- ]after[:\s]*(\d+)\s*(ms|milliseconds|s|sec|seconds|m|min|minutes)?/) || l.match(/(?:try again|retry|wait)\s+(?:in|after)\s+(\d+)\s*(ms|milliseconds|s|sec|seconds|m|min|minutes)?/);
     if (ra) { const n = parseInt(ra[1], 10); const u = ra[2] || "s"; waitMs = /^m(s|illiseconds)$/.test(u) ? n : /^m/.test(u) ? n * 60000 : n * 1000; }
     if (/\b(cancel+ed|canceled) by (the )?user|user (cancel+ed|aborted|stopped)|stop(ped)? by user|operation (was )?cancel+ed|request (was )?cancel+ed/.test(l)) cls = "cancelled";
+    else if (ACCOUNT_BLOCK_RE.test(t)) cls = "account_block";
     else if (/model.{0,30}(not found|does not exist|doesn't exist|is not available|unavailable|not available|has been (deprecated|retired)|decommissioned)|no such model|unknown model|invalid model|unsupported model|model_not_found|\b404\b.{0,40}model|model.{0,40}\b404\b/.test(l)) cls = "unsupported_model";
     else if (/context.{0,24}(limit|length|window|exceed)|maximum.{0,20}tokens|too many tokens|conversation.{0,24}too long|prompt is too long|input is too long|message is too long|exceeds? the (maximum|limit)|token limit/.test(l)) cls = "context_limit";
     else if (/\b(401|403)\b|unauthori[sz]ed|forbidden|invalid (api )?key|incorrect api key|api key (is )?(invalid|missing|not)|authentication|not authenticated|session expired|please (log|sign) in|login required|access denied|permission denied/.test(l)) cls = "auth";
@@ -212,6 +216,50 @@ const TotalOrchestrator = (() => {
     const meta = ERROR_CLASSES[cls];
     return { cls, retryable: meta.retryable, waitMs, hint: meta.hint, detail: t.slice(0, 300) };
   }
+  // 1.99.0: account-level suspension / throttling notices (DeepSeek wording as
+  // reported by users in 2026: "Due to violation of user policies, your account
+  // has been suspended until <date>", "sending messages too frequently"), with
+  // the French / Chinese UI strings the same site renders.
+  const ACCOUNT_BLOCK_RE = /account (has been |is |was )?(temporarily )?(suspended|banned|restricted|locked|disabled|blocked)|suspended until|violation of (the )?user polic|(sending|sent) (messages |requests )?too (frequently|often|fast|quickly)|too frequently|compte (a été |est )?(suspendu|bloqué)|trop fréquemment|请求过于频繁|操作过于频繁|账号.{0,8}(封禁|暂停|冻结|异常)/i;
+  // suspendedUntil(text) → Date | null, from "suspended until September 20, 2026 02:55".
+  function suspendedUntil(text) {
+    const m = String(text || "").match(/until\s+([A-Za-z]+ \d{1,2},? \d{4}(?:[ ,]+\d{1,2}:\d{2})?)/i);
+    if (!m) return null;
+    const d = new Date(m[1].replace(/,\s*(\d{1,2}:\d{2})$/, " $1"));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // ── 1.99.0 gentle pacing ──────────────────────────────────────────────────
+  // paceDelay(sendLog, now, pacing, jitter) → { waitMs, reason, sentLastHour }.
+  // sendLog: timestamps (ms) of earlier sends; pacing: the provider's contract
+  // { minGapMs, maxGapMs, perHour }; jitter: 0..1 (caller passes Math.random()).
+  // The gap keeps automatic turns at a human cadence instead of firing the next
+  // message the millisecond a reply ends; the hourly budget caps a long agent run
+  // at what a person could plausibly type. Pure so it can be unit-tested.
+  function paceDelay(sendLog, now, pacing, jitter) {
+    const log = Array.isArray(sendLog) ? sendLog : [];
+    const p = pacing || {};
+    const hour = 3600000;
+    const recent = log.filter((t) => now - t < hour);
+    let waitMs = 0;
+    let reason = null;
+    const minGap = Math.max(0, Number(p.minGapMs) || 0);
+    const maxGap = Math.max(minGap, Number(p.maxGapMs) || minGap);
+    const last = log.length ? Math.max.apply(null, log) : null;
+    if (last != null && minGap > 0) {
+      const j = Math.min(1, Math.max(0, Number(jitter) || 0));
+      const gap = Math.round(minGap + (maxGap - minGap) * j);
+      if (now - last < gap) { waitMs = gap - (now - last); reason = "gap"; }
+    }
+    const perHour = Number(p.perHour) || 0;
+    if (perHour > 0 && recent.length >= perHour) {
+      const oldest = Math.min.apply(null, recent);
+      const until = oldest + hour - now;
+      if (until > waitMs) { waitMs = until; reason = "budget"; }
+    }
+    return { waitMs: Math.max(0, waitMs), reason, sentLastHour: recent.length };
+  }
+
   // retryDelay(cls, attempt /*1-based*/, waitMs) → ms to wait before retry
   // number `attempt`, or null when this class must not be retried (again).
   function retryDelay(cls, attempt, waitMs) {
@@ -395,7 +443,7 @@ const TotalOrchestrator = (() => {
     return data;
   }
 
-  return { VERSION, classifyTask, taskLayer, classifyProviderError, retryDelay, ERROR_CLASSES, validateToolArgs, argProblemsMessage, claimsCompletion, FEEDBACK, capabilities, redact, redactData, CATEGORY_LABEL };
+  return { VERSION, classifyTask, taskLayer, classifyProviderError, retryDelay, ERROR_CLASSES, ACCOUNT_BLOCK_RE, suspendedUntil, paceDelay, validateToolArgs, argProblemsMessage, claimsCompletion, FEEDBACK, capabilities, redact, redactData, CATEGORY_LABEL };
 })();
 if (typeof window !== "undefined") window.TotalOrchestrator = TotalOrchestrator;
 if (typeof module !== "undefined" && module.exports) module.exports = TotalOrchestrator;

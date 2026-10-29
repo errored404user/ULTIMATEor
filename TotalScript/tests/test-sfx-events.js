@@ -12,7 +12,7 @@ function ok(name, cond, detail) { if (cond) { pass++; console.log("PASS  " + nam
 
 const src = fs.readFileSync("src/core/skills/studio_sfx.js", "utf8");
 ok("pack registered in every isolated-world list + codecraft.html", manifest.content_scripts.filter((c) => c.js && c.js.includes("src/core/main.js")).every((c) => c.js.includes("src/core/skills/studio_sfx.js")) && /studio_sfx\.js/.test(fs.readFileSync("codecraft.html", "utf8")));
-ok("version pinned", S.SFX_VERSION === "1.98.0" && /TotalSFX/.test(S.SFX_RUNTIME_SRC));
+ok("version pinned", S.SFX_VERSION === "1.99.0" && /TotalSFX/.test(S.SFX_RUNTIME_SRC));
 ok("commands: install / define / play / validate visible, list hidden", ["sfx_library_install", "sfx_event_define", "sfx_event_play", "sfx_validate"].every((n) => S.SKILL_COMMANDS.some((c) => c.name === n && !c.hidden)) && S.SKILL_COMMANDS.some((c) => c.name === "sfx_events_list" && c.hidden));
 
 // Catalogue: engine-bundled files or explicitly missing - never invented ids.

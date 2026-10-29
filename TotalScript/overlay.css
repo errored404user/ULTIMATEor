@@ -8985,3 +8985,5 @@ html.rs-light #rs-video select, html.rs-light #rs-video textarea { background: #
 html.rs-light #rs-video .rsv-chk { color: #1f2933; }
 html.rs-light #rs-video .rsv-btn { color: #1f2933; background: rgba(0,0,0,.05); border-color: rgba(0,0,0,.12); }
 @media (max-width: 860px) { #rs-video .rsv-body { grid-template-columns: 1fr; } }
+/* 1.99.0 gentle-mode notice (account-protection explanation, shown once) */
+.rs-banner.info { border-left: 2px solid rgba(34, 211, 238, 0.55); }
