@@ -96,7 +96,7 @@ ok("settings keep serde(default) so old settings.json still loads", /#\[serde\(d
 // ── gui.rs: panel ──
 ok("right side panel", gui.includes('egui::SidePanel::right("chat-panel")') && gui.includes("width_range(320.0..=760.0)"));
 ok("panel drawn before the central panel on every page", gui.indexOf("self.chat_panel(ctx);") > 0 && gui.indexOf("self.chat_panel(ctx);") < gui.indexOf("Page::Home => self.page_home(ui)"));
-ok("AI Chat is a sidebar page (second entry, Ctrl+2)", gui.includes("enum Page { Home, Chat, Explorer, Tools, Servers, Terminal, Settings }") && gui.includes("Page::Chat => egui::Key::Num2") && gui.includes('Page::Chat => "AI Chat"') && gui.includes("Page::Chat => self.page_chat(ui)"));
+ok("AI Chat is a sidebar page (second entry, Ctrl+2)", gui.includes("enum Page { Home, Chat, Explorer, Tools, Servers, Terminal, Help, Settings }") && gui.includes("Page::Chat => egui::Key::Num2") && gui.includes('Page::Chat => "AI Chat"') && gui.includes("Page::Chat => self.page_chat(ui)"));
 ok("sidebar page has its own icon + busy dot", gui.includes("Page::Chat => {\n            // speech bubble") && gui.includes("if page == Page::Chat && self.chat_turn.is_some()"));
 ok("side panel hidden while the Chat page is shown", gui.includes("if self.page != Page::Chat { self.chat_panel(ctx); }"));
 ok("page offers Side panel hand-off", gui.includes('pill(ui, t, "Side panel", false)') && gui.includes("fn page_chat"));
@@ -123,9 +123,9 @@ ok("suggestion chips on empty transcript", gui.includes("Build a spawn lobby"));
 // ── docs + pins ──
 ok("agent README documents the panel", agentReadme.includes("## AI chat panel (1.37.0)") && agentReadme.includes("src/chat.rs"));
 ok("README changelog 1.37.0", readme.includes("**1.37.0 — total-core: AI chat side panel that works in Studio.**"));
-ok("README crate line updated", readme.includes("`total-agent` 1.95.0") && !readme.includes("removed desktop status window"));
-ok("manifest version is 1.95.0", manifest.version === "1.95.0", manifest.version);
-ok("crate / plugin pinned at 1.95.0", /^version = "1\.95\.0"/m.test(cargo) && read("plugin/TotalScript.lua").includes('local VERSION = "1.95.0"') && /name = "total-agent"\nversion = "1\.95\.0"/.test(read("agent/Cargo.lock")));
+ok("README crate line updated", readme.includes("`total-agent` 1.96.0") && !readme.includes("removed desktop status window"));
+ok("manifest version is 1.96.0", manifest.version === "1.96.0", manifest.version);
+ok("crate / plugin pinned at 1.96.0", /^version = "1\.96\.0"/m.test(cargo) && read("plugin/TotalScript.lua").includes('local VERSION = "1.96.0"') && /name = "total-agent"\nversion = "1\.96\.0"/.test(read("agent/Cargo.lock")));
 ok("no new crates needed", !/^(eventsource|async-openai|openai)/m.test(cargo));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall agent-chat checks passed");

@@ -567,10 +567,10 @@ impl Theme {
 // ───────────────────────────── pages ─────────────────────────────
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Page { Home, Chat, Explorer, Tools, Servers, Terminal, Settings }
+enum Page { Home, Chat, Explorer, Tools, Servers, Terminal, Help, Settings }
 
 impl Page {
-    const ALL: [Page; 7] = [Page::Home, Page::Chat, Page::Explorer, Page::Tools, Page::Servers, Page::Terminal, Page::Settings];
+    const ALL: [Page; 8] = [Page::Home, Page::Chat, Page::Explorer, Page::Tools, Page::Servers, Page::Terminal, Page::Help, Page::Settings];
 
     fn title(self) -> &'static str {
         match self {
@@ -580,6 +580,7 @@ impl Page {
             Page::Tools => "Tools",
             Page::Servers => "MCP Servers",
             Page::Terminal => "Terminal",
+            Page::Help => "Help",
             Page::Settings => "Settings",
         }
     }
@@ -592,6 +593,7 @@ impl Page {
             Page::Tools => "Every tool the extension can call through this bridge — run any of them by hand",
             Page::Servers => "Roblox Studio MCP, the local filesystem engine and the extension channels",
             Page::Terminal => "Bridge console, workspace commands and Luau in Studio",
+            Page::Help => "What every page, button and shortcut does — and how to get Studio linked (F1)",
             Page::Settings => "Appearance, behaviour, workspace, Studio MCP and diagnostics",
         }
     }
@@ -604,7 +606,8 @@ impl Page {
             Page::Tools => egui::Key::Num4,
             Page::Servers => egui::Key::Num5,
             Page::Terminal => egui::Key::Num6,
-            Page::Settings => egui::Key::Num7,
+            Page::Help => egui::Key::Num7,
+            Page::Settings => egui::Key::Num8,
         }
     }
 }
@@ -682,6 +685,7 @@ pub struct App {
     snapshot_run: Option<ToolRun>,
     // tools
     tool_query: String,
+    help_query: String,
     tool_filter: ToolFilter,
     local_tools: Vec<ToolInfo>,
     selected_tool: Option<(String, String)>,
@@ -790,6 +794,7 @@ impl App {
             snapshot: None,
             snapshot_run: None,
             tool_query: String::new(),
+            help_query: String::new(),
             tool_filter: ToolFilter::All,
             local_tools,
             selected_tool: None,
@@ -1097,6 +1102,7 @@ impl App {
                 if i.modifiers.shift && i.key_pressed(egui::Key::S) { capture = true; }
             }
             if i.key_pressed(egui::Key::F5) { refresh = true; }
+            if i.key_pressed(egui::Key::F1) { nav = Some(Page::Help); }
             if i.key_pressed(egui::Key::Escape) { escape = true; }
         });
         if escape {
@@ -1104,6 +1110,7 @@ impl App {
                 Page::Tools => { if self.selected_tool.is_some() { self.selected_tool = None; } else { self.tool_query.clear(); } }
                 Page::Explorer => { self.explorer_note.clear(); self.delete_armed = None; }
                 Page::Servers => { self.kill_armed = None; }
+                Page::Help => { self.help_query.clear(); }
                 _ => {}
             }
             self.toast = None;
@@ -1257,7 +1264,7 @@ impl App {
                 ui.add_space(4.0);
                 for (n, page) in Page::ALL.iter().enumerate() {
                     let page = *page;
-                    if page == Page::Settings { ui.add_space(8.0); ui.label(RichText::new("SYSTEM").small().strong().color(t.muted)); ui.add_space(4.0); }
+                    if page == Page::Help { ui.add_space(8.0); ui.label(RichText::new("SYSTEM").small().strong().color(t.muted)); ui.add_space(4.0); }
                     let selected = self.page == page;
                     let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 34.0), Sense::click());
                     let resp = resp.on_hover_text(format!("{}  (Ctrl+{})", page.title(), n + 1));
@@ -1486,7 +1493,8 @@ impl App {
                     ui.add_space(12.0);
                     ui.label(RichText::new("Quick access").size(16.0).strong().color(t.text));
                     ui.add_space(6.0);
-                    let items: [(&str, &str, Page); 5] = [
+                    let items: [(&str, &str, Page); 6] = [
+                        ("Help", "Learn every page, button and shortcut; fix a Studio link that will not come up", Page::Help),
                         ("Explorer", "Edit files inside the AgentScript workspace", Page::Explorer),
                         ("Tools", "Browse and run every Studio and workspace tool", Page::Tools),
                         ("MCP Servers", "Restart the helper, probe or kill Studio, FULL access", Page::Servers),
@@ -2154,6 +2162,49 @@ impl App {
         }
     }
 
+    fn page_help(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
+        let mut goto: Option<Page> = None;
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Search").color(t.muted));
+            ui.add(egui::TextEdit::singleline(&mut self.help_query).hint_text("page, button, shortcut or problem — e.g. Luau, API key, tray, not linked…").desired_width(420.0));
+            if !self.help_query.is_empty() && ui.small_button("Clear").on_hover_text("Esc").clicked() { self.help_query.clear(); }
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                ui.label(RichText::new(format!("{} topics · F1 opens this page from anywhere", HELP_TOPICS.len())).small().color(t.muted));
+            });
+        });
+        ui.add_space(8.0);
+        let q = self.help_query.trim().to_lowercase();
+        let shown: Vec<&HelpTopic> = HELP_TOPICS
+            .iter()
+            .filter(|h| q.is_empty() || h.title.to_lowercase().contains(&q) || h.summary.to_lowercase().contains(&q) || h.steps.iter().any(|st| st.to_lowercase().contains(&q)))
+            .collect();
+        egui::ScrollArea::vertical().id_salt("help").auto_shrink([false, false]).show(ui, |ui| {
+            if shown.is_empty() {
+                ui.label(RichText::new(format!("Nothing matches \"{}\". Try a page name (Tools, Terminal), a feature (Luau, API key, tray, workspace) or a symptom (not linked, offline).", q)).color(t.muted));
+            }
+            for h in shown {
+                settings_section(ui, t, h.title, |ui| {
+                    ui.label(RichText::new(h.summary).color(t.text));
+                    ui.add_space(4.0);
+                    for st in h.steps {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.spacing_mut().item_spacing.x = 6.0;
+                            ui.label(RichText::new("•").color(t.accent));
+                            ui.label(RichText::new(*st).color(t.muted));
+                        });
+                    }
+                    if let Some(p) = h.page {
+                        ui.add_space(6.0);
+                        let n = Page::ALL.iter().position(|x| *x == p).map(|i| i + 1).unwrap_or(0);
+                        if pill(ui, t, &format!("Open {}", p.title()), false).on_hover_text(format!("Ctrl+{n}")).clicked() { goto = Some(p); }
+                    }
+                });
+            }
+        });
+        if let Some(p) = goto { self.page = p; }
+    }
+
     fn page_settings(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
         let mut save = false;
@@ -2248,7 +2299,7 @@ impl App {
             });
             ui.add_space(6.0);
             ui.label(RichText::new("Rebuild: cd TotalScript\\agent && cargo build --release  ->  target\\release\\total-core.exe").monospace().small().color(t.muted));
-            ui.label(RichText::new("Keyboard: Ctrl+1…6 pages · Ctrl+R restart MCP helper · F5 probe Studio + refresh · Ctrl+Shift+S capture Studio viewport · Ctrl+S save file · Ctrl+Enter run Luau").small().color(t.muted));
+            ui.label(RichText::new("Keyboard: Ctrl+1…8 pages · F1 help · Ctrl+J chat panel · Ctrl+R restart MCP helper · F5 probe Studio + refresh · Ctrl+Shift+S capture Studio viewport · Ctrl+S save file · Ctrl+Enter run Luau").small().color(t.muted));
             ui.horizontal_wrapped(|ui| {
                 if pill(ui, t, "Open repository", false).clicked() { open_external(&format!("https://github.com/{REPO}")); }
             });
@@ -2343,6 +2394,7 @@ impl eframe::App for App {
                     Page::Tools => self.page_tools(ui),
                     Page::Servers => self.page_servers(ui),
                     Page::Terminal => self.page_terminal(ui),
+                    Page::Help => self.page_help(ui),
                     Page::Settings => self.page_settings(ui),
                 }
             });
@@ -3252,12 +3304,179 @@ fn nav_icon(p: &egui::Painter, r: egui::Rect, page: Page, c: Color32) {
             p.line_segment([pt(0.42, 0.52), pt(0.25, 0.64)], s);
             p.line_segment([pt(0.5, 0.66), pt(0.75, 0.66)], s);
         }
+        Page::Help => {
+            // circle with a question mark
+            p.circle_stroke(pt(0.5, 0.5), w * 0.42, s);
+            p.text(pt(0.5, 0.53), egui::Align2::CENTER_CENTER, "?", FontId::new(h * 0.66, FontFamily::Proportional), c);
+        }
         Page::Settings => {
             p.circle_stroke(pt(0.5, 0.5), w * 0.36, Stroke::new(2.2_f32, c));
             p.circle_stroke(pt(0.5, 0.5), w * 0.13, s);
         }
     }
 }
+
+
+// ───────────────────────────── help ─────────────────────────────
+
+/// One entry of the in-app Help page (Page::Help, F1). Plain text only — no
+/// markdown — so it renders the same in every theme and can be searched.
+struct HelpTopic { title: &'static str, page: Option<Page>, summary: &'static str, steps: &'static [&'static str] }
+
+const HELP_TOPICS: &[HelpTopic] = &[
+    HelpTopic {
+        title: "Start here: what this app is",
+        page: Some(Page::Home),
+        summary: "TotalScript Desktop is the bridge between the TotalScript browser extension (the AI site you chat on) and your PC: Roblox Studio through the Studio MCP helper, and a local project folder (the AgentScript workspace). The AI never touches your PC directly — every action goes through this app, on localhost only (HTTP 127.0.0.1:3000, extension channels 17613 / 17615).",
+        steps: &[
+            "1. Leave this app running. Closing the window keeps the bridge alive in the background (Settings → Behaviour decides whether it hides to the notification area).",
+            "2. Open Roblox Studio → Assistant → ⋯ → Manage MCP Servers → turn on 'Studio as MCP server'.",
+            "3. Open a place (File → New → Baseplate is enough).",
+            "4. In the browser, press ▶ Start Agent on the TotalScript bar. Home ticks each of these steps off live.",
+            "Then just describe what you want in the chat ('build a lobby', 'fix the error in Output'). The AI reads the place first, builds, playtests and screenshots to verify.",
+        ],
+    },
+    HelpTopic {
+        title: "Home",
+        page: Some(Page::Home),
+        summary: "The status board: bridge, extension connection, Studio MCP helper, Studio process and place link, each with a green / grey dot and a one-line hint about what is missing.",
+        steps: &[
+            "Setup checklist: the four start-up steps with live ticks. a 'Hide' button appears once everything is green; Settings → Behaviour → 'Always show the setup checklist' brings it back.",
+            "Restart Studio MCP (Ctrl+R) restarts the helper that talks to Studio; Probe Studio (F5) re-checks the place link.",
+            "Capture Studio viewport (Ctrl+Shift+S) grabs a screenshot through the helper and shows it here — the same picture the AI sees when it verifies its work.",
+            "Copy diagnostics copies a plain-text report (versions, ports, helper state, tool count) you can paste into a bug report. It contains no keys and no chat text.",
+            "Quick access cards jump to the other pages.",
+        ],
+    },
+    HelpTopic {
+        title: "AI Chat",
+        page: Some(Page::Chat),
+        summary: "Chat with a model on your own API key, without a browser tab. The model drives Studio and the workspace through the same tools the extension uses, and every tool call shows up as a card with its arguments, result and elapsed time.",
+        steps: &[
+            "Set a provider and key in Settings → AI chat (side panel): CodeCraft, OpenAI, OpenRouter, Groq, DeepSeek, Gemini, xAI, Mistral, Together, a local Ollama / LM Studio or any OpenAI-compatible endpoint.",
+            "Keys and the chosen model are stored in plain text in the settings file on this PC only; they are never sent anywhere except the provider you picked.",
+            "Ctrl+J toggles the chat as a side panel so it stays open while you use Explorer, Tools or Terminal.",
+            "Roblox tools need the Studio MCP helper and a linked place; workspace tools work as soon as the bridge is up.",
+            "Tool cards expand to show the full JSON result and any screenshot the tool returned. 'copy' on a message copies its text.",
+        ],
+    },
+    HelpTopic {
+        title: "Explorer",
+        page: Some(Page::Explorer),
+        summary: "A file browser for the AgentScript workspace — the folder the AI is allowed to read and write when it works outside Studio.",
+        steps: &[
+            "Click a folder to enter it, a file to open it. Text files up to 2 MB open inline; Ctrl+S saves. Binary files have no preview.",
+            "The path box jumps to any folder inside the workspace; 'new name…' creates a file or folder.",
+            "Delete is armed on the first click and performed on the second, within three seconds. Esc disarms.",
+            "F5 refreshes the listing after the AI or another program changed files.",
+            "Change the workspace folder in Settings → Workspace. --workspace on the command line and TOTAL_WORKSPACE_ROOT in the environment still win when given.",
+        ],
+    },
+    HelpTopic {
+        title: "Tools",
+        page: Some(Page::Tools),
+        summary: "Every tool the extension can call through this bridge, in one searchable catalog: Roblox tools from the Studio MCP helper and local tools from the workspace engine. You can run any of them by hand to see exactly what the AI gets back.",
+        steps: &[
+            "Filter All / Roblox / Local, then type to search by name or description.",
+            "Pick a tool: its parameters are listed and the argument box is pre-filled with a JSON object holding the required fields — fill them in and press Run tool.",
+            "Results arrive in the panel below with timing; errors come back verbatim, which is also what the AI sees.",
+            "Roblox tools are greyed out until the Studio MCP helper runs ('Start Studio MCP helper' appears when it does not). Studio tools are only listed once the helper has reported them.",
+            "Esc clears the selected tool, then the search box.",
+        ],
+    },
+    HelpTopic {
+        title: "MCP Servers",
+        page: Some(Page::Servers),
+        summary: "The three things this bridge talks to: the Roblox Studio MCP helper (stdio JSON-RPC), the local filesystem engine (AgentScript) and the extension channels.",
+        steps: &[
+            "Studio card: helper process, Studio process, place link, tool count and the launcher command. Restart helper (Ctrl+R) and Probe (F5) are here too.",
+            "Kill Roblox Studio ends every RobloxStudio process — it is a two-click confirm, use it only when Studio is stuck.",
+            "Launcher: by default the helper is Roblox's own Studio MCP launcher (mcp.bat under %LOCALAPPDATA%\\Roblox on Windows); 'Change launcher…' in Settings → Roblox Studio MCP accepts any command that speaks MCP over stdio. TOTAL_MCP_COMMAND in the environment takes precedence at start.",
+            "FULL PC ACCESS: when off (default) the workspace engine stays inside the workspace folder. When on, absolute paths, process_kill and cd anywhere are allowed — applies immediately and on the next start. Leave it off while learning.",
+            "Extension channels: the HTTP endpoint and the two WebSocket channels (17613 roblox, 17615 local) with how many extension tabs are connected; Open status JSON and Copy endpoints are for debugging.",
+        ],
+    },
+    HelpTopic {
+        title: "Terminal",
+        page: Some(Page::Terminal),
+        summary: "The bridge console plus two runners: shell commands inside the workspace and Luau inside Roblox Studio.",
+        steps: &[
+            "Console: every bridge event (extension connected, helper started, tool calls, errors) in order. Use it to see what the AI actually did.",
+            "Workspace command: runs a shell command with the workspace as the current directory, under the same access rules as the AI (Sandbox unless FULL PC ACCESS is on).",
+            "Luau in Studio: runs the code in the linked place through the helper and prints the result — Ctrl+Enter runs. It needs a linked place; the dot next to the mode tells you.",
+        ],
+    },
+    HelpTopic {
+        title: "Settings",
+        page: Some(Page::Settings),
+        summary: "Everything that is remembered between starts. Each change saves on its own; nothing is sent anywhere.",
+        steps: &[
+            "Appearance: TotalScript Aqua, Gold, Emerald or Graphite theme; Compact density for small screens.",
+            "Behaviour: keep running in the notification area when the window is closed, start hidden, always show the checklist, launch at sign-in (hidden).",
+            "Workspace: the folder the AI may use outside Studio, and the FULL PC ACCESS switch.",
+            "Roblox Studio MCP: the launcher command for the helper.",
+            "AI chat (side panel): provider, API key, model and base URL for the in-app chat.",
+            "Donate: Robux game passes, if TotalScript saves you time. About: version, rebuild command, keyboard list, repository link. Diagnostics: live status grid and 'Copy diagnostics'.",
+        ],
+    },
+    HelpTopic {
+        title: "Studio will not link — fix it in order",
+        page: Some(Page::Servers),
+        summary: "Work from the top down; each line is one red / grey hint on Home or MCP Servers and what clears it.",
+        steps: &[
+            "'Start Roblox Studio to link' — Studio is not running. Start it and open a place.",
+            "'Helper not running' — press Restart Studio MCP (Ctrl+R). If it dies again, check the launcher in Settings → Roblox Studio MCP (Roblox installs mcp.bat with Studio; the field's placeholder shows the expected path) and read the console on the Terminal page for the error.",
+            "'Enable Studio as MCP server, then probe' — in Studio: Assistant → ⋯ → Manage MCP Servers → turn on 'Studio as MCP server'. Then Probe (F5). Accept Studio's permission prompt if it shows one.",
+            "'not linked' with Studio running and the switch on — make sure a place is open (not just the Studio start page), then Probe again.",
+            "Extension says 'Agent app offline' — this app is not running, or another copy is holding port 3000. Only one bridge can run at a time; the app raises the existing window instead of starting twice.",
+            "Still stuck: Copy diagnostics on Home and share it together with the last console lines.",
+        ],
+    },
+    HelpTopic {
+        title: "Access, safety and what stays on this PC",
+        page: Some(Page::Settings),
+        summary: "The bridge is local only; the model you chat with gets tool results, not your files, unless a tool returns them.",
+        steps: &[
+            "Listens on 127.0.0.1 only — other machines cannot reach the bridge.",
+            "Sandbox (default): the workspace engine is confined to the workspace folder; Studio tools act on the open place only.",
+            "FULL PC ACCESS (MCP Servers / Settings → Workspace) removes the folder limit and enables process control. The extension's Access setting (Sandbox / Ask / Full) decides whether the browser asks before writes and runs.",
+            "API keys for the in-app chat live in the settings file in plain text — treat that file like a password.",
+            "Diagnostics never include keys or chat text. Nothing in this app phones home.",
+        ],
+    },
+    HelpTopic {
+        title: "Blender, Studio plugin and the browser extension",
+        page: None,
+        summary: "This app is one of three parts. The browser extension (TotalScript bar on the AI site) owns work modes, skills, Blender and the Studio plugin link; the Studio plugin (plugin/TotalScript.lua) handles animation, GUI and screenshot work inside Studio; this app is the bridge and the local engine.",
+        steps: &[
+            "Blender connects through the extension, not this app: press Start MCP Server in Blender (N panel → MCP for Blender), then Settings → MCP servers → Connect Blender on the TotalScript bar. The Blender work mode makes the AI plan, build, validate, render and send assets to Studio from there.",
+            "Work modes (Totality, Blender), skills, templates, prompt enhancer, Paint and Video are in the extension's Settings and bar — this app does not change them.",
+            "The Studio plugin: this app copies plugin/TotalScript.lua into Studio's local Plugins folder; restart Studio once, open Plugins → TotalScript and click Allow on the HTTP prompt. The plugin then long-polls this bridge for jobs.",
+        ],
+    },
+    HelpTopic {
+        title: "Keyboard shortcuts",
+        page: None,
+        summary: "All shortcuts work on every page.",
+        steps: &[
+            "Ctrl+1 … Ctrl+8 — Home, AI Chat, Explorer, Tools, MCP Servers, Terminal, Help, Settings.",
+            "F1 — this Help page.   Ctrl+J — AI chat side panel.",
+            "Ctrl+R — restart the Studio MCP helper.   F5 — probe Studio and refresh the Explorer.",
+            "Ctrl+Shift+S — capture the Studio viewport.   Ctrl+S — save the open file.   Ctrl+Enter — run Luau in the Terminal.",
+            "Esc — clear the current selection / search / armed delete and dismiss the toast.",
+        ],
+    },
+    HelpTopic {
+        title: "Updating and rebuilding",
+        page: Some(Page::Settings),
+        summary: "The app is built from source with cargo; the version in Settings → About must match the extension's version for the bridge protocol to be in sync.",
+        steps: &[
+            "Rebuild: cd TotalScript\\agent && cargo build --release  →  target\\release\\total-core.exe. Copy the exe over bin\\total-core.exe (close the running app first).",
+            "Settings → About → Open repository opens the GitHub project with the changelog and the latest zip.",
+            "If the extension warns about a version mismatch, rebuild the app from the same zip you installed the extension from.",
+        ],
+    },
+];
 
 // ───────────────────────────── utilities ─────────────────────────────
 
