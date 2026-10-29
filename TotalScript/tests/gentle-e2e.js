@@ -8,6 +8,11 @@
 //   G2 an ACCOUNT suspension notice (the DeepSeek wording) stops the loop at
 //      once: classified account_block, no re-send, a banner names the date.
 //   G3 the pacing switch (window.__rsGentlePacing) turns the pacing off.
+//   G4 (1.99.3) the send log is persisted per provider (rsSendLog:<id>).
+//   G5 (1.99.3) a break after breakEvery sends in one streak (measured).
+//   G6 (1.99.3) the human checkpoint: no send until the Continue click.
+//   G7 (1.99.3) "too frequently" = throttled: cool-down, one unchanged retry,
+//      tightened pacing - never an account_block verdict / banner.
 // MOCKED end to end: no DeepSeek, no model, no Studio (canned OK results).
 //   cd TotalScript && NODE_PATH=... node tests/gentle-e2e.js   (DIAG=1 for the trace)
 const { createPage, makeReporter, sleep, log } = require("./lib/e2e-page.js");
@@ -108,6 +113,17 @@ const SUSPENDED = "Due to violation of user policies, your account has been susp
         if (stage.step <= 2) return "Fast " + stage.step + ".\n" + cmd("part_create", "name: Fast" + stage.step + "\nanchored: true");
         return "Done.";
       }
+      if (stage.name === "G5" || stage.name === "G6") {
+        stage.step++;
+        if (stage.step === 1) return "One.\n" + cmd("part_create", "name: " + stage.name + "\nanchored: true");
+        return "Done - " + stage.name + ".";
+      }
+      if (stage.name === "G7") {
+        stage.step++;
+        if (stage.step === 1) { await sleep(2500); return "Thinking.\n" + cmd("part_create", "name: Throttled\nanchored: true"); }
+        if (stage.step === 2) return "Again.\n" + cmd("part_create", "name: Throttled2\nanchored: true");   // reply to the retry → a paced tool result
+        return "Done - after throttle.";
+      }
       return "Noted.";
     };
     const tBoot = Date.now();
@@ -158,6 +174,59 @@ const SUSPENDED = "Due to violation of user policies, your account has been susp
     await untilLoopEnds("G3 loop", 60000);
     ok("G3 with Gentle pacing OFF no send is paced and the run completes", diags("send.paced", t3).length === 0 && stage.step === 3, JSON.stringify({ paced: diags("send.paced", t3).length, step: stage.step }));
     w.__rsGentlePacing = () => true;
+
+    // ── G4 (1.99.3): the send log is persisted per provider (shared across tabs / reloads) ──
+    const logKey = Object.keys(page.storage).find((k) => k.startsWith("rsSendLog:"));
+    const stored = logKey ? page.storage[logKey] : null;
+    // G3 ran with pacing OFF, so its 2 automatic sends are (correctly) not in the paced log; everything else is.
+    ok("G4 rsSendLog:<provider> holds this session's paced sends (user + automatic) as ascending timestamps", logKey === "rsSendLog:" + P.id && Array.isArray(stored) && stored.length >= userMessages.length - 3 && stored.length <= userMessages.length + 1 && stored.every((t, i) => typeof t === "number" && t >= tBoot - 1000 && (i === 0 || t >= stored[i - 1])), JSON.stringify({ logKey, stored: stored && stored.length, sends: userMessages.length }));
+
+    // ── G5 (1.99.3): a break after breakEvery sends in one streak ──
+    stage.name = "G5"; stage.step = 0;
+    const L5 = page.storage["rsSendLog:" + P.id].length;
+    P.pacing = { minGapMs: GAP, maxGapMs: GAP, perHour: 100, breakEvery: L5 + 1, breakMinMs: 3500, breakMaxMs: 3500, noResend: true, label: "Test gentle mode", apiHint: "Use the API." };
+    const t5 = Date.now(), sends5 = userMessages.length;
+    await ask("Create one part for the break test");
+    await untilLoopEnds("G5 loop", 60000);
+    const brk = diags("send.paced", t5).filter((e) => e.data && e.data.reason === "break");
+    const gap5 = userTimes[sends5 + 1] - userTimes[sends5];
+    ok("G5 the user's own message is not held by the break; the first automatic send is (diag send.paced reason=break) and the measured gap >= breakMinMs", userMessages.length - sends5 === 2 && brk.length === 1 && gap5 >= 3500 - 50 && stage.step === 2, JSON.stringify({ sends: userMessages.length - sends5, brk: brk.map((e) => e.data), gap5 }));
+
+    // ── G6 (1.99.3): the human checkpoint waits for a CLICK ──
+    stage.name = "G6"; stage.step = 0;
+    const L6 = page.storage["rsSendLog:" + P.id].length;
+    P.pacing = { minGapMs: GAP, maxGapMs: GAP, perHour: 100, checkpointEvery: L6 + 1, noResend: true, label: "Test gentle mode", apiHint: "Use the API." };
+    const t6 = Date.now(), sends6 = userMessages.length;
+    await ask("Create one part for the checkpoint test");
+    await waitFor(() => diags("send.checkpoint", t6).length === 1, 20000, "checkpoint raised");
+    const cpBanner = [...d.querySelectorAll(".rs-banner")].find((b) => /still there\?/.test(b.textContent || ""));
+    await sleep(GAP + 1500);
+    ok("G6 after checkpointEvery sends in a row the loop stops sending and shows the 'still there?' banner with a Continue action (no send for > gap)", !!cpBanner && userMessages.length - sends6 === 1 && !!cpBanner.querySelector(".rs-banner-go"), JSON.stringify({ banner: !!cpBanner, sends: userMessages.length - sends6 }));
+    cpBanner.querySelector(".rs-banner-go").click();
+    await untilLoopEnds("G6 loop", 60000);
+    ok("G6 the click releases the send and the run completes", userMessages.length - sends6 === 2 && stage.step === 2 && /Done - G6/.test(history.textContent || ""), JSON.stringify({ sends: userMessages.length - sends6, step: stage.step }));
+
+    // ── G7 (1.99.3): a throttle toast is a cool-down + one retry, NOT a suspension ──
+    stage.name = "G7"; stage.step = 0;
+    P.pacing = { minGapMs: GAP, maxGapMs: GAP, perHour: 100, noResend: true, label: "Test gentle mode", apiHint: "Use the API." };
+    const O = w.TotalOrchestrator, realRD = O.retryDelay;
+    O.retryDelay = (c, n, wm) => c === "throttled" ? (n > 1 ? null : 1500) : realRD(c, n, wm);   // 3 min in production; shortened for the test
+    const realScan7 = P.scanError;
+    const t7 = Date.now(), sends7 = userMessages.length;
+    await ask("Create a part named Throttled");
+    await sleep(GAP + 400);
+    P.scanError = () => "You are sending messages too frequently. Please try again later.";
+    await waitFor(() => diags("loop.throttled", t7).length === 1, 20000, "throttle seen");
+    P.scanError = realScan7;
+    await untilLoopEnds("G7 loop", 60000);
+    O.retryDelay = realRD;
+    const thr = diags("loop.throttled", t7);
+    const banner7 = [...d.querySelectorAll(".rs-banner")].map((b) => b.textContent || "").join(" | ");
+    ok("G7 classified throttled (strike 1, cool-down), never account_block; no 'blocked this account' banner", thr.length === 1 && thr[0].data.strikes === 1 && thr[0].data.coolMs === 1500 && diags("loop.accountBlock", t7).length === 0 && !/blocked this account/.test(banner7), JSON.stringify({ thr: thr.map((e) => e.data), banner7: banner7.slice(0, 120) }));
+    ok("G7 the undelivered message was sent once more, unchanged, after the cool-down + the tightened gap (>= 1500 + 2 x gap), and the run completed", userMessages[sends7 + 1] === userMessages[sends7] && userTimes[sends7 + 1] - userTimes[sends7] >= 1500 + 2 * GAP - 100 && /Done - after throttle/.test(history.textContent || ""), JSON.stringify({ same: userMessages[sends7 + 1] === userMessages[sends7], gap: userTimes[sends7 + 1] - userTimes[sends7], step: stage.step }));
+    const tight = diags("send.paced", t7).filter((e) => e.data && e.data.strikes === 1);
+    const gapTool7 = userTimes[sends7 + 2] - userTimes[sends7 + 1];
+    ok("G7 the next automatic send is paced with strikes=1 (tightened contract: measured gap >= 2 x gap)", tight.length >= 1 && userMessages.length - sends7 === 3 && gapTool7 >= 2 * GAP - 50, JSON.stringify({ paced: diags("send.paced", t7).map((e) => e.data), gapTool7, sends: userMessages.length - sends7 }));
 
     ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || "));
     log("sends:", userMessages.length, "boot:", sendsBoot, "elapsed:", Date.now() - tBoot, "ms");

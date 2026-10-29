@@ -873,18 +873,41 @@ const RSProvider = (() => {
   // ── Error / limit detection (site chrome only, never model output) ───────
   // 1.99.0: suspension / throttle notice visible anywhere outside the chat turns
   // (toast, modal, dialog, full-page interstitial). Returns the text or null.
+  // 1.99.3: TotalScript's OWN surfaces are never evidence. Its banners quote the
+  // provider ("DeepSeek said: \"...suspended until...\""), its bar has class
+  // names containing "banner", its enhancer / templates windows are
+  // role="dialog" and may hold the user's own words ("my account got
+  // suspended, help"). Until 1.99.2 those matched here and produced a false
+  // "account blocked" verdict that could re-trigger itself from the previous
+  // banner. Every TotalScript node carries an id or class starting with "rs-".
+  const SELF_SEL = '[id^="rs-"], [class^="rs-"], [class*=" rs-"]';
+  const self = (n) => !!(n && n.closest && n.closest(SELF_SEL));
+  // Page text WITHOUT TotalScript's own windows (for the interstitial check).
+  function pageTextWithoutSelf() {
+    const out = [];
+    const walk = (el) => {
+      for (const c of el.children) {
+        if (c.matches && c.matches(SELF_SEL)) continue;
+        if (c.children.length && c.querySelector && c.querySelector(SELF_SEL)) { walk(c); continue; }
+        const t = (c.innerText || "").trim();
+        if (t) out.push(t);
+      }
+    };
+    if (document.body) walk(document.body);
+    return out.join("\n").trim();
+  }
   function scanAccountBlock() {
     try {
       const nodes = document.querySelectorAll(S.errorSurfaces + ',[role="dialog"],[class*="dialog"],[class*="banner"],[class*="notice"]');
       for (const el of nodes) {
         if (el.offsetParent === null && el.getClientRects().length === 0) continue;
-        if (el.closest(S.chatItem) || foreign(el)) continue;
+        if (el.closest(S.chatItem) || foreign(el) || self(el)) continue;
         const t = (el.innerText || "").trim();
         if (t.length > 8 && t.length < 800 && RE.accountBlock.test(t)) return t.slice(0, 300);
       }
       // the login / interstitial page replaces the chat entirely
       if (!getEditor() && document.body) {
-        const t = (document.body.innerText || "").trim();
+        const t = pageTextWithoutSelf();
         if (t.length < 4000 && RE.accountBlock.test(t)) {
           const m = t.match(RE.accountBlock);
           const i = Math.max(0, t.indexOf(m[0]) - 80);
@@ -901,7 +924,7 @@ const RSProvider = (() => {
     try {
       for (const el of document.querySelectorAll(S.errorSurfaces)) {
         if (el.offsetParent === null) continue;
-        if (el.closest(S.chatItem) || foreign(el)) continue; // inside a chat turn ⇒ model content, not UI; BDS toasts are not DeepSeek's
+        if (el.closest(S.chatItem) || foreign(el) || self(el)) continue; // inside a chat turn ⇒ model content, not UI; BDS toasts / TotalScript's own banners are not DeepSeek's
         const t = (el.innerText || "").trim();
         if (t.length > 8 && t.length < 600 && RE.contextLimit.test(t)) return t.slice(0, 240);
       }
@@ -1171,7 +1194,12 @@ const RSProvider = (() => {
     // re-sends after a dead or failed turn here, and stops on scanAccountBlock().
     // Nothing in this contract hides TotalScript from the site - it only makes
     // the extension behave like a person typing.
-    pacing: { minGapMs: 8000, maxGapMs: 20000, perHour: 30, noResend: true, label: "DeepSeek gentle mode", apiPage: "codecraft.html?api=deepseek", apiLabel: "Open DeepSeek API chat", apiHint: "The only route DeepSeek cannot suspend for cadence is its official API: TotalScript has a built-in DeepSeek API chat (popup → DeepSeek API chat, your own sk- key from platform.deepseek.com, pay as you go) where the agent runs at full speed." },
+    // 1.99.3: a person is not a metronome - after every 6 sends in one streak a
+    // 45-120 s break, at most 160 sends per rolling 24 h (shared across tabs and
+    // reloads), and after 36 sends in one unbroken run the loop waits for a CLICK
+    // before sending more. "Too frequently" toasts are a throttle (cool-down +
+    // tighter pacing), never reported as a suspension.
+    pacing: { minGapMs: 8000, maxGapMs: 20000, perHour: 30, breakEvery: 6, breakMinMs: 45000, breakMaxMs: 120000, perDay: 160, checkpointEvery: 36, noResend: true, label: "DeepSeek gentle mode", apiPage: "codecraft.html?api=deepseek", apiLabel: "Open DeepSeek API chat", apiHint: "The only route DeepSeek cannot suspend for cadence is its official API: TotalScript has a built-in DeepSeek API chat (popup → DeepSeek API chat, your own sk- key from platform.deepseek.com, pay as you go) where the agent runs at full speed." },
     scanAccountBlock,
     init({ diag: d } = {}) {
       if (d) diag = d;

@@ -20,7 +20,7 @@
 // Pure JS; exposes window.TotalMeshImport + module.exports.
 (function (root) {
   "use strict";
-  const VERSION = "1.99.2";
+  const VERSION = "1.99.3";
   const MATERIALS = ["Plastic", "SmoothPlastic", "Neon", "Wood", "WoodPlanks", "Marble", "Slate", "Concrete", "Granite", "Brick", "Pebble", "Cobblestone", "Rock", "Sandstone", "Basalt", "CrackedLava", "Limestone", "Pavement", "CorrodedMetal", "DiamondPlate", "Foil", "Metal", "Grass", "LeafyGrass", "Sand", "Fabric", "Snow", "Mud", "Ground", "Asphalt", "Salt", "Ice", "Glacier", "Glass", "ForceField", "Cardboard", "Carpet", "CeramicTiles", "ClayRoofTiles", "RoofShingles", "Leather", "Plaster", "Rubber"];
   const FIDELITY = { box: "Box", hull: "Hull", precise: "PreciseConvexDecomposition", default: "Default", none: "Box" };
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));

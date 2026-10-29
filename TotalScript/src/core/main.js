@@ -1264,6 +1264,54 @@
     if (!page) return null;
     return { label: P.pacing.apiLabel || "Open the API chat", onClick: () => { bg({ type: "rs-open-extension-page", page }).catch(() => {}); } };
   }
+  // 1.99.3: the send log is SHARED across tabs and SURVIVES reloads
+  // (chrome.storage.local "rsSendLog:<provider>", rolling 24 h). Until 1.99.2 it
+  // lived in memory only, so a reload - or a second DeepSeek tab - started from
+  // an empty log and could fire 30 more messages at once: exactly the burst the
+  // hourly budget exists to prevent. Merge-on-read, append-on-send; a lost
+  // entry in a two-tab race only makes the pacing slightly LESS strict, never
+  // more permissive than one tab alone.
+  function sendLogKey() { return "rsSendLog:" + (P && P.id || "provider"); }
+  function sendLogMerge(stored) {
+    const cut = Date.now() - 86400000;
+    const all = (A.sendLog || []).concat(Array.isArray(stored) ? stored : []).filter((t) => typeof t === "number" && t > cut);
+    A.sendLog = Array.from(new Set(all)).sort((a, b) => a - b);
+    return A.sendLog;
+  }
+  function sendLogLoad() {
+    return new Promise((res) => {
+      try { chrome.storage.local.get([sendLogKey()], (r) => res(sendLogMerge(r && r[sendLogKey()]))); }
+      catch { res(sendLogMerge(null)); }
+    });
+  }
+  function sendLogRecord(t) {
+    (A.sendLog = A.sendLog || []).push(t);
+    if (!P.pacing) return;
+    try { chrome.storage.local.get([sendLogKey()], (r) => { try { chrome.storage.local.set({ [sendLogKey()]: sendLogMerge(r && r[sendLogKey()]) }); } catch {} }); } catch {}
+  }
+  // 1.99.3: the contract actually applied = the provider's, tightened once per
+  // "slow down" the site sent this session (A.paceStrikes; orchestrator.tightenPacing).
+  function effectivePacing() {
+    return ORCH && ORCH.tightenPacing ? ORCH.tightenPacing(P.pacing, A.paceStrikes || 0) : P.pacing;
+  }
+  // 1.99.3: human checkpoint. After `checkpointEvery` sends in one unbroken
+  // streak the loop does not time out into the next message - it waits for a
+  // CLICK. Resolves true on the click, false on Stop. The point is that a person
+  // is demonstrably present every N automatic turns; nothing here is hidden
+  // from the site and nothing is sent until the click.
+  function humanCheckpoint(plan) {
+    return new Promise((res) => {
+      let done = false;
+      const finish = (v) => { if (done) return; done = true; A._checkpointOpen = false; res(v); };
+      A._checkpointOpen = true;
+      diag("send.checkpoint", { streak: plan.streak, sentLastHour: plan.sentLastHour });
+      try { ui.steeringProgress("sending", `Paused after ${plan.streak} messages in a row — click Continue when you're back`, 0); } catch {}
+      ui.banner("info", `${P.pacing.label || P.displayName}: still there?`,
+        `${plan.streak} messages went out in one unbroken run (${plan.sentLastHour} this hour). To keep this session looking like a person at the keyboard, TotalScript waits for you before sending more. Nothing was lost - click Continue to carry on, or Stop.`,
+        { label: "Continue", onClick: () => finish(true) });
+      const tick = setInterval(() => { if (A.stop) { clearInterval(tick); finish(false); } if (done) clearInterval(tick); }, 300);
+    });
+  }
   // One-time explanation of WHY the loop is paced on this site + the official
   // API route for heavy automation. Shown once per install (storage flag).
   function gentleNoticeOnce() {
@@ -1274,7 +1322,7 @@
         if (r && r.rsGentleNoticeShown) return;
         try { chrome.storage.local.set({ rsGentleNoticeShown: Date.now() }); } catch {}
         ui.banner("info", P.pacing.label || "Gentle mode",
-          `${P.displayName} suspends web-chat accounts for bot-like use (dozens of messages per hour, instant follow-ups). TotalScript paces its automatic messages here (${Math.round((P.pacing.minGapMs || 0) / 1000)}–${Math.round((P.pacing.maxGapMs || 0) / 1000)} s apart, at most ${P.pacing.perHour}/hour), skips its optional nudges and never re-sends after a failed turn - that lowers the risk but cannot remove it. ${P.pacing.apiHint || ""} You can switch the pacing off in Settings → Gentle pacing.`, apiPageAction());
+          `${P.displayName} suspends web-chat accounts for bot-like use (dozens of messages per hour, instant follow-ups). TotalScript paces its automatic messages here (${Math.round((P.pacing.minGapMs || 0) / 1000)}–${Math.round((P.pacing.maxGapMs || 0) / 1000)} s apart, at most ${P.pacing.perHour}/hour${P.pacing.breakEvery ? `, a longer break every ${P.pacing.breakEvery}` : ""}${P.pacing.checkpointEvery ? `, and it asks you to click Continue after ${P.pacing.checkpointEvery} in a row` : ""}), skips its optional nudges and never re-sends after a failed turn - that lowers the risk but cannot remove it. ${P.pacing.apiHint || ""} You can switch the pacing off in Settings → Gentle pacing.`, apiPageAction());
       });
     } catch {}
   }
@@ -1307,14 +1355,32 @@
     // Pure math lives in orchestrator.paceDelay; this only waits and reports.
     const userSend = !!A.userSend; A.userSend = false;
     if (P.pacing && gentlePacingOn() && ORCH && ORCH.paceDelay) {
-      A.sendLog = (A.sendLog || []).filter((t) => Date.now() - t < 3600000);
-      let plan = ORCH.paceDelay(A.sendLog, Date.now(), P.pacing, Math.random());
-      if (userSend && plan.reason === "budget") plan = ORCH.paceDelay(A.sendLog, Date.now(), { minGapMs: P.pacing.minGapMs, maxGapMs: P.pacing.maxGapMs }, Math.random());
+      await sendLogLoad();   // 1.99.3: other tabs' and pre-reload sends count too
+      const pacing = effectivePacing();
+      let plan = ORCH.paceDelay(A.sendLog, Date.now(), pacing, Math.random());
+      // The person's own message never waits for a budget, a break or a
+      // checkpoint - only the short gap (two sends 200 ms apart is not typing).
+      if (userSend && plan.reason !== "gap") plan = ORCH.paceDelay(A.sendLog, Date.now(), { minGapMs: pacing.minGapMs, maxGapMs: pacing.maxGapMs }, Math.random());
+      if (userSend) plan.checkpoint = false;
+      if (plan.checkpoint && !A.stop) {
+        const go = await humanCheckpoint(plan);
+        if (!go || A.stop) { diag("send.pacedCancelled", { at: "checkpoint" }); return P.assistantCount(); }
+        plan = ORCH.paceDelay(A.sendLog, Date.now(), pacing, Math.random());   // re-plan after the click
+      }
       if (plan.waitMs > 0 && !A.stop) {
-        diag("send.paced", { waitMs: plan.waitMs, reason: plan.reason, sentLastHour: plan.sentLastHour });
+        diag("send.paced", { waitMs: plan.waitMs, reason: plan.reason, sentLastHour: plan.sentLastHour, streak: plan.streak, strikes: A.paceStrikes || 0 });
         const secs = Math.ceil(plan.waitMs / 1000);
-        if (plan.reason === "budget") ui.toast(`${P.pacing.label || P.displayName}: ${plan.sentLastHour} messages this hour — next one in ${secs >= 90 ? Math.ceil(secs / 60) + " min" : secs + " s"} (Stop to cancel)`);
-        try { ui.steeringProgress("sending", plan.reason === "budget" ? `Hourly budget reached (${plan.sentLastHour}/${P.pacing.perHour}) — waiting ${secs >= 90 ? Math.ceil(secs / 60) + " min" : secs + " s"}` : `Pacing — next message in ${secs} s`, 0); } catch {}
+        const human = secs >= 90 ? Math.ceil(secs / 60) + " min" : secs + " s";
+        if (plan.reason === "budget") ui.toast(`${P.pacing.label || P.displayName}: ${plan.sentLastHour} messages this hour — next one in ${human} (Stop to cancel)`);
+        else if (plan.reason === "break") ui.toast(`${P.pacing.label || P.displayName}: short break after ${plan.streak} messages — next one in ${human}`);
+        else if (plan.reason === "day") ui.toast(`${P.pacing.label || P.displayName}: ${plan.sentToday} messages in 24 h — next one in ${human} (Stop to cancel)`);
+        try {
+          ui.steeringProgress("sending",
+            plan.reason === "budget" ? `Hourly budget reached (${plan.sentLastHour}/${pacing.perHour}) — waiting ${human}`
+            : plan.reason === "break" ? `Taking a break (${plan.streak} messages in a row) — ${human}`
+            : plan.reason === "day" ? `Daily budget reached (${plan.sentToday}/${pacing.perDay}) — waiting ${human}`
+            : `Pacing — next message in ${secs} s`, 0);
+        } catch {}
         const t0 = Date.now();
         while (Date.now() - t0 < plan.waitMs && !A.stop) await sleep(250);
         if (A.stop) { diag("send.pacedCancelled", {}); return P.assistantCount(); }
@@ -1398,7 +1464,7 @@
         tries++;
       }
       if (messageSent) diag("send.cleared", { tries });
-      if (A._pacedSend && (messageSent || landed())) { A._pacedSend = false; (A.sendLog = A.sendLog || []).push(Date.now()); }
+      if (A._pacedSend && (messageSent || landed())) { A._pacedSend = false; sendLogRecord(Date.now()); }
       // All retries exhausted with NO evidence the message landed (textarea never
       // cleared, no new turn). Silently returning here left the loop waiting for
       // a reply that will never come (~60s "empty" timeout) with zero explanation
@@ -5376,7 +5442,7 @@
                         // Stop click that landed before this loop actually started
     A.loopKey = null; // pinned by syncSessionState once this chat has an id + content
     let truncCount = 0;
-    const MAX_TRUNC = 6;
+    const MAX_TRUNC = P.pacing && gentlePacingOn() ? 2 : 6;   // 1.99.3: fewer Continue clicks per turn on paced sites
     // Dead-turn auto-retry budget (v1.12): ONE rescue for a dropped/quiet turn
     // per loop. Reset on every healthy turn (tool result or final text) so an
     // hour-long session can survive multiple one-off site hiccups, while a
@@ -5460,6 +5526,37 @@
           // twice); permanent classes (auth, quota, moderation, invalid request)
           // stop at once with an actionable hint instead of a generic banner.
           const cls = res.cls || (ORCH ? ORCH.classifyProviderError(res.detail) : null);
+          if (cls && cls.cls === "throttled") {
+            // 1.99.3: "sending messages too frequently" = slow down, NOT a suspension
+            // (1.99.0-1.99.2 reported this as "account blocked" - a false verdict).
+            // The message was never delivered, so after a real cool-down (3+ min,
+            // or what the site asked) it is sent ONCE more, unchanged, with the
+            // pacing tightened for the rest of the session. A second throttle in
+            // the same run stops the loop - resume by hand later.
+            A.paceStrikes = (A.paceStrikes || 0) + 1;
+            A.throttleRetries = A.throttleRetries || 0;
+            const cool = ORCH && A.lastSent && !A.stop && A.started ? ORCH.retryDelay("throttled", A.throttleRetries + 1, cls.waitMs) : null;
+            diag("loop.throttled", { strikes: A.paceStrikes, coolMs: cool, detail: String(res.detail || "").slice(0, 120) });
+            if (cool != null) {
+              A.throttleRetries++;
+              const mins = Math.max(1, Math.round(cool / 60000));
+              ui.toast(`${P.displayName} asked to slow down — cooling down ${mins} min, then sending the message once more (Stop to cancel)`);
+              const t0 = Date.now();
+              while (Date.now() - t0 < cool && !A.stop) {
+                const left = Math.ceil((cool - (Date.now() - t0)) / 1000);
+                ui.steeringProgress("correcting", `${P.displayName} asked to slow down — cooling down ${left >= 90 ? Math.ceil(left / 60) + " min" : left + " s"} (pacing tightened)`, toolTurns);
+                await sleep(1000);
+              }
+              if (A.stop) break;
+              const again = A.lastSent;
+              base = await submitAndGetBase(again.text, again.images);
+              continue;
+            }
+            ui.steeringProgress("error", `${P.displayName} asked to slow down again — paused`, toolTurns);
+            ui.banner("warn", `${P.displayName} asked to slow down`,
+              `${P.displayName} said: "${String(res.detail || "").slice(0, 160)}". This is a throttle, not a suspension. TotalScript stopped so the account does not accumulate strikes - wait a few minutes, then send "continue". ${(P.pacing && P.pacing.apiHint) || ""}`.trim(), apiPageAction());
+            break;
+          }
           const wait = cls && cls.retryable && resendAllowed() && ORCH && A.lastSent && !A.stop && A.started ? ORCH.retryDelay(cls.cls, providerRetries + 1, cls.waitMs) : null;
           if (wait != null) {
             providerRetries++;
@@ -5478,7 +5575,7 @@
             const until = ORCH && ORCH.suspendedUntil ? ORCH.suspendedUntil(res.detail) : null;
             A.accountBlockedUntil = until ? until.getTime() : Date.now() + 3600000;
             diag("loop.accountBlock", { until: A.accountBlockedUntil, detail: String(res.detail || "").slice(0, 120) });
-            ui.steeringProgress("error", `${P.displayName} suspended or throttled this account`, toolTurns);
+            ui.steeringProgress("error", `${P.displayName} suspended this account`, toolTurns);
             ui.banner("warn", `${P.displayName} blocked this account${until ? " until " + until.toLocaleString() : ""}`,
               `${P.displayName} said: "${String(res.detail || "").slice(0, 200)}". TotalScript stopped and will not resend anything. ${(P.pacing && P.pacing.apiHint) || ""}`.trim(), apiPageAction());
             break;
@@ -6332,7 +6429,7 @@
   // once the window has elapsed with nothing to piggyback on.
   const RESEND_SYS_EVERY = P.resendSystemEvery || 0;
   // Injected tool results get their own, larger budget (see sysResendDue).
-  const RESEND_SYS_EVERY_RESULTS = 12;
+  const RESEND_SYS_EVERY_RESULTS = P.pacing ? 20 : 12;   // 1.99.3: fewer byte-identical re-statements on paced sites
 
   // How much conversation has accumulated since the operating instructions were
   // last stated. PERSISTED per conversation, because both simpler designs failed
@@ -9455,7 +9552,7 @@
             </div>
             ${pacingContract() ? `<div class="rs-tgl-row rs-adv" data-mode="gentle" role="switch" aria-checked="${gentlePacing}" tabindex="0">
               <span class="rs-tgl-info"><span class="rs-tgl-name">Gentle pacing (${pacingContract().label || "account protection"})</span>
-              <span class="rs-tgl-sub">Automatic messages ${Math.round((pacingContract().minGapMs || 0) / 1000)}–${Math.round((pacingContract().maxGapMs || 0) / 1000)} s apart, max ${pacingContract().perHour}/hour, no re-sends — this site suspends accounts for bot-like cadence. Off = full speed at your own risk.</span></span>
+              <span class="rs-tgl-sub">Automatic messages ${Math.round((pacingContract().minGapMs || 0) / 1000)}–${Math.round((pacingContract().maxGapMs || 0) / 1000)} s apart, max ${pacingContract().perHour}/hour${pacingContract().breakEvery ? `, a break every ${pacingContract().breakEvery}` : ""}${pacingContract().perDay ? `, max ${pacingContract().perDay}/day` : ""}${pacingContract().checkpointEvery ? `, a click from you every ${pacingContract().checkpointEvery} in a row` : ""}, no re-sends, shared across tabs — this site suspends accounts for bot-like cadence. Off = full speed at your own risk.</span></span>
               <span class="rs-tgl ${gentlePacing ? "on" : ""}"></span>
             </div>` : ""}
             <div class="rs-tgl-row rs-adv" data-mode="autodebug" role="switch" aria-checked="${autoDebugEnabled}" tabindex="0">
@@ -12768,6 +12865,12 @@ statusTimer = rsInterval(() => bg({ type: "status" }).then(onStatus), 5000);
       // newest user turn a moment later when the site already cleared it.
       try {
         const txt = String((P.editorText && P.editorText()) || "").trim();
+        // 1.99.3: the person's own message is now "the last thing sent". Before,
+        // A.lastSent still pointed at the previous TOOL RESULT, so a provider
+        // error on the user's message (throttle, 5xx) re-sent a stale result
+        // instead of their text. Unknown text (site already cleared the box) →
+        // null, and the retry branches stop with a banner rather than guess.
+        A.lastSent = txt ? { text: txt, images: null, at: Date.now(), user: true } : null;
         const classify = (text) => { if (!ORCH || !text) return; const prev = A.task && A.task.v ? A.task : null; A.task = ORCH.classifyTask(text, { prev }); A.task.riderSent = false; diag("task.classified", { primary: A.task.primary, intent: A.task.intent, followUp: A.task.followUp, constraints: A.task.constraints.length, words: A.task.words });
           // 1.88.0: pick the specialist(s) for this request from the same text
           // (reuses the task record's intent, so the two layers never disagree).
@@ -12781,7 +12884,7 @@ statusTimer = rsInterval(() => bg({ type: "status" }).then(onStatus), 5000);
       // A fresh user message = fresh intent: clear any previous manual stop so
       // the loop is allowed to run again.
       A.userStopped = false;
-      if (P.pacing) (A.sendLog = A.sendLog || []).push(Date.now()); // 1.99.0: the person's own send counts toward the cadence / hourly budget too
+      if (P.pacing) sendLogRecord(Date.now()); // 1.99.0: the person's own send counts toward the cadence / hourly budget too (1.99.3: persisted, shared across tabs)
       bumpSys("users");
       A.steeringStep = 0;
       ui.steeringProgress("waiting", "Request sent — waiting for the first action", 0);
