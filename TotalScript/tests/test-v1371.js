@@ -131,8 +131,8 @@ ok("offline feedback for project_index_* / blueprint_* gains the no-retry / no-s
 
 // ── G. release bookkeeping ──
 const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
-ok("manifest 1.93.0", manifest.version === "1.93.0", manifest.version);
-ok("plugin + crate pinned at 1.93.0", fs.readFileSync("plugin/TotalScript.lua", "utf8").includes('local VERSION = "1.93.0"') && /^version = "1\.93\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "total-agent"\nversion = "1\.93\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
+ok("manifest 1.94.0", manifest.version === "1.94.0", manifest.version);
+ok("plugin + crate pinned at 1.94.0", fs.readFileSync("plugin/TotalScript.lua", "utf8").includes('local VERSION = "1.94.0"') && /^version = "1\.94\.0"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")) && /name = "total-agent"\nversion = "1\.94\.0"/.test(fs.readFileSync("agent/Cargo.lock", "utf8")));
 ok("README changelog 1.37.1", readme.includes("**1.37.1 — no command searching; project_index_build / blueprint_list hardened.**") && readme.includes("test-v1371.js"));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall 1.37.1 checks passed");

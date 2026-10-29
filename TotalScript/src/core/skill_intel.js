@@ -1,4 +1,4 @@
-// TotalScript — Skill Intelligence (1.93.0)
+// TotalScript — Skill Intelligence (1.94.0)
 //
 // One small, deterministic brain shared by three surfaces:
 //   · the `skill {name}` command (details on demand for the running agent),
@@ -18,7 +18,7 @@
 // DOM-free at top level (loaded in node by the tests).
 (function (root) {
   "use strict";
-  const VERSION = "1.93.0";
+  const VERSION = "1.94.0";
 
   // ───────────────────────── expert library ─────────────────────────
   // Fields: id, title, env (roblox | blender | general), summary (one line

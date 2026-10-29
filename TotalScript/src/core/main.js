@@ -5467,7 +5467,7 @@
           // Pass the detected command name so the feedback only offers the
           // ###LUA### block when it actually applies (execute_luau) - never for a
           // truncated/broken execute_blender_code or other JSON-only command.
-          base = await submitAndGetBase(RS.FEEDBACK.parseError(res.reason, failName));
+          base = await submitAndGetBase(RS.FEEDBACK.parseError(res.reason, failName, P.commandFormat === "plain"));
           continue;
         }
         if (res.kind === "text") {
@@ -6144,6 +6144,9 @@
         customPrompt: ui.getCustomPrompt(),
         providerNotes: P.promptExtra || "",
         providerId: P.id,
+        // 1.94.0: provider capability - "plain" = the site cannot use JSON
+        // blocks; config.js then teaches ###CMD### / ###LUA### as THE format.
+        commandFormat: P.commandFormat || "",
         engine,
         fullAccess: !!(typeof window.__rsFullAccess === "function" && window.__rsFullAccess()),
         maxChars: P.sysMaxChars || 0,

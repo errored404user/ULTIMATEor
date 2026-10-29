@@ -96,7 +96,21 @@ const RS = (() => {
     // to tell the model exactly what to fix (a generic "bad JSON" was misleading
     // for the non-JSON cases, e.g. a missing ###LUA### opener). Falls back to the
     // generic "malformed" text for any unrecognised reason.
-    parseError: (reason, toolName) => {
+    parseError: (reason, toolName, plain = false) => {
+      // 1.94.0: on a plain-protocol provider (`commandFormat: "plain"` - the
+      // site cannot use JSON blocks) the rewrite advice names the ###CMD###
+      // block instead of the JSON envelope; the JSON-specific reasons still
+      // explain what was wrong. Default wording below is unchanged.
+      if (plain && (reason === "malformed" || reason === "unclosed" || reason === "envelope" || reason === "toolKey")) {
+        const otherCmdP = toolName && toolName !== "command" && toolName !== "execute_luau";
+        const luaP = otherCmdP ? "" : " For execute_luau use ###LUA### + your Luau + ###END_LUA### instead.";
+        const what = reason === "unclosed" ? "was cut off before it finished (the block never closed), so it could not run"
+          : reason === "envelope" ? "was written as a bare parameter object without a command name, so it was not recognised"
+          : reason === "toolKey" ? "named the command under the wrong key, so it was not recognised"
+          : "could not be parsed";
+        return "ERROR: the TotalScript command in your reply " + what + ". Nothing ran. Rewrite it as ONE plain-text CMD block inside a fenced code block - " +
+          "###CMD exact_command_name### on the first line, one \"key: value\" line per parameter, ###END_CMD### on the last line (no JSON needed)." + luaP + " Please retry.";
+      }
       // ###LUA### is execute_luau-ONLY (the parser always maps a bare ###LUA###
       // block to execute_luau). So only suggest it when the broken command IS
       // execute_luau, or when we could not tell which command it was. For a KNOWN
@@ -276,17 +290,39 @@ const RS = (() => {
   function buildCompactPrompt(opts = {}) {
     const { siteName = "this AI site" } = opts;
     const embedded = !!opts.catalogueEmbedded;
+    // 1.94.0: `plain` = the provider declared `commandFormat: "plain"` (its
+    // site cannot use JSON blocks - the model is told so by the site's own
+    // platform prompt and answers in prose). The bootstrap then teaches the
+    // ###CMD name### / ###LUA### blocks as THE format and never shows a json
+    // fence, so the core prompt, the provider's notes (PLAIN_FORMAT_NOTE) and
+    // the request pin all say the same thing. JSON parsing is unchanged.
+    const plain = !!opts.plain;
+    const channelLine = plain
+      ? "Commands are plain-text blocks in your normal reply - the only channel that works; no JSON needed."
+      : "Commands are plain JSON in your normal reply - the only channel that works.";
+    const standardFormat = plain
+      ? `STANDARD FORMAT (all but execute_luau) - a CMD block: exact command name in the opener, one "key: value" line per parameter (none = opener + closer):
+${BT}
+###CMD name###
+key: value
+###END_CMD###
+${BT}
+execute_luau - ###LUA### markers only, one fenced block:`
+      : `STANDARD FORMAT (everything except execute_luau):
+${BT}json
+{"command": "name", "params": {"key": "value"}}
+${BT}
+execute_luau NEVER uses JSON - markers only, inside one fenced block:`;
+    const dummyExample = plain
+      ? 'a fenced ###CMD npc_spawn_pathfinding### block with the line rig_name: Dummy'
+      : '{"command":"npc_spawn_pathfinding","params":{"rig_name":"Dummy"}}';
     const firstAction = embedded
       ? `- The COMMAND CATALOGUE at the END of this message IS the list_commands result: every command as a signature "name {a, b?}" (? = optional) - call those DIRECTLY. Do NOT call list_commands {} to fetch it again and NEVER search for commands (no list_commands {"query"}, search_commands or get_command): names under MORE COMMANDS are callable as they are, and a wrong parameter returns the exact schema in the error. If it is not listed there, it DOES NOT EXIST — do not invent list_roblox_studios, get_studio_list, etc. Your very first reply: exactly one short sentence confirming you are ready - no command, no catalogue summary.`
       : `- Your FIRST action: list_commands {} - then use ONLY exact names/params from that reference; never guess. It lists every command as a signature "name {a, b?}" (? = optional): call those DIRECTLY. Do NOT run list_commands again and NEVER search for commands (no list_commands {"query"}, search_commands or get_command): call the command directly - a wrong parameter returns the exact schema in the error. If it is not listed there, it DOES NOT EXIST — do not invent list_roblox_studios, get_studio_list, etc.`;
     return `CONTEXT: the user installed "TotalScript", a browser extension running in this page. It reads your replies: any command you write executes against their live Roblox Studio via a local bridge, and the result is sent back as the next message - always, success or ERROR.
-CRITICAL: this site's own sandboxed tools CANNOT reach Studio. Commands are plain JSON in your normal reply - the only channel that works. Internal reasoning modes are fine.
+CRITICAL: this site's own sandboxed tools CANNOT reach Studio. ${channelLine} Internal reasoning modes are fine.
 FORMATTING (MANDATORY): every command goes inside a fenced code block (triple backticks); outside one, Markdown mangles ###LUA### markers and corrupts commands.
-STANDARD FORMAT (everything except execute_luau):
-${BT}json
-{"command": "name", "params": {"key": "value"}}
-${BT}
-execute_luau NEVER uses JSON - markers only, inside one fenced block:
+${standardFormat}
 ${BT}
 ###LUA###
 -- lua code, no escaping
@@ -300,7 +336,7 @@ RULES:
 - MONETIZE + PUBLISH: \`developer_product_create\` {name, price, reward?} creates a real Developer Product and wires ProcessReceipt; \`developer_product_list\` / \`developer_product_update\` {product_id, price?, for_sale?}. \`animation_publish\` {animation | path, name?} uploads a KeyframeSequence as a real Animation asset → ReplicatedStorage.Animations.<name>. Never invent asset ids.
 - MODE LOCK: every tool result ends with SYSTEM_STATE. Stay on that ENGINE. Obey WORK / EXTRA / PLAN / THINK for this turn. Never switch engines yourself. If unsure, call total_status {}. script_read_analysis is an alias of script_analysis — do not invent other names.
 ${firstAction}
-- NEVER HALLUCINATE a Studio/instance ID: there is ONE auto-connected place. Do NOT ask for studio_id/place ID and do NOT call list_roblox_studios etc. — they do not exist. For a dummy, call npc_spawn_pathfinding directly (e.g. {"command":"npc_spawn_pathfinding","params":{"rig_name":"Dummy"}}).
+- NEVER HALLUCINATE a Studio/instance ID: there is ONE auto-connected place. Do NOT ask for studio_id/place ID and do NOT call list_roblox_studios etc. — they do not exist. For a dummy, call npc_spawn_pathfinding directly (e.g. ${dummyExample}).
 - Never end a turn by only announcing a command - write it or give your final answer.
 - Done = one short plain-text sentence, then STOP. "Done" means the creation exists in Studio, named, styled, and playable — not a grey stub, TODO, or "you can add X later".
 - Brief: the user's latest message is the specification. Deliver a complete, playable feature in their open Studio place. Infer implied systems (shop → GUI + currency + server purchase + feedback; HUD → ScreenGui + live stats + mobile-safe scale; tool → handle + scripts + damage). Match existing style. Stay on this request.
@@ -527,6 +563,34 @@ NEVER: an unread-back script, an unvalidated remote, a build without model_check
     const catalogue = String(opts.catalogue || "").trim();
     const catalogueBlock = catalogue ? `\n\n${catalogue}\n━━━ END COMMAND CATALOGUE ━━━` : "";
     if (engine === "local") return buildLocalPrompt(siteName, customPrompt, memory, providerNotes, opts.fullAccess === true, personaExtra, catalogueBlock);
+    // 1.94.0: provider capability `commandFormat: "plain"` (passed in by
+    // main.js, never branched on a site name here) - the whole prompt teaches
+    // ###CMD### / ###LUA### blocks and shows no json fence. Default unchanged.
+    const plain = opts.commandFormat === "plain";
+    const standardFormatBlock = plain
+      ? `━━━ STANDARD COMMAND FORMAT (everything except execute_luau) ━━━
+Write a CMD block inside a fenced code block: the exact command name in the opener, one "key: value" line per parameter, then the closer (never type "command_name" literally - it is not a command). Numbers, true/false, [lists] and {objects} are read as such; a multi-line value goes between a line "key: <<<" and a line ">>>"; a command without parameters is just the opener and the closer:
+${BT}
+###CMD command_name###
+key: value
+###END_CMD###
+${BT}
+For example, to list every available command you would write a fenced block containing only ###CMD list_commands### and ###END_CMD### on two lines. No JSON is needed anywhere.
+
+━━━ FORMAT FOR execute_luau ━━━
+execute_luau uses the ###LUA### block below - never a CMD block and never JSON around it. Lua code is full of " characters; between the markers nothing is escaped.`
+      : `━━━ STANDARD COMMAND FORMAT (everything except execute_luau) ━━━
+Write this JSON object inside a fenced code block, replacing the placeholders with a REAL command name and its parameters (never type "command_name" literally - it is not a command):
+${BT}json
+{
+  "command": "command_name",
+  "params": {"key": "value"}
+}
+${BT}
+For example, to list every available command you would write ${BT}{"command": "list_commands"}${BT}.
+
+━━━ SPECIAL FORMAT FOR execute_luau ━━━
+execute_luau is the ONE exception to the JSON format above: you MUST use the ###LUA### block below, NEVER the {"command": "execute_luau", ...} JSON form. Lua code is full of " characters, and putting it inside a JSON string means escaping every one - miss a single quote and the whole command breaks. The ###LUA### block needs NO escaping and NO JSON, so this never happens.`;
 
     const firstActionBlock = catalogue
       ? `IMPORTANT: The COMMAND CATALOGUE at the end of this message IS the list_commands result for the Roblox Studio server - every command is shown as a callable signature "name {a, b?}" (? = optional) and can be called DIRECTLY. Do NOT call \`list_commands\` with no params to fetch it again, and never guess a command name that is not in it. NEVER search for commands: no list_commands {"query"}, no search_commands / get_command - names under MORE COMMANDS are callable as they are, and a wrong parameter returns the exact schema in the error. Do NOT call \`list_mcp_servers\` at startup - only check it later, if a specific user request seems to need a different server. Your very first reply is exactly one short sentence confirming you are ready (no command, no summary of the catalogue), then wait for the user's first request. (Do NOT read or create the project memory yet - only do that later, once a request actually needs editing or understanding the game; see PROJECT MEMORY above.) If any Roblox command comes back Studio-offline, Roblox is down - run \`list_mcp_servers\` once, tell the user in one short sentence that Roblox is offline, list what else is connected (if anything), then ask what they want to do and wait - do not act on any other server until they answer.`
@@ -542,18 +606,7 @@ CRITICAL - technical note, not a restriction: this site's own tools (code interp
 
 ⚠️ FORMATTING RULE (MANDATORY): every command goes inside a fenced code block (triple backticks). Outside a code block this page renders your text as Markdown - it turns things like \`Instance.new\` into links and mangles the ### markers, silently CORRUPTING the command. Inside a code block it is kept verbatim.
 
-━━━ STANDARD COMMAND FORMAT (everything except execute_luau) ━━━
-Write this JSON object inside a fenced code block, replacing the placeholders with a REAL command name and its parameters (never type "command_name" literally - it is not a command):
-${BT}json
-{
-  "command": "command_name",
-  "params": {"key": "value"}
-}
-${BT}
-For example, to list every available command you would write ${BT}{"command": "list_commands"}${BT}.
-
-━━━ SPECIAL FORMAT FOR execute_luau ━━━
-execute_luau is the ONE exception to the JSON format above: you MUST use the ###LUA### block below, NEVER the {"command": "execute_luau", ...} JSON form. Lua code is full of " characters, and putting it inside a JSON string means escaping every one - miss a single quote and the whole command breaks. The ###LUA### block needs NO escaping and NO JSON, so this never happens.
+${standardFormatBlock}
 The ###LUA### / ###END_LUA### markers AND the code all go INSIDE one fenced code block:
 ${BT}
 ###LUA###
@@ -717,7 +770,7 @@ When the user asks how a TotalScript feature works, call totalscript_help {quest
     if (maxChars && full.length > maxChars) {
       // Over budget even before the catalogue: fall back to the compact core,
       // which keeps the list_commands-first bootstrap (no embedded catalogue).
-      const compactCore = buildCompactPrompt({ siteName, catalogueEmbedded: !!catalogueBlock, tight: maxChars < 16000 });
+      const compactCore = buildCompactPrompt({ siteName, catalogueEmbedded: !!catalogueBlock, tight: maxChars < 16000, plain });
       const compactFull = `${SYS_MARKER}\n${compactCore}${modeExtra}${personaExtra}${siteRules}${browserLine()}${extra}`;
       if (compactFull.length < full.length) return compactFull + catalogueBlock;
       if (catalogueBlock) return buildSystemPrompt(Object.assign({}, opts, { catalogue: "" }));

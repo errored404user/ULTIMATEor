@@ -738,6 +738,13 @@ const RSProvider = (() => {
     // Guest chat has a shared allowance and an unknown per-message cap: use the
     // compact system prompt (same as ChatGPT) so the bootstrap always lands.
     sysMaxChars: 14000,
+    // 1.94.0: reported live - Vani's platform prompt tells the model it cannot
+    // use JSON blocks, and the core bootstrap still showed a ```json STANDARD
+    // FORMAT, so the model answered in plain prose. This capability makes
+    // config.js build the ###CMD### / ###LUA### variant of the system prompt
+    // (no json fence anywhere) and the parse-error feedback name the CMD
+    // block; the parser itself still accepts JSON if the model writes it.
+    commandFormat: "plain",
     // 1.81.0: Luau-first plain-text protocol. The format itself (###LUA### and
     // ###CMD name### blocks, JSON optional) is RSParse.PLAIN_FORMAT_NOTE - one
     // source for prompt and parser; this adds only what is Vani-specific.
