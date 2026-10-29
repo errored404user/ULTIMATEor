@@ -78,6 +78,14 @@ PROGRAMS = {
     "preview": ["ui_preview", {"path": "StarterGui.Shop", "device": "phone"}],
     "preview_restore": ["ui_preview", {"path": "StarterGui.Shop", "restore": True}],
     "audit_legacy": ["ui_audit", {"path": "StarterGui.Legacy"}],
+    # 1.99.2: GUI standard port - ui_audit fix/grade/phone pass + named styles
+    "audit_legacy2": ["ui_audit", {"path": "StarterGui.Legacy2"}],
+    "audit_fix": ["ui_audit", {"path": "StarterGui.Legacy2", "fix": True}],
+    "audit_nophone": ["ui_audit", {"path": "StarterGui.Shop", "phone": False}],
+    "tokens_style": ["design_tokens_set", {"style": "cartoon"}],
+    "tokens_style_override": ["design_tokens_set", {"style": "Tactical", "primary": "#ff0000"}],
+    "shop_styled": ["ui_screen_generate", {"kind": "shop", "name": "StyledShop", "style": "pixel", "items": ["Sword"]}],
+    "tokens_get2": ["design_tokens_get", {}],
 }
 
 data = json.loads(subprocess.check_output(["node", "-e", GEN, json.dumps(PROGRAMS)], text=True))
@@ -488,6 +496,38 @@ loadBtn.Activated.Fire(loadBtn.Activated)
 ok("button click with TotalSFX installed plays the ui_click event through UIKit.sfx", (M.soundsPlayed or 0) == played0 + 1, (M.soundsPlayed, played0))
 r = run("ability_bad")
 ok("ability_bar with no abilities falls back to the 4 defaults (Strike/Dash/Shield/Ultimate)", r.get("ok") and r["data"]["count"] >= 4, r)
+
+# ───────────────────────── 1.99.2: ui_audit fix / grade / phone pass ─────────────────────────
+legacy2 = L.eval("""function(StarterGui)
+  local sg=Instance.new('ScreenGui') sg.Name='Legacy2' sg.ZIndexBehavior=Enum.ZIndexBehavior.Global sg.Parent=StarterGui
+  local f=Instance.new('Frame') f.Name='Main' f.Size=UDim2.new(0,1000,0,300) f.Position=UDim2.new(0,100,0,100) f.BackgroundColor3=Color3.fromRGB(30,30,30) f.Parent=sg
+  local t=Instance.new('TextLabel') t.Name='Title' t.Size=UDim2.new(1,0,0,30) t.Text='Old title' t.TextSize=9 t.TextColor3=Color3.fromRGB(240,240,240) t.BackgroundTransparency=1 t.Parent=f
+  local sc=Instance.new('TextLabel') sc.Name='Scaled' sc.Size=UDim2.new(1,0,0,40) sc.Position=UDim2.new(0,0,0,30) sc.Text='Scaled' sc.TextScaled=true sc.TextColor3=Color3.fromRGB(240,240,240) sc.BackgroundTransparency=1 sc.Parent=f
+  local b=Instance.new('TextButton') b.Name='Tiny' b.Size=UDim2.new(0,20,0,20) b.Position=UDim2.new(0,10,0,80) b.Text='x' b.TextColor3=Color3.fromRGB(255,255,255) b.BackgroundColor3=Color3.fromRGB(30,30,30) b.Parent=f
+  local s=Instance.new('ScrollingFrame') s.Name='S' s.Size=UDim2.new(0,100,0,50) s.Position=UDim2.new(0,250,0,150) s.Parent=f
+  return sg
+end""")(SG())
+r0 = run("audit_legacy2")
+rules0 = {i["rule"] for i in r0["data"]["issues"]} if r0.get("ok") else set()
+ok("ui_audit (1.99.2) reports grade + fixed_wide + phone pass without fixing anything", r0.get("ok") and r0["data"]["grade"] in ("excellent", "good", "fair", "needs work") and "fixed_wide" in rules0 and r0["data"]["fixed"] == [] and isinstance(r0["data"].get("phone"), dict), (r0.get("data", {}).get("grade"), sorted(rules0)))
+r = run("audit_fix")
+fixed = {f["rule"] for f in r["data"]["fixed"]} if r.get("ok") else set()
+main2 = legacy2.FindFirstChild(legacy2, "Main")
+title2, scaled2, tiny2, scroll2 = (main2.FindFirstChild(main2, n) for n in ("Title", "Scaled", "Tiny", "S"))
+ok("ui_audit fix=true applies the safe repairs: tiny_text, unbounded_text_scale, small_touch_target, static_canvas, zindex_global", r.get("ok") and {"tiny_text", "unbounded_text_scale", "small_touch_target", "static_canvas", "zindex_global"} <= fixed, (sorted(fixed), r.get("error")))
+ok("  repairs landed on the instances (TextSize 14, UITextSizeConstraint, UISizeConstraint 44, AutomaticCanvasSize Y, Sibling)", title2.TextSize == 14 and scaled2.FindFirstChildOfClass(scaled2, "UITextSizeConstraint") is not None and tiny2.FindFirstChildOfClass(tiny2, "UISizeConstraint") is not None and tiny2.FindFirstChildOfClass(tiny2, "UISizeConstraint").MinSize.X == 44 and scroll2.AutomaticCanvasSize.Name == "Y" and legacy2.ZIndexBehavior.Name == "Sibling", (title2.TextSize, scroll2.AutomaticCanvasSize.Name, legacy2.ZIndexBehavior.Name))
+ok("  fixed issues leave the score; fixed_wide (needs ui_make_responsive) stays reported", r["data"]["score"] > r0["data"]["score"] and "fixed_wide" in {i["rule"] for i in r["data"]["issues"]} and "tiny_text" not in {i["rule"] for i in r["data"]["issues"]}, (r0["data"]["score"], r["data"]["score"]))
+r = run("audit_nophone")
+ok("ui_audit phone=false omits the phone pass", r.get("ok") and r["data"].get("phone") is None, r.get("data", {}).get("phone"))
+
+# ───────────────────────── 1.99.2: named styles ─────────────────────────
+r = run("tokens_style")
+ok("design_tokens_set {style:'cartoon'} resolves to the style's preset, font and radius", r.get("ok") and r["data"]["style"] == "cartoon" and r["data"]["preset"] == "candy" and r["data"]["font"] == "FredokaOne" and r["data"]["radius"] == 18, r)
+r = run("tokens_style_override")
+ok("design_tokens_set {style:'Tactical', primary:'#ff0000'}: explicit colour wins, style key normalised", r.get("ok") and r["data"]["style"] == "tactical" and r["data"]["palette"]["Primary"] == "#ff0000" and r["data"]["font"] == "RobotoMono", r)
+r = run("shop_styled")
+r2 = run("tokens_get2")
+ok("ui_screen_generate {style:'pixel'} writes the pixel tokens before building the screen", r.get("ok") and r2.get("ok") and r2["data"]["preset"] == "retro" and r2["data"]["font"]["Family"] == "Arcade" and SG().FindFirstChild(SG(), "StyledShop") is not None, (r.get("error"), r2.get("data", {}).get("preset"), r2.get("data", {}).get("font")))
 
 failed = results.count(False)
 print("\n%d passed, %d failed" % (len(results) - failed, failed))

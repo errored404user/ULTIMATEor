@@ -18,7 +18,7 @@
 // DOM-free at top level (loaded in node by the tests).
 (function (root) {
   "use strict";
-  const VERSION = "1.99.1";
+  const VERSION = "1.99.2";
 
   // ───────────────────────── expert library ─────────────────────────
   // Fields: id, title, env (roblox | blender | general), summary (one line
@@ -126,12 +126,13 @@
     intents: [],
     procedure: [
       "Look before building: `ui_inspect` / `ui_find` / `ui_list_tree` for existing screens, `ui_layout_report` for actual pixel boxes - extend or restyle existing UI rather than stacking a second HUD.",
+      "Work to the GUI standard (1.99.2): this skill's output carries the Core rules plus the style section the request names (cartoon when nothing is named and no UI exists) - one style family per screen, `design_tokens_set` with that style, Scale layout + layout objects, every state without hover, no emoji in UI text, 4.5:1 contrast, 40 px phone targets, every list filled. One section on demand: skill {name: \"ui_ux\", section: \"<style or topic>\"}.",
       "Build whole screens declaratively: `ui_screen_generate` (kinds with runtime scripts) or `ui_from_spec` / `ui_build_spec` for a custom tree; single widgets with `ui_component_place` / `ui_add_element`; cinematic title / pause / results screens with `ui_art_build`.",
       "Root ScreenGui via `ui_screen_create` (IgnoreGuiInset on, ResetOnSpawn off); Scale-based sizes, AnchorPoint set, UIAspectRatioConstraint on cards, TextScaled with UITextSizeConstraint, UIPadding / UIListLayout for spacing.",
       "Style from one token set: `ui_apply_tokens` / `ui_tokens_apply` / `ui_design_system_create`; never hand-pick ten different greys.",
       "Behaviour without hidden scripts: `ui_states_wire` (open / close / toggle), `ui_bind_button`, `ui_state_toggle`, `ui_tween` for motion; data-driven text comes through RemoteEvents from the server.",
       "Make it survive every screen: `ui_make_responsive` / `ui_responsive_fix` (offset → scale), `ui_gamepad_focus` for controller selection, safe margins for the 58 px top bar.",
-      "QA: `ui_audit` (WCAG contrast, tiny text, touch targets), `ui_preview` + a screenshot, `ui_layout_report` at 1280x720 and a phone size; fix findings.",
+      "QA: `ui_audit` with fix:true (WCAG contrast, tiny text, touch targets at desktop and phone size, safe auto-repairs, grade), `ui_preview` + a screenshot at phone and desktop, `ui_layout_report` at 1280x720 and a phone size; fix findings.",
       "Stop when the audit is clean, the screen reads correctly at two resolutions and every button does what the request says.",
     ],
     pitfalls: ["Offset-only sizes (breaks on phones); ZIndex wars instead of DisplayOrder; text without TextScaled constraints.", "Duplicating a ScreenGui per build attempt - clear or reuse the existing one.", "Client-side UI changing game state directly (must go through remotes)."],
@@ -615,15 +616,31 @@
     return [head].concat(rows.map((x) => `- ${x.id} [${x.env}] — ${x.summary}`)).join("\n");
   }
   // answer(args) → text for the `skill` command (name | query | nothing).
+  // 1.99.2: the ui_ux skill carries the GUI standard (gui_standard.js): the Core rules plus the
+  // sections the request's wording calls for, or one named section via {section}. The request
+  // text comes from {query|topic|for} or, when the page exposes it, the current user message.
+  function guiStandardText(a) {
+    const G = root.TotalGuiStandard;
+    if (!G || typeof G.render !== "function") return "";
+    const section = a.section || a.sections || a.style || "";
+    let text = String(a.query || a.topic || a.for || a.request || "").trim();
+    if (!text && typeof root.__rsTaskText === "function") { try { text = String(root.__rsTaskText() || ""); } catch {} }
+    const budget = Number(a.budget) > 0 ? Math.max(4000, Number(a.budget)) : 30000;
+    try { return G.render(text, section ? { only: section } : { budget }); } catch { return ""; }
+  }
   function answer(args) {
     const a = args && typeof args === "object" ? args : { name: args };
     const ref = String(a.name || a.skill || a.id || a.query || a.topic || "").trim();
     if (!ref) return listText("");
     const id = resolveId(ref);
+    if (id === "ui_ux") {
+      const std = guiStandardText(a);
+      return (a.section || a.sections || a.style) && std ? std : expertText(id) + (std ? "\n\n" + std : "");
+    }
     if (id) return expertText(id);
     return listText(ref);
   }
-  const ALIASES = { debug: "debug_repair", debugging: "debug_repair", remotes: "networking", remote: "networking", security: "networking", pathfinding: "gameplay_systems", npc: "gameplay_systems", combat: "gameplay_systems", datastore: "data_persistence", data: "data_persistence", ui: "ui_ux", gui: "ui_ux", physics: "world_building", building: "world_building", tween: "animation", anim: "animation", blender: "blender_modeling", export: "blender_to_roblox", scripting: "luau_scripting", luau: "luau_scripting", perf: "performance", audio: "sfx", sound: "sfx", cutscene: "cinematics", camera: "cinematics", writing: "creative_production", creative: "creative_production", code: "general_engineering", architecture: "project_analysis" };
+  const ALIASES = { debug: "debug_repair", debugging: "debug_repair", remotes: "networking", remote: "networking", security: "networking", pathfinding: "gameplay_systems", npc: "gameplay_systems", combat: "gameplay_systems", datastore: "data_persistence", data: "data_persistence", ui: "ui_ux", gui: "ui_ux", gui_standard: "ui_ux", "check-clean-ui": "ui_ux", check_clean_ui: "ui_ux", screengui: "ui_ux", physics: "world_building", building: "world_building", tween: "animation", anim: "animation", blender: "blender_modeling", export: "blender_to_roblox", scripting: "luau_scripting", luau: "luau_scripting", perf: "performance", audio: "sfx", sound: "sfx", cutscene: "cinematics", camera: "cinematics", writing: "creative_production", creative: "creative_production", code: "general_engineering", architecture: "project_analysis" };
   function resolveId(ref) {
     const k = norm(ref).replace(/\s+/g, "_");
     if (BY_ID[k]) return k;

@@ -38,7 +38,7 @@ function runStudio(importCode, verifyCode, mode) {
 const res = (out, cmd, nth) => { const list = (out.results || []).filter((r) => r.cmd === cmd); const r = list[nth || 0]; return r && r.result ? r.result : null; };
 
 // ───────────────────────── wiring / regression (static) ─────────────────────────
-ok("version 1.99.1 pinned (planner, importer, meshkit, manifest)", A.VERSION === "1.99.1" && MI.VERSION === "1.99.1" && /VERSION = "1\.99\.1"/.test(fs.readFileSync("src/core/skills/studio_meshkit.js", "utf8")) && manifest.version === "1.99.1");
+ok("version 1.99.2 pinned (planner, importer, meshkit, manifest)", A.VERSION === "1.99.2" && MI.VERSION === "1.99.2" && /VERSION = "1\.99\.2"/.test(fs.readFileSync("src/core/skills/studio_meshkit.js", "utf8")) && manifest.version === "1.99.2");
 ok("assetplan.js + meshimport.js + studio_meshkit.js load in every main.js bundle after studio_sequence.js and before agent_skills.js", manifest.content_scripts.filter((c) => c.js && c.js.includes("src/core/main.js")).every((c) => { const i = c.js.indexOf("src/core/assetplan.js"), j = c.js.indexOf("src/core/meshimport.js"), k = c.js.indexOf("src/core/skills/studio_meshkit.js"); return i > c.js.indexOf("src/core/skills/studio_sequence.js") && j > i && k > j && k < c.js.indexOf("src/core/skills/agent_skills.js"); }));
 ok("codecraft.html loads the three files in the same place", (() => { const h = fs.readFileSync("codecraft.html", "utf8"); const i = h.indexOf("src/core/assetplan.js"), j = h.indexOf("src/core/meshimport.js"), k = h.indexOf("skills/studio_meshkit.js"); return i > h.indexOf("skills/studio_sequence.js") && j > i && k > j && k < h.indexOf("skills/agent_skills.js"); })());
 ok("background.js maps blender_asset_build/validate/inspect/export to tools/blender_asset.py and keeps the old ops on blender_ops.py", /blender_asset_build: "asset_build", blender_asset_validate: "asset_validate", blender_asset_inspect: "asset_inspect", blender_asset_export: "asset_export"/.test(bg) && /if \(BLENDER_ASSET_CMDS\.has\(c\)\) return "tools\/blender_asset\.py";/.test(bg) && /return "tools\/blender_ops\.py";\n\}/.test(bg) && bg.includes("let py = await extText(blenderScriptFor(cmd));"));
@@ -163,7 +163,7 @@ ok("E: Blender offline -> main.js answers with the connect instruction for every
 
 // F regression: existing Blender tests still green is checked by the sweep; here: old dump shape preserved
 ok("F: dump keeps the 1.46 fields (name, verts, faces, tris, flat, color) so older consumers keep working", dumpA.meshes.every((m) => Array.isArray(m.verts) && Array.isArray(m.faces) && typeof m.tris === "number" && typeof m.flat === "boolean" && Array.isArray(m.color)));
-ok("F: README changelog documents 1.99.1 and the test", /1\.99\.1/.test(fs.readFileSync("README.md", "utf8")) && /test-blender-assets\.js/.test(fs.readFileSync("README.md", "utf8")));
+ok("F: README changelog documents 1.99.2 and the test", /1\.99\.2/.test(fs.readFileSync("README.md", "utf8")) && /test-blender-assets\.js/.test(fs.readFileSync("README.md", "utf8")));
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
 console.log(fail ? "FAIL  test-blender-assets: " + pass + " passed, " + fail + " failed" : "OK    test-blender-assets: " + pass + " passed");

@@ -1,4 +1,4 @@
-# TotalScript studio rig (1.99.1) - lighting, cameras, world and renders.
+# TotalScript studio rig (1.99.2) - lighting, cameras, world and renders.
 # Sent to Blender as execute_code like blender_ops.py / blender_asset.py;
 # tokens CMD / ARGS / OUT / MESH are filled by TotalScript.
 #
@@ -49,7 +49,7 @@ if not OUT:
 result = None
 WRAP = 3000
 STUDIO = "Total_Studio"
-VERSION = "1.99.1"
+VERSION = "1.99.2"
 
 
 def write_wrapped(path, text):

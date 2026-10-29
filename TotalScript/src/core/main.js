@@ -6048,6 +6048,15 @@
                 const note = TotalSkillIntel.rider(A.skillSel, { tight });
                 if (note && toSend.length + note.length + 2 <= cap) { toSend += "\n\n" + note; diag("skill.riderSent", { chars: note.length, tight, experts: A.skillSel.picked.map((p) => p.id) }); }
                 else if (note) diag("skill.riderSkipped", { chars: note.length, cap });
+                // 1.99.2: GUI work also gets the GUI standard's brief (style for this
+                // request + the six rules that decide whether a screen is finished).
+                // ≤700 chars (≤320 tight), same budget, same precedence sentence.
+                if (A.skillSel.picked[0].id === "ui_ux" && typeof TotalGuiStandard !== "undefined") {
+                  let reqText = ""; try { reqText = String((window.__rsTaskText && window.__rsTaskText()) || ""); } catch {}
+                  const gui = TotalGuiStandard.brief(reqText, { tight });
+                  if (gui && toSend.length + gui.length + 2 <= cap) { toSend += "\n\n" + gui; diag("gui.briefSent", { chars: gui.length, tight, style: TotalGuiStandard.styleFor(reqText).style }); }
+                  else if (gui) diag("gui.briefSkipped", { chars: gui.length, cap });
+                }
               }
             } catch {}
           }

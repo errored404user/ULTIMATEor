@@ -13,7 +13,7 @@
 //   schemaLine(name)         -> compact callable signature for error messages
 const TotalCommandContract = (() => {
   "use strict";
-  const VERSION = "1.99.1";
+  const VERSION = "1.99.2";
 
   // ── authoritative Roblox enum lists (Enum.<Key>.<Item>; a wrong item is a Luau error or a silently swallowed pcall) ──
   const ROBLOX_ENUMS = {
