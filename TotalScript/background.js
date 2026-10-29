@@ -1779,10 +1779,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // Only pages we ship may be opened this way (the AI switcher on a web
         // page cannot open chrome-extension:// URLs itself).
         const page = String(msg.page || "");
-        if (page !== CODECRAFT_PAGE) { sendResponse({ ok: false, error: "unknown extension page" }); break; }
-        const url = chrome.runtime.getURL(page);
+        // 1.99.0: the API chat page takes a profile query (codecraft.html?api=deepseek)
+        const pm = page.match(/^([a-z]+\.html)(?:\?api=([a-z]+))?$/);
+        if (!pm || pm[1] !== CODECRAFT_PAGE) { sendResponse({ ok: false, error: "unknown extension page" }); break; }
+        const base = chrome.runtime.getURL(pm[1]);
+        const url = pm[2] ? base + "?api=" + pm[2] : base;
         try {
-          const tabs = await chrome.tabs.query({ url: url + "*" });
+          const tabs = (await chrome.tabs.query({ url: base + "*" })).filter((t) => (pm[2] ? String(t.url || "").includes("api=" + pm[2]) : !/[?&]api=/.test(String(t.url || ""))));
           if (tabs.length) { await chrome.tabs.update(tabs[0].id, { active: true }); try { await chrome.windows.update(tabs[0].windowId, { focused: true }); } catch {} }
           else await chrome.tabs.create({ url });
           sendResponse({ ok: true });

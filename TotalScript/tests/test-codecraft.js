@@ -98,11 +98,11 @@ sess.messages.length = 0;
   ok("page has the controls the provider binds", ["cc-app", "cc-log", "cc-form", "cc-input", "cc-send", "cc-stop", "cc-model", "cc-key", "cc-key-save", "cc-status", "cc-new", "cc-empty", "cc-composer", "cc-attach", "cc-attachments", "cc-file"].every((id) => html.includes(`id="${id}"`)));
   ok("page stylesheet exists and follows the light flag", fs.existsSync(path.join(root, "ui/codecraft.css")) && /html\.rs-light/.test(read("ui/codecraft.css")));
   ok("AI switcher lists CodeCraft and opens extension pages through the background", /\{ name: "CodeCraft API", url: CODECRAFT_PAGE_URL/.test(main) && /chrome\.runtime\.getURL\("codecraft\.html"\)/.test(main) && /rs-open-extension-page/.test(main) && /s\.host \|\| hostOf\(s\.url\)/.test(main));
-  ok("background broadcasts to the page and serves rs-open-extension-page (allow-listed)", /async function providerTabs\(\)/.test(bg) && /chrome\.runtime\.getURL\(CODECRAFT_PAGE\) \+ "\*"/.test(bg) && !/chrome\.tabs\.query\(\{ url: PROVIDER_URLS \}, \(tabs\)/.test(bg) && /case "rs-open-extension-page"/.test(bg) && /page !== CODECRAFT_PAGE/.test(bg));
+  ok("background broadcasts to the page and serves rs-open-extension-page (allow-listed)", /async function providerTabs\(\)/.test(bg) && /chrome\.runtime\.getURL\(CODECRAFT_PAGE\) \+ "\*"/.test(bg) && !/chrome\.tabs\.query\(\{ url: PROVIDER_URLS \}, \(tabs\)/.test(bg) && /case "rs-open-extension-page"/.test(bg) && /\|\| pm\[1\] !== CODECRAFT_PAGE\) \{ sendResponse\(\{ ok: false, error: "unknown extension page" \}\)/.test(bg)); // 1.99.0: allow-list now also admits the ?api=<profile> query
   ok("popup names the page, treats it as a supported tab and has a launcher", /isCodeCraftTab/.test(popup) && /"CodeCraft API"/.test(popup) && /getElementById\("codecraft"\)/.test(popup) && /id="codecraft"/.test(popupHtml));
   ok("overlay skin for the inline bar", /#rs-bar\.rs-bar-inline\.rs-prov-codecraft \{/.test(css) && /html\.rs-light #rs-bar\.rs-bar-inline\.rs-prov-codecraft/.test(css));
   ok("the key is only ever sent to codecraftapi.com", (() => { const src = read("src/providers/codecraft.js"); const fetches = [...src.matchAll(/fetch\(([^,)]+)/g)].map((m) => m[1]); return fetches.length >= 2 && fetches.every((f) => /API_BASE/.test(f)); })());
-  ok("manifest version 1.99.0", manifest.version === "1.99.0");
+  ok("manifest version 1.99.1", manifest.version === "1.99.1");
 
   console.log(`test-codecraft: ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

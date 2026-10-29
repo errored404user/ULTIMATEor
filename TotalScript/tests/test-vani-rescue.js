@@ -25,7 +25,7 @@ const vani = read("src/providers/vani.js");
 const net = read("src/providers/vani-net.js");
 
 // ── static pins: core loop ──
-ok("main: provider-configurable rescue count (1..3) read from P.commandlessRetries", main.includes("const maxRefuse = Math.max(1, Math.min(3, Number(P.commandlessRetries) || 1));") && main.includes("if (refuseRetries < maxRefuse && !A.stop && (isCapabilityRefuse(body) || providerCommandless)) {") && !main.includes("if (refuseRetries < 1 && !A.stop"));
+ok("main: provider-configurable rescue count (1..3) read from P.commandlessRetries", main.includes("const maxRefuse = resendAllowed() ? Math.max(1, Math.min(3, Number(P.commandlessRetries) || 1)) : 1;") /* 1.99.1: 1 on gentle providers */ && main.includes("if (refuseRetries < maxRefuse && !A.stop && (isCapabilityRefuse(body) || providerCommandless)) {") && !main.includes("if (refuseRetries < 1 && !A.stop"));
 ok("main: second rescue uses the provider's FINAL note, first uses its own note, else the generic capabilityRefuse feedback", /let retryFeedback = refuseRetries > 1 && P\.commandlessRetryFeedbackFinal\s*\?\s*P\.commandlessRetryFeedbackFinal\s*:\s*providerCommandless && P\.commandlessRetryFeedback\s*\?\s*P\.commandlessRetryFeedback\s*:\s*RS\.FEEDBACK\.capabilityRefuse;/.test(main));
 ok("main: the rescue toast carries the attempt count and the bridge label", main.includes("ui.toast(`Model replied without acting — requesting one command… (${refuseRetries}/${maxRefuse})${bridge && bridge.label ? \" · \" + bridge.label : \"\"}`)") && main.includes('typeof P.bridgeStatus === "function" ? P.bridgeStatus() : null'));
 ok("main: give-up path — once per run, only after the rescues, only when nothing ran, with a plain note + steering text, then the run ends", main.includes("if (!commandlessGaveUp && !A.stop && refuseRetries >= maxRefuse && toolTurns === 0 && (isCapabilityRefuse(body) || providerCommandless)) {") && main.includes('diag("loop.commandlessGiveUp"') && main.includes("const note = P.commandlessGiveUpNote ||") && main.includes('ui.steeringProgress("complete", "Stopped: the model answered without a command", toolTurns);') && main.includes("let commandlessGaveUp = false;"));
@@ -115,6 +115,6 @@ ok("adapter: version marker bumped", vani.includes('setAttribute("data-rs-vani-v
   const readme = read("README.md");
   ok("README: 1.76.0 entry + test listed", /\*\*1\.76\.0 — Vani: commandless-reply rescue, visible bridge status\.\*\*/.test(readme) && /test-vani-rescue\.js/.test(readme));
   const manifest = JSON.parse(read("manifest.json"));
-  ok("version pins 1.99.0", manifest.version === "1.99.0" && /^version = "1\.99\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.99.0"'));
+  ok("version pins 1.99.1", manifest.version === "1.99.1" && /^version = "1\.99\.1"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.99.1"'));
   finish();
 })();

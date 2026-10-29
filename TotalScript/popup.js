@@ -277,8 +277,19 @@ document.querySelectorAll(".dono[data-dono]").forEach((b) => b.addEventListener(
 document.getElementById("codecraft")?.addEventListener("click", () => {
   // Reuse an open CodeCraft chat tab (same conversation) instead of stacking copies.
   chrome.tabs.query({ url: CODECRAFT_PAGE_URL + "*" }, (tabs) => {
-    if (tabs && tabs.length) chrome.tabs.update(tabs[0].id, { active: true });
+    tabs = (tabs || []).filter((t) => !/[?&]api=/.test(String(t.url || "")));
+    if (tabs.length) chrome.tabs.update(tabs[0].id, { active: true });
     else chrome.tabs.create({ url: CODECRAFT_PAGE_URL });
+  });
+});
+// 1.99.0 - DeepSeek through the official API (same page, ?api=deepseek profile):
+// the route that is not subject to chat.deepseek.com's account suspensions.
+document.getElementById("deepseek-api")?.addEventListener("click", () => {
+  const url = CODECRAFT_PAGE_URL + "?api=deepseek";
+  chrome.tabs.query({ url: CODECRAFT_PAGE_URL + "*" }, (tabs) => {
+    tabs = (tabs || []).filter((t) => /api=deepseek/.test(String(t.url || "")));
+    if (tabs.length) chrome.tabs.update(tabs[0].id, { active: true });
+    else chrome.tabs.create({ url });
   });
 });
 document.getElementById("blender")?.addEventListener("click", () => {

@@ -1171,7 +1171,7 @@ const RSProvider = (() => {
     // re-sends after a dead or failed turn here, and stops on scanAccountBlock().
     // Nothing in this contract hides TotalScript from the site - it only makes
     // the extension behave like a person typing.
-    pacing: { minGapMs: 6000, maxGapMs: 15000, perHour: 40, noResend: true, label: "DeepSeek gentle mode", apiHint: "For long unattended runs use the TotalScript desktop app with your own DeepSeek API key (platform.deepseek.com) - the official API is not subject to web-chat account suspension." },
+    pacing: { minGapMs: 8000, maxGapMs: 20000, perHour: 30, noResend: true, label: "DeepSeek gentle mode", apiPage: "codecraft.html?api=deepseek", apiLabel: "Open DeepSeek API chat", apiHint: "The only route DeepSeek cannot suspend for cadence is its official API: TotalScript has a built-in DeepSeek API chat (popup → DeepSeek API chat, your own sk- key from platform.deepseek.com, pay as you go) where the agent runs at full speed." },
     scanAccountBlock,
     init({ diag: d } = {}) {
       if (d) diag = d;

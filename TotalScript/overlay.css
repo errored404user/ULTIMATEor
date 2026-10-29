@@ -8987,3 +8987,5 @@ html.rs-light #rs-video .rsv-btn { color: #1f2933; background: rgba(0,0,0,.05); 
 @media (max-width: 860px) { #rs-video .rsv-body { grid-template-columns: 1fr; } }
 /* 1.99.0 gentle-mode notice (account-protection explanation, shown once) */
 .rs-banner.info { border-left: 2px solid rgba(34, 211, 238, 0.55); }
+.rs-banner-go { background: linear-gradient(135deg, rgba(34, 211, 238, 0.28), rgba(34, 211, 238, 0.12)); color: #e6fbff; border-color: rgba(34, 211, 238, 0.45) !important; }
+.rs-banner-go:hover { background: linear-gradient(135deg, rgba(34, 211, 238, 0.4), rgba(34, 211, 238, 0.2)); }

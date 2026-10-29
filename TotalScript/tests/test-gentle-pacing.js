@@ -53,7 +53,7 @@ ok("paceDelay: no perHour → never budget-blocked", O.paceDelay(full, nowF, { m
 let JSDOM, installDomShims;
 try { ({ JSDOM } = require("jsdom")); ({ installDomShims } = require("./lib/e2e-page.js")); } catch { JSDOM = null; }
 const ds = read("src/providers/deepseek.js");
-ok("deepseek.js: pacing contract 6–15 s gap, 40/hour, noResend, label + apiHint pointing at platform.deepseek.com", /pacing: \{ minGapMs: 6000, maxGapMs: 15000, perHour: 40, noResend: true, label: "DeepSeek gentle mode", apiHint: "[^"]*platform\.deepseek\.com[^"]*" \}/.test(ds));
+ok("deepseek.js: pacing contract 8–20 s gap, 30/hour (1.99.1, was 6–15/40), noResend, apiPage → in-extension DeepSeek API chat, apiHint pointing at platform.deepseek.com", /pacing: \{ minGapMs: 8000, maxGapMs: 20000, perHour: 30, noResend: true, label: "DeepSeek gentle mode", apiPage: "codecraft\.html\?api=deepseek", apiLabel: "Open DeepSeek API chat", apiHint: "[^"]*platform\.deepseek\.com[^"]*" \}/.test(ds));
 ok("deepseek.js: scanAccountBlock exported and consulted first by scanError", /scanAccountBlock,/.test(ds) && /function scanError\(\) \{\n\s+const blocked = scanAccountBlock\(\);\n\s+if \(blocked\) return blocked;/.test(ds));
 if (!JSDOM) console.log("skip jsdom half (npm i --no-save jsdom)");
 else {

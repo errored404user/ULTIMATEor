@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript Asset Planner (1.99.0) - brief -> structured 3D asset spec.
+// TotalScript Asset Planner (1.99.1) - brief -> structured 3D asset spec.
 //
 // This is the "think before you add a cube" half of the Blender pipeline. A
 // natural-language brief ("detailed sci-fi sword, 1.2 m, teal accents") becomes
@@ -18,7 +18,7 @@
 // extents; pos = part centre; rot = degrees.
 (function (root) {
   "use strict";
-  const VERSION = "1.99.0";
+  const VERSION = "1.99.1";
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
   const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -259,7 +259,7 @@
   };
 
 
-  // ── Procedural generators (1.99.0): shape "generator" parts are built by tools/blender_asset.py
+  // ── Procedural generators (1.99.1): shape "generator" parts are built by tools/blender_asset.py
   // from a seed - same seed, same asset. pos of a generator part is its BASE point (ground
   // contact / trunk foot), not its centre; the validator knows.
   const GENERATORS = ["tree_branches", "canopy_cluster", "terrain", "rock_cluster", "crystal_cluster", "stairs"];

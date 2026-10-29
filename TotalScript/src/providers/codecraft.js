@@ -17,17 +17,46 @@ const RSProvider = (() => {
   let diag = () => {};
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  const API_BASE = "https://codecraftapi.com/v1";
-  const SITE = "https://codecraftapi.com";
-  const STORE_KEY = "rsCodeCraft";
-  const DEFAULT_MODEL = "claude-opus-4.8";
-  // Shown before /models answers (or when the key is missing). The live list
-  // replaces it as soon as a key is saved.
-  const FALLBACK_MODELS = [
-    "claude-opus-4.8", "claude-sonnet-5", "claude-opus-5", "gpt-5.6-terra", "gpt-5.6-luna",
-    "gemini-3.1-pro", "gemini-3.7-flash", "deepseek-v4-pro-max", "deepseek-v4-flash-0731",
-    "kimi-k3", "kimi-k2.6", "qwen3.8-max", "glm-5.3", "grok-4.6", "seed-2.1-pro",
-  ];
+  // 1.99.0: API PROFILES. The same page + adapter serve any OpenAI-compatible
+  // API; the profile is chosen by the page URL (`codecraft.html?api=deepseek`).
+  // DeepSeek's official API (platform.deepseek.com, your own sk- key, pay as
+  // you go) is the route that is NOT subject to the web-chat account
+  // suspensions DeepSeek hands out for bot-like cadence - the agent loop can
+  // run at full speed here. Keys and chats are stored per profile and only
+  // ever sent to that profile's host.
+  const PROFILES = {
+    codecraft: {
+      id: "codecraft", name: "CodeCraft API", apiBase: "https://codecraftapi.com/v1", site: "https://codecraftapi.com",
+      storeKey: "rsCodeCraft", defaultModel: "claude-opus-4.8", hostLabel: "codecraftapi.com",
+      // Shown before /models answers (or when the key is missing). The live list
+      // replaces it as soon as a key is saved.
+      fallbackModels: [
+        "claude-opus-4.8", "claude-sonnet-5", "claude-opus-5", "gpt-5.6-terra", "gpt-5.6-luna",
+        "gemini-3.1-pro", "gemini-3.7-flash", "deepseek-v4-pro-max", "deepseek-v4-flash-0731",
+        "kimi-k3", "kimi-k2.6", "qwen3.8-max", "glm-5.3", "grok-4.6", "seed-2.1-pro",
+      ],
+      keyRe: /^cc_[A-Za-z0-9_-]{16,}$/, keyPrefix: "cc_", keyPlaceholder: "cc_…  (Dashboard → API Keys)",
+      keysHint: "codecraftapi.com → Dashboard → API Keys", keysUrl: "https://codecraftapi.com/dashboard", pricingUrl: "https://codecraftapi.com/pricing", modelsUrl: "https://codecraftapi.com/models",
+      reasoningParam: true, modelLogos: true, tagline: "OpenAI-compatible chat",
+      heroTitle: "Chat with any CodeCraft model", heroText: "Paste your cc_ key once, choose a model, then press Start in the TotalScript bar below to let the agent build in Roblox Studio — or just chat.",
+    },
+    deepseek: {
+      id: "deepseek", name: "DeepSeek API", apiBase: "https://api.deepseek.com/v1", site: "https://platform.deepseek.com",
+      storeKey: "rsDeepSeekApi", defaultModel: "deepseek-chat", hostLabel: "api.deepseek.com",
+      fallbackModels: ["deepseek-chat", "deepseek-reasoner"],
+      keyRe: /^sk-[A-Za-z0-9]{20,}$/, keyPrefix: "sk-", keyPlaceholder: "sk-…  (platform.deepseek.com → API keys)",
+      keysHint: "platform.deepseek.com → API keys", keysUrl: "https://platform.deepseek.com/api_keys", pricingUrl: "https://platform.deepseek.com/usage", modelsUrl: "https://api-docs.deepseek.com/quick_start/pricing",
+      reasoningParam: false, modelLogos: false, tagline: "official API · your own key · no web-chat suspensions",
+      heroTitle: "DeepSeek through the official API", heroText: "chat.deepseek.com suspends accounts for bot-like message cadence. This page talks to api.deepseek.com with your own API key instead (pay as you go, top up at platform.deepseek.com) — the agent can run at full speed here. Paste the key, pick deepseek-chat or deepseek-reasoner, then press Start in the TotalScript bar below.",
+    },
+  };
+  const PROFILE = (() => { try { const q = new URLSearchParams(location.search).get("api"); return PROFILES[q] || PROFILES.codecraft; } catch { return PROFILES.codecraft; } })();
+  const API_BASE = PROFILE.apiBase;
+  const SITE = PROFILE.site;
+  const STORE_KEY = PROFILE.storeKey;
+  const DEFAULT_MODEL = PROFILE.defaultModel;
+  const FALLBACK_MODELS = PROFILE.fallbackModels;
+  const NAME = PROFILE.name;
   // Total characters of history sent per request (1M-context models cope with
   // far more, but every token is billed against the user's plan).
   const HISTORY_CHAR_BUDGET = 480000;
@@ -55,9 +84,9 @@ const RSProvider = (() => {
   // 1.36.0: generation settings + page preferences live in the same record.
   const settings = { key: "", model: DEFAULT_MODEL, temperature: null, maxTokens: null, reasoning: "", instructions: "", autoRetry: true, ctrlEnter: false, showMeta: true, sideCollapsed: false };
   const SETTING_KEYS = ["key", "model", "temperature", "maxTokens", "reasoning", "instructions", "autoRetry", "ctrlEnter", "showMeta", "sideCollapsed"];
-  const CHAT_INDEX_KEY = "rsCodeCraftChats";
-  const CHAT_KEY_PREFIX = "rsCodeCraftChat:";
-  const USAGE_KEY = "rsCodeCraftUsage";
+  const CHAT_INDEX_KEY = STORE_KEY + "Chats"; // rsCodeCraftChats (unchanged) / rsDeepSeekApiChats
+  const CHAT_KEY_PREFIX = STORE_KEY + "Chat:";
+  const USAGE_KEY = STORE_KEY + "Usage";
   const MAX_SAVED_CHATS = 200;
   const hasChromeStorage = () => { try { return !!(window.chrome && chrome.storage && chrome.storage.local); } catch { return false; } };
   async function loadSettings() {
@@ -109,8 +138,8 @@ const RSProvider = (() => {
       res(false);
     });
   }
-  const hasKey = () => /^cc_[A-Za-z0-9_-]{16,}$/.test(String(settings.key || "").trim()) || String(settings.key || "").trim().length >= 24;
-  const maskKey = (k) => (k && k.length > 10 ? k.slice(0, 5) + "…" + k.slice(-4) : k ? "cc_…" : "");
+  const hasKey = () => PROFILE.keyRe.test(String(settings.key || "").trim()) || String(settings.key || "").trim().length >= 24;
+  const maskKey = (k) => (k && k.length > 10 ? k.slice(0, 5) + "…" + k.slice(-4) : k ? PROFILE.keyPrefix + "…" : "");
 
   // ---------- DOM refs (resolved lazily; the IIFE never touches the DOM at load) ----------
   const $ = (id) => { try { return document.getElementById(id); } catch { return null; } };
@@ -169,7 +198,7 @@ const RSProvider = (() => {
   // Chat library index: [{ id, title, createdAt, updatedAt, model, pinned, count, preview }]
   let chatIndex = [];
   let indexLoaded = false;
-  const BOOTSTRAP_RE = /CodeCraft API rules|TotalScript|list_commands|command catalogue/i;
+  const BOOTSTRAP_RE = /API rules|TotalScript|list_commands|command catalogue/i;
   function deriveTitle() {
     if (sess.title) return sess.title;
     for (const m of sess.messages) {
@@ -227,7 +256,7 @@ const RSProvider = (() => {
     await storeSet(CHAT_KEY_PREFIX + sess.id, { id: sess.id, title, messages: slimMessages(), usage: sess.usage, model: settings.model, createdAt: rec.createdAt, updatedAt: now });
     await storeSet(CHAT_INDEX_KEY, chatIndex);
     renderChats();
-    try { document.title = (title === "New chat" ? "CodeCraft API" : title) + " — CodeCraft · TotalScript"; } catch {}
+    try { document.title = (title === "New chat" ? NAME : title) + " — " + NAME + " · TotalScript"; } catch {}
   }
   async function loadIndex() {
     if (indexLoaded) return chatIndex;
@@ -348,7 +377,7 @@ const RSProvider = (() => {
   }
   // ---------- export / import ----------
   function toMarkdown() {
-    const lines = [`# ${deriveTitle()}`, "", `_CodeCraft API · ${settings.model} · exported ${new Date().toISOString()} · ${sess.messages.length} messages_`, ""];
+    const lines = [`# ${deriveTitle()}`, "", `_${NAME} · ${settings.model} · exported ${new Date().toISOString()} · ${sess.messages.length} messages_`, ""];
     for (const m of sess.messages) {
       lines.push(`## ${m.role === "user" ? "You" : (m.model || "Assistant")}${m.at ? " · " + new Date(m.at).toLocaleString() : ""}`, "");
       if (m.thinking) lines.push("<details><summary>Reasoning</summary>", "", m.thinking, "", "</details>", "");
@@ -471,7 +500,7 @@ const RSProvider = (() => {
     art.setAttribute("data-message-id", msg.id);
     const who = document.createElement("div");
     who.className = "cc-who";
-    who.textContent = msg.role === "user" ? "You" : (msg.model || settings.model || "CodeCraft");
+    who.textContent = msg.role === "user" ? "You" : (msg.model || settings.model || NAME);
     if (!msg.at) msg.at = Date.now();
     try { who.title = new Date(msg.at).toLocaleString(); } catch {}
     const when = document.createElement("time");
@@ -627,7 +656,7 @@ const RSProvider = (() => {
     if (entry) { sess.title = entry.title || ""; sess.createdAt = entry.createdAt || sess.createdAt; }
     renderUsage();
     renderChats();
-    try { document.title = "CodeCraft API — TotalScript"; } catch {}
+    try { document.title = NAME + " — TotalScript"; } catch {}
     if (restored) { persist(); return Promise.resolve(true); }
     // Not in this tab's sessionStorage: fall back to the library (another tab,
     // a closed tab, a reload after the browser dropped session state).
@@ -638,7 +667,7 @@ const RSProvider = (() => {
       if (rec.usage) sess.usage = Object.assign({ prompt: 0, completion: 0, total: 0, requests: 0 }, rec.usage);
       for (const m of rec.messages || []) pushMessage(Object.assign({}, m));
       renderUsage();
-      try { document.title = (sess.title || deriveTitle()) + " — CodeCraft · TotalScript"; } catch {}
+      try { document.title = (sess.title || deriveTitle()) + " — " + NAME + " · TotalScript"; } catch {}
       return true;
     }).catch(() => false);
   }
@@ -674,7 +703,7 @@ const RSProvider = (() => {
   function regenerate(msg) {
     if (!msg || msg.role !== "assistant") return false;
     if (!guardAgent("regenerating")) return false;
-    if (!hasKey()) { status("Paste your CodeCraft API key first (cc_…)", "warn"); return false; }
+    if (!hasKey()) { status(`Paste your ${NAME} key first (${PROFILE.keyPrefix}…)`, "warn"); return false; }
     if (_stream) stopGeneration();
     truncateAfter(msg, true);
     _lastError = "";
@@ -820,15 +849,15 @@ const RSProvider = (() => {
     let detail = "";
     try { const j = JSON.parse(body); detail = (j.error && (j.error.message || j.error)) || j.message || j.detail || ""; } catch { detail = String(body || "").slice(0, 300); }
     detail = typeof detail === "string" ? detail : JSON.stringify(detail);
-    if (status === 401 || status === 403) return `CodeCraft rejected the API key (HTTP ${status}). ${detail || "Create a key at codecraftapi.com → Dashboard → API Keys and paste it above."}`;
-    if (status === 402) return `CodeCraft: out of tokens for this billing period (HTTP 402). ${detail || "Upgrade the plan or wait for the monthly reset."}`;
-    if (status === 429) return `CodeCraft: rate limited (HTTP 429). ${detail || "Retry in a moment."}`;
-    return `CodeCraft API error HTTP ${status}${detail ? ": " + detail : ""}`;
+    if (status === 401 || status === 403) return `${NAME.replace(/ API$/, "")} rejected the API key (HTTP ${status}). ${detail || "Create a key at " + PROFILE.keysHint + " and paste it above."}`;
+    if (status === 402) return `${NAME.replace(/ API$/, "")}: out of tokens / balance (HTTP 402). ${detail || "Top up or upgrade at " + PROFILE.pricingUrl + "."}`;
+    if (status === 429) return `${NAME.replace(/ API$/, "")}: rate limited (HTTP 429). ${detail || "Retry in a moment."}`;
+    return `${NAME} error HTTP ${status}${detail ? ": " + detail : ""}`;
   }
 
   async function submit(text, images, opts = {}) {
     text = truncateForSend(String(text || ""));
-    if (!hasKey()) { status("Paste your CodeCraft API key first (cc_…)", "warn"); try { ui.key && ui.key.focus(); } catch {} return false; }
+    if (!hasKey()) { status(`Paste your ${NAME} key first (${PROFILE.keyPrefix}…)`, "warn"); try { ui.key && ui.key.focus(); } catch {} return false; }
     const imgs = (images && images.length ? images : _pendingImages).slice(0, 8);
     if (!text.trim() && !imgs.length) return false;
     _pendingImages = [];
@@ -857,7 +886,7 @@ const RSProvider = (() => {
     if (settings.temperature != null && settings.temperature !== "") body.temperature = Number(settings.temperature);
     const mt = Number(settings.maxTokens);
     if (mt && mt > 0) body.max_tokens = Math.floor(mt);
-    if (settings.reasoning) body.reasoning_effort = settings.reasoning;
+    if (settings.reasoning && PROFILE.reasoningParam) body.reasoning_effort = settings.reasoning; // DeepSeek's API rejects unknown fields - never sent there
     return body;
   }
   async function runStream(st) {
@@ -878,7 +907,7 @@ const RSProvider = (() => {
         });
       } catch (e) {
         if (ctrl.signal.aborted) return finish(st, "");
-        failure = "Network error reaching codecraftapi.com: " + (e && e.message || e); transient = true;
+        failure = "Network error reaching " + PROFILE.hostLabel + ": " + (e && e.message || e); transient = true;
       }
       if (!failure && !res.ok) {
         let t = ""; try { t = await res.text(); } catch {}
@@ -954,7 +983,7 @@ const RSProvider = (() => {
     } catch (e) {
       if (!ctrl.signal.aborted) return finish(st, "Stream interrupted: " + (e && e.message || e));
     }
-    return finish(st, st.err ? "CodeCraft API error: " + st.err : "");
+    return finish(st, st.err ? NAME + " error: " + st.err : "");
   }
 
   function finish(st, error) {
@@ -1037,9 +1066,28 @@ const RSProvider = (() => {
   // ---------- page wiring ----------
   let hooks = null;
   let booted = false;
+  // 1.99.0: the html ships CodeCraft wording; other profiles rewrite the static
+  // labels at boot (title, brand, key placeholder, hero, links).
+  function applyProfileUi() {
+    if (PROFILE.id === "codecraft") return;
+    try {
+      document.title = NAME + " — TotalScript";
+      document.documentElement.setAttribute("data-rs-api-profile", PROFILE.id);
+      const strong = document.querySelector(".cc-brand-text strong"); if (strong) strong.textContent = NAME;
+      const span = document.querySelector(".cc-brand-text span");
+      if (span) { span.textContent = ""; span.append(PROFILE.tagline + " · "); const a = document.createElement("a"); a.href = PROFILE.keysUrl; a.target = "_blank"; a.rel = "noopener"; a.textContent = "API keys"; span.append(a, " · "); const b = document.createElement("a"); b.href = PROFILE.pricingUrl; b.target = "_blank"; b.rel = "noopener"; b.textContent = "usage / top up"; span.append(b); }
+      if (ui.key) ui.key.setAttribute("placeholder", PROFILE.keyPlaceholder);
+      if (!PROFILE.reasoningParam && ui.reasoning) { const lab = ui.reasoning.closest("label") || ui.reasoning; lab.hidden = true; }
+      const h1 = document.querySelector("#cc-empty h1"); if (h1) h1.textContent = PROFILE.heroTitle;
+      const p = document.querySelector("#cc-empty h1 + p"); if (p) p.textContent = PROFILE.heroText;
+      document.querySelectorAll("a[href*='codecraftapi.com']").forEach((a) => { a.href = PROFILE.keysUrl; });
+    } catch {}
+  }
+
   async function boot() {
     if (booted || !isHostPage()) return;
     booted = true;
+    applyProfileUi();
     await loadSettings();
     await loadIndex();
     _usageTotal = (await storeGet(USAGE_KEY)) || { total: 0, requests: 0, byModel: {} };
@@ -1048,7 +1096,7 @@ const RSProvider = (() => {
     applySettingsUi();
     if (ui.app) ui.app.classList.toggle("cc-side-collapsed", !!settings.sideCollapsed);
     if (ui.sideToggle) ui.sideToggle.setAttribute("aria-expanded", settings.sideCollapsed ? "false" : "true");
-    status(hasKey() ? `key ${maskKey(settings.key)} · ${settings.model}` : "No API key yet — create one at codecraftapi.com → Dashboard → API Keys", hasKey() ? "ok" : "warn");
+    status(hasKey() ? `key ${maskKey(settings.key)} · ${settings.model}` : "No API key yet — create one at " + PROFILE.keysHint, hasKey() ? "ok" : "warn");
     const m = (location.hash || "").match(/#c=([A-Za-z0-9]+)/);
     await startSession(m ? m[1] : newId());
     renderChats();
@@ -1059,7 +1107,7 @@ const RSProvider = (() => {
     const onSave = async () => {
       const k = String(ui.key && ui.key.value || "").trim();
       await saveSettings({ key: k });
-      if (!hasKey()) { status("That does not look like a CodeCraft key (cc_…)", "warn"); return; }
+      if (!hasKey()) { status(`That does not look like a ${NAME.replace(/ API$/, "")} key (${PROFILE.keyPrefix}…)`, "warn"); return; }
       status(`Saved key ${maskKey(k)} — loading models…`, "ok");
       await refreshModels();
     };
@@ -1114,7 +1162,7 @@ const RSProvider = (() => {
     const img = ui.modelLogo;
     if (!img) return;
     const m = String(settings.model || "").trim();
-    if (!m) { img.hidden = true; return; }
+    if (!m || !PROFILE.modelLogos) { img.hidden = true; return; }
     img.hidden = false;
     img.src = `${SITE}/images/models/${encodeURIComponent(m)}.png`;
   }
@@ -1127,7 +1175,7 @@ const RSProvider = (() => {
     if (ui.autoRetry) ui.autoRetry.checked = settings.autoRetry !== false;
     if (ui.ctrlEnter) ui.ctrlEnter.checked = !!settings.ctrlEnter;
     if (ui.showMeta) ui.showMeta.checked = settings.showMeta !== false;
-    if (ui.input) ui.input.setAttribute("placeholder", settings.ctrlEnter ? "Message CodeCraft… (Ctrl+Enter to send, Enter for a new line)" : "Message CodeCraft… (Enter to send, Shift+Enter for a new line)");
+    if (ui.input) ui.input.setAttribute("placeholder", settings.ctrlEnter ? `Message ${NAME.replace(/ API$/, "")}… (Ctrl+Enter to send, Enter for a new line)` : `Message ${NAME.replace(/ API$/, "")}… (Enter to send, Shift+Enter for a new line)`);
     paintModelLogo();
     renderUsage();
   }
@@ -1345,12 +1393,12 @@ const RSProvider = (() => {
   }
 
   async function typeAndSend(text, images) {
-    if (!isHostPage()) throw new Error("CodeCraft chat page not ready");
-    if (!hasKey()) throw new Error("CodeCraft API key missing — paste your cc_ key at the top of the page");
+    if (!isHostPage()) throw new Error(NAME + " chat page not ready");
+    if (!hasKey()) throw new Error(`${NAME} key missing — paste your ${PROFILE.keyPrefix} key at the top of the page`);
     // The composer is NOT used for agent sends: whatever the user is drafting
     // stays put (the core accepts "our text is not in the composer" as landed).
     const ok = await submit(text, images, { fromAgent: true });
-    if (!ok) throw new Error("CodeCraft send refused");
+    if (!ok) throw new Error(NAME + " send refused");
     await sleep(60);
   }
   function stopGeneration() {
@@ -1363,7 +1411,7 @@ const RSProvider = (() => {
 
   function scanError() {
     if (_lastError) return _lastError.slice(0, 300);
-    if (!hasKey()) return "CodeCraft API key missing — paste your cc_ key at the top of the page.";
+    if (!hasKey()) return `${NAME} key missing — paste your ${PROFILE.keyPrefix} key at the top of the page.`;
     return null;
   }
   const isTooLongMsg = (text) => RE.tooLong.test(text || "");
@@ -1371,9 +1419,9 @@ const RSProvider = (() => {
 
   function modeWarning() {
     if (!isHostPage()) return "";
-    if (!hasKey()) return "<b>CodeCraft API</b> — paste your <b>cc_</b> key in the field at the top (codecraftapi.com → Dashboard → API Keys), pick a model, then Start.";
-    if (_lastError && RE.quota.test(_lastError)) return "<b>CodeCraft API</b> — your plan is out of tokens (HTTP 402). Upgrade at codecraftapi.com/pricing or wait for the monthly reset.";
-    if (_lastError && RE.auth.test(_lastError)) return "<b>CodeCraft API</b> — the key was rejected. Create a fresh key in the dashboard and save it above.";
+    if (!hasKey()) return `<b>${NAME}</b> — paste your <b>${PROFILE.keyPrefix}</b> key in the field at the top (${PROFILE.keysHint}), pick a model, then Start.`;
+    if (_lastError && RE.quota.test(_lastError)) return `<b>${NAME}</b> — out of tokens / balance (HTTP 402). Top up at ${PROFILE.pricingUrl.replace(/^https:\/\//, "")} and try again.`;
+    if (_lastError && RE.auth.test(_lastError)) return `<b>${NAME}</b> — the key was rejected. Create a fresh key (${PROFILE.keysHint}) and save it above.`;
     return "";
   }
 
@@ -1384,7 +1432,7 @@ const RSProvider = (() => {
     return true;
   }
   function clearAttachments() { _pendingImages = []; renderAttachments(); }
-  const conversationKey = () => sess.id || "codecraft";
+  const conversationKey = () => sess.id || PROFILE.id;
 
   function installSendHooks(handlers) { hooks = handlers; }
 
@@ -1412,13 +1460,17 @@ const RSProvider = (() => {
   } catch {}
 
   return {
-    id: "codecraft",
-    displayName: "CodeCraft API",
+    id: "codecraft", // the core's contract id stays "codecraft" for every API profile (prompt budgets, reasoning map)
+    profile: PROFILE.id,
+    displayName: NAME,
     supportsVision: true,
     // 1.60: Reasoning effort hook - TotalReasoning maps the effort level to an
     // OpenAI-style reasoning_effort ("" | low | medium | high) and calls this.
     async setReasoningMode(modeId, rule) {
       const v = rule && typeof rule.value === "string" ? rule.value : (modeId === "default" ? "" : String(modeId || ""));
+      // Profiles without reasoning_effort (DeepSeek API): effort stays prompt-only;
+      // thinking is the model choice (deepseek-reasoner), never switched by us.
+      if (!PROFILE.reasoningParam) return { ok: true, how: "prompt-only", reason: NAME + " has no reasoning_effort field - pick " + (FALLBACK_MODELS[1] || "a reasoning model") + " in the model picker for thinking" };
       if (!/^(|low|medium|high)$/.test(v)) return { ok: false, how: "hook", reason: "unknown reasoning_effort " + v };
       if ((settings.reasoning || "") === v) return { ok: true, how: "already" };
       await saveSettings({ reasoning: v });
@@ -1432,7 +1484,7 @@ const RSProvider = (() => {
     compactCommandList: true,
     commandListMaxChars: 24000,
     sysMaxChars: 20000,
-    promptExtra: "CodeCraft API rules: this is a raw OpenAI-compatible chat inside TotalScript with NO native tools - the ONLY way to act is to write the command as text. Put every command in ONE fenced ```json code block and nothing else in that block. Do not simulate results: after a command block STOP and wait for the TotalScript result message. Keep prose short; tokens are billed.",
+    promptExtra: NAME + " rules: this is a raw OpenAI-compatible chat inside TotalScript with NO native tools - the ONLY way to act is to write the command as text. Put every command in ONE fenced ```json code block and nothing else in that block. Do not simulate results: after a command block STOP and wait for the TotalScript result message. Keep prose short; tokens are billed.",
     timings,
     thinkingSel: ".cc-think",
     init({ diag: d } = {}) {
@@ -1463,7 +1515,7 @@ const RSProvider = (() => {
     chipAnchor: (item) => (item && item.querySelector(".cc-chips")) || item,
     // Page-level helpers (used by codecraft.html controls and tests).
     codecraft: {
-      API_BASE, SITE, STORE_KEY, DEFAULT_MODEL, FALLBACK_MODELS, CHAT_INDEX_KEY, CHAT_KEY_PREFIX, USAGE_KEY,
+      API_BASE, SITE, STORE_KEY, DEFAULT_MODEL, FALLBACK_MODELS, CHAT_INDEX_KEY, CHAT_KEY_PREFIX, USAGE_KEY, PROFILES, PROFILE,
       loadSettings, saveSettings, hasKey, refreshModels, newChat, submit, renderMarkdown, apiMessages, session: sess, settings,
       // 1.36.0 page extras
       requestBody, retryable, RETRY_DELAYS_MS, deriveTitle, chats: () => chatIndex, openChat, deleteChat, renameChat, pinChat, clearAllChats,

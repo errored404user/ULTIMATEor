@@ -16,7 +16,7 @@ process.chdir(path.join(__dirname, ".."));
 let failed = 0;
 const ok = (name, cond, extra) => { console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond || !extra ? "" : "  -> " + extra}`); if (!cond) failed++; };
 const read = (p) => fs.readFileSync(p, "utf8");
-const VERSION = "1.99.0";
+const VERSION = "1.99.1";
 const PACK_VERSION = "1.47.0"; // the pack itself last changed in 1.47.0
 const pack = read("src/core/skills/studio_quality.js"), main = read("src/core/main.js"), config = read("src/core/config.js"), readme = read("README.md");
 const manifest = JSON.parse(read("manifest.json"));

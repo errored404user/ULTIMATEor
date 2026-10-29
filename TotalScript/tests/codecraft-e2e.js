@@ -7,6 +7,8 @@
 //   NOKEY=1 node tests/codecraft-e2e.js   # no API key saved: bar warns, Start refuses, nothing is fetched
 //   ERR402=1 node tests/codecraft-e2e.js  # the API answers 402 (out of tokens): visible error, no loop hang
 //   DIAG=1 ...                            # print the [rs-diag] trace
+//   API=deepseek node tests/codecraft-e2e.js  # 1.99.0: same page as the DeepSeek API profile
+//                                             # (codecraft.html?api=deepseek, fake api.deepseek.com, sk- key)
 const fs = require("fs");
 const path = require("path");
 let JSDOM;
@@ -18,12 +20,16 @@ const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "u
 const pageHtml = fs.readFileSync(path.join(ROOT, "codecraft.html"), "utf8");
 const scripts = [...pageHtml.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]);
 const NOKEY = !!process.env.NOKEY;
+const API = process.env.API === "deepseek" ? "deepseek" : "codecraft";
+const PROF = API === "deepseek"
+  ? { query: "?api=deepseek", name: "DeepSeek API", base: "https://api.deepseek.com/v1/", hostRe: /^https:\/\/api\.deepseek\.com\/v1\//, keyRe: /^Bearer sk-[A-Za-z0-9]{20,}$/, key: "sk-" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6", storeKey: "rsDeepSeekApi", models: ["deepseek-chat", "deepseek-reasoner"], model: "deepseek-reasoner", fallback: 2, prefix: "sk-", keysHint: /API keys/ }
+  : { query: "", name: "CodeCraft API", base: "https://codecraftapi.com/v1/", hostRe: /^https:\/\/codecraftapi\.com\/v1\//, keyRe: /^Bearer cc_[A-Za-z0-9]{20,}$/, key: "cc_" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4", storeKey: "rsCodeCraft", models: ["claude-opus-4.8", "kimi-k3", "gpt-5.6-terra", "deepseek-v4-pro-max"], model: "kimi-k3", fallback: 10, prefix: "cc_", keysHint: /API Keys/ };
 const ERR402 = !!process.env.ERR402;
 const log = (...a) => console.log("[harness]", ...a);
 
 // ── page ──────────────────────────────────────────────────────────────────
 const htmlNoScripts = pageHtml.replace(/<script src="[^"]+"><\/script>\s*/g, "").replace(/<link rel="stylesheet"[^>]*>/g, "");
-const dom = new JSDOM(htmlNoScripts, { url: "chrome-extension://harness-ext/codecraft.html", pretendToBeVisual: true, runScripts: "dangerously" });
+const dom = new JSDOM(htmlNoScripts, { url: "chrome-extension://harness-ext/codecraft.html" + PROF.query, pretendToBeVisual: true, runScripts: "dangerously" });
 const w = dom.window;
 const d = w.document;
 Object.defineProperty(w, "innerWidth", { value: 1280, configurable: true });
@@ -97,9 +103,9 @@ w.fetch = async (url, init = {}) => {
   const u = String(url);
   const auth = (init.headers && (init.headers.Authorization || init.headers.authorization)) || "";
   apiCalls.push({ url: u, method: init.method || "GET", auth });
-  if (!/^https:\/\/codecraftapi\.com\/v1\//.test(u)) throw new Error("harness: unexpected fetch " + u);
-  if (!/^Bearer cc_[A-Za-z0-9]{20,}$/.test(auth)) return new Response(JSON.stringify({ error: { message: "Invalid API key" } }), { status: 401, headers: { "content-type": "application/json" } });
-  if (u.endsWith("/models")) return new Response(JSON.stringify({ object: "list", data: ["claude-opus-4.8", "kimi-k3", "gpt-5.6-terra", "deepseek-v4-pro-max"].map((id) => ({ id, object: "model" })) }), { status: 200, headers: { "content-type": "application/json" } });
+  if (!PROF.hostRe.test(u)) throw new Error("harness: unexpected fetch " + u);
+  if (!PROF.keyRe.test(auth)) return new Response(JSON.stringify({ error: { message: "Invalid API key" } }), { status: 401, headers: { "content-type": "application/json" } });
+  if (u.endsWith("/models")) return new Response(JSON.stringify({ object: "list", data: PROF.models.map((id) => ({ id, object: "model" })) }), { status: 200, headers: { "content-type": "application/json" } });
   if (u.endsWith("/chat/completions")) {
     const body = JSON.parse(init.body);
     chatRequests.push(body);
@@ -166,8 +172,9 @@ w.chrome = {
   storage: { local: storageApi(), sync: storageApi(), session: storageApi(), onChanged: { addListener() {}, removeListener() {} } },
   i18n: { getMessage: () => "" },
 };
-const KEY = "cc_" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4";
-if (!NOKEY) storage.rsCodeCraft = { key: KEY, model: "kimi-k3" };
+const KEY = PROF.key;
+if (!NOKEY) storage[PROF.storeKey] = { key: KEY, model: PROF.model, reasoning: API === "deepseek" ? "high" : "" };
+if (API === "deepseek") storage.rsCodeCraft = { key: "cc_other_profile_key_must_stay_untouched_000000", model: "kimi-k3" }; // isolation probe
 w.chrome.storage.local.set({ rsAllowPlaytest: true, rsDebugDiagnostics: !!process.env.DIAG });
 
 // ── load the bundle exactly as codecraft.html does ────────────────────────
@@ -199,19 +206,24 @@ const assistantRows = () => [...d.querySelectorAll("#cc-log article.cc-msg[data-
 (async () => {
   try {
     const P = w.RSProvider;
-    ok("provider is CodeCraft", P && P.id === "codecraft" && P.displayName === "CodeCraft API");
+    ok("provider is " + PROF.name, P && P.id === "codecraft" && P.displayName === PROF.name && P.profile === API, P && (P.displayName + "/" + P.profile));
+    if (API === "deepseek") {
+      ok("deepseek profile: page texts rewritten (title, brand, key placeholder, hero)", /DeepSeek API/.test(d.title) && /DeepSeek API/.test(d.querySelector(".cc-brand-text strong").textContent) && /^sk-/.test(d.getElementById("cc-key").placeholder) && /official API/.test(d.querySelector("#cc-empty h1").textContent) && /suspends/.test(d.querySelector("#cc-empty h1 + p").textContent) && d.documentElement.getAttribute("data-rs-api-profile") === "deepseek", d.title);
+      ok("deepseek profile: no gentle pacing on the API route (full speed) and no web-chat account_block scanner", !P.pacing && typeof P.scanAccountBlock !== "function");
+      ok("deepseek profile: reasoning_effort select hidden, hook is prompt-only", (() => { const sel = d.getElementById("cc-reasoning"); return !!sel && (sel.closest("label") || sel).hidden; })());
+    }
     await waitFor(() => d.getElementById("rs-bar"), 8000, "#rs-bar");
     ok("bar mounted on the extension page", true);
     await sleep(1200);
     const bar = d.getElementById("rs-bar");
     ok("bar mounted in-flow inside the composer card (barMount)", bar.closest("#cc-composer") === d.getElementById("cc-composer") && bar.classList.contains("rs-bar-inline") && bar.classList.contains("rs-prov-codecraft"), "parent=" + (bar.parentElement && bar.parentElement.id) + " classes=" + bar.className);
-    ok("model picker filled", d.getElementById("cc-model").options.length >= (NOKEY ? 10 : 4), d.getElementById("cc-model").options.length + " options");
+    ok("model picker filled", d.getElementById("cc-model").options.length >= (NOKEY ? PROF.fallback : PROF.models.length), d.getElementById("cc-model").options.length + " options");
     const buttons = [...bar.querySelectorAll("button")];
     const startBtn = buttons.find((b) => /start/i.test(b.textContent || "") || /start/i.test(b.getAttribute("aria-label") || "") || b.id === "rs-start");
     ok("start button present", !!startBtn);
     if (NOKEY) {
       ok("no key: /models was never fetched", !apiCalls.some((c) => c.url.endsWith("/models")));
-      ok("no key: modeWarning tells the user where the key goes", /cc_/.test(P.modeWarning()) && /API Keys/.test(P.modeWarning()), P.modeWarning());
+      ok("no key: modeWarning tells the user where the key goes", P.modeWarning().includes(PROF.prefix) && PROF.keysHint.test(P.modeWarning()), P.modeWarning());
       ok("no key: status line says so", /No API key/i.test(d.getElementById("cc-status").textContent));
       startBtn.click();
       await sleep(2500);
@@ -222,12 +234,12 @@ const assistantRows = () => [...d.querySelectorAll("#cc-log article.cc-msg[data-
       d.getElementById("cc-key-save").click();
       await waitFor(() => apiCalls.some((c) => c.url.endsWith("/models")), 3000, "models after save");
       await sleep(200);
-      ok("saving a key fetches /models with the Bearer header and persists it", apiCalls[0].auth === "Bearer " + KEY && storage.rsCodeCraft && storage.rsCodeCraft.key === KEY && d.getElementById("cc-model").options.length === 4);
+      ok("saving a key fetches /models with the Bearer header and persists it", apiCalls[0].auth === "Bearer " + KEY && storage[PROF.storeKey] && storage[PROF.storeKey].key === KEY && d.getElementById("cc-model").options.length === PROF.models.length);
       ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
       return;
     }
     await waitFor(() => apiCalls.some((c) => c.url.endsWith("/models")), 3000, "/models");
-    ok("/models fetched with the saved key (Bearer) and the stored model is selected", apiCalls[0].auth === "Bearer " + KEY && d.getElementById("cc-model").value === "kimi-k3", d.getElementById("cc-model").value);
+    ok("/models fetched with the saved key (Bearer) and the stored model is selected", apiCalls[0].auth === "Bearer " + KEY && d.getElementById("cc-model").value === PROF.model, d.getElementById("cc-model").value);
     ok("key field is masked (password) and never echoed in the status line", d.getElementById("cc-key").type === "password" && !d.getElementById("cc-status").textContent.includes(KEY.slice(6, 30)));
 
     let phase = 0;
@@ -257,8 +269,10 @@ const assistantRows = () => [...d.querySelectorAll("#cc-log article.cc-msg[data-
     }
     await waitFor(() => chatRequests.length >= 1, 20000, "bootstrap request");
     const boot = chatRequests[0];
-    ok("bootstrap sent as a streaming chat completion on the chosen model", boot.stream === true && boot.model === "kimi-k3" && boot.messages.length === 1 && boot.messages[0].role === "user" && /TotalScript|Roblox/i.test(boot.messages[0].content), boot.messages[0].content.length + " chars");
-    ok("bootstrap carries the CodeCraft rules", /CodeCraft API rules/.test(boot.messages[0].content));
+    ok("bootstrap sent as a streaming chat completion on the chosen model", boot.stream === true && boot.model === PROF.model && boot.messages.length === 1 && boot.messages[0].role === "user" && /TotalScript|Roblox/i.test(boot.messages[0].content), boot.messages[0].content.length + " chars");
+    ok("bootstrap carries the " + PROF.name + " rules", boot.messages[0].content.includes(PROF.name + " rules"));
+    if (API === "deepseek") ok("deepseek profile: reasoning_effort is NEVER sent to api.deepseek.com (stored effort=high)", !("reasoning_effort" in boot) && storage.rsDeepSeekApi.reasoning === "high", Object.keys(boot).join(","));
+    else ok("codecraft profile: reasoning_effort still sent when set", (() => { return !("reasoning_effort" in boot) && storage.rsCodeCraft.reasoning === ""; })());
     ok("user row rendered in the transcript", userRows().length === 1 && userRows()[0].textContent.includes("TotalScript"));
     await waitFor(() => chatRequests.length >= 2, 30000, "catalogue reply");
     const cat = chatRequests[1];
@@ -289,8 +303,12 @@ const assistantRows = () => [...d.querySelectorAll("#cc-log article.cc-msg[data-
     ok("final reply rendered as markdown (bold + code) once streaming ended", !!lastRow.querySelector(".cc-body strong") && !!lastRow.querySelector(".cc-body code") && !lastRow.querySelector(".cc-live"), lastRow.querySelector(".cc-body").innerHTML.slice(0, 120));
     if (process.env.DUMP) for (const r of assistantRows()) console.log("ROW:", r.className, r.innerHTML.replace(/\s+/g, " ").slice(0, 400));
     ok("command blocks are hidden behind TotalScript chips", assistantRows().some((r) => r.querySelector("pre.rs-tool-hide")));
-    ok("status line reports model + tokens", /kimi-k3/.test(d.getElementById("cc-status").textContent) && /123 tokens/.test(d.getElementById("cc-status").textContent), d.getElementById("cc-status").textContent);
-    ok("every API call carried the user's key to codecraftapi.com only", apiCalls.every((c) => c.url.startsWith("https://codecraftapi.com/v1/") && c.auth === "Bearer " + KEY), apiCalls.length + " calls");
+    ok("status line reports model + tokens", d.getElementById("cc-status").textContent.includes(PROF.model) && /123 tokens/.test(d.getElementById("cc-status").textContent), d.getElementById("cc-status").textContent);
+    ok("every API call carried the user's key to " + PROF.base + " only", apiCalls.every((c) => c.url.startsWith(PROF.base) && c.auth === "Bearer " + KEY), apiCalls.length + " calls");
+    if (API === "deepseek") {
+      ok("deepseek profile: chats + usage stored under rsDeepSeekApi*, CodeCraft keys untouched", Object.keys(storage).some((k) => k.startsWith("rsDeepSeekApiChat")) && storage.rsDeepSeekApiChats && storage.rsCodeCraft.key === "cc_other_profile_key_must_stay_untouched_000000" && !storage.rsCodeCraftChats, Object.keys(storage).filter((k) => /CodeCraft|DeepSeekApi/.test(k)).join(","));
+      ok("deepseek profile: every chat request is reasoning_effort-free", chatRequests.every((b) => !("reasoning_effort" in b)));
+    }
     ok("conversation key is stable across the session", /^cc[a-z0-9]+$/.test(P.conversationKey()) && w.location.hash === "#c=" + P.conversationKey(), P.conversationKey());
     // New chat clears the transcript and starts a new conversation id.
     const prevKey = P.conversationKey();

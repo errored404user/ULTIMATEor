@@ -957,6 +957,9 @@
     // the chat itself (codecraft.html, bring-your-own cc_ key). The page URL
     // is extension-local, so it opens through the background worker.
     { name: "CodeCraft API", url: CODECRAFT_PAGE_URL, host: "codecraftapi.com · in TotalScript", extensionPage: "codecraft.html" },
+    // 1.99.0: DeepSeek's official API on the same page (?api=deepseek, own sk- key) -
+    // the route that chat.deepseek.com's account suspensions cannot touch.
+    { name: "DeepSeek API", url: CODECRAFT_PAGE_URL + "?api=deepseek", host: "api.deepseek.com · in TotalScript", extensionPage: "codecraft.html?api=deepseek" },
     { name: "Notion AI", url: "https://www.notion.so/chat" },
     { name: "Overchat", url: "https://overchat.ai/" },
     { name: "HuggingChat", url: "https://huggingface.co/chat/" },
@@ -1098,7 +1101,7 @@
     workmode:{title:"Work mode: Totality",summary:"There is ONE built-in work mode, Totality (named Creation until 1.73): the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. Custom Public-Skill modes layer their own mandate on top of it.",details:["Totality runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → total_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Totality automatically; custom modes created on an old base keep working on Totality.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send."],howTo:["TotalScript menu → Work mode → Totality (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
     projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .totalscript-project-reference.json you can re-import."],howTo:["TotalScript menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
     permissions:{title:"Permissions",summary:"Sandbox (Studio + workspace only, no prompts), Ask (confirm writes, publishes and PC access with an approval card) or Full (entire PC via total-core).",details:["Sandbox is the default and never asks - ideal for Studio-only work.","Ask shows an approval card above the page for execute_luau, file writes, publishes and marketplace changes; it auto-denies after 120 s so a hidden card cannot stall the agent.","Full unlocks PC-wide file/terminal tools (TOTAL_FULL_ACCESS in total-core). Publish/marketplace automation additionally requires the 'Allow publish automation' switch."],howTo:["TotalScript menu → Permissions → Sandbox / Ask / Full"]},
-    providers:{title:"Chat providers",summary:"TotalScript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Meta, Arena, Notion, Vani, MultiChat and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["CodeCraft API (codecraftapi.com) has no web chat, so TotalScript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","Compact composers (Notion, Vani, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the TotalScript bar appears above the composer"]},
+    providers:{title:"Chat providers",summary:"TotalScript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Meta, Arena, Notion, Vani, MultiChat and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["CodeCraft API (codecraftapi.com) has no web chat, so TotalScript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","DeepSeek API (1.99.1): the same hosted page pointed at api.deepseek.com with your own sk- key from platform.deepseek.com - the official API is not subject to the chat.deepseek.com account suspensions, so the agent runs at full speed there (popup → DeepSeek API chat, or the AI switcher → DeepSeek API). Gentle pacing on chat.deepseek.com only lowers the risk; it cannot remove it.","Compact composers (Notion, Vani, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the TotalScript bar appears above the composer"]},
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for the approval card (Ask mode) or switch Permissions to Sandbox; cards auto-deny after 120 s.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
@@ -1254,6 +1257,13 @@
   function gentlePacingOn() {
     try { return !(window.__rsGentlePacing && window.__rsGentlePacing() === false); } catch { return true; }
   }
+  // 1.99.0: the banner action that opens the provider's official-API chat page
+  // (P.pacing.apiPage, e.g. "codecraft.html?api=deepseek") through the background worker.
+  function apiPageAction() {
+    const page = P.pacing && P.pacing.apiPage;
+    if (!page) return null;
+    return { label: P.pacing.apiLabel || "Open the API chat", onClick: () => { bg({ type: "rs-open-extension-page", page }).catch(() => {}); } };
+  }
   // One-time explanation of WHY the loop is paced on this site + the official
   // API route for heavy automation. Shown once per install (storage flag).
   function gentleNoticeOnce() {
@@ -1264,7 +1274,7 @@
         if (r && r.rsGentleNoticeShown) return;
         try { chrome.storage.local.set({ rsGentleNoticeShown: Date.now() }); } catch {}
         ui.banner("info", P.pacing.label || "Gentle mode",
-          `${P.displayName} suspends web-chat accounts for bot-like use (dozens of messages per hour, instant follow-ups). TotalScript paces its automatic messages here (${Math.round((P.pacing.minGapMs || 0) / 1000)}–${Math.round((P.pacing.maxGapMs || 0) / 1000)} s apart, at most ${P.pacing.perHour}/hour) and never re-sends after a failed turn. ${P.pacing.apiHint || ""} You can switch this off in Settings → Gentle pacing.`);
+          `${P.displayName} suspends web-chat accounts for bot-like use (dozens of messages per hour, instant follow-ups). TotalScript paces its automatic messages here (${Math.round((P.pacing.minGapMs || 0) / 1000)}–${Math.round((P.pacing.maxGapMs || 0) / 1000)} s apart, at most ${P.pacing.perHour}/hour), skips its optional nudges and never re-sends after a failed turn - that lowers the risk but cannot remove it. ${P.pacing.apiHint || ""} You can switch the pacing off in Settings → Gentle pacing.`, apiPageAction());
       });
     } catch {}
   }
@@ -5379,6 +5389,8 @@
     // 1.99.0: on a gentle-mode provider (P.pacing.noResend) a dead, empty or
     // transiently failed turn is NOT re-sent - a second copy of the same message
     // is the stop/regenerate pattern DeepSeek's abuse detection scores.
+    // Also gates the OPTIONAL follow-up nudges (verification gates, false-success,
+    // GUI-brief, extra commandless retries): each is one more automatic message.
     const resendAllowed = () => !(P.pacing && P.pacing.noResend && gentlePacingOn());
     let falseSuccessNudged = false; // 1.69: one "you said done but nothing ran" correction per run
     let luaFenceNudged = false; // 1.81.0: one "shown ```lua is not executed" correction per run
@@ -5468,7 +5480,7 @@
             diag("loop.accountBlock", { until: A.accountBlockedUntil, detail: String(res.detail || "").slice(0, 120) });
             ui.steeringProgress("error", `${P.displayName} suspended or throttled this account`, toolTurns);
             ui.banner("warn", `${P.displayName} blocked this account${until ? " until " + until.toLocaleString() : ""}`,
-              `${P.displayName} said: "${String(res.detail || "").slice(0, 200)}". TotalScript stopped and will not resend anything. ${(P.pacing && P.pacing.apiHint) || ""}`.trim());
+              `${P.displayName} said: "${String(res.detail || "").slice(0, 200)}". TotalScript stopped and will not resend anything. ${(P.pacing && P.pacing.apiHint) || ""}`.trim(), apiPageAction());
             break;
           }
           ui.steeringProgress("error", "The provider request failed", toolTurns);
@@ -5625,7 +5637,7 @@
           // 1.69: false-success guard - prose that reports the work as done while
           // NO command has run in this task gets ONE correction (truthful report
           // or real commands), never a silent "complete".
-          if (!falseSuccessNudged && !A.stop && toolTurns === 0 && A.task && A.task.mutates && ORCH && ORCH.claimsCompletion(body, toolTurns)) {
+          if (!falseSuccessNudged && resendAllowed() && !A.stop && toolTurns === 0 && A.task && A.task.mutates && ORCH && ORCH.claimsCompletion(body, toolTurns)) {
             falseSuccessNudged = true;
             diag("loop.falseSuccess", { intent: A.task.intent, primary: A.task.primary });
             try { ui.toast("The model reported success without running anything — asking for the real commands"); } catch {}
@@ -5653,7 +5665,7 @@
           // 1.76.0: a provider may ask for more than one rescue (Vani: 2, with an
           // escalating second note) and can report its request-shaper status so
           // the toast tells the user whether the protocol even reached the model.
-          const maxRefuse = Math.max(1, Math.min(3, Number(P.commandlessRetries) || 1));
+          const maxRefuse = resendAllowed() ? Math.max(1, Math.min(3, Number(P.commandlessRetries) || 1)) : 1; // gentle providers: one nudge, never a series
           const bridgeInfo = () => { try { return typeof P.bridgeStatus === "function" ? P.bridgeStatus() : null; } catch { return null; } };
           if (refuseRetries < maxRefuse && !A.stop && (isCapabilityRefuse(body) || providerCommandless)) {
             refuseRetries++;
@@ -5701,7 +5713,7 @@
           }
           // 1.51.2: brief delivered, model still only talking (no command yet)
           // → ONE nudge to act; a real one-line question is allowed through.
-          if (A.guiBrief && A.guiBrief.sent && !A.guiBrief.nudged && !A.stop && toolTurns === 0 && !/\?\s*$/.test(body.trim())) {
+          if (A.guiBrief && A.guiBrief.sent && !A.guiBrief.nudged && resendAllowed() && !A.stop && toolTurns === 0 && !/\?\s*$/.test(body.trim())) {
             A.guiBrief.nudged = true;
             diag("guiBrief.nudge", {});
             ui.steeringProgress("correcting", "GUI brief — asking the model to start with a command", toolTurns);
@@ -5712,7 +5724,7 @@
           // 1.38.0: MODE EVIDENCE GATE - a run that mutated (scripts / visuals /
           // motion) but never ran the mode's proof command gets ONE verification
           // request before its final answer is accepted.
-          if (!modeGateSent && !A.stop && toolTurns >= 2) {
+          if (!modeGateSent && resendAllowed() && !A.stop && toolTurns >= 2) {
             const nudge = modeGateNudge(A.runTools);
             if (nudge) {
               modeGateSent = true;
@@ -5726,7 +5738,7 @@
           }
           // 1.60: REASONING EFFORT GATE - high+ runs that mutated must read back;
           // max+ get one final self-review; ultimate must playtest / audit.
-          if (!A.stop && toolTurns >= 1 && typeof TotalReasoning !== "undefined") {
+          if (resendAllowed() && !A.stop && toolTurns >= 1 && typeof TotalReasoning !== "undefined") {
             let g = null;
             try { g = TotalReasoning.gate(window.__rsThinkingLevel && window.__rsThinkingLevel(), A.runTools, effortGate, window.__rsEffortExtras && window.__rsEffortExtras()); } catch {}
             if (g && !effortGate[g.id]) {
@@ -12062,7 +12074,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, ms);
     }
 
-    function banner(kind, title, msg) {
+    function banner(kind, title, msg, action) {
       const b = document.createElement("div");
       b.className = `rs-banner ${kind}`;
       b.innerHTML = `<div class="rs-banner-t"></div><div class="rs-banner-m"></div>
@@ -12072,6 +12084,14 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       b.querySelector(".rs-banner-t").textContent = title;
       b.querySelector(".rs-banner-m").textContent = msg;
       b.querySelector(".rs-banner-x").addEventListener("click", () => b.remove());
+      // 1.99.0: optional primary action ({ label, onClick }) - e.g. "Open DeepSeek API chat"
+      if (action && action.label && typeof action.onClick === "function") {
+        const go = document.createElement("button");
+        go.className = "rs-banner-go";
+        go.textContent = action.label;
+        go.addEventListener("click", () => { try { action.onClick(); } catch {} b.remove(); });
+        b.querySelector(".rs-banner-acts").prepend(go);
+      }
       root.appendChild(b);
     }
 
