@@ -3439,7 +3439,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
         steps: &[
             "Listens on 127.0.0.1 only — other machines cannot reach the bridge.",
             "Sandbox (default): the workspace engine is confined to the workspace folder; Studio tools act on the open place only.",
-            "FULL PC ACCESS (MCP Servers / Settings → Workspace) removes the folder limit and enables process control. The extension's Access setting (Sandbox / Ask / Full) decides whether the browser asks before writes and runs.",
+            "FULL PC ACCESS (MCP Servers / Settings → Workspace) removes the folder limit and enables process control. The extension's Access switch (Sandbox only / Full PC) is the same state: Full PC there turns this on; Sandbox only refuses PC commands before they reach the bridge.",
             "API keys for the in-app chat live in the settings file in plain text — treat that file like a password.",
             "Diagnostics never include keys or chat text. Nothing in this app phones home.",
         ],

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tests/test-skill-refs.js — 1.99.4 "skills get references".
+// tests/test-skill-refs.js — 1.99.5 "skills get references".
 //
 //   src/core/skill_refs.js carries, per built-in expert (skill_intel.js):
 //     - REFS      official Roblox Creator Docs pages (paths under DOCS_BASE;
@@ -33,7 +33,7 @@ const src = read("src/core/skill_refs.js"), intel = read("src/core/skill_intel.j
 
 // ── A. module shape ────────────────────────────────────────────────────────
 ok("A1 module exports (CommonJS + window.TotalSkillRefs) with the same api", R && window.TotalSkillRefs && ["VERSION", "DOCS_BASE", "REFS", "EXAMPLES", "refs", "examples", "render", "ids", "all"].every((k) => k in R && k in window.TotalSkillRefs));
-ok("A2 VERSION 1.99.4, DOCS_BASE is the Creator Docs root", R.VERSION === "1.99.4" && R.DOCS_BASE === "https://create.roblox.com/docs/");
+ok("A2 VERSION 1.99.5, DOCS_BASE is the Creator Docs root", R.VERSION === "1.99.5" && R.DOCS_BASE === "https://create.roblox.com/docs/");
 ok("A3 module is DOM-free at top level (no document access)", !/\bdocument\./.test(src.replace(/\/\/[^\n]*/g, "").replace(/"[^"\n]*"/g, '""')));
 
 // ── B. REFS per expert ─────────────────────────────────────────────────────

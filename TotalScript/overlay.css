@@ -6185,6 +6185,8 @@ html[data-rs-theme="void"] .rs-template-head{background:linear-gradient(180deg,r
 
 /* Work-mode cards stack full-width in the tray (Creation + custom public modes). */
 .rs-work-row.rs-work-creation{grid-template-columns:minmax(0,1fr)}
+/* 1.99.5: Access has two states (Sandbox only / Full PC). */
+.rs-work-row.rs-access-row{grid-template-columns:1fr 1fr}
 .rs-work-creation .rs-work-card{min-height:48px}
 .rs-sec-state{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--total-accent,#9ca8ff)}
 

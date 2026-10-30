@@ -100,11 +100,19 @@
   try {
     chrome.storage.local.get("rsBgMode", (r) => { if (r && typeof r.rsBgMode === "boolean") bgMode = r.rsBgMode; });
   } catch {}
-  // Codex-style permission: sandbox (Studio + workspace only) | ask (confirm writes) | full (entire PC).
+  // 1.99.5 ACCESS: exactly two states. "sandbox" (default) = Studio + the
+  // workspace folder only - anything that leaves it (shell, process kill,
+  // delete / move paths, downloads, opening paths, Blender code / export) is
+  // BLOCKED with a plain error, no prompt. "full" = Full PC: those commands
+  // run directly and total-core's FULL PC ACCESS is switched on with it. The
+  // old "ask" state (confirm each write) is gone; a stored "ask" reads as
+  // sandbox. Publishing to Roblox cloud keeps its own confirmation in both.
+  const ACCESS_MODES = ["sandbox", "full"];
+  const normalizeAccess = (id) => (ACCESS_MODES.includes(id) ? id : "sandbox");
   let permMode = "sandbox";
   try {
     chrome.storage.local.get("rsPermMode", (r) => {
-      if (r && ["sandbox", "ask", "full"].includes(r.rsPermMode)) permMode = r.rsPermMode;
+      if (r && typeof r.rsPermMode === "string") permMode = normalizeAccess(r.rsPermMode);
       try { window.__rsPermMode = () => permMode; } catch {}
     });
   } catch {}
@@ -196,53 +204,21 @@
     const key = raw.replace(/-/g, "_").toLowerCase();
     return TOOL_ALIASES[key] || TOOL_ALIASES[raw] || n;
   }
-  const ASK_OPS = new Set([
-    "execute_luau","multi_edit","write_file","edit_file","delete_path","move_path","create_folder","insert_from_creator_store","generate_mesh","generate_material","generate_procedural_model","start_stop_play","user_keyboard_input","user_mouse_input",
-    "run_command","process_kill","download_file","open_path",
-    "api_request","web_api","api_json_get","api_json_post","web_fetch",
-    "lighting_set_preset","lighting_setup_day_night","terrain_fill_region","terrain_clear",
-    "quality_fix","style_lighting_apply","brief_set",
-    "ui_build_spec","ui_component","ui_tokens_apply","ui_responsive_fix","ui_to_scale","ui_bulk_set","ui_state_toggle","ui_tween","ui_screen_create",
-    "ui_create_screen","ui_create_component","fx_create_emitter","fx_create_light","fx_create_vfx",
-    "audio_setup_sound_hierarchy","audio_create_sound","camera_set_style","datastore_setup",
-    "leaderboard_setup","remote_setup","teams_setup","npc_spawn_pathfinding","proximity_setup",
-    "tween_create","marketplace_setup","diagnostics_fix_common","plugin_create",
-    "ui_build","ui_set_image","ui_set_texture","ui_set_property","ui_paint","ui_add_element","ui_apply_theme","ui_bind_button",
-    "decal_set","mesh_set_texture","surface_gui_create","ui_clone","ui_clear_children",
-    "instance_rename","instance_reparent","script_append","selection_set",
-    "script_set_source","script_disable","anchored_set","collision_set","transparency_set",
-    "humanoid_set","lighting_set","folder_create","value_set","weld_constraint","instance_move","tag_remove",
-    "append_file","copy_file","replace_in_files","patch_json","write_json","replace_once",
-    "execute_blender_code","blender_export_fbx","blender_send_to_studio","asset_bridge_import","blender_asset_build","blender_asset_export",
-    "blender_asset_bake","blender_light_rig","blender_camera_rig","blender_world_setup","blender_render_setup","blender_turntable","blender_studio_clear",
-    "size_set","color_set","cframe_set","rotation_set","massless_set","can_touch_set","can_query_set","cast_shadow_set","collision_group_set","brickcolor_set",
-    "meshpart_create","wedge_create","spawn_box","ladder_create","trampoline_create","conveyor_create","ice_part","jump_pad","speed_pad",
-    "attachment_create","hinge_create","spring_create","rope_create","vector_force_create","linear_velocity_create",
-    "fire_add","smoke_add","sparkles_add","point_light_add","spot_light_add",
-    "atmosphere_set","bloom_set","blur_set","color_correction_set","sunrays_set","gravity_set",
-    "walkspeed_set","jumppower_set","forcefield_add","explosion_at","teleport_to","leaderstats_int","remote_event_create","sound_volume","set_property","scale_model","ungroup_model",
-    "developer_product_create","developer_product_list","gamepass_create","gamepass_list","gamepass_update",
-    "developer_product_update","animation_publish","cloud_product_update","cloud_animation_publish","animation_apply",
-    "script_replace","script_insert","script_delete_lines","script_rename_symbol","script_restore",
-    "model_build","model_union","model_subtract","model_optimize","model_anchor_fix","model_paint","model_hollow_box","model_wall","model_pipe","model_array_radial",
-    "memory_update_section","memory_remove_fact",
-  ]);
-  // 1.42.0 — Creation mode safety. Everything that leaves the Studio +
-  // workspace sandbox (a shell command, killing a process, deleting or moving
-  // files, downloading, opening a path, running code in Blender) asks the user
-  // first in BOTH Sandbox and Ask access modes - generated code never runs
-  // unattended. Only the explicit "Full PC access" mode runs them directly.
-  // When the approval modal is missing these calls are DENIED (fail closed),
-  // unlike the ordinary Ask-mode prompt that still fails open.
-  const CONFIRM_ALWAYS_OPS = new Set([
+  // 1.99.5 — FULL PC ONLY. Everything that leaves the Studio + workspace
+  // sandbox (a shell command, killing a process, deleting or moving files,
+  // downloading, opening a path, running code in Blender, exporting from it).
+  // In Sandbox these are refused outright - generated code never runs on the
+  // PC unattended and nobody is asked to click Allow for it; Full PC runs them.
+  // (1.42.0 called this CONFIRM_ALWAYS_OPS and prompted; the Ask state is gone.)
+  const FULL_PC_OPS = new Set([
     "run_command","process_kill","delete_path","move_path","download_file","open_path",
     "execute_blender_code","blender_export_fbx",
   ]);
-  const needsConfirmation = (bareName, mode) => mode !== "full" && (CONFIRM_ALWAYS_OPS.has(bareName) || (mode === "ask" && ASK_OPS.has(bareName)));
-  try { window.__rsNeedsConfirmation = needsConfirmation; } catch {}
+  const accessAllows = (bareName, mode) => normalizeAccess(mode) === "full" || !FULL_PC_OPS.has(bareName);
+  try { window.__rsAccessAllows = accessAllows; window.__rsFullPcOps = () => [...FULL_PC_OPS]; } catch {}
   const PUBLISH_OPS=new Set(["developer_product_create","gamepass_create","gamepass_update","cloud_gamepass_create","cloud_gamepass_update","cloud_product_create","developer_product_update","cloud_product_update","animation_publish","cloud_animation_publish","studio_publish_selection","studio.publishPlace","studio.publishAnimation","studio.createGamePass"]);
   async function publishAutomationEnabled(){try{const r=await chrome.storage.local.get("rsAllowPublishAutomation");return r.rsAllowPublishAutomation===true;}catch{return false;}}
-  // Ask-mode / publish confirmation. The prompt is a full-screen modal, but a
+  // Publish confirmation (1.99.5: the only approval prompt left). It is a full-screen modal, but a
   // modal nobody answers is a silent hang (seen on Notion: "stuck after
   // get_studio_state, trying to execute_luau" - execute_luau waited for Allow
   // while the user watched Studio). So: the modal lives at document level (a
@@ -258,9 +234,9 @@
       const body = document.getElementById("rs-approve-body");
       const allow = document.getElementById("rs-approve-allow");
       const deny = document.getElementById("rs-approve-deny");
-      // Missing modal: publish confirmations and the always-confirm ops fail
-      // CLOSED (nothing runs); a plain Ask-mode prompt keeps the old behaviour.
-      if (!root || !allow || !deny) { resolve(!(required || CONFIRM_ALWAYS_OPS.has(op))); return; }
+      // Missing modal: fail CLOSED (nothing runs). Since 1.99.5 the only caller
+      // is the publish confirmation; there is no Ask access state any more.
+      if (!root || !allow || !deny) { resolve(false); return; }
       // Keep the modal outside #rs-root so a collapsed / hidden bar cannot hide it.
       try { if (root.parentElement !== document.documentElement) document.documentElement.appendChild(root); } catch {}
       const oldAllowText=allow.textContent;
@@ -271,7 +247,7 @@
       if (body) body.innerHTML = `<b>${op}</b>${preview ? `<pre>${preview.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</pre>` : ""}<div class="rs-approve-note">Waiting for you - Allow or Deny (Esc = Deny). Auto-denied after ${Math.round(APPROVAL_TIMEOUT_MS / 1000)} s. Switch Permissions to Sandbox in the TotalScript menu to stop being asked.</div>`;
       root.hidden = false;
       try { diag("approval.wait", { op }); } catch {}
-      try { if (typeof ui !== "undefined" && ui && ui.banner) ui.banner("warn", required ? "Confirm publishing" : "Approval needed (Ask mode)", `TotalScript is waiting for you to Allow or Deny '${op}'. Nothing runs until you answer.`); } catch {}
+      try { if (typeof ui !== "undefined" && ui && ui.banner) ui.banner("warn", required ? "Confirm publishing" : "Approval needed", `TotalScript is waiting for you to Allow or Deny '${op}'. Nothing runs until you answer.`); } catch {}
       let timer = null;
       const done = (ok, why) => {
         clearTimeout(timer);
@@ -293,7 +269,7 @@
     });
   }
   function setPermMode(id) {
-    if (!["sandbox", "ask", "full"].includes(id)) return;
+    if (!ACCESS_MODES.includes(id)) return;
     permMode = id;
     try { window.__rsPermMode = () => permMode; } catch {}
     try { chrome.storage.local.set({ rsPermMode: id }); } catch {}
@@ -1100,10 +1076,10 @@
     studio:{title:"Roblox Studio connection",summary:"The browser extension talks to the total-core desktop agent on 127.0.0.1:3000, which bridges to Studio through the Studio MCP helper and the optional TotalScript Studio plugin.",details:["Run total-core (agent/ crate, cargo build) once; it stays in the background and auto-installs plugin/TotalScript.lua into the Studio Plugins folder.","In Studio: Plugins → TotalScript panel → enable; click Allow on the HTTP prompt. The plugin runs execute_luau with plugin-level APIs and adds csg_*, open_script, script_live_update, studio_undo/redo, screenshot_frame, gamepass_handler_create…","total_status / studio_plugin_status report the connection; total_screenshot captures the Studio window through the MCP screen_capture tool."],howTo:["Start total-core","Open the place in Studio and enable the TotalScript plugin","Check the status pill in the TotalScript bar is green, then chat"]},
     workmode:{title:"Work mode: Totality",summary:"There is ONE built-in work mode, Totality (named Creation until 1.73): the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. Custom Public-Skill modes layer their own mandate on top of it.",details:["Totality runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → total_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Totality automatically; custom modes created on an old base keep working on Totality.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send.","Two more built-in modes sit next to Totality: Blender (1.95.0, stored id blender - Blender-first 3D asset pipeline -> Studio) and Animator (1.99.4, stored id animate - rig -> clip -> animation_preview on the actual rig -> playback code through the Animator -> play-test, on R6 and R15; its RIG and PLAYBACK gates demand a preview and a play-tested playback script). The old pre-1.39 Animator id still migrates to Totality; the new mode is a different id."],howTo:["TotalScript menu → Work mode → Totality (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
     projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .totalscript-project-reference.json you can re-import."],howTo:["TotalScript menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
-    permissions:{title:"Permissions",summary:"Sandbox (Studio + workspace only, no prompts), Ask (confirm writes, publishes and PC access with an approval card) or Full (entire PC via total-core).",details:["Sandbox is the default and never asks - ideal for Studio-only work.","Ask shows an approval card above the page for execute_luau, file writes, publishes and marketplace changes; it auto-denies after 120 s so a hidden card cannot stall the agent.","Full unlocks PC-wide file/terminal tools (TOTAL_FULL_ACCESS in total-core). Publish/marketplace automation additionally requires the 'Allow publish automation' switch."],howTo:["TotalScript menu → Permissions → Sandbox / Ask / Full"]},
+    permissions:{title:"Access: Sandbox only / Full PC",summary:"Two states since 1.99.5. Sandbox only (default) = Studio + the workspace folder; commands that leave it (run_command, process_kill, delete_path, move_path, download_file, open_path, execute_blender_code, blender_export_fbx) are refused with ERROR ACCESS_SANDBOX - no approval card. Full PC = those run directly and total-core's FULL PC ACCESS is switched on with it.",details:["Sandbox only never asks and never runs anything on the PC - ideal for Studio-only work; the refusal tells you which step needs Full PC and offers a one-click switch.","Full PC is one switch in two places: Settings → Access and the Session panel's Danger zone. Picking it persists rsPermMode and pushes FULL PC ACCESS to total-core (the agent's own state is mirrored back into the Session panel).","The old Ask state (confirm every write) was removed; a stored 'ask' reads as Sandbox only.","Publishing / marketplace changes always show a confirmation card unless the 'Allow publish automation' switch is on; it auto-denies after 120 s so a hidden card cannot stall the agent."],howTo:["TotalScript menu → Access → Sandbox only / Full PC","Session panel → Danger zone → FULL PC (same switch)"]},
     providers:{title:"Chat providers",summary:"TotalScript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Meta, Arena, Notion, Vani, MultiChat and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["CodeCraft API (codecraftapi.com) has no web chat, so TotalScript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","DeepSeek API (1.99.1): the same hosted page pointed at api.deepseek.com with your own sk- key from platform.deepseek.com - the official API is not subject to the chat.deepseek.com account suspensions, so the agent runs at full speed there (popup → DeepSeek API chat, or the AI switcher → DeepSeek API). Gentle pacing on chat.deepseek.com only lowers the risk; it cannot remove it.","Compact composers (Notion, Vani, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the TotalScript bar appears above the composer"]},
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
-    troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for the approval card (Ask mode) or switch Permissions to Sandbox; cards auto-deny after 120 s.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
+    troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for a publish confirmation card (it auto-denies after 120 s). A PC command refused in Sandbox only is not a wait - the chat gets ERROR ACCESS_SANDBOX at once and a banner offers Switch to Full PC.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
     publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes.",details:["Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","Agent commands: public_skill_create/from_prompt/list/get/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
   };
@@ -4445,22 +4421,19 @@
       }
       return `ERROR: the '${bareName}' command timed out and is unavailable in this environment. Do NOT call it again - complete the task yourself using the other commands (execute_luau, multi_edit, etc.).`;
     }
-    if (permMode !== "full" && /^(process_kill)$/.test(bareName)) {
-      return `ERROR: '${bareName}' needs Full PC access. Switch Permissions to Full in the TotalScript menu, or stay in Sandbox.`;
+    // 1.99.5 ACCESS gate: Sandbox only vs Full PC - no prompt, a plain refusal.
+    if (!accessAllows(bareName, permMode)) {
+      try { if (typeof ui !== "undefined" && ui && ui.banner) ui.banner("warn", "Blocked by Sandbox access", `'${bareName}' leaves the Studio + workspace sandbox, so it did not run. Switch Access to Full PC if you want the AI to do this.`, { label: "Switch to Full PC", onClick: () => { setPermMode("full"); try { ui.toast("Access: Full PC \u2014 send the request again"); } catch {} } }); } catch {}
+      try { diag("access.blocked", { name: bareName, mode: permMode }); } catch {}
+      return `ERROR ACCESS_SANDBOX in ${bareName}: Access is "Sandbox only" (Studio + workspace), and this command leaves the sandbox, so it did NOT run and nothing changed. Do not retry it and do not work around it with another command. Finish what is possible inside Studio / the workspace, then tell the user plainly that this step needs Access → Full PC in the TotalScript menu.`;
     }
     // Internal sub-calls (a skill's own execute_luau, chunk pieces, total_debug
     // probes) inherit the approval of the command the model actually asked for:
-    // get_studio_state is read-only and must never pop an execute_luau prompt.
+    // get_studio_state is read-only and must never pop a publish prompt.
     const internalCall = !!(args && (args._totalInternal || args._totalChunk));
     if (!internalCall && PUBLISH_OPS.has(bareName) && !(await publishAutomationEnabled())) {
       const ok=await requestApproval(bareName,{...args,warning:"Publishing will modify a Roblox cloud resource and remains subject to Roblox ownership, moderation, permissions, and rate limits."},true);
       if(!ok)return approvalTimedOut() ? `ERROR USER_ACTION_REQUIRED in ${bareName}: the user did not answer the publish confirmation within ${Math.round(APPROVAL_TIMEOUT_MS / 1000)} s, so nothing was published. Stop and ask the user to confirm in the TotalScript bar (or enable publish automation), then continue.` : `ERROR USER_ACTION_REQUIRED in ${bareName}: publishing was not confirmed. Nothing was published.`;
-    } else if (!internalCall && needsConfirmation(bareName, permMode)) {
-      const ok = await requestApproval(bareName, args);
-      if (!ok) {
-        const why = CONFIRM_ALWAYS_OPS.has(bareName) ? "this command leaves the Studio + workspace sandbox, so it always needs the user's Allow" : "Ask mode";
-        return approvalTimedOut() ? `ERROR USER_ACTION_REQUIRED in ${bareName}: the user did not answer the approval prompt within ${Math.round(APPROVAL_TIMEOUT_MS / 1000)} s (${why}), so the command did NOT run. Stop here and tell the user to click Allow in the TotalScript bar, then continue when they reply.` : `ERROR in ${bareName}: the user declined this action (${why}). Do not retry unless they ask.`;
-      }
     }
     // Multi-Agent role guard: planner / reviewer / tester are read-only. The
     // crew module refuses the mutation with a handoff recipe (and auto-promotes
@@ -7888,7 +7861,7 @@
         <div id="rs-menu" hidden></div>
         <div id="rs-approve" hidden>
           <div class="rs-approve-card">
-            <div class="rs-approve-kicker">Ask mode</div>
+            <div class="rs-approve-kicker">Confirm</div>
             <div class="rs-approve-title">Allow this action?</div>
             <div id="rs-approve-body"></div>
             <div class="rs-approve-actions">
@@ -8109,11 +8082,14 @@
             e.stopPropagation();
             const want = !(typeof window.__rsFullAccess === "function" && window.__rsFullAccess());
             try { window.__rsFullAccess = () => want; } catch {}
-            try { chrome.runtime.sendMessage({ type: "rs-set-full", enabled: want }); } catch {}
+            // 1.99.5: ONE switch. This toggle and Settings → Access are the same
+            // state; setPermMode persists it and pushes rs-set-full to total-core.
+            setPermMode(want ? "full" : "sandbox");
+            try { buildMenu(); } catch {}
             renderCards(cardsPanel); // re-renders with new ON/OFF + note
             toast(want
-              ? "\u26A0 FULL ACCESS ON \u2014 the AI can now touch your whole PC"
-              : "FULL ACCESS OFF \u2014 back to the workspace sandbox");
+              ? "\u26A0 FULL PC ON \u2014 the AI can now touch your whole PC"
+              : "Sandbox only \u2014 back to Studio + the workspace");
             return;
           }
           const ideaGenerate=e.target.closest&&e.target.closest("[data-idea-generate]");if(ideaGenerate){e.stopPropagation();const g=cardsPanel.querySelector("[data-idea-genre]")?.value||"Platformer",t=cardsPanel.querySelector("[data-idea-theme]")?.value||"Futuristic";ideaGeneratorResult=makeIdea(g,t);renderCards(cardsPanel);return;}const ideaAnother=e.target.closest&&e.target.closest("[data-idea-generate-another]");if(ideaAnother){e.stopPropagation();const g=cardsPanel.querySelector("[data-idea-genre]")?.value||"Platformer",t=cardsPanel.querySelector("[data-idea-theme]")?.value||"Futuristic";ideaGeneratorResult=makeIdea(g,t);renderCards(cardsPanel);return;}const ideaCopy=e.target.closest&&e.target.closest("[data-idea-copy]");if(ideaCopy&&ideaGeneratorResult){navigator.clipboard?.writeText(ideaGeneratorResult.prompt);toast("Prompt copied");return;}const ideaChat=e.target.closest&&e.target.closest("[data-idea-chat]");if(ideaChat&&ideaGeneratorResult){const el=document.activeElement?.matches?.("textarea,[contenteditable=true]")?document.activeElement:document.querySelector("textarea,[contenteditable=true]");if(el){if(el.isContentEditable)el.textContent=ideaGeneratorResult.prompt;else{el.value=ideaGeneratorResult.prompt;el.dispatchEvent(new Event("input",{bubbles:true}));}toast("Prompt placed in chat box");}else toast("Chat box not found");return;}const ideaRun=e.target.closest&&e.target.closest("[data-idea-run]");if(ideaRun&&ideaGeneratorResult){runLibraryCard({engine:"rs",icon:"✦",cat:"Idea",title:ideaGeneratorResult.title,desc:"Generated game idea",prompt:ideaGeneratorResult.prompt},true);return;}
@@ -8630,8 +8606,8 @@
           try { syncWorkModeUi(); } catch {}
           dirty = true;
         }
-        if (changes.rsPermMode && ["sandbox","ask","full"].includes(changes.rsPermMode.newValue)) {
-          permMode = changes.rsPermMode.newValue;
+        if (changes.rsPermMode && typeof changes.rsPermMode.newValue === "string") {
+          permMode = normalizeAccess(changes.rsPermMode.newValue);
           try { window.__rsPermMode = () => permMode; } catch {}
           dirty = true;
         }
@@ -8790,6 +8766,7 @@
       if (!silent) { try { playSfx("special"); } catch {} toast(custom ? custom.toast : WORK_MODES[workMode].toast); }
     }
     try { window.__rsSetWorkMode = (id) => setWorkMode(id); } catch {}
+    try { window.__rsSetPermMode = (id) => setPermMode(id); } catch {}
     // Multi-Agent crew badge: which specialist is active + plan progress.
     function syncCrewBadge(){
       const el = uiEl("rs-crew-badge");
@@ -9566,11 +9543,10 @@
             ${reasoningSectionHtml()}
             <section class="rs-menu-sec">
               <div class="rs-sec-label"><span>Access</span></div>
-              <div class="rs-menu-note">Sandbox = Studio and the project folder; shell commands, deletes, downloads and process kills always ask first. Ask = confirm each write too. Full = the whole PC (AgentScript), no prompts.</div>
-              <div class="rs-work-row">
-                <button type="button" class="rs-work-card ${permMode==="sandbox"?"on":""}" data-perm="sandbox"><span class="rs-work-name">Sandbox</span><span class="rs-work-sub">Roblox / workspace only</span></button>
-                <button type="button" class="rs-work-card ${permMode==="ask"?"on":""}" data-perm="ask"><span class="rs-work-name">Ask</span><span class="rs-work-sub">Confirm each write / run</span></button>
-                <button type="button" class="rs-work-card ${permMode==="full"?"on":""}" data-perm="full"><span class="rs-work-name">Full</span><span class="rs-work-sub">All PC files + processes, no prompts</span></button>
+              <div class="rs-menu-note">Sandbox only = Studio and the workspace folder; shell commands, deletes, moves, downloads, opening paths and Blender code are refused (no prompts). Full PC = everything runs, and total-core's FULL PC ACCESS switches on with it. Publishing to Roblox always confirms.</div>
+              <div class="rs-work-row rs-access-row">
+                <button type="button" class="rs-work-card ${permMode==="sandbox"?"on":""}" data-perm="sandbox"><span class="rs-work-name">Sandbox only</span><span class="rs-work-sub">Studio + workspace; PC commands refused</span></button>
+                <button type="button" class="rs-work-card ${permMode==="full"?"on":""}" data-perm="full"><span class="rs-work-name">Full PC</span><span class="rs-work-sub">Files, shell, processes, Blender - no prompts</span></button>
               </div>
             </section>
             ${brandSectionHtml()}
@@ -9892,8 +9868,8 @@
         btn.addEventListener("click", () => {
           setPermMode(btn.dataset.perm);
           try { buildMenu(); } catch {}
-          const label = permMode === "full" ? "Full PC access" : permMode === "ask" ? "Ask before acting" : "Sandbox (Studio + workspace)";
-          try { toast("Permissions: " + label); } catch {}
+          const label = permMode === "full" ? "Full PC" : "Sandbox only (Studio + workspace)";
+          try { toast("Access: " + label); } catch {}
         });
       });
       try { wireBrandSection(); } catch (e) { diag("brand.wireFailed", { error: String(e && e.message || e) }); }
@@ -10296,7 +10272,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         '<div class="rs-danger-zone">'
         + '<div class="rs-dz-head">\u26A0 Danger zone</div>'
         + '<div class="rs-dz-row">'
-        +   '<div class="rs-dz-text"><b>FULL ACCESS</b><span>Let the AI read and write anywhere on this PC and control processes \u2014 not just the workspace.</span></div>'
+        +   '<div class="rs-dz-text"><b>FULL PC</b><span>Let the AI read and write anywhere on this PC, run commands and control processes \u2014 not just Studio + the workspace. Same switch as Settings \u2192 Access.</span></div>'
         +   '<button id="rs-full-toggle" class="' + (full ? "on" : "") + '" title="' + (full ? "Click to return to the workspace sandbox" : "Lift the workspace sandbox") + '">' + (full ? "ON" : "OFF") + '</button>'
         + '</div>'
         + '</div>';

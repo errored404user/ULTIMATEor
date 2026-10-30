@@ -112,8 +112,9 @@ pub enum ChatEvent {
 
 /// Tools that run programs or destroy / fetch data on the user's PC. They
 /// never run unattended from the desktop chat: the turn pauses and the window
-/// asks Allow / Deny (same rule the browser extension applies in Sandbox and
-/// Ask access modes). Studio Luau and workspace file writes are the product's
+/// asks Allow / Deny (the browser extension refuses the same tools outright in
+/// its Sandbox-only access state and runs them in Full PC). Studio Luau and
+/// workspace file writes are the product's
 /// normal output and stay automatic; the write tools keep backups instead.
 pub const GUARDED_TOOLS: &[&str] = &["run_command", "process_kill", "delete_path", "download_file", "open_path"];
 /// How long a paused turn waits for Allow / Deny before the call is denied.

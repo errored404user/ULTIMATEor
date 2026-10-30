@@ -151,6 +151,7 @@
     }
     .work{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:14px}
     .work.work-modes{grid-template-columns:1fr 1fr 1fr} /* 1.95.0: two built-in modes; 1.99.4: three (Animator) */
+    .work.work-access{grid-template-columns:1fr 1fr} /* 1.99.5: Sandbox only / Full PC */
     .donate-title{font-size:13px; font-weight:800; letter-spacing:-.1px; margin:2px 0 3px; color:var(--text)}
     .donate-note{line-height:1.5}
     .donate-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px}
@@ -309,18 +310,14 @@
         </button>
       </div>
       <div class="sec-label">Access</div>
-      <div class="work">
+      <div class="work work-access">
         <button type="button" class="work-card" data-perm="sandbox" id="perm-sandbox">
-          <span class="work-name">Sandbox</span>
-          <span class="work-sub">Studio + workspace only</span>
-        </button>
-        <button type="button" class="work-card" data-perm="ask" id="perm-ask">
-          <span class="work-name">Ask</span>
-          <span class="work-sub">Confirm writes / runs</span>
+          <span class="work-name">Sandbox only</span>
+          <span class="work-sub">Studio + workspace; PC commands refused</span>
         </button>
         <button type="button" class="work-card" data-perm="full" id="perm-full">
-          <span class="work-name">Full</span>
-          <span class="work-sub">Entire PC access</span>
+          <span class="work-name">Full PC</span>
+          <span class="work-sub">Files, shell, processes, Blender — no prompts</span>
         </button>
       </div>
       <div class="tgl-well">

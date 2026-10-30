@@ -50,7 +50,7 @@ ok("session recap recorder removed", !main.includes("rsAutoMemory") && !main.inc
 ok("repeat guard (which lived next to the recorder) survives", main.includes("function applyRepeatGuard(call, feedback)") && main.includes("[LOOP GUARD]"));
 ok("prompt builder is no longer given a memory block", !/memory:\s*ui\.getCustomMemory\(\)/.test(main) && !/\bmemory:\s*[a-zA-Z_.()]+,\n/.test(main.slice(main.indexOf("RS.buildSystemPrompt({"), main.indexOf("RS.buildSystemPrompt({") + 600)));
 ok("memory CSS removed", !css.includes(".rs-memory-sec") && !css.includes(".rs-memory-label") && !css.includes(".rs-mem-recap"));
-ok("in-Studio handbook commands are untouched", main.includes('"memory_update_section"') && cfg.includes("PROJECT MEMORY: RobloxScript has a durable, shared memory document"));
+ok("in-Studio handbook commands are untouched", read("src/core/skills/studio_ultimate.js").includes('name: "memory_update_section"') && cfg.includes("PROJECT MEMORY: RobloxScript has a durable, shared memory document"));
 
 // ── E. config.js: no memory text reaches the prompt when none is passed ───────
 {

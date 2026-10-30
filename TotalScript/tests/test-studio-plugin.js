@@ -22,9 +22,9 @@ const cargo = read("agent/Cargo.toml");
 
 // ── plugin source ──
 assert(lua.startsWith("--!nocheck"), "plugin disables type checking (plugin globals)");
-assert(lua.includes('local VERSION = "1.99.4"'), "plugin version 1.99.4");
-assert(manifest.version === "1.99.4", "manifest 1.99.4");
-assert(/version = "1\.99\.4"/.test(cargo), "crate 1.99.4");
+assert(lua.includes('local VERSION = "1.99.5"'), "plugin version 1.99.5");
+assert(manifest.version === "1.99.5", "manifest 1.99.5");
+assert(/version = "1\.99\.5"/.test(cargo), "crate 1.99.5");
 assert(lua.includes("if RunService:IsRunning() then return end"), "plugin is edit-mode only");
 assert(lua.includes('"/api/plugin/hello"') && lua.includes('"/api/plugin/poll?client_id="') && lua.includes('"/api/plugin/result"'), "plugin speaks the hub protocol");
 assert(lua.includes('http://127.0.0.1:3000'), "default bridge URL is total-core");
@@ -101,7 +101,7 @@ for (const n of ["gamepass_create", "gamepass_update", "gamepass_list"]) {
   assert(plus.includes('{ name: "' + n + '"'), "catalogue entry " + n);
   assert(main.includes('bareName === "' + n + '"'), "main.js intercepts " + n);
 }
-assert(main.includes('"gamepass_create","gamepass_list","gamepass_update"'), "gamepass_* are virtual (not sent to Studio Luau)");
+assert(main.includes('if (bareName === "gamepass_list") return await listGamePasses(args);') && /PUBLISH_OPS=new Set\(\[[^\]]*"gamepass_create"[^\]]*"gamepass_update"/.test(main), "gamepass_* are virtual (handled in main.js, create / update behind the publish confirmation; not sent to Studio Luau)");
 assert(/PUBLISH_OPS=new Set\(\[[^\]]*"gamepass_create"/.test(main), "gamepass_create behind the publish approval gate");
 assert(main.includes('type: "create_game_pass"') && main.includes('type: "update_game_pass"') && main.includes('type: "list_game_passes"'), "main.js calls the background game-pass messages");
 assert(main.includes('pluginToolAvailable("cloud_gamepass_create")'), "Open Cloud fallback when the browser session fails");

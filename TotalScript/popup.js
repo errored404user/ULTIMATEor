@@ -37,7 +37,7 @@ const WORK_PRESETS = {
   animate: { thinking: "max", extra: false },
 };
 
-const PERM_MODES = ["sandbox", "ask", "full"];
+const PERM_MODES = ["sandbox", "full"]; // 1.99.5: Sandbox only / Full PC (the Ask state is gone; a stored "ask" reads as sandbox)
 const settings = {
   workMode: "creation",
   permMode: "sandbox",
@@ -128,7 +128,7 @@ async function loadSettings() {
     // the same way the content script does — text and an inline raster only).
     settings.brand = sanitizeBrandLite(r.rsBrand);
     if (r.rsWorkMode) settings.workMode = normalizeWorkMode(r.rsWorkMode);
-    if (PERM_MODES.includes(r.rsPermMode)) settings.permMode = r.rsPermMode;
+    if (typeof r.rsPermMode === "string") settings.permMode = PERM_MODES.includes(r.rsPermMode) ? r.rsPermMode : "sandbox";
     if (typeof r.rsSounds === "boolean") settings.sounds = r.rsSounds;
     if (typeof r.rsExtraThinking === "boolean") settings.extra = r.rsExtraThinking;
     if (typeof r.rsForgeMode === "boolean") settings.forge = r.rsForgeMode;
@@ -340,7 +340,7 @@ try {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local" || !changes) return;
     if (changes.rsWorkMode && changes.rsWorkMode.newValue) settings.workMode = normalizeWorkMode(changes.rsWorkMode.newValue);
-    if (changes.rsPermMode && PERM_MODES.includes(changes.rsPermMode.newValue)) settings.permMode = changes.rsPermMode.newValue;
+    if (changes.rsPermMode && typeof changes.rsPermMode.newValue === "string") settings.permMode = PERM_MODES.includes(changes.rsPermMode.newValue) ? changes.rsPermMode.newValue : "sandbox";
     if (changes.rsSounds && typeof changes.rsSounds.newValue === "boolean") settings.sounds = changes.rsSounds.newValue;
     if (changes.rsExtraThinking && typeof changes.rsExtraThinking.newValue === "boolean") settings.extra = changes.rsExtraThinking.newValue;
     if (changes.rsForgeMode && typeof changes.rsForgeMode.newValue === "boolean") settings.forge = changes.rsForgeMode.newValue;

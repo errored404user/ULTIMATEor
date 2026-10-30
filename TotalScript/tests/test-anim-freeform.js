@@ -13,7 +13,7 @@ const inLimits = (clip) => clip.keys.every((k) => Object.entries(k.poses).every(
 // ── 1. the complaint: custom prompts used to collapse into the same idle ──
 const custom = ["drink a potion", "play guitar", "open a heavy door", "headbang to metal", "swing on a rope", "type on a laptop", "answer the phone", "take a selfie", "knock on the door", "think hard", "big yawn and stretch", "shiver in the cold", "cry sadly", "stomp angrily", "push a crate", "pull a rope", "dig a hole", "chop wood", "row a boat", "ride a bike", "look around nervously", "flex muscles", "sneeze", "jumping jacks", "squats", "meditate", "drive a car", "go fishing", "sweep the floor", "paint a picture", "hug", "handshake", "high five", "thumbs up", "curtsy", "out of breath", "dizzy", "cower in fear", "hands up surrender", "kick a ball", "golf swing", "basketball jump shot", "lift a heavy box", "superhero landing", "dab", "floss dance", "twirl around", "lean on a wall", "check the watch", "pet the dog"];
 const clips = custom.map((p) => E.generate(p));
-ok("engine VERSION is 1.99.4", E.VERSION === "1.99.4", E.VERSION);
+ok("engine VERSION is 1.99.5", E.VERSION === "1.99.5", E.VERSION);
 ok("50 custom prompts → 50 clips, none of them the idle fallback", clips.every((c) => c.intent.category !== "idle" && c.intent.category !== "improv"), clips.filter((c) => c.intent.category === "idle" || c.intent.category === "improv").map((c) => c.prompt));
 ok("every clip has its own fingerprint", new Set(clips.map((c) => c.fingerprint)).size === clips.length);
 let maxSim = 0, pair = null; for (let i = 0; i < clips.length; i++) for (let j = i + 1; j < clips.length; j++) { const s = E.similarity(clips[i], clips[j]); if (s > maxSim) { maxSim = s; pair = [custom[i], custom[j]]; } }

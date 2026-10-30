@@ -81,13 +81,16 @@ ok("A: Creation evidence gates (scripts / look / motion) exist and feed modeGate
 }
 
 // ───────────────────────── D. permissions (static) ─────────────────────────
-ok("D: CONFIRM_ALWAYS_OPS covers shell / process / delete / move / download / open / Blender",
-  /const CONFIRM_ALWAYS_OPS = new Set\(\[\s*"run_command","process_kill","delete_path","move_path","download_file","open_path",\s*"execute_blender_code","blender_export_fbx",\s*\]\);/.test(main));
-ok("D: needsConfirmation = not Full && (always-confirm || Ask-mode op)",
-  main.includes('const needsConfirmation = (bareName, mode) => mode !== "full" && (CONFIRM_ALWAYS_OPS.has(bareName) || (mode === "ask" && ASK_OPS.has(bareName)));') && main.includes("} else if (!internalCall && needsConfirmation(bareName, permMode)) {"));
-ok("D: missing approval modal fails CLOSED for publish + always-confirm ops", main.includes("if (!root || !allow || !deny) { resolve(!(required || CONFIRM_ALWAYS_OPS.has(op))); return; }"));
-ok("D: Ask mode also confirms network write tools (api_request / web_fetch — audit R-02)", /"run_command","process_kill","download_file","open_path",\s*"api_request","web_api","api_json_get","api_json_post","web_fetch",/.test(main));
-ok("D: Access cards explain the gate honestly", main.includes("shell commands, deletes, downloads and process kills always ask first") && main.includes("All PC files + processes, no prompts"));
+// 1.99.5: access is two states - Sandbox only / Full PC. The PC-leaving set is
+// unchanged from 1.42.0 but is now REFUSED in Sandbox (no prompt) and run in Full PC.
+ok("D: FULL_PC_OPS covers shell / process / delete / move / download / open / Blender (same set as the 1.42.0 always-confirm list)",
+  /const FULL_PC_OPS = new Set\(\[\s*"run_command","process_kill","delete_path","move_path","download_file","open_path",\s*"execute_blender_code","blender_export_fbx",\s*\]\);/.test(main));
+ok("D: accessAllows = Full PC || not a PC-leaving op; the gate refuses with ERROR ACCESS_SANDBOX before any bridge call and never prompts",
+  main.includes('const accessAllows = (bareName, mode) => normalizeAccess(mode) === "full" || !FULL_PC_OPS.has(bareName);') && main.includes("if (!accessAllows(bareName, permMode)) {") && main.includes("return `ERROR ACCESS_SANDBOX in ${bareName}: Access is \"Sandbox only\" (Studio + workspace), and this command leaves the sandbox, so it did NOT run and nothing changed.") && !/needsConfirmation|ASK_OPS|CONFIRM_ALWAYS_OPS\.has/.test(main));
+ok("D: missing approval modal fails CLOSED (publish confirmation is the only prompt left)", main.includes("if (!root || !allow || !deny) { resolve(false); return; }") && main.includes("if (!internalCall && PUBLISH_OPS.has(bareName) && !(await publishAutomationEnabled())) {"));
+ok("D: only sandbox / full are accepted; a stored 'ask' reads as sandbox (load, setPermMode, storage change)", main.includes('const ACCESS_MODES = ["sandbox", "full"];') && main.includes('const normalizeAccess = (id) => (ACCESS_MODES.includes(id) ? id : "sandbox");') && main.includes('if (r && typeof r.rsPermMode === "string") permMode = normalizeAccess(r.rsPermMode);') && main.includes("if (!ACCESS_MODES.includes(id)) return;") && main.includes("permMode = normalizeAccess(changes.rsPermMode.newValue);") && !/\["sandbox", ?"ask", ?"full"\]/.test(main));
+ok("D: Access cards explain the gate honestly (two cards, no Ask card)", main.includes("Sandbox only = Studio and the workspace folder; shell commands, deletes, moves, downloads, opening paths and Blender code are refused (no prompts). Full PC = everything runs, and total-core's FULL PC ACCESS switches on with it.") && main.includes('data-perm="sandbox"') && main.includes('data-perm="full"') && !main.includes('data-perm="ask"'));
+ok("D: the Danger-zone FULL toggle is the same switch (goes through setPermMode)", main.includes('setPermMode(want ? "full" : "sandbox");') && main.includes('chrome.runtime.sendMessage({ type: "rs-set-full", enabled: id === "full" })'));
 ok("D: runTool is reachable for harnesses (window.__rsRunTool)", main.includes("window.__rsRunTool = (call) => runTool(call);"));
 ok("D: late bar lookups go through uiEl (bar → root → document) so the CREATION badge / status pill / task pill update on inline mounts too", main.includes('function uiEl(id)') && main.includes('const badge = uiEl("rs-work-badge");') && main.includes('const pill = uiEl("rs-status-pill");') && main.includes('const el = uiEl("rs-task-pill");') && !main.includes('root && root.querySelector("#rs-work-badge")'));
 
@@ -173,6 +176,7 @@ if (!JSDOM) { console.log("skip jsdom walk (jsdom not installed)"); finish(); }
   ];
   // Fake total-core bridge: records every call_tool, answers like the Rust side.
   const calls = [];
+  const sentFull = []; // every rs-set-full the page pushed to the background (1.99.5 access switch)
   let bridgeUp = true;
   const background = (msg) => {
     switch (msg && msg.type) {
@@ -192,7 +196,7 @@ if (!JSDOM) { console.log("skip jsdom walk (jsdom not installed)"); finish(); }
         if (msg.name === "run_command") return { ok: true, text: "exit 0\nharness-user" };
         return { ok: true, text: "ok" };
       }
-      case "rs-set-full": return { ok: true };
+      case "rs-set-full": sentFull.push(!!msg.enabled); return { ok: true, enabled: !!msg.enabled };
       default: return { ok: true, tools: TOOLS };
     }
   };
@@ -221,10 +225,10 @@ if (!JSDOM) { console.log("skip jsdom walk (jsdom not installed)"); finish(); }
     w.__rsSetWorkMode("ultimate"); await sleep(50);
     ok("walk A: selecting a legacy mode id keeps creation (normalised, no crash)", w.__rsWorkMode() === "creation" && pageErrors.length === 0, pageErrors.join(" | "));
 
-    // D — needsConfirmation semantics
-    const nc = w.__rsNeedsConfirmation;
-    ok("walk D: sandbox → run_command / delete_path / download_file ask; write_file / execute_luau do not", nc("run_command", "sandbox") && nc("delete_path", "sandbox") && nc("download_file", "sandbox") && !nc("write_file", "sandbox") && !nc("execute_luau", "sandbox"));
-    ok("walk D: ask → write_file / execute_luau / web_fetch / api_request ask too; full → nothing asks", nc("write_file", "ask") && nc("execute_luau", "ask") && nc("web_fetch", "ask") && nc("api_request", "ask") && !nc("run_command", "full") && !nc("write_file", "full"));
+    // D — accessAllows semantics (1.99.5)
+    const al = w.__rsAccessAllows;
+    ok("walk D: sandbox → run_command / delete_path / download_file / execute_blender_code refused; write_file / execute_luau / web_fetch allowed", !al("run_command", "sandbox") && !al("delete_path", "sandbox") && !al("download_file", "sandbox") && !al("execute_blender_code", "sandbox") && al("write_file", "sandbox") && al("execute_luau", "sandbox") && al("web_fetch", "sandbox"));
+    ok("walk D: full → everything allowed; the legacy 'ask' value behaves as sandbox", al("run_command", "full") && al("write_file", "full") && !al("run_command", "ask") && al("write_file", "ask") && w.__rsFullPcOps().length === 8);
 
     // C — the real runTool against the fake bridge
     const runTool = w.__rsRunTool;
@@ -253,30 +257,34 @@ if (!JSDOM) { console.log("skip jsdom walk (jsdom not installed)"); finish(); }
     }
     ok("walk C2: traversal / absolute paths surface as ERROR … outside the workspace (no false success)", evilOk, evilDetail);
 
-    // C3 sandbox: run_command pauses on the approval modal; Deny → nothing ran
+    // C3 sandbox: run_command is REFUSED immediately - no modal, no bridge call (1.99.5)
     calls.length = 0;
-    let pending = runTool({ tool: "run_command", arguments: { command: "whoami" } });
-    const modal = await waitFor(() => { const m = d.getElementById("rs-approve"); return m && !m.hidden ? m : null; }, 2000, "approval modal");
-    ok("walk C3: sandbox run_command opens the Allow / Deny modal naming the command, bridge untouched", !!modal && /run_command/.test(d.getElementById("rs-approve-body").textContent) && calls.length === 0);
-    d.getElementById("rs-approve-deny").click();
-    out = await pending;
-    ok("walk C3: Deny → ERROR 'declined' with the sandbox reason, modal closed, still no bridge call", /^ERROR in run_command: the user declined this action \(this command leaves the Studio \+ workspace sandbox/.test(out) && d.getElementById("rs-approve").hidden && calls.length === 0, out);
+    const t3 = Date.now();
+    out = await runTool({ tool: "run_command", arguments: { command: "whoami" } });
+    ok("walk C3: sandbox run_command → immediate ERROR ACCESS_SANDBOX, modal never opened, bridge untouched", (Date.now() - t3) < 1500 && /^ERROR ACCESS_SANDBOX in run_command: Access is "Sandbox only"/.test(out) && /Access → Full PC/.test(out) && d.getElementById("rs-approve").hidden && calls.length === 0, out);
+    ok("walk C3: the user sees a banner naming the blocked command with a one-click 'Switch to Full PC' action", (() => { const b = [...d.querySelectorAll(".rs-banner")].find((x) => /Blocked by Sandbox access/.test(x.textContent)); return !!b && /run_command/.test(b.textContent) && !!b.querySelector(".rs-banner-go") && /Switch to Full PC/.test(b.querySelector(".rs-banner-go").textContent); })());
 
-    // C4 Allow once → the command runs exactly once and its output is shown
+    // C4 every PC-leaving op is refused the same way; Studio / workspace writes still run
     calls.length = 0;
-    pending = runTool({ tool: "run_command", arguments: { command: "whoami" } });
-    await waitFor(() => !d.getElementById("rs-approve").hidden, 2000, "approval modal (allow)");
-    d.getElementById("rs-approve-allow").click();
-    out = await pending;
-    ok("walk C4: Allow → exactly one call_tool run_command, output returned to the chat", calls.length === 1 && calls[0].name === "run_command" && calls[0].args.command === "whoami" && /harness-user/.test(out), out);
+    const refused = [];
+    for (const [tool, args] of [["delete_path", { path: "src" }], ["download_file", { url: "https://example.com/a.zip", path: "a.zip" }], ["open_path", { path: "." }], ["execute_blender_code", { code: "print(1)" }]]) {
+      const r = await runTool({ tool, arguments: args });
+      if (!/^ERROR ACCESS_SANDBOX in /.test(r)) refused.push(tool + " → " + String(r).slice(0, 60));
+    }
+    ok("walk C4: delete_path / download_file / open_path / execute_blender_code all refused in Sandbox, zero bridge calls", refused.length === 0 && calls.length === 0, refused.join(" ; "));
+    calls.length = 0;
+    out = await runTool({ tool: "write_file", arguments: { path: "c.txt", content: "3" } });
+    ok("walk C4: write_file still runs in Sandbox without any prompt (one bridge call)", calls.length === 1 && /Created c\.txt/.test(out) && d.getElementById("rs-approve").hidden, out);
 
-    // C5 Escape denies as well
+    // C5 the banner's action switches to Full PC and the same command then runs
+    const go = [...d.querySelectorAll(".rs-banner")].find((x) => /Blocked by Sandbox access/.test(x.textContent)).querySelector(".rs-banner-go");
+    go.click(); await sleep(60);
+    ok("walk C5: 'Switch to Full PC' → access mode full, persisted, total-core told (rs-set-full true)", w.__rsPermMode() === "full" && sentFull.length > 0 && sentFull[sentFull.length - 1] === true, JSON.stringify(sentFull));
     calls.length = 0;
-    pending = runTool({ tool: "delete_path", arguments: { path: "src" } });
-    await waitFor(() => !d.getElementById("rs-approve").hidden, 2000, "approval modal (esc)");
-    d.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
-    out = await pending;
-    ok("walk C5: Escape = Deny for delete_path", /declined/.test(out) && calls.length === 0, out);
+    out = await runTool({ tool: "run_command", arguments: { command: "whoami" } });
+    ok("walk C5: Full PC → run_command reaches the bridge exactly once, no modal", calls.length === 1 && calls[0].name === "run_command" && /harness-user/.test(out) && d.getElementById("rs-approve").hidden, out);
+    w.__rsSetPermMode("sandbox"); await sleep(60);
+    ok("walk C5: back to Sandbox only via the hook → rs-set-full false pushed", w.__rsPermMode() === "sandbox" && sentFull[sentFull.length - 1] === false, JSON.stringify(sentFull));
 
     // C6 bridge offline → explicit error, no infinite wait
     bridgeUp = false; calls.length = 0;
@@ -285,24 +293,22 @@ if (!JSDOM) { console.log("skip jsdom walk (jsdom not installed)"); finish(); }
     bridgeUp = true;
     ok("walk C6: bridge offline → immediate ERROR text (no hang), not a success", (Date.now() - t0) < 5000 && /ERROR|offline|bridge/i.test(out) && !/Created/.test(out), out);
 
-    // C7 full access: no prompt for run_command (explicit opt-in) — and Ask mode prompts for write_file
+    // C7 the two Access cards: Full PC card switches (and tells total-core), Sandbox card switches back; no Ask card exists
     const menuEl = d.getElementById("rs-menu");
     const fullCard = menuEl && menuEl.querySelector('.rs-work-card[data-perm="full"]');
+    sentFull.length = 0;
     if (fullCard) { fullCard.click(); await sleep(60); }
-    ok("walk C7: Full card switches the access mode", w.__rsPermMode() === "full", w.__rsPermMode());
+    ok("walk C7: Full PC card switches the access mode and pushes rs-set-full true", w.__rsPermMode() === "full" && sentFull[sentFull.length - 1] === true, w.__rsPermMode() + " " + JSON.stringify(sentFull));
     calls.length = 0;
     out = await runTool({ tool: "run_command", arguments: { command: "dir" } });
-    ok("walk C7: Full → run_command runs without a prompt", calls.length === 1 && d.getElementById("rs-approve").hidden && /exit 0/.test(out), out);
-    const askCard = d.getElementById("rs-menu").querySelector('.rs-work-card[data-perm="ask"]');
-    if (askCard) { askCard.click(); await sleep(60); }
-    calls.length = 0;
-    pending = runTool({ tool: "write_file", arguments: { path: "b.txt", content: "2" } });
-    await waitFor(() => !d.getElementById("rs-approve").hidden, 2000, "approval modal (ask write)");
-    d.getElementById("rs-approve-allow").click();
-    out = await pending;
-    ok("walk C7: Ask → write_file prompts, Allow → one bridge call", w.__rsPermMode() === "ask" && calls.length === 1 && /Created b\.txt/.test(out), out);
+    ok("walk C7: Full PC → run_command runs without a prompt", calls.length === 1 && d.getElementById("rs-approve").hidden && /exit 0/.test(out), out);
+    ok("walk C7: no Ask card is rendered any more", !d.getElementById("rs-menu").querySelector('.rs-work-card[data-perm="ask"]') && d.getElementById("rs-menu").querySelectorAll(".rs-access-row .rs-work-card").length === 2);
     const sandboxCard = d.getElementById("rs-menu").querySelector('.rs-work-card[data-perm="sandbox"]');
     if (sandboxCard) { sandboxCard.click(); await sleep(60); }
+    ok("walk C7: Sandbox only card switches back and pushes rs-set-full false", w.__rsPermMode() === "sandbox" && sentFull[sentFull.length - 1] === false, JSON.stringify(sentFull));
+    calls.length = 0;
+    out = await runTool({ tool: "run_command", arguments: { command: "dir" } });
+    ok("walk C7: back in Sandbox → refused again, no bridge call", /^ERROR ACCESS_SANDBOX/.test(out) && calls.length === 0, out);
 
     ok("walk: no uncaught page errors during the walk", pageErrors.length === 0, pageErrors.join(" | "));
   } catch (e) {

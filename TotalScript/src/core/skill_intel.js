@@ -18,7 +18,7 @@
 // DOM-free at top level (loaded in node by the tests).
 (function (root) {
   "use strict";
-  const VERSION = "1.99.4";
+  const VERSION = "1.99.5";
 
   // ───────────────────────── expert library ─────────────────────────
   // Fields: id, title, env (roblox | blender | general), summary (one line
