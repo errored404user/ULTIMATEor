@@ -44,7 +44,7 @@ const real = [...src.matchAll(/^  B\.([a-z0-9_]+) = function/gm)].map((m) => m[1
 ok("6 real builders remain in studio_100.js (the 7th, cutscene_camera_track, moved to studio_cutscene.js in 1.77.0)", real.length === 6, real.join(","));
 ok("the real builders still produce Luau that creates / changes something", real.every((n) => { const b = S.buildLuau(n, {}); return b && b.code && /Instance\.new|AssemblyLinearVelocity|\.CFrame\s*=/.test(b.code); }));
 ok("real builders are still visible", real.every((n) => byName.get(n) && !byName.get(n).hidden));
-ok("visible catalogue shrank below 600 (fewer tokens in every prompt) and stays above 550", (() => { const v = S.SKILL_COMMANDS.filter((c) => !c.hidden).length; return v < 600 && v > 550; })(), S.SKILL_COMMANDS.filter((c) => !c.hidden).length);
+ok("visible catalogue stays within budget: 597 after the 1.87.0 stub purge + 3 bench commands (1.99.6) = 600, never above 600", (() => { const v = S.SKILL_COMMANDS.filter((c) => !c.hidden).length; return v <= 600 && v > 550; })(), S.SKILL_COMMANDS.filter((c) => !c.hidden).length);
 
 // No NOT_IMPLEMENTED name may satisfy an evidence gate or be recommended by the prompt.
 const mainSrc = fs.readFileSync("src/core/main.js", "utf8"), reasoningSrc = fs.readFileSync("src/core/reasoning.js", "utf8"), configSrc = fs.readFileSync("src/core/config.js", "utf8");

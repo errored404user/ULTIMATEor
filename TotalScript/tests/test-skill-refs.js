@@ -33,7 +33,7 @@ const src = read("src/core/skill_refs.js"), intel = read("src/core/skill_intel.j
 
 // ── A. module shape ────────────────────────────────────────────────────────
 ok("A1 module exports (CommonJS + window.TotalSkillRefs) with the same api", R && window.TotalSkillRefs && ["VERSION", "DOCS_BASE", "REFS", "EXAMPLES", "refs", "examples", "render", "ids", "all"].every((k) => k in R && k in window.TotalSkillRefs));
-ok("A2 VERSION 1.99.5, DOCS_BASE is the Creator Docs root", R.VERSION === "1.99.5" && R.DOCS_BASE === "https://create.roblox.com/docs/");
+ok("A2 VERSION 1.99.6, DOCS_BASE is the Creator Docs root", R.VERSION === "1.99.6" && R.DOCS_BASE === "https://create.roblox.com/docs/");
 ok("A3 module is DOM-free at top level (no document access)", !/\bdocument\./.test(src.replace(/\/\/[^\n]*/g, "").replace(/"[^"\n]*"/g, '""')));
 
 // ── B. REFS per expert ─────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ ok("E5 skill output stays within the chat budget (every expert ≤ 9000 chars)",
 ok("E6 the `skill` answer path (answer({name})) carries the references too", SI.answer({ name: "animation" }).includes("REFERENCES (official documentation"));
 
 // ── F. mode bias (Animator mode pins the animation expert) ─────────────────
-ok("F1 MODE_BIAS.animate boosts animation / cinematics / sfx and nothing else; no bias for creation / blender", SI.MODE_BIAS && JSON.stringify(SI.MODE_BIAS.animate) === JSON.stringify({ animation: 6, cinematics: 3, sfx: 1 }) && !SI.MODE_BIAS.creation && !SI.MODE_BIAS.blender);
+ok("F1 MODE_BIAS.animate boosts animation / cinematics / sfx and nothing else; 1.99.6 adds the Blender pair for blender mode; still no bias for creation", SI.MODE_BIAS && JSON.stringify(SI.MODE_BIAS.animate) === JSON.stringify({ animation: 6, cinematics: 3, sfx: 1 }) && !SI.MODE_BIAS.creation && JSON.stringify(SI.MODE_BIAS.blender) === JSON.stringify({ blender_modeling: 6, blender_to_roblox: 3 }));
 {
   const txt = "make the sword swing feel heavier and add a hit sound";
   const plain = SI.select(SI.analyze(txt, { engine: "roblox" }), { max: 2 });
@@ -96,5 +96,19 @@ ok("G1 manifest: skill_refs.js loads before gui_standard.js and skill_intel.js i
 ok("G2 codecraft.html loads skill_refs.js before gui_standard.js and skill_intel.js", (() => { const h = read("codecraft.html"); return h.indexOf('src="src/core/skill_refs.js"') > 0 && h.indexOf('src="src/core/skill_refs.js"') < h.indexOf('src="src/core/gui_standard.js"') && h.indexOf('src="src/core/skill_refs.js"') < h.indexOf('src="src/core/skill_intel.js"'); })());
 ok("G3 skill_intel never executes example text (no eval / Function / loadstring on the refs)", !/\b(eval|new Function|loadstring)\s*\(/.test(intel));
 ok("G4 the online checker exists and targets the Roblox/creator-docs repository", fs.existsSync(path.join(ROOT, "tools/verify_doc_refs.js")) && read("tools/verify_doc_refs.js").includes("Roblox/creator-docs"));
+
+const mainSrc = read("src/core/main.js");
+// ── H. 1.99.6: tagged examples, query ranking, `example:` picker, context pass-through ──
+ok(`H1 28 examples over 13 experts; every example carries ≥ 2 lowercase tags (${allEx.length})`, allEx.length === 28 && new Set(allEx.map((x) => x.id)).size === 13 && allEx.every((x) => Array.isArray(x.tags) && x.tags.length >= 2 && x.tags.every((t) => /^[a-z0-9][a-z0-9 ._-]*$/.test(t))));
+ok("H2 exampleRank is exported, pure and deterministic (same query → same order; no query → library order)", typeof R.exampleRank === "function" && JSON.stringify(R.exampleRank("ui_ux", "hud on phones").map((r) => r.example.title)) === JSON.stringify(R.exampleRank("ui_ux", "hud on phones").map((r) => r.example.title)) && R.exampleRank("ui_ux", "").map((r) => r.order).join() === R.examples("ui_ux").map((_, i) => i).join() && R.exampleRank("ui_ux", "").every((r) => r.score === 0));
+ok("H3 ui_ux 'the hud looks bad on phones' → Responsive HUD first with explained hits", (() => { const r = R.exampleRank("ui_ux", "the hud looks bad on phones")[0]; return /Responsive HUD/i.test(r.example.title) && r.score > 0 && r.hits.length >= 1; })());
+ok("H4 data 'save coins in leaderstats and autosave' → leaderstats + autosave example first, DataStore wrapper second", (() => { const r = R.exampleRank("data_persistence", "save coins in leaderstats and autosave"); return /leaderstats/i.test(r[0].example.title) && /DataStore/i.test(r[1].example.title); })());
+ok("H5 render with a query prints at most 2 examples, marks [matches: …] and points at the rest via skill {name, example}", (() => { const t = R.render("ui_ux", { query: "the hud looks bad on phones" }); const shown = (t.match(/^--- /gm) || []).length; return shown === 2 && /ordered by relevance to the request/.test(t) && /\[matches: /.test(t) && /\(further example available: .* - skill \{name: "ui_ux", example: "[a-z0-9 _-]+"\}\)/.test(t); })());
+ok("H6 render(id, { example: tag }) prints exactly that one example (tag match, then title substring)", (() => { const a = R.render("data_persistence", { example: "leaderstats" }); const b = R.render("ui_ux", { example: "window" }); return (a.match(/^--- /gm) || []).length === 1 && /^--- [^\n]*leaderstats/im.test(a) && (b.match(/^--- /gm) || []).length === 1 && /window/i.test(b.split("\n")[1]); })());
+ok("H7 render without a query keeps library order and the default cap of 2 (budget still trims)", (() => { const t = R.render("animation"); const titles = (t.match(/^--- (.*) ---$/gm) || []).map((x) => x.replace(/^--- | ---$/g, "")); return titles.length === 2 && titles[0] === R.examples("animation")[0].title && !/ordered by relevance/.test(t); })());
+ok("H8 skill_intel.answer passes the request (query / task / for / context / request ≤ 600 chars) and `example` through to the renderer", /const ropts = \{/.test(intel) && /a\.example/.test(intel) && /slice\(0, 600\)/.test(intel) && /referencesText\(x\.id, \{ query: opts\.query, example: opts\.example, budget: 5000 \}\)|referencesText\(x\.id, \{[^}]*query[^}]*example[^}]*budget: 5000/.test(intel));
+ok("H9 answer({name:'data_persistence', task:'save coins in leaderstats and autosave'}) puts the leaderstats example first; a different task re-orders", (() => { const a = SI.answer({ name: "data_persistence", task: "save coins in leaderstats and autosave" }); const b = SI.answer({ name: "data_persistence", task: "wrap every datastore call with retry" }); return typeof a === "string" && a.indexOf("--- leaderstats") < a.indexOf("--- DataStore wrapper") && /\[matches: /.test(a) && b.indexOf("DataStore wrapper") < b.indexOf("leaderstats + autosave"); })());
+ok("H10 main.js skill handler forwards the current request as context when the AI gives none", /const a2 = Object\.assign\(\{\}, args \|\| \{\}\);/.test(mainSrc) && /a2\.context = ctxText\.slice\(0, 600\)/.test(mainSrc) && /TotalSkillIntel\.answer\(a2\)/.test(mainSrc));
+ok("H11 every expert text (with the extra examples) stays ≤ 9000 chars", SI.IDS.every((id) => SI.expertText(id).length <= 9000), SI.IDS.map((id) => id + ":" + SI.expertText(id).length).join(" "));
 
 console.log(`\n${pass} passed, ${fail} failed`);

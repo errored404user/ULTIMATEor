@@ -66,7 +66,7 @@ ok("signature budget is spent in two passes (fair share per family, then the rem
 const gateBlock = cut(main, "  const MODE_GATES = {", "  // 1.38.0: skill programs that legitimately run long");
 const gctx = { window: { __rsWorkMode: () => "visualizer" }, normalizeWorkMode: norm, bareToolName: (n) => String(n).split("/").pop(), WORK_MODES: { creation: { badge: "CREATION" } } };
 vm.createContext(gctx); vm.runInContext(gateBlock + "\nthis.modeGateNudge=modeGateNudge;this.MODE_GATES=MODE_GATES;", gctx);
-ok("MODE_GATES.creation lists the four gates (scripts, look, motion + 1.47.0 quality)", Array.isArray(gctx.MODE_GATES.creation) && gctx.MODE_GATES.creation.map((g) => g.id).join() === "scripts,look,motion,quality" && gctx.MODE_GATES.creation.every((g) => g.did && typeof g.did.test === "function" && g.proof && typeof g.proof.test === "function" && typeof g.nudge === "string"));
+ok("MODE_GATES.creation lists the five gates (scripts, look, motion + 1.47.0 quality + 1.99.6 systems)", Array.isArray(gctx.MODE_GATES.creation) && gctx.MODE_GATES.creation.map((g) => g.id).join() === "scripts,look,motion,quality,systems" && gctx.MODE_GATES.creation.every((g) => g.did && typeof g.did.test === "function" && g.proof && typeof g.proof.test === "function" && typeof g.nudge === "string"));
 const G = (names) => gctx.modeGateNudge(new Set(names));
 ok("scripts gate fires alone", /━━━ CREATION GATE \(System note from TotalScript, not the user\) ━━━\n- SCRIPTS:/.test(G(["script_create", "multi_edit"])) && !/LOOK:|MOTION:/.test(G(["script_create"])));
 ok("look gate fires alone", /^━━━ CREATION GATE[^\n]*\n- LOOK:/.test(G(["lighting_set_preset", "fx_create_vfx"])) && !/SCRIPTS:|MOTION:/.test(G(["lighting_set_preset"])));
@@ -129,8 +129,8 @@ ok("overlay.css: creation badge / card / row, no legacy selectors", css.includes
 
 // ── G. bookkeeping ──
 const mf = JSON.parse(read("manifest.json"));
-ok("manifest 1.99.5", mf.version === "1.99.5", mf.version);
-ok("plugin + crate pinned at 1.99.5", read("plugin/TotalScript.lua").includes('local VERSION = "1.99.5"') && read("plugin/TotalScript.lua").includes("(TotalScript 1.99.5)") && /^version = "1\.99\.5"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "1\.99\.5"/.test(read("agent/Cargo.lock")) && readme.includes("`total-agent` 1.99.5"));
+ok("manifest 1.99.6", mf.version === "1.99.6", mf.version);
+ok("plugin + crate pinned at 1.99.6", read("plugin/TotalScript.lua").includes('local VERSION = "1.99.6"') && read("plugin/TotalScript.lua").includes("(TotalScript 1.99.6)") && /^version = "1\.99\.6"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "1\.99\.6"/.test(read("agent/Cargo.lock")) && readme.includes("`total-agent` 1.99.6"));
 ok("README changelog 1.39.0 + mode paragraph + test listed", readme.includes("**1.39.0 — Creation: one work mode.**") && readme.includes("tests/test-v139.js") && readme.includes("there is one built-in mode, **Totality** (named Creation until 1.73; stored id `creation`)") /* 1.75.0 rename */);
 ok("tests pinned to the old ids were updated (no test expects three built-in modes)", !read("tests/test-work-modes.js").includes('for (const wm of ["ultimate", "visualizer", "animator"])') && !read("tests/test-v138.js").includes('WORK_MODE_IDS: ["ultimate", "visualizer", "animator"]') && !read("tests/test-public-skills.js").includes('const WORK_MODES = ["ultimate", "visualizer", "animator"]'));
 

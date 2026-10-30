@@ -49,7 +49,7 @@ ok("css: no `#rs-cards-panel .` selectors (keeps the §15 specificity contract o
 
 const readme = read("README.md");
 ok("README: 1.73.0 entry + Templates window section", readme.includes("**1.73.0 — Templates window: Library, Activity and Public Skills in one centred window, with an easy Template Creator.**") && readme.includes("## Templates window — Library, Activity, Public Skills, in the middle of the screen"));
-ok("version pins 1.99.5 (manifest / crate / plugin)", manifest.version === "1.99.5" && /^version = "1\.99\.5"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.99.5"'));
+ok("version pins 1.99.6 (manifest / crate / plugin)", manifest.version === "1.99.6" && /^version = "1\.99\.6"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.99.6"'));
 
 // ── pure helpers (templatecreator.js in a bare sandbox) ──
 const sandbox = { window: {}, console, setTimeout, clearTimeout };
