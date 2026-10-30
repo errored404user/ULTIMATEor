@@ -17,7 +17,7 @@ const isCodeCraftTab = (url) => !!(url && CODECRAFT_PAGE_URL && url.startsWith(C
 const isSupportedTab = (url) => !!url && (SUPPORTED_HOSTS.some((h) => url.includes(h)) || isCodeCraftTab(url));
 const ENGINE_KEY = "rs-engine"; // "roblox" | "local"
 const ENGINES = ["roblox", "local"];
-const WORK_MODES = ["creation", "blender"]; // 1.95.0: + Blender (Blender-first 3D)
+const WORK_MODES = ["creation", "blender", "animate"]; // 1.95.0: + Blender (Blender-first 3D); 1.99.4: + Animator (id "animate")
 const BRAND_LOGO_RE = /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i;
 function sanitizeBrandLite(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
@@ -34,6 +34,7 @@ const normalizeWorkMode = (id) => (WORK_MODES.includes(id) ? id : (LEGACY_WORK_M
 const WORK_PRESETS = {
   creation: { thinking: "max", extra: false },
   blender: { thinking: "max", extra: false },
+  animate: { thinking: "max", extra: false },
 };
 
 const PERM_MODES = ["sandbox", "ask", "full"];

@@ -33,7 +33,7 @@ const RS = globalThis.__RS;
 
 // ── A. config.js profile ───────────────────────────────────────────────────
 const full = RS.workModePrompt("blender"), tight = RS.workModePrompt("blender", { tight: true });
-ok("A1 WORK_MODE_PROMPTS has creation + blender; normalizeModeId keeps blender and still folds unknown ids to creation", Object.keys(RS.WORK_MODE_PROMPTS).join() === "creation,blender" && RS.workModeLabel("blender") === "Blender" && RS.workModeLabel("ultimate") === "Totality" && RS.workModePrompt("nope") === RS.workModePrompt("creation"));
+ok("A1 WORK_MODE_PROMPTS has creation + blender; normalizeModeId keeps blender and still folds unknown ids to creation", Object.keys(RS.WORK_MODE_PROMPTS).join() === "creation,blender,animate" && RS.workModeLabel("blender") === "Blender" && RS.workModeLabel("ultimate") === "Totality" && RS.workModePrompt("nope") === RS.workModePrompt("creation"));
 ok("A2 full profile: shared loop first, own heading, FIRST MOVE get_scene_info, mandate + proof + never list, playbooks appended", full.startsWith("━━━ OPERATING LOOP (every work mode) ━━━") && full.includes("━━━ BLENDER WORK MODE (Blender-first") && /FIRST MOVE: get_scene_info/.test(full) && /ASSET MANDATE/.test(full) && /PROVE IT \(structure, then pixels, then Studio\)/.test(full) && /\nNEVER: start by dropping primitives/.test(full) && full.includes("PLAYBOOKS (Blender mode"));
 ok("A3 tight profile: own heading, pipeline in one paragraph, no playbooks", tight.startsWith("━━━ OPERATING LOOP ━━━") && tight.includes("━━━ BLENDER WORK MODE (Blender-first 3D artist; Studio is the destination) ━━━") && /PIPELINE: blender_asset_plan/.test(tight) && !tight.includes("PLAYBOOKS ("));
 ok(`A4 budgets: full ${full.length} in (9000, 15000), tight ${tight.length} in (1800, 3000)`, full.length > 9000 && full.length < 15000 && tight.length > 1800 && tight.length < 3000);
@@ -85,7 +85,7 @@ const modesBlock = cut("  const WORK_MODES = {", "  const WORK_MODE_IDS");
 const mctx = { window: null, console }; mctx.window = mctx; vm.createContext(mctx);
 vm.runInContext(modesBlock + "\nthis.WORK_MODES = WORK_MODES;", mctx);
 const B = mctx.WORK_MODES.blender;
-ok("B1 WORK_MODES = creation + blender; blender card copy, badge, toast", Object.keys(mctx.WORK_MODES).join() === "creation,blender" && B.name === "Blender" && B.badge === "BLENDER" && B.short === "Blender" && /Blender-first 3D: plan → build → validate → inspect → texture → render → send to Studio, verified/.test(B.sub) && /Blender builds the geometry, Studio receives it/.test(B.toast) && /Connect Blender/.test(B.note));
+ok("B1 WORK_MODES = creation + blender; blender card copy, badge, toast", Object.keys(mctx.WORK_MODES).join() === "creation,blender,animate" && B.name === "Blender" && B.badge === "BLENDER" && B.short === "Blender" && /Blender-first 3D: plan → build → validate → inspect → texture → render → send to Studio, verified/.test(B.sub) && /Blender builds the geometry, Studio receives it/.test(B.toast) && /Connect Blender/.test(B.note));
 ok("B2 eight quick starts, every one a Blender job that ends in verification", B.starters.length === 8 && ["Hero sword", "Modular dungeon kit", "Island terrain set", "Sci-fi crate", "Vehicle blockout", "Product render", "Bake + export", "Fix my import"].every((l) => B.starters.some((s) => s.label === l)) && B.starters.every((s) => /Blender|mesh_import_verify|turntable/i.test(s.prompt) && /verif|turntable|Clear the rig|resend|Do not upload/i.test(s.prompt)));
 ok("B3 focus regex: Blender tools + the Studio read-back / dressing commands, not scripting", ["blender_asset_build", "get_scene_info", "execute_blender_code", "mesh_import_verify", "mesh_decimate", "uv_unwrap", "model_report", "quality_audit", "lighting_set_preset", "instance_move", "rotate_model", "total_screenshot"].every((n) => B.focus.test(n)) && ["script_create", "blueprint_install", "animation_create", "fx_create_vfx", "material_x"].every((n) => !B.focus.test(n)));
 ok("B4 normaliser keeps blender and folds legacy ids to creation (source)", main.includes('const normalizeWorkMode = (id) => (WORK_MODE_IDS.includes(id) ? id : "creation");') && main.includes("WORK_MODES.blender = {"));
@@ -93,7 +93,7 @@ ok("B4 normaliser keeps blender and folds legacy ids to creation (source)", main
 {
   const fnSrc = cut("  function blenderModeTools(requested) {", "  // UNIVERSAL commands:");
   const tools = [{ name: "get_studio_state" }, { name: "get_scene_info", server: "blender" }, { name: "blender_asset_build", server: "blender" }, { name: "blender_hidden", server: "blender", hidden: true }];
-  const c = { window: { __rsWorkMode: () => "blender" }, A: { toolList: tools }, normalizeWorkMode: (id) => (["creation", "blender"].includes(id) ? id : "creation") };
+  const c = { window: { __rsWorkMode: () => "blender" }, A: { toolList: tools }, normalizeWorkMode: (id) => (["creation", "blender", "animate"].includes(id) ? id : "creation") };
   vm.createContext(c); vm.runInContext(fnSrc + "\nthis.blenderModeTools = blenderModeTools;", c);
   const inMode = c.blenderModeTools("roblox").map((t) => t.name);
   c.window.__rsWorkMode = () => "creation";
@@ -108,10 +108,10 @@ ok("B4 normaliser keeps blender and folds legacy ids to creation (source)", main
   const bundle = manifest.content_scripts.find((c) => c.js && c.js.includes("src/core/skills/studio_skills.js"));
   for (const f of bundle.js.filter((f) => /src\/core\/(skills\/|studio_bridge\.js|animlib)/.test(f))) vm.runInThisContext(read(f), { filename: f });
   const block = cut("  const UNIVERSAL_COMMANDS = [", "  const UNIVERSAL_SET") + cut("  const PRIORITY_COMMAND_RE", "  // ── Project Index map cache (1.32) ──") + "\n" + modesBlock;
-  const ctx = { window: null, console, RS: { TOOL_NOTES: {} }, bareToolName: (n) => String(n).split("/").pop(), RobloxScriptSkills, RSAnim, PublicSkills: undefined, TotalTaskList: undefined, WORK_MODE_IDS: ["creation", "blender"] };
+  const ctx = { window: null, console, RS: { TOOL_NOTES: {} }, bareToolName: (n) => String(n).split("/").pop(), RobloxScriptSkills, RSAnim, PublicSkills: undefined, TotalTaskList: undefined, WORK_MODE_IDS: ["creation", "blender", "animate"] };
   ctx.window = ctx; vm.createContext(ctx);
   vm.runInContext(block + "\nthis.buildCatalogue=buildCatalogue;this.commandFamily=commandFamily;this.COMMAND_FAMILIES=COMMAND_FAMILIES;this.FAMILY_ORDER=FAMILY_ORDER;", ctx);
-  ok("B7 COMMAND_FAMILIES: blender family first, OTHER last; both orders hold every family exactly once", ctx.COMMAND_FAMILIES[0].id === "blender" && ctx.COMMAND_FAMILIES[ctx.COMMAND_FAMILIES.length - 1].id === "other" && ["creation", "blender"].every((m) => new Set(ctx.FAMILY_ORDER[m]).size === ctx.COMMAND_FAMILIES.length && ctx.COMMAND_FAMILIES.every((f) => ctx.FAMILY_ORDER[m].includes(f.id))) && ctx.FAMILY_ORDER.blender[0] === "blender" && ctx.FAMILY_ORDER.creation[0] === "script");
+  ok("B7 COMMAND_FAMILIES: blender family first, OTHER last; both orders hold every family exactly once", ctx.COMMAND_FAMILIES[0].id === "blender" && ctx.COMMAND_FAMILIES[ctx.COMMAND_FAMILIES.length - 1].id === "other" && ["creation", "blender", "animate"].every((m) => new Set(ctx.FAMILY_ORDER[m]).size === ctx.COMMAND_FAMILIES.length && ctx.COMMAND_FAMILIES.every((f) => ctx.FAMILY_ORDER[m].includes(f.id))) && ctx.FAMILY_ORDER.blender[0] === "blender" && ctx.FAMILY_ORDER.creation[0] === "script");
   ok("B8 commandFamily routes Blender tools + mesh_import_verify to BLENDER and leaves Studio families alone", ["blender_asset_build", "get_scene_info", "execute_blender_code", "get_viewport_screenshot", "mesh_import_verify"].every((n) => ctx.commandFamily(n) === "blender") && ctx.commandFamily("script_create") === "script" && ctx.commandFamily("model_build") === "build" && ctx.commandFamily("meshpart_create") === "build" && ctx.commandFamily("get_studio_state") !== "blender");
   const native = [
     { name: "execute_luau", inputSchema: { type: "object", required: ["code"], properties: { code: { type: "string" } } } },
@@ -122,7 +122,7 @@ ok("B4 normaliser keeps blender and folds legacy ids to creation (source)", main
     { name: "blender_send_to_studio", server: "blender", inputSchema: { type: "object", properties: { objects: { type: "array" }, scale: { type: "number" } } } },
   ];
   const cats = {};
-  for (const mode of ["creation", "blender"]) {
+  for (const mode of ["creation", "blender", "animate"]) {
     ctx.window.__rsWorkMode = () => mode;
     cats[mode] = ctx.buildCatalogue({ toolName: "list_commands", requested: "roblox", heading: "━━━ COMMAND CATALOGUE (embedded) ━━━", nativeTools: native, virtualLines: [...RSAnim.describeCommands(), ...RobloxScriptSkills.describeCommands()], webLines: [], focusBlock: `━━━ ${mode.toUpperCase()} WORK MODE FOCUS — x ━━━\n\n`, focusNames: [], compact: true, limit: 20000, lineLimit: 420, modeId: mode });
   }
@@ -133,7 +133,7 @@ ok("B4 normaliser keeps blender and folds legacy ids to creation (source)", main
 // evidence gates
 {
   const gateBlock = cut("  const MODE_GATES = {", "  // Returns the gate nudge for the active mode") + cut("  function modeGateNudge(runTools) {", "  // 1.38.0: skill programs that legitimately run long");
-  const g = { window: { __rsWorkMode: () => "blender" }, normalizeWorkMode: (id) => (["creation", "blender"].includes(id) ? id : "creation"), bareToolName: (n) => String(n).split("/").pop(), WORK_MODES: { creation: { badge: "TOTALITY" }, blender: { badge: "BLENDER" } } };
+  const g = { window: { __rsWorkMode: () => "blender" }, normalizeWorkMode: (id) => (["creation", "blender", "animate"].includes(id) ? id : "creation"), bareToolName: (n) => String(n).split("/").pop(), WORK_MODES: { creation: { badge: "TOTALITY" }, blender: { badge: "BLENDER" } } };
   vm.createContext(g); vm.runInContext(gateBlock + "\nthis.modeGateNudge=modeGateNudge;this.MODE_GATES=MODE_GATES;", g);
   ok("B11 MODE_GATES.blender = asset + import + shared scripts + look (creation gates untouched: scripts / look / motion / quality)", g.MODE_GATES.blender.map((x) => x.id).join() === "asset,import,scripts,look" && g.MODE_GATES.creation.map((x) => x.id).join() === "scripts,look,motion,quality" && g.MODE_GATES.blender[2] === g.MODE_GATES.creation[0]);
   ok("B12 asset gate fires on Blender geometry without validate / inspect", /BLENDER GATE[\s\S]*- ASSET:/.test(g.modeGateNudge(new Set(["get_scene_info", "blender_asset_build"]))) && /- ASSET:/.test(g.modeGateNudge(new Set(["blender_add_cube", "blender_bevel"]))) && /- ASSET:/.test(g.modeGateNudge(new Set(["execute_blender_code"]))));
@@ -148,7 +148,7 @@ ok("B4 normaliser keeps blender and folds legacy ids to creation (source)", main
 // ── C. UI ──────────────────────────────────────────────────────────────────
 ok("C1 overlay.css: Blender badge + card accent + selected card (orange), Totality rules untouched", css.includes('#rs-work-badge[data-work="blender"]') && css.includes('.rs-work-modes .rs-work-card[data-work="blender"]::before') && css.includes('html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="blender"].on {') && css.includes('#rs-work-badge[data-work="creation"]   { background: linear-gradient(135deg, #9ff3ff 0%, #22d3ee 45%, #0e7490 100%);'));
 ok("C2 settings tray renders one card per built-in mode from WORK_MODE_IDS (data-driven, no new markup)", main.includes("${WORK_MODE_IDS.map((id) => `<button type=\"button\" class=\"rs-work-card ${workMode===id&&!publicMode()?\"on\":\"\"}\" data-work=\"${id}\"") && main.includes('class="rs-work-row rs-work-creation rs-work-modes"'));
-ok("C3 popup: WORK_MODES + preset + card + orange selected style + two-column grid", popup.includes('const WORK_MODES = ["creation", "blender"];') && /blender: \{ thinking: "max", extra: false \}/.test(popup) && popupHtml.includes('data-work="blender" id="work-blender"') && popupHtml.includes("#work-blender.on{background:linear-gradient(135deg,#ffd9a8 0%,#f5792a 45%,#a63d12 100%)") && popupHtml.includes('<div class="work work-modes">') && popupHtml.includes(".work.work-modes{grid-template-columns:1fr 1fr}"));
+ok("C3 popup: WORK_MODES + preset + card + orange selected style + three-column grid (1.99.4)", popup.includes('const WORK_MODES = ["creation", "blender", "animate"];') && /blender: \{ thinking: "max", extra: false \}/.test(popup) && popupHtml.includes('data-work="blender" id="work-blender"') && popupHtml.includes("#work-blender.on{background:linear-gradient(135deg,#ffd9a8 0%,#f5792a 45%,#a63d12 100%)") && popupHtml.includes('<div class="work work-modes">') && popupHtml.includes(".work.work-modes{grid-template-columns:1fr 1fr 1fr}"));
 {
   const pctx = { console }; vm.createContext(pctx);
   vm.runInContext(popup.slice(popup.indexOf("const WORK_MODES = ["), popup.indexOf("const WORK_PRESETS")) + "\nthis.normalizeWorkMode = normalizeWorkMode;", pctx);

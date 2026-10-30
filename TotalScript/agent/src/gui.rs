@@ -3450,7 +3450,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
         summary: "This app is one of three parts. The browser extension (TotalScript bar on the AI site) owns work modes, skills, Blender and the Studio plugin link; the Studio plugin (plugin/TotalScript.lua) handles animation, GUI and screenshot work inside Studio; this app is the bridge and the local engine.",
         steps: &[
             "Blender connects through the extension, not this app: press Start MCP Server in Blender (N panel → MCP for Blender), then Settings → MCP servers → Connect Blender on the TotalScript bar. The Blender work mode makes the AI plan, build, validate, render and send assets to Studio from there.",
-            "Work modes (Totality, Blender), skills, templates, prompt enhancer, Paint and Video are in the extension's Settings and bar — this app does not change them.",
+            "Work modes (Totality, Blender, Animator), skills, templates, prompt enhancer, Paint and Video are in the extension's Settings and bar — this app does not change them.",
             "The Studio plugin: this app copies plugin/TotalScript.lua into Studio's local Plugins folder; restart Studio once, open Plugins → TotalScript and click Allow on the HTTP prompt. The plugin then long-polls this bridge for jobs.",
         ],
     },

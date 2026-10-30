@@ -102,7 +102,7 @@ sess.messages.length = 0;
   ok("popup names the page, treats it as a supported tab and has a launcher", /isCodeCraftTab/.test(popup) && /"CodeCraft API"/.test(popup) && /getElementById\("codecraft"\)/.test(popup) && /id="codecraft"/.test(popupHtml));
   ok("overlay skin for the inline bar", /#rs-bar\.rs-bar-inline\.rs-prov-codecraft \{/.test(css) && /html\.rs-light #rs-bar\.rs-bar-inline\.rs-prov-codecraft/.test(css));
   ok("the key is only ever sent to codecraftapi.com", (() => { const src = read("src/providers/codecraft.js"); const fetches = [...src.matchAll(/fetch\(([^,)]+)/g)].map((m) => m[1]); return fetches.length >= 2 && fetches.every((f) => /API_BASE/.test(f)); })());
-  ok("manifest version 1.99.3", manifest.version === "1.99.3");
+  ok("manifest version 1.99.4", manifest.version === "1.99.4");
 
   console.log(`test-codecraft: ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

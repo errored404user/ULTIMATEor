@@ -18,7 +18,7 @@
 // DOM-free at top level (loaded in node by the tests).
 (function (root) {
   "use strict";
-  const VERSION = "1.99.3";
+  const VERSION = "1.99.4";
 
   // ───────────────────────── expert library ─────────────────────────
   // Fields: id, title, env (roblox | blender | general), summary (one line
@@ -491,7 +491,7 @@
     const ambiguous = words > 0 && words <= 6 && !paths.length && !numbers.length && !quotes.length && intent === "implement";
     return {
       v: 1, text: raw.slice(0, 4000), words, env, intent, complexity, ambiguous,
-      domains: domainScores(t, env, intent),
+      domains: domainScores(t, env, intent, ctx.mode),
       constraints: { exclusions, numbers, quotes, paths, files, tech, formats, langHint, codeBlocks: codeBlocks.length },
       codeBlocks,
       taskCategories: task && Array.isArray(task.categories) ? task.categories.slice() : [],
@@ -503,10 +503,16 @@
   // domainScores(t, env, intent) → [{id, score, why[]}] for every expert
   // (unsorted; select() ranks). Phrases count double, "avoid" words subtract,
   // env mismatch is a strong penalty, intent affinity a bonus.
-  function domainScores(t, env, intent) {
+  // 1.99.4: the active work mode is an explicit, explainable bias (listed in
+  // `why` as "mode:<id>") - the Animator mode pins the animation specialist
+  // and lets cinematics / sfx ride along; nothing is subtracted from others.
+  const MODE_BIAS = { animate: { animation: 6, cinematics: 3, sfx: 1 } };
+  function domainScores(t, env, intent, mode) {
     const padded = " " + t + " ";
+    const bias = MODE_BIAS[mode] || null;
     return E.map((x) => {
       let score = 0; const why = [];
+      if (bias && bias[x.id] && (env === "roblox" || env === "general")) { score += bias[x.id]; why.push("mode:" + mode); }
       for (const [word, w] of Object.entries(x.triggers)) {
         const phrase = word.includes(" ");
         const re = new RegExp("(^|[^a-z0-9])" + word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+") + "(?=$|[^a-z0-9])", "i");
@@ -599,8 +605,22 @@
     const cmds = commandsOf(x);
     if (cmds.length) L.push("", `COMMANDS THIS SKILL USES (all exist in this build): ${cmds.join(", ")}`);
     if (x.complements && x.complements.length) L.push(`RELATED SKILLS: ${x.complements.map((c) => `skill {name: "${c}"}`).join(", ")}`);
+    // 1.99.4: references - tested Luau patterns to copy the shape of, and the
+    // official docs pages behind the procedure (skill_refs.js, loaded before us).
+    const refText = referencesText(x.id);
+    if (refText) L.push("", refText);
     L.push("", "This skill is guidance only: nothing ran. Commands, permissions and validation stay authoritative; the user's explicit instructions win over any step above.");
     return L.join("\n");
+  }
+  function referencesText(id, opts) {
+    const R = root.TotalSkillRefs;
+    if (!R || typeof R.render !== "function") return "";
+    try { return R.render(id, opts || {}); } catch { return ""; }
+  }
+  function references(id) {
+    const R = root.TotalSkillRefs;
+    if (!R) return { refs: [], examples: [] };
+    try { return { refs: R.refs(id), examples: R.examples(id) }; } catch { return { refs: [], examples: [] }; }
   }
   // listText(query?) → catalogue (or best matches for a free-text query).
   function listText(query) {
@@ -816,7 +836,7 @@
 
   const api = {
     VERSION, EXPERTS: E.map((x) => Object.assign({}, x, { commands: commandsOf(x) })), IDS, MODES,
-    analyze, select, rankPublic, expertText, listText, answer, resolveId, rider,
+    analyze, select, rankPublic, expertText, listText, answer, resolveId, rider, references, referencesText, MODE_BIAS,
     pickMode, modeStrategy, preserveLines, expertise, validateEnhanced, plan, commandsOf: (id) => BY_ID[id] ? commandsOf(BY_ID[id]) : [],
   };
   root.TotalSkillIntel = api;

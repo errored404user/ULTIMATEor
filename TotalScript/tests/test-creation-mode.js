@@ -53,7 +53,7 @@ ok("A: syncWorkModeUi falls back to the mode that exists (no dead WORK_MODES.ult
   main.includes("const mode = WORK_MODES[workMode] || WORK_MODES.creation;") && !main.includes("WORK_MODES.ultimate"));
 ok("A: a work-mode change arriving through chrome.storage is normalised before use",
   main.includes("if (changes.rsWorkMode && normalizeWorkMode(changes.rsWorkMode.newValue) !== workMode) {\n          workMode = normalizeWorkMode(changes.rsWorkMode.newValue);"));
-ok("A: popup mirrors the built-in modes (creation + blender since 1.95.0; creation stays the default)", popup.includes('const WORK_MODES = ["creation", "blender"];') && popup.includes('workMode: "creation"') && /LEGACY_WORK_MODES = \{ ultimate: "creation", visualizer: "creation", animator: "creation", adaptive: "creation" \}/.test(popup));
+ok("A: popup mirrors the built-in modes (creation + blender since 1.95.0; creation stays the default)", popup.includes('const WORK_MODES = ["creation", "blender", "animate"];') && popup.includes('workMode: "creation"') && /LEGACY_WORK_MODES = \{ ultimate: "creation", visualizer: "creation", animator: "creation", adaptive: "creation" \}/.test(popup));
 ok("A: the mode card, quick starts and badge are rendered from WORK_MODES",
   main.includes('class="rs-work-row rs-work-creation rs-work-modes" role="radiogroup"') && main.includes('<span id="rs-work-badge" hidden></span>') && /rs-work-starters/.test(main));
 ok("A: Creation evidence gates (scripts / look / motion) exist and feed modeGateNudge",
