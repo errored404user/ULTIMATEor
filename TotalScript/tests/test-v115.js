@@ -111,7 +111,7 @@ ok("multi-agent", mainSrc.includes("setMultiAgent") && mainSrc.includes('name ==
 ok("studio plus 40 commands file", plusSrc.includes("size_set") && plusSrc.includes("hinge_create") && plusSrc.includes("jump_pad") && manJs.includes("studio_plus.js") && manJs.includes('"default_title": "TotalScript — RS/AS"'));
 ok("deduplicated Studio extension commands", !extra40Src.includes('{ name: "material_set"') && extra40Src.includes("particle_emitter_create") && extra40Src.includes("proximity_prompt_create") && extra40Src.includes("ui_corner_create") && manJs.includes("studio_extra40.js"));
 ok("developer product create", mainSrc.includes("function createDeveloperProduct") && mainSrc.includes("create_dev_product") && bg.includes("function robloxCreateDevProduct") && plusSrc.includes("developer_product_create") && cfgSrc.includes("developer_product_create") && manJs.includes("*.roblox.com"));
-ok("v19 version", /^1\.(19|[2-9][0-9])\./.test(manifest.version));
+ok("v19 version", /^1\.(19|[2-9][0-9])\.|^[2-9]\.\d+\.\d+$/.test(manifest.version));
 ok("devproduct reaches game", mainSrc.includes("function studioUniverseIds") && bg.includes("function robloxResolveUniverse") && bg.includes("develop.roblox.com/v1/user/universes"));
 ok("claude sonnet5 no-refuse", claudeSrc.includes("sonnet5") && claudeSrc.includes("authorized local automation") && mainSrc.includes("function isCapabilityRefuse") && cfgSrc.includes("capabilityRefuse"));
 ok("bridge reconnect retry", bg.includes("waitForConnection(20000)") && bg.includes('r.kind === "disconnected"'));

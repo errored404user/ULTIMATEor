@@ -67,7 +67,7 @@ ok("in-Studio handbook commands are untouched", read("src/core/skills/studio_ult
 }
 
 // ── F. Pins / docs ────────────────────────────────────────────────────────────
-ok("manifest 1.39.1+", /^1\.39\.[1-9]\d*$|^1\.[4-9]\d\./.test(mf.version), mf.version);
+ok("manifest 1.39.1+", /^1\.39\.[1-9]\d*$|^1\.[4-9]\d\.|^[2-9]\.\d+\.\d+$/.test(mf.version), mf.version);
 ok("plugin + crate pinned to the manifest version", read("plugin/TotalScript.lua").includes('local VERSION = "' + mf.version + '"') && read("agent/Cargo.toml").includes('version = "' + mf.version + '"') && read("agent/Cargo.lock").includes('name = "total-agent"\nversion = "' + mf.version + '"'));
 ok("README changelog 1.39.1 + test listed", readme.includes("**1.39.1 — Settings: themes and memory removed.**") && readme.includes("`total-agent` " + mf.version) && readme.includes("test-v1391.js"));
 

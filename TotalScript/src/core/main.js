@@ -1492,6 +1492,7 @@
     const TIMEOUT = T.RESPONSE_TIMEOUT_MS;
     let lastActiveAt = Date.now();
     const STABLE_MS = T.STABLE_MS; // generating-flag stuck ON but text frozen → done
+    const HARD_STABLE_MS = T.HARD_STABLE_MS || T.STABLE_MS; // 2.0.0: longer window while the provider's hard signal says "still generating"
     let started = false, doneSince = 0, lastLimitScan = 0;
     let lastText = null, lastChangeAt = Date.now(), genFalseSince = 0;
     // ── DIAG: finalisation-latency instrumentation (multi_edit "slow" probe) ──
@@ -1716,7 +1717,12 @@
       // is a mid-write gap, NOT a wedged stop button on a COMPLETE reply. Firing
       // here parsed the half-written JSON and stamped a false "bad JSON" error
       // while GLM was still typing. RESPONSE_TIMEOUT still bounds a truly stuck one.
-      const stuckDone = started && d.reply && Date.now() - lastChangeAt > STABLE_MS &&
+      // 2.0.0: a provider whose HARD generating signal is authoritative (Arena's
+      // stop button) can declare a longer stability window for this fallback
+      // (timings.HARD_STABLE_MS) - a thinking model pausing 20 s between
+      // paragraphs is not a wedged stop button. Providers without it: unchanged.
+      const stableNeed = (HARD_STABLE_MS !== STABLE_MS && P.isHardGenerating && P.isHardGenerating()) ? HARD_STABLE_MS : STABLE_MS;
+      const stuckDone = started && d.reply && Date.now() - lastChangeAt > stableNeed &&
         !(gen && RSParse.hasOpenToolBlock(d.reply));
       if ((gen || effectiveBlock) && !stuckDone) {
         // DIAG: attribute this wait. genOffFirstAt set ⇒ we are PAST first stop,
@@ -3036,7 +3042,9 @@
     if (!(A.bridge && A.bridge.blender)) {
       return "ERROR in asset_bridge_import: Connect Blender first. The addon must still be running so TotalScript can read the mesh.";
     }
-    const dump = await bg({ type: "call_tool", name: "blender_mesh_dump", arguments: { filepath: asset, asset, objects: a.objects }, timeout: 120000 });
+    // 2.0.0: base-colour textures ride with the mesh (textures:false turns it
+    // off; texture_size 16..512, default 256 - a live EditableImage per image).
+    const dump = await bg({ type: "call_tool", name: "blender_mesh_dump", arguments: { filepath: asset, asset, objects: a.objects, textures: a.textures !== false && a.textures !== "false", texture_size: a.texture_size }, timeout: 120000 });
     if (!dump || !dump.ok) {
       return "ERROR in asset_bridge_import: " + ((dump && dump.error) || "could not dump meshes from Blender");
     }
@@ -3055,7 +3063,9 @@
       if (data && !info) info = data;
     }
     const skipped = Array.isArray(dump.skipped) ? dump.skipped : (info && Array.isArray(info.skipped) ? info.skipped : []);
-    const skippedText = skipped.length ? "\nSkipped in Blender:\n" + skipped.map((k) => "- " + k.name + ": " + (k.reason || "skipped")).join("\n") : "";
+    const texturesSkipped = Array.isArray(dump.textures_skipped) ? dump.textures_skipped : (info && Array.isArray(info.textures_skipped) ? info.textures_skipped : []);
+    const texturesText = texturesSkipped.length ? "\nTextures not carried:\n" + texturesSkipped.map((k) => "- " + (k.image || "?") + " (" + (k.material || "material") + "): " + (k.reason || "skipped")).join("\n") : "";
+    const skippedText = skipped.length ? "\nSkipped in Blender:\n" + skipped.map((k) => "- " + k.name + ": " + (k.reason || "skipped")).join("\n") + texturesText : texturesText;
     if (!meshes || !meshes.length) {
       return "ERROR in asset_bridge_import: Blender returned no meshes. Add or select mesh objects, then blender_send_to_studio." + skippedText + "\n" + textOut.slice(0, 400);
     }
@@ -3071,7 +3081,7 @@
     let publish = a.publish === true || a.publish === "true";
     let publishNote = "";
     if (publish && !(await publishAutomationEnabled())) {
-      const okPub = await requestApproval("blender_send_to_studio", { objects: meshes.map((m) => m.name), publish: true, warning: "publish:true uploads each mesh as a Mesh asset owned by your Roblox account (moderation, ownership and rate limits apply)." }, true);
+      const okPub = await requestApproval("blender_send_to_studio", { objects: meshes.map((m) => m.name), publish: true, warning: "publish:true uploads each mesh as a Mesh asset and each carried texture as an Image asset owned by your Roblox account (moderation, ownership and rate limits apply)." }, true);
       if (!okPub) { publish = false; publishNote = "\n(publish was not approved - the meshes were built in Studio without uploading them)"; }
     }
     // One execute_luau per ~700 KB of JSON (total-core's HTTP body limit is 2 MB
@@ -3516,6 +3526,7 @@
   }
   function startModePreflight() {
     A.modeBrief = null;
+    try { if (A.explorerTarget) A.explorerTarget.sent = false; } catch {}
     if (!WM) return;
     const mode = currentWorkMode();
     let engine = "roblox"; try { engine = activeEngine(); } catch {}
@@ -3572,6 +3583,88 @@
   // Harness hooks (tests/test-work-modes-live.js walk): run the preflight /
   // auto-check against a fake bridge without a full agent session.
   try { window.__rsModePreflight = () => { startModePreflight(); return A.modeBrief; }; window.__rsModeAutoCheck = attachModeAutoCheck; } catch {}
+  // ── 2.0.0 Explorer & Inspector (src/core/explorer.js) ────────────────────
+  // Live tree + properties of the open place inside the cards panel. Every
+  // probe is read-only Luau through the bridge (Edit datamodel); the only write
+  // is Selection:Set ("Select in Studio"). "Use as target" stores the path on
+  // A.explorerTarget and the USER TARGET brief rides on the first tool result
+  // of each request until the user clears the chip.
+  const EX = (typeof TotalExplorer !== "undefined" && TotalExplorer) ? TotalExplorer : null;
+  async function runExplorerLua(code, ms) {
+    if (!EX || !code) return null;
+    ms = Math.max(1000, Number(ms) || 9000);
+    const req = bg({ type: "call_tool", name: "execute_luau", arguments: { code, datamodel_type: "Edit" }, timeout: ms });
+    const r = await Promise.race([req, new Promise((res) => setTimeout(() => res(null), ms))]);
+    if (!r || !r.ok) return { __err: r && r.error ? String(r.error).slice(0, 160) : "no answer from Studio" };
+    return EX.parse(r.text);
+  }
+  const explorer = EX ? {
+    state: EX.createState(),
+    listeners: [],
+    changed() { for (const fn of this.listeners) { try { fn(this.state); } catch {} } },
+    async reload() {
+      const st = this.state; st.loading.root = true; st.error = ""; st.results = null; this.changed();
+      const data = await runExplorerLua(EX.rootLua(), 9000);
+      delete st.loading.root;
+      if (!data || data.__err) { st.error = "Studio did not answer" + (data && data.__err ? " (" + data.__err + ")" : "") + ". Is the agent started and the bridge connected?"; }
+      else EX.applyRoot(st, data);
+      diag("explorer.reload", { ok: !st.error, roots: st.roots.length });
+      this.changed();
+      if (!st.error && st.target && st.target.path) { try { EX.expandTo(st, st.target.path); } catch {} }
+    },
+    async toggle(path) {
+      const st = this.state; const step = EX.toggle(st, path); this.changed();
+      if (step !== "load") return step;
+      const data = await runExplorerLua(EX.childrenLua(path, EX.CHILD_CAP), 9000);
+      EX.applyChildren(st, path, data && !data.__err ? data : null); this.changed(); return "loaded";
+    },
+    async select(path) {
+      const st = this.state; const sel = EX.select(st, path); this.changed();
+      const data = await runExplorerLua(EX.propsLua(sel), 9000);
+      if (st.selected !== sel) return;
+      EX.applyProps(st, sel, data && !data.__err ? data : null); this.changed();
+    },
+    async search(q) {
+      const st = this.state; st.query = String(q || "").trim();
+      if (!st.query) { st.results = null; delete st.loading.search; this.changed(); return; }
+      st.loading.search = true; this.changed();
+      const data = await runExplorerLua(EX.searchLua(st.query, EX.SEARCH_CAP), 12000);
+      if (String(q || "").trim() !== st.query) return;
+      EX.applySearch(st, data && !data.__err ? data : null); this.changed();
+    },
+    async studioSelect(path) {
+      const data = await runExplorerLua(EX.selectLua(path), 6000);
+      const ok = !!(data && data.selected);
+      diag("explorer.studioSelect", { ok });
+      try { ui.toast(ok ? "Selected in Studio" : "Could not select it in Studio"); } catch {}
+      if (ok) { this.state.selection = [EX.normPath(path)]; this.changed(); }
+      return ok;
+    },
+    setTarget(path) {
+      const t = EX.setTarget(this.state, path);
+      A.explorerTarget = t ? { ...t, sent: false } : null;
+      diag("explorer.target", { set: !!t, cls: t && t.class });
+      try { ui.toast(t ? "Target for the next request: " + t.name : "Target cleared"); } catch {}
+      this.changed(); try { syncExplorerChip(); } catch {}
+      return t;
+    },
+    render() { return EX.render(this.state); },
+  } : null;
+  function explorerTargetBrief() {
+    const t = A.explorerTarget;
+    if (!EX || !t || !t.path || t.sent) return "";
+    t.sent = true;
+    diag("explorer.targetSent", { cls: t.class });
+    return EX.targetBrief(t);
+  }
+  function syncExplorerChip() {
+    const el = document.getElementById("rs-target-chip");
+    if (!el) return;
+    const t = A.explorerTarget;
+    el.hidden = !(t && t.path);
+    if (t && t.path) { el.textContent = ""; const b = document.createElement("b"); b.textContent = t.name || t.path; el.append("Target: ", b); const x = document.createElement("span"); x.className = "rs-target-x"; x.setAttribute("aria-hidden", "true"); x.textContent = "×"; el.appendChild(x); el.title = t.path + " [" + (t.class || "Instance") + "] - the AI treats it as the subject of your next request. Click to clear."; }
+  }
+  try { window.__rsExplorer = explorer; window.__rsExplorerBrief = explorerTargetBrief; } catch {}
   async function attachAutoDebug(toolName, feedback) {
     let on = true;
     try { if (window.__rsAutoDebug && window.__rsAutoDebug() === false) on = false; } catch {}
@@ -6276,6 +6369,8 @@
           // 1.99.9: the MODE PREFLIGHT (facts read from Studio / Blender at send
           // time) rides on the first result too - never by rewriting the composer.
           try { const mb = await takeModeBrief(); if (mb) { toSend += "\n\n" + mb; diag("mode.briefSent", { mode: A.modeBrief && A.modeBrief.mode, kind: A.modeBrief && A.modeBrief.kind }); } } catch {}
+          // 2.0.0: the Explorer target (USER TARGET note) rides on the first result too, once per request.
+          try { const tb = explorerTargetBrief(); if (tb) toSend += "\n\n" + tb; } catch {}
           // 1.69: Layer C - the task brief (type, intent, the user's own
           // constraints, how to verify) rides on the first result of the run.
           if (A.task && !A.task.riderSent && ORCH) {
@@ -7967,6 +8062,7 @@
           <span id="rs-work-badge" hidden></span>
           <span id="rs-crew-badge" hidden></span>
           <button type="button" id="rs-task-pill" hidden title="Task list"></button>
+          <button type="button" id="rs-target-chip" hidden title="Explorer target"></button>
           <div id="rs-engine" data-engine="roblox">
             <span id="rs-engine-thumb"></span>
             <button data-mode="roblox" class="rs-mode-btn on" title="RobloxScript">RS</button>
@@ -8159,6 +8255,22 @@
         openCardsPanel = (open, tab) => { if (open) openCardsWindow(tab); else { closeCardsWindow(); setCardsOpen(false); } }; // Public Skills modal / Settings → Task list (hoisted var)
         openTrayFn = (tab) => openCardsWindow(tab);
         const taskPill = root.querySelector("#rs-task-pill");
+        const targetChip = root.querySelector("#rs-target-chip");
+        if (targetChip) targetChip.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); if (explorer) explorer.setTarget(null); });
+        let exSearchTimer = 0;
+        cardsPanel.addEventListener("input", (e) => {
+          const inp = e.target.closest && e.target.closest("[data-ex-search]");
+          if (!inp || !explorer) return;
+          const q = inp.value;
+          clearTimeout(exSearchTimer);
+          exSearchTimer = setTimeout(() => { explorer.search(q); }, 320);
+        });
+        cardsPanel.addEventListener("keydown", (e) => {
+          const inp = e.target.closest && e.target.closest("[data-ex-search]");
+          if (!inp || !explorer) return;
+          if (e.key === "Enter") { e.preventDefault(); clearTimeout(exSearchTimer); explorer.search(inp.value); }
+          if (e.key === "Escape") { e.preventDefault(); inp.value = ""; explorer.search(""); }
+        });
         if (taskPill) taskPill.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); const wasTasks = cardsWindowOpen() && cardsTab === "tasks"; if (wasTasks) closeCardsWindow(); else openCardsWindow("tasks"); });
         try { syncTaskPill(); } catch {}
         cardsBtn.addEventListener("click", (e)=>{
@@ -8171,7 +8283,7 @@
           const tab=e.target.closest&&e.target.closest(".rs-cards-tab");
           if(!tab||!cardsPanel.contains(tab)) return;
           e.preventDefault(); e.stopPropagation();
-          cardsTab=tab.dataset.tab==="public"?"public":tab.dataset.tab==="tasks"?"tasks":tab.dataset.tab==="activity"?"activity":"library";
+          cardsTab=tab.dataset.tab==="public"?"public":tab.dataset.tab==="tasks"?"tasks":tab.dataset.tab==="activity"?"activity":tab.dataset.tab==="explorer"?"explorer":"library";
           cardsPanel._totalUiGuard=Date.now()+350;
           renderCards(cardsPanel);
         }, true);
@@ -8184,8 +8296,28 @@
             // see a detached target, fail contains(), and slam the panel shut.
             e.stopPropagation();
             const t = tab.dataset.tab;
-            cardsTab = t === "activity" || t === "public" || t === "tasks" ? t : "library";
+            cardsTab = t === "activity" || t === "public" || t === "tasks" || t === "explorer" ? t : "library";
             renderCards(cardsPanel);
+            return;
+          }
+          // 2.0.0 — Explorer & Inspector actions (delegated; the body is re-rendered on every state change).
+          const exTog = e.target.closest && e.target.closest("[data-ex-toggle]");
+          if (exTog) { e.stopPropagation(); e.preventDefault(); if (explorer) explorer.toggle(exTog.dataset.exToggle); return; }
+          const exSel = e.target.closest && e.target.closest("[data-ex-select]");
+          if (exSel) { e.stopPropagation(); e.preventDefault(); if (explorer) explorer.select(exSel.dataset.exSelect); return; }
+          const exAct = e.target.closest && e.target.closest("[data-ex-action]");
+          if (exAct) {
+            e.stopPropagation(); e.preventDefault();
+            if (!explorer) return;
+            const act = exAct.dataset.exAction, st = explorer.state;
+            if (act === "reload") explorer.reload();
+            else if (act === "refresh") { if (st.selected) explorer.select(st.selected); }
+            else if (act === "target") { if (st.selected) explorer.setTarget(st.selected); }
+            else if (act === "untarget") explorer.setTarget(null);
+            else if (act === "studio-select") { if (st.selected) explorer.studioSelect(st.selected); }
+            else if (act === "copy") { if (st.selected) { try { await navigator.clipboard.writeText(st.selected); ui.toast("Path copied"); } catch { ui.toast(st.selected); } } }
+            else if (act === "ask") { if (st.selected) { const cls = (st.props && st.props.class) || (st.nodes[st.selected] && st.nodes[st.selected].class) || "instance"; try { explorer.setTarget(st.selected); } catch {} let okP = false; try { okP = pasteLibraryCard({ title: "Inspect " + st.selected.split(".").pop(), prompt: "Look at " + st.selected + " (" + cls + "): read it back and tell me what it is, what it does and what could be improved. Do not change anything yet." }, { silent: true }); } catch {} if (okP) { closeCardsWindow && closeCardsWindow(); toast("Drafted a question about " + st.selected.split(".").pop() + " - press Enter to send it"); } } }
+            else if (act === "clear-search") { st.query = ""; st.results = null; explorer.changed(); }
             return;
           }
           // 1.41.0 — tab-local filter chips (Activity / Tasks / Public kinds).
@@ -10499,6 +10631,28 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     function panelHasFocusedEditor(panel) {
       try { const a = document.activeElement; return !!(a && panel && panel.contains(a) && (a.matches("input, textarea, select, [contenteditable=\"true\"]"))); } catch { return false; }
     }
+    // 2.0.0 — Explorer tab body: rendered from TotalExplorer state; the state
+    // listener re-renders only the explorer root (never the whole panel) so an
+    // open search box keeps focus while probes come back.
+    function explorerHtml() {
+      if (!explorer) return '<div class="rs-ex-empty">The Explorer module did not load.</div>';
+      if (!explorer.state.roots.length && !explorer.state.loading.root && !explorer.state.error && A.started) { try { explorer.reload(); } catch {} }
+      return explorer.render();
+    }
+    if (explorer) explorer.listeners.push(() => {
+      try {
+        if (!cardsPanel || cardsPanel.hidden || cardsTab !== "explorer") return;
+        const host = cardsPanel.querySelector(".rs-cards-body .rs-ex");
+        if (!host) return;
+        const search = host.querySelector("[data-ex-search]");
+        const hadFocus = search && document.activeElement === search; const selStart = hadFocus ? search.selectionStart : 0;
+        const tmp = document.createElement("div"); tmp.innerHTML = explorer.render();
+        host.replaceWith(tmp.firstElementChild);
+        if (hadFocus) { const s2 = cardsPanel.querySelector(".rs-cards-body [data-ex-search]"); if (s2) { s2.focus(); try { s2.setSelectionRange(selStart, selStart); } catch {} } }
+        const tabBtn = cardsPanel.querySelector('.rs-cards-tab[data-tab="explorer"]');
+        if (tabBtn) tabBtn.innerHTML = "Explorer" + (A.explorerTarget && A.explorerTarget.path ? " <b>1</b>" : "");
+      } catch (err) { diag("explorer.renderFailed", { err: String(err && err.message || err).slice(0, 160) }); }
+    });
     function scheduleRenderCards() {
       if (renderCardsQueued) return;
       renderCardsQueued = true;
@@ -10515,7 +10669,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       // one broken tab must never take the whole panel down: render a fallback
       // block for that tab, keep the tabs clickable, and log the cause.
       try {
-        return cardsTab === "activity" ? activityHtml() : cardsTab === "public" ? publicHtml() : cardsTab === "tasks" ? tasksHtml() : (local ? summaryHtml() : libraryHtml());
+        return cardsTab === "activity" ? activityHtml() : cardsTab === "public" ? publicHtml() : cardsTab === "tasks" ? tasksHtml() : cardsTab === "explorer" ? explorerHtml() : (local ? summaryHtml() : libraryHtml());
       } catch (e) {
         const msg = String(e && e.message || e).slice(0, 200);
         diag("cards.tabFailed", { tab: cardsTab, error: msg });
@@ -10535,6 +10689,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       // 1.34.1 — the panel heading names the open tab instead of always saying
       // "Templates"; data-cards-tab lets overlay.css style per tab.
       const tabHead = cardsTab === "activity" ? ["Activity", "What the AI ran this session"]
+        : cardsTab === "explorer" ? ["Explorer", "Your place, live - pick what the AI should work on"]
         : cardsTab === "public" ? ["Public Skills", "Your own commands, procedures and modes"]
         : cardsTab === "tasks" ? ["Tasks", "Your checklist for this project"]
         : local ? ["Session", "What the agent did this session"] : ["Templates", "Reusable workflows"];
@@ -10544,6 +10699,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       // the content column. Narrow panels stack the rail back on top (CSS).
       const railTip = cardsTab === "activity" ? "Failed rows have an <b>Ask the AI to fix it</b> button — it drafts the message for you."
         : cardsTab === "public" ? "Drop a <b>.txt</b> prompt on the composer and it becomes a reusable skill."
+        : cardsTab === "explorer" ? "Click an instance, then <b>Use as target</b>: the AI edits that one instead of guessing."
         : cardsTab === "tasks" ? "The AI reads this list: <b>Run next</b> hands it the first open task."
         : local ? "Everything the agent did on this PC this session, with results." : "One click on <b>Run</b> executes a whole template with real commands.";
       // 1.73.0 — in the Templates window the Library tab IS the Template
@@ -10558,6 +10714,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "library" ? " on" : "") + '" data-tab="library">' + mainLabel + '</button>'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "activity" ? " on" : "") + '" data-tab="activity">Activity' + actN + '</button>'
         + '<button type="button" class="rs-cards-tab' + (cardsTab === "public" ? " on" : "") + '" data-tab="public">Public' + (publicCount() ? ' <b>' + publicCount() + '</b>' : '') + '</button>'
+        + (explorer && !local ? '<button type="button" class="rs-cards-tab' + (cardsTab === "explorer" ? " on" : "") + '" data-tab="explorer">Explorer' + (A.explorerTarget && A.explorerTarget.path ? ' <b>1</b>' : '') + '</button>' : '')
         + (taskListOn() ? '<button type="button" class="rs-cards-tab' + (cardsTab === "tasks" ? " on" : "") + '" data-tab="tasks">Tasks' + (() => { try { const p = TotalTaskList.progress(); return p.total ? ' <b>' + p.done + '/' + p.total + '</b>' : ''; } catch { return ''; } })() + '</button>' : '')
         + '</div>'
         + '<div class="rs-cards-rail-foot"><span class="rs-cards-rail-tip">' + railTip + '</span>'
@@ -10578,7 +10735,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       panel.querySelectorAll(".rs-cards-tab").forEach((tab) => {
         const openTab = (event) => {
           event.preventDefault(); event.stopImmediatePropagation();
-          cardsTab = tab.dataset.tab === "public" ? "public" : tab.dataset.tab === "tasks" ? "tasks" : tab.dataset.tab === "activity" ? "activity" : "library";
+          cardsTab = tab.dataset.tab === "public" ? "public" : tab.dataset.tab === "tasks" ? "tasks" : tab.dataset.tab === "activity" ? "activity" : tab.dataset.tab === "explorer" ? "explorer" : "library";
           renderCards(panel);
         };
         // Use one activation path only. A pointerup handler plus onclick caused a

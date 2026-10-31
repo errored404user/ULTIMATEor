@@ -12,11 +12,11 @@
 // definition of "what a good import looks like".
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
-  const VERSION = "1.99.9";
+  const VERSION = "2.0.0";
   const MI = (typeof TotalMeshImport !== "undefined" && TotalMeshImport) || (typeof window !== "undefined" && window.TotalMeshImport) || null;
 
   const C = [
-    { name: "mesh_import_verify", description: "Read a Blender import back from the DataModel (default Workspace.Total_Imported): part count, real MeshParts vs bounding-box placeholders, Enum.Material per part, sizes, Model pivots + PrimaryParts, attachments, total extent in studs, default / numbered names. Optional expectations (parts, min_real, extent [x,y,z] studs) become problems when unmet. Run it after every blender_send_to_studio - the import is finished only when problems is empty (visual quality still needs a screenshot).", params: { path: { type: "string", desc: "instance path (default Workspace.Total_Imported)" }, parts: { type: "integer", desc: "expected BasePart count" }, min_real: { type: "integer", desc: "minimum real MeshParts" }, extent: { type: "array", desc: "expected [x,y,z] extent in studs (25 % tolerance)" } } },
+    { name: "mesh_import_verify", description: "Read a Blender import back from the DataModel (default Workspace.Total_Imported): part count, real MeshParts vs bounding-box placeholders, Enum.Material per part, sizes, Model pivots + PrimaryParts, attachments, total extent in studs, default / numbered names. Also reports textures (live EditableImage SurfaceAppearances vs published Image assets, per key). Optional expectations (parts, min_real, extent [x,y,z] studs, textures = textured part count) become problems when unmet. Run it after every blender_send_to_studio - the import is finished only when problems is empty (visual quality still needs a screenshot).", params: { path: { type: "string", desc: "instance path (default Workspace.Total_Imported)" }, parts: { type: "integer", desc: "expected BasePart count" }, min_real: { type: "integer", desc: "minimum real MeshParts" }, extent: { type: "array", desc: "expected [x,y,z] extent in studs (25 % tolerance)" }, textures: { type: "integer", desc: "expected textured part count (live or published)" } } },
   ];
 
   function build(op, args) {
@@ -24,7 +24,7 @@
     const a = args || {};
     if (!MI || typeof MI.verifyLuau !== "function") return { err: "ERROR building mesh_import_verify: src/core/meshimport.js is not loaded" };
     try {
-      const code = MI.verifyLuau(String(a.path || ""), { parts: a.parts, min_real: a.min_real, extent: Array.isArray(a.extent) ? a.extent : null });
+      const code = MI.verifyLuau(String(a.path || ""), { parts: a.parts, min_real: a.min_real, extent: Array.isArray(a.extent) ? a.extent : null, textures: a.textures });
       return { code, lib: "", body: code };
     } catch (e) {
       return { err: "ERROR building mesh_import_verify: " + (e && e.message || e) };

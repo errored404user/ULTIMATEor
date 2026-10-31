@@ -129,6 +129,13 @@ const RSProvider = (() => {
     WARMUP_MS: 10000,
     REASON_NOREPLY_MS: 20000,
     STABLE_MS: 3200,
+    // 2.0.0: while the stop button is up (isHardGenerating) the core's
+    // "generating flag stuck but text frozen" fallback must wait THIS long,
+    // not STABLE_MS - thinking models pause mid-reply far longer than 3.2 s.
+    HARD_STABLE_MS: 45000,
+    // 2.0.0: Arena can take well over a minute to even create the reply turn
+    // for a slow model; the core's pre-start silence budget is widened here.
+    PRESTART_MS: 150000,
     RESPONSE_TIMEOUT_MS: 300000,
   };
 
@@ -531,7 +538,20 @@ const RSProvider = (() => {
   }
   const grewWithin = (ms) => _streamMax > 1 && Date.now() - _streamAt < ms;
 
-  const WEDGE_MS = 10000;
+  // 2.0.0: the stop button is the authoritative whole-generation signal on
+  // Arena (validated live) - TRUST it. The old 10 s "wedge" window treated any
+  // 10 s without visible text as a wedged stop button, so a thinking model (or
+  // Arena under load) that keeps the button up for a minute before the first
+  // token, or pauses mid-reply to reason, was read as "finished": the loop
+  // finalised an empty / half-written reply, nudged "you did nothing", re-sent
+  // or restarted while Arena was still generating - the "Arena takes too long
+  // and bugs TotalScript" report. Now:
+  //   - no visible text yet + stop button up  → generating, up to THINK_MAX_MS;
+  //   - text present, frozen, stop button up  → generating until WEDGE_MS
+  //     (2 min) of silence - the only wedge we still guard against;
+  //   - stop button gone                      → the short growth window.
+  const WEDGE_MS = 120000;
+  const THINK_MAX_MS = 900000;
   let _stopSince = 0;
   function genActive() {
     sampleStream();
@@ -539,11 +559,14 @@ const RSProvider = (() => {
     const now = Date.now();
     if (stop) {
       if (!_stopSince) _stopSince = now;
-      return (now - _streamAt < WEDGE_MS) || (now - _stopSince < 2000);
+      if (now - _stopSince < 2000) return true;
+      if (_streamMax <= 1) return now - _stopSince < THINK_MAX_MS;
+      return now - _streamAt < WEDGE_MS;
     }
     _stopSince = 0;
     return grewWithin(timings.GEN_IDLE_MS);
   }
+  const genDebug = () => ({ stop: !!stopButton(), stopForMs: _stopSince ? Date.now() - _stopSince : 0, textLen: _streamMax, frozenMs: _streamAt ? Date.now() - _streamAt : 0 });
   const isGenerating = genActive;
   const isBusyNow = genActive;
   const isHardGenerating = () => !!stopButton();
@@ -1136,7 +1159,7 @@ const RSProvider = (() => {
     // composer / state
     getEditor, editorText, chatIsEmpty, isFreshChat, composerFrame, barAnchor,
     setInputLock, typeAndSend, stopGeneration,
-    isGenerating, isBusyNow, isHardGenerating,
+    isGenerating, isBusyNow, isHardGenerating, genDebug,
     enforceComposer, ensureComposerReady, modeWarning, captchaPresent, overlayBlocking,
     turnHalted, findContinueBtn, clickContinueBtn,
     scanError, isTooLongMsg, isBusyMsg,

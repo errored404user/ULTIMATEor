@@ -300,6 +300,109 @@ MAX_MESHES = 32
 MAX_TRIS_PER_MESH = 20000
 MAX_TOTAL_TRIS = 40000
 MAX_TOTAL_VERTS = 40000
+# 2.0.0 - base-colour textures ride with the mesh as raw RGBA (base64). Studio
+# turns them into EditableImages (max 1024 px there; we stop at 512 so one
+# blob stays under the 2 MB HTTP body of the bridge). Default 256 px = 256 KB
+# raw / ~350 KB base64. Budget per send: TEXTURE_BUDGET base64 characters.
+TEXTURE_SIZE_DEFAULT = 256
+TEXTURE_SIZE_MAX = 512
+TEXTURE_SIZE_MIN = 16
+TEXTURE_BUDGET = 2400000
+TEXTURE_SKIPPED = []  # filled by dump_meshes, reported by cmd_dump
+
+
+def _srgb_byte(v, is_float):
+    """Float channel -> 0..255 byte. Byte images give sRGB-encoded floats
+    straight from `pixels`; float images (EXR / baked float buffers) are linear
+    and need the sRGB transfer so Studio shows the colours Blender shows."""
+    if v != v:
+        v = 0.0
+    v = 0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
+    if is_float:
+        v = 12.92 * v if v <= 0.0031308 else 1.055 * (v ** (1.0 / 2.4)) - 0.055
+    return int(v * 255.0 + 0.5)
+
+
+def rgba_rows_to_b64(pixels, w, h, is_float=False):
+    """Blender `pixels` (bottom row first, RGBA floats) -> base64 of top-row-
+    first RGBA bytes, the layout EditableImage:WritePixelsBuffer expects.
+    Pure (no bpy) so tests can run it."""
+    import base64
+    out = bytearray(w * h * 4)
+    row = w * 4
+    o = 0
+    for y in range(h - 1, -1, -1):
+        base = y * row
+        for i in range(row):
+            out[o] = _srgb_byte(float(pixels[base + i]), is_float)
+            o += 1
+    return base64.b64encode(bytes(out)).decode("ascii")
+
+
+def material_base_image(mat):
+    """The image feeding Base Color: a TEX_IMAGE node linked straight into the
+    Principled Base Color input, else the baked base-colour map recorded by
+    blender_asset_bake (mat["total_tex_base_color"]). None when the material
+    is a flat colour or the image is not loadable. Returns (image, source)."""
+    if mat is None:
+        return None, None
+    try:
+        if mat.use_nodes and mat.node_tree:
+            bsdf = None
+            for node in mat.node_tree.nodes:
+                if node.type == "BSDF_PRINCIPLED":
+                    bsdf = node
+                    break
+            if bsdf is not None:
+                sock = bsdf.inputs.get("Base Color")
+                if sock is not None:
+                    for link in mat.node_tree.links:
+                        if link.to_node == bsdf and link.to_socket == sock:
+                            src = link.from_node
+                            if src is not None and src.type == "TEX_IMAGE" and getattr(src, "image", None) is not None:
+                                return src.image, "node"
+                            break
+    except Exception:
+        pass
+    try:
+        path = mat.get("total_tex_base_color")
+        if path and os.path.exists(str(path)):
+            return bpy.data.images.load(str(path), check_existing=True), "baked"
+    except Exception:
+        pass
+    return None, None
+
+
+def image_texture_blob(img, size, source):
+    """Downsample an image to <= size px (keeping aspect) and return
+    {key, w, h, rgba_b64, bytes, source, image} or {error}. Works on a copy so
+    the scene image is never touched; the copy is removed afterwards."""
+    size = int(max(TEXTURE_SIZE_MIN, min(TEXTURE_SIZE_MAX, int(size or TEXTURE_SIZE_DEFAULT))))
+    copy = None
+    try:
+        w0, h0 = int(img.size[0]), int(img.size[1])
+        if w0 <= 0 or h0 <= 0:
+            return {"error": "image '%s' has no pixels (missing file?)" % img.name}
+        scale = min(1.0, float(size) / float(max(w0, h0)))
+        w = max(TEXTURE_SIZE_MIN, int(round(w0 * scale)))
+        h = max(TEXTURE_SIZE_MIN, int(round(h0 * scale)))
+        copy = img.copy()
+        if (w, h) != (w0, h0):
+            copy.scale(w, h)
+        px = copy.pixels[:]
+        if len(px) < w * h * 4:
+            return {"error": "image '%s' returned %d floats for %dx%d" % (img.name, len(px), w, h)}
+        b64 = rgba_rows_to_b64(px, w, h, bool(getattr(copy, "is_float", False)))
+        key = "".join(ch if (ch.isalnum() or ch in "_.-") else "_" for ch in str(img.name))[:80] or "texture"
+        return {"key": key, "image": str(img.name), "w": w, "h": h, "rgba_b64": b64, "bytes": w * h * 4, "source": source or "node", "original": [w0, h0]}
+    except Exception as e:
+        return {"error": "image '%s': %s" % (getattr(img, "name", "?"), str(e)[:160])}
+    finally:
+        if copy is not None:
+            try:
+                bpy.data.images.remove(copy)
+            except Exception:
+                pass
 
 
 def mesh_color(obj):
@@ -467,6 +570,12 @@ def dump_meshes(names, skipped=None):
         objs = [o for o in bpy.data.objects if o.type == "MESH" and o.data]
     want_normals = ARGS.get("normals") is not False
     want_uvs = ARGS.get("uvs") is not False
+    want_textures = ARGS.get("textures") is not False and want_uvs
+    tex_size = ARGS.get("texture_size") or TEXTURE_SIZE_DEFAULT
+    tex_cache = {}
+    tex_budget = [0]
+    tex_skipped = TEXTURE_SKIPPED
+    del tex_skipped[:]
     depsgraph = bpy.context.evaluated_depsgraph_get()
     for obj in objs:
         if len(meshes) >= MAX_MESHES:
@@ -586,6 +695,28 @@ def dump_meshes(names, skipped=None):
                 entry["normals"] = [corner_normals[ti] for ti in tri_ids] if multi else corner_normals
             if corner_uvs:
                 entry["uvs"] = [corner_uvs[ti] for ti in tri_ids] if multi else corner_uvs
+            # 2.0.0: base-colour texture - the FIRST entry using an image
+            # carries the blob, later entries only the key (Studio reuses the
+            # SurfaceAppearance it built). Over budget -> skipped with reason.
+            if want_textures and corner_uvs and mat is not None:
+                img, tsrc = material_base_image(mat)
+                if img is not None:
+                    ikey = str(img.name)
+                    if ikey in tex_cache:
+                        if tex_cache[ikey]:
+                            entry["texture"] = {"key": tex_cache[ikey]}
+                    else:
+                        blob = image_texture_blob(img, tex_size, tsrc)
+                        if blob.get("error"):
+                            tex_cache[ikey] = None
+                            tex_skipped.append({"image": ikey, "material": str(mat.name), "reason": blob["error"]})
+                        elif tex_budget[0] + len(blob["rgba_b64"]) > TEXTURE_BUDGET:
+                            tex_cache[ikey] = None
+                            tex_skipped.append({"image": ikey, "material": str(mat.name), "reason": "texture budget (%d base64 chars per send) reached - send fewer objects or a smaller texture_size" % TEXTURE_BUDGET})
+                        else:
+                            tex_budget[0] += len(blob["rgba_b64"])
+                            tex_cache[ikey] = blob["key"]
+                            entry["texture"] = blob
             if props:
                 entry["props"] = props
             if parent:
@@ -857,6 +988,9 @@ def cmd_dump():
         "materials": sorted(set((m.get("material") or {}).get("name") for m in meshes if m.get("material"))),
         "with_uvs": sum(1 for m in meshes if m.get("uvs")),
         "with_normals": sum(1 for m in meshes if m.get("normals")),
+        "textures": sorted(set(m["texture"]["key"] for m in meshes if isinstance(m.get("texture"), dict) and m["texture"].get("key"))),
+        "texture_bytes": sum(int(m["texture"].get("bytes") or 0) for m in meshes if isinstance(m.get("texture"), dict)),
+        "textures_skipped": list(TEXTURE_SKIPPED),
         "assets": used_roots,
         "attachments": attachments,
         "suggested_scale": suggested,

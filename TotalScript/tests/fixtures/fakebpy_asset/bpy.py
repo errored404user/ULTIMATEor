@@ -318,6 +318,29 @@ class Image(_IDBlock):
         self.file_format = "PNG"
         self.colorspace_settings = _ColorSpace()
         self.packed_file = None
+        self.is_float = False
+
+    # 2.0.0 - pixel access for the texture carry: a deterministic gradient,
+    # bottom row first like Blender (R grows with the row = red at the TOP,
+    # B grows with the column = blue at the RIGHT), so a test can prove the
+    # importer flipped rows into top-first order.
+    @property
+    def pixels(self):
+        w, h = int(self.size[0]), int(self.size[1])
+        out = []
+        for y in range(h):
+            for x in range(w):
+                out.extend([y / max(1, h - 1), 0.0, x / max(1, w - 1), 1.0])
+        return out
+
+    def copy(self):
+        img = data.images.new(self.name + ".copy", self.size[0], self.size[1])
+        img.filepath = self.filepath
+        img.is_float = self.is_float
+        return img
+
+    def scale(self, w, h):
+        self.size = (int(w), int(h))
 
     def save(self):
         fp = self.filepath_raw or self.filepath

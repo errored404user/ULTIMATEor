@@ -46,6 +46,22 @@ def fake_step(args):
             packed_file = None
         n.image = _Img()
         return {"ok": True, "material": mat.name}
+    if args.get("add_base_texture"):
+        # 2.0.0: a real (fake) image block linked straight into Base Color, the
+        # way a textured Blender material looks - dump must carry it as RGBA.
+        mat = bpy.data.materials.get(args["add_base_texture"])
+        if mat is None:
+            return {"ok": False, "error": "no material " + args["add_base_texture"]}
+        w, h = int(args.get("w") or 64), int(args.get("h") or 32)
+        img = bpy.data.images.new(str(args.get("image") or "albedo.png"), w, h)
+        img.filepath = "/tmp/" + img.name
+        n = mat.node_tree.nodes.new("ShaderNodeTexImage")
+        n.image = img
+        bsdf = next((x for x in mat.node_tree.nodes if x.type == "BSDF_PRINCIPLED"), None)
+        if bsdf is None:
+            return {"ok": False, "error": "material has no Principled BSDF"}
+        mat.node_tree.links.new(n.outputs["Color"], bsdf.inputs["Base Color"])
+        return {"ok": True, "material": mat.name, "image": img.name, "size": [w, h]}
     if args.get("rename"):
         o = bpy.data.objects.get(args["rename"][0])
         if o:

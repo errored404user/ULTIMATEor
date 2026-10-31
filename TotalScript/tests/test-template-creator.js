@@ -49,7 +49,7 @@ ok("css: no `#rs-cards-panel .` selectors (keeps the §15 specificity contract o
 
 const readme = read("README.md");
 ok("README: 1.73.0 entry + Templates window section", readme.includes("**1.73.0 — Templates window: Library, Activity and Public Skills in one centred window, with an easy Template Creator.**") && readme.includes("## Templates window — Library, Activity, Public Skills, in the middle of the screen"));
-ok("version pins 1.99.9 (manifest / crate / plugin)", manifest.version === "1.99.9" && /^version = "1\.99\.9"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.99.9"'));
+ok("version pins 2.0.0 (manifest / crate / plugin)", manifest.version === "2.0.0" && /^version = "2\.0\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "2.0.0"'));
 
 // ── pure helpers (templatecreator.js in a bare sandbox) ──
 const sandbox = { window: {}, console, setTimeout, clearTimeout };
@@ -149,7 +149,7 @@ async function walk() {
   ok("walk: templates button → centred window open, panel moved into it, bar hidden (html.rs-cards-window-open)", win && win.classList.contains("open") && win.querySelector(".rs-cw-body > #rs-cards-panel") === panel && !panel.hidden && !bar.classList.contains("rs-cards-open") && d.documentElement.classList.contains("rs-cards-window-open"));
   ok("walk: window title bar has the Templates brand, the tabs hint and a close button", /Templates/.test(win.querySelector(".rs-cw-brand").textContent) && /Library · Activity · Public Skills · Tasks/.test(win.querySelector(".rs-cw-sub").textContent) && !!win.querySelector("[data-cw-close]"));
   const tabs = [...panel.querySelectorAll(":scope > .rs-cards-top .rs-cards-tab")].map((b) => b.dataset.tab);
-  ok("walk: rail shows Library / Activity / Public (Tasks appears when the task list is on)", tabs.join(",") === "library,activity,public" || tabs.join(",") === "library,activity,public,tasks", tabs.join(","));
+  ok("walk: rail shows Library / Activity / Public / Explorer (2.0.0; Tasks appears when the task list is on)", tabs.join(",") === "library,activity,public,explorer" || tabs.join(",") === "library,activity,public,explorer,tasks", tabs.join(","));
   const host = await waitFor(() => panel.querySelector(".rs-cards-body > .rs-cards-creator-slot > #rs-tcreator.rst-embedded.open"), 2000, "embedded creator");
   ok("walk: Library tab = embedded Template Creator (list + form + AI sentence row), full-screen chrome hidden", !!host.querySelector(".rst-list") && !!host.querySelector("form.rst-form") && !!host.querySelector(".rst-sentence") && w.TotalTemplateCreator.state().embedded === true && !d.documentElement.classList.contains("rs-tcreator-open"));
   ok("walk: empty library shows the 'No templates yet' state with example chips", /No templates yet/.test(host.querySelector(".rst-list").textContent) && host.querySelectorAll('.rst-example-chips [data-act="example"]').length > 0);

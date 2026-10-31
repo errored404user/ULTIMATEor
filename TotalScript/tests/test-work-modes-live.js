@@ -25,7 +25,7 @@ const gatesSrc = main.slice(main.indexOf("  const MODE_GATES = {"), main.indexOf
 const MODE_GATES = new Function(gatesSrc + "\nreturn MODE_GATES;")();
 
 // ── module surface ──────────────────────────────────────────────────────────
-ok("A1 TotalWorkModes VERSION 1.99.9, ids creation/blender/animate, frozen", W.VERSION === "1.99.9" && JSON.stringify(W.IDS) === JSON.stringify(["creation", "blender", "animate"]) && Object.isFrozen(W));
+ok("A1 TotalWorkModes VERSION 2.0.0, ids creation/blender/animate, frozen", W.VERSION === "2.0.0" && JSON.stringify(W.IDS) === JSON.stringify(["creation", "blender", "animate"]) && Object.isFrozen(W));
 ok("A2 normalize() maps unknown / animator → creation and keeps the three ids", W.normalize("animator") === "creation" && W.normalize("ANIMATE") === "animate" && W.normalize("blender") === "blender" && W.normalize() === "creation");
 ok("A3 DOES text per mode names concrete behaviours (preflight, gate strip, read back, verdict)", W.IDS.every((id) => /[Pp]reflight/.test(W.DOES[id]) && /gate strip/i.test(W.DOES[id]) && /read back/i.test(W.DOES[id]) && /verdict/i.test(W.DOES[id])));
 ok("A4 GATE_LABEL covers every MODE_GATES id", Object.values(MODE_GATES).flat().every((g) => W.GATE_LABEL[g.id]));
@@ -211,7 +211,7 @@ if (!JSDOM) { console.log("skip jsdom walk (jsdom not installed)"); finish(); }
   try {
     await waitFor(() => d.getElementById("rs-bar"), 8000, "#rs-bar");
     await sleep(700);
-    ok("walk W1: page boots with TotalWorkModes on window and no page errors", w.TotalWorkModes && w.TotalWorkModes.VERSION === "1.99.9" && pageErrors.length === 0, pageErrors.join(" | "));
+    ok("walk W1: page boots with TotalWorkModes on window and no page errors", w.TotalWorkModes && w.TotalWorkModes.VERSION === "2.0.0" && pageErrors.length === 0, pageErrors.join(" | "));
     const strip = d.getElementById("rs-mode-gates");
     ok("walk W2: #rs-mode-gates exists in the bar and is hidden before a session starts", !!strip && strip.hidden === true);
     w.__rsSetWorkMode("animate"); await sleep(80);

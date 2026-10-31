@@ -17,10 +17,17 @@
 //   * collision from the spec (box / hull / precise / none) - never silently
 //     disabled, never silently Default-everything
 //   * a verification payload (mesh_import_verify reads it back)
+//   * 2.0.0: the base-colour texture rides with the mesh - the dump carries a
+//     downsampled RGBA blob per image (<= 512 px, default 256), Studio builds
+//     an EditableImage, writes the pixels and binds it through a
+//     SurfaceAppearance.ColorMapContent (fallback MeshPart.TextureContent).
+//     Honest limits: live content only (an EditableImage is NOT saved with the
+//     place; publish:true uploads it as an Image asset through the local
+//     plugin), one base-colour map per material, no normal / roughness maps.
 // Pure JS; exposes window.TotalMeshImport + module.exports.
 (function (root) {
   "use strict";
-  const VERSION = "1.99.9";
+  const VERSION = "2.0.0";
   const MATERIALS = ["Plastic", "SmoothPlastic", "Neon", "Wood", "WoodPlanks", "Marble", "Slate", "Concrete", "Granite", "Brick", "Pebble", "Cobblestone", "Rock", "Sandstone", "Basalt", "CrackedLava", "Limestone", "Pavement", "CorrodedMetal", "DiamondPlate", "Foil", "Metal", "Grass", "LeafyGrass", "Sand", "Fabric", "Snow", "Mud", "Ground", "Asphalt", "Salt", "Ice", "Glacier", "Glass", "ForceField", "Cardboard", "Carpet", "CeramicTiles", "ClayRoofTiles", "RoofShingles", "Leather", "Plaster", "Rubber"];
   const FIDELITY = { box: "Box", hull: "Hull", precise: "PreciseConvexDecomposition", default: "Default", none: "Box" };
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
@@ -45,6 +52,8 @@
     if (metallic >= 0.5 && roughness < 0.35 && out.material !== "Neon") out.reflectance = r3(Math.min(0.5, (0.35 - roughness) * 1.2));
     if (emissive && out.material !== "Neon") out.lost.push("emission (" + out.material + " is not emissive; use Neon or a SurfaceAppearance)");
     if (Array.isArray(m.textures) && m.textures.length) out.lost.push("image textures (" + m.textures.length + " - the mesh bridge carries no images; upload them as Image assets and add a SurfaceAppearance manually)");
+    // 2.0.0: an entry that carries its base-colour blob (entry.texture) clears
+    // this note in planImport - textureFor() decides, not the material.
     if (m.wear) out.lost.push("procedural wear nodes (flat base colour only)");
     if (metallic > 0 && metallic < 0.5) out.lost.push("partial metallic " + r3(metallic));
     return out;
@@ -57,6 +66,31 @@
     return n || "Mesh";
   };
 
+  // 2.0.0 - texture carried by the dump entry:
+  //   { key, w, h, rgba_b64 }  full blob (first entry that uses the image)
+  //   { key }                  reference: Studio reuses the SurfaceAppearance
+  //                            already built for that key (same import run)
+  // Limits are checked here, not trusted: 16..512 px square-or-not, blob
+  // length must match w*h*4 bytes (base64 4/3), otherwise the texture is
+  // dropped with a problem note and the part keeps its flat colour.
+  const TEXTURE_MAX = 512, TEXTURE_MIN = 16;
+  function textureFor(entry, seen) {
+    const t = entry && entry.texture;
+    if (!t || typeof t !== "object") return null;
+    const key = String(t.key || t.image || "").replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 80);
+    if (!key) return null;
+    if (!t.rgba_b64) return { key, ref: true, live: true };
+    const w = Number(t.w) | 0, h = Number(t.h) | 0;
+    const b64 = String(t.rgba_b64).replace(/\s+/g, "");
+    const bytes = Math.floor(b64.length * 3 / 4) - (b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0);
+    if (w < TEXTURE_MIN || h < TEXTURE_MIN || w > TEXTURE_MAX || h > TEXTURE_MAX) return { key, dropped: "size " + w + "x" + h + " outside " + TEXTURE_MIN + ".." + TEXTURE_MAX, live: false };
+    if (bytes !== w * h * 4) return { key, dropped: "blob is " + bytes + " bytes, expected " + (w * h * 4) + " (RGBA " + w + "x" + h + ")", live: false };
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return { key, dropped: "blob is not base64", live: false };
+    if (seen && seen.has(key)) return { key, ref: true, live: true };
+    if (seen) seen.add(key);
+    return { key, w, h, rgba_b64: b64, bytes, live: true, source: String(t.source || "") };
+  }
+
   // JS-side plan: grouping, naming, material / collision decisions. Pure, testable.
   function planImport(meshes, opts) {
     const o = opts || {};
@@ -66,6 +100,7 @@
     const byKey = {};
     const parts = [];
     const problems = [];
+    const seenTextures = o.seenTextures instanceof Set ? o.seenTextures : new Set();
     let idx = 0;
     for (const e of Array.isArray(meshes) ? meshes : []) {
       if (!e || !Array.isArray(e.verts) || !e.verts.length || !Array.isArray(e.faces) || !e.faces.length) { problems.push((e && e.name) + ": empty mesh skipped"); continue; }
@@ -87,7 +122,9 @@
       let name = asset ? partName(objectName, asset) : partName(e.name, null);
       if (asset && multi) name = partName(objectName, asset) + "_" + String(e.name).slice(objectName.length + 1).replace(new RegExp("^" + asset + "_"), "");
       else if (!asset && multi) name = String(e.name).slice(objectName.length + 1) || name;
-      const p = { index: idx++, entry: e, name, group: group ? group.key : null, asset, object: objectName, material: mat, fidelity, canCollide, role: String(props.role || ""), tris: Number(e.tris) || Math.floor(e.faces.length / 3), hasUV: Array.isArray(e.uvs) && e.uvs.length > 0, hasNormals: Array.isArray(e.normals) && e.normals.length > 0, flat: e.flat === true, pivotGroup: props.pivot_group || null };
+      const tex = textureFor(e, seenTextures);
+      if (tex) mat.lost = mat.lost.filter((l) => !/^image textures/.test(l)).concat(tex.live ? ["texture is live EditableImage content (not saved with the place; publish:true uploads it)"] : []);
+      const p = { index: idx++, entry: e, name, group: group ? group.key : null, asset, object: objectName, material: mat, fidelity, canCollide, role: String(props.role || ""), texture: tex, tris: Number(e.tris) || Math.floor(e.faces.length / 3), hasUV: Array.isArray(e.uvs) && e.uvs.length > 0, hasNormals: Array.isArray(e.normals) && e.normals.length > 0, flat: e.flat === true, pivotGroup: props.pivot_group || null };
       parts.push(p);
       if (group) group.parts.push(p.index);
     }
@@ -104,7 +141,9 @@
     }
     const lost = {};
     for (const p of parts) for (const l of p.material.lost) lost[l] = (lost[l] || 0) + 1;
-    return { parts, groups, problems, material_notes: Object.keys(lost).map((k) => k + " x" + lost[k]) };
+    for (const p of parts) if (p.texture && p.texture.dropped) problems.push(p.name + ": texture " + p.texture.key + " dropped - " + p.texture.dropped);
+    const textures = { carried: parts.filter((p) => p.texture && p.texture.rgba_b64).length, referenced: parts.filter((p) => p.texture && p.texture.ref).length, dropped: parts.filter((p) => p.texture && p.texture.dropped).length };
+    return { parts, groups, problems, material_notes: Object.keys(lost).map((k) => k + " x" + lost[k]), textures };
   }
 
   const q = (s) => '"' + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "\\r").replace(/\n/g, "\\n") + '"';
@@ -113,7 +152,7 @@
     const o = opts || {};
     const plan = planImport(meshes, o);
     const payload = {
-      meshes: plan.parts.map((p) => ({ verts: p.entry.verts, faces: p.entry.faces, normals: p.hasNormals ? p.entry.normals : null, uvs: p.hasUV ? p.entry.uvs : null, flat: p.flat, name: p.name, source: String(p.entry.name || ""), object: p.object, group: p.group, material: p.material.material, color: p.material.color, reflectance: p.material.reflectance, transparency: p.material.transparency, blenderMaterial: p.entry.material && p.entry.material.name || null, fidelity: p.fidelity, canCollide: p.canCollide, role: p.role, tris: p.tris, pivot: Array.isArray(p.entry.pivot) ? p.entry.pivot : null })),
+      meshes: plan.parts.map((p) => ({ texture: p.texture && !p.texture.dropped ? (p.texture.ref ? { key: p.texture.key } : { key: p.texture.key, w: p.texture.w, h: p.texture.h, b64: p.texture.rgba_b64 }) : null, verts: p.entry.verts, faces: p.entry.faces, normals: p.hasNormals ? p.entry.normals : null, uvs: p.hasUV ? p.entry.uvs : null, flat: p.flat, name: p.name, source: String(p.entry.name || ""), object: p.object, group: p.group, material: p.material.material, color: p.material.color, reflectance: p.material.reflectance, transparency: p.material.transparency, blenderMaterial: p.entry.material && p.entry.material.name || null, fidelity: p.fidelity, canCollide: p.canCollide, role: p.role, tris: p.tris, pivot: Array.isArray(p.entry.pivot) ? p.entry.pivot : null })),
       groups: plan.groups.map((g) => ({ key: g.key, name: g.name, kind: g.kind, pivot: g.pivot, primary: g.primary, attachments: g.attachments })),
       dest: dest || "Workspace", scale: Number(scale) || 20, append: !!o.append, publish: !!o.publish, notes: plan.material_notes, problems: plan.problems,
     };
@@ -163,6 +202,84 @@
       "local report, verify = {}, { parts = {}, models = {}, attachments = 0, uv_parts = 0, smooth_parts = 0, materials = {}, lost = data.notes or {}, problems = data.problems or {} }",
       "local built, viaEm, viaBox, published = 0, 0, 0, 0",
       "local builtParts = {}",
+      // 2.0.0 - base-colour textures: base64 -> buffer -> EditableImage ->
+      // SurfaceAppearance.ColorMapContent (fallback: MeshPart.TextureContent).
+      // Honest: pcall around every step; nothing claims a texture that was not
+      // bound. verify.textures reports applied / reused / unavailable / failed.
+      "verify.textures = { applied = 0, reused = 0, unavailable = 0, failed = 0, live = true, keys = {} }",
+      "local B64 = {} do local chars = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\" for i = 1, 64 do B64[string.byte(chars, i)] = i - 1 end end",
+      "local function b64ToBuffer(s, expect)",
+      "  local n = #s",
+      "  local buf = buffer.create(expect)",
+      "  local o = 0",
+      "  for i = 1, n, 4 do",
+      "    local a, b, c, d = string.byte(s, i, i + 3)",
+      "    local va, vb, vc, vd = B64[a], B64[b], B64[c] or 0, B64[d] or 0",
+      "    if not va or not vb then return nil, \"bad base64 at \" .. i end",
+      "    local v = va * 262144 + vb * 4096 + vc * 64 + vd",
+      "    if o < expect then buffer.writeu8(buf, o, v // 65536) o = o + 1 end",
+      "    if c ~= 61 and o < expect then buffer.writeu8(buf, o, (v // 256) % 256) o = o + 1 end",
+      "    if d ~= 61 and o < expect then buffer.writeu8(buf, o, v % 256) o = o + 1 end",
+      "  end",
+      "  if o ~= expect then return nil, string.format(\"decoded %d bytes, expected %d\", o, expect) end",
+      "  return buf",
+      "end",
+      "local texContent = {}",
+      "local function findTexture(key)",
+      "  if texContent[key] then return texContent[key], \"run\" end",
+      "  for _, d in ipairs(folder:GetDescendants()) do",
+      "    if d:IsA(\"SurfaceAppearance\") and d:GetAttribute(\"TotalTextureKey\") == key then",
+      "      local okC, c = pcall(function() return d.ColorMapContent end)",
+      "      if okC and c then texContent[key] = c return c, \"folder\" end",
+      "    end",
+      "  end",
+      "  return nil",
+      "end",
+      "local function bindTexture(part, content, key)",
+      "  local okSa = pcall(function()",
+      "    local sa = Instance.new(\"SurfaceAppearance\")",
+      "    sa.Name = \"Total_Texture\"",
+      "    sa.ColorMapContent = content",
+      "    sa:SetAttribute(\"TotalTextureKey\", key)",
+      "    sa:SetAttribute(\"TotalTextureLive\", true)",
+      "    sa.Parent = part",
+      "  end)",
+      "  if okSa then return \"SurfaceAppearance\" end",
+      "  local okTc = pcall(function() part.TextureContent = content end)",
+      "  if okTc then return \"TextureContent\" end",
+      "  return nil",
+      "end",
+      "local function applyTexture(part, tex, name)",
+      "  if type(tex) ~= \"table\" or not tex.key then return nil end",
+      "  local key = tostring(tex.key)",
+      "  local content, from = findTexture(key)",
+      "  local publishedId = nil",
+      "  if not content then",
+      "    if not tex.b64 then verify.textures.failed = verify.textures.failed + 1 return \"texture \" .. key .. \" missing (reference without blob in this run)\" end",
+      "    local w, h = tonumber(tex.w) or 0, tonumber(tex.h) or 0",
+      "    local buf, berr = b64ToBuffer(tostring(tex.b64), w * h * 4)",
+      "    if not buf then verify.textures.failed = verify.textures.failed + 1 return \"texture \" .. key .. \" failed: \" .. tostring(berr) end",
+      "    local okImg, imgOrErr = pcall(function() return AssetService:CreateEditableImage({ Size = Vector2.new(w, h) }) end)",
+      "    if not okImg or not imgOrErr then verify.textures.unavailable = verify.textures.unavailable + 1 return \"texture \" .. key .. \" not applied: EditableImage unavailable (\" .. tostring(imgOrErr) .. \")\" end",
+      "    local okW, werr = pcall(function() imgOrErr:WritePixelsBuffer(Vector2.zero, Vector2.new(w, h), buf) end)",
+      "    if not okW then verify.textures.failed = verify.textures.failed + 1 return \"texture \" .. key .. \" failed: WritePixelsBuffer \" .. tostring(werr) end",
+      "    local okC, cOrErr = pcall(function() return Content.fromObject(imgOrErr) end)",
+      "    if not okC or not cOrErr then verify.textures.failed = verify.textures.failed + 1 return \"texture \" .. key .. \" failed: Content.fromObject \" .. tostring(cOrErr) end",
+      "    content = cOrErr",
+      "    from = \"new\"",
+      "    if data.publish then",
+      "      local okPub, res, idOrErr = pcall(function() return AssetService:CreateAssetAsync(imgOrErr, Enum.AssetType.Image, { Name = key, Description = \"Blender texture sent by TotalScript\" }) end)",
+      "      if okPub and res == Enum.CreateAssetResult.Success and idOrErr then publishedId = tostring(idOrErr) end",
+      "    end",
+      "  end",
+      "  local via = bindTexture(part, content, key)",
+      "  if not via then verify.textures.failed = verify.textures.failed + 1 return \"texture \" .. key .. \" failed: no Content property accepted it\" end",
+      "  if from == \"new\" then verify.textures.applied = verify.textures.applied + 1 else verify.textures.reused = verify.textures.reused + 1 end",
+      "  verify.textures.keys[key] = (verify.textures.keys[key] or 0) + 1",
+      "  texContent[key] = content",
+      "  pcall(function() part:SetAttribute(\"TextureKey\", key) part:SetAttribute(\"TextureLive\", publishedId == nil) if publishedId then part:SetAttribute(\"PublishedTextureId\", publishedId) end end)",
+      "  return \"texture \" .. key .. (from == \"new\" and \" (EditableImage \" .. tostring(tex.w) .. \"x\" .. tostring(tex.h) .. \")\" or \" (reused)\") .. \" via \" .. via .. (publishedId and (\", published as rbxassetid://\" .. publishedId) or \"\")",
+      "end",
       "for _, entry in ipairs(meshes) do",
       "  local verts, faces = entry.verts or {}, entry.faces or {}",
       "  local name = tostring(entry.name or \"Mesh\")",
@@ -286,12 +403,15 @@
       "  end)",
       "  local holder = entry.group and models[entry.group] or folder",
       "  part.Parent = holder",
+      "  local texNote = nil",
+      "  if entry.texture and method == \"EditableMesh\" then texNote = applyTexture(part, entry.texture, name) if texNote then how = how .. \", \" .. texNote end end",
+      "  if entry.texture and method ~= \"EditableMesh\" then how = how .. \", texture skipped (no MeshPart)\" end",
       "  builtParts[#builtParts + 1] = { part = part, entry = entry }",
       "  built = built + 1",
       "  if uvDone then verify.uv_parts = verify.uv_parts + 1 end",
       "  if shading == \"split\" then verify.smooth_parts = verify.smooth_parts + 1 end",
       "  verify.materials[matName] = (verify.materials[matName] or 0) + 1",
-      "  table.insert(verify.parts, { name = name, path = part:GetFullName(), method = method, tris = tonumber(entry.tris) or 0, material = matName, shading = shading, uvs = uvDone, collision = tostring(entry.fidelity or \"Default\"), can_collide = entry.canCollide ~= false, size = { math.floor(size.X * 100 + 0.5) / 100, math.floor(size.Y * 100 + 0.5) / 100, math.floor(size.Z * 100 + 0.5) / 100 } })",
+      "  table.insert(verify.parts, { name = name, path = part:GetFullName(), method = method, tris = tonumber(entry.tris) or 0, material = matName, shading = shading, uvs = uvDone, collision = tostring(entry.fidelity or \"Default\"), can_collide = entry.canCollide ~= false, size = { math.floor(size.X * 100 + 0.5) / 100, math.floor(size.Y * 100 + 0.5) / 100, math.floor(size.Z * 100 + 0.5) / 100 }, texture = (texNote and not string.find(texNote, \" failed\", 1, true) and not string.find(texNote, \" not applied\", 1, true) and not string.find(texNote, \" missing\", 1, true)) and tostring(entry.texture.key) or nil })",
       "  table.insert(report, name .. \": \" .. how)",
       "end",
       "for _, g in ipairs(data.groups or {}) do",
@@ -350,6 +470,7 @@
       "if not target then return HttpService:JSONEncode({ ok = false, error = \"nothing found at \" .. " + q(pathArg || "Workspace.Total_Imported") + " .. \" - the import did not land (or landed elsewhere)\" }) end",
       "local parts, models, atts, problems, mats = {}, {}, 0, {}, {}",
       "local minY, tris, real, fallback, unanchored = math.huge, 0, 0, 0, 0",
+      "local texLive, texPublished, texKeys = 0, 0, {}",
       "local minx, miny, minz, maxx, maxy, maxz = math.huge, math.huge, math.huge, -math.huge, -math.huge, -math.huge",
       "local function walk(inst)",
       "  for _, ch in ipairs(inst:GetChildren()) do",
@@ -368,6 +489,7 @@
       "      if m == \"BoundingBox\" then table.insert(problems, ch.Name .. \": placeholder bounding box, not real geometry\") end",
       "      if s.X < 0.06 and s.Y < 0.06 and s.Z < 0.06 then table.insert(problems, ch.Name .. \": near-zero size\") end",
       "      for _, a in ipairs(ch:GetChildren()) do if a:IsA(\"Attachment\") then atts = atts + 1 end end",
+      "      for _, a in ipairs(ch:GetChildren()) do if a:IsA(\"SurfaceAppearance\") and a:GetAttribute(\"TotalTextureKey\") then local k = tostring(a:GetAttribute(\"TotalTextureKey\")) texKeys[k] = (texKeys[k] or 0) + 1 if ch:GetAttribute(\"PublishedTextureId\") then texPublished = texPublished + 1 else texLive = texLive + 1 end end end",
       "      table.insert(parts, { name = ch.Name, class = ch.ClassName, material = mn, method = m, tris = t, shading = ch:GetAttribute(\"Shading\"), uvs = ch:GetAttribute(\"HasUVs\"), collision = ch:GetAttribute(\"Collision\"), can_collide = ch.CanCollide, anchored = ch.Anchored, size = { math.floor(s.X * 100 + 0.5) / 100, math.floor(s.Y * 100 + 0.5) / 100, math.floor(s.Z * 100 + 0.5) / 100 } })",
       "    elseif ch:IsA(\"Model\") then",
       "      local pv = nil pcall(function() local c = ch:GetPivot() pv = { math.floor(c.X * 100 + 0.5) / 100, math.floor(c.Y * 100 + 0.5) / 100, math.floor(c.Z * 100 + 0.5) / 100 } end)",
@@ -381,11 +503,12 @@
       "if #parts == 0 then table.insert(problems, \"no BaseParts under \" .. target:GetFullName()) end",
       "if unanchored > 0 then table.insert(problems, unanchored .. \" unanchored part(s)\") end",
       "if tris > 20000 * math.max(1, #parts) then table.insert(problems, \"triangle count suspicious: \" .. tris) end",
+      (e.textures ? "if (texLive + texPublished) < " + Math.max(0, Number(e.textures) | 0) + " then table.insert(problems, \"expected " + (Number(e.textures) | 0) + " textured part(s), found \" .. (texLive + texPublished)) end" : ""),
       "local extent = (#parts > 0) and { math.floor((maxx - minx) * 100 + 0.5) / 100, math.floor((maxy - miny) * 100 + 0.5) / 100, math.floor((maxz - minz) * 100 + 0.5) / 100 } or { 0, 0, 0 }",
       (e.parts ? "if #parts ~= " + Math.max(0, Number(e.parts) | 0) + " then table.insert(problems, \"expected " + (Number(e.parts) | 0) + " parts, found \" .. #parts) end" : ""),
       (e.min_real ? "if real < " + Math.max(0, Number(e.min_real) | 0) + " then table.insert(problems, \"expected at least " + (Number(e.min_real) | 0) + " real MeshParts, found \" .. real) end" : ""),
       (Array.isArray(e.extent) && e.extent.length >= 3 ? "do local want = {" + e.extent.slice(0, 3).map((x) => Number(x) || 0).join(", ") + "} for i = 1, 3 do if want[i] > 0 and math.abs(extent[i] - want[i]) / want[i] > 0.25 then table.insert(problems, string.format(\"extent axis %d is %.2f studs, expected %.2f\", i, extent[i], want[i])) end end end" : ""),
-      "return HttpService:JSONEncode({ ok = #problems == 0, target = target:GetFullName(), parts = #parts, real_meshparts = real, placeholders = fallback, models = models, attachments = atts, triangles = tris, materials = mats, extent_studs = extent, min_y = (#parts > 0) and math.floor(miny * 100 + 0.5) / 100 or nil, part_list = parts, problems = problems, note = \"structural read-back from the DataModel: counts, classes, materials, sizes, pivots, attachments - not a visual judgement (take a screenshot for that)\" })",
+      "return HttpService:JSONEncode({ ok = #problems == 0, target = target:GetFullName(), parts = #parts, real_meshparts = real, placeholders = fallback, models = models, attachments = atts, triangles = tris, materials = mats, textures = { live = texLive, published = texPublished, keys = texKeys, note = (texLive > 0) and \"live EditableImage content - not saved with the place; publish:true uploads it\" or nil }, extent_studs = extent, min_y = (#parts > 0) and math.floor(miny * 100 + 0.5) / 100 or nil, part_list = parts, problems = problems, note = \"structural read-back from the DataModel: counts, classes, materials, sizes, pivots, attachments - not a visual judgement (take a screenshot for that)\" })",
     ].filter(Boolean).join("\n");
   }
 

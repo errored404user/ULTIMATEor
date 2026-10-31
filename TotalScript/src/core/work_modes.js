@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// src/core/work_modes.js — TotalWorkModes (1.99.9)
+// src/core/work_modes.js — TotalWorkModes (2.0.0)
 //
 // What a WORK MODE actually DOES at run time. Before 1.99.9 the three built-in
 // modes (creation = Totality, blender, animate = Animator) only shaped the
@@ -24,7 +24,7 @@
 //   PRECONDITION precondition(mode, ctx) → { ok } | { ok:false, title, message, brief }
 const TotalWorkModes = (() => {
   "use strict";
-  const VERSION = "1.99.9";
+  const VERSION = "2.0.0";
   const IDS = ["creation", "blender", "animate"];
   const BADGE = { creation: "TOTALITY", blender: "BLENDER", animate: "ANIMATOR" };
   const BRIEF_MAX = 1200;

@@ -163,6 +163,6 @@ assert(tray.includes("height: min(280px, 42vh, var(--rs-room-above, 280px)) !imp
 assert(fs.existsSync(path.join(root, "ui", "swatch-void.jpg")), "ui/swatch-void.jpg must ship");
 assert(!popup.includes("#theme-void") && !popup.includes('html[data-theme="void"]'), "popup void theme card/hero removed with the picker");
 assert(manifest.web_accessible_resources.some((w) => (w.resources || []).includes("ui/*.jpg")), "swatches must stay web-accessible for the content script");
-assert(/^1\.19\.(?:[7-9]|[1-9]\d)$|^1\.[2-9]\d\./.test(manifest.version), "visual refresh shipped in 1.19.7; later packages keep it");
+assert(/^1\.19\.(?:[7-9]|[1-9]\d)$|^1\.[2-9]\d\.|^[2-9]\.\d+\.\d+$/.test(manifest.version), "visual refresh shipped in 1.19.7; later packages keep it");
 
 console.log("theme visuals: ok (aqua default skin, engine intact, picker removed, SVG ornaments, gradient buttons, 119 sound effects (17 packs x 7))");
