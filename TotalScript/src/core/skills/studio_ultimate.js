@@ -61,6 +61,7 @@
     "local function wpDone(rec) if rec then pcall(function() ChangeHistoryService:FinishRecording(rec,Enum.FinishRecordingOperation.Commit) end) end end",
     "local function plainCount(s,needle) local n,i=0,1 while true do local a,b=string.find(s,needle,i,true) if not a then break end n+=1 i=b+1 end return n end",
     "local function escPat(s) return (tostring(s):gsub('[%^%$%(%)%%%.%[%]%*%+%-%?]','%%%0')) end",
+    "local function syntaxErr(src) if type(loadstring)~='function' then return nil end local okL,f,e=pcall(loadstring,src) if not okL or f then return nil end return tostring(e or 'syntax error') end",
   ].join("\n");
 
   // Memory handbook helpers (only prepended by memory_* builders).
@@ -90,6 +91,7 @@
       "else count=plainCount(src,find) if count>0 then local out,i={},1 local done=0 while true do local x,y=string.find(src,find,i,true) if not x or (not all and done>=1) then break end out[#out+1]=src:sub(i,x-1) out[#out+1]=rep i=y+1 done+=1 end out[#out+1]=src:sub(i) src=table.concat(out) if not all then count=done end end end",
       "if count==0 then return fail('no match for the given text in '..s:GetFullName()..' - script_read it and copy the exact text') end",
       "if expected and expected>=0 and count~=expected then return fail('expected '..expected..' match(es) but found '..count..'; nothing changed - refine the find text or pass expected='..count) end",
+      "local se=" + (a.unchecked === true || a.unchecked === "true" ? "nil" : "syntaxErr(src)") + " if se then return fail('SYNTAX ERROR - nothing changed in '..s:GetFullName()..' (the result would not compile): '..se..' | adjust the replacement and resend (unchecked=true writes anyway)') end",
       "local rec=wp() s.Source=src wpDone(rec)",
       "return ok({path=s:GetFullName(),replaced=count,lines=#lines(src)},'replaced '..count..' occurrence(s)')",
     ].join("\n");
@@ -104,7 +106,8 @@
     "elseif beforeMark~='' then for i,l in ipairs(ls) do if l:find(beforeMark,1,true) then idx=i break end end if not idx then return fail('marker not found: '..beforeMark) end",
     "elseif pos=='top' then idx=1 else idx=#ls+1 end",
     "local ins=lines(text) for k=#ins,1,-1 do table.insert(ls,idx,ins[k]) end",
-    "local rec=wp() s.Source=table.concat(ls,'\\n') wpDone(rec)",
+    "local src=table.concat(ls,'\\n') local se=" + (a.unchecked === true || a.unchecked === "true" ? "nil" : "syntaxErr(src)") + " if se then return fail('SYNTAX ERROR - nothing inserted into '..s:GetFullName()..' (the result would not compile): '..se..' | adjust the text or line and resend (unchecked=true inserts anyway)') end",
+    "local rec=wp() s.Source=src wpDone(rec)",
     "return ok({path=s:GetFullName(),at_line=idx,inserted=#ins,lines=#ls},'inserted '..#ins..' line(s) at line '..idx)",
   ].join("\n");
   B.script_delete_lines = (a) => [
@@ -426,8 +429,8 @@
 
   const S = (t, req, desc) => ({ type: t, req: !!req, desc });
   const C = [
-    { name: "script_replace", description: "Safe find-and-replace inside ONE script's Source (plain text by default, Lua pattern with pattern=true). Refuses when nothing matches or when expected count differs - nothing is written on failure.", params: { path: S("string", true, "script path"), find: S("string", true, "exact text to find"), replace: S("string", true, "replacement text"), all: S("boolean", false, "replace every occurrence (default true)"), pattern: S("boolean", false, "treat find as a Lua pattern"), expected: S("number", false, "fail unless exactly this many matches") } },
-    { name: "script_insert", description: "Insert lines into a script at a 1-based line, after/before the first line containing a marker, or at top/bottom. Never overwrites existing lines.", params: { path: S("string", true), text: S("string", true, "lines to insert"), line: S("number", false), after: S("string", false, "marker text; insert after that line"), before: S("string", false, "marker text; insert before that line"), position: S("string", false, "top | bottom") } },
+    { name: "script_replace", description: "Safe find-and-replace inside ONE script's Source (plain text by default, Lua pattern with pattern=true). Refuses when nothing matches or when expected count differs - nothing is written on failure. The resulting source is syntax-checked before it is written; a Luau error is returned and nothing changes.", params: { unchecked: S("boolean", false, "true = skip the result syntax gate"), path: S("string", true, "script path"), find: S("string", true, "exact text to find"), replace: S("string", true, "replacement text"), all: S("boolean", false, "replace every occurrence (default true)"), pattern: S("boolean", false, "treat find as a Lua pattern"), expected: S("number", false, "fail unless exactly this many matches") } },
+    { name: "script_insert", description: "Insert lines into a script at a 1-based line, after/before the first line containing a marker, or at top/bottom. Never overwrites existing lines. The resulting source is syntax-checked before it is written; a Luau error is returned and nothing changes.", params: { unchecked: S("boolean", false, "true = skip the result syntax gate"), path: S("string", true), text: S("string", true, "lines to insert"), line: S("number", false), after: S("string", false, "marker text; insert after that line"), before: S("string", false, "marker text; insert before that line"), position: S("string", false, "top | bottom") } },
     { name: "script_delete_lines", description: "Delete an inclusive 1-based line range from a script.", params: { path: S("string", true), start: S("number", true), end: S("number", true) } },
     { name: "script_outline", description: "Structural outline of a script: functions with line numbers, require() targets, signal connections, remote usage lines, services, TODO lines. Read this before editing a long script.", params: { path: S("string", true) } },
     { name: "script_find_usages", description: "Find every whole-word usage of a symbol across all scripts (optionally under root) with line previews.", params: { symbol: S("string", true), root: S("string", false, "limit to this container"), limit: S("number", false) } },

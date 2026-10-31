@@ -33,7 +33,7 @@ const src = read("src/core/skill_refs.js"), intel = read("src/core/skill_intel.j
 
 // ── A. module shape ────────────────────────────────────────────────────────
 ok("A1 module exports (CommonJS + window.TotalSkillRefs) with the same api", R && window.TotalSkillRefs && ["VERSION", "DOCS_BASE", "REFS", "EXAMPLES", "refs", "examples", "render", "ids", "all"].every((k) => k in R && k in window.TotalSkillRefs));
-ok("A2 VERSION 1.99.7, DOCS_BASE is the Creator Docs root", R.VERSION === "1.99.7" && R.DOCS_BASE === "https://create.roblox.com/docs/");
+ok("A2 VERSION 1.99.8, DOCS_BASE is the Creator Docs root", R.VERSION === "1.99.8" && R.DOCS_BASE === "https://create.roblox.com/docs/");
 ok("A3 module is DOM-free at top level (no document access)", !/\bdocument\./.test(src.replace(/\/\/[^\n]*/g, "").replace(/"[^"\n]*"/g, '""')));
 
 // ── B. REFS per expert ─────────────────────────────────────────────────────

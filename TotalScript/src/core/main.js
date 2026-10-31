@@ -3475,6 +3475,10 @@
     const s = String(text || "");
     const MAX = 10000;
     if (s.length <= MAX) return s;
+    // 1.99.8: signal-preserving compaction (JSON shrunk structurally, problem
+    // lines kept, repeats folded) lives in the orchestrator - one shared
+    // implementation for every provider. The old head+tail cut is the fallback.
+    if (ORCH && ORCH.compactFeedback) { try { return ORCH.compactFeedback(s, name, MAX); } catch {} }
     return s.slice(0, 6500) + "\n[TotalScript context compression: dropped " + (s.length - 9000) + " chars from " + String(name || "tool") + "]\n" + s.slice(-2500);
   }
   async function attachAutoDebug(toolName, feedback) {

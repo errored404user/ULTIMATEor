@@ -36,6 +36,10 @@
     "local function resolve(p) if not p or p=='' then return nil end p=tostring(p) local lp=p:lower() if lp=='game' then return game end if lp=='workspace' or lp=='space' then return workspace end if lp=='camera' or lp=='cam' then return workspace.CurrentCamera end if lp=='player' or lp=='me' or lp=='char' or lp=='character' then local pl=game:GetService('Players'):GetPlayers()[1] return pl and pl.Character or workspace:FindFirstChildOfClass('Model') end if lp=='hrp' or lp=='root' or lp=='humanoidrootpart' then local pl=game:GetService('Players'):GetPlayers()[1] local c=pl and pl.Character return c and (c:FindFirstChild('HumanoidRootPart') or c.PrimaryPart) or workspace:FindFirstChild('Baseplate') end if lp=='spawn' then return workspace:FindFirstChildOfClass('SpawnLocation') end if lp=='baseplate' or lp=='ground' then return workspace:FindFirstChild('Baseplate') or workspace:FindFirstChildWhichIsA('BasePart') end if p:sub(1,5)=='game.' then p=p:sub(6) end local n=game for _,s in ipairs(string.split(p,'.')) do if s~='' then local nxt=n:FindFirstChild(s) if not nxt then for _,ch in ipairs(n:GetChildren()) do if ch.Name:lower()==s:lower() then nxt=ch break end end end if not nxt and n==game then local ok,svc=pcall(function() return game:GetService(s) end) if ok then nxt=svc end end if not nxt then nxt=workspace:FindFirstChild(s,true) or game:GetService('ReplicatedStorage'):FindFirstChild(s,true) or game:GetService('ServerStorage'):FindFirstChild(s,true) end if not nxt then return nil end n=nxt end end return n end",
     "local function ok(d,t) return HttpService:JSONEncode({ok=true,data=d,text=t or ''}) end",
     "local function fail(m) return HttpService:JSONEncode({ok=false,error=m}) end",
+    // 1.99.8 write-time syntax gate: loadstring returns nil+message on a Luau
+    // syntax error (it never throws). nil = clean OR loadstring unavailable
+    // (then the write proceeds unchecked - reported in the result).
+    "local function syntaxErr(src) if type(loadstring)~='function' then return nil end local okL,f,e=pcall(loadstring,src) if not okL or f then return nil end return tostring(e or 'syntax error') end",
   ].join("\n");
 
   function wrap(body) {
@@ -262,8 +266,9 @@
     if (op === "script_append") {
       const path = luaStr(a.path || "");
       const src = '"' + String(a.source || a.code || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "").replace(/\n/g, "\\n") + '"';
+      const unchecked = a.unchecked === true || a.unchecked === "true";
       return wrap(
-        `local inst=resolve(${path}) if not inst then return fail("not found") end if not inst:IsA("LuaSourceContainer") then return fail("not a script") end inst.Source=inst.Source.."\\n"..${src} return ok({path=inst:GetFullName(),chars=#inst.Source},"appended to "..inst:GetFullName())`
+        `local inst=resolve(${path}) if not inst then return fail("not found") end if not inst:IsA("LuaSourceContainer") then return fail("not a script") end local src=inst.Source.."\\n"..${src} local se=${unchecked ? "nil" : "syntaxErr(src)"} if se then return fail("SYNTAX ERROR - nothing appended to "..inst:GetFullName().." (the combined source would not compile): "..se.." | fix the Luau and resend (unchecked=true appends anyway)") end inst.Source=src return ok({path=inst:GetFullName(),chars=#inst.Source,syntax=(${unchecked ? "'unchecked'" : "type(loadstring)=='function' and 'ok' or 'unchecked'"})},"appended to "..inst:GetFullName())`
       );
     }
     if (op === "camera_look_at") {
@@ -297,8 +302,9 @@
     if (op === "script_set_source") {
       const path = luaStr(a.path || "");
       const src = '"' + String(a.source || a.code || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "").replace(/\n/g, "\\n") + '"';
+      const unchecked = a.unchecked === true || a.unchecked === "true";
       return wrap(
-        `local inst=resolve(${path}) if not inst then return fail("not found") end if not inst:IsA("LuaSourceContainer") then return fail("not a script") end inst.Source=${src} return ok({path=inst:GetFullName(),chars=#inst.Source},"wrote source "..inst:GetFullName())`
+        `local inst=resolve(${path}) if not inst then return fail("not found") end if not inst:IsA("LuaSourceContainer") then return fail("not a script") end local src=${src} local se=${unchecked ? "nil" : "syntaxErr(src)"} if se then return fail("SYNTAX ERROR - nothing written to "..inst:GetFullName()..": "..se.." | fix the Luau and resend (unchecked=true writes anyway)") end inst.Source=src return ok({path=inst:GetFullName(),chars=#inst.Source,syntax=(${unchecked ? "'unchecked'" : "type(loadstring)=='function' and 'ok' or 'unchecked'"})},"wrote source "..inst:GetFullName())`
       );
     }
     if (op === "script_list") {
@@ -465,12 +471,12 @@
     { name: "instance_rename", description: "Rename an instance. Path is dotted from game (e.g. Workspace.Part).", params: { path: { type: "string", req: true }, name: { type: "string", req: true } } },
     { name: "instance_reparent", description: "Move an instance to a new parent.", params: { path: { type: "string", req: true }, parent: { type: "string", req: true } } },
     { name: "selection_set", description: "Set Studio Selection to the given instance paths.", params: { paths: { type: "array", req: false, desc: "dotted paths" }, path: { type: "string", req: false } } },
-    { name: "script_append", description: "Append source to a Script/LocalScript/ModuleScript (does not overwrite).", params: { path: { type: "string", req: true }, source: { type: "string", req: true } } },
+    { name: "script_append", description: "Append source to a Script/LocalScript/ModuleScript (does not overwrite). The combined source is syntax-checked first; a Luau error is returned and nothing is written.", params: { path: { type: "string", req: true }, source: { type: "string", req: true }, unchecked: { type: "boolean", req: false, desc: "true = skip the syntax gate" } } },
     { name: "camera_look_at", description: "Point the Studio camera at an instance (edit-mode viewport).", params: { path: { type: "string", req: true }, distance: { type: "number", req: false } } },
     { name: "attribute_get", description: "Read one Attribute from an instance.", params: { path: { type: "string", req: true }, key: { type: "string", req: true } } },
     { name: "pivot_set", description: "Set an instance pivot world position [x,y,z].", params: { path: { type: "string", req: true }, position: { type: "array", req: true, desc: "[x,y,z]" } } },
     { name: "highlight_add", description: "Add/update a Highlight on an instance so you can see it in the viewport.", params: { path: { type: "string", req: true }, color: { type: "array", req: false, desc: "[r,g,b] 0-1" } } },
-    { name: "script_set_source", description: "Overwrite a Script/LocalScript/ModuleScript Source.", params: { path: { type: "string", req: true }, source: { type: "string", req: true } } },
+    { name: "script_set_source", description: "Overwrite a Script/LocalScript/ModuleScript Source. Syntax-checked first: a Luau error is returned and nothing is written.", params: { path: { type: "string", req: true }, source: { type: "string", req: true }, unchecked: { type: "boolean", req: false, desc: "true = skip the syntax gate" } } },
     { name: "script_list", description: "List LuaSourceContainer scripts under a path (default whole game, capped).", params: { path: { type: "string", req: false }, limit: { type: "number", req: false } } },
     { name: "script_disable", description: "Set Script.Disabled (true to disable).", params: { path: { type: "string", req: true }, disabled: { type: "boolean", req: false } } },
     { name: "sound_play", description: "Play a Sound on an instance (or a child Sound).", params: { path: { type: "string", req: true } } },

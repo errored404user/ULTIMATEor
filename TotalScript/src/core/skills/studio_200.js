@@ -6,6 +6,11 @@
   if (typeof RobloxScriptSkills === "undefined") return;
 
   const q = (s) => '"' + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, " ") + '"';
+  // 1.99.8: script SOURCES must keep their line structure. `q` folds newlines
+  // into spaces (fine for names / labels) - for a Lua body that turned every
+  // `-- comment` into a comment that swallowed the rest of the file and made
+  // the created script one long line. qsrc keeps newlines as \n escapes.
+  const qsrc = (s) => '"' + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "").replace(/\n/g, "\\n").replace(/\t/g, "\\t") + '"';
   const nn = (v, d = 0) => { const x = Number(v); return isFinite(x) ? String(x) : String(d); };
   const bb = (v, d = false) => (v === undefined || v === null ? (d ? "true" : "false") : v ? "true" : "false");
     const parseColor = (v, d = [163, 162, 165]) => {
@@ -77,6 +82,7 @@
     "local function allParts(root) local out={} for _,d in ipairs(root:GetDescendants()) do if d:IsA('BasePart') then out[#out+1]=d end end return out end",
     "local function paths(insts,cap) local out={} for _,i in ipairs(insts) do if #out>=(cap or 40) then break end out[#out+1]=i:GetFullName() end return out end",
     "local function mkScript(kind,name,parent,src) local s=Instance.new(kind) s.Name=name s.Source=src or '' s.Parent=parent return s end",
+    "local function syntaxErr(src) if type(loadstring)~='function' then return nil end local okL,f,e=pcall(loadstring,src) if not okL or f then return nil end return tostring(e or 'syntax error') end",
   ].join("\n");
 
   const B = {};
@@ -561,7 +567,7 @@
   B.replicated_first = function (a) {
     return "local parent=ServerStorage:FindFirstChild('ReplicatedFirst') or Instance.new('Folder')\n" +
       "parent.Name='ReplicatedFirst' parent.Parent=ServerStorage\n" +
-      "local s=mkScript('Script'," + q(a.name || "ReplicatedFirst") + ",parent," + q(a.source || "-- runs before all other server scripts") + ")\n" +
+      "local s=mkScript('Script'," + q(a.name || "ReplicatedFirst") + ",parent," + qsrc(a.source || "-- runs before all other server scripts") + ")\n" +
       "return ok({path=s:GetFullName()},'ReplicatedFirst script created')";
   };
   B.network_ping = function (a) {
@@ -1411,12 +1417,14 @@
   B.script_create = function (a) {
     var kind = { server: "Script", client: "LocalScript", module: "ModuleScript", localscript: "LocalScript" }[String(a.kind || "server").toLowerCase()] || "Script";
     return "local parent=resolve(" + q(a.parent || (kind === "Script" ? "ServerScriptService" : kind === "ModuleScript" ? "ServerStorage" : "StarterPlayer.StarterPlayerScripts")) + ") or " + (kind === "Script" ? "ServerScriptService" : kind === "ModuleScript" ? "ServerStorage" : "StarterPlayer:FindFirstChild('StarterPlayerScripts') or StarterPlayer") + "\n" +
-      "local s=mkScript('" + kind + "'," + q(a.name || "Total_Script") + ",parent," + q(a.source || "") + ")\n" +
-      "return ok({path=s:GetFullName(),kind='" + kind + "'},'script created')";
+      "local src=" + qsrc(a.source || "") + " local se=" + (a.unchecked === true || a.unchecked === "true" ? "nil" : "syntaxErr(src)") + " if se then return fail('SYNTAX ERROR - script not created: '..se..' | fix the Luau and resend (unchecked=true creates anyway)') end\n" +
+      "local s=mkScript('" + kind + "'," + q(a.name || "Total_Script") + ",parent,src)\n" +
+      "return ok({path=s:GetFullName(),kind='" + kind + "',syntax=(" + (a.unchecked === true || a.unchecked === "true" ? "'unchecked'" : "type(loadstring)=='function' and 'ok' or 'unchecked'") + ")},'script created')";
   };
   B.script_module = function (a) {
     return "local parent=ServerStorage:FindFirstChild('Total_Modules') or Instance.new('Folder') parent.Name='Total_Modules' parent.Parent=ServerStorage\n" +
-      "local m=mkScript('ModuleScript'," + q(a.name || "Total_Module") + ",parent," + q(a.source || "local M={} return M") + ")\n" +
+      "local src=" + qsrc(a.source || "local M={} return M") + " local se=" + (a.unchecked === true || a.unchecked === "true" ? "nil" : "syntaxErr(src)") + " if se then return fail('SYNTAX ERROR - module not created: '..se..' | fix the Luau and resend (unchecked=true creates anyway)') end\n" +
+      "local m=mkScript('ModuleScript'," + q(a.name || "Total_Module") + ",parent,src)\n" +
       "return ok({path=m:GetFullName(),require='local " + (a.name || "Total_Module") + "=require(ServerStorage.Total_Modules." + (a.name || "Total_Module") + ")'},'module created')";
   };
   B.script_reload = function (a) {
@@ -1459,17 +1467,21 @@
     return B.api_request({ url: a.url, method: "POST", body: a.body, headers: a.headers });
   };
   B.script_check = function (a) {
-    return "local src=" + q(a.source || a.path ? (a.source != null ? a.source : "") : "") + "\n" +
+    return "local src=" + qsrc(a.source || a.path ? (a.source != null ? a.source : "") : "") + "\n" +
       "if src=='' then local p=resolve(" + q(a.path || "") + ") if not p or not p:IsA('LuaSourceContainer') then return fail('pass source: or path: of an existing script') end src=p.Source end\n" +
-      "local okc,err=pcall(function() local f=loadstring(src) return f end)\n" +
-      "if not okc then return fail('COMPILE ERROR: ' .. tostring(err)) end\n" +
-      "return ok({chars=#src},'source compiles clean')";
+      // 1.99.8: loadstring returns nil+message on a syntax error - it never
+      // throws - so the old pcall-only check reported every broken script as
+      // clean. syntaxErr reads the second return value.
+      "if type(loadstring)~='function' then return fail('loadstring is not available in this context - syntax cannot be checked here') end\n" +
+      "local se=syntaxErr(src)\n" +
+      "if se then return fail('COMPILE ERROR: ' .. se) end\n" +
+      "return ok({chars=#src,syntax='ok'},'source compiles clean')";
   };
   B.log_tag = function (a) {
     var tag = String(a.tag || "Total").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 12) || "Total";
     var src = "local realprint = print\nprint = function(...) realprint('[" + tag + "]', ...) end\nwarn('[" + tag + "] console tag active')";
     return "local old=ServerScriptService:FindFirstChild('Total_LogTag') if old then old:Destroy() end\n" +
-      "local s=mkScript('Script','Total_LogTag',ServerScriptService," + q(src) + ")\n" +
+      "local s=mkScript('Script','Total_LogTag',ServerScriptService," + qsrc(src) + ")\n" +
       "return ok({tag='" + tag + "',path=s:GetFullName()},'server output will be prefixed with [" + tag + "] at play time (ServerScriptService.Total_LogTag)')";
   };
   B.game_stats = function (a) {
@@ -1682,8 +1694,8 @@
     { name: "workspace_clear", description: "Destroy all Workspace children (keeps Terrain + Camera).", params: {} },
     { name: "workspace_export", description: "Export the workspace tree (names/classes/part pos+size) to ReplicatedStorage.Total_Export.", params: {} },
     { name: "workspace_import", description: "Restore the last workspace_export into a new Model (Total_Restore).", params: {} },
-    { name: "script_create", description: "Create a Script/LocalScript with source under a parent service.", params: { kind: { type: "string", req: false, desc: "server|client|module" }, name: { type: "string", req: false}, parent: { type: "string", req: false}, source: { type: "string", req: false, desc: "Lua source" } } },
-    { name: "script_module", description: "Create a ModuleScript under ServerStorage.Total_Modules; returns the require() path.", params: { name: { type: "string", req: false}, source: { type: "string", req: false} } },
+    { name: "script_create", description: "Create a Script/LocalScript with source under a parent service. The source is syntax-checked first: a Luau error is returned and nothing is created (unchecked=true skips the gate).", params: { unchecked: { type: "boolean", req: false, desc: "true = skip the syntax gate" },  kind: { type: "string", req: false, desc: "server|client|module" }, name: { type: "string", req: false}, parent: { type: "string", req: false}, source: { type: "string", req: false, desc: "Lua source" } } },
+    { name: "script_module", description: "Create a ModuleScript under ServerStorage.Total_Modules; returns the require() path. The source is syntax-checked first: a Luau error is returned and nothing is created (unchecked=true skips the gate).", params: { name: { type: "string", req: false}, source: { type: "string", req: false}, unchecked: { type: "boolean", req: false, desc: "true = skip the syntax gate" } } },
     { name: "script_reload", description: "Re-apply a script's Source (reload after edits).", params: { path: { type: "string", req: true} } },
     { name: "script_grep", description: "Search script sources for text; returns matching paths + lines.", params: { query: { type: "string", req: true}, path: { type: "string", req: false, desc: "scope path" } } },
     { name: "script_stats", description: "Script inventory: counts per service (SSS/SPS/ServerStorage/StarterGui...).", params: {} },

@@ -18,8 +18,11 @@ const RSParse = (() => {
   // execute_luau runs against (the MCP REQUIRES datamodel_type; a bare
   // ###LUA### defaults to "Edit" so the model never has to think about it
   // outside play-testing).
-  const LUA_START_RE = /###\s*lua(?:\s*[:\-_ ]\s*(edit|client|server))?\s*(?:###|---)/i;
-  const LUA_END_RE = /###\s*end[_\- ]?lua\s*###/i;
+  // 1.99.8: a marker rendered as a markdown HEADING (`### LUA` alone on its
+  // line, closer `### END_LUA`) is accepted too - the trailing hashes are what
+  // a heading renderer eats first. Only end-of-line qualifies, never prose.
+  const LUA_START_RE = /###\s*lua(?:\s*[:\-_ ]\s*(edit|client|server))?\s*(?:###|---|(?=[ \t]*\r?\n))/i;
+  const LUA_END_RE = /###\s*end[_\- ]?lua\s*(?:###|(?=[ \t]*(?:\r?\n|$)))/i;
   const LUA_DEFAULT_DM = "Edit";
   const dmName = (m) => (m ? m[0].toUpperCase() + m.slice(1).toLowerCase() : LUA_DEFAULT_DM);
 
@@ -206,10 +209,20 @@ const RSParse = (() => {
       .replace(/^[\u200B-\u200D\uFEFF\s]+/, "")
       .replace(/^```[ \t]*[A-Za-z0-9_-]*[ \t]*\r?\n/, "")
       .replace(/\r?\n[ \t]*```[ \t]*$/, "")
+      // 1.99.8: bold-rendered markers (`**###LUA###**`) leave their closing
+      // / opening asterisks on the block's first and last line.
+      .replace(/^(?:\*\*|__)[ \t]*\r?\n/, "")
+      .replace(/\r?\n[ \t]*(?:\*\*|__)[ \t]*$/, "")
       .replace(/^[\u200B-\u200D\uFEFF\s]+/, "");
     // Strip up to two stacked chrome tokens (`lua` + `Copy` is common).
     for (let i = 0; i < 2; i++) {
       out = out.replace(/^(?:json|copy|copy code|lua|luau|javascript|js|python|py|text)[ \t]*(?:\r?\n|\s+)/i, "");
+    }
+    // 1.99.8: a block handed over HTML-escaped (`a &lt; b`, `&quot;x&quot;`)
+    // is decoded ONLY when the block has no raw < or > at all - mixed content
+    // means the entities are the code's own text and must stay.
+    if (/&(?:lt|gt|quot|amp|#39|#34);/.test(out) && !/[<>]/.test(out)) {
+      out = out.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;|&#34;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
     }
     return out;
   }
@@ -309,6 +322,7 @@ const RSParse = (() => {
   // Normalise a parsed JSON object into { tool, arguments }, accepting both the
   // new RobloxScript schema ("command"/"params") and the legacy/function-calling
   // schema ("tool"/"arguments"/"name"/"args"). Returns null if not a valid call.
+  const FLAT_ENVELOPE_SKIP = new Set(["command", "tool", "params", "arguments", "args", "input", "reason", "reasoning", "explanation", "thought", "thoughts", "note", "notes", "comment", "description", "rationale", "why", "purpose", "id", "type"]);
   function normalizeCall(o) {
     if (!o || typeof o !== "object") return null;
     const name = o.command != null ? o.command : (o.tool != null ? o.tool : o.name);
@@ -320,8 +334,23 @@ const RSParse = (() => {
     if (typeof args === "string") {
       try { args = parseLoose(args); } catch { return null; }
     }
-    if (args == null) args = {};
+    if (args == null) {
+      // 1.99.8: flat envelopes - `{"command":"instance_rename","path":…,
+      // "name":…}` - carry the parameters at the root. Adopt every other key
+      // except the envelope's own / commentary ones; a bare {"command":"x"}
+      // still yields {} exactly as before.
+      args = {};
+      for (const k of Object.keys(o)) {
+        if (FLAT_ENVELOPE_SKIP.has(k) || (k === "name" && o.command == null && o.tool == null)) continue;
+        args[k] = o[k];
+      }
+    }
     else if (typeof args !== "object" || Array.isArray(args)) return null;
+    // Code written as an array of lines decodes to a string (seen on Gemini /
+    // Qwen for long execute_luau bodies).
+    for (const k of ["code", "source"]) {
+      if (Array.isArray(args[k]) && args[k].length && args[k].every((x) => typeof x === "string")) args[k] = args[k].join("\n");
+    }
     return { tool: name, arguments: args };
   }
 
@@ -394,8 +423,101 @@ const RSParse = (() => {
         }
         cleaned += c;
       }
-      return JSON.parse(cleaned); // may still throw - callers deliberately catch
+      try { return JSON.parse(cleaned); } catch {}
+      // 1.99.8 repair stages (provider-output corpus, tests/parser-bench.js).
+      // Each one only rewrites text OUTSIDE string literals or is gated on a
+      // shape that valid JSON cannot have, so a correct command is never
+      // altered. They run in order of how common the mangling is live:
+      //  3. `// line` and `/* block */` comments between tokens (models annotate
+      //     the envelope) and Python literals True/False/None (Gemini / Qwen
+      //     when the model "thinks in Python") - then the trailing-comma pass.
+      //  4. One level of double escaping (`\\"` everywhere, never a plain
+      //     `\"`): the model JSON-encoded a JSON string a second time.
+      //  5. A LAST string-valued property (code/source/text/…) written with
+      //     RAW quotes and newlines inside - the single most frequent way an
+      //     execute_luau / script_set_source envelope breaks. The value is
+      //     bounded by the key and the closing braces at the very end, so it
+      //     can be re-escaped without guessing where it stops.
+      const scrubbed = scrubJsonTokens(cleaned);
+      if (scrubbed !== cleaned) { try { return JSON.parse(scrubbed); } catch {} }
+      if (/\\\\"/.test(scrubbed) && !/(^|[^\\])\\"/.test(scrubbed)) {
+        const once = scrubbed.replace(/\\\\(["\\\/bfnrtu])/g, "\\$1");
+        try { return JSON.parse(once); } catch {}
+      }
+      const repaired = repairRawStringValue(scrubbed);
+      if (repaired !== null) return JSON.parse(repaired); // may still throw - callers deliberately catch
+      return JSON.parse(cleaned);                          // rethrow the original failure
     }
+  }
+  // Stage 3 helper: walk `src` outside string literals; drop // and /* */
+  // comments, map True/False/None → true/false/null, then drop commas that sit
+  // right before a closing } or ]. Inside strings nothing is touched.
+  function scrubJsonTokens(src) {
+    let out = "", inStr = false, esc = false, i = 0;
+    while (i < src.length) {
+      const c = src[i];
+      if (inStr) {
+        out += c;
+        if (esc) esc = false;
+        else if (c === "\\") esc = true;
+        else if (c === '"') inStr = false;
+        i++; continue;
+      }
+      if (c === '"') { inStr = true; out += c; i++; continue; }
+      if (c === "/" && src[i + 1] === "/") { const nl = src.indexOf("\n", i); i = nl === -1 ? src.length : nl; continue; }
+      if (c === "/" && src[i + 1] === "*") { const ce = src.indexOf("*/", i + 2); i = ce === -1 ? src.length : ce + 2; continue; }
+      if (/[A-Za-z]/.test(c) && !/[A-Za-z0-9_]/.test(src[i - 1] || "")) {
+        const m = /^(True|False|None)(?![A-Za-z0-9_])/.exec(src.slice(i, i + 6));
+        if (m) { out += m[1] === "True" ? "true" : m[1] === "False" ? "false" : "null"; i += m[1].length; continue; }
+      }
+      if (c === ",") {
+        let j = i + 1;
+        while (j < src.length && /\s/.test(src[j])) j++;
+        if (src[j] === "}" || src[j] === "]") { i++; continue; }
+      }
+      out += c; i++;
+    }
+    return out;
+  }
+  // Stage 5 helper. Finds the LAST `"<key>": "` for a code-carrying key and
+  // the LAST `"` that is followed only by closers (`}` / `]` / whitespace) up
+  // to the end; re-escapes the raw text between them (bare `"` → \", raw
+  // newline/tab/CR → escapes, a backslash that does not start a JSON escape →
+  // doubled). Returns null when the shape is not there, so nothing else is
+  // ever rewritten.
+  const RAW_VALUE_KEYS = /"(code|source|text|content|script|luau|lua|body|new|replace|find|old|query|message|value)"\s*:\s*"/g;
+  function repairRawStringValue(src) {
+    let m, last = null;
+    RAW_VALUE_KEYS.lastIndex = 0;
+    while ((m = RAW_VALUE_KEYS.exec(src))) last = m;
+    if (!last) return null;
+    const vStart = last.index + last[0].length;
+    const tail = src.slice(vStart);
+    const endRel = tail.search(/"[\s}\]]*$/);
+    if (endRel === -1) return null;
+    let raw = tail.slice(0, endRel), rest = "";
+    const closers = tail.slice(endRel + 1);
+    if (!/^[\s}\]]*$/.test(closers)) return null;
+    // Properties AFTER the broken value (`…", "datamodel_type": "Server"`)
+    // stay JSON: split at the last `", "key":` boundary inside the raw span.
+    const after = /",\s*"[A-Za-z_][A-Za-z0-9_]*"\s*:(?![\s\S]*",\s*"[A-Za-z_][A-Za-z0-9_]*"\s*:)/.exec(raw);
+    if (after) { rest = raw.slice(after.index); raw = raw.slice(0, after.index); }
+    let fixed = "";
+    for (let i = 0; i < raw.length; i++) {
+      const c = raw[i];
+      if (c === "\\") {
+        const n = raw[i + 1] || "";
+        if (/["\\\/bfnrtu]/.test(n)) { fixed += c + n; i++; }
+        else fixed += "\\\\";
+      }
+      else if (c === '"') fixed += '\\"';
+      else if (c === "\n") fixed += "\\n";
+      else if (c === "\r") fixed += "\\r";
+      else if (c === "\t") fixed += "\\t";
+      else fixed += c;
+    }
+    if (fixed === raw) return null;
+    return src.slice(0, vStart) + fixed + rest + '"' + closers;
   }
 
   function extractJson(raw) {
@@ -753,12 +875,33 @@ const RSParse = (() => {
       while (true) {
         const s = text.indexOf(key, pos);
         if (s === -1) break;
-        const start = text.lastIndexOf("{", s);
-        if (start === -1 || start < from) { pos = s + 1; continue; }
-        const end = matchBrace(text, start); // string-aware brace matching
-        if (end === -1) { pos = s + 1; continue; }
-        let call = null;
-        try { call = normalizeCall(parseLoose(text.slice(start, end + 1))); } catch {}
+        // 1.99.8: the key is not always the FIRST property - `{"params":{…},
+        // "command":"x"}` puts a closed params object between the opener and
+        // the key, so the nearest "{" is the wrong one. Step back through up to
+        // 4 earlier openers before giving this occurrence up.
+        let start = text.lastIndexOf("{", s), call = null, end = -1;
+        for (let back = 0; back < 4 && start !== -1 && start >= from; back++) {
+          end = matchBrace(text, start); // string-aware brace matching
+          // Odd raw quotes inside a code value leave matchBrace "open" even
+          // though the envelope visibly ends in }} - try the last closer and
+          // let parseLoose's raw-string repair decide (it refuses anything
+          // that is not that exact shape).
+          if (end !== -1) { try { call = normalizeCall(parseLoose(text.slice(start, end + 1))); } catch {} }
+          else {
+            // Candidates: a "}" that ENDS its line (only spaces / fence
+            // backticks after it) - the envelope's visible end - nearest first,
+            // so a second command further down is never swallowed.
+            let tries = 0;
+            for (let e = text.indexOf("}", s); e !== -1 && tries < 3; e = text.indexOf("}", e + 1)) {
+              if (!/^[ \t`]*(?:\r?\n|$)/.test(text.slice(e + 1, e + 12))) continue;
+              tries++;
+              try { call = normalizeCall(parseLoose(text.slice(start, e + 1))); } catch {}
+              if (call) { end = e; break; }
+            }
+          }
+          if (call) break;
+          start = start > 0 ? text.lastIndexOf("{", start - 1) : -1;
+        }
         if (call) { if (!best || start < best.start) best = { call, start, end }; break; }
         pos = s + 1;
       }

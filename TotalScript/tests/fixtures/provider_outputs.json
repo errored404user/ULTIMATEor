@@ -1,0 +1,1085 @@
+{
+ "format": "totalscript-provider-output-corpus",
+ "version": 1,
+ "note": "Realistic shapes in which AI web UIs hand a TotalScript command back to the parser (tests/parser-bench.js). Styles are tagged by the provider family they were first seen on or modelled after; none of these are live transcripts.",
+ "cases": [
+  {
+   "id": "fence-json",
+   "tag": "generic",
+   "text": "Sure.\n```json\n{\"command\":\"workspace_list\",\"params\":{\"path\":\"Workspace\"}}\n```",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "fence-JSON-upper",
+   "tag": "chatgpt",
+   "text": "```JSON\n{\"command\":\"workspace_list\",\"params\":{}}\n```",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "fence-jsonc-comment",
+   "tag": "claude",
+   "text": "```jsonc\n{\"command\":\"workspace_list\",\"params\":{}} // list the tree\n```",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "fence-json5-single-quotes",
+   "tag": "gemini",
+   "text": "```json5\n{command: 'workspace_list', params: {path: 'Workspace'}}\n```",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "fence-tool_code",
+   "tag": "gemini",
+   "text": "```tool_code\n{\"command\":\"workspace_list\",\"params\":{}}\n```",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "fence-no-lang",
+   "tag": "generic",
+   "text": "```\n{\"command\":\"workspace_list\",\"params\":{\"path\":\"Workspace\"}}\n```",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "fence-indented-list",
+   "tag": "chatgpt",
+   "text": "1. List it:\n   ```json\n   {\"command\":\"workspace_list\",\"params\":{}}\n   ```\n2. Then rename.",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "fence-blockquote",
+   "tag": "notion",
+   "text": "> ```json\n> {\"command\":\"workspace_list\",\"params\":{}}\n> ```",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "fence-tilde",
+   "tag": "generic",
+   "text": "~~~json\n{\"command\":\"workspace_list\",\"params\":{}}\n~~~",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "html-pre-code",
+   "tag": "huggingchat",
+   "text": "<pre><code class=\"language-json\">{\"command\":\"workspace_list\",\"params\":{}}</code></pre>",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "copy-chrome",
+   "tag": "kimi",
+   "text": "json\nCopy code\n{\"command\":\"workspace_list\",\"params\":{}}",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "table-cell",
+   "tag": "notion",
+   "text": "| step | call |\n|---|---|\n| 1 | `{\"command\":\"workspace_list\",\"params\":{}}` |",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "think-then-json",
+   "tag": "deepseek",
+   "text": "<think>plan: list first</think>\n```json\n{\"command\":\"workspace_list\",\"params\":{}}\n```",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "prose-unfenced",
+   "tag": "vani",
+   "text": "I will list the workspace now:\n{\"command\":\"workspace_list\",\"params\":{\"path\":\"Workspace\"}}\nDone.",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "trailing-commas",
+   "tag": "gemini",
+   "text": "```json\n{\"command\":\"instance_rename\",\"params\":{\"path\":\"Workspace.Part\",\"name\":\"Door\",},}\n```",
+   "expect": [
+    {
+     "tool": "instance_rename",
+     "args": {
+      "path": "Workspace.Part",
+      "name": "Door"
+     }
+    }
+   ]
+  },
+  {
+   "id": "line-comments",
+   "tag": "claude",
+   "text": "```json\n{\n  // rename it\n  \"command\":\"instance_rename\",\n  \"params\":{\"path\":\"Workspace.Part\",\"name\":\"Door\"}\n}\n```",
+   "expect": [
+    {
+     "tool": "instance_rename",
+     "args": {
+      "path": "Workspace.Part",
+      "name": "Door"
+     }
+    }
+   ]
+  },
+  {
+   "id": "block-comment",
+   "tag": "claude",
+   "text": "{\"command\":\"instance_rename\", /* why */ \"params\":{\"path\":\"Workspace.Part\",\"name\":\"Door\"}}",
+   "expect": [
+    {
+     "tool": "instance_rename",
+     "args": {
+      "path": "Workspace.Part",
+      "name": "Door"
+     }
+    }
+   ]
+  },
+  {
+   "id": "python-true",
+   "tag": "qwen",
+   "text": "```json\n{\"command\":\"script_disable\",\"params\":{\"path\":\"Workspace.S\",\"disabled\":True}}\n```",
+   "expect": [
+    {
+     "tool": "script_disable",
+     "args": {
+      "disabled": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "python-none",
+   "tag": "qwen",
+   "text": "{\"command\":\"attribute_set\",\"params\":{\"path\":\"Workspace.P\",\"key\":\"x\",\"value\":None}}",
+   "expect": [
+    {
+     "tool": "attribute_set",
+     "args": {
+      "value": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "python-literal-inside-string-kept",
+   "tag": "qwen",
+   "text": "{\"command\":\"attribute_set\",\"params\":{\"path\":\"Workspace.P\",\"key\":\"x\",\"value\":\"True\"}}",
+   "expect": [
+    {
+     "tool": "attribute_set",
+     "args": {
+      "value": "True"
+     }
+    }
+   ]
+  },
+  {
+   "id": "unquoted-keys",
+   "tag": "glm",
+   "text": "```\n{command: \"workspace_list\", params: {path: \"Workspace\"}}\n```",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "single-quoted",
+   "tag": "glm",
+   "text": "{'command':'workspace_list','params':{'path':'Workspace'}}",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "smart-quotes",
+   "tag": "notion",
+   "text": "{“command”:“workspace_list”,“params”:{“path”:“Workspace”}}",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "nbsp",
+   "tag": "notion",
+   "text": "{\"command\": \"workspace_list\", \"params\": {}}",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "zero-width",
+   "tag": "notion",
+   "text": "{\"com​mand\":\"workspace_list\",\"params\":{}}",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "entity-escaped",
+   "tag": "huggingchat",
+   "text": "{&quot;command&quot;:&quot;workspace_list&quot;,&quot;params&quot;:{}}",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "spaced-tokens",
+   "tag": "generic",
+   "text": "{ \"command\" : \"workspace_list\" , \"params\" : { } }",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "tabs",
+   "tag": "generic",
+   "text": "{\n\t\"command\": \"workspace_list\",\n\t\"params\": {\n\t\t\"path\": \"Workspace\"\n\t}\n}",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "escaped-underscore",
+   "tag": "vani",
+   "text": "{\"command\":\"workspace\\_list\",\"params\":{\"path\":\"Workspace\"}}",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "shown-escaped-fence",
+   "tag": "vani",
+   "text": "\\`\\`\\`json {\\\"command\\\":\\\"workspace_list\\\",\\\"params\\\":{}} \\`\\`\\`",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "unicode-escape",
+   "tag": "generic",
+   "text": "{\"command\":\"instance_rename\",\"params\":{\"path\":\"Workspace.Part\",\"name\":\"D\\u00f6r\"}}",
+   "expect": [
+    {
+     "tool": "instance_rename",
+     "args": {
+      "name": "Dör"
+     }
+    }
+   ]
+  },
+  {
+   "id": "arguments-key",
+   "tag": "openrouter",
+   "text": "{\"command\":\"workspace_list\",\"arguments\":{\"path\":\"Workspace\"}}",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "name-params",
+   "tag": "openrouter",
+   "text": "{\"name\":\"workspace_list\",\"params\":{\"path\":\"Workspace\"}}",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ],
+   "mode": "alternate"
+  },
+  {
+   "id": "tool-arguments-legacy",
+   "tag": "generic",
+   "text": "{\"tool\":\"workspace_list\",\"arguments\":{\"path\":\"Workspace\"}}",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "params-first",
+   "tag": "kimi",
+   "text": "{\"params\":{\"path\":\"Workspace\"},\"command\":\"workspace_list\"}",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "params-null",
+   "tag": "generic",
+   "text": "{\"command\":\"workspace_list\",\"params\":null}",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "params-absent-extra-keys",
+   "tag": "claude",
+   "text": "{\"command\":\"workspace_list\",\"reason\":\"check the tree\"}",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {}
+    }
+   ]
+  },
+  {
+   "id": "flat-root-params",
+   "tag": "gemini",
+   "text": "{\"command\":\"instance_rename\",\"path\":\"Workspace.Part\",\"name\":\"Door\",\"reason\":\"user asked\"}",
+   "expect": [
+    {
+     "tool": "instance_rename",
+     "args": {
+      "path": "Workspace.Part",
+      "name": "Door"
+     }
+    }
+   ]
+  },
+  {
+   "id": "flat-root-params-tool-key",
+   "tag": "openrouter",
+   "text": "{\"tool\":\"instance_rename\",\"name\":\"Door\",\"path\":\"Workspace.Part\"}",
+   "expect": [
+    {
+     "tool": "instance_rename",
+     "args": {
+      "path": "Workspace.Part",
+      "name": "Door"
+     }
+    }
+   ]
+  },
+  {
+   "id": "double-encoded-params",
+   "tag": "codecraft",
+   "text": "{\"command\":\"inspect_instance\",\"params\":\"{\\\"path\\\":\\\"game.Workspace\\\"}\"}",
+   "expect": [
+    {
+     "tool": "inspect_instance",
+     "args": {
+      "path": "game.Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "code-as-line-array",
+   "tag": "gemini",
+   "text": "{\"command\":\"execute_luau\",\"params\":{\"code\":[\"local a = 1\",\"return a\"]}}",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "local a = 1\nreturn a"
+     }
+    }
+   ]
+  },
+  {
+   "id": "array-of-commands",
+   "tag": "qwen",
+   "text": "```json\n[{\"command\":\"workspace_list\",\"params\":{}},{\"command\":\"selection_info\",\"params\":{}}]\n```",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    },
+    {
+     "tool": "selection_info"
+    }
+   ]
+  },
+  {
+   "id": "commands-wrapper",
+   "tag": "qwen",
+   "text": "```json\n{\"commands\":[{\"command\":\"workspace_list\",\"params\":{}},{\"command\":\"selection_info\",\"params\":{}}]}\n```",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    },
+    {
+     "tool": "selection_info"
+    }
+   ]
+  },
+  {
+   "id": "two-fences",
+   "tag": "chatgpt",
+   "text": "```json\n{\"command\":\"workspace_list\",\"params\":{}}\n```\nthen\n```json\n{\"command\":\"selection_info\",\"params\":{}}\n```",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    },
+    {
+     "tool": "selection_info"
+    }
+   ]
+  },
+  {
+   "id": "duplicate-echo",
+   "tag": "meta",
+   "text": "```json\n{\"command\":\"workspace_list\",\"params\":{}}\n```\n```json\n{\"command\":\"workspace_list\",\"params\":{}}\n```",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    },
+    {
+     "tool": "workspace_list"
+    }
+   ]
+  },
+  {
+   "id": "json-then-lua",
+   "tag": "glm",
+   "text": "{\"command\":\"workspace_list\",\"params\":{}}\n###LUA###\nreturn 2\n###END_LUA###",
+   "expect": [
+    {
+     "tool": "workspace_list"
+    },
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "return 2"
+     }
+    }
+   ]
+  },
+  {
+   "id": "raw-newlines-raw-quotes",
+   "tag": "gemini",
+   "text": "```json\n{\"command\":\"execute_luau\",\"params\":{\"code\":\"local p = Instance.new(\"Part\")\np.Parent = workspace\nreturn p.Name\"}}\n```",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "local p = Instance.new(\"Part\")\np.Parent = workspace\nreturn p.Name"
+     }
+    }
+   ]
+  },
+  {
+   "id": "raw-quotes-odd-count",
+   "tag": "deepseek",
+   "text": "{\"command\":\"execute_luau\",\"params\":{\"code\":\"print(\"a\") print(\"b\") print(\"c\\\")\"}}",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "print(\"a\") print(\"b\") print(\"c\")"
+     }
+    }
+   ]
+  },
+  {
+   "id": "raw-quotes-then-property",
+   "tag": "glm",
+   "text": "{\"command\":\"execute_luau\",\"params\":{\"code\":\"print(\"x\")\nreturn 1\",\"datamodel_type\":\"Server\"}}",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "print(\"x\")\nreturn 1",
+      "datamodel_type": "Server"
+     }
+    }
+   ]
+  },
+  {
+   "id": "raw-tab-in-string",
+   "tag": "gemini",
+   "text": "{\"command\":\"execute_luau\",\"params\":{\"code\":\"local a\t= 1\nreturn a\"}}",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "local a\t= 1\nreturn a"
+     }
+    }
+   ]
+  },
+  {
+   "id": "double-escaped",
+   "tag": "codecraft",
+   "text": "{\"command\":\"execute_luau\",\"params\":{\"code\":\"print(\\\\\"a\\\\\")\\\\nreturn 1\"}}",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "print(\"a\")\nreturn 1"
+     }
+    }
+   ]
+  },
+  {
+   "id": "braces-in-code",
+   "tag": "generic",
+   "text": "{\"command\":\"execute_luau\",\"params\":{\"code\":\"local t={a={b=1}} return t.a.b\"}}",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "local t={a={b=1}} return t.a.b"
+     }
+    }
+   ]
+  },
+  {
+   "id": "fence-inside-source-string",
+   "tag": "chatgpt",
+   "text": "```json\n{\"command\":\"script_set_source\",\"params\":{\"path\":\"SSS.A\",\"source\":\"```lua\\nprint(1)\\n```\"}}\n```",
+   "expect": [
+    {
+     "tool": "script_set_source",
+     "args": {
+      "source": "print(1)"
+     }
+    }
+   ],
+   "mode": "contract"
+  },
+  {
+   "id": "lua-markers-inside-json-code",
+   "tag": "glm",
+   "text": "{\"command\":\"execute_luau\",\"params\":{\"code\":\"###LUA###\\nreturn 5\\n###END_LUA###\"}}",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "return 5",
+      "datamodel_type": "Edit"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lua-plain",
+   "tag": "generic",
+   "text": "###LUA###\nreturn 1+1\n###END_LUA###",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "return 1+1",
+      "datamodel_type": "Edit"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lua-spaced",
+   "tag": "notion",
+   "text": "### LUA ###\nlocal s = 1\n### END_LUA ###",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "local s = 1"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lua-server",
+   "tag": "generic",
+   "text": "###LUA:Server###\nreturn workspace.Name\n###END_LUA###",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "datamodel_type": "Server"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lua-dash-closer",
+   "tag": "kimi",
+   "text": "###LUA###\nreturn 1\n###END-LUA###",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "return 1"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lua-inside-fence",
+   "tag": "vani",
+   "text": "```\n###LUA###\nreturn workspace.Name\n###END_LUA###\n```",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "return workspace.Name"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lua-fence-with-lang-after-marker",
+   "tag": "notion",
+   "text": "###LUA###\n```lua\nprint(1)\n```\n###END_LUA###",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "print(1)"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lua-bold-markers",
+   "tag": "meta",
+   "text": "**###LUA###**\nreturn 1\n**###END_LUA###**",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "return 1"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lua-heading-markers",
+   "tag": "chatgpt",
+   "text": "### LUA\nreturn 1\n### END_LUA",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "return 1"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lua-copy-chrome",
+   "tag": "kimi",
+   "text": "###lua### Copy task.wait(4)\nreturn \"dom test done\"\n###END_LUA###",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "task.wait(4)\nreturn \"dom test done\""
+     }
+    }
+   ]
+  },
+  {
+   "id": "lua-entity-escaped",
+   "tag": "huggingchat",
+   "text": "###LUA###\nif a &lt; b then return 1 end\n###END_LUA###",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "if a < b then return 1 end"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lua-entities-mixed-kept",
+   "tag": "generic",
+   "text": "###LUA###\nif a < b then print(\"&amp;\") end\n###END_LUA###",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "if a < b then print(\"&amp;\") end"
+     }
+    }
+   ]
+  },
+  {
+   "id": "lua-two-blocks",
+   "tag": "generic",
+   "text": "###LUA###\nreturn 1\n###END_LUA###\nthen\n###LUA:Client###\nreturn 2\n###END_LUA###",
+   "expect": [
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "return 1"
+     }
+    },
+    {
+     "tool": "execute_luau",
+     "args": {
+      "code": "return 2",
+      "datamodel_type": "Client"
+     }
+    }
+   ]
+  },
+  {
+   "id": "cmd-plain",
+   "tag": "vani",
+   "text": "###CMD workspace_list###\npath: Workspace\n###END_CMD###",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "cmd-heredoc",
+   "tag": "vani",
+   "text": "###CMD script_set_source###\npath: ServerScriptService.Main\nsource: <<<\nprint(\"hi\")\nlocal x = 1\n>>>\n###END_CMD###",
+   "expect": [
+    {
+     "tool": "script_set_source",
+     "args": {
+      "path": "ServerScriptService.Main",
+      "source": "print(\"hi\")\nlocal x = 1"
+     }
+    }
+   ]
+  },
+  {
+   "id": "cmd-spaced-markers",
+   "tag": "vani",
+   "text": "### CMD workspace_list ###\npath: Workspace\n### END_CMD ###",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "cmd-json-body",
+   "tag": "vani",
+   "text": "###CMD workspace_list###\n{\"path\":\"Workspace\"}\n###END_CMD###",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "cmd-alias-command-eq",
+   "tag": "vani",
+   "text": "###COMMAND: workspace_list###\npath=Workspace\n###END_COMMAND###",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "cmd-number-coercion",
+   "tag": "vani",
+   "text": "###CMD workspace_list###\nlimit: 10\npath: Workspace\n###END_CMD###",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "limit": 10,
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "cmd-bool-list",
+   "tag": "vani",
+   "text": "###CMD selection_set###\npaths: [\"Workspace.A\",\"Workspace.B\"]\n###END_CMD###",
+   "expect": [
+    {
+     "tool": "selection_set",
+     "args": {
+      "paths": [
+       "Workspace.A",
+       "Workspace.B"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "cmd-no-args",
+   "tag": "vani",
+   "text": "###CMD selection_info###\n###END_CMD###",
+   "expect": [
+    {
+     "tool": "selection_info",
+     "args": {}
+    }
+   ]
+  },
+  {
+   "id": "cmd-inside-fence",
+   "tag": "vani",
+   "text": "```\n###CMD workspace_list###\npath: Workspace\n###END_CMD###\n```",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ]
+  },
+  {
+   "id": "hermes-tool_call",
+   "tag": "openrouter",
+   "text": "<tool_call>\n{\"name\":\"workspace_list\",\"arguments\":{\"path\":\"Workspace\"}}\n</tool_call>",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ],
+   "mode": "alternate"
+  },
+  {
+   "id": "glm-arg_key",
+   "tag": "glm",
+   "text": "<tool_call>workspace_list<arg_key>path</arg_key><arg_value>Workspace</arg_value></tool_call>",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ],
+   "mode": "alternate"
+  },
+  {
+   "id": "dsml-invoke",
+   "tag": "deepseek",
+   "text": "<｜DSML｜invoke name=\"workspace_list\"><｜DSML｜parameter name=\"path\" string=\"true\">Workspace</｜DSML｜parameter></｜DSML｜invoke>",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ],
+   "mode": "alternate"
+  },
+  {
+   "id": "dsml-escaped",
+   "tag": "deepseek",
+   "text": "&lt;｜DSML｜invoke name=\"workspace_list\"&gt;&lt;｜DSML｜parameter name=\"path\" string=\"true\"&gt;Workspace&lt;/｜DSML｜parameter&gt;&lt;/｜DSML｜invoke&gt;",
+   "expect": [
+    {
+     "tool": "workspace_list",
+     "args": {
+      "path": "Workspace"
+     }
+    }
+   ],
+   "mode": "alternate"
+  },
+  {
+   "id": "salvage-one-closer",
+   "tag": "qwen",
+   "text": "{\"command\":\"instance_rename\",\"params\":{\"path\":\"Workspace.Part\",\"name\":\"Door\"}",
+   "expect": [
+    {
+     "tool": "instance_rename",
+     "args": {
+      "path": "Workspace.Part",
+      "name": "Door"
+     }
+    }
+   ],
+   "mode": "salvage"
+  },
+  {
+   "id": "salvage-two-closers",
+   "tag": "qwen",
+   "text": "{\"command\":\"instance_rename\",\"params\":{\"path\":\"Workspace.Part\",\"name\":\"Door\"",
+   "expect": [
+    {
+     "tool": "instance_rename",
+     "args": {
+      "path": "Workspace.Part",
+      "name": "Door"
+     }
+    }
+   ],
+   "mode": "salvage"
+  },
+  {
+   "id": "salvage-refuses-mid-string",
+   "tag": "qwen",
+   "text": "{\"command\":\"instance_rename\",\"params\":{\"path\":\"Workspace.Part\",\"name\":\"Do",
+   "expect": [],
+   "mode": "salvage"
+  },
+  {
+   "id": "neg-bare-lua-fence",
+   "tag": "negative",
+   "text": "```lua\nprint(\"shown only\")\n```",
+   "expect": []
+  },
+  {
+   "id": "neg-prose-command-word",
+   "tag": "negative",
+   "text": "The \"command\" pattern for this is simple: call workspace_list when you need the tree.",
+   "expect": []
+  },
+  {
+   "id": "neg-heading-lua-prose",
+   "tag": "negative",
+   "text": "### LUA scripts are great\nUse pcall around DataStore calls.",
+   "expect": []
+  },
+  {
+   "id": "neg-json-no-command",
+   "tag": "negative",
+   "text": "```json\n{\"path\":\"Workspace\",\"depth\":2}\n```",
+   "expect": []
+  },
+  {
+   "id": "neg-name-only-prose-object",
+   "tag": "negative",
+   "text": "{\"name\":\"Door\",\"size\":3}",
+   "expect": []
+  },
+  {
+   "id": "neg-example-in-feedback",
+   "tag": "negative",
+   "text": "ERROR: unknown command. Example: {\"command\": \"inspect_instance\", \"params\": {\"path\": \"game.Workspace\"}}",
+   "expect": [],
+   "mode": "injected"
+  }
+ ]
+}

@@ -13,7 +13,7 @@
 //   schemaLine(name)         -> compact callable signature for error messages
 const TotalCommandContract = (() => {
   "use strict";
-  const VERSION = "1.99.7";
+  const VERSION = "1.99.8";
 
   // ── authoritative Roblox enum lists (Enum.<Key>.<Item>; a wrong item is a Luau error or a silently swallowed pcall) ──
   const ROBLOX_ENUMS = {
@@ -346,10 +346,22 @@ const TotalCommandContract = (() => {
       }
       if (entry.range && typeof v === "number" && (v < entry.range[0] || v > entry.range[1])) problem("out_of_range", k, `${entry.range[0]}..${entry.range[1]}`, String(v), `'${k}' must be between ${entry.range[0]} and ${entry.range[1]} - not clamped, fix the value`);
     }
+    // 5. code-carrying strings (1.99.8): a Lua body handed over wrapped in a
+    // markdown fence (```lua … ```) is never valid Luau - the fence is chat
+    // chrome, not code. Strip it for every command that declares such a
+    // parameter so no pack has to. A fence INSIDE the body (not wrapping all
+    // of it) is left alone: that is the script's own text.
+    for (const k of CODE_PARAM_KEYS) {
+      const v = args[k];
+      if (typeof v !== "string" || !c.params[k]) continue;
+      const m = /^\s*```[ \t]*[A-Za-z0-9_-]*[ \t]*\r?\n([\s\S]*?)\r?\n?[ \t]*```\s*$/.exec(v);
+      if (m && m[1] !== v) { args[k] = m[1]; correct("fence_stripped", k, short(v), short(m[1])); }
+    }
     out.ok = out.problems.length === 0;
     if (!out.ok) out.message = formatProblems(c, out, opts.label || name);
     return out;
   }
+  const CODE_PARAM_KEYS = ["source", "code", "script", "luau", "body", "text", "content"];
   function formatProblems(c, out, label) {
     const missing = out.problems.filter((p) => p.code === "missing_parameter");
     const code = missing.length && missing.length === out.problems.length ? "MISSING_PARAMS" : out.problems.some((p) => p.code === "invalid_enum") && out.problems.every((p) => p.code === "invalid_enum") ? "INVALID_ENUM" : "INVALID_PARAMS";

@@ -33,7 +33,7 @@
 // content script (window.TotalOrchestrator).
 const TotalOrchestrator = (() => {
   "use strict";
-  const VERSION = "1.99.7";
+  const VERSION = "1.99.8";
 
   // ───────────────────────── 1. task understanding ─────────────────────────
   const CATEGORY_RE = {
@@ -507,7 +507,110 @@ const TotalOrchestrator = (() => {
     return data;
   }
 
-  return { VERSION, classifyTask, taskLayer, classifyProviderError, retryDelay, ERROR_CLASSES, ACCOUNT_BLOCK_RE, ACCOUNT_SUSPEND_RE, THROTTLE_RE, suspendedUntil, paceDelay, streakLength, tightenPacing, validateToolArgs, argProblemsMessage, claimsCompletion, FEEDBACK, capabilities, redact, redactData, CATEGORY_LABEL };
+  // ───────────────────────── 8. tool-feedback compaction (1.99.8) ─────────────────────────
+  // Every provider is a chat box with a finite turn budget (ChatGPT / Vani /
+  // Notion run the tight prompt). Before 1.99.8 an oversized tool result was
+  // cut head+tail at a fixed offset - which could drop the one ERROR line in
+  // the middle of a 300-line log, or slice a JSON payload mid-string so the
+  // model could not read counts. compactFeedback keeps the SIGNAL:
+  //   - the "Output of 'x':" / "ERROR" prefix is preserved untouched (the loop
+  //     classifies on startsWith("ERROR"));
+  //   - a JSON body is shrunk structurally: long arrays keep their first items
+  //     + a "(+n more)" marker and long strings are clipped with their length,
+  //     so keys/counts survive and the result still parses;
+  //   - a text body keeps every line that looks like a problem (error / warn /
+  //     fail / exception / stack / traceback / nil / attempt to), folds runs of
+  //     identical lines into one "(×N)" line, then fills the rest of the budget
+  //     with the head and the tail of the output in order;
+  //   - the footer says exactly what was dropped and how to ask for the rest.
+  // Pure function: same input → same output; never throws (falls back to the
+  // old head+tail cut).
+  const PROBLEM_LINE_RE = /\b(error|warn(?:ing)?|fail(?:ed|ure)?|exception|traceback|stack(?:trace| begin)|attempt to|nil value|not a valid member|cannot|denied|timed? ?out|missing|invalid|expected|infinite yield|unknown)\b/i;
+  function compactJson(v, depth, budget) {
+    if (depth > 6) return typeof v === "object" && v !== null ? (Array.isArray(v) ? `[…${v.length} items]` : "{…}") : v;
+    if (typeof v === "string") return v.length > budget.str ? v.slice(0, budget.str) + `…[+${v.length - budget.str} chars]` : v;
+    if (Array.isArray(v)) {
+      const keep = v.length > budget.arr ? v.slice(0, budget.arr) : v;
+      const out = keep.map((x) => compactJson(x, depth + 1, budget));
+      if (v.length > budget.arr) out.push(`(+${v.length - budget.arr} more items, ${v.length} total)`);
+      return out;
+    }
+    if (v && typeof v === "object") {
+      const out = {};
+      const keys = Object.keys(v);
+      for (const k of keys.slice(0, budget.keys)) out[k] = compactJson(v[k], depth + 1, budget);
+      if (keys.length > budget.keys) out["…"] = `+${keys.length - budget.keys} more keys`;
+      return out;
+    }
+    return v;
+  }
+  function compactFeedback(text, name, max) {
+    const s = String(text == null ? "" : text);
+    const MAX = Number(max) > 500 ? Number(max) : 10000;
+    if (s.length <= MAX) return s;
+    const label = String(name || "tool");
+    try {
+      const pm = /^((?:ERROR[^\n]*\n)?Output of '[^']*':\s*\n?|ERROR[^\n]*\n)/.exec(s);
+      const prefix = pm ? pm[1] : "";
+      const body = s.slice(prefix.length);
+      const footer = (kept, note) => `\n[TotalScript context compression: ${note}; dropped ${Math.max(0, s.length - kept)} of ${s.length} chars from ${label}. Ask again with a narrower command (path / limit / query / line range) for the rest.]`;
+      // JSON body: shrink structurally at decreasing budgets until it fits.
+      const trimmed = body.trim();
+      if (/^[\[{]/.test(trimmed) && /[\]}]$/.test(trimmed)) {
+        let parsed = null;
+        try { parsed = JSON.parse(trimmed); } catch {}
+        if (parsed !== null && typeof parsed === "object") {
+          for (const b of [{ arr: 40, str: 600, keys: 60 }, { arr: 20, str: 300, keys: 40 }, { arr: 8, str: 160, keys: 25 }, { arr: 3, str: 80, keys: 12 }]) {
+            const out = JSON.stringify(compactJson(parsed, 0, b));
+            if (prefix.length + out.length + 220 <= MAX) return prefix + out + footer(prefix.length + out.length, "JSON shrunk structurally (arrays keep their first items, long strings clipped - keys and counts are exact)");
+          }
+        }
+      }
+      // Text body: problem lines first, folded repeats, then head + tail.
+      const rawLines = body.split("\n");
+      const lines = [];
+      for (const ln of rawLines) {
+        const last = lines[lines.length - 1];
+        if (last && last.text === ln && ln.trim()) last.n++;
+        else lines.push({ text: ln, n: 1 });
+      }
+      const render = (l) => (l.n > 1 ? `${l.text}  (×${l.n})` : l.text);
+      const budget = MAX - prefix.length - 260;
+      const pick = new Set();
+      let used = 0;
+      const take = (i) => { if (pick.has(i)) return true; if (lines[i].dup) return true; const len = render(lines[i]).length + 1; if (used + len > budget) return false; pick.add(i); used += len; return true; };
+      // Problem lines: the first occurrence of each distinct message is kept
+      // (digits normalised, so "line 12" / "line 40" of the same error fold
+      // into one "(×N)" line); at most 40 distinct ones.
+      let problems = 0;
+      const seenProblem = new Map();
+      for (let i = 0; i < lines.length; i++) {
+        if (!PROBLEM_LINE_RE.test(lines[i].text) || lines[i].text.length > 400) continue;
+        const sig = lines[i].text.replace(/\d+/g, "#").trim();
+        const first = seenProblem.get(sig);
+        if (first !== undefined) { lines[first].n += lines[i].n; lines[i].dup = true; continue; }
+        seenProblem.set(sig, i);
+        if (problems < 40 && take(i)) problems++;
+      }
+      const headShare = Math.floor((budget - used) * 0.65);
+      let acc = 0;
+      for (let i = 0; i < lines.length && acc < headShare; i++) { if (take(i)) acc += render(lines[i]).length + 1; else break; }
+      for (let i = lines.length - 1; i >= 0; i--) { if (!take(i)) break; }
+      const outLines = [];
+      let gap = false;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].dup) continue;
+        if (pick.has(i)) { if (gap) { outLines.push("  […]"); gap = false; } outLines.push(render(lines[i])); }
+        else gap = true;
+      }
+      const out = outLines.join("\n");
+      return prefix + out + footer(prefix.length + out.length, `kept ${pick.size} of ${lines.length} lines (${problems} problem line${problems === 1 ? "" : "s"} kept in full, repeats folded)`);
+    } catch {
+      return s.slice(0, Math.floor(MAX * 0.65)) + "\n[TotalScript context compression: dropped " + (s.length - Math.floor(MAX * 0.9)) + " chars from " + label + "]\n" + s.slice(-Math.floor(MAX * 0.25));
+    }
+  }
+
+  return { VERSION, classifyTask, taskLayer, classifyProviderError, retryDelay, ERROR_CLASSES, ACCOUNT_BLOCK_RE, ACCOUNT_SUSPEND_RE, THROTTLE_RE, suspendedUntil, paceDelay, streakLength, tightenPacing, validateToolArgs, argProblemsMessage, claimsCompletion, FEEDBACK, capabilities, redact, redactData, CATEGORY_LABEL, compactFeedback, PROBLEM_LINE_RE };
 })();
 if (typeof window !== "undefined") window.TotalOrchestrator = TotalOrchestrator;
 if (typeof module !== "undefined" && module.exports) module.exports = TotalOrchestrator;
