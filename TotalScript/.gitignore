@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+
+# Bridge logs
+logs/
+*.log
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Extension / agent build artifacts
+*.zip
+*.bak
+extracted/
+or.rar
+agent/target/
+totalscript-agent.exe
+robloxscript-agent.exe

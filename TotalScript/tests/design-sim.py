@@ -1,0 +1,534 @@
+#!/usr/bin/env python3
+"""Execute the DESIGN pack's Luau against a miniature Roblox DataModel.
+
+tests/luau-parse-check.py proves the generated programs *parse*. This script goes
+one step further for the design pack (src/core/skills/studio_design.js), whose
+Luau builds whole ScreenGuis and writes ModuleScripts/LocalScripts that are then
+required at runtime: it runs every command inside a small Lua model of Roblox
+(Instance tree, Color3/UDim2/Vector2/Enum, services, signals, require/loadstring,
+task.*) and asserts the JSON results, instance counts, controller behaviour
+(button actions close windows, toggles flip, tabs switch) and the audit output.
+
+    pip install lupa && python3 tests/design-sim.py          (from the TotalScript root)
+
+It is not a Roblox engine: layout engines, rendering and replication are not
+modelled. It catches the class of bugs a blind-written Luau program has - nil
+indexing, wrong argument shapes, missing 'end's at runtime paths, properties set
+on the wrong instance, scripts that error on load.
+"""
+import json, os, subprocess, sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(ROOT)
+try:
+    from lupa import LuaRuntime
+except Exception:  # pragma: no cover
+    print("SKIP  lupa is not installed (pip install lupa)")
+    sys.exit(0)
+
+GEN = r"""
+const fs=require("fs"), vm=require("vm");
+global.window=global; global.chrome={storage:{local:{get:(k,cb)=>cb&&cb({}),set:()=>{}}},runtime:{getURL:(p)=>p}};
+const manifest=JSON.parse(fs.readFileSync("manifest.json","utf8"));
+const bundle=manifest.content_scripts.find(c=>c.js&&c.js.includes("src/core/skills/studio_skills.js"));
+for(const f of bundle.js.filter(f=>/src\/core\/(skills\/|studio_bridge\.js)/.test(f))) vm.runInThisContext(fs.readFileSync(f,"utf8"),{filename:f});
+const S=RobloxScriptSkills;
+const out={commands:S.DESIGN_COMMANDS, screens:S.DESIGN_SCREENS, presets:S.DESIGN_PRESETS, lua:S.DESIGN_LUA, programs:{}};
+const want=JSON.parse(process.argv[1]);
+for(const [key,[op,args]] of Object.entries(want)){ const r=S.buildLuau(op,args); out.programs[key]=r.code||("--ERR "+r.err); }
+process.stdout.write(JSON.stringify(out));
+"""
+
+PROGRAMS = {
+    "tokens_set": ["design_tokens_set", {"preset": "neon", "primary": "#ff8800", "font": "Arcade", "radius": 4}],
+    "tokens_get": ["design_tokens_get", {}],
+    "kit": ["design_kit_install", {"force": True}],
+    "shop": ["ui_screen_generate", {"kind": "shop", "title": "Gem Shop", "items": [{"item": "Sword", "price": 100, "rarity": "rare"}, {"item": "Shield", "price": 250, "rarity": "epic"}, "Potion"], "tabs": ["All", "Gear"]}],
+    "inventory": ["ui_screen_generate", {"kind": "inventory", "slots": 12, "items": ["Sword", "Potion"]}],
+    "hud": ["ui_screen_generate", {"kind": "hud", "stats": ["Coins", "Gems"]}],
+    "main_menu": ["ui_screen_generate", {"kind": "main_menu", "title": "Blade Realms", "buttons": ["Play", "Shop", "Settings"]}],
+    "settings": ["ui_screen_generate", {"kind": "settings"}],
+    "leaderboard": ["ui_screen_generate", {"kind": "leaderboard", "currency": "Wins"}],
+    "daily": ["ui_screen_generate", {"kind": "daily_rewards", "rewards": [10, 20, 30, 40, 50, 60, 100]}],
+    "quests": ["ui_screen_generate", {"kind": "quest_log", "quests": [{"title": "Find the key", "progress": 0.5, "reward": 20}]}],
+    "loading": ["ui_screen_generate", {"kind": "loading", "title": "Blade Realms", "tips": ["a", "b"]}],
+    "dialog": ["ui_screen_generate", {"kind": "dialog", "speaker": "Guard", "text": "Halt!", "choices": ["Yes", "No", "Bye"]}],
+    "notify": ["ui_screen_generate", {"kind": "notification_stack"}],
+    "ability": ["ui_screen_generate", {"kind": "ability_bar", "abilities": [{"name": "Fireball", "key": "Q", "cooldown": 6, "sequence": "Fireball"}, {"name": "Dash", "key": "Shift", "cooldown": 3}, "Shield"]}],
+    "ability_bad": ["ui_screen_generate", {"kind": "ability_bar", "abilities": [], "replace": False}],
+    "sfx_install": ["sfx_library_install", {}],
+    "ability_dmg": ["ui_screen_generate", {"kind": "ability_bar", "name": "MeleeBar", "abilities": [{"name": "Slash", "key": "E", "cooldown": 1, "damage": 20, "range": 8}, {"name": "Taunt", "key": "T", "cooldown": 1}], "replace": True}],
+    "from_spec": ["ui_from_spec", {"name": "Custom", "open_key": "M", "spec": {"children": [
+        {"kind": "Window", "name": "Win", "title": "Custom", "size": [600, 400], "start_hidden": True, "children": [
+            {"kind": "Tabs", "name": "T", "tabs": ["One", "Two"], "size": ["fill", "fill"], "pages": [
+                {"layout": "column", "gap": 8, "children": [{"kind": "Label", "text": "Hello"}, {"kind": "Button", "name": "Go", "text": "Go", "action": "print:go"}, {"kind": "ProgressBar", "name": "PB", "value": 0.25}, {"kind": "Toggle", "name": "Tg", "text": "Music", "value": True, "setting": "music"}]},
+                {"children": [{"kind": "Grid", "name": "G", "columns": 3, "size": ["fill", 200], "children": [{"kind": "Slot", "index": 1}, {"kind": "Slot", "index": 2, "item": "Gem", "rarity": "legendary"}]}]}
+            ]}
+        ]},
+        {"kind": "Button", "name": "Floating", "text": "Open", "anchor": "bottom-right", "margin": 20, "action": "toggle:Win"}
+    ]}}],
+    "place": ["ui_component_place", {"kind": "CurrencyPill", "parent": "StarterGui.HUD.TopLeft", "name": "Extra", "props": {"stat": "Gold", "value": "12"}}],
+    "place_bad": ["ui_component_place", {"kind": "Nope", "parent": "StarterGui.HUD.TopLeft"}],
+    "audit": ["ui_audit", {"path": "StarterGui"}],
+    "export": ["ui_export_spec", {"path": "StarterGui.Shop"}],
+    "apply": ["ui_apply_tokens", {"path": "StarterGui.Legacy"}],
+    "responsive": ["ui_make_responsive", {"path": "StarterGui.Legacy"}],
+    "gamepad": ["ui_gamepad_focus", {"path": "StarterGui.Legacy"}],
+    "states": ["ui_states_wire", {"path": "StarterGui.Legacy", "default_action": True}],
+    "preview": ["ui_preview", {"path": "StarterGui.Shop", "device": "phone"}],
+    "preview_restore": ["ui_preview", {"path": "StarterGui.Shop", "restore": True}],
+    "audit_legacy": ["ui_audit", {"path": "StarterGui.Legacy"}],
+    # 1.99.2: GUI standard port - ui_audit fix/grade/phone pass + named styles
+    "audit_legacy2": ["ui_audit", {"path": "StarterGui.Legacy2"}],
+    "audit_fix": ["ui_audit", {"path": "StarterGui.Legacy2", "fix": True}],
+    "audit_nophone": ["ui_audit", {"path": "StarterGui.Shop", "phone": False}],
+    "tokens_style": ["design_tokens_set", {"style": "cartoon"}],
+    "tokens_style_override": ["design_tokens_set", {"style": "Tactical", "primary": "#ff0000"}],
+    "shop_styled": ["ui_screen_generate", {"kind": "shop", "name": "StyledShop", "style": "pixel", "items": ["Sword"]}],
+    "tokens_get2": ["design_tokens_get", {}],
+}
+
+data = json.loads(subprocess.check_output(["node", "-e", GEN, json.dumps(PROGRAMS)], text=True))
+
+# ───────────────────────── miniature Roblox ─────────────────────────
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from roblox_sim import ROBLOX  # shared miniature DataModel (also used by gfx-sim.py)
+
+L = LuaRuntime(unpack_returned_tuples=True)
+M = L.execute(ROBLOX)
+
+
+def lua_to_py(v, depth=0):
+    """Convert a Lua table (from lupa) into Python recursively."""
+    if hasattr(v, "items") and hasattr(v, "keys"):
+        if depth > 40:
+            raise ValueError("JSONEncode: table nesting too deep (cycle?)")
+        keys = list(v.keys())
+        if not keys:
+            return []  # Roblox encodes an empty table as []
+        if "__class" in keys:
+            raise ValueError("JSONEncode: cannot encode an Instance (" + str(v["__props"]["Name"]) + ") - Roblox would error too")
+        if keys and all(isinstance(k, int) for k in keys) and sorted(keys) == list(range(1, len(keys) + 1)):
+            return [lua_to_py(v[k], depth + 1) for k in range(1, len(keys) + 1)]
+        return {str(k): lua_to_py(v[k], depth + 1) for k in keys}
+    return v
+
+
+def py_to_lua(v):
+    if isinstance(v, dict):
+        t = L.table()
+        for k, val in v.items():
+            t[k] = py_to_lua(val)
+        return t
+    if isinstance(v, list):
+        t = L.table()
+        for i, val in enumerate(v):
+            t[i + 1] = py_to_lua(val)
+        return t
+    return v
+
+
+def _enc(v):
+    try:
+        return json.dumps(lua_to_py(v))
+    except Exception as e:
+        return json.dumps({"ok": False, "error": "JSONEncode failed: " + str(e)})
+M.jsonEncode = _enc
+M.jsonDecode = lambda s: py_to_lua(json.loads(s))
+
+same = L.eval("function(a,b) return a == b end")
+results = []
+
+
+def ok(name, cond, detail=""):
+    results.append(bool(cond))
+    print(("PASS  " if cond else "FAIL  ") + name + ("" if cond or not detail else " — " + str(detail)[:400]))
+
+
+def run(key):
+    code = data["programs"][key]
+    if code.startswith("--ERR"):
+        return {"ok": False, "error": code}
+    fn = L.eval("function(src) local f,e=load(src,'=" + key + "') if not f then return 'COMPILE: '..tostring(e) end local okR,res=pcall(f) if not okR then return 'RUNTIME: '..tostring(res) end return res end")
+    out = fn(code)
+    try:
+        parsed = json.loads(out)
+        if not isinstance(parsed, dict):
+            return {"ok": False, "error": "non-object result: " + str(out)[:300]}
+        return parsed
+    except Exception:
+        return {"ok": False, "error": str(out)[:600]}
+
+
+G = L.globals()
+game = M.game
+SG = lambda: game.GetService(game, "StarterGui")
+
+
+def count_desc(inst, cls=None):
+    n = 0
+    for d in list(inst.GetDescendants(inst).values()):
+        if cls is None or d.IsA(d, cls):
+            n += 1
+    return n
+
+
+# ───────────────────────── 1. tokens + kit ─────────────────────────
+r = run("tokens_get")
+ok("design_tokens_get before install reports defaults", r.get("ok") and r["data"]["installed"] is False and "midnight" in r["data"]["presets"], r)
+r = run("tokens_set")
+ok("design_tokens_set writes Tokens + kit", r.get("ok") and r["data"]["preset"] == "neon" and r["data"]["palette"]["Primary"] == "#ff8800" and r["data"]["font"] == "Arcade", r)
+design = game.GetService(game, "ReplicatedStorage").FindFirstChild(game.GetService(game, "ReplicatedStorage"), "Total_Design")
+ok("Total_Design folder has Tokens, UIKit, Responsive, NotifyLocal", design and all(design.FindFirstChild(design, n) for n in ["Tokens", "UIKit", "Responsive", "NotifyLocal"]))
+tokens_src = design.FindFirstChild(design, "Tokens").Source
+ok("Tokens ModuleScript source carries the override", 'Primary = Color3.fromRGB(255, 136, 0)' in tokens_src and 'Family = "Arcade"' in tokens_src, tokens_src[:200])
+r = run("tokens_get")
+ok("design_tokens_get after install", r.get("ok") and r["data"]["installed"] and r["data"]["palette"]["Primary"] == "#ff8800" and r["data"]["kit"], r)
+r = run("kit")
+ok("design_kit_install force refresh lists components", r.get("ok") and "Button" in r["data"]["components"] and "Window" in r["data"]["components"] and "ItemCard" in r["data"]["components"], r)
+
+# UIKit itself runs inside the simulator (edit mode)
+K = M.runModule(design.FindFirstChild(design, "UIKit"))
+T = K.tokens(True)
+ok("UIKit.tokens() merges Tokens over fallback (edit-mode loadstring path)", abs(T.palette.Primary.R - 1.0) < 1e-6 and abs(T.palette.Primary.G - 136 / 255) < 1e-6 and T.font.Family == "Arcade", (T.palette.Primary.R, T.font.Family))
+
+# ───────────────────────── 2. every screen kind ─────────────────────────
+expect = {"shop": ("Shop", 120), "inventory": ("Inventory", 100), "hud": ("HUD", 120), "main_menu": ("MainMenu", 40), "settings": ("Settings", 80), "leaderboard": ("Leaderboard", 10), "daily": ("DailyRewards", 100), "quests": ("QuestLog", 30), "loading": ("LoadingScreen", 20), "dialog": ("Dialog", 40), "notify": ("Notifications", 3)}
+WINDOWED = {"shop", "inventory", "main_menu", "settings", "leaderboard", "daily", "quests", "dialog"}
+for key, (name, minCount) in expect.items():
+    r = run(key)
+    parentName = "ReplicatedFirst" if key == "loading" else "StarterGui"
+    parent = game.GetService(game, parentName)
+    sg = parent.FindFirstChild(parent, name)
+    n = count_desc(sg) if sg is not None else 0
+    ok("ui_screen_generate %s builds %s.%s (%d instances, want >=%d)" % (key, parentName, name, n, minCount), r.get("ok") and sg is not None and n >= minCount, r if not r.get("ok") else r["text"][:160])
+    if sg is None:
+        continue
+    if key != "loading":
+        ok("  %s has Total_Controller" % key, sg.FindFirstChild(sg, "Total_Controller") is not None)
+    ok("  %s roots use scale sizes (no offset-only roots)" % key, all((c.Size.X.Scale > 0 or c.Size.X.Offset == 0) for c in sg.GetChildren(sg).values() if c.IsA(c, "GuiObject")))
+    if key in WINDOWED:
+        ok("  %s window root has aspect + size constraints" % key, any(c.IsA(c, "GuiObject") and c.FindFirstChildOfClass(c, "UIAspectRatioConstraint") and c.FindFirstChildOfClass(c, "UISizeConstraint") for c in sg.GetChildren(sg).values()))
+    ok("  %s text is TextScaled with a size constraint" % key, all((not d.IsA(d, "TextLabel")) or (d.TextScaled and d.FindFirstChildOfClass(d, "UITextSizeConstraint")) for d in sg.GetDescendants(sg).values()))
+
+RS = game.GetService(game, "ReplicatedStorage")
+remotes = RS.FindFirstChild(RS, "Remotes")
+ok("remotes folder created with shop/daily/notify remotes", remotes and all(remotes.FindFirstChild(remotes, n) for n in ["Total_Shop_Buy", "Total_Daily_Claim", "Total_Notify", "Total_Inventory_Equip"]))
+SSS = game.GetService(game, "ServerScriptService")
+ok("server scripts written (Total_ShopServer, Total_DailyServer)", SSS.FindFirstChild(SSS, "Total_ShopServer") and SSS.FindFirstChild(SSS, "Total_DailyServer"))
+shopSrc = SSS.FindFirstChild(SSS, "Total_ShopServer").Source
+ok("shop server CATALOG lists the requested items", '["Sword"] = { price = 100' in shopSrc and '["Potion"]' in shopSrc, shopSrc[:300])
+shop = SG().FindFirstChild(SG(), "Shop")
+win = shop.FindFirstChild(shop, "ShopWindow")
+ok("shop window: header title, close button (Total_Action close), tabs, item cards", win.GetAttribute(win, "Total_Window") is True and win.FindFirstChild(win, "Header").FindFirstChild(win.FindFirstChild(win, "Header"), "Title").Text == "Gem Shop" and win.FindFirstChild(win, "Close", True).GetAttribute(win.FindFirstChild(win, "Close", True), "Total_Action") == "close" and win.FindFirstChild(win, "Categories", True) is not None and count_desc(win, "TextButton") >= 5)
+cards = [d for d in win.GetDescendants(win).values() if d.GetAttribute(d, "Total_Rarity")]
+ok("shop item cards carry Total_Item / Total_Rarity and a Buy button bound to the remote", len(cards) >= 3 and all(c.FindFirstChild(c, "Buy") and c.FindFirstChild(c, "Buy").GetAttribute(c.FindFirstChild(c, "Buy"), "Total_Action") == "remote:Total_Shop_Buy" for c in cards), len(cards))
+ok("shop window starts hidden + toggles with B", win.GetAttribute(win, "Total_StartHidden") is True and shop.GetAttribute(shop, "Total_OpenKey") == "B")
+hud = SG().FindFirstChild(SG(), "HUD")
+ok("hud: currency pills bound to leaderstats, health bar, hotbar slots, feeds", hud.FindFirstChild(hud, "Coins", True).GetAttribute(hud.FindFirstChild(hud, "Coins", True), "Total_Stat") == "Coins" and hud.FindFirstChild(hud, "Health", True).GetAttribute(hud.FindFirstChild(hud, "Health", True), "Total_Progress") == 1 and count_desc(hud.FindFirstChild(hud, "Hotbar"), "ImageButton") == 9 and hud.FindFirstChild(hud, "Total_HudFeed") and hud.FindFirstChild(hud, "Total_NotifyFeed"))
+
+# ───────────────────────── 3. ui_from_spec custom tree ─────────────────────────
+r = run("from_spec")
+custom = SG().FindFirstChild(SG(), "Custom")
+ok("ui_from_spec builds the custom screen", r.get("ok") and custom is not None and r["data"]["count"] >= 9 and count_desc(custom) >= 60, r)
+tabs = custom.FindFirstChild(custom, "T", True)
+pages = tabs.FindFirstChild(tabs, "Pages")
+ok("tabs: 2 tab buttons, 2 pages, first visible", tabs.GetAttribute(tabs, "Total_Tabs") is True and len([c for c in pages.GetChildren(pages).values()]) == 2 and pages.FindFirstChild(pages, "Page_One").Visible is True and pages.FindFirstChild(pages, "Page_Two").Visible is False)
+pb = custom.FindFirstChild(custom, "PB", True)
+ok("progress bar: Fill 25% + Total_Progress attribute", pb and abs(pb.FindFirstChild(pb, "Fill").Size.X.Scale - 0.25) < 1e-6 and pb.GetAttribute(pb, "Total_Progress") == 0.25)
+grid = custom.FindFirstChild(custom, "G", True)
+ok("grid: 3 columns -> UIGridLayout with aspect constraint, 2 slots", grid.FindFirstChildOfClass(grid, "UIGridLayout") and grid.FindFirstChildOfClass(grid, "UIGridLayout").FindFirstChildOfClass(grid.FindFirstChildOfClass(grid, "UIGridLayout"), "UIAspectRatioConstraint") and count_desc(grid, "ImageButton") == 2)
+floating = custom.FindFirstChild(custom, "Floating")
+ok("anchored root button: AnchorPoint (1,1), position 1,1 minus margin", floating.AnchorPoint.X == 1 and floating.AnchorPoint.Y == 1 and floating.Position.X.Scale < 1 and floating.Position.Y.Scale < 1 and floating.GetAttribute(floating, "Total_Action") == "toggle:Win")
+ok("ScrollList children (settings) use offset heights, scale widths", all(c.Size.Y.Offset > 0 and c.Size.Y.Scale == 0 for c in SG().FindFirstChild(SG(), "Settings").FindFirstChild(SG().FindFirstChild(SG(), "Settings"), "Options", True).GetChildren(SG().FindFirstChild(SG(), "Settings").FindFirstChild(SG().FindFirstChild(SG(), "Settings"), "Options", True)).values() if c.IsA(c, "GuiObject")))
+
+# ───────────────────────── 4. component place / errors ─────────────────────────
+r = run("place")
+ok("ui_component_place adds a pill into the HUD row", r.get("ok") and hud.FindFirstChild(hud, "Extra", True) is not None and "layout" in r["text"], r)
+r = run("place_bad")
+ok("ui_component_place rejects an unknown kind cleanly", r.get("ok") is False and "unknown component kind" in r.get("error", ""), r)
+
+# ───────────────────────── 5. export / audit on generated UI ─────────────────────────
+r = run("export")
+# Since 1.48.0 ui_export_spec is the GUI Studio exporter ({screen:{name}, children:[{class,name,…}]}); 1.51.2 made its
+# enum reads tolerant (a UIListLayout without a readable HorizontalAlignment used to abort the WHOLE export).
+_spec = r.get("data", {}).get("spec", {}) if r.get("ok") else {}
+_names = set()
+def _walk(n):
+    if isinstance(n, dict):
+        if n.get("name"): _names.add(n["name"])
+        for c in n.get("children", []) or []: _walk(c)
+_walk(_spec)
+ok("ui_export_spec round-trips the shop into a spec tree", r.get("ok") and _spec.get("screen", {}).get("name") == "Shop" and _spec.get("children") and _spec["children"][0].get("class") == "Frame" and "Title" in _names and len(_names) > 20, r if not r.get("ok") else sorted(_names)[:12])
+r = run("audit")
+if r.get("ok") and r["data"]["score"] < 70:
+    for i in r["data"]["issues"]:
+        print("      audit:", i["rule"], i["path"], i.get("detail", ""))
+ok("ui_audit scores the generated screens high (no errors)", r.get("ok") and r["data"]["counts"]["error"] == 0 and r["data"]["score"] >= 70, r if not r.get("ok") else (r["data"]["score"], r["data"]["counts"], [i["rule"] + ":" + i["path"] for i in r["data"]["issues"][:6]]))
+
+# ───────────────────────── 6. legacy UI: apply tokens / responsive / gamepad / states / audit ─────────────────────────
+legacy = L.eval("""function(StarterGui)
+  local sg=Instance.new('ScreenGui') sg.Name='Legacy' sg.ZIndexBehavior=Enum.ZIndexBehavior.Global sg.Parent=StarterGui
+  local f=Instance.new('Frame') f.Name='Main' f.Size=UDim2.new(0,400,0,300) f.Position=UDim2.new(0,100,0,100) f.BackgroundColor3=Color3.fromRGB(200,200,200) f.Parent=sg
+  local t=Instance.new('TextLabel') t.Name='Title' t.Size=UDim2.new(1,0,0,30) t.Text='Old title' t.TextSize=10 t.TextColor3=Color3.fromRGB(190,190,190) t.BackgroundTransparency=1 t.Parent=f
+  for i=1,4 do local b=Instance.new('TextButton') b.Name='B'..i b.Size=UDim2.new(0,20,0,20) b.Position=UDim2.new(0,10+(i-1)*30,0,60) b.Text='b'..i b.BackgroundColor3=Color3.fromRGB(1,2,3) b.Parent=f end
+  local o1=Instance.new('Frame') o1.Name='O1' o1.Size=UDim2.new(0,100,0,100) o1.Position=UDim2.new(0,0,0,150) o1.Parent=f
+  local o2=Instance.new('Frame') o2.Name='O2' o2.Size=UDim2.new(0,100,0,100) o2.Position=UDim2.new(0,40,0,170) o2.Parent=f
+  local s=Instance.new('ScrollingFrame') s.Name='S' s.Size=UDim2.new(0,100,0,50) s.Position=UDim2.new(0,250,0,150) s.Parent=f
+  return sg
+end""")(SG())
+r = run("audit_legacy")
+rules = {i["rule"] for i in r["data"]["issues"]} if r.get("ok") else set()
+ok("ui_audit flags the legacy UI: contrast, tiny text, small targets, offset root, overlap, static canvas, zindex, no runtime", r.get("ok") and {"low_contrast", "tiny_text", "small_touch_target", "offset_only_root", "overlap", "static_canvas", "zindex_global", "no_runtime"} <= rules and r["data"]["score"] < 70, (r.get("data", {}).get("score"), sorted(rules)))
+r = run("apply")
+main = legacy.FindFirstChild(legacy, "Main")
+ok("ui_apply_tokens restyles buttons to Primary and labels to token text", r.get("ok") and r["data"]["restyled"] >= 6 and same(main.FindFirstChild(main, "B1").BackgroundColor3, T.palette.Primary) and main.FindFirstChild(main, "Title").Font.Name in ("Arcade",), r)
+r = run("responsive")
+ok("ui_make_responsive converts the offset root to scale + constraints + Total_Responsive", r.get("ok") and r["data"]["converted_roots"] == 1 and main.Size.X.Scale > 0 and main.Size.X.Offset == 0 and main.FindFirstChildOfClass(main, "UIAspectRatioConstraint") and legacy.FindFirstChild(legacy, "Total_Responsive") and main.FindFirstChild(main, "Title").TextScaled is True, r)
+r = run("gamepad")
+b1, b2 = main.FindFirstChild(main, "B1"), main.FindFirstChild(main, "B2")
+ok("ui_gamepad_focus links neighbours and adds a selection cursor", r.get("ok") and r["data"]["buttons"] == 4 and same(b1.NextSelectionRight, b2) and same(b2.NextSelectionLeft, b1) and b1.SelectionImageObject is not None and b1.Selectable is True, r)
+r = run("states")
+ok("ui_states_wire writes Total_Controller and default print actions", r.get("ok") and legacy.FindFirstChild(legacy, "Total_Controller") and b1.GetAttribute(b1, "Total_Action") == "print", r)
+r = run("preview")
+ok("ui_preview phone adds Total_PreviewScale 0.55 and shows the window", r.get("ok") and r["data"]["factor"] == 0.55 and win.FindFirstChild(win, "Total_PreviewScale") and win.Visible is True, r)
+r = run("preview_restore")
+ok("ui_preview restore removes the scale", r.get("ok") and win.FindFirstChild(win, "Total_PreviewScale") is None, r)
+
+# ───────────────────────── 7. RUNTIME: controller + feeds as a client ─────────────────────────
+M.isEdit = False
+M.invalidate()
+# clone StarterGui screens into PlayerGui like Roblox does, then run their LocalScripts
+pgui = M.playerGui
+clone_run = L.eval("""function(M, src, pg)
+  local c = src:Clone() c.Parent = pg
+  local ran, errs = 0, {}
+  for _, d in ipairs(c:GetDescendants()) do
+    if d:IsA('LocalScript') then
+      local okR, err = pcall(M.runScript, d, true)
+      ran = ran + 1
+      if not okR then errs[#errs+1] = d.Name .. ': ' .. tostring(err) end
+    end
+  end
+  return c, ran, errs
+end""")
+pshop, ran, errs = clone_run(M, shop, pgui)
+ok("Shop LocalScripts run on a client (Total_Controller + Total_NotifyFeed)", ran == 2 and len(list(errs.values())) == 0, list(errs.values()))
+pwin = pshop.FindFirstChild(pshop, "ShopWindow")
+ok("controller: Total_StartHidden window is hidden on load", pwin.Visible is False)
+# open with key B
+inputB = py_to_lua({"KeyCode": {"Name": "B"}, "UserInputType": {"Name": "Keyboard"}})
+UIS = game.GetService(game, "UserInputService")
+UIS.InputBegan.Fire(UIS.InputBegan, inputB, False)
+ok("controller: Total_OpenKey B opens the window (tween to scale 1)", pwin.Visible is True and pwin.FindFirstChild(pwin, "Total_Anim").Scale == 1)
+closeBtn = pwin.FindFirstChild(pwin, "Close", True)
+closeBtn.Activated.Fire(closeBtn.Activated)
+ok("controller: Close button action hides the window", pwin.Visible is False and pwin.GetAttribute(pwin, "Total_Open") is False)
+buy = [d for d in pwin.GetDescendants(pwin).values() if d.GetAttribute(d, "Total_Action") == "remote:Total_Shop_Buy"][0]
+before = len(list(M.fired.values()))
+buy.Activated.Fire(buy.Activated)
+fired = list(M.fired.values())
+last = lua_to_py(fired[-1]) if len(fired) > before else None
+ok("controller: Buy button fires Total_Shop_Buy with {item}", last and last[0] == "Total_Shop_Buy" and last[1]["item"] in ("Sword", "Shield", "Potion"), last)
+# hover state tween + tabs
+tabBtns = [d for d in pwin.GetDescendants(pwin).values() if d.GetAttribute(d, "Total_Tab")]
+tabBtns[1].Activated.Fire(tabBtns[1].Activated)
+tabsRoot = pwin.FindFirstChild(pwin, "Categories", True)
+pagesP = tabsRoot.FindFirstChild(tabsRoot, "Pages")
+ok("controller/UIKit: clicking tab 2 switches pages", tabsRoot.GetAttribute(tabsRoot, "Total_ActiveTab") == "Gear" and pagesP.FindFirstChild(pagesP, "Page_Gear").Visible is True and pagesP.FindFirstChild(pagesP, "Page_All").Visible is False)
+b = buy
+base = b.BackgroundColor3
+b.MouseEnter.Fire(b.MouseEnter)
+hovered = b.BackgroundColor3
+b.MouseLeave.Fire(b.MouseLeave)
+ok("UIKit.wireButton: hover lightens, leave restores", not same(hovered, base) and same(b.BackgroundColor3, base) and b.FindFirstChild(b, "Total_PressScale") is not None)
+
+# shop server handles the purchase
+server = SSS.FindFirstChild(SSS, "Total_ShopServer")
+M.runScript(server, False)
+buyRemote = remotes.FindFirstChild(remotes, "Total_Shop_Buy")
+buyRemote.OnServerEvent.Fire(buyRemote.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Sword"}))
+coinsV = M.fakePlayer.FindFirstChild(M.fakePlayer, "leaderstats").FindFirstChild(M.fakePlayer.FindFirstChild(M.fakePlayer, "leaderstats"), "Coins")
+ok("Total_ShopServer: validates, charges 100 Coins, grants, notifies", coinsV.Value == 400 and M.fakePlayer.GetAttribute(M.fakePlayer, "Owns_Sword") is True and any("Bought Sword" in str(lua_to_py(f)) for f in list(M.fired.values())), coinsV.Value)
+buyRemote.OnServerEvent.Fire(buyRemote.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Nothing"}))
+ok("Total_ShopServer: unknown item is refused with a warning", coinsV.Value == 400 and any("unknown item" in w for w in list(M.warnings.values())))
+
+# HUD feeds
+phud, ran, errs = clone_run(M, hud, pgui)
+ok("HUD LocalScripts run (controller, hud feed, notify feed)", ran == 3 and len(list(errs.values())) == 0, list(errs.values()))
+pill = phud.FindFirstChild(phud, "Coins", True)
+ok("Total_HudFeed: currency pill shows leaderstats.Coins (400)", pill.FindFirstChild(pill, "Value").Text == "400", pill.FindFirstChild(pill, "Value").Text)
+coinsV.Value = 12500
+coinsV.Changed.Fire(coinsV.Changed)
+ok("Total_HudFeed: live update formats 12.5K", pill.FindFirstChild(pill, "Value").Text == "12.5K", pill.FindFirstChild(pill, "Value").Text)
+
+# settings toggles persist to player attributes
+pset, ran, errs = clone_run(M, SG().FindFirstChild(SG(), "Settings"), pgui)
+sw = [d for d in pset.GetDescendants(pset).values() if d.GetAttribute(d, "Total_Setting") == "music"][0]
+sw.Activated.Fire(sw.Activated)
+ok("Settings: toggle flips Total_Toggle and persists Setting_music", len(list(errs.values())) == 0 and sw.GetAttribute(sw, "Total_Toggle") is False and M.fakePlayer.GetAttribute(M.fakePlayer, "Setting_music") is False, list(errs.values()))
+
+# daily server
+M.runScript(SSS.FindFirstChild(SSS, "Total_DailyServer"), False)
+claim = remotes.FindFirstChild(remotes, "Total_Daily_Claim")
+res = lua_to_py(claim.InvokeServer(claim, py_to_lua({})))
+res2 = lua_to_py(claim.InvokeServer(claim, py_to_lua({})))
+ok("Total_DailyServer: first claim pays day 1 (+10), second is on cooldown", res["ok"] is True and res["day"] == 1 and res["reward"] == 10 and res2["ok"] is False and "Come back" in res2["message"], (res, res2))
+ok("Total_DailyServer: claim persisted to DataStore Total_DailyRewards", M.dsCalls >= 2 and lua_to_py(M.datastores["Total_DailyRewards"]["1"])["day"] == 1, (M.dsCalls,))
+
+# dialog typewriter + leaderboard feed + loading script compile
+pdlg, ran, errs = clone_run(M, SG().FindFirstChild(SG(), "Dialog"), pgui)
+line = pdlg.FindFirstChild(pdlg, "Line", True)
+ok("Dialog: typewriter label animates MaxVisibleGraphemes", len(list(errs.values())) == 0 and line.MaxVisibleGraphemes == len(line.Text) and len(line.Text) > 0, (list(errs.values()), line.MaxVisibleGraphemes))
+plb_errs = None
+try:
+    plb, ran, errs = clone_run(M, SG().FindFirstChild(SG(), "Leaderboard"), pgui)
+    plb_errs = list(errs.values())
+except Exception as e:  # the feed loops with task.wait; the simulator's wait budget stops it
+    plb_errs = [str(e)]
+ok("Leaderboard feed runs until the simulated wait budget (no runtime error before it)", plb_errs is not None and all("wait budget" in e for e in plb_errs), plb_errs)
+RF = game.GetService(game, "ReplicatedFirst")
+loadingScript = RF.FindFirstChild(RF, "Total_Loading")
+M.waits = 0  # the leaderboard poll loop above deliberately spent the main-thread wait budget
+resL = L.eval("function(M,s) local okR, err = pcall(M.runScript, s, true) return {okR, err} end")(M, loadingScript)
+okL, errL = resL[1], resL[2]
+ok("Total_Loading runs end-to-end (preload, progress, fade, destroy)", okL and pgui.FindFirstChild(pgui, "LoadingScreen") is None, errL)
+
+# ───────────────────────── 8. 1.98.0: ability bar + button hotkeys ─────────────────────────
+M.waits = 0
+r = run("ability")
+abar = SG().FindFirstChild(SG(), "AbilityBar")
+ok("ui_screen_generate ability_bar builds StarterGui.AbilityBar + Total_AbilityClient + Total_AbilityServer", r.get("ok") and abar is not None and abar.FindFirstChild(abar, "Total_AbilityClient") is not None and SSS.FindFirstChild(SSS, "Total_AbilityServer") is not None, r)
+aslots = [d for d in abar.GetDescendants(abar).values() if d.GetAttribute(d, "Total_Ability")] if abar else []
+ok("  3 ability slots carry Total_Ability / Total_Hotkey (Q, Shift, R default) / Total_Cooldown and the cast action", len(aslots) == 3 and [x.GetAttribute(x, "Total_Hotkey") for x in aslots] == ["Q", "Shift", "R"] and all(x.GetAttribute(x, "Total_Action") == "remote:Total_Ability_Cast" for x in aslots) and aslots[0].GetAttribute(aslots[0], "Total_Cooldown") == 6, [(x.GetAttribute(x, "Total_Hotkey"), x.GetAttribute(x, "Total_Action")) for x in aslots])
+ok("  remotes Total_Ability_Cast + Total_Ability_State created", remotes.FindFirstChild(remotes, "Total_Ability_Cast") is not None and remotes.FindFirstChild(remotes, "Total_Ability_State") is not None)
+srvSrc = SSS.FindFirstChild(SSS, "Total_AbilityServer").Source
+ok("  server config table lists the abilities with cooldowns + sequence hook", 'Fireball = { cooldown = 6, sequence = "Fireball" }' in srvSrc and "Dash = { cooldown = 3 }" in srvSrc and "Shield = { cooldown = 10 }" in srvSrc, srvSrc[:400])
+# client side
+pab, ran, errs = clone_run(M, abar, pgui)
+ok("  AbilityBar LocalScripts run on a client (controller + ability client)", ran == 2 and len(list(errs.values())) == 0, list(errs.values()))
+pslot = [d for d in pab.GetDescendants(pab).values() if d.GetAttribute(d, "Total_Ability") == "Fireball"][0]
+ok("  client decorates each slot with Cooldown overlay (hidden), CdText and AbilityName", pslot.FindFirstChild(pslot, "Cooldown") is not None and pslot.FindFirstChild(pslot, "Cooldown").Visible is False and pslot.FindFirstChild(pslot, "CdText") is not None and pslot.FindFirstChild(pslot, "AbilityName").Text == "Fireball")
+# hotkey Q -> the controller fires the slot's action exactly like a click
+before = len(list(M.fired.values()))
+UIS.InputBegan.Fire(UIS.InputBegan, py_to_lua({"KeyCode": {"Name": "Q"}, "UserInputType": {"Name": "Keyboard"}}), False)
+fired = list(M.fired.values())
+last = lua_to_py(fired[-1]) if len(fired) > before else None
+ok("  hotkey Q fires Total_Ability_Cast {item=Fireball} through the controller", last is not None and last[0] == "Total_Ability_Cast" and last[1]["item"] == "Fireball", last)
+before = len(list(M.fired.values()))
+UIS.InputBegan.Fire(UIS.InputBegan, py_to_lua({"KeyCode": {"Name": "Q"}, "UserInputType": {"Name": "Keyboard"}}), True)
+ok("  a key the game already processed (chat / textbox) is ignored", len(list(M.fired.values())) == before)
+# server side: validated cooldown, answers the client, second cast refused
+M.runScript(SSS.FindFirstChild(SSS, "Total_AbilityServer"), False)
+castR = remotes.FindFirstChild(remotes, "Total_Ability_Cast")
+before = len(list(M.fired.values()))
+castR.OnServerEvent.Fire(castR.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Fireball"}))
+dead = [lua_to_py(f) for f in list(M.fired.values())[before:]]
+ok("  Total_AbilityServer: a player without a living character is refused", len(dead) == 1 and dead[0][2]["ok"] is False and "cannot cast" in dead[0][2]["message"], dead)
+M.fakePlayer.Character = M.buildRig(None, "Tester")
+before = len(list(M.fired.values()))
+castR.OnServerEvent.Fire(castR.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Fireball"}))
+castR.OnServerEvent.Fire(castR.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Fireball"}))
+castR.OnServerEvent.Fire(castR.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Nope"}))
+answers = [lua_to_py(f) for f in list(M.fired.values())[before:] if f[1] == "Total_Ability_State"]  # script.Casted also fires (with the player Instance)
+ok("  Total_AbilityServer: script.Casted fired once for the accepted cast (gameplay hook)", sum(1 for f in list(M.fired.values())[before:] if f[1] == "Casted") == 1)
+ok("  Total_AbilityServer: first cast ok (cooldown 6), identical second cast refused 'on cooldown', unknown ability refused", len(answers) == 3 and answers[0][2]["ok"] is True and answers[0][2]["cooldown"] == 6 and answers[1][2]["ok"] is False and "cooldown" in answers[1][2]["message"] and answers[2][2]["ok"] is False and answers[2][2]["message"] == "Unknown ability", answers)
+# client applies the server state: sweep visible + slot disabled, then finished -> re-enabled
+stateR = remotes.FindFirstChild(remotes, "Total_Ability_State")
+stateR.OnClientEvent.Fire(stateR.OnClientEvent, py_to_lua({"ability": "Fireball", "ok": True, "cooldown": 6, "remaining": 6}))
+ov = pslot.FindFirstChild(pslot, "Cooldown")
+ok("  client: state event starts the sweep (overlay visible, full height, slot disabled)", ov.Visible is True and ov.Size.Y.Scale > 0.95 and pslot.GetAttribute(pslot, "Total_Disabled") is True, (ov.Visible, ov.Size.Y.Scale))
+stateR.OnClientEvent.Fire(stateR.OnClientEvent, py_to_lua({"ability": "Fireball", "ok": True, "cooldown": 6, "remaining": 0}))
+ok("  client: remaining 0 clears the sweep and re-enables the slot", ov.Visible is False and pslot.GetAttribute(pslot, "Total_Disabled") is None, (ov.Visible, pslot.GetAttribute(pslot, "Total_Disabled")))
+# ── §9 (1.98.0) server hit detection: damage/range -> frontal cone -> Humanoid:TakeDamage (no combat blueprint installed) ──
+r = run("ability_dmg")
+ok("ability_bar with damage/range generates (MeleeBar)", r.get("ok"), r)
+srvSrc = SSS.FindFirstChild(SSS, "Total_AbilityServer").Source
+ok("  server table carries damage + range; Taunt has no damage entry", "Slash = { cooldown = 1, damage = 20, range = 8 }" in srvSrc and "Taunt = { cooldown = 1 }" in srvSrc, srvSrc[:600])
+ok("  hit detection reuses Total_Systems.Combat.Service when installed, else TakeDamage only when damage is set", "Total_Systems" in srvSrc and "Combat.Damage(model, def.damage, player, key)" in srvSrc and 'if def.damage == nil then' in srvSrc)
+L.execute("""
+local function dummy(name, x, z)
+    local m = Instance.new('Model') m.Name = name m.Parent = workspace
+    local root = Instance.new('Part') root.Name = 'HumanoidRootPart' root.CFrame = CFrame.new(x, 3, z) root.Parent = m
+    local hum = Instance.new('Humanoid') hum.Health = 100 hum.MaxHealth = 100 hum.Parent = m
+    m.PrimaryPart = root
+    return m
+end
+dummy('InFront', 0, -4)   -- 4 studs ahead (rig looks down -Z)
+dummy('Behind', 0, 6)     -- behind the caster
+dummy('FarAway', 0, -30)  -- out of range
+""")
+M.delayed = L.table()
+M.fakePlayer.Character.Parent = L.eval("workspace")
+M.runScript(SSS.FindFirstChild(SSS, "Total_AbilityServer"), False)
+castR = remotes.FindFirstChild(remotes, "Total_Ability_Cast")
+before = len(list(M.fired.values()))
+castR.OnServerEvent.Fire(castR.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Slash"}))
+# the first (Fireball/Dash/Shield) server script from §8 is still connected in this simulator and answers "Unknown ability" - only the new one matters
+answers = [lua_to_py(f) for f in list(M.fired.values())[before:] if f[1] == "Total_Ability_State" and lua_to_py(f)[2].get("ok") is True]
+ok("  Slash accepted by the server", len(answers) == 1 and answers[0][2]["cooldown"] == 1, answers)
+ok("  without a sequence the hit is scheduled after hit_delay (task.delay), not applied instantly", len(list(M.delayed.values())) == 1 and L.eval("workspace.InFront.Humanoid.Health") == 100)
+for d in list(M.delayed.values()):
+    d.f(*list(d.args.values()))
+hp = lambda n: L.eval("workspace." + n + ".Humanoid.Health")  # noqa: E731
+ok("  only the dummy in the frontal cone and in range took 20 damage (Behind + FarAway untouched)", hp("InFront") == 80 and hp("Behind") == 100 and hp("FarAway") == 100, (hp("InFront"), hp("Behind"), hp("FarAway")))
+M.delayed = L.table()
+castR.OnServerEvent.Fire(castR.OnServerEvent, M.fakePlayer, py_to_lua({"item": "Taunt"}))
+for d in list(M.delayed.values()):
+    d.f(*list(d.args.values()))
+ok("  an ability without damage never touches Humanoids", hp("InFront") == 80)
+
+# UIKit.setLoading busy state
+K2 = M.runModule(design.FindFirstChild(design, "UIKit"))
+loadBtn = pwin.FindFirstChild(pwin, "Close", True)
+K2.setLoading(loadBtn, True)
+ok("UIKit.setLoading(btn, true) disables the button and animates its label", loadBtn.GetAttribute(loadBtn, "Total_Disabled") is True and loadBtn.GetAttribute(loadBtn, "Total_Loading") is True)
+K2.setLoading(loadBtn, False)
+ok("UIKit.setLoading(btn, false) restores text and enables it", loadBtn.GetAttribute(loadBtn, "Total_Loading") is None and loadBtn.GetAttribute(loadBtn, "Total_Disabled") is None)
+# UI sounds come from TotalSFX once it is installed (tokens carry no sound ids by default)
+played0 = M.soundsPlayed or 0
+loadBtn.Activated.Fire(loadBtn.Activated)
+ok("button click without TotalSFX installed plays nothing (no fabricated sound id)", (M.soundsPlayed or 0) == played0)
+r = run("sfx_install")
+ok("sfx_library_install (for the UI sound bridge)", r.get("ok"), r)
+played0 = M.soundsPlayed or 0
+loadBtn.Activated.Fire(loadBtn.Activated)
+ok("button click with TotalSFX installed plays the ui_click event through UIKit.sfx", (M.soundsPlayed or 0) == played0 + 1, (M.soundsPlayed, played0))
+r = run("ability_bad")
+ok("ability_bar with no abilities falls back to the 4 defaults (Strike/Dash/Shield/Ultimate)", r.get("ok") and r["data"]["count"] >= 4, r)
+
+# ───────────────────────── 1.99.2: ui_audit fix / grade / phone pass ─────────────────────────
+legacy2 = L.eval("""function(StarterGui)
+  local sg=Instance.new('ScreenGui') sg.Name='Legacy2' sg.ZIndexBehavior=Enum.ZIndexBehavior.Global sg.Parent=StarterGui
+  local f=Instance.new('Frame') f.Name='Main' f.Size=UDim2.new(0,1000,0,300) f.Position=UDim2.new(0,100,0,100) f.BackgroundColor3=Color3.fromRGB(30,30,30) f.Parent=sg
+  local t=Instance.new('TextLabel') t.Name='Title' t.Size=UDim2.new(1,0,0,30) t.Text='Old title' t.TextSize=9 t.TextColor3=Color3.fromRGB(240,240,240) t.BackgroundTransparency=1 t.Parent=f
+  local sc=Instance.new('TextLabel') sc.Name='Scaled' sc.Size=UDim2.new(1,0,0,40) sc.Position=UDim2.new(0,0,0,30) sc.Text='Scaled' sc.TextScaled=true sc.TextColor3=Color3.fromRGB(240,240,240) sc.BackgroundTransparency=1 sc.Parent=f
+  local b=Instance.new('TextButton') b.Name='Tiny' b.Size=UDim2.new(0,20,0,20) b.Position=UDim2.new(0,10,0,80) b.Text='x' b.TextColor3=Color3.fromRGB(255,255,255) b.BackgroundColor3=Color3.fromRGB(30,30,30) b.Parent=f
+  local s=Instance.new('ScrollingFrame') s.Name='S' s.Size=UDim2.new(0,100,0,50) s.Position=UDim2.new(0,250,0,150) s.Parent=f
+  return sg
+end""")(SG())
+r0 = run("audit_legacy2")
+rules0 = {i["rule"] for i in r0["data"]["issues"]} if r0.get("ok") else set()
+ok("ui_audit (1.99.2) reports grade + fixed_wide + phone pass without fixing anything", r0.get("ok") and r0["data"]["grade"] in ("excellent", "good", "fair", "needs work") and "fixed_wide" in rules0 and r0["data"]["fixed"] == [] and isinstance(r0["data"].get("phone"), dict), (r0.get("data", {}).get("grade"), sorted(rules0)))
+r = run("audit_fix")
+fixed = {f["rule"] for f in r["data"]["fixed"]} if r.get("ok") else set()
+main2 = legacy2.FindFirstChild(legacy2, "Main")
+title2, scaled2, tiny2, scroll2 = (main2.FindFirstChild(main2, n) for n in ("Title", "Scaled", "Tiny", "S"))
+ok("ui_audit fix=true applies the safe repairs: tiny_text, unbounded_text_scale, small_touch_target, static_canvas, zindex_global", r.get("ok") and {"tiny_text", "unbounded_text_scale", "small_touch_target", "static_canvas", "zindex_global"} <= fixed, (sorted(fixed), r.get("error")))
+ok("  repairs landed on the instances (TextSize 14, UITextSizeConstraint, UISizeConstraint 44, AutomaticCanvasSize Y, Sibling)", title2.TextSize == 14 and scaled2.FindFirstChildOfClass(scaled2, "UITextSizeConstraint") is not None and tiny2.FindFirstChildOfClass(tiny2, "UISizeConstraint") is not None and tiny2.FindFirstChildOfClass(tiny2, "UISizeConstraint").MinSize.X == 44 and scroll2.AutomaticCanvasSize.Name == "Y" and legacy2.ZIndexBehavior.Name == "Sibling", (title2.TextSize, scroll2.AutomaticCanvasSize.Name, legacy2.ZIndexBehavior.Name))
+ok("  fixed issues leave the score; fixed_wide (needs ui_make_responsive) stays reported", r["data"]["score"] > r0["data"]["score"] and "fixed_wide" in {i["rule"] for i in r["data"]["issues"]} and "tiny_text" not in {i["rule"] for i in r["data"]["issues"]}, (r0["data"]["score"], r["data"]["score"]))
+r = run("audit_nophone")
+ok("ui_audit phone=false omits the phone pass", r.get("ok") and r["data"].get("phone") is None, r.get("data", {}).get("phone"))
+
+# ───────────────────────── 1.99.2: named styles ─────────────────────────
+r = run("tokens_style")
+ok("design_tokens_set {style:'cartoon'} resolves to the style's preset, font and radius", r.get("ok") and r["data"]["style"] == "cartoon" and r["data"]["preset"] == "candy" and r["data"]["font"] == "FredokaOne" and r["data"]["radius"] == 18, r)
+r = run("tokens_style_override")
+ok("design_tokens_set {style:'Tactical', primary:'#ff0000'}: explicit colour wins, style key normalised", r.get("ok") and r["data"]["style"] == "tactical" and r["data"]["palette"]["Primary"] == "#ff0000" and r["data"]["font"] == "RobotoMono", r)
+r = run("shop_styled")
+r2 = run("tokens_get2")
+ok("ui_screen_generate {style:'pixel'} writes the pixel tokens before building the screen", r.get("ok") and r2.get("ok") and r2["data"]["preset"] == "retro" and r2["data"]["font"]["Family"] == "Arcade" and SG().FindFirstChild(SG(), "StyledShop") is not None, (r.get("error"), r2.get("data", {}).get("preset"), r2.get("data", {}).get("font")))
+
+failed = results.count(False)
+print("\n%d passed, %d failed" % (len(results) - failed, failed))
+sys.exit(1 if failed else 0)
