@@ -24,7 +24,7 @@
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
 
-  const VERSION = "1.99.8";
+  const VERSION = "1.99.9";
   const q = (s) => '"' + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "\\r").replace(/\n/g, "\\n") + '"';
   const num = (v) => { const x = Number(v); return isFinite(x) ? x : null; };
   const lua = RobloxScriptSkills.luaLiteral || function lua(v) {

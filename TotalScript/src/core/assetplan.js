@@ -18,7 +18,7 @@
 // extents; pos = part centre; rot = degrees.
 (function (root) {
   "use strict";
-  const VERSION = "1.99.8";
+  const VERSION = "1.99.9";
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
   const r3 = (v) => Math.round(v * 1000) / 1000;

@@ -4151,7 +4151,7 @@ dependencies = [
 
 [[package]]
 name = "total-agent"
-version = "1.99.8"
+version = "1.99.9"
 dependencies = [
  "anyhow",
  "axum",

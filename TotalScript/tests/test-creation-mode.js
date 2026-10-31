@@ -176,7 +176,7 @@ if (!JSDOM) { console.log("skip jsdom walk (jsdom not installed)"); finish(); }
   ];
   // Fake total-core bridge: records every call_tool, answers like the Rust side.
   const calls = [];
-  const sentFull = []; // every rs-set-full the page pushed to the background (1.99.8 access switch)
+  const sentFull = []; // every rs-set-full the page pushed to the background (1.99.9 access switch)
   let bridgeUp = true;
   const background = (msg) => {
     switch (msg && msg.type) {

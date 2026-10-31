@@ -2270,6 +2270,7 @@
   MODE_GATES.animate.push(...MODE_GATES.creation.filter((g) => g.id === "scripts" || g.id === "look"));
   // Returns the gate nudge for the active mode when this run mutated without
   // proving, else "". `runTools` = bare names of every command executed this run.
+  const MODE_GATE_ROUNDS = 2; // 1.99.9: a run gets at most two mode-gate reminders (was one)
   function modeGateNudge(runTools) {
     try {
       const mode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode());
@@ -3481,6 +3482,96 @@
     if (ORCH && ORCH.compactFeedback) { try { return ORCH.compactFeedback(s, name, MAX); } catch {} }
     return s.slice(0, 6500) + "\n[TotalScript context compression: dropped " + (s.length - 9000) + " chars from " + String(name || "tool") + "]\n" + s.slice(-2500);
   }
+  // 1.99.9 WORK MODES DO SOMETHING (src/core/work_modes.js). Four run-time
+  // behaviours, all read-only probes through the bridge, none a chat turn:
+  //   startModePreflight  - at send time: read the place / Blender scene
+  //                         (rigs, clips, parts, scripts, lighting, selection)
+  //                         and ride the facts on the FIRST tool result;
+  //   attachModeAutoCheck - after a successful build command: read the created
+  //                         path back and append the real state to the result;
+  //   gate strip + verdict (ui.renderModeGates / TotalWorkModes.verdict) and the
+  //   Blender precondition (hard note + banner when Blender is not connected).
+  const WM = (typeof TotalWorkModes !== "undefined" && TotalWorkModes) ? TotalWorkModes : null;
+  function currentWorkMode() { try { return normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch { return "creation"; } }
+  async function runModeProbe(probe) {
+    if (!probe) return "";
+    const ms = Math.max(1000, Number(probe.timeoutMs) || 8000);
+    const req = probe.kind === "blender"
+      ? bg({ type: "call_tool", name: probe.tool, arguments: probe.args || {}, timeout: ms })
+      : bg({ type: "call_tool", name: "execute_luau", arguments: { code: probe.code, datamodel_type: "Edit" }, timeout: ms });
+    const r = await Promise.race([req, new Promise((res) => setTimeout(() => res(null), ms))]);
+    return r && r.ok ? String(r.text || "") : "";
+  }
+  // Blender link for the precondition: the live flag first, then the same
+  // status → connect attempt runTool makes before a blender_* call.
+  async function blenderReady() {
+    try { if (A.bridge && A.bridge.blender === true) return true; } catch {}
+    try { if (window.__rsBlender && window.__rsBlender()) return true; } catch {}
+    try {
+      let st = await bg({ type: "blender_status" });
+      if (!(st && (st.blender || st.ok))) st = await bg({ type: "blender_connect" });
+      if (st && (st.blender || st.ok)) { A.bridge = A.bridge || {}; A.bridge.blender = true; return true; }
+    } catch {}
+    return false;
+  }
+  function startModePreflight() {
+    A.modeBrief = null;
+    if (!WM) return;
+    const mode = currentWorkMode();
+    let engine = "roblox"; try { engine = activeEngine(); } catch {}
+    if (engine === "local") return;
+    const brief = { text: "", sent: false, pending: true, mode, kind: "preflight", at: Date.now() };
+    A.modeBrief = brief;
+    brief.promise = (async () => {
+      const blenderUp = mode === "blender" ? await blenderReady() : false;
+      const pre = WM.precondition(mode, { blenderConnected: blenderUp });
+      if (!pre.ok) {
+        brief.kind = "precondition"; brief.text = pre.brief; brief.pending = false;
+        diag("mode.precondition", { mode, ok: false });
+        try { if (!A._modePrecondBannerAt || Date.now() - A._modePrecondBannerAt > 60000) { A._modePrecondBannerAt = Date.now(); ui.banner("warn", pre.title, pre.message); } } catch {}
+        try { ui.trackCard("mode preflight", "err", "BLENDER · not connected", "mode"); } catch {}
+        return;
+      }
+      const probe = WM.preflight(mode, { engine, blenderConnected: blenderUp });
+      if (!probe) { brief.pending = false; return; }
+      let raw = "";
+      try { raw = await runModeProbe(probe); } catch {}
+      const data = probe.kind === "blender" ? (raw || null) : WM.parseResult(raw);
+      brief.data = data;
+      brief.text = WM.renderBrief(mode, data, {});
+      brief.pending = false;
+      diag("mode.preflight", { mode, ok: !!data, ms: Date.now() - brief.at, summary: WM.briefSummary(mode, data) });
+      try { ui.trackCard("mode preflight", data ? "ok" : "err", WM.BADGE[mode] + " · " + WM.briefSummary(mode, data), "mode"); } catch {}
+    })();
+  }
+  // Waits (briefly) for a preflight that is still running, then returns the
+  // text to append to the first result - or "" when there is nothing to say.
+  async function takeModeBrief() {
+    const b = A.modeBrief;
+    if (!b || b.sent) return "";
+    if (b.pending && b.promise) { try { await Promise.race([b.promise, new Promise((res) => setTimeout(res, 2500))]); } catch {} }
+    if (b.pending) { diag("mode.preflight", { mode: b.mode, ok: false, late: true }); return ""; }
+    b.sent = true;
+    return b.text || "";
+  }
+  async function attachModeAutoCheck(toolName, args, feedback) {
+    if (!WM) return feedback;
+    try { if (activeEngine() === "local") return feedback; } catch {}
+    const mode = currentWorkMode();
+    const probe = WM.autoCheck(mode, toolName, args, feedback);
+    if (!probe) return feedback;
+    if (probe.kind === "blender" && !(A.bridge && A.bridge.blender === true)) return feedback;
+    let raw = "";
+    try { raw = await runModeProbe(probe); } catch {}
+    const line = WM.renderAutoCheck(probe, raw);
+    diag("mode.autoCheck", { mode, tool: bareToolName(toolName), kind: probe.kind, ok: !!line, found: !/NOT FOUND/.test(line) });
+    if (!line) return feedback;
+    try { ui.trackCard("mode auto-check", /NOT FOUND|CHECK:/.test(line) ? "err" : "ok", line.replace(/^\[MODE AUTO-CHECK[^\]]*\]\s*/, ""), "mode"); } catch {}
+    return String(feedback || "") + "\n" + line;
+  }
+  // Harness hooks (tests/test-work-modes-live.js walk): run the preflight /
+  // auto-check against a fake bridge without a full agent session.
+  try { window.__rsModePreflight = () => { startModePreflight(); return A.modeBrief; }; window.__rsModeAutoCheck = attachModeAutoCheck; } catch {}
   async function attachAutoDebug(toolName, feedback) {
     let on = true;
     try { if (window.__rsAutoDebug && window.__rsAutoDebug() === false) on = false; } catch {}
@@ -5506,9 +5597,10 @@
     const resendAllowed = () => !(P.pacing && P.pacing.noResend && gentlePacingOn());
     let falseSuccessNudged = false; // 1.69: one "you said done but nothing ran" correction per run
     let luaFenceNudged = false; // 1.81.0: one "shown ```lua is not executed" correction per run
-    let modeGateSent = false; // 1.38.0: one evidence gate per run
+    let modeGateRounds = 0; // 1.38.0: evidence gate per run (1.99.9: up to 2 rounds, see MODE_GATE_ROUNDS)
     const effortGate = { verify: false, audit: false, review: false }; // 1.60: one of each per run
     A.runTools = new Set();
+    try { ui.renderModeGates(); } catch {}
     let toolTurns = A.steeringStep || 0;
     // Re-send the command list after this many successful tool calls. Kept high
     // so the reminder does not bloat the context too often.
@@ -5867,11 +5959,11 @@
           // 1.38.0: MODE EVIDENCE GATE - a run that mutated (scripts / visuals /
           // motion) but never ran the mode's proof command gets ONE verification
           // request before its final answer is accepted.
-          if (!modeGateSent && resendAllowed() && !A.stop && toolTurns >= 2) {
+          if (modeGateRounds < MODE_GATE_ROUNDS && resendAllowed() && !A.stop && toolTurns >= 2) {
             const nudge = modeGateNudge(A.runTools);
             if (nudge) {
-              modeGateSent = true;
-              diag("loop.modeGate", { mode: (() => { try { return normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch { return "?"; } })(), tools: [...A.runTools].slice(0, 20) });
+              modeGateRounds++;
+              diag("loop.modeGate", { mode: (() => { try { return normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch { return "?"; } })(), round: modeGateRounds, tools: [...A.runTools].slice(0, 20) });
               try { ui.toast("Work-mode gate — asking the model to verify before it finishes"); } catch {}
               ui.steeringProgress("correcting", "Verification required by the work mode", toolTurns);
               const state = asStateTag();
@@ -5894,6 +5986,11 @@
               continue;
             }
           }
+          // 1.99.9: MODE VERDICT - one honest line per run: which gates were
+          // proved, which stayed open after the reminders (shown in the
+          // Activity tab + diag; never sent to the model).
+          try { if (WM && toolTurns) { const states = WM.gateStates(MODE_GATES[currentWorkMode()], A.runTools); const v = WM.verdict(currentWorkMode(), states, modeGateRounds); const lvl = WM.verdictLevel(states); diag("loop.modeVerdict", { mode: currentWorkMode(), level: lvl, rounds: modeGateRounds, gates: states.map((x) => x.id + ":" + x.state) }); ui.trackCard("mode verdict", lvl === "open" ? "err" : "ok", v, "mode"); if (lvl === "open") ui.toast(v); } } catch {}
+          try { ui.renderModeGates(); } catch {}
           ui.steeringProgress("complete", toolTurns ? `${toolTurns} step${toolTurns === 1 ? "" : "s"} completed` : "Reply finished", toolTurns);
           break;
         }
@@ -5988,7 +6085,7 @@
             batchStopped = true; batchParts.length = 0; break;
           }
           toolTurns++;
-          try { A.runTools.add(bareToolName(call.tool)); } catch {}
+          try { A.runTools.add(bareToolName(call.tool)); ui.renderModeGates(); } catch {}
           ui.steeringProgress("running", batchN > 1 ? `${call.tool} (step ${bi + 1}/${batchN})` : call.tool, toolTurns);
           // Loading chip with the real args (loop owns this item from here).
           decorate.toolBox(res.item, call.tool, "run", (batchN > 1 ? `step ${bi + 1}/${batchN} · ` : "") + argSummary(call), true, callBody(call), category);
@@ -6036,6 +6133,9 @@
           // last step), not once per step.
           if (bi === batchN - 1) { try { feedback = await attachAutoDebug(call.tool, feedback); } catch {} }
           try { feedback = compressToolFeedback(feedback, call.tool); } catch {}
+          // 1.99.9: mode auto-check (read the created path back) - appended AFTER
+          // compression so the fact line is never the part that gets dropped.
+          try { feedback = await attachModeAutoCheck(call.tool, call.arguments, feedback); } catch {}
           try {
             const failed = feedback.startsWith("ERROR");
           } catch {}
@@ -6173,6 +6273,9 @@
             diag("guiBrief.sent", { via: "result" });
             try { ui.toast("GUI brief sent with the result"); } catch {}
           }
+          // 1.99.9: the MODE PREFLIGHT (facts read from Studio / Blender at send
+          // time) rides on the first result too - never by rewriting the composer.
+          try { const mb = await takeModeBrief(); if (mb) { toSend += "\n\n" + mb; diag("mode.briefSent", { mode: A.modeBrief && A.modeBrief.mode, kind: A.modeBrief && A.modeBrief.kind }); } } catch {}
           // 1.69: Layer C - the task brief (type, intent, the user's own
           // constraints, how to verify) rides on the first result of the run.
           if (A.task && !A.task.riderSent && ORCH) {
@@ -7874,6 +7977,7 @@
           <span id="rs-state"></span>
           <span id="rs-unstable-inline" hidden title="This site can drop turns">⚠ unstable</span>
           <span id="rs-perf" hidden title="Performance budget"></span>
+          <span id="rs-mode-gates" hidden title="Work-mode gates for this request: ✓ proof command ran · ◌ changed but not verified · – nothing of that family ran"></span>
           <span id="rs-ctx" hidden title=""></span>
           <div class="rs-cluster rs-cluster-right">
           <button id="rs-action"></button>
@@ -8819,7 +8923,23 @@
     try { window.__rsSyncCrewBadge = syncCrewBadge; } catch {}
     try { window.addEventListener("total-crew-change", () => { try { syncCrewBadge(); } catch {} }); } catch {}
     // Bar badge + <html data-rs-work> for CSS; every mode has a badge.
+    // 1.99.9: live GATE STRIP in the bar - per mode gate: – idle, ◌ changed
+    // without proof, ✓ proof command ran. Recomputed from A.runTools after every
+    // command, at loop start / end and on a mode switch.
+    function renderModeGates(){
+      const el = uiEl("rs-mode-gates");
+      if (!el) return;
+      if (typeof TotalWorkModes === "undefined" || !TotalWorkModes || !A.started || activeEngine() === "local") { el.hidden = true; return; }
+      const gates = MODE_GATES[workMode] || [];
+      const states = TotalWorkModes.gateStates(gates, A.runTools || []);
+      const html = TotalWorkModes.gateStripHtml(workMode, states);
+      if (el.innerHTML !== html) el.innerHTML = html;
+      el.dataset.level = TotalWorkModes.verdictLevel(states);
+      el.hidden = false;
+    }
+    try { window.__rsRenderModeGates = renderModeGates; } catch {}
     function syncWorkModeUi(){
+      try { renderModeGates(); } catch {}
       const mode = WORK_MODES[workMode] || WORK_MODES.creation;
       const pm = publicMode();
       try { document.documentElement.setAttribute("data-rs-work", workMode); } catch {}
@@ -9577,6 +9697,7 @@
                 ${(() => { let customs = []; try { customs = typeof PublicSkills !== "undefined" ? PublicSkills.modes().filter((m) => m.enabled) : []; } catch {} const pm = publicMode(); return customs.map((m) => `<button type="button" class="rs-work-card rs-work-custom ${pm&&pm.id===m.id?"on":""}" data-work="pm:${m.id}" role="radio" aria-checked="${pm&&pm.id===m.id?"true":"false"}" title="Custom mode on ${escRs(WORK_MODES[normalizeWorkMode(m.base)].name)}"><span class="rs-work-name">${escRs(m.title)} <small>public</small></span><span class="rs-work-sub">${escRs(m.sub || m.description)}</span></button>`).join(""); })()}
               </div>
               ${(() => { const st = (WORK_MODES[workMode] && WORK_MODES[workMode].starters) || []; return st.length ? `<div class="rs-work-starters" aria-label="${WORK_MODES[workMode].name} quick starts"><span class="rs-work-starters-label">Quick starts</span>${st.map((q, i) => `<button type="button" class="rs-work-starter" data-work-starter="${i}" title="${escRs(q.prompt)}">${escRs(q.label)}</button>`).join("")}</div>` : ""; })()}
+              ${(() => { try { const d = typeof TotalWorkModes !== "undefined" && TotalWorkModes.DOES[workMode]; return d ? `<div class="rs-menu-note rs-work-does"><b>What ${escRs(WORK_MODES[workMode].name)} does while it runs:</b> ${escRs(d)}</div>` : ""; } catch { return ""; } })()}
               <div class="rs-menu-note rs-work-public-note">Make your own mode, skill or ability: open the cards panel → <b>Public</b> tab and describe it — the AI builds and installs it.</div>
             </section>
             ${reasoningSectionHtml()}
@@ -12349,7 +12470,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     function runTemplateById(templateId, values) { const t = TotalTemplateRegistry.getTemplate(templateId); if (!t) { toast("TEMPLATE_NOT_FOUND"); return false; } const card = { templateId: t.id, engine: "rs", icon: "T", cat: t.category, title: t.name, desc: t.description, prompt: (t.instructions || []).join("\n") }; return runTemplateCard(card, values || {}); }
     function openTray(tab) { if (openTrayFn) openTrayFn(tab); else if (openCardsPanel) { if (tab) cardsTab = tab; openCardsPanel(true); } }
     function closeTray() { if (closeCardsWindowFn) closeCardsWindowFn(); }
-    return { runTemplateById, openTray, closeTray, noteGuiRequest, composerHasImage, setStatus, staleExtensionAlert, setStarted, setStarting, showStop, markStopping, inputCover, toast, banner, showImages, nudgeStart, updateStartGate, refreshSetup, getCustomPrompt, getCustomMcpServers, trackCard, hideCardEmbed, steeringProgress, takeSteeringSteering, peekSteeringSteering, clearSteeringSteering, syncSteeringUi, openMenu: (toSupport) => openMenuFn && openMenuFn(toSupport) };
+    return { runTemplateById, openTray, closeTray, noteGuiRequest, composerHasImage, setStatus, staleExtensionAlert, setStarted, setStarting, showStop, markStopping, inputCover, toast, banner, renderModeGates, showImages, nudgeStart, updateStartGate, refreshSetup, getCustomPrompt, getCustomMcpServers, trackCard, hideCardEmbed, steeringProgress, takeSteeringSteering, peekSteeringSteering, clearSteeringSteering, syncSteeringUi, openMenu: (toSupport) => openMenuFn && openMenuFn(toSupport) };
   })();
 
   // ── Live token + timer, shown ONLY on a tool call's chip detail. The
@@ -12933,6 +13054,9 @@ statusTimer = rsInterval(() => bg({ type: "status" }).then(onStatus), 5000);
       // the first result (never by rewriting the composer).
       A.guiBrief = null;
       try { A.guiBrief = ui.noteGuiRequest(); } catch {}
+      // 1.99.9: work-mode preflight / precondition starts NOW (async, read-only);
+      // its brief rides on the first tool result (takeModeBrief).
+      try { if (A.started) startModePreflight(); } catch {}
       // 1.69: task understanding BEFORE the model acts - category, intent
       // (implement / fix / explain / plan / review / continue), follow-up
       // inheritance and the user's explicit constraints. Read from the composer

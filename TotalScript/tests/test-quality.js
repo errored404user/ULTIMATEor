@@ -16,7 +16,7 @@ process.chdir(path.join(__dirname, ".."));
 let failed = 0;
 const ok = (name, cond, extra) => { console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond || !extra ? "" : "  -> " + extra}`); if (!cond) failed++; };
 const read = (p) => fs.readFileSync(p, "utf8");
-const VERSION = "1.99.8";
+const VERSION = "1.99.9";
 const PACK_VERSION = "1.47.0"; // the pack itself last changed in 1.47.0
 const pack = read("src/core/skills/studio_quality.js"), main = read("src/core/main.js"), config = read("src/core/config.js"), readme = read("README.md");
 const manifest = JSON.parse(read("manifest.json"));
@@ -53,7 +53,7 @@ ok("codecraft.html loads the pack after studio_project.js", (() => { const h = r
 
 // ── C. main.js wiring ──
 ok("style_guide is answered locally (no Studio round-trip) and still reaches __rsAfterTool", main.includes('if (name === "style_guide" && typeof RobloxScriptSkills.styleGuideLocal === "function") {') && main.includes("const res0 = `Output of 'style_guide':\\n${JSON.stringify(r)}`;"));
-ok("quality_fix / style_lighting_apply / brief_set are registered pack commands that run in Sandbox (Studio writes; 1.99.8 removed the Ask-mode list)", ["quality_fix", "style_lighting_apply", "brief_set"].every((n) => pack.includes('name: "' + n + '"')) && !/FULL_PC_OPS = new Set\(\[[^\]]*"(quality_fix|style_lighting_apply|brief_set)"/.test(main) && !/ASK_OPS/.test(main));
+ok("quality_fix / style_lighting_apply / brief_set are registered pack commands that run in Sandbox (Studio writes; 1.99.9 removed the Ask-mode list)", ["quality_fix", "style_lighting_apply", "brief_set"].every((n) => pack.includes('name: "' + n + '"')) && !/FULL_PC_OPS = new Set\(\[[^\]]*"(quality_fix|style_lighting_apply|brief_set)"/.test(main) && !/ASK_OPS/.test(main));
 const gateBlock = main.slice(main.indexOf("  const MODE_GATES = {"), main.indexOf("  // 1.38.0: skill programs that legitimately run long"));
 const gctx = { window: { __rsWorkMode: () => "creation" }, normalizeWorkMode: () => "creation", bareToolName: (n) => String(n).split("/").pop(), WORK_MODES: { creation: { badge: "CREATION" } } };
 vm.createContext(gctx); vm.runInContext(gateBlock + "\nthis.modeGateNudge=modeGateNudge;this.MODE_GATES=MODE_GATES;", gctx);

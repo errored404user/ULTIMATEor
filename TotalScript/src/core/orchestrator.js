@@ -33,7 +33,7 @@
 // content script (window.TotalOrchestrator).
 const TotalOrchestrator = (() => {
   "use strict";
-  const VERSION = "1.99.8";
+  const VERSION = "1.99.9";
 
   // ───────────────────────── 1. task understanding ─────────────────────────
   const CATEGORY_RE = {

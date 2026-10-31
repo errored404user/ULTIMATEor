@@ -75,6 +75,6 @@ const readme = fs.readFileSync("README.md", "utf8");
 ok("README changelog + test list", /\*\*1\.78\.0 — Art direction engine/.test(readme) && /test-artui\.js/.test(readme) && /artui-sim\.py/.test(readme) && names.filter((x) => !/theme_get/.test(x)).every((x) => readme.includes("`" + x)));
 ok("test-command-dedup.js scans the art pack", /"studio_artui\.js"/.test(fs.readFileSync("tests/test-command-dedup.js", "utf8")));
 ok("simulator stubs for the pack are real stand-ins (EditableImage buffer, CreateAssetAsync ids, GetFreeDecals, Font / buffer / Content)", (() => { const sim = fs.readFileSync("tests/roblox_sim.py", "utf8"); return /function methods:CreateEditableImage/.test(sim) && /function methods:WritePixelsBuffer/.test(sim) && /function methods:CreateAssetAsync/.test(sim) && /function methods:GetFreeDecals/.test(sim) && /_G\.Font = \{/.test(sim) && /_G\.buffer = \{/.test(sim) && /_G\.Content = \{/.test(sim); })());
-ok("version pins 1.99.8 (manifest, plugin, crate)", manifest.version === "1.99.8" && fs.readFileSync("plugin/TotalScript.lua", "utf8").includes('local VERSION = "1.99.8"') && /^version = "1\.99\.8"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
+ok("version pins 1.99.9 (manifest, plugin, crate)", manifest.version === "1.99.9" && fs.readFileSync("plugin/TotalScript.lua", "utf8").includes('local VERSION = "1.99.9"') && /^version = "1\.99\.9"/m.test(fs.readFileSync("agent/Cargo.toml", "utf8")));
 
 console.log(`\n${n} checks, exit ${process.exitCode || 0}`);

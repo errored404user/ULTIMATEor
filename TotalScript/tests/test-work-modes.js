@@ -54,7 +54,7 @@ const vm = require("vm");
 global.window = global; global.chrome = { runtime: { getURL: () => "" }, storage: { local: { get() {}, set() {} } } };
 vm.runInThisContext(config + ";globalThis.__RS=RS;", { filename: "config.js" });
 const RS = globalThis.__RS;
-assert.deepStrictEqual(Object.keys(RS.WORK_MODE_PROMPTS), ["creation", "blender", "animate"], "exactly three built-in profiles: creation + blender (1.95.0; tests/test-blender-mode.js) + animate (1.99.8; tests/test-animator-mode.js)");
+assert.deepStrictEqual(Object.keys(RS.WORK_MODE_PROMPTS), ["creation", "blender", "animate"], "exactly three built-in profiles: creation + blender (1.95.0; tests/test-blender-mode.js) + animate (1.99.9; tests/test-animator-mode.js)");
 const wm = "creation";
 const full = RS.workModePrompt(wm), tight = RS.workModePrompt(wm, { tight: true });
 assert(full.startsWith("━━━ OPERATING LOOP (every work mode) ━━━") && tight.startsWith("━━━ OPERATING LOOP ━━━"), "shared loop first");

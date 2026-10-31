@@ -711,6 +711,23 @@ html.rs-light #rs-perf { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,
 html.rs-light #rs-perf[data-lvl="low"] { color: #065f46; background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.30); }
 html.rs-light #rs-perf[data-lvl="mid"] { color: #92400e; background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.35); }
 html.rs-light #rs-perf[data-lvl="high"] { color: #991b1b; background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.35); }
+/* 1.99.9 work-mode GATE STRIP (src/core/work_modes.js): one pill per mode gate -
+   "–" nothing of that family ran, "◌" changed without proof, "✓" proof command ran. */
+#rs-mode-gates { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; height: 22px; border-radius: 999px; font-size: 10px; font-weight: 600; letter-spacing: 0.2px; border: 1px solid rgba(34,211,238,0.22); background: rgba(34,211,238,0.07); color: #c8c8d1; white-space: nowrap; }
+#rs-mode-gates[hidden] { display: none !important; }
+#rs-mode-gates b { color: #22d3ee; font-weight: 800; margin-right: 2px; }
+#rs-mode-gates .rs-gate { font-style: normal; padding: 0 5px; border-radius: 999px; border: 1px solid transparent; color: #8a8a94; }
+#rs-mode-gates .rs-gate-pending { color: #fde68a; border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.12); }
+#rs-mode-gates .rs-gate-proved { color: #a7f3d0; border-color: rgba(52,211,153,0.30); background: rgba(52,211,153,0.10); }
+#rs-mode-gates[data-level="open"] { border-color: rgba(251,191,36,0.35); }
+#rs-mode-gates[data-level="proved"] { border-color: rgba(52,211,153,0.30); }
+html.rs-light #rs-mode-gates { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); color: #374151; }
+html.rs-light #rs-mode-gates b { color: #0e7490; }
+html.rs-light #rs-mode-gates .rs-gate { color: #6b7280; }
+html.rs-light #rs-mode-gates .rs-gate-pending { color: #92400e; background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.35); }
+html.rs-light #rs-mode-gates .rs-gate-proved { color: #065f46; background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.30); }
+.rs-work-does { margin: 6px 0 4px; padding: 7px 9px; border-radius: 8px; border: 1px dashed rgba(34,211,238,0.28); background: rgba(34,211,238,0.05); }
+.rs-work-does b { color: #22d3ee; }
 .rs-checkpoint-list { display: grid; gap: 6px; }
 .rs-checkpoint-item { display: flex; align-items: center; gap: 8px; padding: 7px 9px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; font-size: 11px; }
 .rs-checkpoint-op { font-weight: 600; color: #e8e8ec; }

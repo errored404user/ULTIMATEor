@@ -52,7 +52,7 @@ const agentSrc = fs.readFileSync(path.join(root, "src/core/skills/agent_skills.j
 ok("gui mutation suite", guiSrc.includes("ui_set_image") && guiSrc.includes("ui_set_texture") && guiSrc.includes("ui_set_property") && guiSrc.includes("ui_paint") && manJs.includes("studio_gui.js"));
 ok("agentscript extras suite", agentSrc.includes("append_file") && agentSrc.includes("replace_in_files") && agentSrc.includes("AgentScriptSkills") && manJs.includes("agent_skills.js"));
 ok("gui mutation in system prompt", cfgSrc.includes("GUI MUTATION") && cfgSrc.includes("ui_set_image"));
-ok("prompt uses texture tools (config.js owns the prompt; 1.99.8 removed the main.js list that used to carry these names)", cfgSrc.includes("ui_set_image") && cfgSrc.includes("ui_set_texture"));
+ok("prompt uses texture tools (config.js owns the prompt; 1.99.9 removed the main.js list that used to carry these names)", cfgSrc.includes("ui_set_image") && cfgSrc.includes("ui_set_texture"));
 ok("blender camera align", fs.readFileSync(path.join(root, "tools", "blender_ops.py"), "utf8").includes("cmd_align_camera_axis") && fs.readFileSync(path.join(root, "background.js"), "utf8").includes("blender_align_camera"));
 ok("ui_build daily", guiSrc.includes("ui_build") && guiSrc.includes("BUILTIN"));
 ok("no leftover template backticks in lua lib", !/`plugin`/.test(skillSrc));

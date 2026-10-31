@@ -92,7 +92,7 @@ const cmd = (name, body) => "```\n###CMD " + name + "###\n" + body + "\n###END_C
 const partA = cmd("part_create", "name: RecoveryA\nsize: [2, 2, 2]\nposition: [0, 5, 0]\nanchored: true");
 const { ok, waitFor, finish } = makeReporter();
 const lastUser = () => userMessages[userMessages.length - 1] || "";
-const luau = () => toolCalls.filter((c) => c.name === "execute_luau" && !/GetLogHistory|IsRunning\(\)/.test(String(c.arguments.code || "")));
+const luau = () => toolCalls.filter((c) => c.name === "execute_luau" && !/GetLogHistory|IsRunning\(\)|TotalScript mode probe/.test(String(c.arguments.code || "")));
 async function ask(text) { d.execCommand("insertText", false, text); await sleep(60); action.click(); }
 async function untilLoopEnds(label) {
   const t0 = Date.now(); // the diag buffer is capped (chip events flood it) - match by time, never by count

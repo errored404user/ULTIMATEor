@@ -271,8 +271,9 @@ const PART = "TotalScript_ProviderParityTest";
     ok("###LUA### read-back ran and reported the part", simReady ? /size=4(\.0+)?, 2(\.0+)?, 4(\.0+)? anchored=true/.test(userMessages[4]) : /Output of 'execute_luau'/.test(userMessages[4]), userMessages[4].slice(0, 120).replace(/\n/g, " "));
     await waitFor(() => (w.__rsDiag || []).some((e) => e.event === "loop.end"), 30000, "loop.end");
     ok("agent loop ended after the final prose reply", true);
-    // The core's own post-command log scan (GetLogHistory) is internal, not a model command.
-    const luauCalls = toolCalls.filter((c) => c.name === "execute_luau" && !/GetLogHistory/.test(String(c.arguments.code || "")));
+    // The core's own post-command log scan (GetLogHistory) and the 1.99.9 work-mode
+    // probes (preflight / read-back, marked "TotalScript mode probe") are internal, not model commands.
+    const luauCalls = toolCalls.filter((c) => c.name === "execute_luau" && !/GetLogHistory|TotalScript mode probe/.test(String(c.arguments.code || "")));
     ok("exactly two model commands reached the bridge (create + read-back) - the remembered turns were never re-run", luauCalls.length === (BRIDGE_DROP ? 3 : TIMEOUT ? 4 : 2), luauCalls.length + " calls");
     ok("5 sends total: bootstrap, catalogue, request, 2 results" + (BRIDGE_DROP ? " (+1 bridge-down error, spliced out above)" : ""), userMessages.length === 5, userMessages.length + "");
     if (simReady) {

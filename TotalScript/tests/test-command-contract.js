@@ -17,7 +17,7 @@ const C = require(path.join(process.cwd(), "src/core/command_contract.js"));
 const S = RobloxScriptSkills;
 
 // ── wiring ──────────────────────────────────────────────────────────────────
-ok("module version 1.99.8", C.VERSION === "1.99.8", C.VERSION);
+ok("module version 1.99.9", C.VERSION === "1.99.9", C.VERSION);
 const lists = manifest.content_scripts.filter((c) => c.js && c.js.includes("src/core/command_registry.js"));
 ok("command_contract.js follows command_registry.js in every manifest list (" + lists.length + ")", lists.length >= 12 && lists.every((c) => c.js.indexOf("src/core/command_contract.js") === c.js.indexOf("src/core/command_registry.js") + 1));
 ok("codecraft.html loads the contract", /command_registry\.js"><\/script>\s*<script src="src\/core\/command_contract\.js">/.test(fs.readFileSync("codecraft.html", "utf8")));

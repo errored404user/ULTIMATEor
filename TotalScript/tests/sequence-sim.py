@@ -283,7 +283,7 @@ r = do("stop")
 ok("G7 sequence_stop with nothing running is a clean no-op", r.get("ok") and r["data"]["stopped"] == [])
 r = do("delete")
 ok("G8 sequence_delete removes only R6Test, runtime kept for the others", r.get("ok") and "R6Test" not in kids(seqf) and "Fireball" in kids(seqf) and "SequenceRunner" in kids(seqf), r)
-ok("versions: VFX / SFX / sequence runtimes all 1.99.8", data["vfxVersion"] == "1.99.8" and data["sfxVersion"] == "1.99.8" and data["seqVersion"] == "1.99.8")
+ok("versions: VFX / SFX / sequence runtimes all 1.99.9", data["vfxVersion"] == "1.99.9" and data["sfxVersion"] == "1.99.9" and data["seqVersion"] == "1.99.9")
 
 print("\n%d/%d checks passed (mock DataModel - not live Studio)" % (sum(results), len(results)))
 sys.exit(0 if all(results) else 1)

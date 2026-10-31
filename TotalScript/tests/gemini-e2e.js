@@ -189,7 +189,7 @@ const PART = "TotalScript_ProviderParityTest";
     ok("###LUA### read-back ran and reported the part", simReady ? /size=4(\.0+)?, 2(\.0+)?, 4(\.0+)? anchored=true/.test(userMessages[4]) : /Output of 'execute_luau'/.test(userMessages[4]), userMessages[4].slice(0, 120).replace(/\n/g, " "));
     await waitFor(() => (w.__rsDiag || []).some((e) => e.event === "loop.end"), 30000, "loop.end");
     ok("agent loop ended after the final prose reply", true);
-    const modelLuau = toolCalls.filter((c) => c.name === "execute_luau" && !/GetLogHistory|IsRunning\(\)/.test(String(c.arguments.code || "")));
+    const modelLuau = toolCalls.filter((c) => c.name === "execute_luau" && !/GetLogHistory|IsRunning\(\)|TotalScript mode probe/.test(String(c.arguments.code || "")));
     ok("exactly two model commands reached the bridge (create + read-back); nothing re-ran", modelLuau.length === 2, modelLuau.length + " calls");
     ok("5 sends total, each a single submit", userMessages.length === 5 && submitAttempts === 5, userMessages.length + " sends, " + submitAttempts + " submits");
     ok("command blocks were masked in the transcript (rs-tool-hide on code-block)", !!history.querySelector("code-block.rs-tool-hide"));
