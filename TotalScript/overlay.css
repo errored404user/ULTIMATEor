@@ -7102,6 +7102,14 @@ html.rs-paint-open #rs-root { visibility: hidden !important; }
 .rs-public-kind-skill{color:#8fd3ff;border-color:rgba(143,211,255,.4)}
 .rs-public-kind-ability{color:#c9b3ff;border-color:rgba(201,179,255,.4)}
 .rs-public-kind-mode{color:#ffd37a;border-color:rgba(255,211,122,.45)}
+/* 1.99.7: references line + run stats on Public cards */
+.rs-public-refs{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:5px;font-size:9px;line-height:1.3;text-transform:none;letter-spacing:0;color:#aeb7c4}
+.rs-public-refs b{font-size:8px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8893a3}
+.rs-public-refs a.rs-public-ref{color:#8fd3ff;text-decoration:none;border-bottom:1px dotted rgba(143,211,255,.45);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rs-public-refs a.rs-public-ref:hover{border-bottom-style:solid}
+.rs-public-refs a.rs-public-ref-v::after{content:" \2713";color:#5ee0a0;font-weight:700}
+.rs-public-refs em{font-style:normal;color:#8893a3}
+.rs-public-refs em.rs-public-ref-expert{color:#c9b3ff}
 .rs-public-active{color:#071017;background:var(--rsa,#24afe2);border-color:transparent}
 .rs-public-disabled{color:#e4828d;border-color:rgba(228,130,141,.4)}
 .rs-public-editor{height:min(640px,90vh)}

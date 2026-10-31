@@ -11,6 +11,16 @@
 // public_skill_import command). Storage is chrome.storage.local (key
 // rsPublicSkills); nothing is uploaded anywhere.
 //
+// 1.99.7: every item can carry REFERENCES - references[] (official docs
+// pages it relies on, flagged `verified` when the URL is one of the pages the
+// built-in skill references were checked against), examples[] (short plain-
+// Luau patterns the agent copies the shape of) and expert (the nearest built-in
+// expert, auto-detected when omitted). Abilities print them when called, modes
+// carry their own links in the mandate, public_skill_refs / the Public tab
+// manage them, and the AI that designs a skill is handed verified candidate
+// pages so it never invents a URL. Run statistics (stats) and a change history
+// (history) ride along the item too.
+//
 // This file is DOM-free at top level (it is loaded in node by the tests).
 (function (root) {
   "use strict";
@@ -30,7 +40,7 @@
   const NAME_RE = /^[a-z][a-z0-9_]{2,40}$/;
   const PARAM_RE = /^[a-z][a-z0-9_]{0,40}$/;
   const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
-  const LIMITS = { luau: 24000, mandate: 9000, instructions: 7000, params: 12, steps: 20, commands: 40, focus: 60 };
+  const LIMITS = { luau: 24000, mandate: 9000, instructions: 7000, params: 12, steps: 20, commands: 40, focus: 60, references: 12, examples: 4, exampleBody: 3000, history: 10 };
 
   let items = [];
   let activeModeId = null;
@@ -135,6 +145,67 @@
 
   // validate(def, {reserved:Set|Array of built-in command names, allowDuplicateId})
   // -> {ok, errors[], warnings[], item}
+  // ── References (1.99.7) ──────────────────────────────────────────────────
+  // Built-in modules are looked up at call time: public_skills.js loads before
+  // skill_refs.js / skill_intel.js and both stay optional.
+  const DOCS_HOST = "https://create.roblox.com/docs/";
+  const refsModule = () => { try { return root.TotalSkillRefs && typeof root.TotalSkillRefs.refs === "function" ? root.TotalSkillRefs : null; } catch { return null; } };
+  const intelModule = () => { try { return root.TotalSkillIntel && typeof root.TotalSkillIntel.select === "function" ? root.TotalSkillIntel : null; } catch { return null; } };
+  const URL_RE = /(https?:\/\/[^\s"'<>|]+|\/?docs\/[^\s"'<>|]+)/i;
+  function normalizeUrl(u) {
+    let v = String(u || "").trim().replace(/[),.;:]+$/, "").replace(/\/+$/, "");
+    if (!v) return null;
+    if (/^\/?docs\//i.test(v)) v = DOCS_HOST + v.replace(/^\/?docs\//i, "");
+    if (!/^https?:\/\/[^\s"'<>]+$/i.test(v)) return null;
+    return v;
+  }
+  const titleFromUrl = (u) => { try { const seg = decodeURIComponent(String(u).replace(/[?#].*$/, "").replace(/\/+$/, "").split("/").pop() || ""); return titleCase(seg.replace(/\.[a-z]+$/i, "").replace(/[-_]+/g, " ")).slice(0, 80) || u; } catch { return String(u).slice(0, 80); } };
+  // references: [{title, url, note?}] | ["Title | url", "url", ...] | "one per line" | {Title: url}
+  function normalizeReferences(raw, warnings) {
+    const out = []; const seen = new Set();
+    const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(/\r?\n|;/) : raw && typeof raw === "object" ? Object.entries(raw).map(([t, u]) => ({ title: t, url: u })) : [];
+    for (const entry of list) {
+      if (out.length >= LIMITS.references) { warnings.push(`only the first ${LIMITS.references} references are kept`); break; }
+      let title = "", url = "", note = "";
+      if (typeof entry === "string") {
+        const t = entry.trim().replace(/^[-*•]\s*/, "");
+        if (!t) continue;
+        const m = t.match(URL_RE);
+        if (!m) { warnings.push(`reference dropped (no http(s) URL): ${t.slice(0, 60)}`); continue; }
+        url = m[1]; title = (t.slice(0, m.index) + " " + t.slice(m.index + m[1].length)).replace(/[|—–:]+/g, " ").replace(/\s+-\s+/g, " ").replace(/\s+/g, " ").trim();
+      } else if (entry && typeof entry === "object") {
+        url = String(entry.url || entry.href || entry.link || entry.path || "").trim(); title = str(entry.title || entry.name || entry.label, 80).trim(); note = str(entry.note || entry.why, 160).trim();
+      } else continue;
+      const nu = normalizeUrl(url);
+      if (!nu) { warnings.push(`reference dropped (not an http(s) URL): ${String(url || title).slice(0, 60)}`); continue; }
+      if (seen.has(nu)) continue;
+      seen.add(nu);
+      const ref = { title: (title || titleFromUrl(nu)).slice(0, 80), url: nu };
+      if (note) ref.note = note;
+      out.push(ref);
+    }
+    return out;
+  }
+  // examples: [{title, lang?, body, note?}] - plain code the agent copies the shape of.
+  function normalizeExamples(raw, warnings) {
+    const out = [];
+    for (const e of Array.isArray(raw) ? raw : []) {
+      if (out.length >= LIMITS.examples) { warnings.push(`only the first ${LIMITS.examples} examples are kept`); break; }
+      const obj = e && typeof e === "object" ? e : { body: e };
+      const body = String(obj.body || obj.code || obj.luau || "").replace(/\r\n?/g, "\n").replace(/^```[a-z]*\n?/i, "").replace(/\n?```\s*$/, "").trim();
+      const title = str(obj.title || obj.name, 100).trim() || `Example ${out.length + 1}`;
+      if (body.length < 20) { warnings.push(`example '${title}' dropped (under 20 characters)`); continue; }
+      if (body.length > LIMITS.exampleBody) { warnings.push(`example '${title}' dropped (${body.length} > ${LIMITS.exampleBody} chars)`); continue; }
+      if (/`/.test(body)) { warnings.push(`example '${title}' dropped (backticks break the chat rendering)`); continue; }
+      const ex = { title, lang: /^(lua|luau|text|json)$/i.test(String(obj.lang || "")) ? String(obj.lang).toLowerCase() : "luau", body };
+      const note = str(obj.note, 200).trim(); if (note) ex.note = note;
+      out.push(ex);
+    }
+    return out;
+  }
+  const sanitizeStats = (s) => ({ runs: Math.max(0, parseInt(s && s.runs, 10) || 0), ok: Math.max(0, parseInt(s && s.ok, 10) || 0), fail: Math.max(0, parseInt(s && s.fail, 10) || 0), lastRunAt: Number(s && s.lastRunAt) || 0, lastOk: !!(s && s.lastOk === true), lastError: str(s && s.lastError, 200) });
+  const HISTORY_FIELDS = ["title", "description", "params", "luau", "instructions", "steps", "commands", "mandate", "focus", "references", "examples", "triggers", "tags", "usage", "expert"];
+
   function validate(def, opts) {
     opts = opts || {};
     const errors = [], warnings = [];
@@ -167,6 +238,12 @@
       params: [],
     };
     if (def.usage) item.usage = str(def.usage, 300);
+    item.references = normalizeReferences(def.references || def.refs || def.docs || def.links, warnings);
+    item.examples = normalizeExamples(def.examples, warnings);
+    const expert = snake(def.expert || def.related_expert || def.relatedExpert || "");
+    if (expert) { const SI = intelModule(); if (SI && Array.isArray(SI.IDS) && !SI.IDS.includes(expert)) warnings.push(`expert '${expert}' is not a built-in expert - the nearest one is auto-detected instead`); else item.expert = expert; }
+    if (def.stats && typeof def.stats === "object") item.stats = sanitizeStats(def.stats);
+    if (Array.isArray(def.history) && def.history.length) item.history = def.history.filter((h) => h && typeof h === "object").slice(-LIMITS.history).map((h) => ({ v: Math.max(1, parseInt(h.v, 10) || 1), at: Number(h.at) || 0, note: str(h.note, 160) }));
     if (kind === "skill" || kind === "ability") item.params = normalizeParams(def.params || def.parameters || def.arguments, errors, warnings);
     if (kind === "skill") {
       const luau = str(def.luau || def.code || def.source_code);
@@ -241,6 +318,13 @@
     const v = validate(merged, opts);
     if (!v.ok) return { ok: false, errors: v.errors, warnings: v.warnings, item: null };
     const idx = items.findIndex((i) => i.id === v.item.id);
+    if (idx >= 0) {
+      // 1.99.7: a short change history rides along the item (what changed, in which version).
+      const changed = HISTORY_FIELDS.filter((k) => JSON.stringify(items[idx][k] === undefined ? null : items[idx][k]) !== JSON.stringify(v.item[k] === undefined ? null : v.item[k]));
+      if (changed.length) v.item.history = (items[idx].history || []).concat([{ v: v.item.version, at: Date.now(), note: "changed " + changed.join(", ") }]).slice(-LIMITS.history);
+      else if (items[idx].history) v.item.history = items[idx].history;
+      if (items[idx].stats && !v.item.stats) v.item.stats = items[idx].stats;
+    }
     if (idx >= 0) items[idx] = v.item; else items.push(v.item);
     persist();
     emit(idx >= 0 ? "updated" : "created", v.item);
@@ -272,6 +356,131 @@
     return { ok: true, errors: [], item: clone(cur) };
   }
 
+  // recordRun(ref, ok, error) - run statistics shown on the Public tab card
+  // (runs / ok / fail / last result). Device-local; exports strip them.
+  function recordRun(ref, ok, error) {
+    const cur = find(ref);
+    if (!cur) return null;
+    const st = sanitizeStats(cur.stats || {});
+    st.runs++; if (ok) st.ok++; else st.fail++;
+    st.lastRunAt = Date.now(); st.lastOk = !!ok; st.lastError = ok ? "" : str(error, 200);
+    cur.stats = st; persist(); emit("ran", cur);
+    return clone(st);
+  }
+
+  // ── References (1.99.7) ──────────────────────────────────────────────────
+  // relatedExpert(item) → the built-in expert this item is closest to: the
+  // author's `expert` when it names a real one, else skill_intel's ranking of
+  // the item's own words (title, description, tags, triggers, commands /
+  // focus). null when skill_intel is not loaded or nothing matches.
+  function relatedExpert(item) {
+    const SI = intelModule();
+    if (!SI || !item) return null;
+    if (item.expert && Array.isArray(SI.IDS) && SI.IDS.includes(item.expert)) return { id: item.expert, why: ["set by the author"], explicit: true };
+    try {
+      const text = [item.title, item.description, (item.tags || []).join(" "), (item.triggers || []).join(" "), (item.commands || []).join(" "), (item.focus || []).slice(0, 12).join(" ")].filter(Boolean).join(". ");
+      const sel = SI.select(SI.analyze(text, { engine: "roblox" }), { max: 1 });
+      const p = sel && sel.picked && sel.picked[0];
+      return p ? { id: p.id, why: [].concat(p.why || []).slice(0, 4), explicit: false } : null;
+    } catch { return null; }
+  }
+  // referencesFor(ref, {query, maxInherited, maxExamples}) → { own[], examples[],
+  // inherited: {expert, explicit, why, refs[], examples[]} }. `verified` on a
+  // link means the URL is one of the pages the built-in references were checked
+  // against (tools/verify_doc_refs.js) - anything else is "not verified offline".
+  function referencesFor(ref, opts) {
+    opts = opts || {};
+    const item = find(ref);
+    if (!item) return null;
+    const R = refsModule();
+    const known = new Map();
+    if (R && typeof R.all === "function") { try { for (const e of R.all()) for (const r of e.refs || []) if (!r.unverified) known.set(r.url, e.id); } catch {} }
+    const own = (item.references || []).map((r) => Object.assign({}, r, { verified: known.has(r.url), verifiedBy: known.get(r.url) || null }));
+    const exp = relatedExpert(item);
+    const inherited = { expert: exp ? exp.id : null, explicit: !!(exp && exp.explicit), why: exp ? exp.why : [], refs: [], examples: [] };
+    if (exp && R) {
+      const ownUrls = new Set(own.map((r) => r.url));
+      const maxInherited = opts.maxInherited == null ? 6 : Math.max(0, opts.maxInherited);
+      inherited.refs = (R.refs(exp.id) || []).filter((r) => !ownUrls.has(r.url)).slice(0, maxInherited).map((r) => ({ title: r.title, url: r.url, verified: !r.unverified }));
+      const maxEx = opts.maxExamples == null ? 1 : Math.max(0, opts.maxExamples);
+      const q = opts.query || [item.title, item.description, (item.tags || []).join(" "), (item.triggers || []).join(" ")].join(" ");
+      if (maxEx && typeof R.exampleRank === "function") inherited.examples = R.exampleRank(exp.id, q).slice(0, maxEx).map((x) => ({ title: x.example.title, body: x.example.body, note: x.example.note || "", hits: x.hits || [] }));
+    }
+    return { name: item.name, kind: item.kind, own, examples: clone(item.examples || []), inherited };
+  }
+  // referencesText(ref, {budget, query, inherit}) - the text block appended to
+  // an ability call (and, own links only, to a mode's mandate).
+  function referencesText(ref, opts) {
+    opts = opts || {};
+    const info = referencesFor(ref, opts);
+    if (!info) return "";
+    const inherit = opts.inherit !== false;
+    const budget = Number(opts.budget) > 0 ? Number(opts.budget) : 4000;
+    const L = [];
+    const examples = info.examples.concat(inherit ? info.inherited.examples.map((x) => Object.assign({}, x, { from: info.inherited.expert })) : []);
+    if (examples.length) {
+      L.push("REFERENCE EXAMPLES (copy the shape, rename for this place; nothing here ran):");
+      let used = 0;
+      for (const e of examples) {
+        const block = `--- ${e.title}${e.from ? ` [from built-in ${e.from}]` : ""} ---\n${e.note ? "-- " + e.note + "\n" : ""}${e.body}`;
+        if (used + block.length > budget) { L.push(`(further example omitted for length: ${e.title})`); continue; }
+        L.push(block); used += block.length;
+      }
+    }
+    const refs = info.own.concat(inherit ? info.inherited.refs.map((r) => Object.assign({}, r, { from: info.inherited.expert })) : []);
+    if (refs.length) {
+      L.push(L.length ? "" : null, "REFERENCES (official documentation - read these before inventing an API; 'verified' = the page was checked offline against the Roblox docs listing):");
+      for (const r of refs) L.push(`- ${r.title} — ${r.url}${r.verified ? " (verified)" : " (not verified offline)"}${r.from ? ` [from built-in ${r.from}]` : ""}`);
+    }
+    if (inherit && info.inherited.expert) L.push(L.length ? "" : null, `RELATED BUILT-IN EXPERT: ${info.inherited.expert}${info.inherited.explicit ? "" : " (auto-detected)"} - skill {name: "${info.inherited.expert}"} prints its full procedure, pitfalls and verification.`);
+    return L.filter((x) => x !== null).join("\n");
+  }
+  // addReferences(ref, list) / removeReferences(ref, keys) / adoptSuggested(ref, max)
+  // - edits through update() so the version and history move with them.
+  function addReferences(ref, list, opts) {
+    const cur = find(ref);
+    if (!cur) return { ok: false, errors: [`unknown public skill '${ref}'`], warnings: [], item: null };
+    const warnings = [];
+    const add = normalizeReferences(list, warnings);
+    if (!add.length) return { ok: false, errors: ["no valid reference to add (each needs an http(s) URL; '/docs/...' paths resolve to the Roblox Creator Docs)"], warnings, item: null };
+    const have = new Set((cur.references || []).map((r) => r.url));
+    const merged = (cur.references || []).concat(add.filter((r) => !have.has(r.url)));
+    const r = update(cur.id, { references: merged }, opts);
+    return Object.assign(r, { warnings: warnings.concat(r.warnings || []), added: add.filter((x) => !have.has(x.url)).length });
+  }
+  function removeReferences(ref, keys, opts) {
+    const cur = find(ref);
+    if (!cur) return { ok: false, errors: [`unknown public skill '${ref}'`], warnings: [], item: null };
+    const ks = [].concat(keys == null ? [] : keys).map((k) => String(k).trim().toLowerCase());
+    const kept = (cur.references || []).filter((r, i) => !ks.includes(String(i + 1)) && !ks.includes(r.url.toLowerCase()) && !ks.includes(r.title.toLowerCase()));
+    if (kept.length === (cur.references || []).length) return { ok: false, errors: ["nothing matched - pass a url, a title or the 1-based index from public_skill_refs"], warnings: [], item: null };
+    const r = update(cur.id, { references: kept }, opts);
+    return Object.assign(r, { removed: (cur.references || []).length - kept.length });
+  }
+  function adoptSuggested(ref, max, opts) {
+    const info = referencesFor(ref, { maxInherited: max == null ? 4 : max, maxExamples: 0 });
+    if (!info) return { ok: false, errors: [`unknown public skill '${ref}'`], warnings: [], item: null };
+    if (!info.inherited.refs.length) return { ok: false, errors: [info.inherited.expert ? `no further docs pages to inherit from ${info.inherited.expert}` : "no related built-in expert found - add references yourself (public_skill_refs {name, add:[\"Title | url\"]})"], warnings: [], item: null, expert: info.inherited.expert };
+    const r = addReferences(ref, info.inherited.refs.map((x) => ({ title: x.title, url: x.url })), opts);
+    return Object.assign(r, { expert: info.inherited.expert });
+  }
+  // referenceCandidates(text, max) - verified docs pages for the AI that is
+  // about to design / convert a skill, so references[] never needs an invented URL.
+  function referenceCandidates(text, max) {
+    const SI = intelModule(), R = refsModule();
+    if (!SI || !R) return "";
+    try {
+      const sel = SI.select(SI.analyze(String(text || ""), { engine: "roblox" }), { max: 2 });
+      const picked = (sel && sel.picked || []).map((p) => p.id);
+      if (!picked.length) return "";
+      const per = Math.max(2, Math.ceil((max || 8) / picked.length));
+      const rows = [];
+      for (const id of picked) for (const r of (R.refs(id) || []).filter((x) => !x.unverified).slice(0, per)) rows.push(`- ${r.title} — ${r.url}`);
+      if (!rows.length) return "";
+      return `REFERENCE CANDIDATES (official docs pages already verified for ${picked.join(" / ")}): put the 2-5 that apply in references[] as {title, url} and set expert to the closest of ${picked.join(", ")}. Do NOT invent other URLs - unknown links are stored as "not verified offline".\n${rows.join("\n")}`;
+    } catch { return ""; }
+  }
+
   // ── Modes ───────────────────────────────────────────────────────────────
   const modes = () => list({ kind: "mode" });
   const activeMode = () => { const m = items.find((i) => i.id === activeModeId && i.kind === "mode" && i.enabled); return m ? clone(m) : null; };
@@ -287,7 +496,8 @@
     if (!m) return "";
     const BASE = baseLabel(m.base).toUpperCase();
     const focus = m.focus.length ? `\nFOCUS COMMANDS for this mode (use them heavily, on top of the ${BASE} focus list): ${m.focus.join(", ")}` : "";
-    return `━━━ CUSTOM WORK MODE: ${m.title.toUpperCase()} (public mode by ${m.author}, layered on ${BASE}) ━━━\n${m.sub ? m.sub + "\n" : ""}${m.mandate}${focus}\nThe ${BASE} workflow above stays the process; this block sets the priorities and the standard of quality. The user picked this mode on purpose - follow it.`;
+    const refs = (m.references && m.references.length) || (m.examples && m.examples.length) ? "\n" + referencesText(m.id, { budget: 1500, inherit: false }) : "";
+    return `━━━ CUSTOM WORK MODE: ${m.title.toUpperCase()} (public mode by ${m.author}, layered on ${BASE}) ━━━\n${m.sub ? m.sub + "\n" : ""}${m.mandate}${focus}${refs}\nThe ${BASE} workflow above stays the process; this block sets the priorities and the standard of quality. The user picked this mode on purpose - follow it.`;
   }
 
   // ── Execution ───────────────────────────────────────────────────────────
@@ -359,6 +569,8 @@
     if (item.instructions) lines.push("", "INSTRUCTIONS:", fill(item.instructions, r.args));
     if (item.steps.length) lines.push("", "STEPS:", ...item.steps.map((s, i) => `${i + 1}. ${fill(s, r.args)}`));
     if (item.commands.length) lines.push("", `COMMANDS TO USE: ${item.commands.join(", ")}`);
+    const rt = referencesText(item.id, { budget: 3500, query: Object.values(r.args).filter((v) => typeof v === "string").join(" ") || undefined });
+    if (rt) lines.push("", rt);
     lines.push("", "Carry these steps out now with real command calls (one per message as usual), verify the result, then report what you did. This ability returned instructions only - nothing has been executed yet.");
     return { text: lines.join("\n"), item: clone(item), args: r.args };
   }
@@ -448,6 +660,7 @@
     "DEFINITION OBJECT (JSON) - common fields: kind ('skill'|'ability'|'mode'), name (snake_case, unique, 3-41 chars; modes may use a title instead), title, description (10-600 chars: what it does, when to use it), version (int), author, tags[], triggers[] (optional: words / short phrases that say WHEN to use it - used for ranking), usage (one example call).",
     "SKILL fields: params[{name, type: string|number|boolean|array|object, description, required, default?, enum?}], luau (the program; max 24000 chars). Every param is available in Luau BOTH as the Lua literal {{param}} and as args.param. The program runs in Studio through execute_luau in the Edit DataModel (plugin-level API, no `plugin` global, no yields over 5 s). Resolve instance paths first (walk game by name, fail with a clear error), wrap risky work in pcall, keep work idempotent, name created instances, record ChangeHistoryService waypoints for big edits, and RETURN A TABLE such as {ok=true, created=3, path='Workspace.X'} (it is JSON-encoded for the agent). Use `return {ok=false, error='...'}` for failures.",
     "ABILITY fields: params[] (optional), instructions (imperative procedure; may use {{param}}), steps[] (3-15 concrete steps), commands[] (real command names from list_commands). Calling an ability returns these instructions to the agent, which then performs them with real commands.",
+    "REFERENCES (any kind, optional): references[{title, url}] - the official docs pages the item relies on (prefer the REFERENCE CANDIDATES given below; '/docs/...' paths resolve to create.roblox.com; never invent URLs - unknown ones are kept but marked 'not verified offline'); examples[{title, body}] - up to 4 short plain-Luau patterns (20-3000 chars, no backticks) the agent copies the shape of; expert - the nearest built-in expert id (auto-detected when omitted). Abilities print references + examples when called; modes carry their own links in the mandate.",
     "MODE fields: title, badge (<=12 chars, uppercase), base ('creation' - the only built-in mode; legacy 'ultimate'|'visualizer'|'animator' map to it), sub (one line), note (menu blurb), mandate (80-9000 chars: priorities, quality bar, pipeline, verification rules - written like a senior specialist's standing orders), focus[] (10-40 real command names the mode leans on), toast.",
   ].join("\n");
 
@@ -465,6 +678,7 @@
       kindLine,
       "PROCESS: (1) design it completely - make sensible decisions instead of asking questions and mention them in the description; (2) submit it with ONE call to public_skill_create {\"definition\": {...}}; (3) if it returns VALIDATION_FAILED, fix the listed problems and call public_skill_create again; (4) for skills call public_skill_test {\"name\": ...} once to syntax-check it in Studio and fix any error with public_skill_update; (5) finally tell the user in one short paragraph what was installed, one example call, and how to share it (Public tab -> Export / Share code). Do not run the new skill on the user's place unless they asked for a test.",
       DEFINITION_DOC,
+      referenceCandidates(request, 8),
       existing,
       names,
     ].filter(Boolean).join("\n\n");
@@ -480,15 +694,16 @@
     { name: "public_skill_test", description: "Syntax-check a public skill's Luau in Studio (dry_run=true, default) or actually run it with args (dry_run=false).", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string" }, args: { type: "object" }, dry_run: { type: "boolean", default: true } } } },
     { name: "public_skill_export", description: "Export a Public Skill (or name='all' for a pack of everything installed) as shareable JSON plus an ORSKILL1: share code the user can give to others.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string", description: "name, id, or 'all'" } } } },
     { name: "public_skill_import", description: "Import Public Skills from exported JSON (single .orskill.json, a pack .orskills.json), a plain-text .txt skill (# Title / kind: / --- luau --- sections) or an ORSKILL1: share code.", inputSchema: { type: "object", required: ["data"], properties: { data: { type: "string", description: "JSON text, .txt skill text or ORSKILL1: share code" }, replace: { type: "boolean", description: "Replace items with the same name" } } } },
+    { name: "public_skill_refs", description: "References of a Public Skill: its own docs links / examples (verified = page checked offline against the Roblox docs listing) plus the ones inherited from the nearest built-in expert. add[] attaches links ('Title | url' or {title,url}), remove[] drops them by url / title / index, suggest=true adopts the inherited docs links.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string" }, add: { type: "array", items: { type: "string" }, description: "'Title | https://...' entries (or '/docs/...' paths)" }, remove: { type: "array", items: { type: "string" } }, suggest: { type: "boolean", description: "adopt the related expert's verified docs links" } } } },
     { name: "public_skill_from_prompt", description: "Turn a full prompt the user wrote into an installed Public Skill WITHOUT redesigning it: the prompt is kept verbatim as an ability's instructions (default), a mode's mandate (kind=mode) or, when it contains Luau, a skill. Instant; refine later with public_skill_update.", inputSchema: { type: "object", required: ["prompt"], properties: { prompt: { type: "string", description: "The full prompt text" }, kind: { type: "string", enum: ["skill", "ability", "mode"] }, title: { type: "string" }, name: { type: "string", description: "snake_case command name" }, description: { type: "string" } } } },
-  ].map((t) => Object.assign(t, { server: "totalscript", executionMode: /create|update|delete|import|enable|test|from_prompt/.test(t.name) ? "WRITE" : "READ", environment: "GENERAL", category: "Public Skills" }));
+  ].map((t) => Object.assign(t, { server: "totalscript", executionMode: /create|update|delete|import|enable|test|from_prompt|refs/.test(t.name) ? "WRITE" : "READ", environment: "GENERAL", category: "Public Skills" }));
 
   // ── Sharing ─────────────────────────────────────────────────────────────
   function exportObject(ref) {
     const item = find(ref);
     if (!item) return null;
     const out = clone(item);
-    delete out.enabled; delete out.source; delete out.createdAt; delete out.updatedAt;
+    delete out.enabled; delete out.source; delete out.createdAt; delete out.updatedAt; delete out.stats;
     return { format: FORMAT, formatVersion: FORMAT_VERSION, exportedAt: new Date().toISOString(), app: "TotalScript", item: out };
   }
   const exportJson = (ref) => { const o = exportObject(ref); return o ? JSON.stringify(o, null, 2) : null; };
@@ -564,9 +779,11 @@
   //   --- luau ---
   //   local n = {{count}}
   //   ...
-  const SECTION_RE = /^\s*(?:-{3,}|={3,}|#{2,3})\s*([a-zA-Z][a-zA-Z _-]{1,30}?)\s*(?:-{3,}|={3,})?\s*$/;
-  const HEADER_KEYS = { kind: "kind", type: "kind", name: "name", command: "name", title: "title", description: "description", desc: "description", summary: "description", tags: "tags", tag: "tags", triggers: "triggers", trigger: "triggers", when: "triggers", params: "params", param: "params", parameters: "params", args: "params", base: "base", badge: "badge", focus: "focus", commands: "commands", uses: "commands", author: "author", by: "author", usage: "usage", example: "usage", sub: "sub", subtitle: "sub", note: "note", toast: "toast", version: "version", executionmode: "executionMode", mode: "executionMode" };
-  const SECTION_KEYS = { luau: "luau", lua: "luau", code: "luau", script: "luau", program: "luau", instructions: "instructions", instruction: "instructions", procedure: "instructions", prompt: "instructions", steps: "steps", step: "steps", workflow: "steps", mandate: "mandate", "system prompt": "mandate", systemprompt: "mandate", rules: "mandate", description: "description", about: "description", notes: "note" };
+  const SECTION_RE = /^\s*(?:-{3,}|={3,}|#{2,3})\s*([a-zA-Z][a-zA-Z0-9 _:'(),./+-]{1,60}?)\s*(?:-{3,}|={3,})?\s*$/;
+  // `--- example Title ---` opens an example block (closing dashes required so a Luau doc comment never does).
+  const EXAMPLE_SECTION_RE = /^\s*(?:-{3,}|={3,})\s*example\s*[:\-]?\s*(.*?)\s*(?:-{3,}|={3,})\s*$/i;
+  const HEADER_KEYS = { kind: "kind", type: "kind", name: "name", command: "name", title: "title", description: "description", desc: "description", summary: "description", tags: "tags", tag: "tags", triggers: "triggers", trigger: "triggers", when: "triggers", params: "params", param: "params", parameters: "params", args: "params", base: "base", badge: "badge", focus: "focus", commands: "commands", uses: "commands", author: "author", by: "author", usage: "usage", example: "usage", sub: "sub", subtitle: "sub", note: "note", toast: "toast", version: "version", executionmode: "executionMode", mode: "executionMode", references: "references", reference: "references", refs: "references", docs: "references", links: "references", expert: "expert" };
+  const SECTION_KEYS = { luau: "luau", lua: "luau", code: "luau", script: "luau", program: "luau", instructions: "instructions", instruction: "instructions", procedure: "instructions", prompt: "instructions", steps: "steps", step: "steps", workflow: "steps", mandate: "mandate", "system prompt": "mandate", systemprompt: "mandate", rules: "mandate", description: "description", about: "description", notes: "note", references: "references", refs: "references", docs: "references", links: "references" };
   // `count:number=4 "how many"` | `name (string, required): what it is` | `color string`
   function parseParamSpec(spec) {
     const out = [];
@@ -600,6 +817,8 @@
     const headerBuf = [];
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
+      const exs = line.match(EXAMPLE_SECTION_RE);
+      if (exs) { cur = "example:" + (exs[1] || "").trim().slice(0, 100); sections[cur] = sections[cur] || []; structure++; continue; }
       const sec = line.match(SECTION_RE);
       if (sec && SECTION_KEYS[sec[1].trim().toLowerCase()]) { cur = SECTION_KEYS[sec[1].trim().toLowerCase()]; sections[cur] = sections[cur] || []; structure++; continue; }
       if (cur) { sections[cur].push(line); continue; }
@@ -619,7 +838,9 @@
     if (title && !def.title) def.title = title;
     for (const [k, v] of Object.entries(sections)) {
       const body = v.join("\n").replace(/^\n+|\n+$/g, "");
-      if (k === "steps") def.steps = body.split("\n").map((s) => s.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean);
+      if (k.startsWith("example:")) { (def.examples = def.examples || []).push({ title: k.slice(8) || `Example ${def.examples.length + 1}`, body }); }
+      else if (k === "references") def.references = (def.references ? def.references + "\n" : "") + body;
+      else if (k === "steps") def.steps = body.split("\n").map((s) => s.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean);
       else if (k === "luau") def.luau = body.replace(/^```[a-z]*\n?/i, "").replace(/\n?```\s*$/, "");
       else if (k === "description") def.description = (def.description ? def.description + " " : "") + body.replace(/\s+/g, " ").trim();
       else def[k] = body;
@@ -647,6 +868,7 @@
     if (i.author) L.push(`author: ${i.author}`);
     L.push(`version: ${i.version}`);
     if (i.usage) L.push(`usage: ${i.usage}`);
+    if (i.expert) L.push(`expert: ${i.expert}`);
     if (i.params && i.params.length) L.push(`params: ${i.params.map((p) => `${p.name}:${p.type}${p.default !== undefined ? "=" + JSON.stringify(p.default) : ""}${p.required === false && p.default === undefined ? " optional" : ""}${p.description ? ` "${p.description.replace(/"/g, "'")}"` : ""}`).join(", ")}`);
     if (i.kind === "skill") { L.push("", "--- luau ---", i.luau, ""); }
     if (i.kind === "ability") {
@@ -660,6 +882,8 @@
       if (i.focus && i.focus.length) L.push(`focus: ${i.focus.join(", ")}`);
       L.push("", "--- mandate ---", i.mandate, "");
     }
+    if (i.references && i.references.length) L.push("--- references ---", ...i.references.map((r) => `${r.title} | ${r.url}`), "");
+    for (const e of i.examples || []) L.push(`--- example ${e.title} ---`, e.body, "");
     return L.join("\n");
   }
   const textFileName = (ref) => { const i = find(ref); return i ? `${i.name || "mode"}.${i.kind}.orskill.txt` : "public-skill.orskill.txt"; };
@@ -748,6 +972,7 @@
       "PROCESS: (1) submit ONE public_skill_create {\"definition\": {...}}; (2) if VALIDATION_FAILED, fix and resubmit; (3) for skills run public_skill_test {\"name\"} once; (4) reply with one short paragraph: what was installed, how to call it, and what you changed from the prompt (ideally nothing).",
       "THE PROMPT (verbatim, between the markers):\n<<<PROMPT\n" + prompt + "\nPROMPT>>>",
       DEFINITION_DOC,
+      referenceCandidates(prompt.slice(0, 1200), 8),
       existing,
       names,
     ].filter(Boolean).join("\n\n");
@@ -762,6 +987,7 @@
     validate, list, get, has, find, isCommand, upsert, update, remove, setEnabled, replaceAll,
     modes, activeMode, setActiveMode, modePrompt,
     buildLuau, syntaxCheckLuau, abilityText, resolveArgs, signature, schema, toolEntries, catalogueBlock, relevant,
+    recordRun, relatedExpert, referencesFor, referencesText, addReferences, removeReferences, adoptSuggested, referenceCandidates,
     managementTools: () => clone(MANAGEMENT_TOOLS), generationPrompt,
     exportObject, exportJson, fileName, shareCode, parseShared, importShared, importPack, luauLiteral, snake,
     exportPackObject, exportPackJson, packFileName, packShareCode, PACK_FORMAT,

@@ -128,7 +128,7 @@ try {
 // ── 5. release bookkeeping ───────────────────────────────────────────────────
 const readme = read("README.md");
 ok("README: 1.79.0 entry + this test listed", /\*\*1\.79\.0 — Video Studio: show it a video/.test(readme) && readme.includes("test-video-studio.js"));
-ok("version pins 1.99.6", manifest.version === "1.99.6" && /^version = "1\.99\.6"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.99.6"'));
+ok("version pins 1.99.7", manifest.version === "1.99.7" && /^version = "1\.99\.7"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "1.99.7"'));
 
 console.log(`\n${pass}/${pass + fail} checks passed`);
 process.exit(fail ? 1 : 0);

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tests/test-animator-mode.js — 1.99.6 third built-in work mode: ANIMATOR (id "animate").
+// tests/test-animator-mode.js — 1.99.7 third built-in work mode: ANIMATOR (id "animate").
 //
 //   The mode must change what the loop DOES, not only the prompt:
 //   A. config.js: the Animator profile (full + tight), checklist, playbooks and
