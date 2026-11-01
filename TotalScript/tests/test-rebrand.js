@@ -84,7 +84,7 @@ ok("night skin still exists as a selectable style", css.includes('html[data-rs-t
 // ── 5. release pins ───────────────────────────────────────────────────────────
 const readme = read("README.md");
 ok("README 1.71.0 entry + title", /\*\*1\.71\.0 — TotalScript: the rename, and Aqua as the default skin\.\*\*/.test(readme) && readme.startsWith("# TotalScript — "));
-ok("version pins 2.0.5", manifest.version === "2.0.5" && /^version = "2\.0\.5"/m.test(cargo) && lua.includes('local VERSION = "2.0.5"') && lock.includes('name = "total-agent"\nversion = "2.0.5"'));
+ok("version pins 2.1.0", manifest.version === "2.1.0" && /^version = "2\.1\.0"/m.test(cargo) && lua.includes('local VERSION = "2.1.0"') && lock.includes('name = "total-agent"\nversion = "2.1.0"'));
 
 console.log((failed ? "FAIL  " : "OK    ") + "test-rebrand: " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

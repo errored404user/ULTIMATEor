@@ -123,9 +123,9 @@ ok("suggestion chips on empty transcript", gui.includes("Build a spawn lobby"));
 // ── docs + pins ──
 ok("agent README documents the panel", agentReadme.includes("## AI chat panel (1.37.0)") && agentReadme.includes("src/chat.rs"));
 ok("README changelog 1.37.0", readme.includes("**1.37.0 — total-core: AI chat side panel that works in Studio.**"));
-ok("README crate line updated", readme.includes("`total-agent` 2.0.5") && !readme.includes("removed desktop status window"));
-ok("manifest version is 2.0.5", manifest.version === "2.0.5", manifest.version);
-ok("crate / plugin pinned at 2.0.5", /^version = "2\.0\.5"/m.test(cargo) && read("plugin/TotalScript.lua").includes('local VERSION = "2.0.5"') && /name = "total-agent"\nversion = "2\.0\.5"/.test(read("agent/Cargo.lock")));
+ok("README crate line updated", readme.includes("`total-agent` 2.1.0") && !readme.includes("removed desktop status window"));
+ok("manifest version is 2.1.0", manifest.version === "2.1.0", manifest.version);
+ok("crate / plugin pinned at 2.1.0", /^version = "2\.1\.0"/m.test(cargo) && read("plugin/TotalScript.lua").includes('local VERSION = "2.1.0"') && /name = "total-agent"\nversion = "2\.1\.0"/.test(read("agent/Cargo.lock")));
 ok("no new crates needed", !/^(eventsource|async-openai|openai)/m.test(cargo));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nall agent-chat checks passed");

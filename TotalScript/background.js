@@ -2160,6 +2160,72 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         } catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
         break;
       }
+      // ── 2.1.0 Image Studio ──
+      // image_api_status / image_api: the user's OpenAI-compatible images
+      // endpoint. The key is read HERE from chrome.storage.local and sent only
+      // to the base URL the user typed; it never reaches a content script, the
+      // AI, a prompt or a log (the status reply carries a masked tail only).
+      // image_fetch: bytes of a picture URL (what a chat site drew), read with
+      // the extension's host permissions so page CORS cannot block it.
+      case "image_api_status": {
+        try {
+          const cfg = (await chrome.storage.local.get("rs_image_api")).rs_image_api || {};
+          const key = String(cfg.key || "");
+          sendResponse({ ok: true, configured: !!key, base: String(cfg.base || "https://api.openai.com/v1"), model: String(cfg.model || "gpt-image-1"), key_masked: key ? "…" + key.slice(-4) : "" });
+        } catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
+        break;
+      }
+      case "image_api": {
+        try {
+          const cfg = (await chrome.storage.local.get("rs_image_api")).rs_image_api || {};
+          const key = String(cfg.key || "");
+          if (!key) { sendResponse({ ok: false, error: "no image API key saved (Images window → API)" }); break; }
+          const base = String(cfg.base || "https://api.openai.com/v1").trim().replace(/\/+$/, "");
+          if (!/^https?:\/\//i.test(base)) { sendResponse({ ok: false, error: "image API base URL must start with http:// or https://" }); break; }
+          const model = String(cfg.model || "gpt-image-1").trim();
+          const prompt = String(msg.prompt || "").slice(0, 4000);
+          if (!prompt) { sendResponse({ ok: false, error: "prompt is required" }); break; }
+          // Same shaping as TotalImageGen.apiRequest (kept in sync by tests/test-imagegen.js).
+          const fam = /gpt-image/i.test(model) ? "gpt-image" : /dall-e-3/i.test(model) ? "dall-e-3" : /dall-e-2/i.test(model) ? "dall-e-2" : "generic";
+          const landscape = /^(thumbnail|gui_background|gui_button)$/.test(String(msg.kind || ""));
+          const size = !landscape ? "1024x1024" : fam === "gpt-image" ? "1536x1024" : fam === "dall-e-3" ? "1792x1024" : "1024x1024";
+          const body = { model, prompt, n: 1, size };
+          if (fam === "gpt-image") { body.output_format = "png"; if (msg.transparent) body.background = "transparent"; }
+          else body.response_format = "b64_json";
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 180000);
+          let res;
+          try {
+            res = await fetch(base + "/images/generations", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key }, body: JSON.stringify(body), signal: ctrl.signal });
+          } finally { clearTimeout(timer); }
+          const text = await res.text();
+          let j = null; try { j = JSON.parse(text); } catch {}
+          if (!res.ok) { sendResponse({ ok: false, error: "HTTP " + res.status + ": " + String((j && j.error && (j.error.message || j.error.code)) || text.slice(0, 300)) }); break; }
+          const d = j && Array.isArray(j.data) ? j.data[0] : null;
+          if (!d) { sendResponse({ ok: false, error: "the API returned no data[0]" + (j && j.error ? ": " + String(j.error.message || j.error) : "") }); break; }
+          if (d.b64_json) sendResponse({ ok: true, b64: String(d.b64_json), mime: "image/png", model, size, revised: d.revised_prompt || "" });
+          else if (d.url) sendResponse({ ok: true, url: String(d.url), model, size, revised: d.revised_prompt || "" });
+          else sendResponse({ ok: false, error: "data[0] carries neither b64_json nor url" });
+        } catch (e) { sendResponse({ ok: false, error: e && e.name === "AbortError" ? "image API timed out after 180 s" : String(e && e.message || e) }); }
+        break;
+      }
+      case "image_fetch": {
+        try {
+          const url = String(msg.url || "").trim();
+          if (!/^https?:\/\//i.test(url)) { sendResponse({ ok: false, error: "url must start with http:// or https://" }); break; }
+          { const why = privateNetworkReason(url); if (why) { sendResponse({ ok: false, error: "image_fetch refused: " + why }); break; } }
+          const res = await fetch(url, { redirect: "follow" });
+          if (!res.ok) { sendResponse({ ok: false, error: "HTTP " + res.status + " for the picture url" }); break; }
+          const mime = (res.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+          const buf = new Uint8Array(await res.arrayBuffer());
+          if (buf.length > 20 * 1024 * 1024) { sendResponse({ ok: false, error: "picture larger than 20 MB" }); break; }
+          if (!/^image\//.test(mime) && !(buf[0] === 0x89 && buf[1] === 0x50) && !(buf[0] === 0xff && buf[1] === 0xd8) && !(buf[0] === 0x52 && buf[1] === 0x49)) { sendResponse({ ok: false, error: "the url did not return an image (" + (mime || "no content-type") + ")" }); break; }
+          let bin = ""; const CH = 0x8000;
+          for (let i = 0; i < buf.length; i += CH) bin += String.fromCharCode.apply(null, buf.subarray(i, i + CH));
+          sendResponse({ ok: true, b64: btoa(bin), mime: /^image\//.test(mime) ? mime : (buf[0] === 0x89 ? "image/png" : buf[0] === 0xff ? "image/jpeg" : "image/webp"), bytes: buf.length });
+        } catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
+        break;
+      }
       case "web_search": {
         try {
           const q = String(msg.query || msg.q || "").trim();

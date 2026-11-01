@@ -3218,7 +3218,7 @@
     { id: "lighting", label: "LIGHTING & ATMOSPHERE", re: /^(lighting|light_|atmosphere|sky|clouds|cloud_layer|bloom|blur|color_correction|sunrays|sun_|fog|postfx|shadow|cast_sh|depth_of_field|aurora|weather_|time_of_day|day_night|ambient_set|exposure_set|film_)/ },
     { id: "vfx", label: "VFX & PARTICLES", re: /^(fx_|vfx_|particle|beam|trail|highlight|fire_add|smoke_add|sparkles|explosion|portal_|point_light|spot_light|surface_light|emitter|snowfall|sandstorm|underwater_effect|volcanic|firefly|debris_add|screen_shake|shield_bubble|rain_)/ },
     { id: "ui", label: "UI & HUD", re: /^(ui_|gui_|design_|billboard_gui|notification_|loading_(screen|show)|progress_show|screen_gui|surface_gui|hud_|menu_|image_label|text_button|starter_gui|fps_counter|mini_map|radial_menu|scoreboard|status_bar|performance_monitor_gui|waypoint_arrow|colors_ui|crosshair|frame_create|text_label|toast_show|tooltip_)|_ui$/ },
-    { id: "gfx", label: "THUMBNAIL & ICON STUDIO", re: /^gfx_/ },
+    { id: "gfx", label: "THUMBNAIL & ICON STUDIO", re: /^(gfx_|image_)/ },
     { id: "audio", label: "AUDIO", re: /^(audio_|sfx_|sound|ambient_|music_|background_music|directional_audio|jingle|radio_station|footstep_|impact_sound|voice_)/ },
     { id: "animation", label: "ANIMATION", re: /^(animation_|anim_|rig_|ik_|motor6d|facial_|character_emote|eclipse_|keyframe|pose_|emote_|sequence_|ability_sequence_)/ }, // 1.82.0: sequence_* / ability_sequence_* (anim + camera + VFX + SFX + UI timelines)
     { id: "motion", label: "TWEENS, SPRINGS & CAMERA", re: /^(tween|spring_|camera_|cutscene|walkspeed)/ },
@@ -5123,6 +5123,14 @@
     if (name === "asset_bridge_import" || bareName === "asset_bridge_import") {
       return await runAssetBridgeImport(args);
     }
+    // ── 2.1.0 Image Studio: image_generate / image_pickup / image_to_gui / image_thumbnail / image_list run in the browser (pixels never pass through the model) ──
+    if (/^image_(generate|pickup|to_gui|thumbnail|list)$/.test(bareName) && typeof TotalImageGen !== "undefined") {
+      try { if (typeof window.__rsBeforeTool === "function") window.__rsBeforeTool(name, args); } catch {}
+      let res;
+      try { res = await TotalImageGen.run(bareName, args, imageHooks()); } catch (e) { res = `ERROR in ${bareName}: ${String(e && e.message || e)}`; }
+      try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(name, args, !String(res || "").startsWith("ERROR"), res); } catch {}
+      return res;
+    }
     // ── Thumbnail & Icon Studio: photograph + crop (needs the browser canvas, so it is not pure Luau) ──
     if (name === "gfx_capture" || bareName === "gfx_capture") {
       try { if (typeof window.__rsBeforeTool === "function") window.__rsBeforeTool(name, args); } catch {}
@@ -6955,6 +6963,33 @@
     });
   }
   window.__rsOpenVideoStudio = openVideoStudio;
+  // 2.1.0 — Image Studio (src/core/imagegen.js): AI-generated thumbnails, icons
+  // and GUI art. The module owns prompts, pixels, the window and the Studio
+  // Luau; main.js lends it the things only the core has - the background
+  // worker, the provider's transcript, the Studio execution path, the publish
+  // approval gate, the image strip and the hand-off send.
+  function imageHooks() {
+    return {
+      bg, diag,
+      toast: (m) => ui.toast(m),
+      attach: (imgs, tool) => { A.pendingImages = imgs; try { ui.showImages(imgs, tool); } catch {} },
+      download: downloadDataImage,
+      assistantItems: () => { try { const items = P.allItems().filter((it) => P.isAssistantItem(it)); return items.reverse(); } catch { return []; } },
+      viaPlugin: () => pluginToolAvailable("plugin_execute_luau"),
+      runLuau: async (code) => {
+        if (pluginToolAvailable("plugin_execute_luau")) return await bridgeTool("plugin_execute_luau", { code }, 180000);
+        return await runTool({ tool: "execute_luau", arguments: { code, datamodel_type: "Edit", _totalInternal: true } });
+      },
+      publishAllowed: async (detail) => (await publishAutomationEnabled()) || (await requestApproval("image_to_gui", Object.assign({}, detail, { publish: true, warning: "publish:true uploads this picture as an Image asset on your Roblox account (moderation applies). Without it the image is a live preview that is not saved with the place." }))),
+      send: sendHandoff,
+      siteName: () => P.displayName,
+    };
+  }
+  function openImageStudio() {
+    if (typeof TotalImageGen === "undefined") { ui.toast("Image Studio module missing — reload the extension"); return; }
+    TotalImageGen.open(imageHooks());
+  }
+  window.__rsOpenImageStudio = openImageStudio;
   // ═════════════════════════════════════════════════════════════════
   //  1.72.0 — PROMPT ENHANCER (src/core/enhancer.js)
   //  The user's rough request goes to the CURRENT AI site as a "rewrite this
@@ -8042,6 +8077,7 @@
           <button id="rs-discord" aria-label="Discord" title="TotalScript Discord"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.8 19.8 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg></button>
           <button id="rs-enhance-btn" aria-label="Prompt Enhancer" title="Prompt Enhancer — the AI rewrites your rough request into a precise prompt, you review and send it (Ctrl+Shift+E)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/><path d="M5 15l.6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6z"/></svg></button>
           <button id="rs-video-btn" aria-label="Video Studio" title="Video Studio — show it a video, the AI builds something similar (Ctrl+Shift+V)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M16 10l6-3v10l-6-3z"/></svg></button>
+          <button id="rs-images-btn" aria-label="Image Studio" title="Image Studio — generate thumbnails, icons and GUI art, send them to Studio (Ctrl+Shift+I)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg></button>
           <button id="rs-settings-btn" aria-label="Settings" title="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
           </div>
 
@@ -8441,6 +8477,10 @@
       // 1.79.0 — Video Studio (Ctrl+Shift+V): a local video → keyframes + VIDEO BRIEF → the AI recreates it.
       const videoBtn = root.querySelector("#rs-video-btn");
       if (videoBtn) videoBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenVideoStudio) window.__rsOpenVideoStudio(); });
+      // 2.1.0 — Image Studio (Ctrl+Shift+I): generate thumbnails / icons / GUI art, send them to Studio.
+      const imagesBtn = root.querySelector("#rs-images-btn");
+      if (imagesBtn) imagesBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenImageStudio) window.__rsOpenImageStudio(); });
+      document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "I" || e.key === "i") && !e.altKey) { if (typeof TotalImageGen !== "undefined" && TotalImageGen.isOpen()) return; e.preventDefault(); if (window.__rsOpenImageStudio) window.__rsOpenImageStudio(); } });
       document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "V" || e.key === "v") && !e.altKey) { if (typeof TotalVideoStudio !== "undefined" && TotalVideoStudio.isOpen()) return; e.preventDefault(); if (window.__rsOpenVideoStudio) window.__rsOpenVideoStudio(); } }, true);
       // Engine toggle (Roblox ↔ AgentScript ↔ Animation)
       const engineEl = root.querySelector("#rs-engine");

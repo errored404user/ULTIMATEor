@@ -2116,7 +2116,7 @@ html.rs-light #rs-state b { color: color-mix(in srgb, var(--rsa) 70%, #000000); 
   box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
 }
 #rs-cards-btn:hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.18); }
-:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn) {
+:is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn) {
   flex: none; width: 28px; height: 28px; padding: 0;
   display: flex; align-items: center; justify-content: center;
   background: rgba(255,255,255,0.07); color: #c8c8ce;
@@ -2125,7 +2125,7 @@ html.rs-light #rs-state b { color: color-mix(in srgb, var(--rsa) 70%, #000000); 
   transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
   box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
 }
-:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn):hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.18); }
+:is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn):hover { background: rgba(255,255,255,0.12); color: #fff; border-color: rgba(255,255,255,0.18); }
 /* ── Danger zone (AgentScript session panel) — FULL ACCESS toggle ──────── */
 .rs-danger-zone {
   margin-top: 10px; padding: 9px 10px;
@@ -2976,17 +2976,17 @@ html.rs-light .rs-mode-btn.on[data-mode="roblox"],
 html.rs-light .rs-mode-btn.on[data-mode="local"],
 html.rs-light .rs-mode-btn.on[data-mode="anim"] { color: #000000 !important; }
 
-#rs-action, #rs-stop, #rs-extra, :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-cards-btn,
+#rs-action, #rs-stop, #rs-extra, :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn), #rs-cards-btn,
 button.act, .rs-tgl-row, .rs-cards-tab {
   background: transparent !important;
   box-shadow: none !important;
 }
-#rs-action, #rs-stop, #rs-extra, :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn) {
+#rs-action, #rs-stop, #rs-extra, :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn) {
   border: 1px solid #ffffff !important;
   color: #ffffff !important;
   border-radius: 0 !important;
 }
-html.rs-light #rs-action, html.rs-light #rs-stop, html.rs-light #rs-extra, html.rs-light :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn) {
+html.rs-light #rs-action, html.rs-light #rs-stop, html.rs-light #rs-extra, html.rs-light :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn) {
   border-color: #000000 !important;
   color: #000000 !important;
 }
@@ -3114,7 +3114,7 @@ html.rs-light .rs-mode-btn.on[data-mode="roblox"],
 html.rs-light .rs-mode-btn.on[data-mode="local"],
 html.rs-light .rs-mode-btn.on[data-mode="anim"] { color: #111111 !important; }
 
-#rs-action, #rs-stop, #rs-extra, :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-cards-btn,
+#rs-action, #rs-stop, #rs-extra, :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn), #rs-cards-btn,
 #rs-discord, #rs-support, #rs-switch {
   background: rgba(255,255,255,0.06) !important;
   border: 1px solid var(--total-line) !important;
@@ -3123,13 +3123,13 @@ html.rs-light .rs-mode-btn.on[data-mode="anim"] { color: #111111 !important; }
   box-shadow: none !important;
   transition: background 0.16s var(--total-ease), border-color 0.16s var(--total-ease), transform 0.12s var(--total-ease) !important;
 }
-#rs-action:hover, #rs-stop:hover, #rs-extra:hover, :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn):hover,
+#rs-action:hover, #rs-stop:hover, #rs-extra:hover, :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn):hover,
 #rs-cards-btn:hover, #rs-discord:hover, #rs-support:hover, #rs-switch:hover {
   background: rgba(255,255,255,0.11) !important;
   transform: translateY(-0.5px);
 }
 html.rs-light #rs-action, html.rs-light #rs-stop, html.rs-light #rs-extra,
-html.rs-light :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), html.rs-light #rs-cards-btn,
+html.rs-light :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn), html.rs-light #rs-cards-btn,
 html.rs-light #rs-discord, html.rs-light #rs-support, html.rs-light #rs-switch {
   background: rgba(0,0,0,0.04) !important;
   border-color: var(--total-line) !important;
@@ -3345,7 +3345,7 @@ html[data-rs-theme]:not([data-rs-theme="night"]) #rs-action[data-kind="restart"]
   border-color: var(--total-accent) !important;
 }
 html[data-rs-theme]:not([data-rs-theme="night"]) #rs-discord,
-html[data-rs-theme]:not([data-rs-theme="night"]) :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn),
+html[data-rs-theme]:not([data-rs-theme="night"]) :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn),
 html[data-rs-theme]:not([data-rs-theme="night"]) #rs-extra {
   color: var(--total-accent) !important;
   border-color: var(--total-line) !important;
@@ -3792,7 +3792,7 @@ html[data-rs-theme] #rs-action[data-kind="start"] {
   background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 6px, rgba(255,255,255,0) 6px 12px) !important;
 }
 
-#rs-discord, :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn) {
+#rs-discord, :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn) {
   width: 30px !important;
   height: 30px !important;
   border-radius: 10px !important;
@@ -3802,13 +3802,13 @@ html[data-rs-theme] #rs-action[data-kind="start"] {
   box-shadow: none !important;
 }
 html[data-rs-theme]:not([data-rs-theme="night"]) #rs-discord,
-html[data-rs-theme]:not([data-rs-theme="night"]) :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn),
+html[data-rs-theme]:not([data-rs-theme="night"]) :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn),
 html[data-rs-theme]:not([data-rs-theme="night"]) #rs-extra {
   color: #ddd9d2 !important;
   border-color: rgba(255,255,255,.1) !important;
   background: rgba(255,255,255,.05) !important;
 }
-#rs-discord:hover, :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn):hover {
+#rs-discord:hover, :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn):hover {
   background: rgba(255,255,255,.12) !important;
   color: #fff !important;
 }
@@ -4660,7 +4660,7 @@ html[data-rs-theme="autumn"] #rs-bar.rs-bar-inline {
 .rs-menu-head, #rs-setup-head, #rs-tut-head, #rs-cards-panel::before {
   border-radius: 0 !important;
 }
-#rs-action, #rs-stop, #rs-extra, #rs-discord, :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn),
+#rs-action, #rs-stop, #rs-extra, #rs-discord, :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn),
 .rs-site-opt, .rs-tip-opt, .rs-work-card, .rs-lib-card, .rs-card,
 .rs-mcp-item, .rs-chip, .rs-lvl-btn, .rs-mode-btn,
 #rs-cards-search, #rs-cards-clear, #rs-approve-allow, #rs-approve-deny,
@@ -4676,7 +4676,7 @@ html[data-rs-theme="autumn"] #rs-bar.rs-bar-inline {
   font-size: 11px !important;
   letter-spacing: .02em !important;
 }
-#rs-discord, :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn) {
+#rs-discord, :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn) {
   width: 26px !important; height: 26px !important;
 }
 
@@ -5010,7 +5010,7 @@ html[data-rs-theme="autumn"] #rs-bar.rs-bar-inline {
 /* Settings tray: rotated 90° into a horizontal strip on top of the TotalScript bar. */
 #rs-bar.rs-bar-inline { position: relative !important; overflow: visible !important; }
 #rs-bar.rs-menu-open { overflow: visible !important; }
-:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn).on, :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn)[aria-expanded="true"] {
+:is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn).on, :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn)[aria-expanded="true"] {
   background: rgba(255,255,255,0.16);
   color: #fff;
 }
@@ -5277,7 +5277,7 @@ html[data-rs-theme] #rs-extra,
 html[data-rs-theme] #rs-undo,
 html[data-rs-theme] #rs-discord,
 html[data-rs-theme] #rs-settings-btn,
-html[data-rs-theme] :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn),
+html[data-rs-theme] :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn),
 html[data-rs-theme] .rs-mode-btn,
 html[data-rs-theme] #rs-approve-allow,
 html[data-rs-theme] #rs-approve-deny {
@@ -5652,7 +5652,7 @@ html[data-rs-theme="pixelated"] #rs-stop,
 html[data-rs-theme="pixelated"] #rs-extra,
 html[data-rs-theme="pixelated"] #rs-undo,
 html[data-rs-theme="pixelated"] #rs-discord,
-html[data-rs-theme="pixelated"] :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn) {
+html[data-rs-theme="pixelated"] :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn) {
   border-width: 2px !important;
   border-color: #2fae5f !important;
   box-shadow: 3px 3px 0 rgba(0,0,0,.6) !important;
@@ -6013,7 +6013,7 @@ html[data-rs-theme="void"] .rs-menu-sec{border-color:var(--void-line)!important}
 html[data-rs-theme="void"] .rs-work-card,html[data-rs-theme="void"] .rs-site-opt,html[data-rs-theme="void"] .rs-tip-opt,html[data-rs-theme="void"] .rs-mcp-item,html[data-rs-theme="void"] .rs-blender-card{position:relative;background:linear-gradient(145deg,rgba(24,31,44,.92),rgba(12,16,24,.96))!important;border:1px solid var(--void-line)!important;border-radius:7px!important;color:var(--void-text-2)!important;box-shadow:inset 0 1px rgba(255,255,255,.025)!important;transition:background-color .14s ease,border-color .14s ease,transform .14s ease!important}
 html[data-rs-theme="void"] .rs-work-card:hover,html[data-rs-theme="void"] .rs-site-opt:hover,html[data-rs-theme="void"] .rs-tip-opt:hover{background:var(--void-hover)!important;border-color:var(--void-line-strong)!important;transform:translateY(-1px)!important}html[data-rs-theme="void"] .rs-work-card.on{background:linear-gradient(100deg,var(--void-soft),rgba(16,22,32,.96) 58%)!important;border-color:rgba(255,112,72,.43)!important;box-shadow:inset 2px 0 var(--void-accent)!important}
 html[data-rs-theme="void"] input,html[data-rs-theme="void"] textarea,html[data-rs-theme="void"] select{background:#080b11!important;border-color:var(--void-line-strong)!important;color:var(--void-text)!important;caret-color:var(--void-accent)}html[data-rs-theme="void"] input::placeholder,html[data-rs-theme="void"] textarea::placeholder{color:var(--void-muted)!important}html[data-rs-theme="void"] :focus-visible{outline:2px solid var(--void-accent)!important;outline-offset:2px!important}
-html[data-rs-theme="void"] #rs-action{background:linear-gradient(180deg,#ff805b,#e95831)!important;border-color:#ff9678!important;color:#180b07!important;box-shadow:0 5px 16px rgba(255,112,72,.14)!important}html[data-rs-theme="void"] #rs-stop{border-color:rgba(230,108,120,.45)!important;color:#ffadb5!important}html[data-rs-theme="void"] #rs-extra,html[data-rs-theme="void"] #rs-steering,html[data-rs-theme="void"] :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn){background:var(--void-panel-2)!important;border-color:var(--void-line)!important;color:var(--void-text-2)!important}
+html[data-rs-theme="void"] #rs-action{background:linear-gradient(180deg,#ff805b,#e95831)!important;border-color:#ff9678!important;color:#180b07!important;box-shadow:0 5px 16px rgba(255,112,72,.14)!important}html[data-rs-theme="void"] #rs-stop{border-color:rgba(230,108,120,.45)!important;color:#ffadb5!important}html[data-rs-theme="void"] #rs-extra,html[data-rs-theme="void"] #rs-steering,html[data-rs-theme="void"] :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn){background:var(--void-panel-2)!important;border-color:var(--void-line)!important;color:var(--void-text-2)!important}
 html[data-rs-theme="void"] #rs-state{color:var(--void-text-2)!important}html[data-rs-theme="void"] #rs-state::before{content:"VOID";margin-right:6px;color:var(--void-muted);font:700 7px "Cascadia Mono",monospace;letter-spacing:.12em}html[data-rs-theme="void"] .rs-state-warn .rs-state-txt{color:var(--void-bad)!important}
 html[data-rs-theme="void"] .rs-template-row,html[data-rs-theme="void"] .rs-template-editor,html[data-rs-theme="void"] .rs-builder-row,html[data-rs-theme="void"] .rs-project-reference{background:linear-gradient(145deg,rgba(20,27,39,.97),rgba(9,13,20,.98))!important;border-color:var(--void-line)!important;border-radius:7px!important;color:var(--void-text-2)!important}html[data-rs-theme="void"] .rs-template-row:hover{border-color:var(--void-line-strong)!important;background:var(--void-panel-2)!important}html[data-rs-theme="void"] .rs-template-row b,html[data-rs-theme="void"] .rs-template-editor b{color:var(--void-text)!important}
 html[data-rs-theme="void"] .rs-template-modal{background:rgba(3,5,9,.8)!important}html[data-rs-theme="void"] .rs-template-editor{box-shadow:0 30px 80px rgba(0,0,0,.62)!important}html[data-rs-theme="void"] .rs-template-editor header,html[data-rs-theme="void"] .rs-template-editor footer,html[data-rs-theme="void"] .rs-template-editor nav{border-color:var(--void-line)!important}html[data-rs-theme="void"] .rs-template-editor nav button.on{background:var(--void-soft)!important;color:var(--void-text)!important;box-shadow:inset 0 -1px var(--void-accent)!important}
@@ -6463,7 +6463,7 @@ html[data-rs-theme] #rs-discord,
 html[data-rs-theme] #rs-support,
 html[data-rs-theme] #rs-switch,
 html[data-rs-theme] #rs-settings-btn,
-html[data-rs-theme] :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn),
+html[data-rs-theme] :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn),
 html[data-rs-theme] .rs-lvl-btn,
 html[data-rs-theme] #rs-approve-deny {
   background: linear-gradient(180deg, var(--totalx-ghost-hi), var(--totalx-ghost)) !important;
@@ -6477,7 +6477,7 @@ html[data-rs-theme] #rs-action[data-kind="restart"]:hover,
 html[data-rs-theme] #rs-discord:hover,
 html[data-rs-theme] #rs-support:hover,
 html[data-rs-theme] #rs-switch:hover,
-html[data-rs-theme] :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn):hover,
+html[data-rs-theme] :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn):hover,
 html[data-rs-theme] .rs-lvl-btn:hover,
 html[data-rs-theme] #rs-approve-deny:hover {
   background: linear-gradient(180deg, color-mix(in srgb, var(--totalx-a) 30%, transparent), var(--totalx-ghost-hi)) !important;
@@ -6487,13 +6487,13 @@ html[data-rs-theme] #rs-approve-deny:hover {
   box-shadow: 0 1px 0 rgba(255,255,255,.12) inset, 0 6px 18px var(--totalx-glow) !important;
 }
 html[data-rs-theme="npcenergy"] #rs-action[data-kind="restart"]:hover, html[data-rs-theme="npcenergy"] #rs-discord:hover, html[data-rs-theme="npcenergy"] #rs-support:hover,
-html[data-rs-theme="npcenergy"] #rs-switch:hover, html[data-rs-theme="npcenergy"] :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn):hover, html[data-rs-theme="npcenergy"] .rs-lvl-btn:hover,
+html[data-rs-theme="npcenergy"] #rs-switch:hover, html[data-rs-theme="npcenergy"] :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn):hover, html[data-rs-theme="npcenergy"] .rs-lvl-btn:hover,
 html[data-rs-theme="npcenergy"] #rs-approve-deny:hover { color: #111 !important; }
 html[data-rs-theme] #rs-action[data-kind="restart"]:active,
 html[data-rs-theme] #rs-discord:active,
 html[data-rs-theme] #rs-support:active,
 html[data-rs-theme] #rs-switch:active,
-html[data-rs-theme] :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn):active,
+html[data-rs-theme] :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn):active,
 html[data-rs-theme] .rs-lvl-btn:active,
 html[data-rs-theme] #rs-approve-deny:active { transform: translateY(0) scale(.97); }
 /* selected level reads as "lit" rather than a filled block */
@@ -7965,7 +7965,7 @@ html[data-rs-btn="flat"] #rs-extra,
 html[data-rs-btn="flat"] #rs-voice,
 html[data-rs-btn="flat"] #rs-undo,
 html[data-rs-btn="flat"] .rs-mode-btn,
-html[data-rs-btn="flat"] :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn),
+html[data-rs-btn="flat"] :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn),
 html[data-rs-btn="flat"] #rs-approve-deny {
   background: color-mix(in srgb, var(--totalx-a) 14%, transparent) !important;
   border-color: transparent !important;
@@ -7973,7 +7973,7 @@ html[data-rs-btn="flat"] #rs-approve-deny {
 }
 html[data-rs-btn="flat"] #rs-action[data-kind="restart"]:hover,
 html[data-rs-btn="flat"] #rs-discord:hover,
-html[data-rs-btn="flat"] :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn):hover,
+html[data-rs-btn="flat"] :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn):hover,
 html[data-rs-btn="flat"] #rs-approve-deny:hover { background: color-mix(in srgb, var(--totalx-a) 26%, transparent) !important; transform: none; box-shadow: none !important; }
 html[data-rs-btn="flat"] #rs-stop { background: #ef4444 !important; border-color: transparent !important; box-shadow: none !important; }
 
@@ -7999,7 +7999,7 @@ html[data-rs-btn="outline"] #rs-extra,
 html[data-rs-btn="outline"] #rs-voice,
 html[data-rs-btn="outline"] #rs-undo,
 html[data-rs-btn="outline"] .rs-mode-btn,
-html[data-rs-btn="outline"] :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn),
+html[data-rs-btn="outline"] :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn),
 html[data-rs-btn="outline"] #rs-approve-deny {
   background: transparent !important;
   border: 1px solid color-mix(in srgb, var(--totalx-a) 45%, transparent) !important;
@@ -8025,7 +8025,7 @@ html[data-rs-btn="glass"] #rs-extra,
 html[data-rs-btn="glass"] #rs-voice,
 html[data-rs-btn="glass"] #rs-undo,
 html[data-rs-btn="glass"] .rs-mode-btn,
-html[data-rs-btn="glass"] :is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn),
+html[data-rs-btn="glass"] :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn),
 html[data-rs-btn="glass"] #rs-approve-deny {
   background: rgba(255,255,255,.08) !important;
   -webkit-backdrop-filter: blur(10px);
@@ -8634,3 +8634,54 @@ html.rs-light #rs-video .rsv-btn { color: #1f2933; background: rgba(0,0,0,.05); 
 html.rs-light .rs-ex-tree,html.rs-light .rs-ex-inspector{background:rgba(0,0,0,.03);border-color:rgba(0,0,0,.1)}
 html.rs-light .rs-ex-search,html.rs-light .rs-ex-btn{border-color:rgba(0,0,0,.14);background:rgba(0,0,0,.04)}
 html.rs-light .rs-ex-props th,html.rs-light .rs-ex-props td{border-top-color:rgba(0,0,0,.07)}
+
+/* 2.1.0 Image Studio (src/core/imagegen.js) - thumbnails, icons, GUI art -> Studio.
+   Own dialog (data-rs-owned) at the Video Studio scale; aqua accents from the brand tokens. */
+#rs-images { position: fixed; z-index: 2147483600; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(1120px, 96vw); max-height: min(820px, 92vh); display: flex; flex-direction: column; border-radius: 16px; overflow: hidden; background: linear-gradient(180deg, #11151c, #0b0e14); border: 1px solid rgba(34,211,238,.22); box-shadow: 0 30px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04) inset; font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #e6edf3; }
+#rs-images[hidden] { display: none; }
+#rs-images .rs-ig-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,.08); background: rgba(34,211,238,.06); }
+#rs-images .rs-ig-title { font-weight: 800; font-size: 15px; letter-spacing: .2px; }
+#rs-images .rs-ig-sub { color: #93a4b8; font-size: 12px; flex: 1; }
+#rs-images .rs-ig-close { border: 0; background: rgba(255,255,255,.08); color: #e6edf3; width: 28px; height: 28px; border-radius: 8px; font-size: 18px; line-height: 1; cursor: pointer; }
+#rs-images .rs-ig-close:hover { background: rgba(255,255,255,.16); }
+#rs-images .rs-ig-body { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(320px, 1.1fr); gap: 16px; padding: 14px 16px; overflow: auto; }
+#rs-images .rs-ig-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+#rs-images .rs-ig-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#rs-images .rs-ig-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #a9b7c6; min-width: 0; }
+#rs-images .rs-ig-field > span { font-weight: 600; }
+#rs-images textarea, #rs-images input:not([type=checkbox]):not([type=file]), #rs-images select { width: 100%; box-sizing: border-box; background: rgba(255,255,255,.05); color: #e6edf3; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 13px; }
+#rs-images textarea:focus, #rs-images input:focus, #rs-images select:focus { outline: none; border-color: rgba(34,211,238,.6); box-shadow: 0 0 0 3px rgba(34,211,238,.15); }
+#rs-images .rs-ig-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#rs-images .rs-ig-btn { border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: #e6edf3; padding: 7px 12px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer; }
+#rs-images .rs-ig-btn:hover { background: rgba(255,255,255,.12); }
+#rs-images .rs-ig-primary { background: linear-gradient(135deg, #22d3ee, #0ea5e9); color: #04121a; border-color: transparent; box-shadow: 0 6px 18px rgba(34,211,238,.28); }
+#rs-images .rs-ig-primary:hover { filter: brightness(1.08); }
+#rs-images .rs-ig-file { cursor: pointer; }
+#rs-images .rs-ig-drop { border: 1px dashed rgba(255,255,255,.18); border-radius: 10px; padding: 14px; text-align: center; color: #8ea0b5; font-size: 12px; }
+#rs-images .rs-ig-drop.over { border-color: #22d3ee; background: rgba(34,211,238,.08); color: #e6edf3; }
+#rs-images .rs-ig-api { border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 8px 10px; }
+#rs-images .rs-ig-api summary { cursor: pointer; font-weight: 600; color: #cbd5e1; }
+#rs-images .rs-ig-api .rs-ig-field { margin-top: 8px; }
+#rs-images .rs-ig-note { color: #93a4b8; font-size: 12px; margin: 6px 0 2px; }
+#rs-images .rs-ig-note code { background: rgba(255,255,255,.08); padding: 0 4px; border-radius: 4px; }
+#rs-images .rs-ig-api-state { color: #93a4b8; font-size: 12px; }
+#rs-images .rs-ig-preview { min-height: 220px; max-height: 360px; display: flex; align-items: center; justify-content: center; background: repeating-conic-gradient(rgba(255,255,255,.06) 0 25%, transparent 0 50%) 0 0 / 18px 18px, #0a0d12; border: 1px solid rgba(255,255,255,.1); border-radius: 12px; overflow: hidden; }
+#rs-images .rs-ig-preview img { max-width: 100%; max-height: 360px; object-fit: contain; display: block; }
+#rs-images .rs-ig-empty { color: #6b7a8c; font-size: 12px; }
+#rs-images .rs-ig-meta { color: #93a4b8; font-size: 12px; min-height: 16px; }
+#rs-images .rs-ig-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #a9b7c6; align-self: end; padding-bottom: 6px; }
+#rs-images .rs-ig-list { display: flex; gap: 8px; flex-wrap: wrap; }
+#rs-images .rs-ig-item { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 92px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); border-radius: 10px; padding: 6px; cursor: pointer; color: #cbd5e1; font: inherit; font-size: 11px; }
+#rs-images .rs-ig-item img { width: 76px; height: 48px; object-fit: cover; border-radius: 6px; background: #000; }
+#rs-images .rs-ig-item span { max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#rs-images .rs-ig-item.on { border-color: #22d3ee; box-shadow: 0 0 0 2px rgba(34,211,238,.25); }
+#rs-images .rs-ig-status { padding: 8px 16px; border-top: 1px solid rgba(255,255,255,.08); color: #93a4b8; font-size: 12px; min-height: 18px; }
+#rs-images .rs-ig-status[data-kind="warn"] { color: #fbbf24; }
+#rs-images .rs-ig-status[data-kind="busy"] { color: #22d3ee; }
+html.rs-light #rs-images { background: linear-gradient(180deg, #ffffff, #f3f6fa); color: #0f172a; border-color: rgba(14,165,233,.28); }
+html.rs-light #rs-images .rs-ig-sub, html.rs-light #rs-images .rs-ig-field, html.rs-light #rs-images .rs-ig-note, html.rs-light #rs-images .rs-ig-meta, html.rs-light #rs-images .rs-ig-status, html.rs-light #rs-images .rs-ig-drop, html.rs-light #rs-images .rs-ig-check { color: #475569; }
+html.rs-light #rs-images textarea, html.rs-light #rs-images input:not([type=checkbox]):not([type=file]), html.rs-light #rs-images select { background: #fff; color: #0f172a; border-color: rgba(0,0,0,.14); }
+html.rs-light #rs-images .rs-ig-btn { background: rgba(0,0,0,.05); color: #0f172a; border-color: rgba(0,0,0,.12); }
+html.rs-light #rs-images .rs-ig-close { background: rgba(0,0,0,.06); color: #0f172a; }
+html.rs-light #rs-images .rs-ig-item { color: #334155; border-color: rgba(0,0,0,.1); background: rgba(0,0,0,.03); }
+@media (max-width: 760px) { #rs-images .rs-ig-body { grid-template-columns: 1fr; } }
