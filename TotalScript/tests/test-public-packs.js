@@ -1,4 +1,4 @@
-// Featured Public Skills pack (2.2.3): src/core/public_packs.js.
+// Featured Public Skills pack (2.2.4): src/core/public_packs.js.
 // Dependency-free. Loads the real skills bundle + Public Skills in a vm, then checks
 // that every bundled item validates against the live command catalogue, installs
 // through the normal import path, round-trips as a pack file / share code, and that
@@ -28,7 +28,7 @@ const catalogue = new Set(S.SKILL_COMMANDS.map((c) => c.name));
 const reserved = new Set([...catalogue, ...PS.managementTools().map((t) => t.name)]);
 
 ok("module exposes window.TotalPublicPacks (and module.exports) with a frozen API", PP && Object.isFrozen(PP) && typeof PP.install === "function" && typeof PP.status === "function" && typeof PP.packJson === "function");
-ok("VERSION 2.2.3, PACK_ID totalscript_featured, exactly one pack listed", PP.VERSION === "2.2.3" && PP.PACK_ID === "totalscript_featured" && PP.list().length === 1 && PP.list()[0].id === PP.PACK_ID);
+ok("VERSION 2.2.4, PACK_ID totalscript_featured, exactly one pack listed", PP.VERSION === "2.2.4" && PP.PACK_ID === "totalscript_featured" && PP.list().length === 1 && PP.list()[0].id === PP.PACK_ID);
 ok("module is DOM-free at top level", !/^\s*(const|let|var)?\s*\w*\s*=?\s*document\./m.test(read("src/core/public_packs.js")));
 
 const pack = PP.get(PP.PACK_ID);
@@ -81,7 +81,7 @@ ok("missing required param -> MISSING_PARAMS with signature", /MISSING_PARAMS/.t
 // ── pack file / share code round trip ──────────────────────────────────────
 const json = PP.packJson(PP.PACK_ID);
 const obj = JSON.parse(json);
-ok("packJson is a totalscript-public-skill-pack with deterministic exportedAt and 11 items", obj.format === "totalscript-public-skill-pack" && obj.formatVersion === 1 && obj.pack === PP.PACK_ID && obj.exportedAt === "bundled" && obj.count === 11 && obj.items.length === 11 && obj.version === "2.2.3");
+ok("packJson is a totalscript-public-skill-pack with deterministic exportedAt and 11 items", obj.format === "totalscript-public-skill-pack" && obj.formatVersion === 1 && obj.pack === PP.PACK_ID && obj.exportedAt === "bundled" && obj.count === 11 && obj.items.length === 11 && obj.version === "2.2.4");
 const file = read("public_skills/totalscript-featured.orskills.json");
 ok("public_skills/totalscript-featured.orskills.json is the exact packJson output (node tests/build-public-pack.js)", file === json + "\n", "run: node tests/build-public-pack.js");
 PS.replaceAll([]);
@@ -103,7 +103,7 @@ ok("main.js dispatcher: public_skill_import {data:'featured'} / {pack} routes th
 ok("main.js: empty list hint points at the featured pack", main.includes('public_skill_import {data:\\"featured\\"} installs the bundled Featured pack'));
 ok("main.js Public tab renders the Featured shelf with per-item + install-all + export + share handlers", /function publicFeaturedHtml\(PS\)/.test(main) && main.includes("${publicFeaturedHtml(PS)}${pfilters}") && ["data-public-feat-install=", "data-public-feat-install-all", "data-public-feat-export", "data-public-feat-share", "data-public-featured"].every((s) => main.includes(s)) && /function publicFeaturedInstall\(names, replace\)/.test(main));
 ok("main.js: reinstalling an edited item asks first; install uses publicReserved()", main.includes("was edited on this device. Replace it with the bundled version?") && main.includes("PP.install(PublicSkills, PP.PACK_ID, { names, replace: !!replace, reserved: publicReserved() })"));
-ok("main.js help card mentions the Featured pack", /Featured by TotalScript \(2\.2\.3\)/.test(main));
+ok("main.js help card mentions the Featured pack", /Featured by TotalScript \(2\.2\.4\)/.test(main));
 const tool = PS.managementTools().find((t) => t.name === "public_skill_import");
 ok("public_skill_import tool schema documents data:'featured' and names[]", /featured/.test(tool.description) && tool.inputSchema.properties.names && tool.inputSchema.properties.names.type === "array");
 const css = read("overlay.css");
@@ -154,7 +154,7 @@ ok("README documents the Featured pack and the sim test", /Featured by TotalScri
   const until = Date.now() + 10000; while (Date.now() < until && !d.getElementById("rs-bar")) await sleep(50);
   await sleep(800);
   const WPS = w.PublicSkills, WPP = w.TotalPublicPacks;
-  ok("E1 page boots with TotalPublicPacks loaded and nothing installed", !!d.getElementById("rs-bar") && WPP && WPP.VERSION === "2.2.3" && WPS.list().length === 0);
+  ok("E1 page boots with TotalPublicPacks loaded and nothing installed", !!d.getElementById("rs-bar") && WPP && WPP.VERSION === "2.2.4" && WPS.list().length === 0);
   d.getElementById("rs-cards-btn").click(); await sleep(200);
   const panel = d.getElementById("rs-cards-panel");
   panel.querySelector('[data-tab="public"]').click(); await sleep(250);

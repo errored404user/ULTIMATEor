@@ -18,7 +18,7 @@
 // DOM-free at top level (loaded in node by the tests).
 (function (root) {
   "use strict";
-  const VERSION = "2.2.3";
+  const VERSION = "2.2.4";
 
   // ───────────────────────── expert library ─────────────────────────
   // Fields: id, title, env (roblox | blender | general), summary (one line
@@ -241,7 +241,7 @@
       "Group and pivot: `model_group`, `model_center_pivot`, `model_snap_to_ground`; align / distribute repeated pieces with `model_align` / `model_distribute`.",
       "Openings and details with CSG only where needed: `model_subtract` (doors, windows), `model_union` sparingly (unions cost more than parts).",
       "Materials and colour from the style guide in one pass: `model_paint`; keep everything anchored (`model_anchor_fix` / `physics_anchor_all`).",
-      "Terrain: `terrain_fill_region`, `terrain_paint`, `terrain_height`; clear mistakes with `terrain_clear_region`.",
+      "Terrain: whole worlds with `map_generate {preset}` or `terrain_generate {biome, size, seed}`; sculpt with `terrain_shape`, rivers / roads with `terrain_path`, lakes / oceans with `terrain_water`, repaint with `terrain_paint_biome`; props on the real ground with `environment_scatter`, roads with `road_build`; read back with `terrain_info`. Local fills: `terrain_fill_region`, `terrain_paint`, `terrain_height`.",
       "Mood: `lighting_set_preset` or `style_lighting_apply`, `sky_set`, `atmosphere_setup`; snapshot before experimenting (`lighting_snapshot` / `lighting_restore`).",
       "Critique and verify: `model_check` (floating / buried / sliver parts), `model_report`, a screenshot from `camera_look_at`; then score it - `quality_audit {path}` must reach 85 (`quality_fix` for the mechanical findings, palette / materials / lighting by hand); stop when the scene matches the brief at the stated scale.",
     ],

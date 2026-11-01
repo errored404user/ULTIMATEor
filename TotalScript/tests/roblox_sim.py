@@ -35,7 +35,7 @@ local CLASSES = {
   UIAspectRatioConstraint={"UIConstraint"}, UISizeConstraint={"UIConstraint"}, UITextSizeConstraint={"UIConstraint"}, UIScale={"UIComponent"}, UIGradient={"UIComponent"},
   Service={"Instance"}, EditableImage={"Instance"},
   ProximityPrompt={"Instance"}, ClickDetector={"Instance"}, CFrameValue={"ValueBase"}, ForceField={"Instance"},
-  SpawnLocation={"BasePart"}, Seat={"BasePart"}, StarterPlayerScripts={"Instance"}, StarterCharacterScripts={"Instance"}, Backpack={"Instance"}, StarterGear={"Instance"}, BillboardGui={"LayerCollector"}, Animation={"Instance"}, Team={"Instance"}, BoolValue={"ValueBase"}, ObjectValue={"ValueBase"}, Constraint={"Instance"}, AlignPosition={"Constraint"}, AlignOrientation={"Constraint"}, BodyVelocity={"Instance"}, Configuration={"Instance"}, Tags={"Instance"},
+  Terrain={"BasePart"}, SpawnLocation={"BasePart"}, Seat={"BasePart"}, StarterPlayerScripts={"Instance"}, StarterCharacterScripts={"Instance"}, Backpack={"Instance"}, StarterGear={"Instance"}, BillboardGui={"LayerCollector"}, Animation={"Instance"}, Team={"Instance"}, BoolValue={"ValueBase"}, ObjectValue={"ValueBase"}, Constraint={"Instance"}, AlignPosition={"Constraint"}, AlignOrientation={"Constraint"}, BodyVelocity={"Instance"}, Configuration={"Instance"}, Tags={"Instance"},
 }
 local function isa(cls, want)
   local c = cls
@@ -53,6 +53,7 @@ Color3.__index = Color3
 function Color3.new(r,g,b) return setmetatable({R=r or 0,G=g or 0,B=b or 0}, Color3) end
 function Color3.fromRGB(r,g,b) return Color3.new((r or 0)/255,(g or 0)/255,(b or 0)/255) end
 function Color3.fromHSV(h,s,v) local i=math.floor(h*6)%6 local f=h*6-math.floor(h*6) local p,q,t2=v*(1-s),v*(1-f*s),v*(1-(1-f)*s) local r,g,b if i==0 then r,g,b=v,t2,p elseif i==1 then r,g,b=q,v,p elseif i==2 then r,g,b=p,v,t2 elseif i==3 then r,g,b=p,q,v elseif i==4 then r,g,b=t2,p,v else r,g,b=v,p,q end return Color3.new(r,g,b) end
+function Color3:ToHSV() local r,g,b=self.R,self.G,self.B local mx,mn=math.max(r,g,b),math.min(r,g,b) local d=mx-mn local h=0 if d>0 then if mx==r then h=((g-b)/d)%6 elseif mx==g then h=(b-r)/d+2 else h=(r-g)/d+4 end h=h/6 end return h, (mx>0 and d/mx or 0), mx end
 function Color3:Lerp(o,t) return Color3.new(self.R+(o.R-self.R)*t, self.G+(o.G-self.G)*t, self.B+(o.B-self.B)*t) end
 Color3.__eq = function(a,b) return math.abs(a.R-b.R)<1e-6 and math.abs(a.G-b.G)<1e-6 and math.abs(a.B-b.B)<1e-6 end
 Color3.__tostring = function(c) return string.format("Color3(%.2f,%.2f,%.2f)", c.R, c.G, c.B) end
@@ -476,7 +477,7 @@ function methods:GetTags() local out={} for t in pairs(self.__tags or {}) do out
 function methods:GetTagged(tag) local out={} for _,d in ipairs(game:GetDescendants()) do if d.__tags and d.__tags[tag] then out[#out+1]=d end end return out end
 function methods:GetInstanceAddedSignal(tag) return tagSignal("added", tag) end
 function methods:GetInstanceRemovedSignal(tag) return tagSignal("removed", tag) end
-function methods:Raycast() return nil end
+function methods:Raycast(o, d, p) if M.raycastEnabled and M.raycast then return M.raycast(self, o, d, p) end return nil end
 function methods:SetNetworkOwner() end
 function methods:SetNetworkOwnershipAuto() end
 function methods:UserOwnsGamePassAsync() return false end
@@ -603,6 +604,115 @@ M.services = {}
 local function service(name, class) local s = new(class or "Service", name) s.Parent = game M.services[name] = s return s end
 local workspace = service("Workspace")
 local cam = new("Camera", "Camera") cam.ViewportSize = Vector2.new(1280,720) cam.CFrame = CFrame.new(0,10,20) cam.FieldOfView = 70 cam.Parent = workspace workspace.CurrentCamera = cam
+-- 2.2.4 Terrain: a 4-stud voxel store (material name + occupancy per cell) so the
+-- environment pack can be exercised end to end: Read/WriteVoxels, Fill*, Clear.
+-- Reachable as workspace.Terrain (property) but NOT parented, so scene fixtures
+-- that count Workspace children (explorer / quality sims) stay as they were.
+local terrain = new("Terrain", "Terrain") workspace.Terrain = terrain
+terrain.WaterWaveSize = 0.15 terrain.WaterWaveSpeed = 10 terrain.WaterReflectance = 1 terrain.WaterTransparency = 0.3 terrain.WaterColor = Color3.fromRGB(12, 84, 92) terrain.Decoration = false
+M.voxels = {} M.voxelCount = 0
+local VOX = 4
+local function vkey(ix, iy, iz) return ix .. ":" .. iy .. ":" .. iz end
+local function vset(ix, iy, iz, matName, occ)
+  local k = vkey(ix, iy, iz)
+  if matName == "Air" or (occ or 1) <= 0 then if M.voxels[k] then M.voxels[k] = nil M.voxelCount = M.voxelCount - 1 end return end
+  if not M.voxels[k] then M.voxelCount = M.voxelCount + 1 end
+  M.voxels[k] = { m = matName, o = math.max(0.01, math.min(1, occ or 1)) }
+end
+local function regionBounds(region)
+  local half = region.Size * 0.5 local c = region.CFrame.Position
+  return c - half, c + half
+end
+function terrain:Clear() M.voxels = {} M.voxelCount = 0 end
+function terrain:GetMaterialColor(m) return Color3.new(0.5, 0.5, 0.5) end
+function terrain:GetMaterial(pos, size) local v = M.voxels[vkey(math.floor(pos.X / VOX + 0.5), math.floor(pos.Y / VOX + 0.5), math.floor(pos.Z / VOX + 0.5))] return v and Enum.Material[v.m] or Enum.Material.Air end
+function terrain:SetMaterialColor() end
+function terrain:ReadVoxels(region, res)
+  assert(res == VOX, "ReadVoxels: resolution must be 4")
+  local mn, mx = regionBounds(region)
+  local nx, ny, nz = math.floor((mx.X - mn.X) / VOX + 0.5), math.floor((mx.Y - mn.Y) / VOX + 0.5), math.floor((mx.Z - mn.Z) / VOX + 0.5)
+  local mats, occs = { Size = Vector3.new(nx, ny, nz) }, { Size = Vector3.new(nx, ny, nz) }
+  local bx, by, bz = math.floor(mn.X / VOX + 0.5), math.floor(mn.Y / VOX + 0.5), math.floor(mn.Z / VOX + 0.5)
+  for x = 1, nx do mats[x] = {} occs[x] = {} for y = 1, ny do mats[x][y] = {} occs[x][y] = {} for z = 1, nz do
+    local v = M.voxels[vkey(bx + x - 1, by + y - 1, bz + z - 1)]
+    mats[x][y][z] = v and Enum.Material[v.m] or Enum.Material.Air occs[x][y][z] = v and v.o or 0
+  end end end
+  return mats, occs
+end
+function terrain:WriteVoxels(region, res, mats, occs)
+  assert(res == VOX, "WriteVoxels: resolution must be 4")
+  local mn, mx = regionBounds(region)
+  local nx, ny, nz = math.floor((mx.X - mn.X) / VOX + 0.5), math.floor((mx.Y - mn.Y) / VOX + 0.5), math.floor((mx.Z - mn.Z) / VOX + 0.5)
+  assert(#mats == nx and #mats[1] == ny and #mats[1][1] == nz, "WriteVoxels: array size does not match region")
+  local bx, by, bz = math.floor(mn.X / VOX + 0.5), math.floor(mn.Y / VOX + 0.5), math.floor(mn.Z / VOX + 0.5)
+  for x = 1, nx do for y = 1, ny do for z = 1, nz do
+    local m = mats[x][y][z] if type(m) ~= "table" or not m.Name then error("WriteVoxels: material must be an Enum.Material") end
+    vset(bx + x - 1, by + y - 1, bz + z - 1, m.Name, occs[x][y][z])
+  end end end
+  M.terrainWrites = (M.terrainWrites or 0) + 1
+end
+local function fillTest(cf, half, mat, test)
+  local c = cf.Position
+  local r = math.sqrt(half.X ^ 2 + half.Y ^ 2 + half.Z ^ 2)
+  local x0, x1 = math.floor((c.X - r) / VOX), math.ceil((c.X + r) / VOX)
+  local y0, y1 = math.floor((c.Y - r) / VOX), math.ceil((c.Y + r) / VOX)
+  local z0, z1 = math.floor((c.Z - r) / VOX), math.ceil((c.Z + r) / VOX)
+  if (x1 - x0) * (y1 - y0) * (z1 - z0) > 4000000 then error("Fill: region too large for the simulator") end
+  local n = 0
+  for ix = x0, x1 do for iy = y0, y1 do for iz = z0, z1 do
+    local lp = cf:PointToObjectSpace(Vector3.new(ix * VOX, iy * VOX, iz * VOX))
+    if test(lp) then vset(ix, iy, iz, mat.Name, 1) n = n + 1 end
+  end end end
+  M.terrainFills = (M.terrainFills or 0) + 1
+  return n
+end
+function terrain:FillBlock(cf, size, mat) local h = size * 0.5 return fillTest(cf, h, mat, function(lp) return math.abs(lp.X) <= h.X and math.abs(lp.Y) <= h.Y and math.abs(lp.Z) <= h.Z end) end
+function terrain:FillBall(center, radius, mat) return fillTest(CFrame.new(center), Vector3.new(radius, radius, radius), mat, function(lp) return lp.Magnitude <= radius end) end
+function terrain:FillCylinder(cf, height, radius, mat) return fillTest(cf, Vector3.new(radius, height * 0.5, radius), mat, function(lp) return math.abs(lp.Y) <= height * 0.5 and math.sqrt(lp.X ^ 2 + lp.Z ^ 2) <= radius end) end
+function terrain:FillRegion(region, res, mat) local mn, mx = regionBounds(region) return terrain:FillBlock(CFrame.new((mn + mx) * 0.5), mx - mn, mat) end
+function terrain:FillWedge(cf, size, mat) return terrain:FillBlock(cf, size, mat) end
+function terrain:ReplaceMaterial(region, res, from, to) local mn, mx = regionBounds(region) local n = 0
+  for k, v in pairs(M.voxels) do if v.m == from.Name then local ix, iy, iz = k:match("(-?%d+):(-?%d+):(-?%d+)") ix, iy, iz = tonumber(ix) * VOX, tonumber(iy) * VOX, tonumber(iz) * VOX
+    if ix >= mn.X and ix <= mx.X and iy >= mn.Y and iy <= mx.Y and iz >= mn.Z and iz <= mx.Z then v.m = to.Name n = n + 1 end end end return n end
+function terrain:CountCells() return M.voxelCount end
+-- column top of the voxel store at world (x, z) below y: returns top y, material name
+function M.terrainTop(x, z, belowY, skipWater)
+  local ix, iz = math.floor(x / VOX + 0.5), math.floor(z / VOX + 0.5)
+  local best, bm = nil, nil
+  local iyMax = math.floor(belowY / VOX)
+  for iy = iyMax, iyMax - 200, -1 do
+    local v = M.voxels[vkey(ix, iy, iz)]
+    if v and not (skipWater and v.m == "Water") then best = iy * VOX + v.o * VOX - VOX * 0.5 bm = v.m break end
+  end
+  return best, bm
+end
+-- opt-in (M.raycastEnabled) downward raycast: terrain column top or anchored BasePart AABB top
+function M.raycast(_, origin, dir, params)
+  if dir.Y >= 0 then return nil end
+  local x, z = origin.X, origin.Z
+  local minY = origin.Y + dir.Y
+  local ignore = {}
+  local excl = params and params.FilterDescendantsInstances or {}
+  local isExclude = not params or params.FilterType == nil or params.FilterType == Enum.RaycastFilterType.Exclude or params.FilterType == Enum.RaycastFilterType.Blacklist
+  local function filtered(inst) for _, f in ipairs(excl) do if inst == f or inst:IsDescendantOf(f) then return true end end return false end
+  local bestY, bestInst, bestMat = -math.huge, nil, nil
+  local ty, tm = M.terrainTop(x, z, origin.Y)
+  if ty and ty >= minY and ty <= origin.Y and (isExclude and not filtered(terrain) or not isExclude and filtered(terrain)) then
+    if not (params and params.IgnoreWater and tm == "Water") then bestY, bestInst, bestMat = ty, terrain, Enum.Material[tm] end
+  end
+  for _, p in ipairs(workspace:GetDescendants()) do
+    if p.Anchored and isa(p.__class, "BasePart") and p.__class ~= "Terrain" and p.CanQuery ~= false then
+      local keep = isExclude and not filtered(p) or (not isExclude and filtered(p))
+      if keep then
+        local pos, sz = p.Position, p.Size
+        local top = pos.Y + sz.Y * 0.5
+        if math.abs(x - pos.X) <= sz.X * 0.5 and math.abs(z - pos.Z) <= sz.Z * 0.5 and top <= origin.Y and top >= minY and top > bestY then bestY, bestInst, bestMat = top, p, p.Material or Enum.Material.Plastic end
+      end
+    end
+  end
+  if not bestInst then return nil end
+  return { Position = Vector3.new(x, bestY, z), Normal = Vector3.new(0, 1, 0), Instance = bestInst, Material = bestMat, Distance = origin.Y - bestY }
+end
 service("Lighting") service("Selection") service("CollectionService") service("StarterPack") service("Teams") service("Chat") service("TextService") service("MarketplaceService") service("Debris")
 M.selection = {}
 local ReplicatedStorage = service("ReplicatedStorage")
@@ -692,6 +802,25 @@ M.waits = 0
 _G.tick = os.clock
 _G.Random = {new = function(seed) local st = seed or os.time() local function nxt() st = (st * 1103515245 + 12345) % 2147483648 return st / 2147483648 end return {NextNumber=function(_, a, b) local r = nxt() if a == nil then return r end return a + (b - a) * r end, NextInteger=function(_, a, b) return a + math.floor(nxt() * (b - a + 1)) end} end}
 _G.OverlapParams = {new = function() return {FilterDescendantsInstances = {}, FilterType = nil, MaxParts = 0} end}
+-- 2.2.4 Region3 + deterministic math.noise (smooth value noise, roughly -0.5..0.5 like Roblox)
+local Region3 = {} Region3.__index = Region3
+function Region3.new(a, b)
+  local mn = Vector3.new(math.min(a.X, b.X), math.min(a.Y, b.Y), math.min(a.Z, b.Z)) local mx = Vector3.new(math.max(a.X, b.X), math.max(a.Y, b.Y), math.max(a.Z, b.Z))
+  return setmetatable({ CFrame = CFrame.new((mn + mx) * 0.5), Size = mx - mn, __min = mn, __max = mx }, Region3)
+end
+function Region3:ExpandToGrid(r) local mn, mx = self.__min, self.__max
+  return Region3.new(Vector3.new(math.floor(mn.X / r) * r, math.floor(mn.Y / r) * r, math.floor(mn.Z / r) * r), Vector3.new(math.ceil(mx.X / r) * r, math.ceil(mx.Y / r) * r, math.ceil(mx.Z / r) * r)) end
+_G.Region3 = Region3
+do
+  local function h3(x, y, z) local n = math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453 return n - math.floor(n) end
+  local function sm(t) return t * t * (3 - 2 * t) end
+  local function lp(a, b, t) return a + (b - a) * t end
+  math.noise = function(x, y, z) x, y, z = x or 0, y or 0, z or 0
+    local xi, yi, zi = math.floor(x), math.floor(y), math.floor(z) local u, v, w = sm(x - xi), sm(y - yi), sm(z - zi)
+    local c00 = lp(h3(xi, yi, zi), h3(xi + 1, yi, zi), u) local c10 = lp(h3(xi, yi + 1, zi), h3(xi + 1, yi + 1, zi), u)
+    local c01 = lp(h3(xi, yi, zi + 1), h3(xi + 1, yi, zi + 1), u) local c11 = lp(h3(xi, yi + 1, zi + 1), h3(xi + 1, yi + 1, zi + 1), u)
+    return lp(lp(c00, c10, v), lp(c01, c11, v), w) - 0.5 end
+end
 _G.RaycastParams = {new = function() return {FilterDescendantsInstances = {}} end}
 _G.utf8 = utf8
 -- 1.78.0: Font / buffer / Content for the art pack (data-only stand-ins)
