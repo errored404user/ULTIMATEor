@@ -9,6 +9,7 @@ const SUPPORTED_HOSTS = [
   "www.notion.so", "app.notion.so", "www.notion.com", "notion.com", "c.vani.ai",
   "overchat.ai", "www.overchat.ai", "huggingface.co", "www.huggingface.co",
   "openrouter.ai", "www.openrouter.ai",
+  "feather-chat-link.base44.app", // 2.0.5: FeatherRBLX (Base44 app, adaptive multichat adapter)
 ];
 const DEFAULT_AI_URL = "https://chat.deepseek.com/";
 // CodeCraft API (codecraftapi.com) is API-only; TotalScript hosts its chat page.
@@ -193,6 +194,7 @@ if (runHint) {
       "meta.ai": "Meta AI",
       "www.notion.so": "Notion", "app.notion.so": "Notion", "www.notion.com": "Notion", "notion.com": "Notion",
       "c.vani.ai": "Vani Chat",
+      "feather-chat-link.base44.app": "FeatherRBLX",
     };
     el.textContent = isCodeCraftTab(url) ? "CodeCraft API" : (names[host] || (SUPPORTED_HOSTS.some((h) => url.includes(h)) ? (host || "Chat") : "Idle"));
   } catch {}

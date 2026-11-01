@@ -940,6 +940,7 @@
     { name: "Overchat", url: "https://overchat.ai/" },
     { name: "HuggingChat", url: "https://huggingface.co/chat/" },
     { name: "OpenRouter Chat", url: "https://openrouter.ai/chat" },
+    { name: "FeatherRBLX", url: "https://feather-chat-link.base44.app/" },
   ];
 
   const A = {

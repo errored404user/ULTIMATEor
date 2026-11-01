@@ -10,6 +10,7 @@ const providerFiles = [
   ['src/providers/multichat.js','overchat.ai'],
   ['src/providers/multichat.js','overchat.ai'],
   ['src/providers/multichat.js','huggingface.co'],
+  ['src/providers/multichat.js','feather-chat-link.base44.app'],
   // Extension-hosted chat page (no content_scripts entry: loaded by codecraft.html).
   ['src/providers/codecraft.js', 'codecraftapi.com', 'codecraft.html'],
 ];

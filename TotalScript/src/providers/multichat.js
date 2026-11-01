@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/providers/multichat.js — adaptive provider for Overchat, HuggingChat and OpenRouter Chat.
+// src/providers/multichat.js — adaptive provider for Overchat, HuggingChat, OpenRouter Chat and FeatherRBLX (2.0.5).
 // Each host is isolated to its plain text chat surface. DOM assumptions are semantic and fail visibly when the composer is unavailable.
 // eslint-disable-next-line no-unused-vars
 const RSProvider = (() => {
@@ -13,7 +13,12 @@ const RSProvider = (() => {
     // never asks for or stores provider credentials; API-only pages fail visibly
     // with the adapter's normal "open a text chat" warning.
     "openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"},
-    "www.openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"}
+    "www.openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"},
+    // 2.0.5: FeatherRBLX - a Base44-hosted "Roblox chat console" (Google sign-in, credit metered:
+    // the landing page says "every account gets 10 free credits — that's 56 messages"). Its chat
+    // DOM is behind the login and not publicly inspectable, so it rides the adaptive adapter and
+    // fails visibly (login gate / "open its text chat") instead of guessing selectors.
+    "feather-chat-link.base44.app":{id:"feather",name:"FeatherRBLX",chat:"https://feather-chat-link.base44.app/",credits:true}
   };
   const SITE=HOSTS[location.hostname]||{id:"multichat",name:"AI Chat",chat:location.origin};
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -545,11 +550,25 @@ const RSProvider = (() => {
     return ref ? { parent, ref } : null;
   }
 
+  // 2.0.5: credit-metered hosts (FeatherRBLX) - every reply costs the user a credit, so the
+  // loop packs as many commands per reply as the core allows (8 instead of the default 6) and
+  // the model is told once why. The bar's notice pill (the existing unstable/notice system)
+  // carries the credit note; nothing is sent to the site that is not a normal chat turn.
+  const CREDIT_NOTE = SITE.credits
+    ? `${SITE.name} is credit-metered (the site says 10 free credits ≈ 56 messages per Google account). TotalScript packs up to 8 commands into each reply to spend fewer messages; keep requests focused and watch the site's credit counter.`
+    : "";
+  const CREDIT_PROMPT = SITE.credits
+    ? `${SITE.name} rules: every reply costs the user a site credit. Batch up to 8 commands in one reply, skip filler sentences and do not ask questions you can answer with a tool result.`
+    : "";
+
   return {
     id: SITE.id,
     displayName: SITE.name,
     supportsVision: true,
     timings,
+    maxBatchCommands: SITE.credits ? 8 : 6,
+    unstableWarning: CREDIT_NOTE,
+    promptExtra: CREDIT_PROMPT,
     thinkingSel: ".reasoning, [class*='thinking'], [class*='reason'], [class*='thought'], [data-testid*='reasoning']",
     init({ diag: d } = {}) {
       if (d) diag = d;
