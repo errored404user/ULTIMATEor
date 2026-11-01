@@ -7185,6 +7185,29 @@ html[data-rs-public-mode] #rs-work-badge{border-style:dashed}
 .rs-public-share-actions button{border:1px solid rgba(255,255,255,.1);background:#222730;color:#c9ced6;border-radius:5px;padding:5px 8px;font-size:9px;cursor:pointer}
 .rs-public-share-actions button:first-child{background:var(--rsa,#24afe2);border-color:transparent;color:#071017;font-weight:750}
 .rs-public-share-actions button:disabled{opacity:.4;cursor:not-allowed}
+/* 2.0.2 Public Skills -> Preferences (collapsible, under the Share box) */
+.rs-public-prefs{margin:6px 10px 0;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(255,255,255,.02)}
+.rs-public-prefs>summary{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;list-style:none;user-select:none}
+.rs-public-prefs>summary::-webkit-details-marker{display:none}
+.rs-public-prefs>summary::before{content:"";width:6px;height:6px;border-right:1.5px solid #9aa3b2;border-bottom:1.5px solid #9aa3b2;transform:rotate(-45deg);transition:transform .15s}
+.rs-public-prefs[open]>summary::before{transform:rotate(45deg)}
+.rs-public-prefs>summary>b{font-size:10px;color:#ffd37a;letter-spacing:.04em;text-transform:uppercase}
+.rs-public-prefs>summary>span{margin-left:auto;font-size:8.5px;color:#7d8694}
+.rs-public-prefs-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;padding:2px 10px 9px;border-top:1px solid rgba(255,255,255,.06)}
+.rs-public-pref{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;padding:5px 0}
+.rs-public-pref>span{display:block;min-width:0;flex:1 1 auto}
+.rs-public-pref b{display:block;font-size:9.5px;color:#e7eaef;font-weight:650}
+.rs-public-pref small{display:block;font-size:8.3px;color:#7d8694;line-height:1.35;margin-top:1px}
+.rs-public-pref input[type="text"],.rs-public-pref input[type="number"],.rs-public-pref select{flex:0 0 auto;width:118px;max-width:45%;border:1px solid rgba(255,255,255,.12);background:#1b2028;color:#e7eaef;border-radius:5px;padding:4px 6px;font-size:9px;font-family:inherit}
+.rs-public-pref input[type="number"]{width:62px}
+.rs-public-pref input:focus,.rs-public-pref select:focus{outline:none;border-color:var(--rsa,#24afe2);box-shadow:0 0 0 2px rgba(36,175,226,.18)}
+.rs-public-pref-check{flex-direction:row-reverse;justify-content:flex-end}
+.rs-public-pref-check input{flex:0 0 auto;width:13px;height:13px;margin:0;accent-color:var(--rsa,#24afe2);cursor:pointer}
+.rs-public-prefs-foot{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:4px;border-top:1px dashed rgba(255,255,255,.08)}
+.rs-public-prefs-foot small{font-size:8.3px;color:#7d8694}
+.rs-public-prefs-foot button{border:1px solid rgba(255,255,255,.1);background:#222730;color:#c9ced6;border-radius:5px;padding:4px 8px;font-size:9px;cursor:pointer}
+.rs-public-prefs-foot button:disabled{opacity:.4;cursor:not-allowed}
+@media (max-width:620px){.rs-public-prefs-body{grid-template-columns:1fr}}
 
 /* CodeCraft API — TotalScript-hosted chat page (codecraft.html). The bar sits
    in-flow at the top of the composer card; match the page's gold accent. */
@@ -8071,6 +8094,22 @@ html.rs-light .rs-setup-starter { color: #1f2937; background: rgba(0,0,0,.04); b
 #rs-cards-panel[data-cards-tab] .rs-public-side .rs-public-sharebox > span { font-size: 11.5px !important; }
 #rs-cards-panel[data-cards-tab] .rs-public-side .rs-public-share-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 #rs-cards-panel[data-cards-tab] .rs-public-side .rs-public-share-actions button { min-height: 32px !important; font-size: 11.5px !important; padding: 0 12px !important; }
+/* 2.0.2 Preferences block at the same scale as the Share box (the side column is a grid; the block is single-column there) */
+#rs-cards-panel[data-cards-tab] .rs-public-prefs { margin: 0 !important; border-radius: var(--cp-r) !important; border: 1px solid var(--cp-line) !important; background: color-mix(in srgb, var(--cp-row) 70%, transparent) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-prefs > summary { padding: 12px 16px !important; gap: 10px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-prefs > summary > b { font-size: 12px !important; color: var(--totalx-ghost-fg, #ffd37a) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-prefs > summary > span { font-size: 11px !important; color: var(--cp-fg-3) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-prefs-body { padding: 4px 16px 12px !important; gap: 6px 14px !important; border-top-color: var(--cp-line) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-side .rs-public-prefs-body { grid-template-columns: 1fr !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-pref { padding: 7px 0 !important; gap: 10px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-pref b { font-size: 12.5px !important; color: var(--cp-fg) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-pref small { font-size: 11px !important; color: var(--cp-fg-2) !important; line-height: 1.4 !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-pref input[type="text"], #rs-cards-panel[data-cards-tab] .rs-public-pref input[type="number"], #rs-cards-panel[data-cards-tab] .rs-public-pref select { min-height: 32px !important; font-size: 11.5px !important; padding: 0 10px !important; border-radius: 8px !important; width: 150px !important; max-width: 48% !important; background: var(--cp-row, #1b2028) !important; color: var(--cp-fg) !important; border: 1px solid var(--cp-line-hi) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-pref input[type="number"] { width: 84px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-pref-check input { width: 16px !important; height: 16px !important; min-height: 0 !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-prefs-foot { padding-top: 8px !important; border-top-color: var(--cp-line) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-prefs-foot small { font-size: 11px !important; color: var(--cp-fg-3) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-prefs-foot button { min-height: 30px !important; font-size: 11.5px !important; padding: 0 12px !important; border-radius: 8px !important; }
 #rs-cards-panel[data-cards-tab] .rs-public-compose-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
 #rs-cards-panel[data-cards-tab] .rs-public-compose-head b { font-size: 16px; }
 #rs-cards-panel[data-cards-tab] .rs-public-compose-head span { font-size: 12px; color: var(--cp-fg-2); }

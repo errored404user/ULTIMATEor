@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// src/core/explorer.js — TotalExplorer (2.0.1): the Explorer & Inspector panel.
+// src/core/explorer.js — TotalExplorer (2.0.2): the Explorer & Inspector panel.
 //
 // A live view of the Studio DataModel inside the extension (cards panel →
 // "Explorer" tab): browse services and their children, inspect the properties
@@ -19,7 +19,7 @@
 //   RENDER  render(state) → HTML (escaped)   targetBrief(target) → text for the model
 const TotalExplorer = (() => {
   "use strict";
-  const VERSION = "2.0.1";
+  const VERSION = "2.0.2";
   const ROOTS = ["Workspace", "ReplicatedStorage", "ServerStorage", "ServerScriptService", "StarterGui", "StarterPack", "StarterPlayer", "Lighting", "SoundService", "ReplicatedFirst", "Teams"];
   const CHILD_CAP = 200;
   const SEARCH_CAP = 60;
