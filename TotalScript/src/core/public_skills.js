@@ -41,32 +41,18 @@
   const PARAM_RE = /^[a-z][a-z0-9_]{0,40}$/;
   const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
   const LIMITS = { luau: 24000, mandate: 9000, instructions: 7000, params: 12, steps: 20, commands: 40, focus: 60, references: 12, examples: 4, exampleBody: 3000, history: 10 };
-  // 2.0.2: PREFERENCES - how Public Skills behave on this device (Public tab ->
-  // Preferences). Stored under rsPublicPrefs; every entry changes real
-  // behaviour (see the hooks marked "pref:" below), none is cosmetic:
-  //   author          default author stamped on items created here ("" -> "you")
-  //   promptMax       public commands listed IN FULL in every system prompt (3-40)
-  //   newDisabled     AI-made / imported items start disabled until reviewed
-  //   importDuplicates ask | replace | keep - what Import does with a name clash
-  //   testAfterCreate the AI is asked to public_skill_test a new skill in Studio
-  //   exportHistory   the change history rides along exports / share codes
-  //   sort            Public tab order: added (install order) | updated | name | runs | kind
-  const PREFS_KEY = "rsPublicPrefs";
-  const PREF_DEFAULTS = Object.freeze({ author: "", promptMax: 12, newDisabled: false, importDuplicates: "ask", testAfterCreate: true, exportHistory: true, sort: "added" });
-  const PREF_SPEC = Object.freeze({
-    author: { type: "string", max: 60, label: "Author name on new items" },
-    promptMax: { type: "int", min: 3, max: 40, label: "Public commands listed in full in every prompt" },
-    newDisabled: { type: "bool", label: "New AI-made / imported items start disabled" },
-    importDuplicates: { type: "enum", values: ["ask", "replace", "keep"], label: "On import, when the name is already installed" },
-    testAfterCreate: { type: "bool", label: "Ask the AI to syntax-check a new skill in Studio" },
-    exportHistory: { type: "bool", label: "Include change history in exports / share codes" },
-    sort: { type: "enum", values: ["added", "updated", "name", "runs", "kind"], label: "Sort the list by" },
-  });
-  const PREF_KEYS = Object.freeze(Object.keys(PREF_DEFAULTS));
+  // 2.2.2: the Preferences section is gone (fixed behaviour: author "you",
+  // 12 commands listed in full per prompt, new items start enabled, Import asks
+  // on a name clash, the AI syntax-checks a new skill, history travels with
+  // exports, install order). Its place in the Public tab is taken by the
+  // REFERENCE LIBRARY (src/core/public_refs.js, window.PublicReferences):
+  // user links / notes / Luau snippets attached to items by name and handed to
+  // the AI through referencesText(), the design prompts and public_skill_refs.
+  const PROMPT_MAX = 12;
+  const libraryModule = () => { try { return root.PublicReferences && typeof root.PublicReferences.forItem === "function" ? root.PublicReferences : null; } catch { return null; } };
 
   let items = [];
   let activeModeId = null;
-  let prefs = Object.assign({}, PREF_DEFAULTS);
   let loaded = false;
   let loadPromise = null;
   const listeners = new Set();
@@ -109,8 +95,7 @@
       const st = storage();
       if (!st) { loaded = true; return resolve(list()); }
       try {
-        st.get([KEY, MODE_KEY, PREFS_KEY], (r) => {
-          try { prefs = normalizePrefs(r && r[PREFS_KEY], true).prefs; } catch { prefs = Object.assign({}, PREF_DEFAULTS); }
+        st.get([KEY, MODE_KEY], (r) => {
           try {
             const raw = r && Array.isArray(r[KEY]) ? r[KEY] : [];
             items = raw.map((it) => { const v = validate(it, { allowDuplicateId: true }); return v.ok ? v.item : null; }).filter(Boolean);
@@ -128,82 +113,6 @@
     const st = storage();
     if (!st) return;
     try { st.set({ [KEY]: clone(items), [MODE_KEY]: activeModeId }); } catch {}
-  }
-
-  // ── Preferences ─────────────────────────────────────────────────────────
-  // normalizePrefs(raw, lenient): unknown keys are dropped, bad values are
-  // reported (lenient = fall back to the default instead of erroring, used
-  // when loading stored data). Returns {prefs, errors}.
-  function normalizePrefs(raw, lenient, base) {
-    const out = Object.assign({}, base || PREF_DEFAULTS);
-    const errors = [];
-    const src = raw && typeof raw === "object" ? raw : {};
-    for (const k of Object.keys(src)) {
-      const spec = PREF_SPEC[k];
-      if (!spec) { if (!lenient) errors.push(`unknown preference '${k}' (known: ${PREF_KEYS.join(", ")})`); continue; }
-      const v = src[k];
-      if (spec.type === "string") { out[k] = str(v, spec.max).trim(); continue; }
-      if (spec.type === "bool") {
-        if (typeof v === "boolean") out[k] = v;
-        else if (v === "true" || v === "false" || v === 1 || v === 0 || v === "1" || v === "0") out[k] = v === "true" || v === 1 || v === "1";
-        else if (lenient) out[k] = PREF_DEFAULTS[k]; else errors.push(`${k} must be true or false`);
-        continue;
-      }
-      if (spec.type === "int") {
-        const n = Math.round(Number(v));
-        if (Number.isFinite(n) && n >= spec.min && n <= spec.max) out[k] = n;
-        else if (lenient) out[k] = Math.min(spec.max, Math.max(spec.min, Number.isFinite(n) ? n : PREF_DEFAULTS[k]));
-        else errors.push(`${k} must be a whole number between ${spec.min} and ${spec.max}`);
-        continue;
-      }
-      if (spec.type === "enum") {
-        const sv = String(v == null ? "" : v).toLowerCase();
-        if (spec.values.includes(sv)) out[k] = sv;
-        else if (lenient) out[k] = PREF_DEFAULTS[k]; else errors.push(`${k} must be one of ${spec.values.join(" | ")}`);
-      }
-    }
-    return { prefs: out, errors };
-  }
-  const getPrefs = () => Object.assign({}, prefs);
-  const prefSpec = () => clone(PREF_SPEC);
-  function persistPrefs() {
-    const st = storage();
-    if (!st) return;
-    try { st.set({ [PREFS_KEY]: Object.assign({}, prefs) }); } catch {}
-  }
-  // setPrefs(patch) -> {ok, prefs, errors, changed[]}. Strict: a bad value
-  // rejects the whole patch so a typo never half-applies.
-  function setPrefs(patch) {
-    const r = normalizePrefs(patch, false, prefs);
-    if (r.errors.length) return { ok: false, prefs: getPrefs(), errors: r.errors, changed: [] };
-    const changed = PREF_KEYS.filter((k) => r.prefs[k] !== prefs[k]);
-    prefs = r.prefs;
-    if (changed.length) { persistPrefs(); emit("prefs", null); }
-    return { ok: true, prefs: getPrefs(), errors: [], changed };
-  }
-  function resetPrefs() {
-    const changed = PREF_KEYS.filter((k) => prefs[k] !== PREF_DEFAULTS[k]);
-    prefs = Object.assign({}, PREF_DEFAULTS);
-    persistPrefs(); emit("prefs", null);
-    return { ok: true, prefs: getPrefs(), errors: [], changed };
-  }
-  // sortItems(list, order) - the Public tab order (pref: sort). Stable; never
-  // mutates the input. `added` = install order (the default, unchanged from
-  // before), `updated` = newest change first, `runs` = most used first (ties
-  // by update), `kind` = skills, abilities, modes then title.
-  function sortItems(arr, order) {
-    const o = PREF_SPEC.sort.values.includes(order) ? order : prefs.sort;
-    const a = (arr || []).slice();
-    const title = (i) => String(i.title || i.name || "").toLowerCase();
-    const upd = (i) => Number(i.updatedAt || i.createdAt || 0);
-    const runs = (i) => (i.stats && Number(i.stats.runs)) || 0;
-    const kindRank = (i) => KINDS.indexOf(i.kind);
-    const cmp = o === "name" ? (x, y) => title(x).localeCompare(title(y))
-      : o === "runs" ? (x, y) => runs(y) - runs(x) || upd(y) - upd(x)
-      : o === "kind" ? (x, y) => kindRank(x) - kindRank(y) || title(x).localeCompare(title(y))
-      : o === "updated" ? (x, y) => upd(y) - upd(x)
-      : () => 0;
-    return a.map((it, idx) => [it, idx]).sort((p, q) => cmp(p[0], q[0]) || p[1] - q[1]).map((p) => p[0]);
   }
 
   // ── Validation ──────────────────────────────────────────────────────────
@@ -326,7 +235,7 @@
       id: typeof def.id === "string" && /^ps_[a-z0-9_]+$/.test(def.id) ? def.id : uid(),
       kind, name, title: title || titleCase(name), description,
       version: Math.max(1, parseInt(def.version, 10) || 1),
-      author: str(def.author, 60).trim() || prefs.author || "you", // pref: author
+      author: str(def.author, 60).trim() || "you",
       tags: stringList(def.tags, 10, true),
       // 1.88.0: optional "when to use" words / phrases (ranking only; never
       // required - items saved before this field simply have none).
@@ -422,14 +331,8 @@
     if (opts.source && merged && typeof merged === "object") merged.source = opts.source;
     // pref: newDisabled - a NEW item that arrived from the AI or an import is
     // installed switched off until the user enables it in the Public tab
-    // (hand-made ones were written by the user; they stay on).
-    let parked = false;
-    if (!existing && prefs.newDisabled && merged && typeof merged === "object" && (merged.source === "ai" || merged.source === "import") && merged.enabled !== false && !items.some((i) => i.id === merged.id)) {
-      merged.enabled = false; parked = true;
-    }
     const v = validate(merged, opts);
     if (!v.ok) return { ok: false, errors: v.errors, warnings: v.warnings, item: null };
-    if (parked) v.warnings.push("installed DISABLED (Preferences: new AI-made / imported items start disabled) - the user enables it in the Public tab; do not call it until then");
     const idx = items.findIndex((i) => i.id === v.item.id);
     if (idx >= 0) {
       // 1.99.7: a short change history rides along the item (what changed, in which version).
@@ -456,6 +359,7 @@
     items = items.filter((i) => i.id !== cur.id);
     if (activeModeId === cur.id) activeModeId = null;
     persist();
+    try { const L = libraryModule(); if (L && typeof L.renameAttachment === "function") L.renameAttachment(cur.name, ""); } catch {}
     emit("removed", cur);
     return { ok: true, errors: [], item: clone(cur) };
   }
@@ -519,7 +423,20 @@
       const q = opts.query || [item.title, item.description, (item.tags || []).join(" "), (item.triggers || []).join(" ")].join(" ");
       if (maxEx && typeof R.exampleRank === "function") inherited.examples = R.exampleRank(exp.id, q).slice(0, maxEx).map((x) => ({ title: x.example.title, body: x.example.body, note: x.example.note || "", hits: x.hits || [] }));
     }
-    return { name: item.name, kind: item.kind, own, examples: clone(item.examples || []), inherited };
+    return { name: item.name, kind: item.kind, own, examples: clone(item.examples || []), inherited, library: libraryFor(item.name) };
+  }
+  // 2.2.2: the user's reference library (public_refs.js). libraryFor(name) →
+  // entries attached to that item; libraryText(name|entries, {budget, design})
+  // → the "USER REFERENCES" block (design=true also includes the entries the
+  // user marked for every new design - used by the design / convert prompts).
+  function libraryFor(name) { const L = libraryModule(); if (!L) return []; try { return L.forItem(name); } catch { return []; } }
+  function libraryText(nameOrEntries, opts) {
+    const L = libraryModule(); if (!L) return "";
+    opts = opts || {};
+    try {
+      const entries = Array.isArray(nameOrEntries) ? nameOrEntries : nameOrEntries ? L.forItem(nameOrEntries, { design: !!opts.design }) : opts.design ? L.designEntries() : [];
+      return L.textFor(entries, { budget: opts.budget, heading: opts.heading });
+    } catch { return ""; }
   }
   // referencesText(ref, {budget, query, inherit}) - the text block appended to
   // an ability call (and, own links only, to a mode's mandate).
@@ -545,6 +462,8 @@
       L.push(L.length ? "" : null, "REFERENCES (official documentation - read these before inventing an API; 'verified' = the page was checked offline against the Roblox docs listing):");
       for (const r of refs) L.push(`- ${r.title} — ${r.url}${r.verified ? " (verified)" : " (not verified offline)"}${r.from ? ` [from built-in ${r.from}]` : ""}`);
     }
+    const lib = libraryText(info.library, { budget: Math.min(budget, Number(opts.libraryBudget) > 0 ? Number(opts.libraryBudget) : 3000) });
+    if (lib) L.push(L.length ? "" : null, lib);
     if (inherit && info.inherited.expert) L.push(L.length ? "" : null, `RELATED BUILT-IN EXPERT: ${info.inherited.expert}${info.inherited.explicit ? "" : " (auto-detected)"} - skill {name: "${info.inherited.expert}"} prints its full procedure, pitfalls and verification.`);
     return L.filter((x) => x !== null).join("\n");
   }
@@ -609,7 +528,7 @@
     if (!m) return "";
     const BASE = baseLabel(m.base).toUpperCase();
     const focus = m.focus.length ? `\nFOCUS COMMANDS for this mode (use them heavily, on top of the ${BASE} focus list): ${m.focus.join(", ")}` : "";
-    const refs = (m.references && m.references.length) || (m.examples && m.examples.length) ? "\n" + referencesText(m.id, { budget: 1500, inherit: false }) : "";
+    const refs = (m.references && m.references.length) || (m.examples && m.examples.length) || libraryFor(m.name).length ? "\n" + referencesText(m.id, { budget: 1500, inherit: false, libraryBudget: 1500 }) : "";
     return `━━━ CUSTOM WORK MODE: ${m.title.toUpperCase()} (public mode by ${m.author}, layered on ${BASE}) ━━━\n${m.sub ? m.sub + "\n" : ""}${m.mandate}${focus}${refs}\nThe ${BASE} workflow above stays the process; this block sets the priorities and the standard of quality. The user picked this mode on purpose - follow it.`;
   }
 
@@ -754,7 +673,7 @@
     const cmds = items.filter((i) => i.enabled && i.kind !== "mode");
     if (!cmds.length) return "";
     const compact = !!(opts && opts.compact);
-    const max = Math.max(3, (opts && opts.max) || prefs.promptMax || 12); // pref: promptMax
+    const max = Math.max(3, (opts && opts.max) || PROMPT_MAX);
     let shown = cmds, hidden = 0;
     if (cmds.length > max) {
       let task = opts && opts.task; if (!task) { try { task = typeof root.__rsTaskText === "function" ? root.__rsTaskText() : ""; } catch { task = ""; } }
@@ -766,7 +685,9 @@
     }
     const rows = shown.map((i) => compact ? `${signature(i)} - ${i.description.slice(0, 90)}` : `${signature(i)} - [${i.kind}] ${i.description.slice(0, 200)}${i.triggers && i.triggers.length ? ` (when: ${i.triggers.slice(0, 4).join(", ")})` : ""}`);
     const more = hidden ? `\n…and ${hidden} more installed - public_skill_list {} shows all of them with signatures.` : "";
-    return `PUBLIC SKILLS - ${cmds.length} user-made command${cmds.length === 1 ? "" : "s"} installed on this device (call them like any command; skills run Luau in Studio, abilities return a procedure to follow):\n${rows.join("\n")}${more}\nManage them with public_skill_list / public_skill_get / public_skill_update / public_skill_delete / public_skill_export; create new ones with public_skill_create.\n\n`;
+    let libLine = ""; try { const L = libraryModule(); if (L && !compact) libLine = L.promptLine(); } catch {}
+    if (libLine) libLine = "\n" + libLine;
+    return `PUBLIC SKILLS - ${cmds.length} user-made command${cmds.length === 1 ? "" : "s"} installed on this device (call them like any command; skills run Luau in Studio, abilities return a procedure to follow):\n${rows.join("\n")}${more}${libLine}\nManage them with public_skill_list / public_skill_get / public_skill_update / public_skill_delete / public_skill_export; create new ones with public_skill_create.\n\n`;
   }
 
   const DEFINITION_DOC = [
@@ -789,9 +710,10 @@
       "PUBLIC SKILL REQUEST - TotalScript 'Public Skills' lets the user create their own commands, abilities and work modes by describing them. You do the whole job now.",
       `USER REQUEST: "${String(request || "").trim()}"`,
       kindLine,
-      "PROCESS: (1) design it completely - make sensible decisions instead of asking questions and mention them in the description; (2) submit it with ONE call to public_skill_create {\"definition\": {...}}; (3) if it returns VALIDATION_FAILED, fix the listed problems and call public_skill_create again; (4) " + (prefs.testAfterCreate ? "for skills call public_skill_test {\"name\": ...} once to syntax-check it in Studio and fix any error with public_skill_update" : "do NOT call public_skill_test unless the user asks for a test (their preference)") + "; (5) finally tell the user in one short paragraph what was installed, one example call, and how to share it (Public tab -> Export / Share code). Do not run the new skill on the user's place unless they asked for a test.",
+      "PROCESS: (1) design it completely - make sensible decisions instead of asking questions and mention them in the description; (2) submit it with ONE call to public_skill_create {\"definition\": {...}}; (3) if it returns VALIDATION_FAILED, fix the listed problems and call public_skill_create again; (4) for skills call public_skill_test {\"name\": ...} once to syntax-check it in Studio and fix any error with public_skill_update; (5) finally tell the user in one short paragraph what was installed, one example call, and how to share it (Public tab -> Export / Share code). Do not run the new skill on the user's place unless they asked for a test.",
       DEFINITION_DOC,
       referenceCandidates(request, 8),
+      libraryText(null, { design: true, budget: 3000, heading: "USER REFERENCE LIBRARY (the user marked these for every new design - follow them: copy the shape of snippets, cite the links in references[]; nothing here ran):" }),
       existing,
       names,
     ].filter(Boolean).join("\n\n");
@@ -808,8 +730,9 @@
     { name: "public_skill_export", description: "Export a Public Skill (or name='all' for a pack of everything installed) as shareable JSON plus an ORSKILL1: share code the user can give to others.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string", description: "name, id, or 'all'" } } } },
     { name: "public_skill_import", description: "Import Public Skills from exported JSON (single .orskill.json, a pack .orskills.json), a plain-text .txt skill (# Title / kind: / --- luau --- sections), an ORSKILL1: share code, or data:'featured' for the bundled Featured pack (damage_numbers_pro, npc_patrol_chase, keycard_door_system, dialogue_tree_system, collectible_spawner, zone_system, boss_health_bar + gui_polish_pass, release_checklist, game_feel_pass + prototype_sprint mode).", inputSchema: { type: "object", required: ["data"], properties: { data: { type: "string", description: "JSON text, .txt skill text, ORSKILL1: share code, or 'featured'" }, names: { type: "array", items: { type: "string" }, description: "With data:'featured': install only these item names" }, replace: { type: "boolean", description: "Replace items with the same name" } } } },
     { name: "public_skill_refs", description: "References of a Public Skill: its own docs links / examples (verified = page checked offline against the Roblox docs listing) plus the ones inherited from the nearest built-in expert. add[] attaches links ('Title | url' or {title,url}), remove[] drops them by url / title / index, suggest=true adopts the inherited docs links.", inputSchema: { type: "object", required: ["name"], properties: { name: { type: "string" }, add: { type: "array", items: { type: "string" }, description: "'Title | https://...' entries (or '/docs/...' paths)" }, remove: { type: "array", items: { type: "string" } }, suggest: { type: "boolean", description: "adopt the related expert's verified docs links" } } } },
+    { name: "public_skill_reference", description: "The user's reference LIBRARY (Public tab -> References): docs links, notes and Luau/GUI snippets. op=list|get|add|update|remove|attach|detach. Attached entries are appended automatically when that public item runs; design=true entries reach every new design.", inputSchema: { type: "object", required: ["op"], properties: { op: { type: "string", enum: ["list", "get", "add", "update", "remove", "attach", "detach"] }, id: { type: "string", description: "entry id or exact title (get/update/remove/attach/detach)" }, kind: { type: "string", enum: ["link", "note", "snippet"] }, title: { type: "string" }, url: { type: "string" }, body: { type: "string", description: "note / snippet text (max 16000 chars)" }, lang: { type: "string", enum: ["luau", "text", "json", "markdown"] }, tags: { type: "array", items: { type: "string" } }, names: { type: "array", items: { type: "string" }, description: "public item names to attach to / detach from" }, design: { type: "boolean" }, query: { type: "string", description: "list filter (words)" }, attached_to: { type: "string", description: "list filter: public item name" } } } },
     { name: "public_skill_from_prompt", description: "Turn a full prompt the user wrote into an installed Public Skill WITHOUT redesigning it: the prompt is kept verbatim as an ability's instructions (default), a mode's mandate (kind=mode) or, when it contains Luau, a skill. Instant; refine later with public_skill_update.", inputSchema: { type: "object", required: ["prompt"], properties: { prompt: { type: "string", description: "The full prompt text" }, kind: { type: "string", enum: ["skill", "ability", "mode"] }, title: { type: "string" }, name: { type: "string", description: "snake_case command name" }, description: { type: "string" } } } },
-  ].map((t) => Object.assign(t, { server: "totalscript", executionMode: /create|update|delete|import|enable|test|from_prompt|refs/.test(t.name) ? "WRITE" : "READ", environment: "GENERAL", category: "Public Skills" }));
+  ].map((t) => Object.assign(t, { server: "totalscript", executionMode: /create|update|delete|import|enable|test|from_prompt|refs|reference/.test(t.name) ? "WRITE" : "READ", environment: "GENERAL", category: "Public Skills" }));
 
   // ── Sharing ─────────────────────────────────────────────────────────────
   function exportObject(ref) {
@@ -817,7 +740,6 @@
     if (!item) return null;
     const out = clone(item);
     delete out.enabled; delete out.source; delete out.createdAt; delete out.updatedAt; delete out.stats;
-    if (!prefs.exportHistory) delete out.history; // pref: exportHistory
     return { format: FORMAT, formatVersion: FORMAT_VERSION, exportedAt: new Date().toISOString(), app: "TotalScript", item: out };
   }
   const exportJson = (ref) => { const o = exportObject(ref); return o ? JSON.stringify(o, null, 2) : null; };
@@ -1083,10 +1005,11 @@
       "PROMPT → PUBLIC SKILL - the user wrote a full prompt and wants it installed as a reusable TotalScript item. CONVERT it; do not redesign it.",
       "RULES: keep every instruction, rule and constraint from the prompt (rephrase only for clarity, never drop or soften); do not add behaviour the prompt does not ask for; pick a short title and a snake_case name from the prompt's subject; write a 1-2 sentence description of when to use it; for skills, turn the variable parts into params[] with sensible defaults and write complete Luau; for abilities keep the prompt as instructions and list 3-15 steps[] in its order; for modes keep the prompt as the mandate and pick base/badge/focus[].",
       kindLine,
-      "PROCESS: (1) submit ONE public_skill_create {\"definition\": {...}}; (2) if VALIDATION_FAILED, fix and resubmit; (3) " + (prefs.testAfterCreate ? "for skills run public_skill_test {\"name\"} once" : "do NOT run public_skill_test unless the user asks (their preference)") + "; (4) reply with one short paragraph: what was installed, how to call it, and what you changed from the prompt (ideally nothing).",
+      "PROCESS: (1) submit ONE public_skill_create {\"definition\": {...}}; (2) if VALIDATION_FAILED, fix and resubmit; (3) for skills run public_skill_test {\"name\"} once; (4) reply with one short paragraph: what was installed, how to call it, and what you changed from the prompt (ideally nothing).",
       "THE PROMPT (verbatim, between the markers):\n<<<PROMPT\n" + prompt + "\nPROMPT>>>",
       DEFINITION_DOC,
       referenceCandidates(prompt.slice(0, 1200), 8),
+      libraryText(null, { design: true, budget: 2000, heading: "USER REFERENCE LIBRARY (the user marked these for every new design; use them only where the prompt leaves a gap - never override the prompt with them):" }),
       existing,
       names,
     ].filter(Boolean).join("\n\n");
@@ -1107,8 +1030,8 @@
     exportPackObject, exportPackJson, packFileName, packShareCode, PACK_FORMAT,
     parseText, exportText, textFileName, parseParamSpec,
     looksLikeFullPrompt, fromPrompt, installFromPrompt, conversionPrompt,
-    // 2.0.2 preferences
-    PREF_DEFAULTS, PREF_KEYS, prefSpec, getPrefs, setPrefs, resetPrefs, normalizePrefs, sortItems,
+    // 2.2.2 reference library (src/core/public_refs.js) seen through the skills engine
+    libraryText, libraryFor, PROMPT_MAX,
   };
   root.PublicSkills = api;
   try { root.__rsPublicMode = () => api.activeMode(); } catch {}

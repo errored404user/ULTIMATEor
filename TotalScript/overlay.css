@@ -6938,29 +6938,54 @@ html[data-rs-public-mode] #rs-work-badge{border-style:dashed}
 .rs-public-share-actions button{border:1px solid rgba(255,255,255,.1);background:#222730;color:#c9ced6;border-radius:5px;padding:5px 8px;font-size:9px;cursor:pointer}
 .rs-public-share-actions button:first-child{background:var(--rsa,#24afe2);border-color:transparent;color:#071017;font-weight:750}
 .rs-public-share-actions button:disabled{opacity:.4;cursor:not-allowed}
-/* 2.0.2 Public Skills -> Preferences (collapsible, under the Share box) */
-.rs-public-prefs{margin:6px 10px 0;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(255,255,255,.02)}
-.rs-public-prefs>summary{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;list-style:none;user-select:none}
-.rs-public-prefs>summary::-webkit-details-marker{display:none}
-.rs-public-prefs>summary::before{content:"";width:6px;height:6px;border-right:1.5px solid #9aa3b2;border-bottom:1.5px solid #9aa3b2;transform:rotate(-45deg);transition:transform .15s}
-.rs-public-prefs[open]>summary::before{transform:rotate(45deg)}
-.rs-public-prefs>summary>b{font-size:10px;color:#ffd37a;letter-spacing:.04em;text-transform:uppercase}
-.rs-public-prefs>summary>span{margin-left:auto;font-size:8.5px;color:#7d8694}
-.rs-public-prefs-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;padding:2px 10px 9px;border-top:1px solid rgba(255,255,255,.06)}
-.rs-public-pref{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;padding:5px 0}
-.rs-public-pref>span{display:block;min-width:0;flex:1 1 auto}
-.rs-public-pref b{display:block;font-size:9.5px;color:#e7eaef;font-weight:650}
-.rs-public-pref small{display:block;font-size:8.3px;color:#7d8694;line-height:1.35;margin-top:1px}
-.rs-public-pref input[type="text"],.rs-public-pref input[type="number"],.rs-public-pref select{flex:0 0 auto;width:118px;max-width:45%;border:1px solid rgba(255,255,255,.12);background:#1b2028;color:#e7eaef;border-radius:5px;padding:4px 6px;font-size:9px;font-family:inherit}
-.rs-public-pref input[type="number"]{width:62px}
-.rs-public-pref input:focus,.rs-public-pref select:focus{outline:none;border-color:var(--rsa,#24afe2);box-shadow:0 0 0 2px rgba(36,175,226,.18)}
-.rs-public-pref-check{flex-direction:row-reverse;justify-content:flex-end}
-.rs-public-pref-check input{flex:0 0 auto;width:13px;height:13px;margin:0;accent-color:var(--rsa,#24afe2);cursor:pointer}
-.rs-public-prefs-foot{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:4px;border-top:1px dashed rgba(255,255,255,.08)}
-.rs-public-prefs-foot small{font-size:8.3px;color:#7d8694}
-.rs-public-prefs-foot button{border:1px solid rgba(255,255,255,.1);background:#222730;color:#c9ced6;border-radius:5px;padding:4px 8px;font-size:9px;cursor:pointer}
-.rs-public-prefs-foot button:disabled{opacity:.4;cursor:not-allowed}
-@media (max-width:620px){.rs-public-prefs-body{grid-template-columns:1fr}}
+/* 2.2.2 Public Skills -> References (the user's reference library; replaces Preferences) */
+.rs-public-lib{margin:6px 10px 0;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(255,255,255,.02)}
+.rs-public-lib>summary{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;list-style:none;user-select:none}
+.rs-public-lib>summary::-webkit-details-marker{display:none}
+.rs-public-lib>summary::before{content:"";width:6px;height:6px;border-right:1.5px solid #9aa3b2;border-bottom:1.5px solid #9aa3b2;transform:rotate(-45deg);transition:transform .15s;flex:0 0 auto}
+.rs-public-lib[open]>summary::before{transform:rotate(45deg)}
+.rs-public-lib>summary>b{font-size:10px;color:#7fe3f5;letter-spacing:.04em;text-transform:uppercase}
+.rs-public-lib>summary>span{margin-left:auto;font-size:8.5px;color:#7d8694}
+.rs-public-lib-body{display:flex;flex-direction:column;gap:8px;padding:2px 10px 9px;border-top:1px solid rgba(255,255,255,.06)}
+.rs-public-lib-hint{margin:4px 0 0;font-size:8.6px;line-height:1.45;color:#9aa3b2}
+.rs-public-lib-hint b{color:#e7eaef;font-weight:650}
+.rs-public-lib-hint code{font-size:8.3px;color:#7fe3f5;background:rgba(34,211,238,.08);padding:0 4px;border-radius:4px}
+.rs-public-lib-form{display:flex;flex-direction:column;gap:5px;padding:7px;border:1px dashed rgba(255,255,255,.12);border-radius:7px;background:rgba(0,0,0,.14)}
+.rs-public-lib-form-row{display:flex;align-items:center;gap:6px;min-width:0}
+.rs-public-lib-form-row>input[type="text"]{flex:1 1 auto;min-width:0}
+.rs-public-lib-form select,.rs-public-lib-form input[type="text"],.rs-public-lib-form input[type="url"],.rs-public-lib-form textarea{font:inherit;font-size:9px;color:#e7eaef;background:#161a22;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:4px 6px;min-width:0}
+.rs-public-lib-form input[type="url"],.rs-public-lib-form textarea{width:100%;box-sizing:border-box;resize:vertical}
+.rs-public-lib-form textarea{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.4}
+.rs-public-lib-form select:focus,.rs-public-lib-form input:focus,.rs-public-lib-form textarea:focus{outline:none;border-color:var(--rs-accent,#22d3ee)}
+.rs-public-lib-check{display:inline-flex;align-items:center;gap:5px;font-size:8.6px;color:#c9d1dc;white-space:nowrap;cursor:pointer}
+.rs-public-lib-check input{width:13px;height:13px;margin:0;accent-color:var(--rs-accent,#22d3ee)}
+.rs-public-lib-form-actions small{margin-left:auto;font-size:8.2px;color:#7d8694;text-align:right}
+.rs-public-lib-form button,.rs-public-lib-actions button,.rs-public-lib-foot button{border:1px solid rgba(255,255,255,.1);background:#222730;color:#e7eaef;font:inherit;font-size:8.8px;padding:4px 9px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.rs-public-lib-form button[type="submit"]{background:linear-gradient(135deg,rgba(34,211,238,.35),rgba(34,211,238,.12));border-color:rgba(34,211,238,.45);color:#e7fdff}
+.rs-public-lib-form button:hover,.rs-public-lib-actions button:hover,.rs-public-lib-foot button:hover{border-color:rgba(255,255,255,.22)}
+.rs-public-lib-actions button[aria-pressed="true"]{border-color:rgba(34,211,238,.5);color:#7fe3f5}
+.rs-public-lib-actions button.rs-danger{color:#ff9d9d}
+.rs-public-lib-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;max-height:320px;overflow:auto}
+.rs-public-lib-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 8px;padding:6px 8px;border:1px solid rgba(255,255,255,.08);border-radius:7px;background:rgba(255,255,255,.02)}
+.rs-public-lib-editing{border-color:rgba(34,211,238,.5)}
+.rs-public-lib-kind{align-self:start;font-size:7.6px;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:999px;background:rgba(255,255,255,.08);color:#c9d1dc}
+.rs-public-lib-kind-link{background:rgba(34,211,238,.14);color:#7fe3f5}
+.rs-public-lib-kind-snippet{background:rgba(167,139,250,.16);color:#c9b8ff}
+.rs-public-lib-kind-note{background:rgba(255,211,122,.14);color:#ffd37a}
+.rs-public-lib-copy{min-width:0}
+.rs-public-lib-copy b{display:block;font-size:9.5px;color:#e7eaef;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rs-public-lib-copy b a{color:#7fe3f5;text-decoration:none}
+.rs-public-lib-copy b a:hover{text-decoration:underline}
+.rs-public-lib-copy small{display:block;font-size:8.2px;color:#7d8694;line-height:1.35;word-break:break-word}
+.rs-public-lib-copy small em{color:#7fe3f5;font-style:normal}
+.rs-public-lib-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px}
+.rs-public-lib-empty{font-size:8.6px;color:#7d8694;padding:4px 2px}
+.rs-public-lib-empty b{color:#c9d1dc}
+.rs-public-lib-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.rs-public-lib-foot small{font-size:8.2px;color:#7d8694}
+.rs-public-lib-foot span{display:flex;gap:4px}
+.rs-public-lib-foot button:disabled{opacity:.4;cursor:not-allowed}
+.rs-public-compose-lib{font-style:normal;color:#7fe3f5}
 
 /* CodeCraft API — TotalScript-hosted chat page (codecraft.html). The bar sits
    in-flow at the top of the composer card; match the page's gold accent. */
@@ -7848,21 +7873,24 @@ html.rs-light .rs-setup-starter { color: #1f2937; background: rgba(0,0,0,.04); b
 #rs-cards-panel[data-cards-tab] .rs-public-side .rs-public-share-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 #rs-cards-panel[data-cards-tab] .rs-public-side .rs-public-share-actions button { min-height: 32px !important; font-size: 11.5px !important; padding: 0 12px !important; }
 /* 2.0.2 Preferences block at the same scale as the Share box (the side column is a grid; the block is single-column there) */
-#rs-cards-panel[data-cards-tab] .rs-public-prefs { margin: 0 !important; border-radius: var(--cp-r) !important; border: 1px solid var(--cp-line) !important; background: color-mix(in srgb, var(--cp-row) 70%, transparent) !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-prefs > summary { padding: 12px 16px !important; gap: 10px !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-prefs > summary > b { font-size: 12px !important; color: var(--totalx-ghost-fg, #ffd37a) !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-prefs > summary > span { font-size: 11px !important; color: var(--cp-fg-3) !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-prefs-body { padding: 4px 16px 12px !important; gap: 6px 14px !important; border-top-color: var(--cp-line) !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-side .rs-public-prefs-body { grid-template-columns: 1fr !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-pref { padding: 7px 0 !important; gap: 10px !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-pref b { font-size: 12.5px !important; color: var(--cp-fg) !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-pref small { font-size: 11px !important; color: var(--cp-fg-2) !important; line-height: 1.4 !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-pref input[type="text"], #rs-cards-panel[data-cards-tab] .rs-public-pref input[type="number"], #rs-cards-panel[data-cards-tab] .rs-public-pref select { min-height: 32px !important; font-size: 11.5px !important; padding: 0 10px !important; border-radius: 8px !important; width: 150px !important; max-width: 48% !important; background: var(--cp-row, #1b2028) !important; color: var(--cp-fg) !important; border: 1px solid var(--cp-line-hi) !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-pref input[type="number"] { width: 84px !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-pref-check input { width: 16px !important; height: 16px !important; min-height: 0 !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-prefs-foot { padding-top: 8px !important; border-top-color: var(--cp-line) !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-prefs-foot small { font-size: 11px !important; color: var(--cp-fg-3) !important; }
-#rs-cards-panel[data-cards-tab] .rs-public-prefs-foot button { min-height: 30px !important; font-size: 11.5px !important; padding: 0 12px !important; border-radius: 8px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib { margin: 0 !important; border-radius: var(--cp-r) !important; border: 1px solid var(--cp-line) !important; background: color-mix(in srgb, var(--cp-row) 70%, transparent) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib > summary { padding: 12px 16px !important; gap: 10px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib > summary > b { font-size: 12px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib > summary > span { font-size: 11px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-body { padding: 4px 16px 14px !important; gap: 10px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-hint { font-size: 11.5px !important; line-height: 1.5 !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-hint code { font-size: 11px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-form { padding: 10px !important; gap: 7px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-form select, #rs-cards-panel[data-cards-tab] .rs-public-lib-form input[type="text"], #rs-cards-panel[data-cards-tab] .rs-public-lib-form input[type="url"], #rs-cards-panel[data-cards-tab] .rs-public-lib-form textarea { font-size: 12px !important; padding: 6px 8px !important; border-radius: 8px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-check { font-size: 11.5px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-check input { width: 16px !important; height: 16px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-form button, #rs-cards-panel[data-cards-tab] .rs-public-lib-actions button, #rs-cards-panel[data-cards-tab] .rs-public-lib-foot button { min-height: 30px !important; font-size: 11.5px !important; padding: 0 12px !important; border-radius: 8px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-form-actions small, #rs-cards-panel[data-cards-tab] .rs-public-lib-foot small, #rs-cards-panel[data-cards-tab] .rs-public-lib-empty { font-size: 11px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-list { max-height: 420px !important; gap: 7px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-row { padding: 9px 12px !important; border-radius: 10px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-kind { font-size: 10px !important; padding: 3px 8px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-copy b { font-size: 12.5px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-lib-copy small { font-size: 11px !important; }
 #rs-cards-panel[data-cards-tab] .rs-public-compose-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
 #rs-cards-panel[data-cards-tab] .rs-public-compose-head b { font-size: 16px; }
 #rs-cards-panel[data-cards-tab] .rs-public-compose-head span { font-size: 12px; color: var(--cp-fg-2); }
