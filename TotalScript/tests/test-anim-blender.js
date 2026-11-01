@@ -12,7 +12,7 @@ const E = require(path.join(ROOT, "src/core/animengine.js"));
 
 // ── engine: smoothing ──
 const walk = E.generate("natural walk cycle, loop", { quality: "balanced" });
-ok("engine VERSION is 2.0.2 and the report carries a smoothness metric", E.VERSION === "2.0.2" && Number.isFinite(walk.report.smoothness) && walk.report.smoothness >= 0 && walk.report.smoothness <= 100, [E.VERSION, walk.report.smoothness]);
+ok("engine VERSION is 2.0.3 and the report carries a smoothness metric", E.VERSION === "2.0.3" && Number.isFinite(walk.report.smoothness) && walk.report.smoothness >= 0 && walk.report.smoothness <= 100, [E.VERSION, walk.report.smoothness]);
 const sm = E.smooth(walk, { strength: 1 });
 ok("smooth() keeps the clip valid, keeps first/last/impact keys and reports what it did", sm.report.ok && sm.keys[0].t === 0 && Math.abs(sm.keys[sm.keys.length - 1].t - sm.duration) < 1e-6 && /smoothed \(strength 1/.test(sm.fixes[sm.fixes.length - 1]), sm.fixes);
 ok("smooth() does not lower smoothness and is deterministic", sm.report.smoothness >= walk.report.smoothness && JSON.stringify(E.smooth(walk, { strength: 1 }).keys) === JSON.stringify(sm.keys), [walk.report.smoothness, sm.report.smoothness]);
@@ -90,103 +90,14 @@ ok("channels() exposes per-joint F-curves for the graph editor", E.channels(walk
 // ── catalogue + main wiring ──
 const animlib = read("src/core/animlib.js"), main = read("src/core/main.js");
 ok("animlib advertises animation_polish + animation_layer after the five engine commands (first five unchanged)", /name: "animation_polish"/.test(animlib) && /name: "animation_layer"/.test(animlib) && animlib.indexOf('name: "animation_polish"') > animlib.indexOf('name: "animation_export_rbxmx"') && /1\.54: animation_polish/.test(animlib));
-ok("main.js routes animation_polish / animation_layer through runAnimEngine and hands session clips to the studio", /"polish", "layer"\]\);/.test(main) && main.includes('if (op === "polish") {') && main.includes('if (op === "layer") {') && main.includes("clips: () => A.animClips"));
+ok("main.js routes animation_polish / animation_layer through runAnimEngine and keeps session clips in A.animClips (2.0.3: no studio window)", /"polish", "layer"\]\);/.test(main) && main.includes('if (op === "polish") {') && main.includes('if (op === "layer") {') && main.includes("A.animClips = A.animClips || {};") && !/TotalAnimStudio|__rsOpenAnimStudio|rs-anim-btn/.test(main));
 
-// ── studio in jsdom ──
-const { JSDOM } = require("jsdom");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { runScripts: "dangerously", pretendToBeVisual: true, url: "https://chatgpt.com/" });
-const w = dom.window; w.requestAnimationFrame = (f) => setTimeout(() => f(performance.now()), 0); w.cancelAnimationFrame = (id) => clearTimeout(id);
-w.HTMLElement.prototype.getBoundingClientRect = function () { return { left: 0, top: 0, width: 800, height: 400, right: 800, bottom: 400 }; };
-Object.defineProperty(w.HTMLElement.prototype, "clientWidth", { get() { return 800; } }); Object.defineProperty(w.HTMLElement.prototype, "clientHeight", { get() { return 400; } });
-const ops = []; w.HTMLCanvasElement.prototype.getContext = function () { return new Proxy({}, { get: (_, k) => (k === "measureText" ? () => ({ width: 10 }) : (...a) => { ops.push(String(k)); return undefined; }), set: () => true }); };
-const errors = []; w.addEventListener("error", (e) => errors.push(String(e.message)));
-const mem = {}; Object.defineProperty(w, "localStorage", { value: { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: (k) => { delete mem[k]; } } });
-w.prompt = () => "0.25"; w.confirm = () => true;
-for (const f of ["src/core/animengine.js", "src/core/animstudio.js"]) { const el = w.document.createElement("script"); el.textContent = read(f); w.document.head.appendChild(el); }
-const AS = w.TotalAnimStudio;
-AS.open({ send: async () => true, runTool: async () => "", studioReady: () => false, engine: () => "", toast: () => {}, diag: () => {}, clips: () => ({ ExtWave: w.TotalAnimEngine.generate("wave emote") }) });
-const host = w.document.getElementById("rs-anim"); const ref = (k) => host.querySelector(`[data-ref="${k}"]`), act = (k) => host.querySelector(`[data-act="${k}"]`);
-const toast = () => host.querySelector(".rsa-toast").textContent;
-const click = (el, o) => el.dispatchEvent(new w.MouseEvent("click", Object.assign({ bubbles: true, cancelable: true }, o || {})));
-const key = (k, o) => host.dispatchEvent(new w.KeyboardEvent("keydown", Object.assign({ key: k, bubbles: true, cancelable: true }, o || {})));
-const studio = read("src/core/animstudio.js"), css = read("overlay.css");
-ok("every data-act button has a doAction case and every data-tool button a clipTool branch (no dead controls)", [...host.querySelectorAll("[data-act]")].every((b) => studio.includes(`case "${b.dataset.act}":`)) && [...host.querySelectorAll("[data-tool]")].every((b) => studio.includes(`kind === "${b.dataset.tool}"`)) && host.querySelectorAll("[data-tool]").length === 7);
-ok("overlay.css styles the new surfaces", [".rsa-tools {", ".rsa-bench {", ".rsa-keystrip {", ".rsa-kchip {", ".rsa-bench-tools {", ".rsa-posetools {", ".rsa-poses {", ".rsa-pose-apply {", ".rsa-layer select", ".rsa-smooth {"].every((s) => css.includes(s)));
-ref("prompt").value = "natural walk cycle, loop"; click(act("generate"));
-const S = AS._state;
-ok("default view is the orbitable 3D viewport with joint + effector handles laid out", S.view === "3d" && S.cams.length === 1 && S.handles.filter((h) => h.kind === "joint").length === 15 && S.handles.filter((h) => h.kind === "effector").length === 4 && ops.includes("arc"));
-const cv = ref("canvas"); const pe = (type, x, y, o) => cv.dispatchEvent(new w.MouseEvent(type, Object.assign({ bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }, o || {})));
-const yaw0 = S.cam.yaw, pitch0 = S.cam.pitch; pe("pointerdown", 400, 200); pe("pointermove", 460, 210); pe("pointerup", 460, 210);
-ok("dragging empty viewport orbits the camera (yaw + pitch change)", S.cam.yaw !== yaw0 && S.cam.pitch !== pitch0, [yaw0, S.cam.yaw, pitch0, S.cam.pitch]);
-const z0 = S.cam.zoom; cv.dispatchEvent(new w.WheelEvent("wheel", { deltaY: -300, bubbles: true, cancelable: true }));
-ok("wheel zooms", S.cam.zoom > z0);
-pe("pointerdown", 400, 200, { shiftKey: true }); pe("pointermove", 420, 230, { shiftKey: true }); pe("pointerup", 420, 230, { shiftKey: true });
-ok("shift-drag pans", S.cam.pan[0] !== 0 || S.cam.pan[1] !== 0, S.cam.pan);
-cv.dispatchEvent(new w.MouseEvent("dblclick", { bubbles: true })); ok("double-click resets the camera", S.cam.yaw === 35 && S.cam.zoom === 1 && S.cam.pan[0] === 0);
-click(host.querySelector('[data-view="front"]')); ok("view chips switch views (front) and keep the pinned front/side labels", S.view === "front" && host.querySelector('[data-view="front"]').classList.contains("on"));
-key("5"); ok("hotkey 5 returns to the 3D view, 2 = front + side", S.view === "3d" && (key("2"), S.view === "both") && (key("5"), true));
-// IK drag on the right hand
-const h = S.handles.find((x) => x.eff === "r_hand"); const shoulderBefore = JSON.stringify(AS.getClip().keys[S.sel].poses.r_shoulder); const hist = S.history.length;
-pe("pointerdown", h.x, h.y); pe("pointermove", h.x + 40, h.y - 60);
-ok("dragging a hand handle runs live IK (ikDrag state, target reached)", S.ikDrag && S.ikDrag.eff === "r_hand" && S.ikDrag.reached, S.ikDrag && [S.ikDrag.reached, S.ikDrag.distance]);
-pe("pointerup", h.x + 40, h.y - 60);
-ok("IK drag commits one undo step, marks the clip edited and revalidates", !S.ikDrag && shoulderBefore !== JSON.stringify(AS.getClip().keys[S.sel].poses.r_shoulder) && AS.getClip().edited && S.history.length === hist + 1 && /IK r hand: target reached/.test(toast()));
-key("z", { ctrlKey: true }); ok("Ctrl+Z undoes the IK drag", shoulderBefore === JSON.stringify(AS.getClip().keys[S.sel].poses.r_shoulder));
-const jh = S.handles.find((x) => x.j === "l_knee"); pe("pointerdown", jh.x, jh.y); pe("pointerup", jh.x, jh.y);
-ok("clicking a joint handle selects that joint", S.selJoint === "l_knee");
-// hotkeys
-const n0 = AS.getClip().keys.length; key("ArrowRight"); key("ArrowRight"); key("i");
-ok("I inserts a key at the playhead and selects it", AS.getClip().keys.length === n0 + 1 && Math.abs(AS.getClip().keys[S.sel].t - S.t) < 1e-6, [n0, AS.getClip().keys.length]);
-key("x"); ok("X deletes the selected key", AS.getClip().keys.length === n0);
-key("D", { shiftKey: true }); ok("Shift+D duplicates the key one frame later", AS.getClip().keys.length === n0 + 1);
-const selBefore = S.sel; key("ArrowUp"); ok("↑ jumps to the next key", S.sel === selBefore + 1 && Math.abs(S.t - AS.getClip().keys[S.sel].t) < 1e-6);
-key("o"); ok("O toggles onion skin", S.onion === false && !ref("onionBtn").classList.contains("on")); key("o");
-key("k"); ok("K toggles auto-key", S.autoKey === true && ref("autoKeyBtn").classList.contains("on")); key("k");
-// 1.64: the dope sheet + graph editor are gone - G now toggles motion arcs; the key strip is the key picker
-ok("no dope sheet / graph editor is left in the Studio (no editor tabs, no editor canvas, no S.editor state)", !host.querySelector("[data-editor]") && !host.querySelector("canvas.rsa-editor") && !("editor" in S) && !/renderGraph|renderDope|graphPts|dopeRows/.test(studio));
-key("g"); ok("G toggles the motion-arc overlay (not a graph editor)", S.arcs === true && ref("arcsBtn").classList.contains("on")); key("g"); ok("G again hides the arcs", S.arcs === false);
-const chips = host.querySelectorAll(".rsa-kchip"); ok("the key strip shows one chip per key with the selected one highlighted", chips.length === AS.getClip().keys.length && host.querySelectorAll(".rsa-kchip.on").length === 1 && chips[S.sel].classList.contains("on"));
-click(chips[2]); ok("clicking a key chip selects that key and moves the playhead there", S.sel === 2 && Math.abs(S.t - AS.getClip().keys[2].t) < 1e-6, [S.sel, S.t]);
-// copy / paste flipped
-S.selJoint = "r_shoulder"; const srcPose = JSON.stringify(AS.getClip().keys[S.sel].poses.r_shoulder);
-key("c", { ctrlKey: true }); ok("Ctrl+C copies the pose and enables Paste", S.clipboard && !ref("pasteBtn").disabled && !ref("pasteFlipBtn").disabled);
-key("ArrowUp"); key("V", { ctrlKey: true, shiftKey: true });
-const tgt = AS.getClip().keys[S.sel].poses; const srcR = JSON.parse(srcPose);
-ok("Ctrl+Shift+V pastes X-flipped onto the next key (r_shoulder lands on l_shoulder, mirrored)", tgt.l_shoulder.rot[0] === srcR.rot[0] && tgt.l_shoulder.rot[2] === -srcR.rot[2] && /Pasted X-flipped/.test(toast()));
-// lock + pose library
-click(act("lockKey")); ok("Lock key flags the key and highlights the button", AS.getClip().keys[S.sel].locked === true && ref("lockBtn").classList.contains("on")); click(act("lockKey"));
-ref("poseName").value = "HeroPose"; click(act("savePose"));
-ok("Save pose stores the selected pose in the library (localStorage) and lists it", host.querySelectorAll("[data-pose]").length === 1 && /HeroPose/.test(mem.rsAnimPoses || ""));
-key("ArrowDown"); click(host.querySelector("[data-pose]")); ok("clicking a library pose applies it to the selected key", /Applied pose "HeroPose"/.test(toast()));
-click(host.querySelector("[data-pose-del]")); ok("the × deletes a library pose", host.querySelectorAll("[data-pose]").length === 0);
-// clip tools
-const results = {};
-for (const t of ["smooth", "plant", "simplify", "reverse", "bake", "offset"]) { const before = AS.getClip().keys.length; click(host.querySelector(`[data-tool="${t}"]`)); results[t] = [before, AS.getClip().keys.length, toast()]; }
-ok("Smooth / Plant feet / Simplify / Reverse / Bake / Cycle offset buttons all act on the clip with a report toast", /smoothed/.test(results.smooth[2]) && /planted feet|already planted/.test(results.plant[2]) && /simplified|No redundant/.test(results.simplify[2]) && /Reversed/.test(results.reverse[2]) && /baked \d+ frames/.test(results.bake[2]) && results.bake[1] > results.bake[0] && /Loop start moved/.test(results.offset[2]), results);
-ok("each tool is one undo step", (key("z", { ctrlKey: true }), AS.getClip().keys.length === results.offset[0]) && (key("z", { ctrlKey: true }), AS.getClip().keys.length === results.bake[0]));
-ok("smoothness readout is shown next to the validation score", /^\d+$/.test(ref("smoothVal").textContent));
-// 1.54 spline interpolation toggle
+// ── engine: spline interpolation (2.0.3: ported from the removed Studio toggle test) ──
 {
-  const before = AS.getClip().interp, b = host.querySelector('[data-tool="interp"]');
-  click(b); const mid = AS.getClip(); click(b); const back = AS.getClip();
-  ok("Eased|Spline toggle flips clip.interp, relabels the button and explains the Studio bake in the toast", mid.interp !== before && back.interp === before && /Spline curves|Eased segments/.test(toast()) && (b.textContent === (back.interp === "spline" ? "Spline" : "Eased")), [before, mid.interp, back.interp, b.textContent]);
-  if (AS.getClip().interp !== "spline") click(b);
-  const sp = AS.getClip(), dense = E.exportKeys(sp);
-  ok("spline clips report the baked export density in the validation panel and export the frame grid", sp.interp === "spline" && new RegExp(`Curves: spline \\(C1\\) - ${sp.keys.length} authored keys, exported .* as ${dense.length} baked frames`).test(ref("report").textContent) && dense.length > sp.keys.length, ref("report").textContent.slice(0, 200));
-  ok("spline sampling is C1 at interior keys (velocity does not jump)", (() => { const k = sp.keys.find((kk, i) => i > 0 && i < sp.keys.length - 1 && kk.tag !== "impact" && kk.tag !== "hold"); if (!k) return true; const e = 0.004, j = "r_shoulder"; const v = (t0, t1) => (E.sampleAt(sp, t1)[j].rot[0] - E.sampleAt(sp, t0)[j].rot[0]) / (t1 - t0); const vl = v(k.t - 2 * e, k.t - e), vr = v(k.t + e, k.t + 2 * e); return Math.abs(vl - vr) < Math.max(4, 0.2 * Math.abs(vl)); })());
+  const sp = E.setInterp(walk, "spline"), dense = E.exportKeys(sp);
+  ok("setInterp('spline') flags the clip and exportKeys bakes a dense frame grid for Studio", sp.interp === "spline" && dense.length > sp.keys.length && E.setInterp(sp, "eased").interp === "eased");
   const studioPayload = E.toBuildArgs(sp, E.defaultRigInfo("R15"));
-  ok("Studio payload for a spline clip is the dense Linear bake with the authored markers kept", studioPayload.keys.length === dense.length && studioPayload.keys.every((k) => k.e[0] === "Linear") && studioPayload.keys.reduce((n, k) => n + k.m.length, 0) === E.toBuildArgs(E.setInterp(sp, "eased"), E.defaultRigInfo("R15")).keys.reduce((n, k) => n + k.m.length, 0));
-  click(b); if (AS.getClip().interp !== before) click(b);
+  ok("build payload for a spline clip is the dense Linear bake", studioPayload.keys.length === dense.length && studioPayload.keys.every((k) => k.e[0] === "Linear"));
 }
-// layer picker
-ref("prompt").value = "natural walk cycle, loop"; click(act("generate")); const pick = ref("layerPick"); const names = [...pick.options].map((o) => o.value);
-ok("Layer picker lists session clips (studio + AI hook) and a file option, never the current clip", names.includes("ExtWave") && names.includes("__file") && !names.includes(AS.getClip().name) && names[0] === "");
-click(act("layer")); ok("Layer without a pick explains what to do", /Pick the clip/.test(toast()));
-pick.value = "ExtWave"; click(act("layer"));
-ok("Layer combines the picked upper body over the current clip's legs (keep-tempo fit by default since 1.58, weight 1)", AS.getClip().layered && AS.getClip().layered.requested === "auto" && AS.getClip().layered.upper === "Wave" && AS.getClip().layered.base === "RealisticWalkLoop" && AS.getClip().name === "RealisticWalkLoop+Wave" && AS.getClip().report.ok, AS.getClip().layered);
-ref("layerFit").value = "loop"; ref("layerWeight").value = "0.5"; key("z", { ctrlKey: true }); click(act("layer"));
-ok("fit + weight controls are honoured", AS.getClip().layered.fit === "loop" && AS.getClip().layered.weight === 0.5);
-ok("API exposes the new studio verbs", ["clipTool", "layerWith", "insertKey", "copyPose", "pastePose", "setView", "resetCamera"].every((k) => typeof AS[k] === "function"));
-ok("no window errors during the whole session", errors.length === 0, errors);
 console.log(`test-anim-blender: ${n} checks, ${failed} failed`);
 process.exit(failed ? 1 : 0);

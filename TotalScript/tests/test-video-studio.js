@@ -92,15 +92,15 @@ ok("brief: the looping animation clip tells the model to loop", /The clip loops:
 // ── 3. wiring ────────────────────────────────────────────────────────────────
 const manifest = JSON.parse(read("manifest.json"));
 const lists = manifest.content_scripts.filter((c) => c.js && c.js.includes("src/core/main.js")).map((c) => c.js);
-ok("manifest: videostudio.js loads after animstudio.js and right before main.js in all 12 provider lists", lists.length === 12 && lists.every((js) => js.indexOf("src/core/videostudio.js") > js.indexOf("src/core/animstudio.js") && js.indexOf("src/core/main.js") === js.indexOf("src/core/videostudio.js") + 1));
+ok("manifest: videostudio.js loads after paint.js + reasoning.js and right before main.js in all 12 provider lists (2.0.3: animstudio.js removed)", lists.length === 12 && lists.every((js) => js.indexOf("src/core/videostudio.js") > js.indexOf("src/core/reasoning.js") && js.indexOf("src/core/reasoning.js") > js.indexOf("src/core/paint.js") && !js.includes("src/core/animstudio.js") && js.indexOf("src/core/main.js") === js.indexOf("src/core/videostudio.js") + 1));
 const codecraft = read("codecraft.html");
-ok("codecraft.html loads videostudio.js after animstudio.js", codecraft.indexOf('<script src="src/core/videostudio.js"></script>') > codecraft.indexOf('<script src="src/core/animstudio.js"></script>'));
+ok("codecraft.html loads videostudio.js after paint.js and never animstudio.js", codecraft.indexOf('<script src="src/core/videostudio.js"></script>') > codecraft.indexOf('<script src="src/core/paint.js"></script>') && !codecraft.includes("animstudio.js"));
 const main = read("src/core/main.js");
-ok("bar: Video button between Animation Studio and Settings (1.90.0: GUI Studio button removed), Ctrl+Shift+V shortcut, opener exported", main.indexOf('id="rs-video-btn"') > main.indexOf('id="rs-anim-btn"') && main.indexOf('id="rs-video-btn"') < main.indexOf('id="rs-settings-btn"') && main.includes("(Ctrl+Shift+V)") && main.includes('root.querySelector("#rs-video-btn")') && main.includes("window.__rsOpenVideoStudio = openVideoStudio;") && /e\.key === "V" \|\| e\.key === "v"/.test(main));
+ok("bar: Video button between Paint and Settings (1.90.0: GUI Studio button removed; 2.0.3: Animation Studio button removed), Ctrl+Shift+V shortcut, opener exported", main.indexOf('id="rs-video-btn"') > main.indexOf('id="rs-paint-btn"') && !main.includes('id="rs-anim-btn"') && main.indexOf('id="rs-video-btn"') < main.indexOf('id="rs-settings-btn"') && main.includes("(Ctrl+Shift+V)") && main.includes('root.querySelector("#rs-video-btn")') && main.includes("window.__rsOpenVideoStudio = openVideoStudio;") && /e\.key === "V" \|\| e\.key === "v"/.test(main));
 ok("opener rides the Paint send path (agent auto-start, images where accepted) and passes engine / canAttachImages / maxImages / toast / diag", /TotalVideoStudio\.open\(\{\s*send: sendPainting,\s*engine: \(\) => activeEngine\(\),\s*canAttachImages:[\s\S]*?maxImages:[\s\S]*?toast:[\s\S]*?diag,\s*\}\)/.test(main));
 const css = read("overlay.css");
 ok("overlay.css: Video Studio window styles + hides the bar while open", ["#rs-video {", "#rs-video.open {", "html.rs-video-open #rs-root { visibility: hidden !important; }", ".rsv-drop {", ".rsv-keygrid {", ".rsv-primary {", "html.rs-light #rs-video .rsv-shell"].every((s) => css.includes(s)));
-ok("overlay.css: bar button styled with the others by nesting the pinned selectors (older pins stay intact)", (css.match(/:is\(:is\(:is\(:is\(#rs-settings-btn, #rs-paint-btn\), #rs-anim-btn\), #rs-enhance-btn\), #rs-video-btn\)/g) || []).length >= 20 && (css.match(/:is\(:is\(:is\(#rs-settings-btn, #rs-paint-btn\), #rs-anim-btn\), #rs-enhance-btn\)/g) || []).length >= 20);
+ok("overlay.css: bar button styled with the others by nesting the pinned selectors (older pins stay intact)", (css.match(/:is\(:is\(:is\(#rs-settings-btn, #rs-paint-btn\), #rs-enhance-btn\), #rs-video-btn\)/g) || []).length >= 20 && (css.match(/:is\(:is\(#rs-settings-btn, #rs-paint-btn\), #rs-enhance-btn\)/g) || []).length >= 20);
 
 // ── 4. window smoke test (jsdom; no canvas) ──────────────────────────────────
 try {
@@ -128,7 +128,7 @@ try {
 // ── 5. release bookkeeping ───────────────────────────────────────────────────
 const readme = read("README.md");
 ok("README: 1.79.0 entry + this test listed", /\*\*1\.79\.0 — Video Studio: show it a video/.test(readme) && readme.includes("test-video-studio.js"));
-ok("version pins 2.0.2", manifest.version === "2.0.2" && /^version = "2\.0\.2"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "2.0.2"'));
+ok("version pins 2.0.3", manifest.version === "2.0.3" && /^version = "2\.0\.3"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "2.0.3"'));
 
 console.log(`\n${pass}/${pass + fail} checks passed`);
 process.exit(fail ? 1 : 0);

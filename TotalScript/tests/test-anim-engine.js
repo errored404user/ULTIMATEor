@@ -110,7 +110,6 @@ function makeCtx(studio) {
   const log = [];
   const ctx = {
     TotalAnimEngine: E, RSAnim, A: { stop: false }, console,
-    TotalAnimStudio: { loaded: [], loadClip(c, meta) { this.loaded.push([c.name, meta]); } },
     document: { createElement: () => ({ click() { log.push("download"); }, set href(v) {}, set download(v) { log.push("file:" + v); } }) },
     URL: { createObjectURL: () => { if (studio.downloadFails) throw new Error("blob blocked"); return "blob:x"; }, revokeObjectURL() {} },
     Blob: function (parts) { this.size = String(parts[0]).length; },
@@ -138,7 +137,7 @@ ok("the generated Luau for rig_info / build is detectable by the scripted Studio
   let out = await c.__run("generate", { prompt: "looping idle with calm breathing", quality: "balanced" });
   ok("dispatcher A: generate = exactly one rig_info trip + one build trip", c.log.filter((l) => l.startsWith("luau:rig_info")).length === 1 && c.log.filter((l) => l.startsWith("luau:build")).length === 1, c.log);
   ok("dispatcher A: report says BUILT, names next steps, never claims an asset id", /BUILT in Studio/.test(out) && /animation_preview/.test(out) && /animation_refine/.test(out) && !/asset ?id\s*[:=]\s*\d/i.test(out), out.slice(0, 400));
-  ok("dispatcher A: the overlay receives the clip flagged as built with the rig info", c.TotalAnimStudio.loaded.length === 1 && c.TotalAnimStudio.loaded[0][1].built === true && c.TotalAnimStudio.loaded[0][1].rigInfo.rigType === "R15");
+  ok("dispatcher A: the built clip is remembered for the session (A.animClips + A.animLast; 2.0.3: no studio overlay)", Object.keys(c.A.animClips).length === 1 && c.A.animLast === Object.keys(c.A.animClips)[0] && typeof c.TotalAnimStudio === "undefined");
   ok("dispatcher A: the clip is remembered as the last one", c.__A.animLast && c.__A.animClips[c.__A.animLast]);
   // validate / export on the remembered clip
   out = await c.__run("validate", {});
@@ -160,13 +159,13 @@ ok("the generated Luau for rig_info / build is detectable by the scripted Studio
   // G: provider/Studio unavailable → generated, validated, NOT built, honest
   c = makeCtx({ rig: R15RIG, builds: [], offline: true });
   out = await c.__run("generate", { prompt: "heavy two-handed slam" });
-  ok("dispatcher G: offline → clip generated + validated, explicitly NOT built, overlay still gets it", /NOT built/.test(out) && /STUDIO_BRIDGE_OFFLINE/.test(out) && !/BUILT in Studio/.test(out) && c.TotalAnimStudio.loaded.length === 1 && !c.TotalAnimStudio.loaded[0][1].built, out);
+  ok("dispatcher G: offline → clip generated + validated, explicitly NOT built, clip still remembered, no Animation Studio steer", /NOT built/.test(out) && /STUDIO_BRIDGE_OFFLINE/.test(out) && !/BUILT in Studio/.test(out) && !/Animation Studio|Ctrl\+Shift\+K/.test(out) && /animation_build/.test(out) && Object.keys(c.A.animClips).length === 1, out);
   out = await c.__run("export_rbxmx", {});
   ok("dispatcher G: export still works offline (file path)", /Saved .*\.rbxmx/.test(out), out);
   // G: Studio refuses the build (wrong rig) → ERROR, clip kept for the overlay
   c = makeCtx({ rig: R15RIG, builds: [], buildFails: "only 3 of the clip's 15 bones exist on rig 'Rig' (wrong rig type?)" });
   out = await c.__run("generate", { prompt: "run cycle" });
-  ok("dispatcher G: a refused build is an ERROR naming the Studio reason, not a success", /^ERROR calling 'animation_generate'/.test(out) && /wrong rig type/.test(out) && c.TotalAnimStudio.loaded.length === 1 && !c.TotalAnimStudio.loaded[0][1].built, out);
+  ok("dispatcher G: a refused build is an ERROR naming the Studio reason, not a success", /^ERROR calling 'animation_generate'/.test(out) && /wrong rig type/.test(out) && Object.keys(c.A.animClips).length === 1, out);
   // G: invalid transforms never reach Studio
   c = makeCtx({ rig: R15RIG, builds: [] });
   const bad = JSON.parse(JSON.stringify(wave)); bad.keys[1].poses.r_shoulder = { rot: [NaN, 0, 0] };
@@ -283,7 +282,7 @@ ok("the generated Luau for rig_info / build is detectable by the scripted Studio
     const desc = E.describeSet(set);
     ok("describeSet reports every clip, the shared character and the fade advice", /ZombieIdleLoop/.test(desc) && /ZombieWalkLoop/.test(desc) && /Play\(/.test(desc) && /character/i.test(desc), desc.slice(0, 400));
     const main = read("src/core/main.js");
-    for (const s of ['"build", "set", "compatibility", "polish", "layer"]', 'op === "set"', 'op === "compatibility"', "function animBuildSet(", "function animPersonaSeed(", "E.splitSet(", "TotalAnimStudio.loadSet"]) ok("main.js set wiring: " + s, main.includes(s));
+    for (const s of ['"build", "set", "compatibility", "polish", "layer"]', 'op === "set"', 'op === "compatibility"', "function animBuildSet(", "function animPersonaSeed(", "E.splitSet(", "animRemember(c)"]) ok("main.js set wiring: " + s, main.includes(s));
     const animlib = read("src/core/animlib.js");
     ok("catalogue advertises animation_set + animation_compatibility", /name: "animation_set"/.test(animlib) && /name: "animation_compatibility"/.test(animlib));
     const outSet = await c.__run("set", { prompts: ["idle", "walk", "jump"], rig: "R15" });

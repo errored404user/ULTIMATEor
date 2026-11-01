@@ -51,7 +51,7 @@
     rail_grind_setup: "execute_luau",
     launch_pad_create: "jump_pad / speed_pad",
     checkpoint_track_build: "spawn_location_create per checkpoint + script_create",
-    character_emote_play: "animation_motion_preset or the Animation Studio",
+    character_emote_play: "animation_motion_preset",
     ik_control_setup: "execute_luau (IKControl instance)",
     camera_shake_preset: "camera_shake / screen_shake",
     ragdoll_death_enable: "ragdoll_make + script_create (Humanoid.Died)",

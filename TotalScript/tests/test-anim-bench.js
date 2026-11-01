@@ -13,7 +13,7 @@ const rig = E.defaultRigInfo("R15");
 
 // ── engine: breakdown / tween machine ──
 const potion = E.generate("drink a potion");
-ok("engine VERSION is 2.0.2 and exposes the workbench API", E.VERSION === "2.0.2" && ["breakdown", "holdKey", "nudgeKey", "easeAll", "EASE_PRESETS", "overlap", "setMarker", "removeMarker", "markers", "arcs", "timing"].every((k) => k in E), E.VERSION);
+ok("engine VERSION is 2.0.3 and exposes the workbench API", E.VERSION === "2.0.3" && ["breakdown", "holdKey", "nudgeKey", "easeAll", "EASE_PRESETS", "overlap", "setMarker", "removeMarker", "markers", "arcs", "timing"].every((k) => k in E), E.VERSION);
 const mid = (potion.keys[1].t + potion.keys[2].t) / 2;
 const bd0 = E.breakdown(potion, mid, 0), bd1 = E.breakdown(potion, mid, 1), bd5 = E.breakdown(potion, mid, 0.5);
 ok("breakdown inserts ONE key tagged 'breakdown' between the neighbours and keeps the clip valid + ordered", bd5.inserted && bd5.clip.keys.length === potion.keys.length + 1 && bd5.clip.keys[bd5.index].tag === "breakdown" && ordered(bd5.clip) && bd5.clip.report.errors === 0, [bd5.index, bd5.clip.keys.length]);
@@ -79,83 +79,6 @@ const even = Object.assign({}, potion, { loop: false, keys: [0, 0.4, 0.8, 1.2, 1
 const tmE = E.timing(even), tmH = E.timing(h.clip);
 ok("timing() counts holds / breakdowns / markers / impacts and flags evenly spaced keys on one-shots", tmH.holds === E.timing(potion).holds + 1 && tmE.notes.some((x) => x.kind === "even") && E.timing(mk).markers === 3 && Array.isArray(tmE.gaps), tmE.notes.map((x) => x.kind));
 ok("timing() does not nag a loop for being evenly spaced (cycles are)", !E.timing(walk).notes.some((x) => x.kind === "even"));
-
-// ── Studio in jsdom ──
-const { JSDOM } = require("jsdom");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { runScripts: "dangerously", pretendToBeVisual: true, url: "https://chatgpt.com/" });
-const w = dom.window; w.requestAnimationFrame = (f) => setTimeout(() => f(performance.now()), 0); w.cancelAnimationFrame = (id) => clearTimeout(id);
-w.HTMLElement.prototype.getBoundingClientRect = function () { return { left: 0, top: 0, width: 800, height: 400, right: 800, bottom: 400 }; };
-Object.defineProperty(w.HTMLElement.prototype, "clientWidth", { get() { return 800; } }); Object.defineProperty(w.HTMLElement.prototype, "clientHeight", { get() { return 400; } });
-w.HTMLCanvasElement.prototype.getContext = function () { return new Proxy({}, { get: (_, k) => (k === "measureText" ? () => ({ width: 10 }) : () => undefined), set: () => true }); };
-const errors = []; w.addEventListener("error", (e) => errors.push(String(e.message)));
-const mem = {}; Object.defineProperty(w, "localStorage", { value: { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: (k) => { delete mem[k]; } } });
-w.prompt = () => "0.25"; w.confirm = () => true;
-for (const f of ["src/core/animengine.js", "src/core/animstudio.js"]) { const el = w.document.createElement("script"); el.textContent = read(f); w.document.head.appendChild(el); }
-const AS = w.TotalAnimStudio; const diags = [];
-AS.open({ send: async () => true, runTool: async () => "", studioReady: () => false, engine: () => "", toast: () => {}, diag: (ev, d) => diags.push(ev), clips: () => ({}) });
-const host = w.document.getElementById("rs-anim"); const ref = (k) => host.querySelector(`[data-ref="${k}"]`), act = (k) => host.querySelector(`[data-act="${k}"]`);
-const toast = () => host.querySelector(".rsa-toast").textContent;
-const click = (el, o) => el.dispatchEvent(new w.MouseEvent("click", Object.assign({ bubbles: true, cancelable: true }, o || {})));
-const key = (k, o) => host.dispatchEvent(new w.KeyboardEvent("keydown", Object.assign({ key: k, bubbles: true, cancelable: true }, o || {})));
-const studio = read("src/core/animstudio.js"), css = read("overlay.css");
-const S = AS._state;
-
-ok("the dope sheet and graph editor are gone: no editor tabs, no editor canvas, no graph/dope code, no G-graph hotkey", !host.querySelector("[data-editor]") && !host.querySelector("canvas.rsa-editor") && !/renderGraph|renderDope|graphPts|dopeRows|rsa-edtabs/.test(studio) && !/dope sheet \/ graph editor/i.test(studio.replace(/replaces the dope sheet \+ graph editor/, "")));
-ok("the workbench sits where the editors were (same data-ref=editor + toggleEditor) and is empty-state before a clip", ref("editor").classList.contains("rsa-bench") && ref("keystrip") && /Generate a clip/.test(ref("keystrip").textContent) && act("breakdown").disabled && act("hold").disabled && ref("markerName").disabled);
-ok("every workbench control has a doAction case + a handler; CSS covers the bench", ["breakdown", "hold", "nudgeL", "nudgeR", "marker", "overlap", "retime", "arcs"].every((a) => act(a) && studio.includes(`case "${a}":`)) && [".rsa-bench {", ".rsa-bench[hidden] { display: none !important; }", ".rsa-keystrip {", ".rsa-kchip {", ".rsa-kchip.on {", ".rsa-bench-tools {", ".rsa-bt {", ".rsa-markers {", ".rsa-marker {", ".rsa-timing {"].every((s) => css.includes(s)));
-ok("six Ease-all preset chips rendered from the engine table", host.querySelectorAll("[data-ease-all]").length === 6 && [...host.querySelectorAll("[data-ease-all]")].every((b) => E.EASE_PRESETS[b.getAttribute("data-ease-all")]));
-ok("the tips line teaches the new hotkeys and no longer mentions a graph editor", /<kbd>B<\/kbd> breakdown/.test(studio) && /<kbd>H<\/kbd> hold/.test(studio) && /<kbd>G<\/kbd> motion arcs/.test(studio) && !/graph editor · <kbd>Ctrl\+Z<\/kbd>/.test(studio));
-
-ref("prompt").value = "drink a potion"; click(act("generate"));
-const c0 = AS.getClip(); const n0 = c0.keys.length;
-ok("after generating, the key strip lists every key and the timing read shows counts", host.querySelectorAll(".rsa-kchip").length === n0 && /keys/.test(ref("timing").textContent) && /impacts/.test(ref("timing").textContent) && !act("breakdown").disabled);
-click(host.querySelectorAll(".rsa-kchip")[1]); ok("clicking a key chip selects the key (chip highlighted, playhead moved, inspector follows)", S.sel === 1 && host.querySelectorAll(".rsa-kchip")[1].classList.contains("on") && Math.abs(S.t - c0.keys[1].t) < 1e-6);
-// breakdown at the playhead between key 1 and 2 with bias 25%
-AS._scrub((c0.keys[1].t + c0.keys[2].t) / 2); ref("bias").value = "25"; ref("bias").dispatchEvent(new w.Event("input", { bubbles: true }));
-ok("the bias slider echoes its value", ref("biasVal").textContent === "25%");
-click(act("breakdown"));
-ok("Breakdown inserts a 'breakdown' key at the playhead, selects it, toasts the favour, and the chip shows ~", AS.getClip().keys.length === n0 + 1 && AS.getClip().keys[S.sel].tag === "breakdown" && /favouring the previous pose \(25%\)/.test(toast()) && host.querySelector(".rsa-kchip.on i").textContent === "~" && S.history.length >= 1, [toast(), S.sel]);
-const bdT = AS.getClip().keys[S.sel].t;
-// hold 3 frames
-ref("holdFrames").value = "3"; click(act("hold"));
-ok("Hold adds a moving hold 3 frames after the selected key and selects the new hold key", AS.getClip().keys.length === n0 + 2 && AS.getClip().keys[S.sel].tag === "hold" && Math.abs(AS.getClip().keys[S.sel].t - (bdT + 3 / AS.getClip().fps)) < 2e-3 && /Moving hold/.test(toast()), [toast(), AS.getClip().keys.map((k) => k.t)]);
-// nudge
-const tN = AS.getClip().keys[S.sel].t; click(act("nudgeR"));
-ok("Nudge ▶ moves the selected key one frame later (or explains it cannot)", Math.abs(AS.getClip().keys[S.sel].t - tN - 1 / AS.getClip().fps) < 2e-3 || /cannot move/.test(toast()), [tN, AS.getClip().keys[S.sel].t, toast()]);
-key(","); key(","); ok("',' nudges back a frame (hotkey)", AS.getClip().keys[S.sel].t <= tN + 1e-6 && ordered(AS.getClip()));
-// markers
-ref("markerName").value = "sip=potion"; click(act("marker"));
-ok("Marker adds a KeyframeMarker to the selected key, shows the chip + flag, and toasts the Studio signal name", AS.getClip().keys[S.sel].markers.length === 1 && AS.getClip().keys[S.sel].markers[0].name === "sip" && AS.getClip().keys[S.sel].markers[0].value === "potion" && host.querySelector(".rsa-marker") && /GetMarkerReachedSignal\("sip"\)/.test(toast()) && host.querySelector(".rsa-kchip.on em") && ref("markerName").value === "", toast());
-ref("markerName").value = "sfx"; ref("markerName").dispatchEvent(new w.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-ok("Enter in the marker box adds a second marker", AS.getClip().keys[S.sel].markers.length === 2 && host.querySelectorAll(".rsa-marker").length === 2);
-click(host.querySelector('[data-marker-del="sfx"]'));
-ok("the × on a marker chip removes that marker", AS.getClip().keys[S.sel].markers.length === 1 && host.querySelectorAll(".rsa-marker").length === 1);
-ok("the clip's Studio export now carries the marker", E.toStudio(AS.getClip(), rig).keyframes[S.sel].markers.some((m) => m.name === "sip" && m.value === "potion"));
-// ease all
-click(host.querySelector('[data-ease-all="mechanical"]'));
-ok("Ease all → Mechanical sets every key Linear, lights the chip and toasts the preset note", AS.getClip().keys.every((k) => k.ease[0] === "Linear") && host.querySelector('[data-ease-all="mechanical"]').classList.contains("on") && /Mechanical/.test(toast()));
-click(host.querySelector('[data-ease-all="snappy"]')); ok("another preset replaces it", AS.getClip().easePreset === "snappy" && !host.querySelector('[data-ease-all="mechanical"]').classList.contains("on"));
-// overlap
-const beforeOv = JSON.stringify(AS.getClip().keys.map((k) => [k.poses.r_elbow, k.poses.neck, k.poses.r_wrist])); ref("lagFrames").value = "2"; click(act("overlap"));
-ok("Overlap applies follow-through (child joints change, counter shows 2f)", JSON.stringify(AS.getClip().keys.map((k) => [k.poses.r_elbow, k.poses.neck, k.poses.r_wrist])) !== beforeOv && AS.getClip().overlapFrames === 2 && /2f/.test(ref("timing").textContent) && /Overlap/.test(toast()));
-// retime
-const dur0 = AS.getClip().duration; ref("retimeTo").value = "4"; click(act("retime"));
-ok("Retime stretches the clip to 4 s keeping key ratios", Math.abs(AS.getClip().duration - 4) < 1e-6 && Math.abs(AS.getClip().keys[1].t / 4 - c0.keys[1].t / dur0) < 0.02 && /retimed to 4.00s/.test(toast()) && ref("retimeTo").value === "", [dur0, AS.getClip().duration, toast()]);
-ref("retimeTo").value = "0"; click(act("retime")); ok("an invalid length is refused with a hint", /new length in seconds/.test(toast()) && Math.abs(AS.getClip().duration - 4) < 1e-6);
-// arcs
-click(act("arcs")); ok("Arcs toggles the viewport motion trails (button lit, state on, toast)", S.arcs === true && ref("arcsBtn").classList.contains("on") && /Motion arcs/.test(toast()));
-key("g"); ok("G hotkey turns the arcs off again", S.arcs === false && !ref("arcsBtn").classList.contains("on"));
-// hotkeys B / H
-const nB = AS.getClip().keys.length; AS._scrub((AS.getClip().keys[0].t + AS.getClip().keys[1].t) / 2); key("b");
-ok("B inserts a breakdown at the playhead", AS.getClip().keys.length === nB + 1 && AS.getClip().keys[S.sel].tag === "breakdown");
-const nH = AS.getClip().keys.length; key("h"); ok("H adds a hold after the selected key", AS.getClip().keys.length === nH + 1 && AS.getClip().keys[S.sel].tag === "hold");
-// undo through the stack
-const nU = AS.getClip().keys.length; key("z", { ctrlKey: true }); ok("Ctrl+Z undoes the last workbench edit", AS.getClip().keys.length === nU - 1);
-// collapse / expand
-click(act("toggleEditor")); ok("the toggle hides the workbench; toggling again shows it with the strip intact", ref("editor").hidden && (click(act("toggleEditor")), !ref("editor").hidden && host.querySelectorAll(".rsa-kchip").length === AS.getClip().keys.length));
-ok("workbench actions are reported through diag", ["animStudio.bench.breakdown", "animStudio.bench.hold", "animStudio.bench.marker", "animStudio.bench.easeAll", "animStudio.bench.overlap"].every((d) => diags.includes(d)), diags.filter((d) => /bench/.test(d)));
-ok("the clip still validates and exports after the whole session (no NaNs, ordered keys)", AS.getClip().report && ordered(AS.getClip()) && !/NaN/.test(E.toRbxmx(AS.getClip(), rig)));
-ok("no window errors during the workbench session", errors.length === 0, errors);
 
 // ── README / help ──
 const readme = read("README.md");

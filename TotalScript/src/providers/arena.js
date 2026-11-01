@@ -953,7 +953,7 @@ const RSProvider = (() => {
   // reallyVisible() ignores display:none / detached closed dialogs, so a chat page
   // with no open modal never matches. Our own UI lives in #rs-root and is skipped.
   // 2.0.1: TotalScript's own windows (Templates / Explorer, Paint, Video,
-  // Enhancer, Animation Studio, template editors) are role="dialog" too and live
+  // Enhancer, template editors) are role="dialog" too and live
   // OUTSIDE #rs-root (document root / body). They carry data-rs-owned; counting
   // them here made main.js hide the bar + the cards panel every placement pass
   // the moment the Templates window opened on Arena - only the window shell

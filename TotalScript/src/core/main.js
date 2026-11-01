@@ -1068,7 +1068,7 @@
     quality:{title:"Quality Gate (1.47 quality pack)",summary:"A measurable finish line for builds, UI, lighting and scripts: style_guide gives the art direction in numbers, brief_set stores the brief, quality_audit scores the place 0-100 with exact fix commands, quality_fix applies the mechanical ones, and Totality mode does not hand off below 85.",details:["style_guide {genre} (medieval, fantasy, scifi, cyberpunk, horror, cozy, nature, desert, winter, tropical, city, cartoon / simulator / obby, candy, industrial, underwater, space - aliases like castle, neon, forest, snow work) returns a palette (6 roles as hex + Color3), materials per surface, a full lighting recipe, UI tokens for design_tokens_set, real-scale notes, motifs, VFX / SFX beats, an avoid list and a 5-step recipe. It needs no Studio.","brief_set {title, genre, palette, scale, must_have, avoid} stores the brief in ServerStorage._TotalBrief (palette filled from the guide when omitted); brief_get reads it back when a project continues. style_lighting_apply {genre} writes the recipe into Lighting (Atmosphere, Bloom, ColorCorrection) in one undoable step.","quality_audit {path?, scope?} finds default grey Plastic, one-material / two-colour builds, plain-block-only builds, unanchored parts, Models without PrimaryPart, Part / Model names, loose parts, parts off the brief palette, untouched Lighting, white 1px-border Frames, default fonts, fixed 14px text, Offset-only roots, containers without layouts, wait() / LocalScript-in-server / LocalPlayer-on-server / DataStore-without-pcall / --!strict / print() issues. Each finding carries severity, examples and the command that fixes it; the score is 100 minus weighted deductions, pass is >= 85.","quality_fix {fixes: anchor | primary_part | names | ui} anchors free parts, sets the largest part as PrimaryPart, renames Part -> BrickWall_3 by material + role, strips legacy borders, adds UICorner, TextScaled + UITextSizeConstraint and replaces default fonts; dry_run:true only reports. Colours, materials, lighting and layout stay design decisions."],howTo:["style_guide {genre} before the first build / UI / lighting command","brief_set once; brief_get when continuing","quality_audit before every hand-off; quality_fix, then re-audit until >= 85 and report the score"]},
     bench:{title:"Benchmark (1.99.6 bench pack)",summary:"An engineering scorecard next to the Quality Gate: bench_targets prints the rubric (security 30 / performance 25 / robustness 20 / architecture 15 / UI wiring 10, 33 checks, each with its weight and fix command), bench_run scores the place 0-100 with a grade (S/A/B/C/D) and findings that name the exact fix, and bench_history keeps the last 12 runs so every re-run reports its delta. Totality mode will not hand off remotes / saves / modules / blueprints without a bench_run (the SYSTEMS gate).",details:["Security: remotes with no handler or no argument validation, server code that trusts a client damage / amount, DataStoreService in a LocalScript, require(<asset id>), loadstring / getfenv, token-shaped secrets, HttpService outside pcall.","Performance: while true do wait() loops, GetDescendants inside RenderStepped / Heartbeat, Touched without a debounce, particle / shadow-light / part / union / decal budgets, one Script per part.","Robustness: DataStore calls without pcall, writes without BindToClose or a PlayerRemoving save, many connections and no cleanup, stub / disabled scripts, print spam.","Architecture: _G / shared, no ModuleScripts, remotes still named RemoteEvent, LocalScripts in ServerScriptService, wrong-side APIs, scripts over 700 lines.","UI wiring: buttons no LocalScript references, fixed TextSize, offset-only root frames.","bench_run is read-only apart from ServerStorage._TotalBench (the history). path scopes it to one container / GUI / script, suite to one category; label tags the run; save:false skips the history."]},
     reasoning:{title:"Reasoning effort (Settings → Reasoning effort)",summary:"Five levels - Low, Medium (default), High, Max, Ultimate - set how hard the AI thinks before it acts, through the prompt only. The level adds a matching REASONING EFFORT block to the system prompt (plan first, self-review loops, read-back and proof before 'done' grow with the level) and, from High up, TotalScript itself gates the final answer: a run that changed things must read them back (High+), gets one final self-review (Max+), and must playtest / console-check / audit what it built (Ultimate). On top of the level you can pin individual behaviours on (boosts), add focus lenses (performance, security, mobile, multiplayer, clean code, minimal changes, explain, ask-first) and one standing rule. TotalScript never changes the AI site's model or think-more switch - your model stays as you set it.",details:["Stored as rsThinkingLevel (low | mid | high | max | ultimate); boosts, focus lenses and the standing rule live in rsEffortExtras = {boost:{}, focus:[], rule:\"\"}.","Boosts: click any behaviour chip in the effort profile (Plan, Critique, Loops, Read-back, Proof, Audit, Review, Research) to pin it on at every level - e.g. Medium with Proof pinned still playtests before done. Boosted read-back / proof / review also arm the evidence gate.","Focus lenses: Performance, Security, Mobile & UI, Multiplayer, Clean code, Minimal changes, Explain decisions, Ask before destructive - each adds a precise checklist to every review pass.","Standing rule: one line of your own (\"Always use typed Luau and ModuleScripts\") injected with the effort block on every turn.","Prompt-only since 1.63: TotalScript never switches the site's model or think mode (ChatGPT Instant / Thinking / Pro, Gemini, DeepSeek, Claude, CodeCraft reasoning_effort). Whatever you pick on the site stays. \"What the AI is told (advanced)\" shows the exact block that is injected.","Picking a work mode in the popup no longer overwrites the effort level."]},
-    guibrief:{title:"GUI brief (custom message for GUI requests)",summary:"When your own message asks for a GUI (make a shop UI, redesign my HUD, build this menu like the screenshot) TotalScript sends the AI an 'TotalScript GUI BRIEF' message right after it (appended to the first command result, or as its own message when the AI answers without acting - your message itself is never edited): a six-step build protocol (understand, art direction with tokens, one-shot ui_build_spec, wiring with remotes, verification with ui_layout_report + screenshots + quality_audit, hand-off). If a reference image is attached or mentioned, a REFERENCE READ step makes the AI measure the image (regions as % of the screen, hex palette, typography, states) and rebuild it 1:1, then compare its screenshot against the reference until they match. Editing an existing GUI switches to a read-first protocol (ui_export_spec, change only what was asked).",details:["Toggle: TotalScript menu → GUI brief (on by default, saved as rsGuiBrief). Off = your message goes out untouched.","Detection is local and instant: GUI nouns (gui, ui, hud, menu, shop, inventory, popup, settings menu, health bar...) plus a build / edit verb; questions ('how do I make a gui?'), pure scripting requests and messages that say 'no gui' are left alone.","Reference images: attach the screenshot in the chat as usual (ChatGPT, Claude, Gemini... any multimodal provider); TotalScript detects the attachment thumbnail in the composer or words like 'like this screenshot', 'from the image', '1:1', 'mockup'.","The brief is a normal visible message in the chat; Paint / Animation Studio hand-offs are never double-briefed."]},
+    guibrief:{title:"GUI brief (custom message for GUI requests)",summary:"When your own message asks for a GUI (make a shop UI, redesign my HUD, build this menu like the screenshot) TotalScript sends the AI an 'TotalScript GUI BRIEF' message right after it (appended to the first command result, or as its own message when the AI answers without acting - your message itself is never edited): a six-step build protocol (understand, art direction with tokens, one-shot ui_build_spec, wiring with remotes, verification with ui_layout_report + screenshots + quality_audit, hand-off). If a reference image is attached or mentioned, a REFERENCE READ step makes the AI measure the image (regions as % of the screen, hex palette, typography, states) and rebuild it 1:1, then compare its screenshot against the reference until they match. Editing an existing GUI switches to a read-first protocol (ui_export_spec, change only what was asked).",details:["Toggle: TotalScript menu → GUI brief (on by default, saved as rsGuiBrief). Off = your message goes out untouched.","Detection is local and instant: GUI nouns (gui, ui, hud, menu, shop, inventory, popup, settings menu, health bar...) plus a build / edit verb; questions ('how do I make a gui?'), pure scripting requests and messages that say 'no gui' are left alone.","Reference images: attach the screenshot in the chat as usual (ChatGPT, Claude, Gemini... any multimodal provider); TotalScript detects the attachment thumbnail in the composer or words like 'like this screenshot', 'from the image', '1:1', 'mockup'.","The brief is a normal visible message in the chat; Paint / Video Studio hand-offs are never double-briefed."]},
     gfx:{title:"Thumbnail & Icon Studio (gfx pack)",summary:"Stage, light, pose and photograph real game thumbnails (1920x1080) and icons (512x512) inside Roblox Studio - the finished PNG is cropped, downloaded and attached to the chat - instead of a static AI image you cannot edit.",details:["gfx_stage_create {style, kind} builds a cyclorama stage far above the map (floor, cove, backdrop, Key/Fill/Rim SpotLights) and applies the style lighting + post stack: cinematic, cartoony, horror, neon, clean or chroma (green screen). Lighting and the camera are snapshotted so gfx_teardown leaves no trace.","gfx_subject_add {source, pose, face, slot} puts a character on stage: 'dummy' (R15), 'r6', 'player:USERID' / 'user:Name' (the real avatar) or any model path. Poses: hero, point, jump, wave, scared, victory, run, think, sit, dab, fight, crossed_arms. Faces on dynamic heads: happy, shocked, angry, scared, smirk, determined, laughing, wink (face_id for classic decal heads). gfx_pose re-poses; gfx_prop_add floats a glowing sword / pet / chest beside the subject.","gfx_camera {preset} frames the shot: hero_low, three_quarter, front, closeup, top_down, dutch, wide, icon (+ fov / pitch / yaw / roll / distance_scale). gfx_overlay {title, subtitle, badge, logo_image} adds a huge outlined gradient title in the style font with 16:9 / 1:1 masks, safe-area and thirds guides. gfx_fx adds sparkles / embers / smoke / confetti / snow / magic / rays; gfx_lighting fine-tunes bloom, saturation, DOF, fog, time and the rig lights.","gfx_capture photographs the viewport through the Studio MCP, hides the guides, crops to the aspect box and returns the PNG (thumbnail 1920x1080, icon 512x512 or custom) - downloaded by the browser and attached to the chat so the model can judge and iterate. gfx_brief writes an art-director brief, an image-generation prompt and a CTR checklist for chats that can paint.","Workflow: gfx_brief -> gfx_stage_create -> gfx_subject_add (+ gfx_prop_add) -> gfx_overlay -> gfx_fx -> gfx_camera -> gfx_capture (judge, iterate) -> gfx_teardown. Maximise the 3D viewport first: the capture is only as sharp as the viewport."]},
     blueprints:{title:"System Blueprints (built-in skills)",summary:"Twelve production-grade game systems that install into the place as real code - shared Core (Signal bus, remotes, DataStore profiles with session locks, receipts, leaderstats, notifications) + a Config ModuleScript, a server Service and a client script per system - then verify themselves in edit mode. Lemonade-style 'complete systems', but built in, inspectable and yours.",details:["blueprint_list shows the catalogue: currency (wallet + data profiles), shop (items, game passes, dev-product packs), pets (eggs, rarity, luck, following pets), combat (weapons, hitboxes, damage pipeline, statuses), rounds (intermission / round / results loop with maps), checkpoints (obby stages + skip product), quests (Bus-driven daily objectives), tycoon (plots, buttons, droppers, collector), leaderboards (OrderedDataStore boards), admin (ranks + chat commands), anticheat (speed / fly / teleport rules), sprint (stamina).","blueprint_install {name:\"pets\"} installs dependencies first (pets -> currency), writes ReplicatedStorage.Total_Systems.<System>.{Config,Remotes}, ServerScriptService.Total_Systems.<System>.Service and StarterPlayerScripts.Total_Systems.<System>Client, generates weapon Tools / a demo course / plots / boards / an arena when the place has none, then runs blueprint_verify. name:\"all\" installs everything; config:{...} seeds the Config.","blueprint_configure {name, config} deep-merges into the Config module (readable Lua table, Total_ConfigJSON attribute) and re-verifies; blueprint_verify compiles Config + Service against Core in edit mode and runs each Service's SelfTest (shop validation, pet odds, cooldowns, round state machine, quest progress, tycoon gates, anticheat rules...); blueprint_status reports versions, remotes and missing dependencies; blueprint_remove uninstalls without touching player data.","Systems talk through Core.Bus topics (Combat.Kill -> Currency reward + Quests + Leaderboards; Checkpoints.Reached -> reward; Round.Won -> reward + quest) so any subset works together. Extend them with script_read / multi_edit on the Service, or build UI on their remotes with ui_screen_generate.","Workflow for a 'make me a pet simulator' request: blueprint_install {name:[\"currency\",\"pets\",\"shop\",\"quests\",\"leaderboards\"]} -> blueprint_configure the eggs / prices -> ui_screen_generate {kind:\"shop\"} wired to the Hatch / Purchase remotes -> start_stop_play + get_console_output -> blueprint_status."]},
     projectindex:{title:"Project Index (codebase awareness)",summary:"TotalScript keeps a map of the whole place inside the place (ServerStorage.Total_ProjectIndex): every script hashed and outlined (functions + lines, requires resolved to modules, remotes fired / handled, services, DataStores, tags, TODOs, --!strict), the require graph with hubs / orphans / cycles, remote producers vs consumers with mismatch detection, the folder layout, the coding conventions in use and the installed blueprints. The compact PROJECT MAP is re-injected into the chat so the model works from a map instead of re-reading every script - Lemonade-style codebase awareness without a hosted account.",details:["project_index_build scans the place (or a scope), writes the index and returns added / modified / removed vs the previous index plus the PROJECT MAP text. Run it first on an unknown place and again after big changes; dry_run:true only computes.","project_index_summary is the cheap read: counts, layout per service, the style guide to match (indent, PascalCase / camelCase, strict ratio, task.wait vs wait, game:GetService), hubs, orphans, cycles, remotes with producer -> consumer, mismatches, DataStores, tags, TODO files, largest scripts, installed blueprints, and whether the index is stale.","project_index_search {query, kind} finds functions / exports / require targets / remote names / services / DataStore names / tags / paths / TODOs with script path + line, so you script_read a range instead of a whole file. project_index_script {path} gives one script's outline, requires + required_by, remote partners (who handles what it fires) and stale:true when the source changed since the index.","project_index_graph {kind:\"requires\"} returns the dependency graph (edges, hubs, orphans, cycles, unresolved requires; root + depth for a neighbourhood); {kind:\"remotes\"} the remote matrix with mismatches (fired but never handled, handled but never fired, referenced without an instance, unused instance) and handlers on the wrong side.","project_index_changes rehashes without writing: added / modified / removed scripts, and per modified script the line delta, new / removed functions and whether requires or remotes changed - use it to summarise your own edits or before trusting an old map.","Read before you write: on an existing place start with project_index_build (or project_index_summary when an index exists and is current), match the conventions it reports, wire new scripts into existing hubs and remotes instead of duplicating them, then rebuild the index at the end so the next session starts from an accurate map."]},
@@ -4288,8 +4288,9 @@
   // extension (no model keyframing), then ONE `rig_info` trip reads the real
   // rig (type + bones) and ONE `build` trip writes the KeyframeSequence with
   // exact per-joint CFrames (C0-conjugated, so R6/R15/custom rigs are right).
-  // Studio offline → the clip is still generated + validated and handed to the
-  // Animation Studio overlay (export .rbxmx there); nothing is pretended built.
+  // Studio offline → the clip is still generated + validated (animation_export_rbxmx
+  // can still write it out); nothing is pretended built. 2.0.3: the Animation
+  // Studio overlay is gone - clips live in A.animClips for this session only.
   const ANIM_ENGINE_OPS = new Set(["generate", "refine", "sequence", "validate", "export_rbxmx", "build", "set", "compatibility", "polish", "layer"]);
   A.animClips = A.animClips || {};
   A.animLast = A.animLast || "";
@@ -4306,9 +4307,8 @@
     try { return animParse(await runSkillLuau(built, budget || 0)); } catch (e) { return { ok: false, error: String(e && e.message || e), transport: true }; }
   }
   function animRigFromInfo(data) { return data && Array.isArray(data.bones) ? { rigType: data.rigType === "R6" || data.rigType === "R15" ? data.rigType : TotalAnimEngine.detectRigType({ bones: data.bones }), path: data.path, name: data.name, root: data.root, bones: data.bones.map((b) => ({ name: b.name, parent: b.parent })) } : null; }
-  function animRemember(clip, meta) {
+  function animRemember(clip) { // session memory for animation_refine / build / export / layer ("last clip" + by name)
     A.animClips[clip.name] = clip; A.animLast = clip.name;
-    try { if (typeof TotalAnimStudio !== "undefined") TotalAnimStudio.loadClip(clip, meta || {}); } catch {}
   }
   // 1.56: one character per session. The first clip fixes the persona seed (lead side, arm rest, tempo, easing flavour);
   // every later clip reuses it so idle / walk / jump / attack made in separate requests still look like the same person
@@ -4323,10 +4323,10 @@
   async function animBuildSet(set, rigInfo, offlineNote) {
     const built = [], failed = [];
     for (const c of set.clips) {
-      if (A.stop) { failed.push(`${c.name}: cancelled by the user before it was built`); animRemember(c, { rigInfo }); continue; }
-      if (!rigInfo) { animRemember(c, {}); continue; }
+      if (A.stop) { failed.push(`${c.name}: cancelled by the user before it was built`); animRemember(c); continue; }
+      if (!rigInfo) { animRemember(c); continue; }
       const b = await animBuild(c, rigInfo);
-      if (b.ok) { built.push(c.name); animRemember(c, { built: true, rigInfo }); } else { failed.push(`${c.name}: ${b.error}`); animRemember(c, { rigInfo }); if (b.transport) break; }
+      if (b.ok) { built.push(c.name); animRemember(c); } else { failed.push(`${c.name}: ${b.error}`); animRemember(c); if (b.transport) break; }
     }
     animAdoptSeed(set.clips[0]);
     const lines = [TotalAnimEngine.describeSet(set)];
@@ -4334,7 +4334,6 @@
     else lines.push(built.length === set.clips.length ? `BUILT in Studio: all ${built.length} as separate KeyframeSequences (${built.join(", ")}) - each also saved to the rig's AnimSaves; the active one is the last built.` : `BUILT in Studio: ${built.length}/${set.clips.length} (${built.join(", ") || "none"}).`);
     if (failed.length) lines.push((A.stop ? "CANCELLED - not built: " : "FAILED: ") + failed.join(" | "));
     lines.push("They are SEPARATE animations (not one combined clip): play each from its own AnimationTrack with the fade times above; idle on priority Idle, cycles on Movement, actions on Action. animation_refine {name, feedback} adjusts one; animation_compatibility re-checks the whole set after edits.");
-    try { if (typeof TotalAnimStudio !== "undefined" && TotalAnimStudio.loadSet) TotalAnimStudio.loadSet(set, { built, rigInfo }); } catch {}
     return lines.join("\n");
   }
   function animReport(clip, extra) {
@@ -4394,7 +4393,7 @@
       const rigInfo = animRigFromInfo(info.data);
       const b = await animBuild(clip, rigInfo);
       if (!b.ok) return `ERROR calling 'animation_build': ${b.error}`;
-      animRemember(clip, { built: true, rigInfo });
+      animRemember(clip);
       return `Built '${clip.name}' in Studio (${b.text}). It is the active animation in ServerStorage.RobloxScript.AnimLib - animation_preview plays it, animation_simulate {all:true} runs the QA sweep.`;
     }
     if (op === "generate" || op === "sequence") {
@@ -4409,7 +4408,7 @@
       const rigInfo = info.ok ? animRigFromInfo(info.data) : null;
       const wanted = String(args.rig || args.rig_type || "").toUpperCase();
       const rigType = rigInfo ? rigInfo.rigType : (wanted === "R6" ? "R6" : "R15");
-      const offlineNote = info.ok ? "" : `Studio was not available (${info.error}) - the clip was generated and validated but NOT built. Open the Animation Studio (bar button / Ctrl+Shift+K) to export it as .rbxmx, or reconnect Studio and run animation_build {name: "${"%NAME%"}"}.`;
+      const offlineNote = info.ok ? "" : `Studio was not available (${info.error}) - the clip was generated and validated but NOT built. Reconnect Studio and run animation_build {name: "${"%NAME%"}"}, or animation_export_rbxmx {name} to hand the user a file.`;
       const notes = [];
       if (rigInfo && wanted && wanted !== rigInfo.rigType && (wanted === "R6" || wanted === "R15")) notes.push(`You asked for ${wanted} but the rig in Studio ('${rigInfo.name}') is ${rigInfo.rigType} - built for ${rigInfo.rigType}; animation_select_rig {path} picks another rig.`);
       if (rigInfo && rigInfo.rigType === "Custom") notes.push(`Custom rig '${rigInfo.name}': bones were matched by R15 names; unmatched semantic joints are skipped.`);
@@ -4433,9 +4432,9 @@
             let c; try { c = E.generate(prompt, Object.assign({}, opts, { take: opts.take + i, name: opts.name ? opts.name + "_v" + (i + 1) : undefined, avoid: avoid.concat(clips.map((x) => x.fingerprint)) })); } catch (e) { failed.push(`take ${i + 1}: ${String(e && e.message || e)}`); continue; }
             if (!opts.name) c.name = c.name.replace(/_take\d+$/, "") + "_v" + (i + 1);
             clips.push(c);
-            if (!rigInfo) { animRemember(c, {}); continue; }
+            if (!rigInfo) { animRemember(c); continue; }
             const b = await animBuild(c, rigInfo);
-            if (b.ok) { built.push(c.name); animRemember(c, { built: true, rigInfo }); } else { failed.push(`${c.name}: ${b.error}`); animRemember(c, { rigInfo }); }
+            if (b.ok) { built.push(c.name); animRemember(c); } else { failed.push(`${c.name}: ${b.error}`); animRemember(c); }
           }
           if (!clips.length) return "ERROR calling 'animation_generate': no variation could be generated - " + failed.join("; ");
           const lines = [`${clips.length} distinct takes of "${prompt}" (fingerprints ${clips.map((c) => c.fingerprint).join(", ")}; pairwise similarity ${clips.length > 1 ? Math.round(E.similarity(clips[0], clips[1]) * 100) + "% for v1/v2" : "n/a"}):`];
@@ -4449,24 +4448,24 @@
         let clip; try { clip = E.generate(prompt, opts); } catch (e) { return "ERROR calling 'animation_generate': " + String(e && e.message || e); }
         animAdoptSeed(clip);
         if (Number.isFinite(personaSeed) && Object.keys(A.animClips).length) notes.push(`Same character as ${Object.keys(A.animClips).slice(-3).join(", ")} (shared persona seed ${personaSeed}; pass new_character:true for a different one). animation_compatibility checks how the session's clips blend.`);
-        if (!rigInfo) { animRemember(clip, {}); return animReport(clip, offlineNote.replace("%NAME%", clip.name) + (notes.length ? "\n" + notes.join("\n") : "")); }
+        if (!rigInfo) { animRemember(clip); return animReport(clip, offlineNote.replace("%NAME%", clip.name) + (notes.length ? "\n" + notes.join("\n") : "")); }
         const b = await animBuild(clip, rigInfo);
-        if (!b.ok) { animRemember(clip, { rigInfo }); return `ERROR calling 'animation_generate': generated + validated '${clip.name}' (${clip.keys.length} keys, score ${clip.report.score}) but Studio refused the build: ${b.error}`; }
-        animRemember(clip, { built: true, rigInfo });
+        if (!b.ok) { animRemember(clip); return `ERROR calling 'animation_generate': generated + validated '${clip.name}' (${clip.keys.length} keys, score ${clip.report.score}) but Studio refused the build: ${b.error}`; }
+        animRemember(clip);
         const r = clip.report;
-        return animReport(clip, `BUILT in Studio: ${b.text}${b.dropped && b.dropped.length ? ` (joints not on this rig, folded into parents: ${b.dropped.join(", ")})` : ""}.` + (notes.length ? "\n" + notes.join("\n") : "") + `\nNext: animation_preview to watch it on the rig, animation_simulate {all:true} for the QA sweep; animation_refine {feedback: "..."} to adjust (make it slow / fast, a bit slower, 2x faster, fluent, more anticipation / heavier landing / exaggerate / subtle / longer / shorter / loop / variation); animation_export (plugin) or animation_publish only when the user asks. The user can edit it in the Animation Studio overlay or Studio's Animation Editor (rig.AnimSaves.${clip.name}).` + (r.ok ? "" : "\nValidation has ERRORS - do not publish before refining."));
+        return animReport(clip, `BUILT in Studio: ${b.text}${b.dropped && b.dropped.length ? ` (joints not on this rig, folded into parents: ${b.dropped.join(", ")})` : ""}.` + (notes.length ? "\n" + notes.join("\n") : "") + `\nNext: animation_preview to watch it on the rig, animation_simulate {all:true} for the QA sweep; animation_refine {feedback: "..."} to adjust (make it slow / fast, a bit slower, 2x faster, fluent, more anticipation / heavier landing / exaggerate / subtle / longer / shorter / loop / variation); animation_export (plugin) or animation_publish only when the user asks. The user can edit it in Studio's Animation Editor (rig.AnimSaves.${clip.name}).` + (r.ok ? "" : "\nValidation has ERRORS - do not publish before refining."));
       }
       // sequence: combined clip + one clip per stage group
       let seq; try { seq = E.generateSequence(prompt, opts); } catch (e) { return "ERROR calling 'animation_sequence': " + String(e && e.message || e); }
       const all = [seq.combined].concat(seq.clips);
       const builtNames = [], failed = [];
       for (const c of all) {
-        if (A.stop) { failed.push(`${c.name}: cancelled by the user before it was built`); animRemember(c, { rigInfo }); continue; }
-        if (!rigInfo) { animRemember(c, {}); continue; }
+        if (A.stop) { failed.push(`${c.name}: cancelled by the user before it was built`); animRemember(c); continue; }
+        if (!rigInfo) { animRemember(c); continue; }
         const b = await animBuild(c, rigInfo);
-        if (b.ok) { builtNames.push(c.name); animRemember(c, { built: true, rigInfo }); } else { failed.push(`${c.name}: ${b.error}`); animRemember(c, { rigInfo }); if (b.transport) break; }
+        if (b.ok) { builtNames.push(c.name); animRemember(c); } else { failed.push(`${c.name}: ${b.error}`); animRemember(c); if (b.transport) break; }
       }
-      A.animLast = seq.combined.name; try { if (typeof TotalAnimStudio !== "undefined") TotalAnimStudio.loadClip(seq.combined, { built: builtNames.includes(seq.combined.name), rigInfo }); } catch {}
+      A.animLast = seq.combined.name;
       const lines = [TotalAnimEngine.summary(seq.combined), `Per-stage clips (${seq.clips.length}): ` + seq.clips.map((c) => `${c.name} ${c.duration}s/${c.keys.length} keys/score ${c.report.score}`).join(" · "), "Transitions: " + seq.transitions.map((t) => `${t.clip}: ${t.blend}; ${t.gameplayWindow}`).join(" | ")];
       if (!rigInfo) lines.push(offlineNote.replace("%NAME%", seq.combined.name));
       else { lines.push(`BUILT in Studio: ${builtNames.length}/${all.length} clips (${builtNames.join(", ")}); the active animation is the last built one - animation_open {name} switches.`); if (failed.length) lines.push((A.stop ? "CANCELLED - not built: " : "FAILED: ") + failed.join(" | ")); }
@@ -4483,7 +4482,7 @@
       const info = await animStudioCall("rig_info", {});
       const rigInfo = info.ok ? animRigFromInfo(info.data) : null;
       const rigType = rigInfo ? rigInfo.rigType : (String(args.rig || "").toUpperCase() === "R6" ? "R6" : "R15");
-      const offlineNote = info.ok ? "" : `Studio was not available (${info.error}) - the set was generated and validated but NOT built; reconnect Studio and run animation_build {name} per clip, or export each from the Animation Studio.`;
+      const offlineNote = info.ok ? "" : `Studio was not available (${info.error}) - the set was generated and validated but NOT built; reconnect Studio and run animation_build {name} per clip, or animation_export_rbxmx {name} for each.`;
       const avoid = Object.keys(A.animClips).map((n) => A.animClips[n] && A.animClips[n].fingerprint).filter(Boolean);
       let set; try { set = E.generateSet(prompts, { quality, rigType, avoid, fps: Number(args.fps) > 0 ? Number(args.fps) : undefined, personaSeed: animPersonaSeed(args), prefix: args.prefix != null ? String(args.prefix).replace(/[^A-Za-z0-9_]/g, "") : undefined, take: Number(args.take) > 0 ? Math.floor(Number(args.take)) : 0 }); } catch (e) { return "ERROR calling 'animation_set': " + String(e && e.message || e); }
       return await animBuildSet(set, rigInfo, offlineNote);
@@ -4511,10 +4510,10 @@
       const cmp = E.compare(got.clip, out);
       const info = await animStudioCall("rig_info", {});
       const rigInfo = info.ok ? animRigFromInfo(info.data) : got.rigInfo || null;
-      if (!rigInfo) { animRemember(out, {}); return animReport(out, `Applied: ${applied.join(", ")}. Before → after: ${cmp.durationBefore}s → ${cmp.durationAfter}s, ${cmp.keysBefore} → ${cmp.keysAfter} keys, score ${cmp.scoreBefore} → ${cmp.scoreAfter}, largest change ${cmp.largestChange.joint} ${cmp.largestChange.degrees}°.\nStudio was not available (${info.error}) - NOT rebuilt.`); }
+      if (!rigInfo) { animRemember(out); return animReport(out, `Applied: ${applied.join(", ")}. Before → after: ${cmp.durationBefore}s → ${cmp.durationAfter}s, ${cmp.keysBefore} → ${cmp.keysAfter} keys, score ${cmp.scoreBefore} → ${cmp.scoreAfter}, largest change ${cmp.largestChange.joint} ${cmp.largestChange.degrees}°.\nStudio was not available (${info.error}) - NOT rebuilt.`); }
       const b = await animBuild(out, rigInfo);
-      if (!b.ok) { animRemember(out, { rigInfo }); return `ERROR calling 'animation_refine': refined '${out.name}' (${applied.join(", ")}) but Studio refused the rebuild: ${b.error}`; }
-      animRemember(out, { built: true, rigInfo });
+      if (!b.ok) { animRemember(out); return `ERROR calling 'animation_refine': refined '${out.name}' (${applied.join(", ")}) but Studio refused the rebuild: ${b.error}`; }
+      animRemember(out);
       return animReport(out, `Applied: ${applied.join(", ")}. Before → after: ${cmp.durationBefore}s → ${cmp.durationAfter}s, ${cmp.keysBefore} → ${cmp.keysAfter} keys, score ${cmp.scoreBefore} → ${cmp.scoreAfter}, largest change ${cmp.largestChange.joint} ${cmp.largestChange.degrees}°.\nREBUILT in Studio: ${b.text}. Preview again (animation_preview) before judging.`);
     }
     if (op === "polish") { // 1.54.0 - Blender-style post passes on an existing clip (no regeneration, manual edits survive)
@@ -4534,10 +4533,10 @@
       const info = await animStudioCall("rig_info", {});
       const rigInfo = info.ok ? animRigFromInfo(info.data) : got.rigInfo || null;
       const summary = `Polish: ${did.join("; ")}. Before → after: ${cmp.keysBefore} → ${cmp.keysAfter} keys, score ${cmp.scoreBefore} → ${cmp.scoreAfter}, smoothness ${got.clip.report && got.clip.report.smoothness} → ${out.report.smoothness}.`;
-      if (!rigInfo) { animRemember(out, {}); return animReport(out, summary + "\nNot rebuilt: Studio is not connected (animation_build when it is)."); }
+      if (!rigInfo) { animRemember(out); return animReport(out, summary + "\nNot rebuilt: Studio is not connected (animation_build when it is)."); }
       const b = await animBuild(out, rigInfo);
-      if (!b.ok) { animRemember(out, { rigInfo }); return `ERROR calling 'animation_polish': polished '${out.name}' (${did.join("; ")}) but Studio refused the rebuild: ${b.error}`; }
-      animRemember(out, { built: true, rigInfo });
+      if (!b.ok) { animRemember(out); return `ERROR calling 'animation_polish': polished '${out.name}' (${did.join("; ")}) but Studio refused the rebuild: ${b.error}`; }
+      animRemember(out);
       return animReport(out, summary + "\nREBUILT in Studio: " + b.text + "\nNext: animation_preview to watch it.");
     }
     if (op === "layer") { // 1.54.0 - NLA-style layering: legs + root from {base}, upper body from {upper}
@@ -4551,10 +4550,10 @@
       const info = await animStudioCall("rig_info", {});
       const rigInfo = info.ok ? animRigFromInfo(info.data) : null;
       const summary = `Layered: upper body of '${upper.name}' over '${base.name}' (${out.layered.requested === "auto" ? "keep tempo → " + out.layered.fit : out.layered.fit}, weight ${out.layered.weight}) → '${out.name}', ${out.duration}s, ${out.keys.length} keys, score ${out.report.score}.` + (out.layered.tempo ? "\n" + out.layered.tempo : "");
-      if (!rigInfo) { animRemember(out, {}); return animReport(out, summary + "\nNot built: Studio is not connected (animation_build when it is)."); }
+      if (!rigInfo) { animRemember(out); return animReport(out, summary + "\nNot built: Studio is not connected (animation_build when it is)."); }
       const b = await animBuild(out, rigInfo);
-      if (!b.ok) { animRemember(out, { rigInfo }); return `ERROR calling 'animation_layer': layered '${out.name}' but Studio refused the build: ${b.error}`; }
-      animRemember(out, { built: true, rigInfo });
+      if (!b.ok) { animRemember(out); return `ERROR calling 'animation_layer': layered '${out.name}' but Studio refused the build: ${b.error}`; }
+      animRemember(out);
       return animReport(out, summary + "\nBUILT in Studio: " + b.text + "\nNext: animation_preview; check the shoulder / hip balance at the seam.");
     }
     return `ERROR: unknown animation engine op '${op}'.`;
@@ -6975,28 +6974,6 @@
     });
   }
   window.__rsOpenVideoStudio = openVideoStudio;
-  // Internal tool runner for the studios (Animation / Video): the user pressed
-  // the button themselves, so the call must not wait on the bar's Allow prompt
-  // (hidden under the overlay). 1.90.0: the GUI Studio window that introduced it was removed.
-  async function studioRunTool(name, args) {
-    try { await ensureTools(); } catch {}
-    return runTool({ tool: name, arguments: Object.assign({}, args || {}, { _totalInternal: true }) });
-  }
-  // 1.52.0 — Animation Studio: prompt → engine clip → schematic preview / timeline / joint editor; Build + Preview run
-  // animation_build / animation_preview directly through the tool runner (the click is the approval), Send hands off text.
-  function openAnimStudio() {
-    if (typeof TotalAnimStudio === "undefined" || typeof TotalAnimEngine === "undefined") { ui.toast("Animation Studio module missing — reload the extension"); return; }
-    TotalAnimStudio.open({
-      send: (text, onStatus) => sendPainting(text, null, onStatus),
-      runTool: studioRunTool,
-      clips: () => A.animClips, // 1.54: session clips for the Layer (NLA) picker
-      studioReady: () => { try { return currentEngineIsLive(); } catch { return false; } },
-      engine: () => activeEngine(),
-      toast: (m) => ui.toast(m),
-      diag,
-    });
-  }
-  window.__rsOpenAnimStudio = openAnimStudio;
   // ═════════════════════════════════════════════════════════════════
   //  1.72.0 — PROMPT ENHANCER (src/core/enhancer.js)
   //  The user's rough request goes to the CURRENT AI site as a "rewrite this
@@ -8084,7 +8061,6 @@
           <button id="rs-discord" aria-label="Discord" title="TotalScript Discord"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.8 19.8 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg></button>
           <button id="rs-enhance-btn" aria-label="Prompt Enhancer" title="Prompt Enhancer — the AI rewrites your rough request into a precise prompt, you review and send it (Ctrl+Shift+E)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/><path d="M5 15l.6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6z"/></svg></button>
           <button id="rs-paint-btn" aria-label="Paint" title="Paint — draw it, the AI builds it (Ctrl+Shift+P)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 4c-3 1-8 6-10 9l2 2c3-2 8-7 9-10z"/><path d="M8 15c-2 0-4 1-4 4 0 1-1 1-1 1s4 1 6-1c1-1 1-2 1-2z"/></svg></button>
-          <button id="rs-anim-btn" aria-label="Animation Studio" title="Animation Studio — describe a motion, preview the keys, build the KeyframeSequence in Studio (Ctrl+Shift+K)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="4.5" r="2"/><path d="M12 7v6"/><path d="M12 9l-4 3M12 9l4-2"/><path d="M12 13l-3 7M12 13l3 6"/></svg></button>
           <button id="rs-video-btn" aria-label="Video Studio" title="Video Studio — show it a video, the AI builds something similar (Ctrl+Shift+V)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M16 10l6-3v10l-6-3z"/></svg></button>
           <button id="rs-settings-btn" aria-label="Settings" title="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
           </div>
@@ -8484,13 +8460,10 @@
       document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "E" || e.key === "e") && !e.altKey) { if (typeof TotalEnhancer !== "undefined" && TotalEnhancer.isOpen()) return; e.preventDefault(); if (window.__rsOpenEnhancer) window.__rsOpenEnhancer(); } });
       const paintBtn = root.querySelector("#rs-paint-btn");
       if (paintBtn) paintBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenPaint) window.__rsOpenPaint(); });
-      const animBtn = root.querySelector("#rs-anim-btn");
-      if (animBtn) animBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenAnimStudio) window.__rsOpenAnimStudio(); });
       // 1.79.0 — Video Studio (Ctrl+Shift+V): a local video → keyframes + VIDEO BRIEF → the AI recreates it.
       const videoBtn = root.querySelector("#rs-video-btn");
       if (videoBtn) videoBtn.addEventListener("click", (e) => { e.stopPropagation(); setMenuOpen(false); try { cardsPanel.hidden = true; } catch {} if (window.__rsOpenVideoStudio) window.__rsOpenVideoStudio(); });
       document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "V" || e.key === "v") && !e.altKey) { if (typeof TotalVideoStudio !== "undefined" && TotalVideoStudio.isOpen()) return; if (typeof TotalPaint !== "undefined" && TotalPaint.isOpen()) return; e.preventDefault(); if (window.__rsOpenVideoStudio) window.__rsOpenVideoStudio(); } }, true);
-      document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "K" || e.key === "k") && !e.altKey) { if (typeof TotalAnimStudio !== "undefined" && TotalAnimStudio.isOpen()) return; if (typeof TotalPaint !== "undefined" && TotalPaint.isOpen()) return; e.preventDefault(); if (window.__rsOpenAnimStudio) window.__rsOpenAnimStudio(); } }, true);
       document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "P" || e.key === "p") && !e.altKey) { if (typeof TotalPaint !== "undefined" && TotalPaint.isOpen()) return; e.preventDefault(); if (window.__rsOpenPaint) window.__rsOpenPaint(); } }, true);
       // Engine toggle (Roblox ↔ AgentScript ↔ Animation)
       const engineEl = root.querySelector("#rs-engine");

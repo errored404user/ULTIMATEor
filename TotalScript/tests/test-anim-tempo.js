@@ -103,10 +103,8 @@ ok("a chain slows down as a whole and keeps calm joins", (() => { const s = fb("
 ok("'fluent' on a chain lengthens the blends between parts (≤ 360 deg/s sampled peak) and 'snappier transitions' shortens them", (() => { const f = fb("make it fluent", chain), sn = fb("snappier transitions", chain); return f.c.joins.reduce((a, j) => a + j.gap, 0) > chain.joins.reduce((a, j) => a + j.gap, 0) && f.p.join === "soft" && f.c.joins.every((j) => peakRate(f.c, null, j.at, j.at + j.gap) <= 360) && sn.c.joins.reduce((a, j) => a + j.gap, 0) < chain.joins.reduce((a, j) => a + j.gap, 0); })());
 ok("the 'nothing recognised' hint teaches the new words", /make it slow \/ fast/.test(fb("make it pop").notes.join(" ")) && /fluent/.test(fb("make it pop").notes.join(" ")));
 
-// ── wiring: Studio overlay, model-facing command, docs ───────────────────────────────────────────
-const studio = read("src/core/animstudio.js"), main = read("src/core/main.js"), animlib = read("src/core/animlib.js");
-ok("Animation Studio layer select defaults to keep-tempo and offers stretch / loop / hold", /<option value="auto">keep tempo \(auto\)<\/option><option value="stretch">/.test(studio) && /<option value="hold">play once, hold<\/option>/.test(studio) && /\["loop", "stretch", "hold"\]\.includes\(D\.layerFit\.value\) \? D\.layerFit\.value : "auto"/.test(studio));
-ok("Studio feedback box advertises the speed words", /placeholder="make it slow · a bit faster · fluent ·/.test(studio) && /Understands speed \("make it slow \/ fast"/.test(studio));
+// ── wiring: model-facing command, docs (2.0.3: Studio overlay pins removed with the window) ───────────────────────────────────────────
+const main = read("src/core/main.js"), animlib = read("src/core/animlib.js");
 ok("main.js: model-picked durations are soft and animation_layer defaults to auto", /softDuration: true, loop, fps, name: nameOf\(\)/.test(main) && /\["loop", "stretch", "hold", "auto"\]\.includes\(String\(args\.fit \|\| ""\)\) \? String\(args\.fit\) : "auto"/.test(main) && /keep tempo → /.test(main));
 ok("main.js next-steps hint lists the speed words", /make it slow \/ fast, a bit slower, 2x faster, fluent/.test(main));
 ok("animlib documents the new refine vocabulary and the layer fit modes", /'make it slow' \/ 'make it fast'/.test(animlib) && /auto \(keep tempo, default\) \| stretch \| loop \| hold/.test(animlib) && /1\.58: tempo is kept when combining/.test(animlib));
