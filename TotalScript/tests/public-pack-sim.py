@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Featured Public Skills (2.2.2) against the miniature Roblox DataModel.
+"""Featured Public Skills (2.2.3) against the miniature Roblox DataModel.
 
 tests/test-public-packs.js checks the pack statically (validation, registration, UI,
 command). This script does what a user would: installs the pack into PublicSkills in
@@ -63,6 +63,12 @@ WANT = {
     "zone_safe": ["zone_system", {"zone": "Workspace.Lobby", "kind": "safe", "message": "Safe zone"}],
     "boss": ["boss_health_bar", {"boss": "Workspace.Dragon", "title": "Ancient Dragon", "phases": 3}],
     "boss_bad": ["boss_health_bar", {"boss": "Workspace.LabDoor"}],
+    "cp": ["checkpoint_system", {"checkpoints": "Workspace.Checkpoints", "stat_name": "Stage", "celebrate": True}],
+    "cp_bad": ["checkpoint_system", {"checkpoints": "Workspace.Nope"}],
+    "gui": ["gui_polish_kit", {"screen": "StarterGui.HUD", "style": "cartoon", "accent": "#FF8800"}],
+    "gui_bad": ["gui_polish_kit", {"screen": "Workspace.Lava"}],
+    "feel": ["game_feel_kit", {"intensity": "heavy", "demo": True}],
+    "audit": ["place_audit_report", {"fix_deprecated": True}],
 }
 
 gen = subprocess.run(["node", "-e", GEN, json.dumps(WANT)], capture_output=True, text=True)
@@ -122,6 +128,19 @@ player.Character = ch
 local bp = Instance.new("Backpack") bp.Name = "Backpack" bp.Parent = player
 M.players = { player }
 _G.Char = ch _G.CharHum = chum _G.CharRoot = croot
+-- 2.2.3: checkpoints (named out of order on purpose), a HUD to polish, and audit bait
+local cps = Instance.new("Folder") cps.Name = "Checkpoints" cps.Parent = workspace
+_G.CP3 = part("Checkpoint3", cps, Vector3.new(30, 1, -40)) _G.CP1 = part("Checkpoint1", cps, Vector3.new(10, 1, -40)) _G.CP2 = part("Checkpoint2", cps, Vector3.new(20, 1, -40))
+local hud = Instance.new("ScreenGui") hud.Name = "HUD" hud.Parent = game.StarterGui
+local panel = Instance.new("Frame") panel.Name = "Panel" panel.Size = UDim2.new(0, 300, 0, 200) panel.Parent = hud
+local play = Instance.new("TextButton") play.Name = "Play" play.Text = "Play" play.Size = UDim2.new(0, 120, 0, 40) play.Parent = panel
+local title = Instance.new("TextLabel") title.Name = "Title" title.Text = "Hello" title.Size = UDim2.new(0, 200, 0, 30) title.Parent = panel
+_G.HUD = hud _G.PlayBtn = play
+local loose = part("Loose", workspace, Vector3.new(0, 5, -80)) loose.Anchored = false
+part("Far", workspace, Vector3.new(9000, 1, 0))
+local empty = Instance.new("Folder") empty.Name = "Empty" empty.Parent = workspace
+local old = Instance.new("Script") old.Name = "Old" old.Source = "wait(1)\nspawn(function() print(1) end)\nlocal bv = Instance.new('BodyVelocity')\nworkspace.Part:Remove()\n" old.Parent = game.ServerScriptService
+local bad = Instance.new("LocalScript") bad.Name = "Bad" bad.Source = "local ds = game:GetService('DataStoreService')" bad.Parent = game.StarterGui
 """)
 
 def runp(key):
@@ -271,9 +290,86 @@ ok("  half health -> fill 0.5, '1000 / 2000' (tweened; ghost lags behind)", abs(
 lua(r"""local hum = _G.Dragon:FindFirstChildOfClass("Humanoid") hum.Health = 0 hum.HealthChanged:Fire(0)""")
 ok("  death -> hide scheduled (task.delay queued), fill at 0", lua("return _G.fill.Size.X.Scale") == 0 and lua("return #M.delayed") >= 4)
 
+# ── 8. checkpoints ────────────────────────────────────────────────────────────
+r = runp("cp_bad")
+ok("checkpoint_system: missing holder -> honest error", not r.get("ok") and "not found" in r.get("error", ""), r)
+r = runp("cp")
+ok("  3 parts ordered by the number in their name (Checkpoint1 first, 3 last), tags + Stage attributes, server inside the folder, client shared", r.get("ok") and r.get("stages") == 3 and r.get("order") == "name" and r.get("first") == "Checkpoint1" and r.get("last") == "Checkpoint3" and lua('return _G.CP1:GetAttribute("Stage") == 1 and _G.CP3:GetAttribute("Stage") == 3 and _G.CP2:HasTag("Checkpoint") and workspace.Checkpoints:HasTag("CheckpointSet") and workspace.Checkpoints:FindFirstChild("CheckpointServer") ~= nil and game.StarterPlayer.StarterPlayerScripts:FindFirstChild("CheckpointClient") ~= nil'), r)
+lua(r"""M.runScript(workspace.Checkpoints.CheckpointServer)""")
+ok("  server: leaderstat Stage = 0 created for the present player", lua('return M.fakePlayer.leaderstats.Stage.Value') == 0)
+lua(r"""_G.CP1.Touched:Fire(_G.CharRoot)""")
+touched = lua(r"""local f = M.fired[#M.fired] return M.fakePlayer.leaderstats.Stage.Value, f and f[1], f and f[3], f and f[4], M.fakePlayer:GetAttribute("Checkpoint")""")
+ok("  touching checkpoint 1 -> Stage 1, CheckpointReached:FireClient(1, 3), attribute Checkpoint = 1", touched[0] == 1 and touched[1] == "CheckpointReached" and touched[2] == 1 and touched[3] == 3 and touched[4] == 1, touched)
+lua(r"""_G.CP3.Touched:Fire(_G.CharRoot)""")
+ok("  a second touch inside the 0.25 s debounce window is ignored (still 1)", lua('return M.fakePlayer.leaderstats.Stage.Value') == 1)
+SPIN = 'local t = os.clock() while os.clock() - t < 0.3 do end'  # plain Lua os.clock is CPU time, so burn it instead of sleeping
+lua(SPIN + ' _G.CP3.Touched:Fire(_G.CharRoot)')
+lua(SPIN + ' _G.CP2.Touched:Fire(_G.CharRoot)')
+ok("  progress only moves forward: 3 after checkpoint 3, still 3 after walking back onto 2", lua('return M.fakePlayer.leaderstats.Stage.Value') == 3)
+lua(r"""workspace.Checkpoints.SetStage:Fire(M.fakePlayer, 2)""")
+placed = lua(r"""return M.fakePlayer.leaderstats.Stage.Value, (_G.Char:GetPivot().Position - _G.CP2.Position).Magnitude""")
+ok("  SetStage bindable: stage 2 and the character is pivoted on top of checkpoint 2 (offset 4 + half height)", placed[0] == 2 and abs(placed[1] - 4.5) < 0.01, placed)
+lua(r"""M.runScript(game.StarterPlayer.StarterPlayerScripts.CheckpointClient, true)""")
+lua(r"""workspace.Checkpoints.CheckpointReached.OnClientEvent:Fire(2, 3)""")
+painted = lua(r"""local g = M.playerGui:FindFirstChild("CheckpointBanner") local b = g and g:FindFirstChild("Banner")
+return b and b.Text, b and b.Visible, _G.CP1.Color == workspace.Checkpoints:GetAttribute("DoneColor"), _G.CP3.Color == workspace.Checkpoints:GetAttribute("NextColor"), _G.CP2:FindFirstChild("CheckpointSparkle") ~= nil""")
+ok("  client: banner 'Checkpoint 2 / 3' shown, reached parts green, next one yellow, sparkle emitter on the reached part", painted[0] == "Checkpoint 2 / 3" and painted[1] == True and painted[2] == True and painted[3] == True and painted[4] == True, painted)
+
+# ── 9. gui polish kit ─────────────────────────────────────────────────────────
+r = runp("gui_bad")
+ok("gui_polish_kit refuses a Part", not r.get("ok") and "not a ScreenGui" in r.get("error", ""), r)
+r = runp("gui")
+ok("  cartoon style on StarterGui.HUD: 3 panels, 2 texts, 1 button, padding on the crowded frame, FredokaOne, 16px corners, 3px stroke", r.get("ok") and r.get("panels") == 3 and r.get("texts") == 2 and r.get("buttons") == 1 and r.get("paddings") == 1 and r.get("font") == "FredokaOne" and r.get("corner") == 16 and r.get("stroke") == 3, r)
+added = lua(r"""local p = _G.HUD.Panel
+return p.TS_Corner.CornerRadius.Offset, p.TS_Stroke.Thickness, p.TS_Padding.PaddingLeft.Offset, _G.HUD.Panel.Title.TextScaled, _G.HUD.Panel.Title.TS_TextSize.MaxTextSize, tostring(_G.HUD.Panel.Title.Font), _G.PlayBtn.AutoButtonColor, _G.PlayBtn:GetAttribute("TS_Hover"), _G.HUD.TS_Scale ~= nil, _G.HUD.TS_PolishClient ~= nil""")
+ok("  TS_* elements: corner 16, stroke 3, padding 10, TextScaled + max 36, Font FredokaOne, button AutoButtonColor off + TS_Hover, UIScale + client in the ScreenGui", added[0] == 16 and added[1] == 3 and added[2] == 10 and added[3] == True and added[4] == 36 and added[5] == "Enum.Font.FredokaOne" and added[6] == False and added[7] == True and added[8] == True and added[9] == True, added)
+r2 = runp("gui")
+ok("  running it again updates in place (still exactly one TS_Corner per panel)", r2.get("ok") and lua('local n = 0 for _, c in ipairs(_G.HUD.Panel:GetChildren()) do if c.Name == "TS_Corner" then n = n + 1 end end return n') == 1)
+lua(r"""M.runScript(_G.HUD.TS_PolishClient, true)""")
+hovered = lua(r"""_G.PlayBtn.MouseEnter:Fire() local a = _G.PlayBtn.Size.X.Offset _G.PlayBtn.MouseButton1Down:Fire() local b = _G.PlayBtn.Size.X.Offset _G.PlayBtn.MouseLeave:Fire() return a, b, _G.PlayBtn.Size.X.Offset, _G.HUD.TS_Scale.Scale""")
+ok("  client: hover grows the button to 124.8 px, press shrinks to 115.2, leave restores 120; viewport 1280 -> scale 1", abs(hovered[0] - 124.8) < 0.01 and abs(hovered[1] - 115.2) < 0.01 and hovered[2] == 120 and hovered[3] == 1, hovered)
+
+# ── 10. game feel kit ─────────────────────────────────────────────────────────
+r = runp("feel")
+ok("game_feel_kit installs folder + remote + Client / Server modules + runner, heavy dose 1.6", r.get("ok") and r.get("dose") == 1.6 and r.get("demo") == True and lua('local f = game.ReplicatedStorage.GameFeel return f.Feel:IsA("RemoteEvent") and f.Client:IsA("ModuleScript") and f.Server:IsA("ModuleScript") and game.StarterPlayer.StarterPlayerScripts.GameFeelClient ~= nil and f:GetAttribute("Intensity") == "heavy"'), r)
+lua(r"""M.runScript(game.StarterPlayer.StarterPlayerScripts.GameFeelClient, true)""")
+shook = lua(r"""local Feel = M.runModule(game.ReplicatedStorage.GameFeel.Client)
+local cam = workspace.CurrentCamera local before = cam.CFrame.Position
+game.ReplicatedStorage.GameFeel.Feel.OnClientEvent:Fire("shake", { strength = 0.5 })
+local t1 = Feel.trauma
+Feel.Step(1 / 60)
+local moved = (cam.CFrame.Position - before).Magnitude
+local t2 = Feel.trauma
+for i = 1, 200 do Feel.Step(1 / 60) end
+return t1, moved > 0, t2 < t1, Feel.trauma""")
+ok("  remote 'shake' 0.5 x dose 1.6 -> trauma 0.8, RenderStepped step moves the camera and decays trauma, 200 frames later it is 0", abs(shook[0] - 0.8) < 1e-6 and shook[1] == True and shook[2] == True and shook[3] == 0, shook)
+flashed = lua(r"""game.ReplicatedStorage.GameFeel.Feel.OnClientEvent:Fire("flash", { duration = 0.2, peak = 0.5 })
+local g = M.playerGui:FindFirstChild("GameFeelFlash") local f = g and g:FindFirstChild("Flash")
+return f ~= nil, f and f.Size.X.Scale, f and f.BackgroundTransparency""")
+ok("  remote 'flash' builds the full-screen frame and tweens it back to transparent", flashed[0] == True and flashed[1] == 1 and flashed[2] == 1, flashed)
+demo = lua(r"""local Feel = M.runModule(game.ReplicatedStorage.GameFeel.Client) Feel.trauma = 0
+_G.CharHum.Health = 70 _G.CharHum.HealthChanged:Fire(70)
+return Feel.trauma > 0, workspace.CurrentCamera.FieldOfView""")
+ok("  demo hook: the local character losing 30 HP shakes (trauma > 0) and the FOV kick tweened back to base", demo[0] == True and demo[1] == 70, demo)
+impact = lua(r"""local S = M.runModule(game.ReplicatedStorage.GameFeel.Server)
+local n = S.Impact(_G.CharRoot.Position + Vector3.new(30, 0, 0), 1, 60)
+local f = M.fired[#M.fired]
+local far = S.Impact(_G.CharRoot.Position + Vector3.new(500, 0, 0), 1, 60)
+return n, f and f[1], f and f[3], f and f[4] and f[4].strength, far""")
+ok("  server Impact: 30 studs inside a 60 radius -> 1 player hit with strength 0.5 (falloff); 500 studs away -> nobody", impact[0] == 1 and impact[1] == "Feel" and impact[2] == "shake" and abs(impact[3] - 0.5) < 1e-6 and impact[4] == 0, impact)
+
+# ── 11. place audit report ────────────────────────────────────────────────────
+r = runp("audit")
+checks = {f.split(" ")[1] + ":" + f.split(" ")[2] for f in r.get("findings", [])}
+ok("place_audit_report scans the whole place: client DataStore error, deprecated APIs in Old (wait/spawn/BodyVelocity/:Remove), loose part, far part, empty folder; no false 'no_spawn'", r.get("ok") and "client_datastore:StarterGui.Bad" in checks and "deprecated_api:ServerScriptService.Old" in checks and "unanchored_part:Workspace.Loose" in checks and "far_from_origin:Workspace.Far" in checks and "empty_folder:Workspace.Empty" in checks and not any(c.startswith("no_spawn") for c in checks), r.get("findings"))
+old_src = lua('return game.ServerScriptService.Old.Source')
+ok("  fix_deprecated rewrote wait/spawn to task.* in exactly 1 script, left BodyVelocity / :Remove reported only", r.get("fixed") == 1 and old_src.startswith("task.wait(1)\ntask.spawn(") and "BodyVelocity" in old_src and ":Remove()" in old_src, old_src)
+ok("  score / verdict honest (errors -> blocked), report ModuleScript written to ServerStorage and it requires back", r.get("errors") >= 1 and r.get("verdict").startswith("blocked") and r.get("score") < 100 and r.get("report") == "ServerStorage.TotalScriptAuditReport" and lua('local rep = M.runModule(game.ServerStorage.TotalScriptAuditReport) return type(rep) == "table" and rep.score and #rep.findings') == r.get("total"), r)
+ok("  the unanchored character root is NOT flagged (character models are skipped)", not any(c.endswith("HumanoidRootPart") for c in checks))
+
 # ── compile every embedded script ────────────────────────────────────────────
 n, bad = compile_sources()
-ok("every installed Script / LocalScript / ModuleScript compiles (%d sources)" % n, n == 13 and bad == "", bad)
+ok("every installed Script / LocalScript / ModuleScript compiles (%d sources)" % n, n == 22 and bad == "", bad)
 ok("no Luau-only syntax the mocked parser cannot read slipped in (+= / continue / `::` types)", lua(r"""for _, d in ipairs(game:GetDescendants()) do if d:IsA("LuaSourceContainer") and (d.Source:find("+=", 1, true) or d.Source:find("\ncontinue", 1, true) or d.Source:find("::", 1, true)) then return false end end return true"""))
 
 print("public-pack-sim: %d passed, %d failed (MOCKED DataModel - not Studio)" % (passed, failed))

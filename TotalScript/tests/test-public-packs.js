@@ -1,4 +1,4 @@
-// Featured Public Skills pack (2.2.2): src/core/public_packs.js.
+// Featured Public Skills pack (2.2.3): src/core/public_packs.js.
 // Dependency-free. Loads the real skills bundle + Public Skills in a vm, then checks
 // that every bundled item validates against the live command catalogue, installs
 // through the normal import path, round-trips as a pack file / share code, and that
@@ -28,14 +28,14 @@ const catalogue = new Set(S.SKILL_COMMANDS.map((c) => c.name));
 const reserved = new Set([...catalogue, ...PS.managementTools().map((t) => t.name)]);
 
 ok("module exposes window.TotalPublicPacks (and module.exports) with a frozen API", PP && Object.isFrozen(PP) && typeof PP.install === "function" && typeof PP.status === "function" && typeof PP.packJson === "function");
-ok("VERSION 2.2.2, PACK_ID totalscript_featured, exactly one pack listed", PP.VERSION === "2.2.2" && PP.PACK_ID === "totalscript_featured" && PP.list().length === 1 && PP.list()[0].id === PP.PACK_ID);
+ok("VERSION 2.2.3, PACK_ID totalscript_featured, exactly one pack listed", PP.VERSION === "2.2.3" && PP.PACK_ID === "totalscript_featured" && PP.list().length === 1 && PP.list()[0].id === PP.PACK_ID);
 ok("module is DOM-free at top level", !/^\s*(const|let|var)?\s*\w*\s*=?\s*document\./m.test(read("src/core/public_packs.js")));
 
 const pack = PP.get(PP.PACK_ID);
 const items = pack.items;
 const byKind = (k) => items.filter((i) => i.kind === k);
-ok("pack has 11 items: 7 skills, 3 abilities, 1 mode", items.length === 11 && byKind("skill").length === 7 && byKind("ability").length === 3 && byKind("mode").length === 1, items.map((i) => i.kind + ":" + i.name).join(","));
-ok("expected item names", JSON.stringify(items.map((i) => i.name)) === JSON.stringify(["damage_numbers_pro", "npc_patrol_chase", "keycard_door_system", "dialogue_tree_system", "collectible_spawner", "zone_system", "boss_health_bar", "gui_polish_pass", "release_checklist", "game_feel_pass", "prototype_sprint"]), items.map((i) => i.name).join(","));
+ok("pack has 11 items and every one is a skill (no abilities, no modes - 2.2.3)", items.length === 11 && byKind("skill").length === 11 && byKind("ability").length === 0 && byKind("mode").length === 0, items.map((i) => i.kind + ":" + i.name).join(","));
+ok("expected item names", JSON.stringify(items.map((i) => i.name)) === JSON.stringify(["damage_numbers_pro", "npc_patrol_chase", "keycard_door_system", "dialogue_tree_system", "collectible_spawner", "zone_system", "boss_health_bar", "checkpoint_system", "gui_polish_kit", "game_feel_kit", "place_audit_report"]), items.map((i) => i.name).join(","));
 ok("names are unique and none collides with a built-in command or management tool", new Set(items.map((i) => i.name)).size === items.length && items.every((i) => !reserved.has(i.name)));
 ok("every item carries author/version/tags and a real description", items.every((i) => i.author === PP.AUTHOR && i.version >= 1 && Array.isArray(i.tags) && i.tags.length >= 2 && i.description.length >= 60));
 
@@ -50,22 +50,21 @@ for (const it of byKind("skill")) {
   ok(`skill '${it.name}' Luau avoids +=, continue and :: so the sim parser (and old tooling) reads it`, !/\+=|\ncontinue\b|::/.test(luau));
   ok(`skill '${it.name}' installs scripts with real code in .Source (no TODO stubs, no fake asset ids)`, /\.Source\s*=/.test(luau) && !/TODO|rbxassetid:\/\/\d{3,}/.test(luau));
 }
-for (const it of byKind("ability")) {
-  ok(`ability '${it.name}' has ordered steps that reference only real commands`, Array.isArray(it.steps) && it.steps.length >= 5 && (it.commands || []).length >= 8 && it.commands.every((c) => catalogue.has(c)) && it.instructions.length >= 200, (it.commands || []).filter((c) => !catalogue.has(c)).join(","));
+for (const it of items) {
+  const refs = it.references || [];
+  ok(`skill '${it.name}' carries >= 4 docs references, each a titled create.roblox.com/docs link`, refs.length >= 4 && refs.length <= 12 && refs.every((r) => r && typeof r.title === "string" && r.title.length >= 3 && /^https:\/\/create\.roblox\.com\/docs\//.test(r.url)), JSON.stringify(refs.map((r) => r.url)));
 }
-const mode = byKind("mode")[0];
-ok("mode 'prototype_sprint' focus commands exist and its prompt is a real work-mode instruction", mode.focus.length >= 10 && mode.focus.every((c) => catalogue.has(c)) && /playable loop|player can enjoy/i.test(mode.mandate) && mode.mandate.length >= 800 && mode.base === "creation" && mode.badge === "JAM", mode.focus.filter((c) => !catalogue.has(c)).join(","));
-ok("every focus list (abilities + mode) names only catalogue commands", items.every((i) => (i.focus || i.commands || []).every((c) => catalogue.has(c))));
+ok("no item carries ability/mode fields (steps, commands, focus, mandate) - skills with references only", items.every((i) => !i.steps && !i.commands && !i.focus && !i.mandate));
 
 // ── install through the normal import path ──────────────────────────────────
 let st = PP.status(PS, PP.PACK_ID);
-ok("status before install: 11 rows, none installed", st.length === 11 && st.every((r) => !r.installed && !r.upToDate && !r.modified));
+ok("status before install: 11 rows, none installed, each reporting its reference count (>= 4)", st.length === 11 && st.every((r) => !r.installed && !r.upToDate && !r.modified && r.references >= 4));
 let inst = PP.install(PS, PP.PACK_ID, { reserved });
 ok("install: 11 installed, no errors/warnings, every item is now a real Public Skill", inst.ok && inst.installed.length === 11 && inst.errors.length === 0 && inst.warnings.length === 0 && items.every((i) => PS.find(i.name) && PS.find(i.name).kind === i.kind), JSON.stringify({ e: inst.errors, w: inst.warnings }));
 st = PP.status(PS, PP.PACK_ID);
 ok("status after install: all installed, upToDate, unmodified", st.every((r) => r.installed && r.upToDate && !r.modified && r.installedVersion >= 1));
 ok("installed skills are callable tools (toolEntries) with their signatures", byKind("skill").every((i) => PS.toolEntries().some((t) => t.name === i.name && t.publicSkill)));
-ok("installed mode is selectable (PS.modes) and abilities render text", PS.modes().some((m) => m.name === "prototype_sprint") && byKind("ability").every((a) => { const r = PS.abilityText(a.name, { screen: "StarterGui.Main", mechanic: "sword hit" }); return r && typeof r.text === "string" && r.text.length > 400 && r.text.includes(a.name); }));
+ok("no featured mode or ability leaks into PS.modes / PS.abilities after install", !PS.modes().some((m) => m.name === "prototype_sprint") && byKind("ability").every((a) => { const r = PS.abilityText(a.name, { screen: "StarterGui.Main", mechanic: "sword hit" }); return r && typeof r.text === "string" && r.text.length > 400 && r.text.includes(a.name); }));
 const again = PP.install(PS, PP.PACK_ID, { reserved });
 ok("installing again skips everything instead of duplicating", again.installed.length === 0 && again.skipped.length === 11 && PS.list().length === 11, JSON.stringify(again.skipped.length));
 const subset = PP.install(PS, PP.PACK_ID, { reserved, names: ["zone_system"], replace: true });
@@ -82,7 +81,7 @@ ok("missing required param -> MISSING_PARAMS with signature", /MISSING_PARAMS/.t
 // ── pack file / share code round trip ──────────────────────────────────────
 const json = PP.packJson(PP.PACK_ID);
 const obj = JSON.parse(json);
-ok("packJson is a totalscript-public-skill-pack with deterministic exportedAt and 11 items", obj.format === "totalscript-public-skill-pack" && obj.formatVersion === 1 && obj.pack === PP.PACK_ID && obj.exportedAt === "bundled" && obj.count === 11 && obj.items.length === 11 && obj.version === "2.2.2");
+ok("packJson is a totalscript-public-skill-pack with deterministic exportedAt and 11 items", obj.format === "totalscript-public-skill-pack" && obj.formatVersion === 1 && obj.pack === PP.PACK_ID && obj.exportedAt === "bundled" && obj.count === 11 && obj.items.length === 11 && obj.version === "2.2.3");
 const file = read("public_skills/totalscript-featured.orskills.json");
 ok("public_skills/totalscript-featured.orskills.json is the exact packJson output (node tests/build-public-pack.js)", file === json + "\n", "run: node tests/build-public-pack.js");
 PS.replaceAll([]);
@@ -93,7 +92,7 @@ const code = "ORSKILL1:" + Buffer.from(json, "utf8").toString("base64");
 const imp2 = PS.importShared(code, { reserved });
 ok("the share code the Public tab copies imports too", imp2.ok && imp2.installed.length === 11);
 const parsed = PS.parseShared(json);
-ok("parseShared recognises the pack and keeps item kinds", parsed.ok && parsed.pack && parsed.defs.length === 11 && parsed.defs.filter((i) => i.kind === "mode").length === 1);
+ok("parseShared recognises the pack and keeps item kinds", parsed.ok && parsed.pack && parsed.defs.length === 11 && parsed.defs.every((i) => i.kind === "skill" && Array.isArray(i.references) && i.references.length >= 4));
 
 // ── wiring ─────────────────────────────────────────────────────────────────
 ok("manifest loads public_packs.js right before public_skills.js in all 12 main.js bundles (pack module is load-order independent; explorer.js keeps its slot after public_skills.js)", bundles.length >= 12 && bundles.every((c) => c.js.indexOf("src/core/public_packs.js") === c.js.indexOf("src/core/public_skills.js") - 1 && c.js.indexOf("src/core/public_packs.js") < c.js.indexOf("src/core/main.js")));
@@ -104,7 +103,7 @@ ok("main.js dispatcher: public_skill_import {data:'featured'} / {pack} routes th
 ok("main.js: empty list hint points at the featured pack", main.includes('public_skill_import {data:\\"featured\\"} installs the bundled Featured pack'));
 ok("main.js Public tab renders the Featured shelf with per-item + install-all + export + share handlers", /function publicFeaturedHtml\(PS\)/.test(main) && main.includes("${publicFeaturedHtml(PS)}${pfilters}") && ["data-public-feat-install=", "data-public-feat-install-all", "data-public-feat-export", "data-public-feat-share", "data-public-featured"].every((s) => main.includes(s)) && /function publicFeaturedInstall\(names, replace\)/.test(main));
 ok("main.js: reinstalling an edited item asks first; install uses publicReserved()", main.includes("was edited on this device. Replace it with the bundled version?") && main.includes("PP.install(PublicSkills, PP.PACK_ID, { names, replace: !!replace, reserved: publicReserved() })"));
-ok("main.js help card mentions the Featured pack", /Featured by TotalScript \(2\.2\.2\)/.test(main));
+ok("main.js help card mentions the Featured pack", /Featured by TotalScript \(2\.2\.3\)/.test(main));
 const tool = PS.managementTools().find((t) => t.name === "public_skill_import");
 ok("public_skill_import tool schema documents data:'featured' and names[]", /featured/.test(tool.description) && tool.inputSchema.properties.names && tool.inputSchema.properties.names.type === "array");
 const css = read("overlay.css");
@@ -155,18 +154,19 @@ ok("README documents the Featured pack and the sim test", /Featured by TotalScri
   const until = Date.now() + 10000; while (Date.now() < until && !d.getElementById("rs-bar")) await sleep(50);
   await sleep(800);
   const WPS = w.PublicSkills, WPP = w.TotalPublicPacks;
-  ok("E1 page boots with TotalPublicPacks loaded and nothing installed", !!d.getElementById("rs-bar") && WPP && WPP.VERSION === "2.2.2" && WPS.list().length === 0);
+  ok("E1 page boots with TotalPublicPacks loaded and nothing installed", !!d.getElementById("rs-bar") && WPP && WPP.VERSION === "2.2.3" && WPS.list().length === 0);
   d.getElementById("rs-cards-btn").click(); await sleep(200);
   const panel = d.getElementById("rs-cards-panel");
   panel.querySelector('[data-tab="public"]').click(); await sleep(250);
   const shelf = () => panel.querySelector("[data-public-featured]");
+  ok("E2b every featured row shows its docs reference count pill (e.g. '5 refs')", shelf().querySelectorAll(".rs-public-feat-row").length === 11 && Array.from(shelf().querySelectorAll(".rs-public-feat-row")).every((row) => /\d+ refs/.test(row.textContent)));
   ok("E2 Public tab shows the Featured shelf open, 0/11 installed, 11 rows with Install buttons", shelf() && shelf().open && shelf().querySelector(".rs-template-count").textContent === "0/11" && shelf().querySelectorAll(".rs-public-feat-row").length === 11 && shelf().querySelectorAll("[data-public-feat-install]").length === 11);
   shelf().querySelector('[data-public-feat-install="zone_system"]').click(); await sleep(300);
   ok("E3 Install on one row installs that skill (list card appears, row marked Installed, count 1/11)", WPS.find("zone_system") && WPS.list().length === 1 && shelf().querySelector('[data-public-feat-item="zone_system"]').classList.contains("on") && shelf().querySelector(".rs-template-count").textContent === "1/11" && !!panel.querySelector(".rs-public-list"));
-  ok("E4 the installed skill is a live tool for the agent (public_skill tool entry + mode not yet)", WPS.toolEntries().some((t) => t.name === "zone_system") && !WPS.modes().some((m) => m.name === "prototype_sprint"));
+  ok("E4 the installed skill is a live tool for the agent (public_skill tool entry)", WPS.toolEntries().some((t) => t.name === "zone_system") && WPS.toolEntries().filter((t) => t.publicSkill).length === 1);
   shelf().querySelector("[data-public-feat-install-all]").click(); await sleep(400);
   ok("E5 Install all missing installs the other 10; button turns into 'Everything installed' (disabled)", WPS.list().length === 11 && shelf().querySelector("[data-public-feat-install-all]").disabled && /Everything installed/.test(shelf().querySelector("[data-public-feat-install-all]").textContent) && shelf().querySelectorAll("[data-public-feat-replace]").length === 11);
-  ok("E6 the featured mode is now selectable in the work-mode list", WPS.modes().some((m) => m.name === "prototype_sprint"));
+  ok("E6 all 11 featured items are callable tools and none became a work mode", WPS.toolEntries().filter((t) => t.publicSkill).length === 11 && WPS.modes().length === 0);
   WPS.update("boss_health_bar", { description: WPS.find("boss_health_bar").description + " (edited)" });
   await sleep(300);
   const bossRow = shelf().querySelector('[data-public-feat-item="boss_health_bar"]');

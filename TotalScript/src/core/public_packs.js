@@ -1,4 +1,4 @@
-// TotalScript — Featured Public Skill packs (2.2.2)
+// TotalScript — Featured Public Skill packs (2.2.3)
 //
 // Ready-made, high-quality Public Skills that ship WITH the extension so anyone
 // can install them in one click (cards panel → Public → "Featured by
@@ -28,7 +28,7 @@
 // This file is DOM-free at top level (node loads it for the tests).
 (function (root) {
   "use strict";
-  const VERSION = "2.2.2";
+  const VERSION = "2.2.3";
   const PACK_ID = "totalscript_featured";
   const AUTHOR = "TotalScript";
   const DOCS = "https://create.roblox.com/docs/";
@@ -126,7 +126,7 @@ folder:SetAttribute("Font", tostring(args.font or "GothamBold"))
 folder:SetAttribute("DamageColor", hexColor(args.damage_color, Color3.fromRGB(255, 90, 90)))
 folder:SetAttribute("CritColor", hexColor(args.crit_color, Color3.fromRGB(255, 200, 61)))
 folder:SetAttribute("HealColor", hexColor(args.heal_color, Color3.fromRGB(74, 222, 128)))
-folder:SetAttribute("Version", "2.2.2")
+folder:SetAttribute("Version", "2.2.3")
 
 setSource(ServerScriptService, "Script", "DamageNumbersServer", [==[
 -- Damage Numbers Pro (TotalScript featured skill) - server side.
@@ -277,7 +277,7 @@ return {
       { name: "damage", type: "number", required: false, default: 10, description: "Damage per hit (0 = never attacks, just follows)" },
       { name: "attack_cooldown", type: "number", required: false, default: 1.2 },
     ],
-    references: [ref("Character pathfinding", "characters/pathfinding"), ref("Humanoid", "reference/engine/classes/Humanoid")],
+    references: [ref("Character pathfinding", "characters/pathfinding"), ref("PathfindingService", "reference/engine/classes/PathfindingService"), ref("Humanoid", "reference/engine/classes/Humanoid"), ref("Humanoid.MoveTo", "reference/engine/classes/Humanoid#MoveTo"), ref("Attributes", "scripting/attributes")],
     luau: PRELUDE + String.raw`
 local npc = resolve(args.npc)
 if not npc then return { ok = false, error = "NPC not found at '" .. tostring(args.npc) .. "' - give the full path, e.g. Workspace.Zombie" } end
@@ -734,7 +734,7 @@ ensure(folder, "RemoteEvent", "Action")
 local trees = ensure(folder, "Folder", "Trees")
 folder:SetAttribute("Accent", hexColor(args.accent, Color3.fromRGB(34, 211, 238)))
 folder:SetAttribute("TypewriterSpeed", num(args.typewriter_speed, 40, 0, 400))
-folder:SetAttribute("Version", "2.2.2")
+folder:SetAttribute("Version", "2.2.3")
 local json = HttpService:JSONEncode(tree)
 local mod = setSource(trees, "ModuleScript", treeName, "-- Dialogue tree for " .. title .. " (edit freely; choices: {text, next = node id or nil to end, action = optional string sent to the server})\nlocal HttpService = game:GetService(\"HttpService\")\nreturn HttpService:JSONDecode([=====[" .. json .. "]=====])\n")
 mod:SetAttribute("NPC", npc:GetFullName())
@@ -1099,7 +1099,7 @@ folder:SetAttribute("Stat", stat)
 folder:SetAttribute("Radius", num(args.radius, 40, 2, 2000))
 folder:SetAttribute("AreaPath", area and area:GetFullName() or "")
 folder:SetAttribute("CenterPath", center and center:GetFullName() or "")
-folder:SetAttribute("Version", "2.2.2")
+folder:SetAttribute("Version", "2.2.3")
 
 setSource(ServerScriptService, "Script", "CollectibleServer", [==[
 -- Collectible Spawner (TotalScript featured skill) - server side.
@@ -1283,7 +1283,7 @@ end
 
 local folder = ensure(ReplicatedStorage, "Folder", "Zones")
 ensure(folder, "RemoteEvent", "Message")
-folder:SetAttribute("Version", "2.2.2")
+folder:SetAttribute("Version", "2.2.3")
 local server = setSource(ServerScriptService, "Script", "ZoneServer", [==[
 -- Zone System (TotalScript featured skill) - server side.
 -- Every Part tagged "Zone" with attributes ZoneKind / ZoneAmount / ZoneMessage is checked each tick.
@@ -1688,108 +1688,899 @@ return {
 `,
   };
 
-  // ── abilities ────────────────────────────────────────────────────────────
-  const GUI_POLISH = {
-    kind: "ability", name: "gui_polish_pass", title: "GUI Polish Pass",
-    description: "A disciplined polish routine for an EXISTING ScreenGui: inspect, audit, fix responsiveness for phone + desktop, apply the design tokens, wire hover / press states and micro-tweens, verify with a preview, report before/after. Uses only real ui_* commands, one per message, and never rebuilds a screen that works.",
-    tags: ["ui", "polish", "responsive", "quality"], triggers: ["polish gui", "improve ui", "make the ui look better", "responsive", "juice the menu"],
-    expert: "ui_ux", version: 1,
-    usage: 'gui_polish_pass {screen:"StarterGui.MainMenu", style:"sleek"}',
-    params: [
-      { name: "screen", type: "string", required: true, description: "Path of the ScreenGui to polish, e.g. StarterGui.HUD" },
-      { name: "style", type: "string", required: false, default: "", description: "Token style to apply (sleek | cartoon | minimal | glass | horror | scifi | fantasy | retro | ...) - empty keeps the installed tokens" },
-      { name: "mobile", type: "boolean", required: false, default: true, description: "Also verify / fix the phone layout" },
-    ],
-    instructions: "Polish {{screen}} without changing what it does. Work strictly in this order and show the evidence of each step (the command output), never a description of what you would do. If a step finds nothing to fix, say so and move on - do not invent problems. Style requested: '{{style}}' (empty = keep tokens). Mobile pass: {{mobile}}.",
-    steps: [
-      "ui_inspect {path:\"{{screen}}\"} - learn the real tree: names, classes, sizes, text. Stop with an ERROR if the screen does not exist; never create a new one in this ability.",
-      "ui_audit {path:\"{{screen}}\"} - record every finding (offset-only sizes, missing anchors, TextScaled without UITextSizeConstraint, missing padding/corners, unreadable contrast, overlapping siblings).",
-      "ui_responsive_check {path:\"{{screen}}\"} at desktop, then (if mobile) phone - note which elements break.",
-      "ui_responsive_fix {path:\"{{screen}}\"} / ui_make_responsive for the elements that broke - scale sizes, anchor presets, UISizeConstraint and UITextSizeConstraint; keep pixel values only for strokes and paddings.",
-      "If a style was given: design_tokens_set {style:\"{{style}}\"} then ui_apply_tokens {path:\"{{screen}}\"} (colours, corner radii, strokes, fonts from the tokens - no hand-picked colours).",
-      "ui_states_wire {path:\"{{screen}}\"} for every button: hover / press / disabled states; ui_tween for the two or three micro-interactions that matter (menu open, button press, value change) with 0.12-0.25 s durations - no bouncing everything.",
-      "ui_audit again and ui_preview {path:\"{{screen}}\"} - attach the preview and compare with the first audit. Every finding fixed or explicitly deferred with a reason.",
-      "Report: a two-column before/after of the audit findings, the exact commands run, and anything you could not verify (e.g. 'phone layout not previewed because ...').",
-    ],
-    commands: ["ui_inspect", "ui_audit", "ui_responsive_check", "ui_responsive_fix", "ui_make_responsive", "design_tokens_set", "ui_apply_tokens", "ui_states_wire", "ui_tween", "ui_preview"],
-    references: [ref("UI position and size", "ui/position-and-size"), ref("Size modifiers", "ui/size-modifiers"), ref("Appearance modifiers", "ui/appearance-modifiers"), ref("UI animation", "ui/animation"), ref("UIAspectRatioConstraint", "reference/engine/classes/UIAspectRatioConstraint")],
-  };
-
-  const RELEASE_CHECK = {
-    kind: "ability", name: "release_checklist", title: "Release Checklist",
-    description: "A pre-publish inspection of the whole place with real tools: diagnostics audit, script lint + deprecations, project health, model checks (unanchored / huge parts), UI responsiveness, console errors - then fixes ONLY what the evidence shows and ends with a go / no-go table. Nothing is published by this ability.",
-    tags: ["quality", "release", "audit", "lint"], triggers: ["release checklist", "ready to publish", "pre-publish check", "audit my game", "ship check", "qa pass"],
-    expert: "debug_repair", version: 1,
-    usage: "release_checklist {fix:true}",
-    params: [
-      { name: "fix", type: "boolean", required: false, default: true, description: "Apply the safe automatic fixes (deprecations, common diagnostics) after reporting them" },
-      { name: "scope", type: "string", required: false, default: "", description: "Optional path to limit the model / UI checks to (default: whole place)" },
-    ],
-    instructions: "Run a release inspection. Fixes allowed: {{fix}}. Scope: '{{scope}}' (empty = whole place). Rules: every verdict must quote the command output it came from; never mark a row PASS without evidence; never publish, never change gameplay numbers, never delete anything - fixes are limited to deprecations, lint-safe rewrites and the diagnostics_fix_common set, and each fix is followed by script_check on the touched script.",
-    steps: [
-      "diagnostics_audit {} - the engine-level issues (missing services, broken requires, infinite yields).",
-      "project_health_report {} and workspace_stats {} - part counts, script counts, oversized assets, StreamingEnabled, physics load.",
-      "script_lint {} across all scripts, then script_deprecations_fix only if fix is true; script_check each script you touched.",
-      "model_check {path: scope or Workspace} - unanchored static geometry, CanCollide on decorations, parts far from origin, missing PrimaryPart on models that move.",
-      "ui_responsive_check on every ScreenGui under StarterGui (list them with ui_find or instance_find_class first) - phone and desktop.",
-      "get_console_output {} after a short Play test if the user allows it - any red lines block the release.",
-      "If fix is true: diagnostics_fix_common {} for the safe set; re-run diagnostics_audit to prove it.",
-      "Final table: row per check (Diagnostics, Health, Lint, Models, UI, Console) with PASS / FAIL / NOT CHECKED, the evidence line, and the remaining manual to-dos (thumbnails, descriptions, game passes, moderation) - stated as things the user does in the Creator Dashboard, not as done.",
-    ],
-    commands: ["diagnostics_audit", "project_health_report", "workspace_stats", "script_lint", "script_deprecations_fix", "script_check", "model_check", "ui_responsive_check", "ui_find", "instance_find_class", "get_console_output", "diagnostics_fix_common"],
-    references: [ref("Streaming", "workspace/streaming"), ref("Data stores best practices", "cloud-services/data-stores/best-practices")],
-  };
-
-  const GAME_FEEL = {
-    kind: "ability", name: "game_feel_pass", title: "Game Feel Pass",
-    description: "Adds juice to an existing mechanic with measured doses: camera shake on impact, hit flash highlight, particle burst + sound event, a short hit-stop, and UI punch on value changes - each wired to the mechanic's real event (not a demo loop), each with restrained numbers, each verified at Play. Uses the fx_/sfx_/camera_/ui_ packs rather than hand-written effect code.",
-    tags: ["juice", "vfx", "sfx", "polish", "combat"], triggers: ["game feel", "juice", "screen shake", "hit feedback", "make it feel good", "impact"],
-    expert: "vfx", version: 1,
-    usage: 'game_feel_pass {mechanic:"sword hit", script:"ServerScriptService.Combat", intensity:"medium"}',
-    params: [
-      { name: "mechanic", type: "string", required: true, description: "What should feel better (e.g. 'sword hit', 'coin pickup', 'door open', 'jump landing')" },
-      { name: "script", type: "string", required: false, default: "", description: "Path of the script where the event happens (found with script_search if empty)" },
-      { name: "intensity", type: "string", required: false, default: "medium", enum: ["subtle", "medium", "heavy"], description: "Overall dose" },
-    ],
-    instructions: "Improve the feel of '{{mechanic}}' at intensity '{{intensity}}'. Find the real event first (script '{{script}}' or script_search); every effect is triggered from that event, never from a timer. Doses: subtle = shake 0.15/0.1 s, flash 0.08 s, no hit-stop; medium = shake 0.35/0.18 s, flash 0.12 s, hit-stop 0.05 s; heavy = shake 0.6/0.25 s, flash 0.15 s, hit-stop 0.08 s. Add at most five effects; remove any that makes the mechanic harder to read. Never invent sound asset ids - define sfx events with sfx_event_define and leave the id empty if the user has none, saying so.",
-    steps: [
-      "script_search / script_read the mechanic's script and quote the exact line (event, function) the effects will hang off. If there is none, stop and say what is missing.",
-      "camera_shake preset for the intensity, fired from that event on the affected client (RemoteEvent if the event is server-side - remote_event_create).",
-      "highlight_add on the hit target for the flash duration (then highlight_clear), or ui_tween a flash on the HUD element for UI events.",
-      "fx_burst (or fx_sparks / fx_puff matching the material) at the impact position, pooled, 8-16 particles - verify with vfx_validate.",
-      "sfx_event_define + sfx_event_play for the impact (layered: thump + material tail); empty SoundId if none provided.",
-      "Hit-stop (medium/heavy only): script_insert a 0.05-0.08 s pause of the attacker/target animation speed (never a global wait).",
-      "UI punch for value changes: ui_tween the number label scale 1.0 -> 1.2 -> 1.0 in 0.18 s.",
-      "Play-test with get_console_output; report the five effects, their numbers, where they are wired, and what was intentionally left out.",
-    ],
-    commands: ["script_search", "script_read", "script_insert", "camera_shake", "remote_event_create", "highlight_add", "highlight_clear", "fx_burst", "fx_sparks", "fx_puff", "vfx_validate", "sfx_event_define", "sfx_event_play", "ui_tween", "get_console_output"],
-    references: [ref("Particle emitters", "effects/particle-emitters"), ref("Highlighting", "effects/highlighting"), ref("Sound", "sound"), ref("Camera", "workspace/camera")],
-  };
-
-  // ── work mode ────────────────────────────────────────────────────────────
-  const JAM_MODE = {
-    kind: "mode", name: "prototype_sprint", title: "Prototype Sprint", badge: "JAM",
-    description: "Game-jam work mode: a playable loop in the fewest messages. Grey-box first, one system per message, blueprints and featured skills before custom code, verify at Play after every system, polish only after the loop closes.",
-    sub: "Playable loop first, polish last", note: "Best for jams, pitches and 'can this idea work' tests. Switch back to Totality for production quality.",
-    toast: "Prototype Sprint - playable loop first", base: "creation",
-    tags: ["jam", "prototype", "speed"], triggers: ["game jam", "prototype", "quick test", "mvp", "proof of concept"],
+  // ── 8. checkpoint_system ─────────────────────────────────────────────────
+  const CHECKPOINTS = {
+    kind: "skill", name: "checkpoint_system", title: "Checkpoint System",
+    description: "Turns a Folder / Model of parts into a complete obby checkpoint system: numbered stages (from the part names or the folder order), a leaderstat that only moves forward, respawn on top of the last checkpoint, a slide-in 'Checkpoint 3 / 12' banner, reached / next checkpoints recoloured on the client, optional sparkle burst, and a SetStage bindable for other scripts. Progress lives for the session (no DataStore is written - say so if persistence is wanted).",
+    tags: ["obby", "checkpoint", "leaderstats", "gameplay"], triggers: ["checkpoint", "checkpoints", "obby stages", "respawn at checkpoint", "stage counter"],
     expert: "gameplay_systems", version: 1,
-    mandate: [
-      "PROTOTYPE SPRINT. Goal: the smallest loop a player can enjoy end-to-end (spawn -> act -> reward -> repeat) running at Play before anything is pretty.",
-      "Order of work, one system per message: 1) grey-box the space with part_create / model_build (no materials, no decoration); 2) the core verb (move / hit / collect / build) with the matching blueprint_install or featured public skill (collectible_spawner, zone_system, npc_patrol_chase, keycard_door_system, damage_numbers_pro, boss_health_bar) before any hand-written system; 3) the reward (leaderstats_int + the stat the skill feeds); 4) the loop closer (round / respawn / shop) via blueprint_install; 5) only now: one HUD (ui_screen_generate hud) and one feedback pass (game_feel_pass).",
-      "Verify after every system with get_console_output and a one-line Play check; a red line is fixed before the next system. Keep numbers in attributes so they can be tuned without edits.",
-      "Forbidden until the loop closes: textures, lighting presets, cutscenes, custom fonts, more than one UI screen, refactors. Say 'deferred: <thing>' instead of doing it.",
-      "Finish each message with the loop status: which of the five steps are done and the single next step.",
-    ].join("\n"),
-    focus: ["part_create", "model_build", "blueprint_list", "blueprint_install", "blueprint_verify", "leaderstats_int", "spawn_location_create", "ui_screen_generate", "get_console_output", "humanoid_set", "instance_find", "script_check", "tag_add", "proximity_prompt_create", "remote_event_create"],
-    references: [ref("Leaderboards", "players/leaderboards"), ref("Attributes", "scripting/attributes")],
+    usage: 'checkpoint_system {checkpoints:"Workspace.Checkpoints", stat_name:"Stage", celebrate:true}',
+    params: [
+      { name: "checkpoints", type: "string", required: true, description: "Path to the Folder / Model holding the checkpoint parts (every BasePart inside counts)" },
+      { name: "stat_name", type: "string", required: false, default: "Stage", description: "Leaderstat name shown on the player list" },
+      { name: "order", type: "string", required: false, default: "name", enum: ["name", "folder"], description: "name = number in the part name (Checkpoint7, CP_7); folder = the order the parts sit in the folder" },
+      { name: "respawn_offset", type: "number", required: false, default: 4, description: "Studs above the checkpoint the character spawns at (1-20)" },
+      { name: "done_color", type: "string", required: false, default: "#3DDC84", description: "Hex colour of checkpoints already reached (client only)" },
+      { name: "next_color", type: "string", required: false, default: "#FFD166", description: "Hex colour of the next checkpoint (client only)" },
+      { name: "celebrate", type: "boolean", required: false, default: true, description: "Sparkle burst + banner when a new checkpoint is reached" },
+    ],
+    references: [ref("Leaderboards", "players/leaderboards"), ref("CollectionService", "reference/engine/classes/CollectionService"), ref("Attributes", "scripting/attributes"), ref("BasePart.Touched", "reference/engine/classes/BasePart#Touched"), ref("Player.CharacterAdded", "reference/engine/classes/Player#CharacterAdded")],
+    luau: PRELUDE + String.raw`
+local CollectionService = game:GetService("CollectionService")
+local ServerScriptService = game:GetService("ServerScriptService")
+local holder = resolve(args.checkpoints)
+if not holder then return { ok = false, error = "checkpoints not found at '" .. tostring(args.checkpoints) .. "' - give the Folder / Model that holds the checkpoint parts" } end
+local parts = {}
+for _, d in ipairs(holder:GetDescendants()) do
+  if d:IsA("BasePart") then parts[#parts + 1] = d end
+end
+if holder:IsA("BasePart") then parts[#parts + 1] = holder end
+if #parts == 0 then return { ok = false, error = holder:GetFullName() .. " holds no parts - add one Part per checkpoint first (part_create / model_build)" } end
+
+local statName = tostring(args.stat_name or "")
+if statName == "" then statName = "Stage" end
+local order = tostring(args.order or "name")
+local offset = num(args.respawn_offset, 4, 1, 20)
+local doneColor = hexColor(args.done_color, Color3.fromRGB(61, 220, 132))
+local nextColor = hexColor(args.next_color, Color3.fromRGB(255, 209, 102))
+local celebrate = args.celebrate ~= false
+
+-- order the parts: by the number in their name when every part has one, else folder order
+local numbered = 0
+local keyed = {}
+for i, p in ipairs(parts) do
+  local n = string.match(p.Name, "(%d+)%s*$")
+  if n then numbered = numbered + 1 end
+  keyed[i] = { part = p, n = tonumber(n or "0") or 0, i = i }
+end
+if order == "name" and numbered == #parts then
+  table.sort(keyed, function(a, b) if a.n == b.n then return a.i < b.i end return a.n < b.n end)
+end
+local stages = {}
+for _, old in ipairs(CollectionService:GetTagged("Checkpoint")) do
+  if old:IsDescendantOf(holder) or old == holder then CollectionService:RemoveTag(old, "Checkpoint") end
+end
+for idx, k in ipairs(keyed) do
+  local p = k.part
+  p.Anchored = true
+  p:SetAttribute("Stage", idx)
+  CollectionService:AddTag(p, "Checkpoint")
+  stages[idx] = p.Name
+end
+holder:SetAttribute("StatName", statName)
+holder:SetAttribute("RespawnOffset", offset)
+holder:SetAttribute("DoneColor", doneColor)
+holder:SetAttribute("NextColor", nextColor)
+holder:SetAttribute("Celebrate", celebrate)
+holder:SetAttribute("Total", #keyed)
+CollectionService:AddTag(holder, "CheckpointSet")
+
+local reached = ensure(holder, "RemoteEvent", "CheckpointReached")
+local setStage = ensure(holder, "BindableEvent", "SetStage")
+
+setSource(holder, "Script", "CheckpointServer", [==[
+-- Checkpoint System (TotalScript featured skill) - server. Lives inside the checkpoint folder.
+local Players = game:GetService("Players")
+local CollectionService = game:GetService("CollectionService")
+local holder = script.Parent
+local statName = holder:GetAttribute("StatName") or "Stage"
+local offset = holder:GetAttribute("RespawnOffset") or 4
+local reachedEvent = holder:WaitForChild("CheckpointReached")
+local setStageEvent = holder:WaitForChild("SetStage")
+
+local byStage = {}
+local total = 0
+local function index()
+  byStage = {}
+  total = 0
+  for _, p in ipairs(CollectionService:GetTagged("Checkpoint")) do
+    if p:IsDescendantOf(holder) or p == holder then
+      local s = p:GetAttribute("Stage")
+      if s then byStage[s] = p if s > total then total = s end end
+    end
+  end
+  holder:SetAttribute("Total", total)
+end
+index()
+
+local function statOf(player)
+  local ls = player:FindFirstChild("leaderstats")
+  if not ls then ls = Instance.new("Folder") ls.Name = "leaderstats" ls.Parent = player end
+  local v = ls:FindFirstChild(statName)
+  if not v then v = Instance.new("IntValue") v.Name = statName v.Value = 0 v.Parent = ls end
+  return v
+end
+
+local function placeAt(character, stage)
+  local p = byStage[stage]
+  if not p or not character then return end
+  local root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
+  if not root then return end
+  local top = p.Position + Vector3.new(0, p.Size.Y / 2 + offset, 0)
+  character:PivotTo(CFrame.new(top))
+end
+
+local function setStage(player, stage, silent)
+  local v = statOf(player)
+  stage = math.clamp(math.floor(tonumber(stage) or 0), 0, math.max(total, 0))
+  if stage == v.Value then return false end
+  v.Value = stage
+  player:SetAttribute("Checkpoint", stage)
+  if not silent then reachedEvent:FireClient(player, stage, total) end
+  return true
+end
+
+local lastTouch = {}
+local function onTouch(p, hit)
+  local character = hit and hit.Parent
+  local player = character and Players:GetPlayerFromCharacter(character)
+  if not player then return end
+  local hum = character:FindFirstChildOfClass("Humanoid")
+  if not hum or hum.Health <= 0 then return end
+  local stage = p:GetAttribute("Stage")
+  if not stage then return end
+  local now = os.clock()
+  local last = lastTouch[player]
+  if last and now - last < 0.25 then return end
+  lastTouch[player] = now
+  local v = statOf(player)
+  if stage > v.Value then setStage(player, stage) end
+end
+
+local hooked = {}
+local function hook(p)
+  if hooked[p] then return end
+  hooked[p] = true
+  p.Touched:Connect(function(hit) onTouch(p, hit) end)
+end
+for _, p in pairs(byStage) do hook(p) end
+CollectionService:GetInstanceAddedSignal("Checkpoint"):Connect(function(p) index() if p:IsDescendantOf(holder) then hook(p) end end)
+CollectionService:GetInstanceRemovedSignal("Checkpoint"):Connect(index)
+
+Players.PlayerAdded:Connect(function(player)
+  statOf(player)
+  player.CharacterAdded:Connect(function(character)
+    local v = statOf(player)
+    if v.Value > 0 then
+      task.wait(0.1)
+      placeAt(character, v.Value)
+    end
+  end)
+end)
+for _, player in ipairs(Players:GetPlayers()) do statOf(player) end
+Players.PlayerRemoving:Connect(function(player) lastTouch[player] = nil end)
+
+-- other scripts: holder.SetStage:Fire(player, stage) (clamped; 0 resets to the start)
+setStageEvent.Event:Connect(function(player, stage)
+  if typeof(player) == "Instance" and player:IsA("Player") then
+    setStage(player, stage)
+    if player.Character then placeAt(player.Character, statOf(player).Value) end
+  end
+end)
+]==])
+
+setSource(StarterPlayerScripts, "LocalScript", "CheckpointClient", [==[
+-- Checkpoint System (TotalScript featured skill) - client: banner, colours, sparkles.
+local Players = game:GetService("Players")
+local CollectionService = game:GetService("CollectionService")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+
+local holder = nil
+for _, h in ipairs(CollectionService:GetTagged("CheckpointSet")) do holder = h end
+if not holder then
+  CollectionService:GetInstanceAddedSignal("CheckpointSet"):Wait()
+  holder = CollectionService:GetTagged("CheckpointSet")[1]
+end
+local doneColor = holder:GetAttribute("DoneColor") or Color3.fromRGB(61, 220, 132)
+local nextColor = holder:GetAttribute("NextColor") or Color3.fromRGB(255, 209, 102)
+local celebrate = holder:GetAttribute("Celebrate") ~= false
+local reachedEvent = holder:WaitForChild("CheckpointReached")
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "CheckpointBanner"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 40
+gui.Parent = player:WaitForChild("PlayerGui")
+local banner = Instance.new("TextLabel")
+banner.Name = "Banner"
+banner.AnchorPoint = Vector2.new(0.5, 0)
+banner.Position = UDim2.new(0.5, 0, 0, -60)
+banner.Size = UDim2.new(0, 360, 0, 48)
+banner.BackgroundColor3 = Color3.fromRGB(20, 22, 28)
+banner.BackgroundTransparency = 0.15
+banner.TextColor3 = Color3.fromRGB(255, 255, 255)
+banner.Font = Enum.Font.GothamBold
+banner.TextScaled = true
+banner.Text = ""
+banner.Visible = false
+banner.Parent = gui
+local corner = Instance.new("UICorner") corner.CornerRadius = UDim.new(0, 12) corner.Parent = banner
+local stroke = Instance.new("UIStroke") stroke.Thickness = 2 stroke.Color = nextColor stroke.Parent = banner
+local pad = Instance.new("UIPadding") pad.PaddingLeft = UDim.new(0, 16) pad.PaddingRight = UDim.new(0, 16) pad.PaddingTop = UDim.new(0, 8) pad.PaddingBottom = UDim.new(0, 8) pad.Parent = banner
+
+local original = {}
+local function paint(stage)
+  for _, p in ipairs(CollectionService:GetTagged("Checkpoint")) do
+    if p:IsDescendantOf(holder) or p == holder then
+      local s = p:GetAttribute("Stage") or 0
+      if original[p] == nil then original[p] = p.Color end
+      if s <= stage then p.Color = doneColor
+      elseif s == stage + 1 then p.Color = nextColor
+      else p.Color = original[p] end
+    end
+  end
+end
+
+local function sparkle(stage)
+  for _, p in ipairs(CollectionService:GetTagged("Checkpoint")) do
+    if p:GetAttribute("Stage") == stage then
+      local e = Instance.new("ParticleEmitter")
+      e.Name = "CheckpointSparkle"
+      e.Color = ColorSequence.new(doneColor)
+      e.Size = NumberSequence.new(0.6, 0)
+      e.Lifetime = NumberRange.new(0.6, 1.1)
+      e.Speed = NumberRange.new(6, 12)
+      e.SpreadAngle = Vector2.new(180, 180)
+      e.Rate = 0
+      e.Parent = p
+      pcall(function() e:Emit(40) end)
+      task.delay(2, function() e:Destroy() end)
+    end
+  end
+end
+
+local showing = nil
+local function show(stage, total)
+  banner.Text = "Checkpoint " .. tostring(stage) .. " / " .. tostring(total)
+  banner.Visible = true
+  banner.Position = UDim2.new(0.5, 0, 0, -60)
+  TweenService:Create(banner, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Position = UDim2.new(0.5, 0, 0, 24) }):Play()
+  local token = {}
+  showing = token
+  task.delay(2.2, function()
+    if showing ~= token then return end
+    local t = TweenService:Create(banner, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = UDim2.new(0.5, 0, 0, -60) })
+    t:Play()
+    t.Completed:Connect(function() if showing == token then banner.Visible = false end end)
+  end)
+end
+
+reachedEvent.OnClientEvent:Connect(function(stage, total)
+  paint(stage)
+  if celebrate then show(stage, total) sparkle(stage) end
+end)
+paint(player:GetAttribute("Checkpoint") or 0)
+CollectionService:GetInstanceAddedSignal("Checkpoint"):Connect(function() paint(player:GetAttribute("Checkpoint") or 0) end)
+]==])
+
+waypoint("TotalScript: checkpoint_system " .. holder.Name)
+return {
+  holder = holder:GetFullName(), stages = #keyed, order = (order == "name" and numbered == #parts) and "name" or "folder", stat = statName, first = stages[1], last = stages[#stages],
+  installed = { "tag Checkpoint + attribute Stage on every part (tag CheckpointSet on the holder)", holder:GetFullName() .. ".CheckpointServer (leaderstat, forward-only progress, respawn on the last checkpoint)", holder:GetFullName() .. ".CheckpointReached (RemoteEvent) + .SetStage (BindableEvent for other scripts)", "StarterPlayer.StarterPlayerScripts.CheckpointClient (banner, colours, sparkles)" },
+  note = "Progress is per session; wire a DataStore if it must survive rejoin. Attributes StatName / RespawnOffset / DoneColor / NextColor / Celebrate on the holder tweak it live.",
+  test = "Press Play, walk onto checkpoint 1 then 2: the banner slides in, the leaderstat climbs, reset the character and you respawn on checkpoint 2.",
+}
+`,
+  };
+
+  // ── 9. gui_polish_kit ────────────────────────────────────────────────────
+  const GUI_POLISH_KIT = {
+    kind: "skill", name: "gui_polish_kit", title: "GUI Polish Kit",
+    description: "Polishes an EXISTING ScreenGui (or any frame inside one) in one pass without changing what it does: a consistent style (sleek / cartoon / minimal / glass) with rounded corners, strokes, padding on crowded containers, one font family and scaled text with min / max sizes, hover / press micro-tweens on every button, and a viewport-aware UIScale so it reads on phones and 4K. Every element it adds is named TS_* so running it again updates instead of stacking.",
+    tags: ["ui", "polish", "responsive", "style"], triggers: ["polish gui", "improve ui", "make the ui look better", "round the corners", "consistent ui", "button hover"],
+    expert: "ui_ux", version: 1,
+    usage: 'gui_polish_kit {screen:"StarterGui.MainMenu", style:"sleek", accent:"#22D3EE"}',
+    params: [
+      { name: "screen", type: "string", required: true, description: "Path of the ScreenGui (or a Frame inside one) to polish, e.g. StarterGui.HUD" },
+      { name: "style", type: "string", required: false, default: "sleek", enum: ["sleek", "cartoon", "minimal", "glass"], description: "Look: sleek (10px corners, thin stroke), cartoon (16px, thick stroke), minimal (6px, no stroke), glass (translucent panels, soft stroke)" },
+      { name: "accent", type: "string", required: false, default: "#22D3EE", description: "Hex accent used for strokes and button hover" },
+      { name: "font", type: "string", required: false, default: "", description: "Enum.Font name for every text (default per style: GothamMedium / FredokaOne / Gotham / GothamMedium)" },
+      { name: "corner", type: "number", required: false, default: 0, description: "Corner radius in px (0 = style default)" },
+      { name: "hover", type: "boolean", required: false, default: true, description: "Hover / press tweens on buttons" },
+      { name: "text_scale", type: "boolean", required: false, default: true, description: "TextScaled + UITextSizeConstraint (10-36 px) on every text" },
+    ],
+    references: [ref("Appearance modifiers", "ui/appearance-modifiers"), ref("UICorner", "reference/engine/classes/UICorner"), ref("UIStroke", "reference/engine/classes/UIStroke"), ref("UIPadding", "reference/engine/classes/UIPadding"), ref("UITextSizeConstraint", "reference/engine/classes/UITextSizeConstraint"), ref("UI animation", "ui/animation")],
+    luau: PRELUDE + String.raw`
+local target = resolve(args.screen)
+if not target then return { ok = false, error = "nothing at '" .. tostring(args.screen) .. "' - give a ScreenGui path such as StarterGui.HUD" } end
+if not (target:IsA("LayerCollector") or target:IsA("GuiObject")) then return { ok = false, error = target:GetFullName() .. " is a " .. target.ClassName .. ", not a ScreenGui / Frame" } end
+local rootGui = target
+if not rootGui:IsA("LayerCollector") then rootGui = target:FindFirstAncestorWhichIsA("LayerCollector") or target end
+
+local STYLES = {
+  sleek = { corner = 10, stroke = 1, strokeT = 0.35, font = "GothamMedium", glass = false, pad = 8 },
+  cartoon = { corner = 16, stroke = 3, strokeT = 0, font = "FredokaOne", glass = false, pad = 10 },
+  minimal = { corner = 6, stroke = 0, strokeT = 1, font = "Gotham", glass = false, pad = 6 },
+  glass = { corner = 12, stroke = 1, strokeT = 0.5, font = "GothamMedium", glass = true, pad = 10 },
+}
+local styleName = tostring(args.style or "sleek")
+local S = STYLES[styleName] or STYLES.sleek
+if not STYLES[styleName] then styleName = "sleek" end
+local accent = hexColor(args.accent, Color3.fromRGB(34, 211, 238))
+local fontName = tostring(args.font or "")
+if fontName == "" then fontName = S.font end
+local font = nil
+pcall(function() font = Enum.Font[fontName] end)
+if not font then fontName = S.font pcall(function() font = Enum.Font[fontName] end) end
+local radius = math.floor(num(args.corner, 0, 0, 64))
+if radius == 0 then radius = S.corner end
+local hover = args.hover ~= false
+local textScale = args.text_scale ~= false
+
+local counts = { panels = 0, texts = 0, buttons = 0, paddings = 0, skipped = 0 }
+local function isUi(inst) return inst:IsA("UIComponent") or inst:IsA("UIBase") end
+local function hasLayout(inst)
+  for _, c in ipairs(inst:GetChildren()) do if c:IsA("UIListLayout") or c:IsA("UIGridLayout") or c:IsA("UIPadding") then return true end end
+  return false
+end
+local function guiChildren(inst)
+  local n = 0
+  for _, c in ipairs(inst:GetChildren()) do if c:IsA("GuiObject") then n = n + 1 end end
+  return n
+end
+
+local function panel(inst)
+  if inst.BackgroundTransparency >= 1 then return end
+  counts.panels = counts.panels + 1
+  local c = ensure(inst, "UICorner", "TS_Corner")
+  c.CornerRadius = UDim.new(0, radius)
+  if S.stroke > 0 then
+    local st = ensure(inst, "UIStroke", "TS_Stroke")
+    st.Thickness = S.stroke
+    st.Color = accent
+    st.Transparency = S.strokeT
+    pcall(function() st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border end)
+  else
+    local old = inst:FindFirstChild("TS_Stroke") if old then old:Destroy() end
+  end
+  inst.BorderSizePixel = 0
+  if S.glass and not inst:IsA("GuiButton") and inst.BackgroundTransparency < 0.25 then inst.BackgroundTransparency = 0.25 end
+  if not hasLayout(inst) and guiChildren(inst) >= 2 then
+    local p = ensure(inst, "UIPadding", "TS_Padding")
+    p.PaddingLeft = UDim.new(0, S.pad) p.PaddingRight = UDim.new(0, S.pad) p.PaddingTop = UDim.new(0, S.pad) p.PaddingBottom = UDim.new(0, S.pad)
+    counts.paddings = counts.paddings + 1
+  end
+end
+
+local function text(inst)
+  counts.texts = counts.texts + 1
+  if font then inst.Font = font end
+  if textScale then
+    inst.TextScaled = true
+    inst.TextWrapped = true
+    local k = ensure(inst, "UITextSizeConstraint", "TS_TextSize")
+    k.MinTextSize = 10
+    k.MaxTextSize = 36
+  end
+end
+
+local function button(inst)
+  counts.buttons = counts.buttons + 1
+  inst.AutoButtonColor = false
+  inst:SetAttribute("TS_Hover", hover)
+  inst:SetAttribute("TS_Accent", accent)
+end
+
+local function visit(inst)
+  if isUi(inst) then return end
+  if inst:IsA("GuiObject") then
+    panel(inst)
+    if inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox") then text(inst) end
+    if inst:IsA("GuiButton") then button(inst) end
+  elseif inst ~= target and not inst:IsA("LayerCollector") and not inst:IsA("LuaSourceContainer") then
+    counts.skipped = counts.skipped + 1
+  end
+end
+visit(target)
+for _, d in ipairs(target:GetDescendants()) do visit(d) end
+
+-- viewport-aware scale on the root (one per ScreenGui)
+local scaleHost = rootGui
+if scaleHost:IsA("LayerCollector") then
+  local sc = ensure(scaleHost, "UIScale", "TS_Scale")
+  sc.Scale = 1
+end
+rootGui:SetAttribute("TS_Style", styleName)
+rootGui:SetAttribute("TS_Accent", accent)
+
+setSource(rootGui, "LocalScript", "TS_PolishClient", [==[
+-- GUI Polish Kit (TotalScript featured skill) - hover / press tweens + viewport scale. Lives inside the ScreenGui.
+local TweenService = game:GetService("TweenService")
+local root = script.Parent
+local accent = root:GetAttribute("TS_Accent") or Color3.fromRGB(34, 211, 238)
+local quick = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+local bound = {}
+local function bind(btn)
+  if bound[btn] or not btn:IsA("GuiButton") or btn:GetAttribute("TS_Hover") == false then return end
+  bound[btn] = true
+  local baseSize = btn.Size
+  local baseColor = btn.BackgroundColor3
+  local function to(scale, tint)
+    local w = UDim2.new(baseSize.X.Scale * scale, baseSize.X.Offset * scale, baseSize.Y.Scale * scale, baseSize.Y.Offset * scale)
+    local props = { Size = w }
+    if tint and btn.BackgroundTransparency < 1 then props.BackgroundColor3 = baseColor:Lerp(accent, tint) end
+    if not tint and btn.BackgroundTransparency < 1 then props.BackgroundColor3 = baseColor end
+    TweenService:Create(btn, quick, props):Play()
+  end
+  btn.MouseEnter:Connect(function() to(1.04, 0.25) end)
+  btn.MouseLeave:Connect(function() to(1, nil) end)
+  btn.MouseButton1Down:Connect(function() to(0.96, 0.45) end)
+  btn.MouseButton1Up:Connect(function() to(1.04, 0.25) end)
+  btn:SetAttribute("TS_Bound", true)
+end
+for _, d in ipairs(root:GetDescendants()) do bind(d) end
+root.DescendantAdded:Connect(bind)
+
+local scale = root:FindFirstChild("TS_Scale")
+local camera = workspace.CurrentCamera
+local function fit()
+  if not scale or not camera then return end
+  local w = camera.ViewportSize.X
+  local s = w / 1280
+  if s < 0.75 then s = 0.75 elseif s > 1.25 then s = 1.25 end
+  scale.Scale = s
+end
+fit()
+if camera then camera:GetPropertyChangedSignal("ViewportSize"):Connect(fit) end
+]==])
+
+waypoint("TotalScript: gui_polish_kit " .. target.Name)
+return {
+  target = target:GetFullName(), style = styleName, font = fontName, corner = radius, stroke = S.stroke, accent = tostring(accent),
+  panels = counts.panels, texts = counts.texts, buttons = counts.buttons, paddings = counts.paddings, skipped = counts.skipped,
+  installed = { "TS_Corner / TS_Stroke / TS_Padding / TS_TextSize inside the elements (re-run updates them)", rootGui:GetFullName() .. ".TS_Scale (UIScale 0.75-1.25 from the viewport width)", rootGui:GetFullName() .. ".TS_PolishClient (hover / press tweens on buttons, live scale)" },
+  note = "Nothing was repositioned; layout stays yours. Set attribute TS_Hover=false on a button to opt it out.",
+  test = "Press Play: hover and press any button (grows 4 %, tints towards the accent); resize the window and the whole GUI scales with it.",
+}
+`,
+  };
+
+  // ── 10. game_feel_kit ────────────────────────────────────────────────────
+  const GAME_FEEL_KIT = {
+    kind: "skill", name: "game_feel_kit", title: "Game Feel Kit",
+    description: "Installs a reusable juice toolkit: a client module (Shake with a trauma model that decays smoothly, Flash, FOV Kick, Punch for GUI elements, Highlight on an instance) driven by one RemoteEvent, a server module (Impact(position, strength, radius) with distance falloff, Flash / Shake for one or every player) and the client runner on RenderStepped. Intensity presets scale everything; an optional demo hook shakes and flashes red whenever the local character takes damage so it can be felt immediately.",
+    tags: ["juice", "camera shake", "vfx", "polish", "combat"], triggers: ["game feel", "juice", "screen shake", "camera shake", "hit feedback", "make it feel good", "impact"],
+    expert: "vfx", version: 1,
+    usage: 'game_feel_kit {intensity:"medium", demo:true}',
+    params: [
+      { name: "intensity", type: "string", required: false, default: "medium", enum: ["subtle", "medium", "heavy"], description: "Global dose for shake / flash / kick" },
+      { name: "flash_color", type: "string", required: false, default: "#FFFFFF", description: "Default hex colour of the screen flash" },
+      { name: "max_distance", type: "number", required: false, default: 60, description: "Impact radius in studs beyond which nobody feels it (5-500)" },
+      { name: "demo", type: "boolean", required: false, default: false, description: "Shake + red flash when the local character loses health (remove later or keep as hit feedback)" },
+    ],
+    references: [ref("Camera", "workspace/camera"), ref("RunService.RenderStepped", "reference/engine/classes/RunService#RenderStepped"), ref("TweenService", "reference/engine/classes/TweenService"), ref("Remote events", "scripting/events/remote"), ref("Highlighting", "effects/highlighting")],
+    luau: PRELUDE + String.raw`
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DOSES = { subtle = 0.6, medium = 1, heavy = 1.6 }
+local intensity = tostring(args.intensity or "medium")
+local dose = DOSES[intensity]
+if not dose then intensity = "medium" dose = 1 end
+local flash = hexColor(args.flash_color, Color3.fromRGB(255, 255, 255))
+local maxDistance = num(args.max_distance, 60, 5, 500)
+local demo = args.demo == true
+
+local folder = ensure(ReplicatedStorage, "Folder", "GameFeel")
+folder:SetAttribute("Intensity", intensity)
+folder:SetAttribute("Dose", dose)
+folder:SetAttribute("FlashColor", flash)
+folder:SetAttribute("MaxDistance", maxDistance)
+folder:SetAttribute("Demo", demo)
+local remote = ensure(folder, "RemoteEvent", "Feel")
+
+setSource(folder, "ModuleScript", "Client", [==[
+-- Game Feel Kit (TotalScript featured skill) - client module. require(ReplicatedStorage.GameFeel.Client)
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local folder = script.Parent
+local dose = folder:GetAttribute("Dose") or 1
+local defaultFlash = folder:GetAttribute("FlashColor") or Color3.fromRGB(255, 255, 255)
+
+local Feel = {}
+Feel.trauma = 0
+Feel.maxOffset = 0.6
+Feel.maxAngle = math.rad(3)
+Feel.decay = 1.6
+Feel.seed = math.random() * 100
+Feel.enabled = true
+local flashFrame = nil
+local baseFov = nil
+
+local function camera() return workspace.CurrentCamera end
+
+-- trauma model: shake strength = trauma^2, trauma decays linearly, so big hits linger and taps barely register
+function Feel.Shake(strength, duration)
+  strength = (tonumber(strength) or 0.5) * dose
+  Feel.trauma = math.min(1, Feel.trauma + strength)
+  if duration then Feel.decay = math.max(0.4, 1 / math.max(0.05, duration)) end
+end
+
+function Feel.Impact(position, strength, radius)
+  local char = Players.LocalPlayer and Players.LocalPlayer.Character
+  local root = char and char:FindFirstChild("HumanoidRootPart")
+  local falloff = 1
+  if root and typeof(position) == "Vector3" then
+    local d = (root.Position - position).Magnitude
+    radius = tonumber(radius) or (folder:GetAttribute("MaxDistance") or 60)
+    if d >= radius then return end
+    falloff = 1 - d / radius
+  end
+  Feel.Shake((tonumber(strength) or 0.5) * falloff)
+end
+
+local function ensureFlash()
+  if flashFrame and flashFrame.Parent then return flashFrame end
+  local player = Players.LocalPlayer
+  local gui = Instance.new("ScreenGui")
+  gui.Name = "GameFeelFlash"
+  gui.ResetOnSpawn = false
+  gui.IgnoreGuiInset = true
+  gui.DisplayOrder = 90
+  gui.Parent = player:WaitForChild("PlayerGui")
+  local f = Instance.new("Frame")
+  f.Name = "Flash"
+  f.Size = UDim2.new(1, 0, 1, 0)
+  f.BackgroundColor3 = defaultFlash
+  f.BackgroundTransparency = 1
+  f.BorderSizePixel = 0
+  f.ZIndex = 50
+  f.Parent = gui
+  flashFrame = f
+  return f
+end
+
+function Feel.Flash(color, duration, peak)
+  local f = ensureFlash()
+  f.BackgroundColor3 = (typeof(color) == "Color3" and color) or defaultFlash
+  peak = math.clamp((tonumber(peak) or 0.35) * dose, 0.05, 0.9)
+  f.BackgroundTransparency = 1 - peak
+  TweenService:Create(f, TweenInfo.new(tonumber(duration) or 0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 1 }):Play()
+end
+
+function Feel.Kick(degrees, duration)
+  local cam = camera()
+  if not cam then return end
+  if not baseFov then baseFov = cam.FieldOfView end
+  degrees = (tonumber(degrees) or 6) * dose
+  cam.FieldOfView = baseFov + degrees
+  TweenService:Create(cam, TweenInfo.new(tonumber(duration) or 0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { FieldOfView = baseFov }):Play()
+end
+
+function Feel.Punch(guiObject, amount, duration)
+  if not (guiObject and guiObject:IsA("GuiObject")) then return end
+  amount = 1 + (tonumber(amount) or 0.15) * dose
+  local base = guiObject:GetAttribute("FeelBaseSize") or guiObject.Size
+  guiObject:SetAttribute("FeelBaseSize", base)
+  guiObject.Size = UDim2.new(base.X.Scale * amount, base.X.Offset * amount, base.Y.Scale * amount, base.Y.Offset * amount)
+  TweenService:Create(guiObject, TweenInfo.new(tonumber(duration) or 0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = base }):Play()
+end
+
+function Feel.Highlight(instance, color, duration)
+  if typeof(instance) ~= "Instance" then return end
+  local h = Instance.new("Highlight")
+  h.Name = "FeelHighlight"
+  h.FillColor = (typeof(color) == "Color3" and color) or defaultFlash
+  h.FillTransparency = 0.4
+  h.OutlineTransparency = 0
+  h.Parent = instance
+  task.delay(tonumber(duration) or 0.15, function() h:Destroy() end)
+end
+
+function Feel.Hit(position, strength)
+  Feel.Impact(position, strength or 0.5)
+  Feel.Kick(4, 0.25)
+end
+
+-- the runner: applied every frame on top of whatever the camera scripts did
+local noise = { 0.3, -0.7, 0.9, -0.2, 0.6, -0.9, 0.1, 0.8, -0.5, 0.4 }
+local function sample(t, k)
+  local i = math.floor(t * 20 + k) % #noise + 1
+  local j = i % #noise + 1
+  local f = (t * 20 + k) % 1
+  return noise[i] + (noise[j] - noise[i]) * f
+end
+function Feel.Step(dt)
+  if not Feel.enabled or Feel.trauma <= 0 then return end
+  local cam = camera()
+  if not cam then return end
+  local s = Feel.trauma * Feel.trauma
+  local t = os.clock() + Feel.seed
+  local ox = Feel.maxOffset * s * sample(t, 0)
+  local oy = Feel.maxOffset * s * sample(t, 3)
+  local rz = Feel.maxAngle * s * sample(t, 6)
+  cam.CFrame = cam.CFrame * CFrame.new(ox, oy, 0) * CFrame.Angles(0, 0, rz)
+  Feel.trauma = math.max(0, Feel.trauma - Feel.decay * dt)
+end
+Feel.lastOffset = sample
+
+return Feel
+]==])
+
+setSource(folder, "ModuleScript", "Server", [==[
+-- Game Feel Kit (TotalScript featured skill) - server module. require(ReplicatedStorage.GameFeel.Server)
+local Players = game:GetService("Players")
+local folder = script.Parent
+local remote = folder:WaitForChild("Feel")
+local Server = {}
+
+local function send(player, kind, data) remote:FireClient(player, kind, data) end
+
+-- Impact(position, strength, radius): everyone whose character is inside the radius shakes, scaled by distance
+function Server.Impact(position, strength, radius)
+  radius = tonumber(radius) or (folder:GetAttribute("MaxDistance") or 60)
+  local hit = 0
+  for _, player in ipairs(Players:GetPlayers()) do
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if root then
+      local d = (root.Position - position).Magnitude
+      if d < radius then
+        hit = hit + 1
+        send(player, "shake", { strength = (tonumber(strength) or 0.5) * (1 - d / radius) })
+      end
+    end
+  end
+  return hit
+end
+function Server.Shake(player, strength, duration) send(player, "shake", { strength = strength, duration = duration }) end
+function Server.Flash(player, color, duration, peak) send(player, "flash", { color = color, duration = duration, peak = peak }) end
+function Server.Kick(player, degrees, duration) send(player, "kick", { degrees = degrees, duration = duration }) end
+function Server.Highlight(player, instance, color, duration) send(player, "highlight", { instance = instance, color = color, duration = duration }) end
+function Server.All(kind, data) remote:FireAllClients(kind, data) end
+return Server
+]==])
+
+setSource(StarterPlayerScripts, "LocalScript", "GameFeelClient", [==[
+-- Game Feel Kit (TotalScript featured skill) - client runner: remote -> module, RenderStepped shake, optional damage demo.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local folder = ReplicatedStorage:WaitForChild("GameFeel")
+local Feel = require(folder:WaitForChild("Client"))
+local remote = folder:WaitForChild("Feel")
+
+remote.OnClientEvent:Connect(function(kind, data)
+  data = type(data) == "table" and data or {}
+  if kind == "shake" then Feel.Shake(data.strength, data.duration)
+  elseif kind == "flash" then Feel.Flash(data.color, data.duration, data.peak)
+  elseif kind == "kick" then Feel.Kick(data.degrees, data.duration)
+  elseif kind == "highlight" then Feel.Highlight(data.instance, data.color, data.duration)
+  elseif kind == "impact" then Feel.Impact(data.position, data.strength, data.radius)
+  elseif kind == "hit" then Feel.Hit(data.position, data.strength) end
+end)
+
+RunService.RenderStepped:Connect(function(dt) Feel.Step(dt) end)
+
+if folder:GetAttribute("Demo") then
+  local player = Players.LocalPlayer
+  local function watch(character)
+    local hum = character:WaitForChild("Humanoid")
+    local last = hum.Health
+    hum.HealthChanged:Connect(function(h)
+      if h < last then
+        local amount = math.clamp((last - h) / math.max(1, hum.MaxHealth), 0.05, 1)
+        Feel.Shake(0.3 + amount * 0.7)
+        Feel.Flash(Color3.fromRGB(255, 60, 60), 0.3, 0.2 + amount * 0.4)
+        Feel.Kick(3 + amount * 6, 0.3)
+      end
+      last = h
+    end)
+  end
+  if player.Character then watch(player.Character) end
+  player.CharacterAdded:Connect(watch)
+end
+]==])
+
+waypoint("TotalScript: game_feel_kit " .. intensity)
+return {
+  folder = folder:GetFullName(), intensity = intensity, dose = dose, max_distance = maxDistance, demo = demo,
+  installed = { "ReplicatedStorage.GameFeel (attributes Intensity / Dose / FlashColor / MaxDistance / Demo)", "ReplicatedStorage.GameFeel.Feel (RemoteEvent)", "ReplicatedStorage.GameFeel.Client (ModuleScript: Shake / Impact / Flash / Kick / Punch / Highlight / Hit)", "ReplicatedStorage.GameFeel.Server (ModuleScript: Impact / Shake / Flash / Kick / Highlight / All)", "StarterPlayer.StarterPlayerScripts.GameFeelClient (runner)" },
+  usage = { server = 'local Feel = require(game.ReplicatedStorage.GameFeel.Server) Feel.Impact(part.Position, 0.8, 40)', client = 'local Feel = require(game.ReplicatedStorage.GameFeel.Client) Feel.Shake(0.5) Feel.Flash(Color3.new(1,1,1), 0.2) Feel.Punch(label, 0.2)' },
+  test = demo and "Press Play and take damage (humanoid_set Health or fall): the camera shakes, the screen flashes red and the FOV kicks." or "Press Play, then from a server script call require(ReplicatedStorage.GameFeel.Server).Impact(position, 0.8) near the player.",
+}
+`,
+  };
+
+  // ── 11. place_audit_report ───────────────────────────────────────────────
+  const PLACE_AUDIT = {
+    kind: "skill", name: "place_audit_report", title: "Place Audit Report",
+    description: "A pre-publish health check that reads everything and invents nothing: loose unanchored parts, deprecated script APIs (wait / spawn / delay / BodyMovers / :connect / Humanoid:LoadAnimation), LocalScripts touching DataStores, disabled scripts, print spam, empty folders, models without a PrimaryPart, parts far from the origin, missing SpawnLocation, empty Sounds / Decals, duplicate names, streaming hints. Writes a readable report ModuleScript into ServerStorage, returns a score with the top findings, and applies the one safe fix (wait/spawn/delay to task.*) only when asked.",
+    tags: ["quality", "audit", "release", "lint"], triggers: ["audit my game", "release checklist", "ready to publish", "pre-publish check", "health check", "find problems"],
+    expert: "debug_repair", version: 1,
+    usage: 'place_audit_report {scope:"", fix_deprecated:false}',
+    params: [
+      { name: "scope", type: "string", required: false, default: "", description: "Path to audit (empty = the whole place: Workspace, ReplicatedStorage, ServerScriptService, ServerStorage, StarterGui, StarterPlayer, StarterPack, Lighting)" },
+      { name: "fix_deprecated", type: "boolean", required: false, default: false, description: "Rewrite bare wait( / spawn( / delay( to task.wait( / task.spawn( / task.delay( inside the scanned scripts" },
+      { name: "max_findings", type: "number", required: false, default: 40, description: "How many findings to list in the result (5-200); the report file always has all of them" },
+      { name: "far_distance", type: "number", required: false, default: 5000, description: "Studs from the origin beyond which a part is flagged (physics precision)" },
+    ],
+    references: [ref("task library", "reference/engine/libraries/task"), ref("Streaming", "workspace/streaming"), ref("Improve performance", "performance-optimization/improve"), ref("Client-server boundary", "scripting/security/client-server-boundary"), ref("SpawnLocation", "reference/engine/classes/SpawnLocation")],
+    luau: PRELUDE + String.raw`
+local ServerStorage = game:GetService("ServerStorage")
+local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
+local scopePath = tostring(args.scope or "")
+local roots = {}
+if scopePath ~= "" then
+  local s = resolve(scopePath)
+  if not s then return { ok = false, error = "scope not found at '" .. scopePath .. "'" } end
+  roots[1] = s
+else
+  for _, name in ipairs({ "Workspace", "ReplicatedStorage", "ServerScriptService", "ServerStorage", "StarterGui", "StarterPlayer", "StarterPack", "Lighting", "ReplicatedFirst" }) do
+    local okS, svc = pcall(function() return game:GetService(name) end)
+    if okS and svc then roots[#roots + 1] = svc end
+  end
+end
+local fixDeprecated = args.fix_deprecated == true
+local maxFindings = math.floor(num(args.max_findings, 40, 5, 200))
+local farDistance = num(args.far_distance, 5000, 500, 100000)
+
+local findings = {}
+local counts = { error = 0, warn = 0, info = 0 }
+local function add(severity, check, inst, detail)
+  counts[severity] = (counts[severity] or 0) + 1
+  findings[#findings + 1] = { severity = severity, check = check, path = inst and inst:GetFullName() or "", detail = detail or "" }
+end
+
+local function inCharacter(inst)
+  local m = inst:FindFirstAncestorOfClass("Model")
+  while m do
+    if m:FindFirstChildOfClass("Humanoid") then return true end
+    m = m:FindFirstAncestorOfClass("Model")
+  end
+  return false
+end
+local function hasJoint(part)
+  for _, c in ipairs(part:GetChildren()) do
+    if c:IsA("JointInstance") or c:IsA("WeldConstraint") or c:IsA("Constraint") or c:IsA("Attachment") then return true end
+  end
+  return false
+end
+
+local DEPRECATED = {
+  { pat = "^wait%(", pat2 = "[^%w_%.:]wait%(", label = "wait()", fix = "task.wait(" },
+  { pat = "^spawn%(", pat2 = "[^%w_%.:]spawn%(", label = "spawn()", fix = "task.spawn(" },
+  { pat = "^delay%(", pat2 = "[^%w_%.:]delay%(", label = "delay()", fix = "task.delay(" },
+  { pat2 = "Body(%a+)", label = "BodyMover", bodies = true },
+  { pat2 = ":connect%(", label = ":connect()" },
+  { pat2 = ":Remove%(%)", label = ":Remove()" },
+  { pat2 = "Humanoid:LoadAnimation", label = "Humanoid:LoadAnimation" },
+  { pat2 = "%.Stepped:Connect%(", label = "RunService.Stepped" },
+}
+local BODIES = { BodyVelocity = true, BodyGyro = true, BodyPosition = true, BodyForce = true, BodyThrust = true, BodyAngularVelocity = true, RocketPropulsion = true }
+
+local fixed = 0
+local scriptsSeen = 0
+local partsSeen = 0
+local unanchored = 0
+local function auditScript(s)
+  scriptsSeen = scriptsSeen + 1
+  local src = s.Source or ""
+  if s:IsA("Script") or s:IsA("LocalScript") then
+    local okD, disabled = pcall(function() return s.Disabled end)
+    if okD and disabled then add("info", "disabled_script", s, "Disabled - delete it or enable it on purpose") end
+  end
+  local hits = {}
+  local rewritten = false
+  for _, d in ipairs(DEPRECATED) do
+    local found = false
+    if d.bodies then
+      for name in string.gmatch(src, "Body(%a+)") do if BODIES["Body" .. name] then found = "Body" .. name end end
+    else
+      if d.pat and string.find(src, d.pat) then found = true end
+      if not found and string.find(src, d.pat2) then found = true end
+    end
+    if found then hits[#hits + 1] = (found == true) and d.label or tostring(found) end
+    if found and fixDeprecated and d.fix then
+      local before = src
+      src = string.gsub(src, d.pat2, function(m) return string.sub(m, 1, 1) .. d.fix end)
+      if d.pat then src = string.gsub(src, d.pat, d.fix) end
+      if src ~= before then rewritten = true end
+    end
+  end
+  if rewritten then fixed = fixed + 1 end
+  if #hits > 0 then add("warn", "deprecated_api", s, table.concat(hits, ", ") .. (fixDeprecated and " (wait/spawn/delay rewritten to task.*)" or " - use task.wait / task.spawn / task.delay, constraints, :Connect, Animator:LoadAnimation")) end
+  if src ~= (s.Source or "") then s.Source = src end
+  local prints = select(2, string.gsub(src, "[^%w_]print%(", ""))
+  if string.find(src, "^print%(") then prints = prints + 1 end
+  if prints >= 5 then add("info", "print_spam", s, tostring(prints) .. " print() calls - strip debug output before release") end
+  if s:IsA("LocalScript") and string.find(src, "DataStoreService") then add("error", "client_datastore", s, "a LocalScript cannot use DataStoreService - move saving to a server Script") end
+  if s:IsA("LocalScript") and string.find(src, "ServerStorage") then add("warn", "client_serverstorage", s, "ServerStorage does not exist on the client") end
+  if string.find(src, "game%.Workspace") then add("info", "game_workspace", s, "use the workspace global") end
+end
+
+local names = {}
+local function auditInstance(inst)
+  if inst:IsA("LuaSourceContainer") then auditScript(inst) return end
+  if inst:IsA("BasePart") then
+    partsSeen = partsSeen + 1
+    if not inst.Anchored and not inCharacter(inst) and not hasJoint(inst) and not inst:FindFirstAncestorOfClass("Tool") then
+      unanchored = unanchored + 1
+      if unanchored <= 25 then add("warn", "unanchored_part", inst, "unanchored with no joint - it will fall at Play") end
+    end
+    local d = inst.Position.Magnitude
+    if d > farDistance then add("warn", "far_from_origin", inst, string.format("%.0f studs from the origin - physics precision drops", d)) end
+  elseif inst:IsA("Folder") then
+    if #inst:GetChildren() == 0 then add("info", "empty_folder", inst, "empty Folder") end
+  elseif inst:IsA("Model") then
+    local n = 0
+    for _, c in ipairs(inst:GetDescendants()) do if c:IsA("BasePart") then n = n + 1 end end
+    if n >= 2 and not inst.PrimaryPart and not inst:FindFirstChildOfClass("Humanoid") then add("info", "no_primary_part", inst, tostring(n) .. " parts and no PrimaryPart - PivotTo / GetPivot use a computed centre") end
+  elseif inst:IsA("Sound") then
+    if (inst.SoundId or "") == "" then add("warn", "empty_sound", inst, "SoundId is empty - it will never play") end
+  elseif inst:IsA("Decal") then
+    if (inst.Texture or "") == "" then add("warn", "empty_decal", inst, "Texture is empty") end
+  end
+end
+
+for _, root in ipairs(roots) do
+  auditInstance(root)
+  for _, d in ipairs(root:GetDescendants()) do auditInstance(d) end
+end
+if unanchored > 25 then add("warn", "unanchored_part", nil, tostring(unanchored - 25) .. " more unanchored parts not listed") end
+
+-- place-level checks
+local wsRoot = nil
+for _, r in ipairs(roots) do if r == workspace then wsRoot = r end end
+if wsRoot then
+  local spawns = 0
+  for _, d in ipairs(workspace:GetDescendants()) do if d:IsA("SpawnLocation") then spawns = spawns + 1 end end
+  if spawns == 0 then add("error", "no_spawn", workspace, "no SpawnLocation - players spawn at the origin (spawn_location_create)") end
+  local seen = {}
+  for _, c in ipairs(workspace:GetChildren()) do
+    if seen[c.Name] then names[c.Name] = (names[c.Name] or 1) + 1 else seen[c.Name] = true end
+  end
+  for n, k in pairs(names) do add("info", "duplicate_name", workspace, string.format("%d children named '%s' - FindFirstChild returns only the first", k, n)) end
+  local okStream, streaming = pcall(function() return workspace.StreamingEnabled end)
+  if okStream and streaming == false and partsSeen > 5000 then add("info", "streaming_off", workspace, tostring(partsSeen) .. " parts with StreamingEnabled off - consider enabling streaming") end
+  local okTech, tech = pcall(function() return Lighting.Technology end)
+  if okTech and tech and tostring(tech) == "Enum.Technology.Compatibility" then add("info", "legacy_lighting", Lighting, "Lighting.Technology is Compatibility - Future / ShadowMap look far better") end
+end
+
+local order = { error = 1, warn = 2, info = 3 }
+table.sort(findings, function(a, b) if order[a.severity] == order[b.severity] then return a.path < b.path end return order[a.severity] < order[b.severity] end)
+local score = 100 - counts.error * 15 - counts.warn * 4 - counts.info * 1
+if score < 0 then score = 0 end
+local verdict = "ship it"
+if counts.error > 0 then verdict = "blocked: fix the errors first" elseif score < 70 then verdict = "needs a cleanup pass" elseif score < 90 then verdict = "good, a few warnings" end
+
+-- the report file: a ModuleScript anyone can require or read
+local lines = {}
+lines[#lines + 1] = "-- TotalScript place audit (" .. os.date("%Y-%m-%d %H:%M") .. ") - scope: " .. (scopePath ~= "" and scopePath or "whole place")
+lines[#lines + 1] = string.format("-- score %d/100 - %s - %d errors, %d warnings, %d infos; %d scripts, %d parts scanned%s", score, verdict, counts.error, counts.warn, counts.info, scriptsSeen, partsSeen, fixDeprecated and (", " .. fixed .. " scripts fixed") or "")
+lines[#lines + 1] = "return {"
+lines[#lines + 1] = string.format("  score = %d, verdict = %q, errors = %d, warnings = %d, infos = %d, scripts = %d, parts = %d, fixed = %d,", score, verdict, counts.error, counts.warn, counts.info, scriptsSeen, partsSeen, fixed)
+lines[#lines + 1] = "  findings = {"
+for _, f in ipairs(findings) do
+  lines[#lines + 1] = string.format("    { severity = %q, check = %q, path = %q, detail = %q },", f.severity, f.check, f.path, f.detail)
+end
+lines[#lines + 1] = "  },"
+lines[#lines + 1] = "}"
+local report = setSource(ServerStorage, "ModuleScript", "TotalScriptAuditReport", table.concat(lines, "\n"))
+
+local top = {}
+for i = 1, math.min(maxFindings, #findings) do
+  local f = findings[i]
+  top[i] = f.severity .. " " .. f.check .. " " .. f.path .. (f.detail ~= "" and (" - " .. f.detail) or "")
+end
+
+waypoint("TotalScript: place_audit_report")
+return {
+  score = score, verdict = verdict, errors = counts.error, warnings = counts.warn, infos = counts.info, scripts = scriptsSeen, parts = partsSeen, fixed = fixed,
+  report = report:GetFullName(), scope = scopePath ~= "" and scopePath or "whole place", listed = #top, total = #findings,
+  findings = top,
+  note = "Every row names the instance it came from - open it in the Explorer. Only wait/spawn/delay were rewritten, and only with fix_deprecated=true; everything else is reported, not changed.",
+}
+`,
   };
 
   const PACKS = [
     {
       id: PACK_ID, title: "Featured by TotalScript", version: VERSION,
-      description: "Seven complete gameplay systems (damage numbers, NPC brain, keycard doors, dialogue trees, collectibles, zones, boss bar), three disciplined procedures (GUI polish, release checklist, game feel) and a game-jam work mode. Curated, idempotent, settings as attributes, no invented asset ids.",
-      items: [DAMAGE_NUMBERS, NPC_BRAIN, DOOR, DIALOGUE, COLLECTIBLES, ZONES, BOSS_BAR, GUI_POLISH, RELEASE_CHECK, GAME_FEEL, JAM_MODE],
+      description: "Eleven complete skills - real Luau systems installed in one call: damage numbers, NPC brain, keycard doors, dialogue trees, collectibles, zones, boss bar, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one carries its docs references. Curated, idempotent, settings as attributes, no invented asset ids.",
+      items: [DAMAGE_NUMBERS, NPC_BRAIN, DOOR, DIALOGUE, COLLECTIBLES, ZONES, BOSS_BAR, CHECKPOINTS, GUI_POLISH_KIT, GAME_FEEL_KIT, PLACE_AUDIT],
     },
   ];
   for (const p of PACKS) for (const it of p.items) { it.author = it.author || AUTHOR; it.source = "import"; it.pack = p.id; }
@@ -1814,7 +2605,7 @@ return {
     return p.items.map((it) => {
       const inst = PS && typeof PS.find === "function" ? PS.find(it.name) : null;
       const have = inst && inst.kind === it.kind ? inst : null;
-      return { kind: it.kind, name: it.name, title: it.title, description: it.description, version: it.version, installed: !!have, installedVersion: have ? have.version : 0, modified: !!(have && Array.isArray(have.history) && have.history.length), upToDate: !!(have && have.version >= it.version) };
+      return { kind: it.kind, name: it.name, title: it.title, description: it.description, version: it.version, references: Array.isArray(it.references) ? it.references.length : 0, installed: !!have, installedVersion: have ? have.version : 0, modified: !!(have && Array.isArray(have.history) && have.history.length), upToDate: !!(have && have.version >= it.version) };
     });
   }
   // Install (or update) items through the normal import path. names: optional subset.
