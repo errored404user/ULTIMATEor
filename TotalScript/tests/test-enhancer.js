@@ -57,7 +57,7 @@ for (const s of [
   "const parsed = RS.parseEnhanced(text);", 'if (parsed.command) throw new Error("the AI answered with a command instead of a rewrite',
   '(e.key === "E" || e.key === "e") && !e.altKey',
 ]) ok("main.js: " + s.slice(0, 70), main.includes(s), s);
-ok("bar: enhancer button sits right before Paint", main.indexOf('id="rs-enhance-btn"') < main.indexOf('id="rs-paint-btn"') && main.indexOf('id="rs-paint-btn"') < main.indexOf('id="rs-settings-btn"'));
+ok("bar: enhancer button sits before Video and Settings (2.0.4: the Paint button is gone)", main.indexOf('id="rs-enhance-btn"') < main.indexOf('id="rs-video-btn"') && main.indexOf('id="rs-video-btn"') < main.indexOf('id="rs-settings-btn"') && !main.includes('id="rs-paint-btn"'));
 // The round trip is our own send: hooks must ignore it (A.injecting), and it must never start the agent or switch anything on the site.
 // 1.73.0: the visible round trip moved into aiRoundTrip(request, {cancelled, kind}, onStatus)
 // (shared with the Template Creator's AI draft); enhancePromptViaAI calls it. The body
@@ -73,12 +73,12 @@ ok("round trip surfaces site errors and empty replies honestly", body.includes("
 ok("cancel stops a running generation and returns null (no result invented)", body.includes("if (cancelled()) { try { if (P.isGenerating()) P.stopGeneration(); } catch {} return null; }"));
 ok("enhancer never starts the agent, never calls startSession, never touches reasoning / model switches", !body.includes("startSession(") && !body.includes("applyNativeReasoning") && !body.includes("__rsAllowSiteSwitch"));
 const sendBody = main.slice(main.indexOf("async function sendEnhancedPrompt"), main.indexOf("async function fillComposer"));
-ok("Send: running session → sendPainting path; agent off → plain message, no auto-start", sendBody.includes("if (A.started) return sendPainting(text, null, onStatus);") && sendBody.includes("const r = await P.typeAndSend(text); return r !== false;") && !sendBody.includes("startSession("));
+ok("Send: running session → sendHandoff path (2.0.4: formerly sendPainting); agent off → plain message, no auto-start", sendBody.includes("if (A.started) return sendHandoff(text, null, onStatus);") && sendBody.includes("const r = await P.typeAndSend(text); return r !== false;") && !sendBody.includes("startSession("));
 const fillBody = main.slice(main.indexOf("async function fillComposer"), main.indexOf("function openEnhancer()"));
 ok("Put in chat box: provider writeDraft first, then textarea value setter / insertText, verified by reading back", fillBody.includes('typeof P.writeDraft === "function"') && fillBody.includes('ed.dispatchEvent(new Event("input", { bubbles: true }));') && fillBody.includes('document.execCommand("insertText", false, value)') && fillBody.includes("return now.includes(value.slice(0, 40).trim());") && fillBody.includes("if (A.running || A.injecting || A.starting) return false;"));
 for (const s of ["#rs-enhance {", "#rs-enhance.open {", "html.rs-enhance-open #rs-root { visibility: hidden !important; }", ".rse-shell {", ".rse-chip.on {", ".rse-btn.primary {", ".rse-result {", ".rse-status[data-kind=\"err\"]", "@media (max-width: 820px) { .rse-body { grid-template-columns: minmax(0, 1fr); }"])
   ok("overlay.css: " + s.slice(0, 60), css.includes(s), s);
-ok("bar button styled with the other bar buttons (nested :is chain; 2.0.3: #rs-anim-btn left the chain with the Animation Studio)", (css.match(/:is\(:is\(#rs-settings-btn, #rs-paint-btn\), #rs-enhance-btn\)/g) || []).length >= 20 && !/#rs-anim-btn/.test(css));
+ok("bar button styled with the other bar buttons (nested :is chain; 2.0.3: #rs-anim-btn left the chain with the Animation Studio)", (css.match(/:is\(#rs-settings-btn, #rs-enhance-btn\)/g) || []).length >= 20 && !/#rs-anim-btn|#rs-paint-btn/.test(css));
 ok("README documents the enhancer", read("README.md").includes("**1.72.0 — Prompt Enhancer: rough idea → precise prompt, reviewed by you.**") && read("README.md").includes("Ctrl/⌘+Shift+E"));
 
 // ── overlay in jsdom ───────────────────────────────────────────────────────

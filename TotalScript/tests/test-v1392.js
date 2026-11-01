@@ -71,7 +71,7 @@ ok("manifest icons point at the derived sizes", ["16", "32", "48", "128"].every(
 const css = fs.readFileSync(path.join(root, "overlay.css"), "utf8");
 const logoCss = css.slice(css.indexOf("/* TotalScript mark (aqua T"), css.indexOf("#rs-cards-panel:has(.rs-template-library) .rs-cards-brand"));
 ok("logo rings are neutral white, not gold", logoCss.length > 100 && !logoCss.includes("214,174,79") && logoCss.includes("#rs-logo.rs-logo") && logoCss.includes(".rs-menu-mark.rs-menu-mark-logo") && logoCss.includes(".rs-cards-logo.rs-logo"));
-ok("paint brand ring is neutral white", /\.rsp-logo \{[^}]*rgba\(255,255,255,\.3\)/.test(css) && !/\.rsp-logo \{[^}]*214,174,79/.test(css));
+ok("paint brand ring: Paint was removed in 2.0.4 - no .rsp-logo rule (gold or white) may survive", !/\.rsp-logo/.test(css));
 ok("desktop app embeds assets/icon.png", fs.readFileSync(path.join(root, "agent/src/gui.rs"), "utf8").includes('include_bytes!("../../assets/icon.png")'));
 const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 ok("README changelog 1.39.2 (historical) + 1.71.1 logo entry + test listed", /\*\*1\.39\.2 — Logo: black & white R\.\*\*/.test(readme) && /\*\*1\.71\.1 — Logo & icon: the aqua TotalScript T\.\*\*/.test(readme) && readme.includes("test-v1392.js"));

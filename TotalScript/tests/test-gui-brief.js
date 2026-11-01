@@ -69,7 +69,7 @@ ok("setting: rsGuiBrief (default on) with window.__rsGuiBrief, storage sync, men
 ok("menu row explains the feature in plain words (incl. reference images)", main.includes('<span class="rs-tgl-name">GUI brief</span><span class="rs-tgl-sub">When you ask for a GUI, TotalScript sends the AI its build protocol right after your message — with a reference-image protocol when you attach or mention a screenshot.</span>'));
 ok("ui exposes noteGuiRequest + composerHasImage", main.includes("return { runTemplateById, openTray, closeTray, noteGuiRequest, composerHasImage, setStatus,") /* 1.73.0: template window/creator hooks exported first */);
 ok("GUI brief toggle is visible in Simple settings (not rs-adv)", /<div class="rs-tgl-row" data-mode="guibrief"/.test(main));
-ok("feature help has a factual guibrief topic", main.includes('guibrief:{title:"GUI brief (custom message for GUI requests)"') && main.includes("saved as rsGuiBrief") && main.includes("Paint / Video Studio hand-offs are never double-briefed") && main.includes("your message itself is never edited"));
+ok("feature help has a factual guibrief topic", main.includes('guibrief:{title:"GUI brief (custom message for GUI requests)"') && main.includes("saved as rsGuiBrief") && main.includes("Video Studio hand-offs are never double-briefed") && main.includes("your message itself is never edited"));
 
 // ── composer image detection (selector exercised in jsdom) ──────────────────
 try {

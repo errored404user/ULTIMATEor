@@ -56,7 +56,7 @@ ok("manifest name / title", manifest.name === "TotalScript" && manifest.action.d
 const main = read("src/core/main.js"), config = read("src/core/config.js"), lua = read("plugin/TotalScript.lua"), gui = read("agent/src/gui.rs");
 ok("product name + APP_NAME", main.includes('totalTheme==="void"?"VoidScript":"TotalScript"') && config.includes('const APP_NAME = "TotalScript";') && gui.includes('pub const APP_NAME: &str = "TotalScript";'));
 ok("plugin toolbar + kind id", lua.includes('plugin:CreateToolbar("TotalScript")') && lua.includes('{ id = "totalscript", name = "TotalScript", match = { "totalscript" }, kind = "agent" }'));
-ok("module globals renamed", ["TotalPaint", "TotalOrchestrator", "TotalTaskList", "TotalReasoning", "TotalAgentCrew", "TotalAnimEngine"].every((g) => main.includes(g)));
+ok("module globals renamed", ["TotalVideoStudio", "TotalOrchestrator", "TotalTaskList", "TotalReasoning", "TotalAgentCrew", "TotalAnimEngine"].every((g) => main.includes(g)));
 ok("internal-arg prefix is _total (wire filter + validator agree)", main.includes("if (!/^_total/.test(k)) o[k] = args[k];") && read("src/core/orchestrator.js").includes("if (/^_total/.test(k)) continue;") && main.includes("_totalInternal"));
 ok("workflow builds TotalScript/agent and uploads total-core artefacts", (() => { const w = fs.readFileSync(path.join(root, "..", ".github", "workflows", "desktop.yml"), "utf8"); return w.includes("working-directory: TotalScript/agent") && w.includes("total-core-windows-x64") && w.includes("./target/release/total-core.exe --help") && !/ORscript|or-core/.test(w); })());
 ok("mesh marker parsing is length-based, not a hard-coded 13", read("background.js").includes('lines[i].slice("TOTAL_MESH_JSON:".length)') && main.includes('textOut.slice(mark + "TOTAL_MESH_JSON:".length)'));
@@ -84,7 +84,7 @@ ok("night skin still exists as a selectable style", css.includes('html[data-rs-t
 // ── 5. release pins ───────────────────────────────────────────────────────────
 const readme = read("README.md");
 ok("README 1.71.0 entry + title", /\*\*1\.71\.0 — TotalScript: the rename, and Aqua as the default skin\.\*\*/.test(readme) && readme.startsWith("# TotalScript — "));
-ok("version pins 2.0.3", manifest.version === "2.0.3" && /^version = "2\.0\.3"/m.test(cargo) && lua.includes('local VERSION = "2.0.3"') && lock.includes('name = "total-agent"\nversion = "2.0.3"'));
+ok("version pins 2.0.4", manifest.version === "2.0.4" && /^version = "2\.0\.4"/m.test(cargo) && lua.includes('local VERSION = "2.0.4"') && lock.includes('name = "total-agent"\nversion = "2.0.4"'));
 
 console.log((failed ? "FAIL  " : "OK    ") + "test-rebrand: " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

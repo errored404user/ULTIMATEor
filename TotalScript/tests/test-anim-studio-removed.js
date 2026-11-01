@@ -19,15 +19,15 @@ ok("A1 src/core/animstudio.js no longer exists", !exists("src/core/animstudio.js
 const lists = manifest.content_scripts.map((c) => c.js).filter((js) => js.includes("src/core/animlib.js")); // the 12 provider bundles (the rest are tiny helper scripts)
 ok("A2 no manifest bundle loads animstudio.js (12 bundles)", lists.length === 12 && lists.every((js) => !js.some((f) => /animstudio/.test(f))));
 ok("A3 codecraft.html does not load it", !/animstudio/.test(html));
-ok("A4 the engine + animlib still load in every bundle, in order (animlib → animengine → … → paint → reasoning → … → videostudio → main)", lists.every((js) => {
+ok("A4 the engine + animlib still load in every bundle, in order (animlib → animengine → … → reasoning → … → videostudio → main)", lists.every((js) => {
   const i = (f) => js.indexOf("src/core/" + f);
-  return i("animlib.js") >= 0 && i("animengine.js") > i("animlib.js") && i("paint.js") > i("animengine.js") && i("reasoning.js") === i("paint.js") + 1 && i("videostudio.js") > i("reasoning.js") && i("main.js") === i("videostudio.js") + 1;
+  return i("animlib.js") >= 0 && i("animengine.js") > i("animlib.js") && i("reasoning.js") > i("animengine.js") && i("videostudio.js") > i("reasoning.js") && i("main.js") === i("videostudio.js") + 1;
 }));
 ok("A5 main.js: no TotalAnimStudio / __rsOpenAnimStudio / openAnimStudio / studioRunTool / #rs-anim-btn / Ctrl+Shift+K", !/TotalAnimStudio|__rsOpenAnimStudio|openAnimStudio|studioRunTool|rs-anim-btn|rs-anim"|Shift\+K/.test(main));
 ok("A6 main.js: no Ctrl/⌘+Shift+K keydown listener is registered", !/e\.key === "K" \|\| e\.key === "k"/.test(main));
 ok("A7 overlay.css: the #rs-anim host, .rsa-* classes, rs-anim-open and #rs-anim-btn are gone", !/#rs-anim\b|\.rsa-|rs-anim-open|#rs-anim-btn|#rs-anim \{/.test(css));
-ok("A8 overlay.css: the bar-button chain now reads settings / paint / enhance / video", (css.match(/:is\(:is\(:is\(#rs-settings-btn, #rs-paint-btn\), #rs-enhance-btn\), #rs-video-btn\)/g) || []).length >= 20);
-ok("A9 the bar still has Paint, Video and Settings buttons in that order", main.indexOf('id="rs-paint-btn"') > 0 && main.indexOf('id="rs-video-btn"') > main.indexOf('id="rs-paint-btn"') && main.indexOf('id="rs-settings-btn"') > main.indexOf('id="rs-video-btn"'));
+ok("A8 overlay.css: the bar-button chain now reads settings / enhance / video (2.0.4: paint left too)", (css.match(/:is\(:is\(#rs-settings-btn, #rs-enhance-btn\), #rs-video-btn\)/g) || []).length >= 20);
+ok("A9 the bar still has Enhancer, Video and Settings buttons in that order", main.indexOf('id="rs-enhance-btn"') > 0 && main.indexOf('id="rs-video-btn"') > main.indexOf('id="rs-enhance-btn"') && main.indexOf('id="rs-settings-btn"') > main.indexOf('id="rs-video-btn"'));
 const srcFiles = [];
 (function walk(d) { for (const e of fs.readdirSync(path.join(R, d), { withFileTypes: true })) { const p = d + "/" + e.name; if (e.isDirectory()) { if (!/node_modules|target|__pycache__/.test(e.name)) walk(p); } else if (/\.(js|html|css|json)$/.test(e.name)) srcFiles.push(p); } })("src");
 ["manifest.json", "codecraft.html", "overlay.css", "popup.js", "popup.html", "background.js"].forEach((f) => { if (exists(f)) srcFiles.push(f); });

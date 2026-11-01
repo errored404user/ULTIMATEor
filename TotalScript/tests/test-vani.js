@@ -15,7 +15,7 @@ const bundle = manifest.content_scripts.find((c) => c.matches.includes("https://
 ok(bundle, "manifest has a c.vani.ai content-script bundle");
 ok(bundle.js.includes("src/providers/vani.js"), "bundle loads src/providers/vani.js");
 ok(bundle.js.indexOf("src/providers/vani.js") < bundle.js.indexOf("src/core/main.js"), "provider loads before the core");
-for (const f of ["src/core/config.js", "src/core/screenshot.js", "src/core/templates.js", "src/core/studio_bridge.js", "src/core/paint.js", "src/core/agent_crew.js", "src/core/main.js"]) {
+for (const f of ["src/core/config.js", "src/core/screenshot.js", "src/core/templates.js", "src/core/studio_bridge.js", "src/core/agent_crew.js", "src/core/main.js"]) {
   ok(bundle.js.includes(f), "bundle includes " + f);
 }
 // 1.89.0: the Ox Alpha bundle (the former mirror) is gone; the MultiChat bundle has the same stream-reader + adapter + core shape.

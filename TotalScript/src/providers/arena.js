@@ -952,7 +952,7 @@ const RSProvider = (() => {
   // bar whenever this is true (same get-out-of-the-way path as captchaPresent).
   // reallyVisible() ignores display:none / detached closed dialogs, so a chat page
   // with no open modal never matches. Our own UI lives in #rs-root and is skipped.
-  // 2.0.1: TotalScript's own windows (Templates / Explorer, Paint, Video,
+  // 2.0.1: TotalScript's own windows (Templates / Explorer, Video,
   // Enhancer, template editors) are role="dialog" too and live
   // OUTSIDE #rs-root (document root / body). They carry data-rs-owned; counting
   // them here made main.js hide the bar + the cards panel every placement pass

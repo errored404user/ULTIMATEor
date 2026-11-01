@@ -140,7 +140,7 @@ function boot(turnPairs) {
     const main = read("src/core/main.js");
     ok(/cardsWindow\.setAttribute\("data-rs-owned", "1"\)/.test(main), "B1 main.js cards window marked");
     ok((main.match(/modal\.setAttribute\("data-rs-owned", *"1"\)/g) || []).length >= 3, "B2 main.js template editor modals marked");
-    for (const f of ["paint.js", "videostudio.js", "enhancer.js"]) ok(/data-rs-owned/.test(read("src/core/" + f)), "B3 " + f + " host marked");
+    for (const f of ["videostudio.js", "enhancer.js"]) ok(/data-rs-owned/.test(read("src/core/" + f)), "B3 " + f + " host marked");
     ok(/closest\("#rs-root, \[data-rs-owned\]"\)/.test(read("src/providers/arena.js")), "B4 arena.js overlayBlocking skips data-rs-owned");
     ok(/closest\("#rs-root, \[data-rs-owned\]"\)/.test(read("src/providers/meta.js")), "B5 meta.js overlayBlocking (same pattern) skips data-rs-owned");
     ok(/closest\("#rs-root, \[data-rs-owned\]"\)/.test(read("src/core/ui_collision_manager.js")), "B6 collision manager never treats our windows as site overlays");
