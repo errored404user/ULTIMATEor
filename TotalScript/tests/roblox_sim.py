@@ -34,6 +34,7 @@ local CLASSES = {
   UICorner={"UIComponent"}, UIStroke={"UIComponent"}, UIPadding={"UIComponent"}, UIListLayout={"UIGridStyleLayout"}, UIGridLayout={"UIGridStyleLayout"},
   UIAspectRatioConstraint={"UIConstraint"}, UISizeConstraint={"UIConstraint"}, UITextSizeConstraint={"UIConstraint"}, UIScale={"UIComponent"}, UIGradient={"UIComponent"},
   Service={"Instance"}, EditableImage={"Instance"},
+  ProximityPrompt={"Instance"}, ClickDetector={"Instance"}, CFrameValue={"ValueBase"}, ForceField={"Instance"},
   SpawnLocation={"BasePart"}, Seat={"BasePart"}, StarterPlayerScripts={"Instance"}, StarterCharacterScripts={"Instance"}, Backpack={"Instance"}, StarterGear={"Instance"}, BillboardGui={"LayerCollector"}, Animation={"Instance"}, Team={"Instance"}, BoolValue={"ValueBase"}, ObjectValue={"ValueBase"}, Constraint={"Instance"}, AlignPosition={"Constraint"}, AlignOrientation={"Constraint"}, BodyVelocity={"Instance"}, Configuration={"Instance"}, Tags={"Instance"},
 }
 local function isa(cls, want)
@@ -193,7 +194,7 @@ M.firedSignals = 0
 -- instances
 local Instance = {}
 local Inst = {}
-local EVENTS = {Ended=1,Played=1,Stopped=1,Activated=1,MouseEnter=1,MouseLeave=1,MouseButton1Down=1,MouseButton1Up=1,MouseButton1Click=1,SelectionGained=1,SelectionLost=1,DescendantAdded=1,ChildAdded=1,ChildRemoved=1,Changed=1,CharacterAdded=1,HealthChanged=1,PlayerRemoving=1,PlayerAdded=1,Loaded=1,InputBegan=1,InputEnded=1,LastInputTypeChanged=1,Completed=1,OnClientEvent=1,OnServerEvent=1,Event=1,Focused=1,FocusLost=1,AncestryChanged=1,Destroying=1,Died=1,Touched=1,TouchEnded=1,Heartbeat=1,Stepped=1,RenderStepped=1,Chatted=1,StateChanged=1,Equipped=1,Unequipped=1,Running=1,Jumping=1,AttributeChanged=1,PromptGamePassPurchaseFinished=1,PromptProductPurchaseFinished=1,PromptPurchaseFinished=1,PlayerMembershipChanged=1,ProcessReceipt=0}
+local EVENTS = {Ended=1,Played=1,Stopped=1,Activated=1,MouseEnter=1,MouseLeave=1,MouseButton1Down=1,MouseButton1Up=1,MouseButton1Click=1,SelectionGained=1,SelectionLost=1,DescendantAdded=1,ChildAdded=1,ChildRemoved=1,Changed=1,CharacterAdded=1,HealthChanged=1,PlayerRemoving=1,PlayerAdded=1,Loaded=1,InputBegan=1,InputEnded=1,LastInputTypeChanged=1,Completed=1,OnClientEvent=1,OnServerEvent=1,Event=1,Focused=1,FocusLost=1,AncestryChanged=1,Destroying=1,Died=1,Touched=1,TouchEnded=1,Heartbeat=1,Stepped=1,RenderStepped=1,Chatted=1,StateChanged=1,Equipped=1,Unequipped=1,Running=1,Jumping=1,AttributeChanged=1,PromptGamePassPurchaseFinished=1,PromptProductPurchaseFinished=1,PromptPurchaseFinished=1,PlayerMembershipChanged=1,ProcessReceipt=0,Triggered=1,PromptTriggered=1,MoveToFinished=1,PromptShown=1,PromptHidden=1}
 local DEFAULTS = {Size=function() return UDim2.new(0,100,0,100) end, Position=function() return UDim2.new() end, AnchorPoint=function() return Vector2.new() end,
   BackgroundColor3=function() return Color3.new(1,1,1) end, BackgroundTransparency=0, BorderSizePixel=1, TextColor3=function() return Color3.new(0,0,0) end, TextTransparency=0, TextStrokeTransparency=1, TextSize=14, Text="", TextScaled=false, TextWrapped=false, RichText=false,
   Visible=true, ZIndex=1, Image="", ImageTransparency=0, ImageColor3=function() return Color3.new(1,1,1) end, Font=function() return Enum.Font.Legacy end, Enabled=true, Active=false, AutoButtonColor=true, ClipsDescendants=false,
@@ -462,8 +463,22 @@ function methods:GetRankInGroup() return 0 end
 function methods:IsInGroup() return false end
 function methods:AddItem(inst, t) M.debris[#M.debris+1] = {inst, t} end
 M.debris = {}
-function methods:GetPartBoundsInBox(cf, size, params) local out={} local half=size*0.5 for _,p in ipairs(M.services.Workspace:GetDescendants()) do if isa(p.__class,"BasePart") then local rel=cf:Inverse()*p.CFrame.Position if math.abs(rel.X)<=half.X and math.abs(rel.Y)<=half.Y and math.abs(rel.Z)<=half.Z then local skip=false if params and params.FilterDescendantsInstances then for _,f in ipairs(params.FilterDescendantsInstances) do if p==f or p:IsDescendantOf(f) then skip=true end end end if not skip then out[#out+1]=p end end end end return out end
+function methods:GetPartBoundsInBox(cf, size, params) local out={} local half=size*0.5 for _,p in ipairs(M.services.Workspace:GetDescendants()) do if isa(p.__class,"BasePart") then local rel=cf:Inverse()*p.CFrame.Position if math.abs(rel.X)<=half.X and math.abs(rel.Y)<=half.Y and math.abs(rel.Z)<=half.Z then local listed=false if params and params.FilterDescendantsInstances then for _,f in ipairs(params.FilterDescendantsInstances) do if p==f or p:IsDescendantOf(f) then listed=true end end end local include = params and params.FilterType and tostring(params.FilterType.Name)=="Include" local skip = include and not listed or (not include and listed) if not skip then out[#out+1]=p end end end end return out end
 function methods:GetPartsInPart() return {} end
+-- 2.2.0 (featured public skills): CollectionService tags, no-hit raycasts, network ownership no-ops
+M.tagSignals = {}
+local function tagSignal(kind, tag) local key=kind..":"..tag local sg=M.tagSignals[key] if not sg then sg=Signal.new() M.tagSignals[key]=sg end return sg end
+-- both spellings: inst:AddTag(tag) and CollectionService:AddTag(inst, tag)
+function methods:AddTag(tag, tag2) if tag2 ~= nil then return tag:AddTag(tag2) end self.__tags = self.__tags or {} if not self.__tags[tag] then self.__tags[tag]=true tagSignal("added", tag):Fire(self) end end
+function methods:RemoveTag(tag, tag2) if tag2 ~= nil then return tag:RemoveTag(tag2) end if self.__tags and self.__tags[tag] then self.__tags[tag]=nil tagSignal("removed", tag):Fire(self) end end
+function methods:HasTag(tag, tag2) if tag2 ~= nil then return tag:HasTag(tag2) end return not not (self.__tags and self.__tags[tag]) end
+function methods:GetTags() local out={} for t in pairs(self.__tags or {}) do out[#out+1]=t end table.sort(out) return out end
+function methods:GetTagged(tag) local out={} for _,d in ipairs(game:GetDescendants()) do if d.__tags and d.__tags[tag] then out[#out+1]=d end end return out end
+function methods:GetInstanceAddedSignal(tag) return tagSignal("added", tag) end
+function methods:GetInstanceRemovedSignal(tag) return tagSignal("removed", tag) end
+function methods:Raycast() return nil end
+function methods:SetNetworkOwner() end
+function methods:SetNetworkOwnershipAuto() end
 function methods:UserOwnsGamePassAsync() return false end
 function methods:GetProductInfo(id, infoType) id = tonumber(id) or 0 if id == 404 then error("HTTP 404 (Not Found)") end if id == 500 then error("HTTP 500") end M.productInfoCalls = (M.productInfoCalls or 0) + 1 if id == 777 then return {Name = "Not A Sound", AssetTypeId = 13} end return {Name = "Sim Audio " .. tostring(id), AssetTypeId = 3} end
 function methods:PromptGamePassPurchase() M.prompts[#M.prompts+1]="gamepass" end
@@ -574,6 +589,8 @@ Inst.__newindex = function(o, k, v)
   local old = o.__props[k]
   o.__props[k] = v
   if old ~= v and o.__propSignals[k] then o.__propSignals[k]:Fire() end
+  -- 2.2.0: Instance.Changed - ValueBase objects pass the new value, everything else the property name (as Roblox does)
+  if old ~= v and o.__signals.Changed then if isa(o.__class, "ValueBase") then o.__signals.Changed:Fire(v) else o.__signals.Changed:Fire(k) end end
 end
 Inst.__tostring = function(o) return o.__props.Name end
 Inst.__eq = function(a,b) return rawequal(a,b) end

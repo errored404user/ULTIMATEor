@@ -8685,3 +8685,44 @@ html.rs-light #rs-images .rs-ig-btn { background: rgba(0,0,0,.05); color: #0f172
 html.rs-light #rs-images .rs-ig-close { background: rgba(0,0,0,.06); color: #0f172a; }
 html.rs-light #rs-images .rs-ig-item { color: #334155; border-color: rgba(0,0,0,.1); background: rgba(0,0,0,.03); }
 @media (max-width: 760px) { #rs-images .rs-ig-body { grid-template-columns: 1fr; } }
+
+/* 2.2.0 Featured Public Skills shelf (src/core/public_packs.js) - the bundled
+   "Featured by TotalScript" pack inside the Public tab: one-click installs that
+   land as ordinary Public Skills. Reuses the public kind pills + share buttons. */
+.rs-public-featured{margin:8px 0 6px;border:1px solid rgba(34,211,238,.28);border-radius:9px;background:linear-gradient(180deg,rgba(34,211,238,.08),rgba(255,255,255,.02));flex-basis:100%}
+.rs-public-featured>summary{display:flex;align-items:center;gap:7px;padding:7px 10px;cursor:pointer;list-style:none;font-size:10.5px;color:#e7eaef}
+.rs-public-featured>summary::-webkit-details-marker{display:none}
+.rs-public-featured>summary::before{content:"▸";font-size:9px;color:var(--rsa,#22d3ee);transition:transform .15s}
+.rs-public-featured[open]>summary::before{transform:rotate(90deg)}
+.rs-public-featured>summary em{margin-left:auto;font-style:normal;font-size:8.5px;color:#7d8694}
+.rs-public-feat-body{padding:0 10px 9px}
+.rs-public-feat-body>p{margin:0 0 7px;font-size:9px;line-height:1.45;color:#9aa3b0}
+.rs-public-feat-body>p code{font-size:8.5px;color:#8fd3ff;background:rgba(255,255,255,.05);padding:0 4px;border-radius:4px}
+.rs-public-feat-list{list-style:none;margin:8px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px}
+.rs-public-feat-row{display:flex;flex-direction:column;gap:6px;padding:7px 8px;border:1px solid rgba(255,255,255,.08);border-radius:7px;background:rgba(255,255,255,.025);min-width:0}
+.rs-public-feat-row.on{border-color:rgba(34,211,238,.22)}
+.rs-public-feat-copy b{display:block;font-size:9.5px;color:#e7eaef}
+.rs-public-feat-copy p{margin:3px 0 0;font-size:8.5px;line-height:1.4;color:#7d8694;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.rs-public-feat-actions{display:flex;align-items:center;gap:6px;margin-top:auto}
+.rs-public-feat-actions .rs-btn-primary,.rs-public-feat-actions .rs-btn-secondary{padding:4px 9px;font-size:9px}
+.rs-public-feat-have{font-size:8.5px;color:#8ee9c2;font-weight:650;margin-right:auto}
+.rs-public-share-actions button[disabled]{opacity:.55;cursor:default}
+html.rs-light .rs-public-featured{background:linear-gradient(180deg,rgba(14,165,233,.08),rgba(0,0,0,.02));border-color:rgba(14,165,233,.3)}
+html.rs-light .rs-public-featured>summary,html.rs-light .rs-public-feat-copy b{color:#0f172a}
+html.rs-light .rs-public-feat-row{background:rgba(0,0,0,.03);border-color:rgba(0,0,0,.1)}
+html.rs-light .rs-public-feat-body>p,html.rs-light .rs-public-feat-copy p{color:#475569}
+/* legible cards-panel scale (the window variant of the Public tab) */
+#rs-cards-panel[data-cards-tab] .rs-public-featured { margin: 0 var(--cp-x) 12px !important; border-radius: var(--cp-r) !important; border-color: color-mix(in srgb, var(--rsa, #22d3ee) 35%, var(--cp-line)) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-featured > summary { padding: 12px 16px !important; gap: 10px !important; font-size: 13px !important; color: var(--cp-fg) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-featured > summary em { font-size: 11px !important; color: var(--cp-fg-3) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-feat-body { padding: 0 16px 14px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-feat-body > p { font-size: 11.5px !important; color: var(--cp-fg-2) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-feat-body > p code { font-size: 11px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-feat-list { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important; gap: 10px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-feat-row { padding: 12px 14px !important; border-radius: var(--cp-r) !important; border-color: var(--cp-line) !important; background: color-mix(in srgb, var(--cp-row) 70%, transparent) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-feat-row.on { border-color: color-mix(in srgb, var(--rsa, #22d3ee) 40%, var(--cp-line)) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-feat-copy b { font-size: 12.5px !important; color: var(--cp-fg) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-feat-copy p { font-size: 11.5px !important; color: var(--cp-fg-2) !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-feat-actions .rs-btn-primary, #rs-cards-panel[data-cards-tab] .rs-public-feat-actions .rs-btn-secondary { min-height: 30px !important; font-size: 11.5px !important; padding: 0 12px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-feat-have { font-size: 11px !important; }
+#rs-cards-panel[data-cards-tab] .rs-public-featured .rs-public-share-actions button { min-height: 32px !important; font-size: 11.5px !important; padding: 0 12px !important; }
