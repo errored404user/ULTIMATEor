@@ -642,7 +642,8 @@ const RSProvider = (() => {
   const captchaPresent = () => false;
   function overlayBlocking() {
     for (const d of document.querySelectorAll('[role="dialog"]')) {
-      if (d.closest("#rs-root")) continue;
+      // 2.0.1: our own windows (data-rs-owned, outside #rs-root) are not site overlays.
+      if (d.closest("#rs-root, [data-rs-owned]")) continue;
       const r = d.getBoundingClientRect();
       if (r.width > 40 && r.height > 40 && r.top < innerHeight && r.bottom > 0) return true;
     }

@@ -37,7 +37,7 @@
     return m[1] === undefined ? 1 : parseFloat(m[1]);
   };
   const visible = (el) => {
-    if (!el || el === document.documentElement || el === document.body || el.closest("#rs-root")) return false;
+    if (!el || el === document.documentElement || el === document.body || el.closest("#rs-root, [data-rs-owned]")) return false;
     const r = rectOf(el);
     if (!r || r.width < 8 || r.height < 8) return false;
     const s = styleOf(el);

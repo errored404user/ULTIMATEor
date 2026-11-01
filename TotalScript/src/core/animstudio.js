@@ -836,7 +836,7 @@
 
   // ───────────────────────── DOM ─────────────────────────
   function build() {
-    const host = document.createElement("div"); host.id = "rs-anim"; host.tabIndex = -1;
+    const host = document.createElement("div"); host.id = "rs-anim"; host.tabIndex = -1; host.setAttribute("data-rs-owned", "1");
     const logo = assetUrl("assets/gui-studio-mark.png");
     host.innerHTML = `
       <div class="rsa-shell" role="dialog" aria-label="Animation Studio">

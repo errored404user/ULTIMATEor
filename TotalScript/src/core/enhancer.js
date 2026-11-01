@@ -76,7 +76,7 @@
   function savePrefs() { try { chrome.storage.local.set({ rsEnhancer: { focus: S.focus, short: S.short, mode: S.mode } }); } catch {} }
 
   function build() {
-    const host = document.createElement("div"); host.id = "rs-enhance"; host.setAttribute("role", "dialog"); host.setAttribute("aria-label", "TotalScript Prompt Enhancer"); host.tabIndex = -1;
+    const host = document.createElement("div"); host.id = "rs-enhance"; host.setAttribute("role", "dialog"); host.setAttribute("data-rs-owned", "1"); host.setAttribute("aria-label", "TotalScript Prompt Enhancer"); host.tabIndex = -1;
     const logo = (window.chrome && chrome.runtime && chrome.runtime.getURL) ? chrome.runtime.getURL("assets/icon128.png") : "";
     host.innerHTML = `
       <div class="rse-shell">

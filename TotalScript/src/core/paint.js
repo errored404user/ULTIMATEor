@@ -663,7 +663,7 @@
 
   // ───────────────────────── UI build ─────────────────────────
   function build() {
-    const host = document.createElement("div"); host.id = "rs-paint"; host.setAttribute("role", "dialog"); host.setAttribute("aria-label", "TotalScript Paint");
+    const host = document.createElement("div"); host.id = "rs-paint"; host.setAttribute("role", "dialog"); host.setAttribute("data-rs-owned", "1"); host.setAttribute("aria-label", "TotalScript Paint");
     const toolBtns = TOOLS.map((t) => `<button type="button" class="rsp-tool" data-tool="${t.id}" title="${esc(t.label)} (${t.key}) — ${esc(t.hint)}">${ICONS[t.id]}<span>${esc(t.label)}</span></button>`).join("");
     const palette = PALETTE.map((c) => `<button type="button" class="rsp-sw" data-color="${c}" style="--c:${c}" title="${colorName(c)} ${c} (left = primary, right = secondary)"></button>`).join("");
     host.innerHTML = `

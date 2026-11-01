@@ -496,7 +496,7 @@
   const logoUrl = () => { try { return chrome.runtime.getURL("assets/icon128.png"); } catch { return ""; } };
 
   function build() {
-    const host = document.createElement("div"); host.id = "rs-video"; host.setAttribute("role", "dialog"); host.setAttribute("aria-label", "TotalScript Video Studio");
+    const host = document.createElement("div"); host.id = "rs-video"; host.setAttribute("role", "dialog"); host.setAttribute("data-rs-owned", "1"); host.setAttribute("aria-label", "TotalScript Video Studio");
     const kindOpts = KIND_IDS.map((k) => `<option value="${k}">${esc(KINDS[k].label)}</option>`).join("");
     host.innerHTML = `
       <div class="rsv-shell">

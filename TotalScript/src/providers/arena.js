@@ -181,6 +181,23 @@ const RSProvider = (() => {
   // explicitly or it is never counted as a reply.
   const isCarouselItem = (c) => !!c && !!c.querySelector(S.carousel);
 
+  // 2.0.1 perf: the core polls readAssistant/isGenerating/assistantCount/
+  // lastAssistantId every ~120 ms and EACH re-walked every turn of the list with
+  // attribute-substring selectors (bodySel) - measured in the jsdom harness at
+  // ~33 ms per call for an 80-turn chat and ~125 ms for 300 turns, i.e. more
+  // CPU per poll than the poll interval on a long Arena session. A child that
+  // has once qualified as a turn stays one (its body is never removed while the
+  // node lives), so remember that per node; only not-yet-qualified children
+  // (the trailing spacer, a freshly mounted empty reply shell) are re-probed.
+  const _turnMemo = new WeakMap();
+  const isTurnNode = (c) => {
+    if (c.nodeType !== 1) return false;
+    if (_turnMemo.get(c)) return true;
+    if (c.closest("#rs-root")) return false;
+    const ok = isCarouselItem(c) || c.matches(bodySel()) || !!c.querySelector(bodySel());
+    if (ok) _turnMemo.set(c, true);
+    return ok;
+  };
   function domTurns() {
     const ol = listEl();
     if (!ol) return [];
@@ -188,7 +205,8 @@ const RSProvider = (() => {
     // `mx-auto` class is NOT required any more (1.59): when Arena dropped /
     // renamed it, no turn was recognised, lastAssistant() froze on nothing or on
     // a stale node and the core finalised the previous reply.
-    const kids = [...ol.children].filter((c) => c.nodeType === 1 && !c.closest("#rs-root") && (isCarouselItem(c) || c.matches(bodySel()) || c.querySelector(bodySel())));
+    const kids = [];
+    for (let c = ol.firstElementChild; c; c = c.nextElementSibling) if (isTurnNode(c)) kids.push(c);
     return listReversed(ol) ? kids.reverse() : kids;
   }
 
@@ -265,7 +283,18 @@ const RSProvider = (() => {
   // might miss is worse than a user turn we might count).
   const USER_CLS = /\b(justify-end|self-end|ml-auto|items-end|from-user|user-message|user-turn)\b/;
   const AST_CLS = /\b(from-assistant|assistant-message|assistant-turn|model-response)\b/;
+  // 2.0.1 perf: a turn's role never changes once its body exists (alignment
+  // classes / data attributes are set at mount), so the verdict is memoised per
+  // node. Undecided shells (no body yet) are re-classified on the next poll.
+  const _roleMemo = new WeakMap();
   function directIsUser(item) {
+    const memo = _roleMemo.get(item);
+    if (memo !== undefined) return memo;
+    const v = directIsUserUncached(item);
+    if (v || proseOf(item)) _roleMemo.set(item, v);
+    return v;
+  }
+  function directIsUserUncached(item) {
     if (item.classList.contains("justify-end")) return true;
     const attr = ((item.getAttribute("data-message-role") || item.getAttribute("data-role") || item.getAttribute("data-author") || item.getAttribute("data-message-author-role") || "") + "").toLowerCase();
     if (attr) return /user|human/.test(attr);
@@ -923,9 +952,15 @@ const RSProvider = (() => {
   // bar whenever this is true (same get-out-of-the-way path as captchaPresent).
   // reallyVisible() ignores display:none / detached closed dialogs, so a chat page
   // with no open modal never matches. Our own UI lives in #rs-root and is skipped.
+  // 2.0.1: TotalScript's own windows (Templates / Explorer, Paint, Video,
+  // Enhancer, Animation Studio, template editors) are role="dialog" too and live
+  // OUTSIDE #rs-root (document root / body). They carry data-rs-owned; counting
+  // them here made main.js hide the bar + the cards panel every placement pass
+  // the moment the Templates window opened on Arena - only the window shell
+  // stayed. Never treat our own UI as a site overlay.
   function overlayBlocking() {
     for (const d of document.querySelectorAll('[role="dialog"]')) {
-      if (d.closest("#rs-root")) continue;
+      if (d.closest("#rs-root, [data-rs-owned]")) continue;
       if (reallyVisible(d)) return true;
     }
     return false;
