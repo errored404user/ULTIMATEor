@@ -1083,7 +1083,7 @@
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for a publish confirmation card (it auto-denies after 120 s). A PC command refused in Sandbox only is not a wait - the chat gets ERROR ACCESS_SANDBOX at once and a banner offers Switch to Full PC.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
-    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The Preferences section (2.0.2) sets the author stamp, how many of your commands every prompt lists in full, whether new AI-made / imported items start disabled, what Import does with duplicates, the AI test step, export privacy and the list order.",details:["Featured by TotalScript (2.2.0): a ready-made pack at the top of the Public tab - 7 gameplay systems (damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars), 3 procedures (GUI polish, release checklist, game feel) and the Prototype sprint work mode. Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
+    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The Preferences section (2.0.2) sets the author stamp, how many of your commands every prompt lists in full, whether new AI-made / imported items start disabled, what Import does with duplicates, the AI test step, export privacy and the list order.",details:["Featured by TotalScript (2.2.1): a ready-made pack at the top of the Public tab - 7 gameplay systems (damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars), 3 procedures (GUI polish, release checklist, game feel) and the Prototype sprint work mode. Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
   };
   try { window.__rsFeatureHelpTopics = FEATURE_HELP_TOPICS; } catch {}
   const CREATOR_TOOLS=[
@@ -8045,6 +8045,14 @@
     let bridgeOk = false, studioDown = false, placeDown = false, appDown = false, addonOk = false, studioProcUp = false;
     let robloxProcUp = false, unrealProcUp = false;
     let wasConnected = false, bridgeBannerEl = null;
+    // 2.2.1: the bridge-drop banner is debounced. A blip (socket close → reconnect
+    // 0.5 s later, a service-worker wake-up) used to pop the red banner on every
+    // flap; now a drop has to last BRIDGE_DROP_GRACE_MS - or the worker has to
+    // report lifecycle ERROR (fast reconnects exhausted) - before it shows, a
+    // Close click mutes it until the bridge has been stable for a minute, and a
+    // manual Studio-off in the popup never counts as an outage.
+    const BRIDGE_DROP_GRACE_MS = 8000, BRIDGE_REARM_MS = 60000;
+    let bridgeDropTimer = null, bridgeDismissedAt = 0, bridgeUpSince = 0, bridgeReconnecting = false;
     let currentEngine = "roblox"; // hoisted to ui scope so renderBar can read it
     // setEngine lives inside build(); expose it here so setStatus can drive it.
     let engineApi = null;
@@ -11253,6 +11261,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       if (setupCard.hidden) {
         setupCard.hidden = false;
         if (bar) bar.classList.add("rs-setup-open");
+        root.classList.add("rs-setup-visible"); // the notification stack slides left of the card
         cancelAnimationFrame(setupRaf);
         try { kickPlaceBar(); } catch {}
       }
@@ -11262,6 +11271,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const was = !!(setupCard && !setupCard.hidden);
       if (setupCard) setupCard.hidden = true;
       if (bar) bar.classList.remove("rs-setup-open");
+      try { root.classList.remove("rs-setup-visible"); } catch {}
       cancelAnimationFrame(setupRaf);
       if (was) { try { kickPlaceBar(); } catch {} }
     }
@@ -11386,8 +11396,9 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
           // only computed when the bridge IS connected - see setStatus), so
           // without this check the bridge dropping fell through to the
           // stale "N tools" text below, reading as if nothing was wrong.
-          toneClass = "warn"; warn = true;
-          msg = `<b>Agent running</b> — bridge is down, run ${RUN_CMD}`;
+          // 2.2.1: a blip (worker redialling, under the banner grace) is not "down".
+          toneClass = "warn"; warn = !bridgeReconnecting;
+          msg = bridgeReconnecting ? `<b>Agent running</b> — bridge connection dropped, reconnecting…` : `<b>Agent running</b> — bridge is down, run ${RUN_CMD}`;
         } else if (_isLocalStarted) {
           if (placeDown || appDown || studioDown) {
             toneClass = "warn"; warn = true;
@@ -11571,7 +11582,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const coreReady = !!(A.bridge && A.bridge.connected === true);
       const startKind = kind === "start" || kind === "start-degraded" || kind === "restart";
       if (!A.starting && startKind && !coreReady) disabled = true;
-      const sig = [toneClass, indicator, msg, label, kind, disabled, warn, busy, showExtras, coreReady].join("|");
+      const sig = [toneClass, indicator, msg, label, kind, disabled, warn, busy, showExtras, coreReady, bridgeReconnecting].join("|");
       if (sig === lastBarSig) return;
       lastBarSig = sig;
       try { kickPlaceBar(); } catch {} // the bar's content (and so its height) is about to change
@@ -11596,7 +11607,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
           const wsConnected = isConnected !== undefined ?  isConnected : legacyConnected;
           const connected = wsConnected && procUp;
           pill.hidden = false;
-          pill.classList.remove("rs-status-connected", "rs-status-simulated", "rs-status-offline");
+          pill.classList.remove("rs-status-connected", "rs-status-simulated", "rs-status-offline", "rs-status-reconnecting");
           if (isSim) {
             pill.classList.add("rs-status-simulated");
             txt.textContent = "Simulated";
@@ -11604,6 +11615,10 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
           } else if (connected) {
             pill.classList.add("rs-status-connected");
             txt.textContent = currentEngine === "local" ? "AS Connected" : "RS Connected";
+            if (dot) dot.className = "rs-status-dot";
+          } else if (bridgeReconnecting) {
+            pill.classList.add("rs-status-offline", "rs-status-reconnecting");
+            txt.textContent = "Reconnecting…";
             if (dot) dot.className = "rs-status-dot";
           } else {
             pill.classList.add("rs-status-offline");
@@ -11700,10 +11715,13 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const noApp = studioOff && s.studioApp === false;
       const noPlace = studioOff && s.studioApp === true;
       const ok = mcpOk && editorConnected;
-      dot.className = s.connected ?  (ok ?  "on" : "warn") : "off";
+      bridgeReconnecting = !s.connected && s.manual !== true && (s.reconnecting === true || (!!bridgeDropTimer && s.lifecycle !== "ERROR"));
+      dot.className = (s.connected ?  (ok ?  "on" : "warn") : "off") + (bridgeReconnecting ? " reconnecting" : "");
       const procUp = s.studioProc === true;
       let txt;
-      if (!s.connected) txt = `Bridge offline, run ${RUN_CMD}`;
+      if (!s.connected && s.manual === true) txt = "Bridge paused by mcp.disconnect - run mcp.connect (or restart the bridge) to resume";
+      else if (!s.connected && bridgeReconnecting) txt = "Bridge connection dropped - reconnecting…";
+      else if (!s.connected) txt = `Bridge offline, run ${RUN_CMD}`;
       else if (!mcpOk) txt = isUnreal ?  "Bridge OK, open Unreal Editor 5.8" : isLocal ? "Bridge OK — AgentScript workspace ready" : "Bridge OK, open Roblox Studio";
       else if (isLocal) txt = ok ? `Connected · ${totalTools} tools ready` : "AgentScript not ready - start bin/total-core.exe";
       else if (noPlace) txt = isUnreal ?  "Unreal Editor is open but no level is loaded - open a level" : "Roblox Studio is open but no place is loaded - open a place";
@@ -11737,8 +11755,26 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       addonOk = !!s.connected && servers.some((x) => x.id !== primaryId && x.alive && (x.tools || 0) > 0);
       // Bridge-drop alert: a clear, persistent red banner the moment a
       // previously-connected bridge goes offline. Clears on reconnect.
-      if (wasConnected && !s.connected) bridgeAlert(true);
-      if (s.connected) bridgeAlert(false);
+      if (s.connected) {
+        if (bridgeDropTimer) { clearTimeout(bridgeDropTimer); bridgeDropTimer = null; }
+        if (!wasConnected) bridgeUpSince = Date.now();
+        if (bridgeDismissedAt && Date.now() - bridgeUpSince >= BRIDGE_REARM_MS) bridgeDismissedAt = 0; // stable again: a NEW drop may alert
+        bridgeAlert(false);
+      } else if (s.manual === true) {
+        if (bridgeDropTimer) { clearTimeout(bridgeDropTimer); bridgeDropTimer = null; }
+        bridgeAlert(false); // the user paused it on purpose - the dot title says so
+      } else if (wasConnected || bridgeDropTimer) {
+        if (s.lifecycle === "ERROR") { // the worker gave up its fast reconnects: a real outage, say so now
+          if (bridgeDropTimer) { clearTimeout(bridgeDropTimer); bridgeDropTimer = null; }
+          bridgeAlert(true);
+        } else if (!bridgeDropTimer) {
+          bridgeDropTimer = setTimeout(() => {
+            bridgeDropTimer = null;
+            const cur = A.bridge;
+            if (cur && cur.connected === false && cur.manual !== true) { bridgeAlert(true); try { renderBar(); } catch {} }
+          }, BRIDGE_DROP_GRACE_MS);
+        }
+      }
       wasConnected = s.connected;
       // 1.40.0: the getting-started checklist decides for itself whether it is
       // still useful (dismissed / all four steps green / reading an old chat).
@@ -11765,7 +11801,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         <div class="rs-banner-m">This tab's running an old version after the extension updated — commands won't go through anymore. Studio and the bridge are fine, just reload this page.</div>
         <div class="rs-banner-acts"><button class="rs-banner-reload">Reload page</button></div>`;
       b.querySelector(".rs-banner-reload").addEventListener("click", () => location.reload());
-      root.appendChild(b);
+      notifyHost().appendChild(b);
       bridgeBannerEl = b;
     }
 
@@ -11776,16 +11812,17 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         return;
       }
       if (bridgeBannerEl) return; // already shown
+      if (bridgeDismissedAt) return; // closed by the user for this outage - re-arms after a minute of stable connection
       const b = document.createElement("div");
-      b.className = "rs-banner limit";
+      b.className = "rs-banner limit rs-bridge-down";
       // The setup tutorial lives INSIDE this banner (not as a separate card) so it
       // can never overlap the alert - the previous standalone onboarding card did.
       b.innerHTML = `<div class="rs-banner-t">⚠ Bridge went down</div>
-        <div class="rs-banner-m">Bridge stopped. Just run ${RUN_CMD} again (keep Studio open) — it'll hop back on automatically when it's back.</div>
+        <div class="rs-banner-m">The bridge has been unreachable for a while. If TotalScript Desktop (${RUN_CMD}) is closed, start it again and keep Studio open — this page reconnects by itself, nothing to reload.</div>
         <div class="rs-banner-acts"><button class="rs-banner-video" id="rs-banner-tut">◇ Tutorial</button><button class="rs-banner-x">Close</button></div>`;
       b.querySelector("#rs-banner-tut").addEventListener("click", () => openTutorial());
-      b.querySelector(".rs-banner-x").addEventListener("click", () => { b.remove(); if (bridgeBannerEl === b) bridgeBannerEl = null; });
-      root.appendChild(b);
+      b.querySelector(".rs-banner-x").addEventListener("click", () => { b.remove(); if (bridgeBannerEl === b) bridgeBannerEl = null; bridgeDismissedAt = Date.now(); try { refreshSetup(); } catch {} });
+      notifyHost().appendChild(b);
       bridgeBannerEl = b;
     }
 
@@ -12602,20 +12639,67 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       place();
     }
 
+    // 2.2.1: one top-right stack for every banner and toast (#rs-notify). They used
+    // to be independent position:fixed boxes at the same corner, so two toasts (or
+    // a toast under a banner) painted on top of each other. Now they flow in a
+    // column; a toast with the SAME text while one is still showing just bumps a
+    // "×N" counter and restarts its timer; at most TOAST_MAX toasts stay up (the
+    // oldest leaves); hovering a toast pauses its auto-hide; the stack is a polite
+    // live region for screen readers.
+    const TOAST_MAX = 4;
+    function notifyHost() {
+      let h = root.querySelector("#rs-notify");
+      if (!h) {
+        h = document.createElement("div");
+        h.id = "rs-notify";
+        h.setAttribute("role", "region");
+        h.setAttribute("aria-label", "TotalScript notifications");
+        h.setAttribute("aria-live", "polite");
+        root.appendChild(h);
+      }
+      return h;
+    }
     function toast(msg) {
+      msg = String(msg == null ? "" : msg);
+      const host = notifyHost();
+      const same = [...host.querySelectorAll(".rs-toast")].find((x) => x.dataset.msg === msg && !x.dataset.leaving);
+      if (same) {
+        const n = (Number(same.dataset.n) || 1) + 1;
+        same.dataset.n = String(n);
+        const c = same.querySelector(".rs-toast-n");
+        if (c) { c.textContent = "×" + n; c.hidden = false; }
+        if (typeof same.__restart === "function") same.__restart();
+        return;
+      }
+      const live = [...host.querySelectorAll(".rs-toast")].filter((x) => !x.dataset.leaving);
+      if (live.length >= TOAST_MAX && typeof live[0].__dismiss === "function") live[0].__dismiss();
       const t = document.createElement("div");
       t.className = "rs-toast";
-      t.textContent = msg;
-      root.appendChild(t);
+      t.dataset.msg = msg;
+      const m = document.createElement("span"); m.className = "rs-toast-m"; m.textContent = msg;
+      const c = document.createElement("span"); c.className = "rs-toast-n"; c.hidden = true;
+      t.appendChild(m); t.appendChild(c);
+      host.appendChild(t);
       setTimeout(() => t.classList.add("show"), 10);
       // 1.76.0: long notes (give-up guidance) stay up long enough to be read.
       const ms = Math.min(12000, 3500 + Math.max(0, String(msg || "").length - 60) * 40);
-      setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, ms);
+      let timer = null, hovering = false;
+      t.__dismiss = () => { if (t.dataset.leaving) return; t.dataset.leaving = "1"; clearTimeout(timer); t.classList.remove("show"); setTimeout(() => t.remove(), 300); };
+      t.__restart = () => { clearTimeout(timer); if (!hovering) timer = setTimeout(t.__dismiss, ms); };
+      t.addEventListener("mouseenter", () => { hovering = true; clearTimeout(timer); });
+      t.addEventListener("mouseleave", () => { hovering = false; t.__restart(); });
+      t.addEventListener("click", () => t.__dismiss());
+      t.__restart();
     }
 
     function banner(kind, title, msg, action) {
+      // 2.2.1: the same banner (title + text) is never stacked twice - the live one
+      // just gets a short attention pulse (e.g. a repeated "Blocked by Sandbox access").
+      const dup = [...notifyHost().querySelectorAll(".rs-banner")].find((x) => x.dataset.title === String(title) && x.dataset.msg === String(msg));
+      if (dup) { dup.classList.remove("rs-banner-again"); void dup.offsetWidth; dup.classList.add("rs-banner-again"); return; }
       const b = document.createElement("div");
       b.className = `rs-banner ${kind}`;
+      b.dataset.title = String(title); b.dataset.msg = String(msg);
       b.innerHTML = `<div class="rs-banner-t"></div><div class="rs-banner-m"></div>
         <div class="rs-banner-acts">
           <button class="rs-banner-x">Close</button>
@@ -12631,7 +12715,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
         go.addEventListener("click", () => { try { action.onClick(); } catch {} b.remove(); });
         b.querySelector(".rs-banner-acts").prepend(go);
       }
-      root.appendChild(b);
+      notifyHost().appendChild(b);
     }
 
     // Keep capture previews inside the reserved bar instead of opening a 300px
@@ -13001,7 +13085,7 @@ rsInterval(() => {
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg && msg.type === "rs-status") {
-      ui.setStatus({ connected: msg.connected, mcpAlive: msg.mcpAlive, studio: msg.studio, studioApp: msg.studioApp, studioProc: msg.studioProc, robloxProc: msg.robloxProc, roblox_connected: msg.roblox_connected, engine: msg.engine, tools: msg.tools, servers: msg.servers, local_connected: msg.local_connected, local_full: msg.local_full, local_root: msg.local_root, blender: msg.blender, blender_shim: msg.blender_shim, blender_error: msg.blender_error });
+      ui.setStatus({ connected: msg.connected, mcpAlive: msg.mcpAlive, studio: msg.studio, studioApp: msg.studioApp, studioProc: msg.studioProc, robloxProc: msg.robloxProc, roblox_connected: msg.roblox_connected, engine: msg.engine, tools: msg.tools, servers: msg.servers, local_connected: msg.local_connected, local_full: msg.local_full, local_root: msg.local_root, blender: msg.blender, blender_shim: msg.blender_shim, blender_error: msg.blender_error, lifecycle: msg.lifecycle, reconnecting: msg.reconnecting, manual: msg.manual });
     }
     if (msg && msg.type === "rs-open-menu") {
       ui.openMenu(false); // from the popup's Settings button — opens at the top (Switch AI / custom prompt)
@@ -13016,6 +13100,11 @@ rsInterval(() => {
   // before setStatus, say the right thing, and stop polling: the context can
   // never come back, so every later tick would just repeat the same failure.
   let statusTimer = null;
+  // 2.2.1: a poll the worker did not answer (asleep, busy, timed out) is NOT a
+  // status - it has no `connected` at all. Feeding it to setStatus read as "the
+  // bridge dropped" and popped the red banner on a healthy bridge. Skip such
+  // replies; only after three in a row (≥ 15 s of silence) report an outage.
+  let statusMisses = 0;
   function onStatus(s) {
     if (!s) return;
     if (s.kind === "stale-extension") {
@@ -13024,6 +13113,12 @@ rsInterval(() => {
       diag("bridge.staleExtension", { via: "status", error: s.error });
       return;
     }
+    if (typeof s.connected !== "boolean") {
+      statusMisses++;
+      diag("bridge.statusMiss", { n: statusMisses, kind: s.kind, error: s.error });
+      if (statusMisses < 3) return;
+      s = { connected: false, lifecycle: "ERROR", unanswered: true, engine: A.bridge && A.bridge.engine, servers: [] };
+    } else statusMisses = 0;
     ui.setStatus(s);
   }
   // Hydrate the persisted re-statement budget for this conversation up front, so

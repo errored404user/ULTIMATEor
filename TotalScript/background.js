@@ -111,6 +111,7 @@ const MCP_CONNECT_TIMEOUT_MS = 6000;
 const MCP_DISCOVERY_TIMEOUT_MS = 10000;
 const MCP_CACHE_TTL_MS = 60000;
 const MCP_MAX_RECONNECT_ATTEMPTS = 3;
+const STATUS_SETTLE_MS = 1500; // a status poll waits this long for an in-flight (re)connect before reporting "down"
 
 let ws = null;
 let connected = false;
@@ -352,7 +353,7 @@ function connect() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     return;
   }
-  clearTimeout(reconnectTimer);
+  clearTimeout(reconnectTimer); reconnectTimer = null; // (a fired timer kept its stale id, which read as "reconnecting" forever)
   const url = engineUrl();
   let sock;
   try {
@@ -715,8 +716,15 @@ function failAllPending(reason) {
 
 // ── status push to any open DeepSeek tab + popup ─────────────────────────
 function statusObj() {
+  // 2.2.1: tell the tabs WHY we are not connected. `reconnecting` = a dial is in
+  // flight or scheduled (a blip, a worker wake-up); `lifecycle` ERROR = the fast
+  // attempts are exhausted (a real outage); `manual` = mcp.disconnect / studio.disconnect
+  // was called on purpose. The content script shows the red banner only for the
+  // outage, never for the blip.
+  const reconnecting = !connected && !manualStudioDisconnect && ((ws && ws.readyState === WebSocket.CONNECTING) || !!reconnectTimer);
   return {
     type: "rs-status", connected, mcpAlive, studio: studioConnected, studioApp, studioProc,
+    lifecycle: mcpLifecycle, reconnecting, manual: manualStudioDisconnect,
     robloxProc, roblox_connected: robloxEditorConnected,
     local_connected: localReady, local_full: localFull,
     local_root: localRoot,
@@ -1844,7 +1852,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ enabled: localFull });
         break;
       case "status":
-        if (!connected) connect(); // self-heal after a worker wake-up
+        // Self-heal after a worker wake-up - and do NOT answer "down" while that
+        // dial is still in flight: a fresh worker has connected=false for a few
+        // hundred ms, and answering immediately made every tab flash the red
+        // "Bridge went down" banner on each wake-up (2.2.1).
+        if (!connected && !manualStudioDisconnect) { connect(); await waitForConnection(STATUS_SETTLE_MS); }
         sendResponse(statusObj());
         break;
       case "list_tools": {

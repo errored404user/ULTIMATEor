@@ -224,8 +224,10 @@ function render(s) {
     ? (ok ? (isLocal ? "Connected — AgentScript is ready" : "Connected — Studio is ready")
         : studioOff ? "Studio MCP is off — enable it in Assistant settings"
         : (isLocal ? "Bridge is up — AgentScript ready" : "Bridge is up — open Studio"))
+    : s.manual === true ? "Bridge paused by a disconnect command — ask the AI for mcp.connect (or restart the bridge)"
+    : s.reconnecting === true && s.lifecycle !== "ERROR" ? "Bridge connection dropped — reconnecting…"
     : `Bridge is offline — run ${RUN_CMD}`;
-  tools.textContent = s.connected ? `${s.tools || 0} tools ready` : `Run ${RUN_CMD}`;
+  tools.textContent = s.connected ? `${s.tools || 0} tools ready` : s.reconnecting === true && s.lifecycle !== "ERROR" ? "reconnecting…" : `Run ${RUN_CMD}`;
   servers.textContent = s.connected
     ? list.map((x) => `${x.alive ? "●" : "○"} ${x.id} (${x.alive ? x.tools + " tools" : "down"})`).join("\n")
     : "";

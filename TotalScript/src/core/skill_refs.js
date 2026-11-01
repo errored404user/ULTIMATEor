@@ -20,7 +20,7 @@
  */
 (function (root) {
   "use strict";
-  const VERSION = "2.2.0";
+  const VERSION = "2.2.1";
   const DOCS_BASE = "https://create.roblox.com/docs/";
   const C = (name) => ({ t: name + " (class)", p: "reference/engine/classes/" + name });
   const EN = (name) => ({ t: "Enum." + name, p: "reference/engine/enums/" + name });

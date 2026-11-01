@@ -8726,3 +8726,31 @@ html.rs-light .rs-public-feat-body>p,html.rs-light .rs-public-feat-copy p{color:
 #rs-cards-panel[data-cards-tab] .rs-public-feat-actions .rs-btn-primary, #rs-cards-panel[data-cards-tab] .rs-public-feat-actions .rs-btn-secondary { min-height: 30px !important; font-size: 11.5px !important; padding: 0 12px !important; }
 #rs-cards-panel[data-cards-tab] .rs-public-feat-have { font-size: 11px !important; }
 #rs-cards-panel[data-cards-tab] .rs-public-featured .rs-public-share-actions button { min-height: 32px !important; font-size: 11.5px !important; padding: 0 12px !important; }
+
+/* 2.2.1 bridge blips: the dot pulses amber while the worker is redialling instead of
+   the page throwing the red "Bridge went down" banner at every flap. */
+#rs-dot.reconnecting { background: #fbbf24; box-shadow: 0 0 0 2px rgba(251,191,36,0.18), 0 0 10px rgba(251,191,36,0.45); animation: rs-dot-pulse 1.1s ease-in-out infinite; }
+@keyframes rs-dot-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.82); } }
+@media (prefers-reduced-motion: reduce) { #rs-dot.reconnecting { animation: none; } }
+
+/* 2.2.1 notification stack: every banner and toast lives in #rs-notify (one
+   top-right column) instead of independent fixed boxes on the same corner, so
+   nothing paints on top of anything else. Children drop their own fixed
+   placement; toasts hug the right edge, banners take the full column width. */
+#rs-notify { position: fixed; top: 18px; right: 18px; width: 320px; max-width: calc(100vw - 36px); display: flex; flex-direction: column; align-items: stretch; gap: 10px; z-index: 2147483601; pointer-events: none; }
+#rs-notify:empty { display: none; }
+#rs-notify > .rs-banner, #rs-notify > .rs-toast { position: static !important; top: auto !important; right: auto !important; left: auto !important; bottom: auto !important; width: auto !important; margin: 0 !important; box-sizing: border-box; pointer-events: auto; }
+#rs-notify > .rs-toast { align-self: flex-end; max-width: 100% !important; display: inline-flex; align-items: center; gap: 8px; cursor: default; }
+#rs-notify > .rs-toast:hover { border-color: rgba(255,255,255,0.18); }
+.rs-toast-m { min-width: 0; overflow-wrap: anywhere; }
+.rs-toast-n { flex: none; font-size: 10.5px; font-weight: 700; line-height: 1; padding: 3px 6px; border-radius: 999px; background: rgba(255,255,255,0.1); color: #e8e8ec; }
+html.rs-light .rs-toast-n { background: rgba(0,0,0,0.08); color: #0f172a; }
+/* a banner asked for twice nudges instead of stacking a copy */
+.rs-banner-again { animation: rs-banner-nudge .45s ease !important; }
+@keyframes rs-banner-nudge { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-5px); } 50% { transform: translateX(4px); } 80% { transform: translateX(-2px); } }
+@media (prefers-reduced-motion: reduce) { .rs-banner-again { animation: none !important; } .rs-banner { animation: none; } }
+/* while the getting-started card occupies the corner, the stack sits to its left */
+#rs-root.rs-setup-visible #rs-notify { right: calc(18px + 288px + 12px); }
+@media (max-width: 760px) { #rs-root.rs-setup-visible #rs-notify { right: 18px; top: auto; bottom: 96px; } }
+#rs-status-pill.rs-status-reconnecting .rs-status-dot { animation: rs-dot-pulse 1.1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { #rs-status-pill.rs-status-reconnecting .rs-status-dot { animation: none; } }
