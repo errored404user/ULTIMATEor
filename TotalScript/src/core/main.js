@@ -1083,7 +1083,7 @@
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for a publish confirmation card (it auto-denies after 120 s). A PC command refused in Sandbox only is not a wait - the chat gets ERROR ACCESS_SANDBOX at once and a banner offers Switch to Full PC.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
-    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.2.5): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
+    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.3.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
   };
   try { window.__rsFeatureHelpTopics = FEATURE_HELP_TOPICS; } catch {}
   const CREATOR_TOOLS=[
@@ -2223,7 +2223,7 @@
         nudge: "SCRIPTS: you wrote or changed scripts in this run but never verified them - script_read the changed script(s) back, run script_check (or script_lint), then start_stop_play + get_console_output (or total_debug) and fix anything it reports." },
       { id: "look",
         did: /^(fx_|vfx_|lighting|atmosphere|sky|clouds|bloom|blur|color_correction|postfx|sunrays|fog|ui_(?!list_tree|audit|inspect|image_find|art_theme_get)|gui_(?!hide|show)|design_tokens_set|design_kit_install|beam|trail|point_light|spot_light|surface_light|fire_add|smoke_add|sparkles|highlight|portal_|gfx_(stage|subject|prop|overlay|fx|camera|lighting|pose))/,
-        proof: /^(total_screenshot|gfx_capture|screen_capture|screenshot_frame|lighting_time_lapse)$/,
+        proof: /^(total_screenshot|screenshot_compare|gfx_capture|screen_capture|screenshot_frame|lighting_time_lapse)$/,
         nudge: "LOOK: you changed the look of the place in this run but never looked at it - take total_screenshot {target:\"studio\"} now, judge it as an art director (contrast, hierarchy, colour harmony, readability) and run one polish pass on what it shows." },
       { id: "motion",
         did: /^(animation_(create|set_pose|add_keyframe|update_keyframe|motion_preset|stagger_parts|set_easing|mirror|retime|reverse|import|move_keyframe|clone_keyframe)|tween_(create|sequence)|spring_create|cutscene_(create|camera_track|shot_add|shot_from_camera|shots_from_path|trigger))$/,
@@ -2293,7 +2293,7 @@
   }
   // 1.38.0: skill programs that legitimately run long (whole-place scans, system
   // installs with self-tests). They get a 90 s execute budget instead of 20 s.
-  const SLOW_SKILL_RE = /^(project_index_(build|changes|summary|search|graph)|project_health_report|blueprint_(install|verify|remove|configure|status)|script_analysis|script_deprecations_fix|diagnostics_(audit|fix_common)|audit_(script_errors|unanchored_parts)|model_optimize|workspace_export|script_rename_symbol|script_find_usages|script_requires|script_todo|script_lint|structure_build|vehicle_build|mesh_shape_create|model_detail|model_variant|terrain_(generate|shape|path|water|paint_biome|info)|environment_scatter|road_build|map_generate)$/;
+  const SLOW_SKILL_RE = /^(project_index_(build|changes|summary|search|graph)|project_health_report|blueprint_(install|verify|remove|configure|status)|script_analysis|script_deprecations_fix|diagnostics_(audit|fix_common)|audit_(script_errors|unanchored_parts)|model_optimize|workspace_export|script_rename_symbol|script_find_usages|script_requires|script_todo|script_lint|structure_build|vehicle_build|mesh_shape_create|model_detail|model_variant|terrain_(generate|shape|path|water|paint_biome|info)|environment_scatter|road_build|map_generate|place_checkpoint)$/;
   const ALWAYS_BLOCKED_TOOLS = new Set([]);
   const VISION_TOOLS = new Set(["screen_capture"]);
   const bareToolName = (name) => (name && name.includes("/") ? name.split("/").pop() : name) || "";
@@ -2673,7 +2673,7 @@
     const reg=typeof TotalCommandRegistry!=="undefined"?TotalCommandRegistry:null;if(!reg)return;
     const envFor=(tool)=>tool&&tool.server==="blender"?"BLENDER":tool&&tool.server==="web"?"WEB":tool&&tool.server==="totalscript"?"GENERAL":activeEngine()==="local"?"GENERAL":"ROBLOX_STUDIO";
     for(const tool of A.toolList||[])reg.registerTool(tool,envFor(tool),{replace:true,virtual:tool.server==="totalscript",executionMode:tool.executionMode,permissions:tool.permissions});
-    const add=(items,environment)=>{for(const c of items||[]){if(!c||!c.name)continue;reg.register({id:c.name,name:c.name,description:c.description||"TotalScript virtual command",category:c.category,parameters:c.inputSchema||c.parameters||{type:"object",properties:{}},environment,aliases:c.aliases||[],examples:c.examples||[],virtual:true},{replace:true});}};
+    const add=(items,environment)=>{for(const c of items||[]){if(!c||!c.name)continue;reg.register({id:c.name,name:c.name,description:c.description||"TotalScript virtual command",category:c.category,parameters:c.inputSchema||c.parameters||{type:"object",properties:{}},environment,aliases:c.aliases||[],examples:c.examples||[],virtual:true,hidden:c.hidden===true},{replace:true});}};
     try{if(typeof RobloxScriptSkills!=="undefined")add(RobloxScriptSkills.SKILL_COMMANDS,"ROBLOX_STUDIO");}catch(e){diag("registry.skillsFailed",{error:String(e)});}
     try{if(typeof RSAnim!=="undefined"&&Array.isArray(RSAnim.ANIM_COMMANDS))add(RSAnim.ANIM_COMMANDS,"ROBLOX_STUDIO");}catch(e){diag("registry.animFailed",{error:String(e)});}
     try{if(typeof AgentScriptSkills!=="undefined")add(AgentScriptSkills.SKILL_COMMANDS,"GENERAL");}catch(e){diag("registry.agentSkillsFailed",{error:String(e)});}
@@ -2737,6 +2737,22 @@
           inputSchema: { type: "object", properties: {
             target: { type: "string", enum: ["auto", "studio", "game", "viewport", "blender", "tab"] },
             studio_id: { type: "string", description: "Optional Studio id when multiple Studio windows are connected." },
+            compare: { type: "boolean", description: "2.3.0: also measure the pixel delta against the previous capture and report CHANGE / NO VISIBLE CHANGE (changed %, area, regions)." },
+            label: { type: "string", description: "Optional label for this capture (e.g. \"before\", \"after shop\") so screenshot_compare can reference it." },
+            threshold: { type: "number", description: "Per-channel pixel delta (1-255) that counts as changed when comparing (default 24)." },
+          } },
+          server: activeEngine(),
+        });
+      }
+      if (!tools.some((t) => t && t.name === "screenshot_compare")) {
+        tools.push({
+          name: "screenshot_compare",
+          description: "Measure what changed between two captures taken with total_screenshot: % of pixels that differ, the changed bounding box, the 6x6 heat grid and a NO VISIBLE CHANGE flag when < 0.5% differs. Defaults to previous vs latest. Use it after every look change: it tells you whether your edit is actually visible from the current camera before you judge or polish it.",
+          inputSchema: { type: "object", properties: {
+            before: { type: "string", description: "Capture reference: \"previous\" (default), a label given to total_screenshot, or #id." },
+            after: { type: "string", description: "Capture reference: \"last\" (default), a label, or #id." },
+            threshold: { type: "number", description: "Per-channel delta (1-255) that counts as a changed pixel (default 24)." },
+            op: { type: "string", enum: ["compare", "list"], description: "list = show the captures kept in memory (last 8)." },
           } },
           server: activeEngine(),
         });
@@ -3167,15 +3183,81 @@
     // 1.38.0: only real parameter tokens count. The old regex also matched
     // "Rewards:" inside a description example ({Currencies:[...], Rewards:{...}})
     // and printed it as a required parameter. Required parameters come first.
-    const req = [], opt = [];
-    const push = (name, mark) => { if (!req.includes(name) && !opt.includes(name)) (mark ? opt : req).push(name); };
+    const req = [], opt = [], enums = new Map();
+    const push = (name, mark, desc, type) => {
+      if (!req.includes(name) && !opt.includes(name)) (mark ? opt : req).push(name);
+      if (type && type !== "string") return;
+      // 2.3.0: a short option list in the description ("ocean|lake|pond",
+      // "toggle|open|close") is printed as name:a|b|c - the HOW TO READ header
+      // promised that notation for years while no signature ever carried one,
+      // so models guessed enum values and burned a turn on the schema error.
+      const e = sigEnum(desc);
+      if (e && !enums.has(name)) enums.set(name, e);
+    };
     for (const ln of str.split("\n").slice(1)) {
-      const d = ln.match(/^\s{4}([A-Za-z_]\w*)(\??):\s*[a-z\[\]]+\s+-\s/);
-      if (d) { push(d[1], d[2]); continue; }
+      const d = ln.match(/^\s{4}([A-Za-z_]\w*)(\??):\s*([a-z\[\]]+)\s+-\s(.*)$/);
+      if (d) { push(d[1], d[2], d[4], d[3]); continue; }
       if (!/^\s{4}\S/.test(ln)) continue;
-      for (const tok of ln.trim().split(/,\s+(?=[A-Za-z_]\w*\??:)/)) { const m = tok.match(/^([A-Za-z_]\w*)(\??):[a-z\[\]]+/); if (m) push(m[1], m[2]); }
+      for (const tok of ln.trim().split(/,\s+(?=[A-Za-z_]\w*\??:)/)) { const m = tok.match(/^([A-Za-z_]\w*)(\??):([a-z\[\]]+)\s*(?:"([^"]*)")?/); if (m) push(m[1], m[2], m[4] || "", m[3]); }
     }
-    return `${nm} {${[...req, ...opt.map((o) => o + "?")].join(", ")}}`;
+    const show = (n, mark) => n + (enums.has(n) ? ":" + enums.get(n) : "") + (mark ? "?" : "");
+    // 2.3.0: long optional tails (design_tokens_set has 21, ui_art_theme_set
+    // 17) are cut after SIG_MAX_OPT with "+N?" - the schema still comes back on
+    // the first wrong call, and the chars buy ~90 more real signatures.
+    const shownOpt = opt.length > SIG_MAX_OPT + 1 ? [...opt.slice(0, SIG_MAX_OPT).map((o) => show(o, true)), `+${opt.length - SIG_MAX_OPT}?`] : opt.map((o) => show(o, true));
+    return `${nm} {${[...req.map((r) => show(r, false)), ...shownOpt].join(", ")}}`;
+  }
+  const SIG_MAX_OPT = 7;
+  // "a|b|c" with 2-6 lowercase tokens somewhere in a parameter description.
+  // Longer lists (18 structure kinds, 15 prop kinds) stay in the schema: a
+  // signature line has to stay short enough to pack several per row.
+  function sigEnum(desc) {
+    const d = String(desc || "");
+    let m = d.match(/(?:^|[\s("'])([a-z][a-z0-9_]*(?:\|[a-z][a-z0-9_]*){1,5})(?=$|[\s)"'.,;])/);
+    // "(top_left, center, bottom_right)" / "one of: a, b, c" lists count too
+    if (!m) { const c = d.match(/(?:\(|one of:?\s*|options:?\s*)([a-z][a-z0-9_]*(?:,\s*[a-z][a-z0-9_]*){1,5})(?=\)|$|\s*[.;(])/); if (c) m = [c[0], c[1].split(/,\s*/).join("|")]; }
+    if (!m) return null;
+    const opts = m[1].split("|");
+    if (opts.length < 2 || opts.length > 6 || m[1].length > 48 || opts.some((o) => /^(and|or|the|a|an|of|to|in|is|default|optional|required|true|false|nil|null)$/.test(o))) return null;
+    return m[1];
+  }
+  // NAMES ONLY row for one family. 2.3.0: 229 names-only commands had a
+  // REQUIRED parameter, so every blind call failed and cost a schema turn.
+  // Names are grouped by their required set - "[path] a, b, c · [-] d, e" -
+  // (singletons as "name{a,b}") which costs ~1.5 chars per command instead of
+  // ~6 for name{path} everywhere. Returns {text, omitted}.
+  function namesRow(entries, budget, plain) {
+    const runs = new Map();
+    for (const e of entries) { const k = plain ? "" : sigRequired(e.sig).join(","); if (!runs.has(k)) runs.set(k, []); runs.get(k).push(e.name); }
+    if (plain) {
+      let text = "", omitted = 0;
+      for (const n of runs.get("") || []) { if (text.length + n.length + 2 > budget) { omitted++; continue; } text += (text ? ", " : "") + n; }
+      return { text, omitted };
+    }
+    const ordered = [...runs.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    let text = "", omitted = 0;
+    for (const [k, ns] of ordered) {
+      if (ns.length === 1) {
+        const label = k ? `${ns[0]}{${k}}` : ns[0];
+        if (text.length + label.length + 3 > budget) { omitted++; continue; }
+        text += (text ? " · " : "") + label; continue;
+      }
+      let run = "";
+      for (const n of ns) {
+        const need = (run ? 2 : k.length + 4 + (text ? 3 : 0)) + n.length;
+        if (text.length + run.length + need > budget) { omitted++; continue; }
+        run += (run ? ", " : `[${k || "-"}] `) + n;
+      }
+      if (run) text += (text ? " · " : "") + run;
+    }
+    return { text, omitted };
+  }
+  // Required parameters of a signature ("name {a, b?, c:x|y}" -> ["a"]) - used
+  // by the NAMES ONLY tail so a blind call cannot fail on a missing argument.
+  function sigRequired(sig) {
+    const m = String(sig || "").match(/\{([^}]*)\}/);
+    if (!m) return [];
+    return m[1].split(",").map((t) => t.trim()).filter((t) => t && !/\?$/.test(t)).map((t) => t.replace(/:.*$/, ""));
   }
   // Pack signatures several per line (line count is what costs on composers
   // that type text in; characters are nearly free). Returns the text and how
@@ -3245,8 +3327,30 @@
       byId.get(commandFamily(e.name)).entries.push(e);
     }
     const out = familyOrderFor(modeId).map((id) => byId.get(id)).filter((g) => g && g.entries.length);
-    for (const g of out) g.entries.sort((a, b) => a.name.localeCompare(b.name));
+    // 2.3.0: within a family the signature budget used to go to the
+    // ALPHABETICALLY first commands (anchored_set, billboard_gui_create,
+    // animation_add_keyframe...) while ui_screen_generate, structure_build or
+    // fx_create_vfx fell into NAMES ONLY. Order by importance instead: the mode's
+    // focus set, then generators / systems, then everything else, then
+    // primitive setters / getters - alphabetical only as the tie-break.
+    const w = (e) => (focusSet && focusSet.has(e.name) ? -4 : 0) + signaturePriority(e.name);
+    for (const g of out) g.entries.sort((a, b) => w(a) - w(b) || a.name.localeCompare(b.name));
     return custom && custom.entries.length ? [custom, ...out] : out;
+  }
+  // Deterministic, explainable tiers (test-catalogue-ranking.js pins them):
+  //  -3 generators / whole systems (one call does a lot of work)
+  //  -1 audits, reports, inspectors (the verify half of every loop)
+  //   0 everything else
+  //  +2 primitive property setters / getters / single-instance tweaks
+  const SIGNATURE_TIERS = [
+    [-3, /(_generate|_build|_from_spec|_build_spec|_install|_setup|_scaffold|_create_vfx|_design_system_create|_art_build|_art_theme_set|_restyle|_compose|_wire|_system|_rig|_kit|_prefab|_variant|_detail|_preset|_sequence_create|_cutscene|_playbook|_responsive)(_|$)|^(model_build|ui_build|generate_|mesh_shape_create|cutscene_create|animation_create|blueprint_|style_apply)/],
+    [-1, /(_audit|_report|_inspect|_info|_check|_list|_summary|_verify|_test|_compare|_layout_report)(_|$)/],
+    [2, /(_set|_get|_add|_clear|_remove|_delete|_measure|_count|_toggle|_enable|_disable|_show|_hide)$|^(anchored|brickcolor|cframe|collision|color|decal|material|transparency|size|position|orientation|name)_/],
+  ];
+  function signaturePriority(name) {
+    const n = String(name || "");
+    for (const [tier, re] of SIGNATURE_TIERS) if (re.test(n)) return tier;
+    return 0;
   }
   // Full detail line for a bridge tool (description + param docs + usage note).
   function toolDetailLine(t) {
@@ -3327,7 +3431,7 @@
     const rank = (e) => (PRIORITY_COMMAND_RE.test(e.name) ? 0 : e.native ? 1 : focus.has(e.name) ? 2 : 3);
     entries.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
     const intro = `${heading || `Output of '${toolName}':`}\n${requested} commands - ${entries.length} total${compact ? " (compact index for this chat)" : ""}.\n`
-      + `HOW TO READ: "name {a, b?, c?:x|y}" = call name with a (required), b (optional), c (one of x|y). `
+      + `HOW TO READ: "name {a, b?, c:x|y?, +3?}" = call name with a (required), b (optional), c (one of x|y), +3 = three more optional parameters. `
       + `Every command shown with {…} can be called DIRECTLY - do not fetch its schema first. `
       + `This catalogue is COMPLETE: never search, browse or look up commands (no list_commands {"query"}, search_commands or get_command). `
       + `A name shown without a signature is still callable - call it with sensible parameters; if one is wrong the error returns the exact schema. Anything not covered: execute_luau {code}.\n\n`;
@@ -3380,9 +3484,28 @@
       usedChars += dc; usedLines += dl;
     }
     const rest = entries.filter((e) => !e.done);
-    // Compact: signatures take ~60% of what is left so a name index of the
-    // remaining commands still fits; full: signatures may use everything.
-    let sigBudget = Math.max(800, Math.floor((limit - usedChars - 600) * (compact ? 0.6 : 1)));
+    // Compact: signatures used to take a flat 60% of what is left. 2.3.0 solves
+    // the split instead: every command must at least appear in the NAMES ONLY
+    // tail (a missing command is invisible), so the tail's cost is reserved
+    // first and the signatures get what fits on top of it
+    // (fit = (avail - allNames) / (avgSig - avgName)). Full: everything.
+    let sigBudget, plainNames = false;
+    const groups = groupByFamily(rest, modeId, focus);
+    if (compact) {
+      const avail = limit - usedChars - 600;
+      let nameCostAll = groups.reduce((n, g) => n + namesRow(g.entries, Infinity).text.length + g.label.length + 3, 0);
+      // Tight budgets (list_commands {} on a 12-16k composer): the required-
+      // parameter runs would leave < 40% for signatures - fall back to plain
+      // names so the generators keep their signatures.
+      if (avail - nameCostAll < avail * 0.4) { plainNames = true; nameCostAll = groups.reduce((n, g) => n + namesRow(g.entries, Infinity, true).text.length + g.label.length + 3, 0); }
+      // the sorted heads of every family (generators) are longer than the
+      // family average, so the fit uses the mean of the first third.
+      const heads = groups.flatMap((g) => g.entries.slice(0, Math.max(2, Math.ceil(g.entries.length / 3))));
+      const avgSig = heads.length ? heads.reduce((n, e) => n + String(e.sig || e.name).length + 5, 0) / heads.length : 45;
+      const avgName = rest.length ? nameCostAll / rest.length : 20;
+      const fit = Math.floor((avail - nameCostAll) / Math.max(1, avgSig - avgName));
+      sigBudget = Math.max(Math.min(1500, Math.floor(avail * 0.35)), Math.min(Math.floor(avail * 0.75), Math.floor(fit * avgSig)));
+    } else sigBudget = Math.max(800, limit - usedChars - 600);
     let sigLines = Math.max(6, lineLimit - usedLines - 4);
     // 1.38.0: signatures grouped by FAMILY, this mode's families first.
     // 1.39.0 (one Creation mode, every family matters): the budget is spent in
@@ -3390,27 +3513,41 @@
     // animation keep real signatures instead of falling into NAMES ONLY behind
     // ~200 scripting / build rows - then the remainder in family order. Within
     // a family `shown` stays a strict prefix (names-only tail never repeats).
-    const groups = groupByFamily(rest, modeId, focus);
     const sigParts = []; const nameGroups = []; let packedChars = 0;
     const shownBy = new Map(), textBy = new Map();
-    const fairChars = Math.max(420, Math.floor(sigBudget / Math.max(1, groups.length)));
-    const fairLines = Math.max(3, Math.floor(sigLines / Math.max(1, groups.length)));
-    for (const pass of [0, 1]) {
+    // 2.3.0: the first-pass share is proportional to the family's size (floor
+    // 420 chars / 3 lines) - UI with 98 commands used to get the same share as
+    // WEB with 6, so 87 UI commands were names-only on a 20k budget.
+    // Every later pass is proportional to what each family still has left, so
+    // the remainder no longer drains into the first families of FAMILY_ORDER
+    // (SCRIPTING / DATA / BUILD took it all while UI stopped at 11-22).
+    const left = (g) => g.entries.length - (shownBy.get(g.id) || 0);
+    let leftTotal = Math.max(1, groups.reduce((n, g) => n + g.entries.length, 0));
+    // The per-family floor shrinks with the budget: on the compact 1500-char
+    // signature budget 19 x 420 would hand everything to the first four
+    // families again (lighting / VFX / UI / animation lost their rows).
+    const floorChars = Math.max(140, Math.min(420, Math.floor(sigBudget / Math.max(1, groups.length))));
+    const shareChars = (g, passBudget) => Math.max(floorChars, Math.floor(passBudget * left(g) / leftTotal));
+    const shareLines = (g, passLines) => Math.max(3, Math.floor(passLines * left(g) / leftTotal));
+    for (let pass = 0; pass < 6 && sigBudget >= 140; pass++) {
+      const passBudget = sigBudget, passLines = sigLines; let progressed = false;
+      leftTotal = Math.max(1, groups.reduce((n, g) => n + left(g), 0));
       for (const g of groups) {
         const done = shownBy.get(g.id) || 0;
         const remaining = g.entries.slice(done);
         if (!remaining.length) continue;
         const header = done ? "" : `── ${g.label} (${g.entries.length}) ──`;
-        const charCap = pass === 0 ? Math.min(fairChars, sigBudget) : sigBudget;
-        const lineCap = pass === 0 ? Math.min(fairLines, sigLines) : sigLines;
-        if (charCap - header.length < 120 || lineCap < 2) continue;
+        const charCap = Math.min(shareChars(g, passBudget), sigBudget);
+        const lineCap = Math.min(shareLines(g, passLines), sigLines);
+        if (charCap - header.length < (floorChars < 420 ? 80 : 120) || lineCap < 2) continue;
         const packed = packSignatures(remaining.map((e) => e.sig), charCap - header.length - 1, lineCap - 1);
         if (!packed.shown) continue;
         textBy.set(g.id, (textBy.get(g.id) || header) + "\n" + packed.text);
         shownBy.set(g.id, done + packed.shown);
         const cost = packed.chars + header.length + 2;
-        sigBudget -= cost; sigLines -= packed.lines + (header ? 1 : 0); packedChars += cost;
+        sigBudget -= cost; sigLines -= packed.lines + (header ? 1 : 0); packedChars += cost; progressed = true;
       }
+      if (!progressed) break;
     }
     for (const g of groups) {
       const done = shownBy.get(g.id) || 0;
@@ -3422,11 +3559,13 @@
       let nameBudget = Math.max(300, limit - usedChars - packedChars - 400);
       const rows = [];
       for (const g of nameGroups) {
-        let list = "";
-        for (const e of g.entries) { if (list.length + e.name.length + 2 > nameBudget) { omitted++; continue; } list += (list ? ", " : "") + e.name; }
-        if (list) { rows.push(`${g.label}: ${list}`); nameBudget -= list.length + g.label.length + 3; }
+        const row = namesRow(g.entries, nameBudget, plainNames);
+        omitted += row.omitted;
+        if (row.text) { rows.push(`${g.label}: ${row.text}`); nameBudget -= row.text.length + g.label.length + 3; }
       }
-      namesBlock = rows.length ? `\n\nNAMES ONLY (call them directly; a wrong parameter returns the exact schema, never look them up):\n${rows.join("\n")}` : "";
+      namesBlock = rows.length ? (plainNames
+        ? `\n\nNAMES ONLY (call them directly; a wrong parameter returns the exact schema, never look them up):\n${rows.join("\n")}`
+        : `\n\nNAMES ONLY (call them directly - [a,b] before a run of names = the REQUIRED parameters of those names, [-] = none required, name{a} = that name needs a, everything else optional; a wrong parameter returns the exact schema, never look them up):\n${rows.join("\n")}`) : "";
     }
     const detailBlock = detail.length ? `${String((focusBlock || "").match(/━━━ (\w+) WORK MODE/) ? RegExp.$1 : "FOCUS")} FAMILY (full schemas):\n\n${detail.join("\n\n")}\n\n` : "";
     const sigBlock = sigParts.length ? `SIGNATURES BY FAMILY (callable as shown; ${(WORK_MODES[modeId] || WORK_MODES.creation).badge} families first):\n${sigParts.join("\n")}` : "";
@@ -4805,11 +4944,30 @@
         studio: studioOn ? captureStudio : null,
         blender: bridge.blender ? async () => bg({ type: "call_tool", name: "get_viewport_screenshot", arguments: {max_size:Number(args.max_size)||1000}, timeout: 30000 }) : null,
       });
+      let compareNote = "";
       if (result.images && result.images.length) {
         try { ui.showImages(result.images, "total_screenshot"); } catch {}
         A.pendingImages = result.images;
+        // 2.3.0: every capture is remembered (ring of 8) so screenshot_compare
+        // / compare:true can measure the pixel delta against the previous one.
+        if (typeof TotalScreenshotDiff !== "undefined") {
+          try {
+            const prev = TotalScreenshotDiff.latest();
+            const entry = TotalScreenshotDiff.remember(result.images[0], args.label || "");
+            if (args.compare === true || args.compare === "true" || args.compare === 1) {
+              if (!prev) compareNote = "\n[screenshot_compare: this is the first capture kept in memory (#" + (entry && entry.id) + ") - nothing to compare against yet. Make your change, then total_screenshot {compare:true} again and the delta is reported.]";
+              else { const r = await TotalScreenshotDiff.compare({ before: prev.id, after: entry.id, threshold: args.threshold }); compareNote = "\n" + r.text; }
+            } else if (entry) compareNote = `\n[capture #${entry.id}${entry.label ? " " + JSON.stringify(entry.label) : ""} kept; after your next change call total_screenshot {compare:true} to measure what actually changed.]`;
+          } catch (e) { compareNote = "\n[screenshot_compare unavailable: " + String(e && e.message || e) + "]"; }
+        }
       }
-      return result.text;
+      return result.text + compareNote;
+    }
+    if (name === "screenshot_compare") {
+      if (typeof TotalScreenshotDiff === "undefined") return "ERROR: screenshot_diff module missing - reload the extension.";
+      if (args.op === "list" || args.list === true) { const l = TotalScreenshotDiff.list(); return l.length ? "Captures in memory (oldest first): " + l.map((e) => `#${e.id}${e.label ? " " + JSON.stringify(e.label) : ""} ${new Date(e.at).toLocaleTimeString()}`).join(", ") : "No captures in memory yet - total_screenshot first."; }
+      const r = await TotalScreenshotDiff.compare(args);
+      return r.text + (r.ok ? `\n[diff: changed ${r.diff.changed_pct}%, mean delta ${r.diff.mean_delta}, bbox ${JSON.stringify(r.diff.bbox)}, hot ${JSON.stringify(r.diff.hot_regions)}]` : "");
     }
         if (name === "http_get") {
       let url = String(args.url || args.href || "").trim();
@@ -5134,7 +5292,7 @@
         return `Output of '${name}':\n${requested} commands (${scoped.length}${virtualCount ? ` + ${virtualCount} TotalScript virtual tools` : ""}):\n\n${lines.join("\n\n")}${animLines.length ? "\n\n" + animLines.join("\n\n") : ""}${skillLines.length ? "\n\n" + skillLines.join("\n\n") : ""}${agentLines.length ? "\n\n" + agentLines.join("\n\n") : ""}${webLines.length ? "\n\n" + webLines.join("\n") : ""}`;
       }
       const helperNames = [
-        "total_screenshot", "total_debug", "get_template", "total_status", "web_fetch",
+        "total_screenshot", "screenshot_compare", "total_debug", "get_template", "total_status", "web_fetch",
         "web_search", "capture_id", "total_agent", "developer_product_create",
         "developer_product_list",
       ];
@@ -6658,7 +6816,11 @@
     // list_commands, universal + work-mode families first, ~16k chars) inside
     // the system prompt itself, so turn zero is just "ready". Providers with a
     // tight composer (compactCommandList) keep the forced bootstrap catalogue.
-    const EMBED_CATALOGUE_DEFAULT_CHARS = 20000;
+    // 2.3.0: 20000 -> 24000. With 653 commands the tail that lists every
+    // command WITH its required parameters costs ~10k, and 20k left only ~170
+    // signatures; 24k holds ~320 (UI 42, build 44, animation 26) with every
+    // generator shown and nothing omitted. Only roomy composers embed at all.
+    const EMBED_CATALOGUE_DEFAULT_CHARS = 24000;
     function embeddedCatalogue(engine) {
       try {
         if (P.compactCommandList || P.embedCatalogue === false) return "";
@@ -6671,7 +6833,7 @@
         const animLines = requested === "roblox" && typeof RSAnim !== "undefined" ? RSAnim.describeCommands() : [];
         const skillLines = requested === "roblox" && typeof RobloxScriptSkills !== "undefined" ? RobloxScriptSkills.describeCommands() : [];
         const agentLines = requested === "local" && typeof AgentScriptSkills !== "undefined" ? AgentScriptSkills.describeCommands() : [];
-        const helperNames = ["total_screenshot", "total_debug", "get_template", "total_status", "web_fetch", "web_search", "capture_id", "total_agent"];
+        const helperNames = ["total_screenshot", "screenshot_compare", "total_debug", "get_template", "total_status", "web_fetch", "web_search", "capture_id", "total_agent"];
         const helperTools = helperNames.filter((hn) => !allScoped.some((t) => t.name === hn)).map((hn) => A.toolList.find((t) => t && t.name === hn)).filter(Boolean);
         let focusMode = "creation";
         try { focusMode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
@@ -9031,6 +9193,9 @@
       weapon_build: "Next: weapon_trail_enable / weapon_hitbox_create on the Handle, then move the Tool to StarterPack",
       furniture_build: "Next: model_variant for a set, seat_create or proximity prompts for interaction, model_detail {ops:['wear']} to age it",
       mesh_shape_create: "Next: material_set / color_set on the MeshPart; model_build or part_create for the rest of the prop",
+      place_checkpoint: "Next: make the risky change; afterwards place_checkpoint {op:'diff'} names what changed and {op:'restore'} undoes it in one call",
+      ui_test: "Next: wire every DEAD button (ui_states_wire / ui_state_toggle / ui_bind_button), then run the live_plan in Play mode to prove the clicks",
+      screenshot_compare: "Next: if NO VISIBLE CHANGE - check the path / Enabled / camera before polishing; if CHANGE - judge the attached image as an art director",
       ui_create_screen: "Next: add a component (ui_create_component) to this ScreenGui",
       ui_create_component: "Next: preview in Studio or add another component",
       fx_create_emitter: "Next: add a light (fx_create_light) or sound",

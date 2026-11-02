@@ -80,7 +80,7 @@ assert(main.includes("(!t.hidden || String(t.name || \"\").toLowerCase() === com
 assert(main.includes("RobloxScriptSkills.describeCommands({ includeHidden: !!commandQuery })"), "list_commands includes hidden skill lines only when querying");
 assert(config.includes(".filter((t) => t && !t.hidden)"), "compactTools (reminder) skips hidden tools");
 assert(main.includes("function embeddedCatalogue(engine)"), "embedded catalogue builder exists");
-assert(main.includes("const EMBED_CATALOGUE_DEFAULT_CHARS = 20000;"), "embedded catalogue default budget");
+assert(main.includes("const EMBED_CATALOGUE_DEFAULT_CHARS = 24000;"), "embedded catalogue default budget (2.3.0: 24000, see test-catalogue-ranking)");
 assert(main.includes("if (P.compactCommandList || P.embedCatalogue === false) return \"\";"), "compact providers keep the forced bootstrap catalogue");
 assert(main.includes("systemPrompt({ embedCatalogue: false })"), "system-prompt resends do not repeat the catalogue");
 assert(main.includes("heading: \"━━━ COMMAND CATALOGUE (embedded; this IS the list_commands result"), "catalogue heading");

@@ -342,9 +342,14 @@
   };
   B.constraints_clear = function (a) {
     return "local m=resolve(" + q(a.path || "") + ") if not m then return fail('path not found') end\n" +
-      "local n=0 for _,d in ipairs(m:GetDescendants()) do if d:IsA('BaseConstraint') or d:IsA('BasePart') and d:IsA('Weld') then d:Destroy() n+=1 end end\n" +
-      "for _,d in ipairs(m:GetDescendants()) do if d:IsA('Motor6D') or d:IsA('Weld') then d:Destroy() n+=1 end end\n" +
-      "return ok({removed=n},'constraints cleared')";
+      // 2.3.0: 'BaseConstraint' is not a Roblox class (IsA was always false) and
+      // 'BasePart and Weld' can never hold, so this used to leave every Hinge /
+      // Rope / Spring in place while deleting the Motor6D rig joints. Now:
+      // Constraint subclasses + WeldConstraint / Weld / Snap / Glue by default;
+      // Motor6D (character rigs) only with include_joints:true.
+      "local joints=" + (a.include_joints === true ? "true" : "false") + " local n=0 local byClass={}\n" +
+      "for _,d in ipairs(m:GetDescendants()) do if d:IsA('Constraint') or d:IsA('WeldConstraint') or d:IsA('NoCollisionConstraint') or ((d:IsA('JointInstance') and (joints or not d:IsA('Motor6D')))) then byClass[d.ClassName]=(byClass[d.ClassName] or 0)+1 d:Destroy() n+=1 end end\n" +
+      "return ok({removed=n,by_class=byClass,joints_included=joints},n>0 and ('constraints cleared: '..n) or 'no constraints found')";
   };
   B.constraint_create = function (a) {
     var t = { weld: "WeldConstraint", motor6d: "Motor6D", hinge: "HingeConstraint", pivot: "PivotConstraint", ball: "BallSocketConstraint", prismatic: "PrismaticConstraint" }[String(a.type || "weld").toLowerCase()];
@@ -1545,7 +1550,7 @@
     { name: "physics_root_set", description: "Point a model's HumanoidRootPart at a specific part.", params: { path: { type: "string", req: true, desc: "model" }, root_part: { type: "string", req: true, desc: "part path" } } },
     { name: "physics_anchor_all", description: "Anchor or unanchor every BasePart under a path.", params: { path: { type: "string", req: false}, anchored: { type: "boolean", req: false, desc: "true=anchor, false=free" } } },
     { name: "physics_lock", description: "Anchor a part and zero its velocity (fully stop it).", params: { path: { type: "string", req: true} } },
-    { name: "constraints_clear", description: "Remove all Motor6D/Weld/constraint children from a model or part.", params: { path: { type: "string", req: true} } },
+    { name: "constraints_clear", description: "Remove every physics constraint (Hinge / Rope / Spring / Weld / WeldConstraint / NoCollision ...) under a model or part; Motor6D rig joints are kept unless include_joints:true. Reports counts per class.", params: { path: { type: "string", req: true }, include_joints: { type: "boolean", req: false, desc: "also destroy Motor6D joints (breaks character rigs)" } } },
     { name: "constraint_create", description: "Create a constraint between two parts: weld, motor6d, hinge, pivot, ball, prismatic.", params: { part0: { type: "string", req: true}, part1: { type: "string", req: true}, type: { type: "string", req: false, desc: "weld|motor6d|hinge|pivot|ball|prismatic" } } },
     { name: "motor6d_set", description: "Tune a Motor6D: motor speed/force and U0-U2 limits.", params: { path: { type: "string", req: true, desc: "Motor6D path" }, motor: { type: "number", req: false, desc: "DesiredVelocity rad/s" }, motor_force: { type: "number", req: false, desc: "MaxMotorForce" }, u0: { type: "boolean", req: false}, u1: { type: "boolean", req: false}, u2: { type: "boolean", req: false}, limits: { type: "boolean", req: false, desc: "true=apply u0-u2" } } },
     { name: "physics_parts_on_ray", description: "List BaseParts intersecting a line from 'from' to 'to' (swept sphere).", params: { from: { type: "array", req: false, desc: "start [x,y,z]" }, to: { type: "array", req: true, desc: "end [x,y,z]" }, radius: { type: "number", req: false} } },

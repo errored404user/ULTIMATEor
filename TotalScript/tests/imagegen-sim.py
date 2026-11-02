@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Image Studio (2.2.5) Studio-side Luau against the miniature Roblox DataModel.
+"""Image Studio (2.3.0) Studio-side Luau against the miniature Roblox DataModel.
 
 src/core/imagegen.js ships the Luau that turns an RGBA payload into an
 EditableImage bound to an ImageLabel (live) or published as an Image asset.

@@ -1491,7 +1491,7 @@ const RSProvider = (() => {
     if (stop) {
       if (!_stopSince) _stopSince = now;
       // Trust a continuously present stop button for 5 min (long planning),
-      // same policy as the Arena provider after v2.2.5.
+      // same policy as the Arena provider after v2.3.0.
       return (now - _stopSince < 300000) || (now - _streamAt < 300000);
     }
     _stopSince = 0;

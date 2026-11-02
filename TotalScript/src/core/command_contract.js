@@ -13,7 +13,7 @@
 //   schemaLine(name)         -> compact callable signature for error messages
 const TotalCommandContract = (() => {
   "use strict";
-  const VERSION = "2.2.5";
+  const VERSION = "2.3.0";
 
   // ── authoritative Roblox enum lists (Enum.<Key>.<Item>; a wrong item is a Luau error or a silently swallowed pcall) ──
   const ROBLOX_ENUMS = {
@@ -152,7 +152,7 @@ const TotalCommandContract = (() => {
     for (const [alias, canon] of Object.entries(COMMAND_ALIASES[id] || {})) if (params[canon] && !params[alias]) aliases[alias] = canon;
     for (const [alias, canon] of Object.entries(PARAM_ALIASES)) if (params[canon] && !params[alias] && !aliases[alias]) aliases[alias] = canon;
     for (const [alias, canon] of Object.entries(PARAM_ALIASES_REVERSE)) if (params[canon] && !params[alias]) aliases[alias] = canon;
-    const read = READ_RE.test(id) || READ_SUFFIX_RE.test(id) || /^(lighting_inspect|ui_inspect|plugin_list|blueprint_list|style_guide)$/.test(id);
+    const read = READ_RE.test(id) || READ_SUFFIX_RE.test(id) || /^(lighting_inspect|ui_inspect|plugin_list|blueprint_list|style_guide|ui_test)$/.test(id); // 2.3.0: ui_test simulates on a virtual state (animation_test is NOT read: it creates a clip)
     const c = Object.freeze({
       name: id, backend, description: String(def.description || ""), params, aliases,
       required: declared.filter((k) => params[k].required),

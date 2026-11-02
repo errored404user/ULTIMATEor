@@ -52,6 +52,10 @@ const TotalCommandRegistry = (() => {
       validation:typeof raw.validation === "function" ? raw.validation : null,
       errorHandling:raw.errorHandling || "return_structured_error",
       virtual:raw.virtual === true,
+      // 2.3.0: hidden (legacy aliases, NOT_IMPLEMENTED stubs) stays callable by
+      // id but never comes back from search() - "staircase" used to rank the
+      // dead staircase_generate stub above structure_build.
+      hidden:raw.hidden === true,
     });
   }
   function register(raw, options = {}) {
@@ -92,7 +96,7 @@ const TotalCommandRegistry = (() => {
   }
   function search(query, options={}) {
     const terms=words(query); const environment=options.environment&&String(options.environment).toUpperCase();const cacheKey=JSON.stringify([terms,environment,Number(options.limit)||25]);if(searchCache.has(cacheKey))return searchCache.get(cacheKey).slice();
-    const result=[...commands.values()].filter((c)=>!environment||c.environment===environment||c.environment==="GENERAL").map((c)=>{
+    const result=[...commands.values()].filter((c)=>(!c.hidden||options.includeHidden===true)&&(!environment||c.environment===environment||c.environment==="GENERAL")).map((c)=>{
       const hay=[c.id,c.name,c.description,c.category,...c.aliases,...c.examples].join(" ").toLowerCase();
       let score=terms.reduce((n,t)=>n+(c.id.toLowerCase()===t?12:c.id.toLowerCase().includes(t)?7:c.category.includes(t)?5:hay.includes(t)?2:0),0);
       if(!terms.length)score=0; return {command:c,score};

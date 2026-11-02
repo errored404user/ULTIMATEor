@@ -38,7 +38,7 @@ ok("help topic describes the merge, the gates and the migration", main.includes(
 
 // ── B. catalogue: the union focus is not dumped as a 7k name list; signatures are shared fairly across families ──
 ok("focus block skips the name dump when the focus set is large (Creation ≈ 425 names)", main.includes('${P.compactCommandList || focusNames.length > 240 ? "" : focusNames.join(", ") + "\\n"}'));
-ok("signature budget is spent in two passes (fair share per family, then the remainder)", main.includes("const fairChars = Math.max(420, Math.floor(sigBudget / Math.max(1, groups.length)));") && main.includes("for (const pass of [0, 1]) {") && main.includes("const charCap = pass === 0 ? Math.min(fairChars, sigBudget) : sigBudget;"));
+ok("signature budget is spent in fair-share passes per family (2.3.0: proportional to what each family still has left, floor shrinking with the budget; was two flat passes)", main.includes("const floorChars = Math.max(140, Math.min(420, Math.floor(sigBudget / Math.max(1, groups.length))));") && main.includes("for (let pass = 0; pass < 6 && sigBudget >= 140; pass++) {") && main.includes("const charCap = Math.min(shareChars(g, passBudget), sigBudget);"));
 {
   global.window = global; global.chrome = { runtime: { getURL: (p) => p }, storage: { local: { get: (k, cb) => cb && cb({}), set: () => {} } } };
   const manifest = JSON.parse(read("manifest.json"));
@@ -129,8 +129,8 @@ ok("overlay.css: creation badge / card / row, no legacy selectors", css.includes
 
 // ── G. bookkeeping ──
 const mf = JSON.parse(read("manifest.json"));
-ok("manifest 2.2.5", mf.version === "2.2.5", mf.version);
-ok("plugin + crate pinned at 2.2.5", read("plugin/TotalScript.lua").includes('local VERSION = "2.2.5"') && read("plugin/TotalScript.lua").includes("(TotalScript 2.2.5)") && /^version = "2\.2\.5"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "2\.2\.5"/.test(read("agent/Cargo.lock")) && readme.includes("`total-agent` 2.2.5"));
+ok("manifest 2.3.0", mf.version === "2.3.0", mf.version);
+ok("plugin + crate pinned at 2.3.0", read("plugin/TotalScript.lua").includes('local VERSION = "2.3.0"') && read("plugin/TotalScript.lua").includes("(TotalScript 2.3.0)") && /^version = "2\.3\.0"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "2\.3\.0"/.test(read("agent/Cargo.lock")) && readme.includes("`total-agent` 2.3.0"));
 ok("README changelog 1.39.0 + mode paragraph + test listed", readme.includes("**1.39.0 — Creation: one work mode.**") && readme.includes("tests/test-v139.js") && readme.includes("there is one built-in mode, **Totality** (named Creation until 1.73; stored id `creation`)") /* 1.75.0 rename */);
 ok("tests pinned to the old ids were updated (no test expects three built-in modes)", !read("tests/test-work-modes.js").includes('for (const wm of ["ultimate", "visualizer", "animator"])') && !read("tests/test-v138.js").includes('WORK_MODE_IDS: ["ultimate", "visualizer", "animator"]') && !read("tests/test-public-skills.js").includes('const WORK_MODES = ["ultimate", "visualizer", "animator"]'));
 

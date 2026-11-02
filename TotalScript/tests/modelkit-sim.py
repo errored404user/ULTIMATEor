@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Model kit pack (2.2.5) against the miniature Roblox DataModel.
+"""Model kit pack (2.3.0) against the miniature Roblox DataModel.
 
 tests/test-modelkit-pack.js checks the pack statically (registration, params,
 validation, wiring). This script runs the REAL generated Luau of all seven commands
 (structure_build / vehicle_build / weapon_build / furniture_build / mesh_shape_create /
-model_detail / model_variant) in tests/roblox_sim.py, which for 2.2.5 grew an
+model_detail / model_variant) in tests/roblox_sim.py, which for 2.3.0 grew an
 EditableMesh bookkeeping mock (AddVertex / AddTriangle / normals / UVs) and
 AssetService:CreateMeshPartAsync (a MeshPart whose Size is the vertex bounding box).
 
