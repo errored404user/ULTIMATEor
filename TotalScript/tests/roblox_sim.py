@@ -36,6 +36,10 @@ local CLASSES = {
   Service={"Instance"}, EditableImage={"Instance"},
   ProximityPrompt={"Instance"}, ClickDetector={"Instance"}, CFrameValue={"ValueBase"}, ForceField={"Instance"},
   Terrain={"BasePart"}, SpawnLocation={"BasePart"}, Seat={"BasePart"}, StarterPlayerScripts={"Instance"}, StarterCharacterScripts={"Instance"}, Backpack={"Instance"}, StarterGear={"Instance"}, BillboardGui={"LayerCollector"}, Animation={"Instance"}, Team={"Instance"}, BoolValue={"ValueBase"}, ObjectValue={"ValueBase"}, Constraint={"Instance"}, AlignPosition={"Constraint"}, AlignOrientation={"Constraint"}, BodyVelocity={"Instance"}, Configuration={"Instance"}, Tags={"Instance"},
+  -- 2.2.5 model kit: constraints, vehicle seat, corner wedges, fire, editable meshes
+  CornerWedgePart={"BasePart"}, VehicleSeat={"Seat"}, HingeConstraint={"Constraint"}, SpringConstraint={"Constraint"}, RopeConstraint={"Constraint"}, PrismaticConstraint={"Constraint"},
+  BallSocketConstraint={"Constraint"}, CylindricalConstraint={"Constraint"}, LinearVelocity={"Constraint"}, AngularVelocity={"Constraint"}, VectorForce={"Constraint"}, Torque={"Constraint"},
+  Fire={"Instance"}, Smoke={"Instance"}, Sparkles={"Instance"}, EditableMesh={"Instance"},
 }
 local function isa(cls, want)
   local c = cls
@@ -196,7 +200,7 @@ M.firedSignals = 0
 local Instance = {}
 local Inst = {}
 local EVENTS = {Ended=1,Played=1,Stopped=1,Activated=1,MouseEnter=1,MouseLeave=1,MouseButton1Down=1,MouseButton1Up=1,MouseButton1Click=1,SelectionGained=1,SelectionLost=1,DescendantAdded=1,ChildAdded=1,ChildRemoved=1,Changed=1,CharacterAdded=1,HealthChanged=1,PlayerRemoving=1,PlayerAdded=1,Loaded=1,InputBegan=1,InputEnded=1,LastInputTypeChanged=1,Completed=1,OnClientEvent=1,OnServerEvent=1,Event=1,Focused=1,FocusLost=1,AncestryChanged=1,Destroying=1,Died=1,Touched=1,TouchEnded=1,Heartbeat=1,Stepped=1,RenderStepped=1,Chatted=1,StateChanged=1,Equipped=1,Unequipped=1,Running=1,Jumping=1,AttributeChanged=1,PromptGamePassPurchaseFinished=1,PromptProductPurchaseFinished=1,PromptPurchaseFinished=1,PlayerMembershipChanged=1,ProcessReceipt=0,Triggered=1,PromptTriggered=1,MoveToFinished=1,PromptShown=1,PromptHidden=1}
-local DEFAULTS = {Size=function() return UDim2.new(0,100,0,100) end, Position=function() return UDim2.new() end, AnchorPoint=function() return Vector2.new() end,
+local DEFAULTS = {Shape=function() return Enum.PartType.Block end, Size=function() return UDim2.new(0,100,0,100) end, Position=function() return UDim2.new() end, AnchorPoint=function() return Vector2.new() end,
   BackgroundColor3=function() return Color3.new(1,1,1) end, BackgroundTransparency=0, BorderSizePixel=1, TextColor3=function() return Color3.new(0,0,0) end, TextTransparency=0, TextStrokeTransparency=1, TextSize=14, Text="", TextScaled=false, TextWrapped=false, RichText=false,
   Visible=true, ZIndex=1, Image="", ImageTransparency=0, ImageColor3=function() return Color3.new(1,1,1) end, Font=function() return Enum.Font.Legacy end, Enabled=true, Active=false, AutoButtonColor=true, ClipsDescendants=false,
   CanvasSize=function() return UDim2.new() end, AutomaticCanvasSize=function() return Enum.AutomaticSize.None end, AutomaticSize=function() return Enum.AutomaticSize.None end, ZIndexBehavior=function() return Enum.ZIndexBehavior.Sibling end, IgnoreGuiInset=false, ResetOnSpawn=true, DisplayOrder=0,
@@ -428,6 +432,49 @@ function methods:WritePixelsBuffer(pos, size, buf) self.__pixels = buf self.__pi
 function methods:DrawCircle() end
 function methods:DrawLine() end
 function methods:DrawRectangle() end
+-- 2.2.5 model kit: EditableMesh bookkeeping + CreateMeshPartAsync (bounding box from the vertices)
+function methods:CreateEditableMesh(opts)
+  local e = new("EditableMesh", "EditableMesh")
+  e.__verts = {} e.__tris = {} e.__normals = 0 e.__uvs = 0 e.__faceNormals = 0 e.__faceUVs = 0
+  M.editableMeshes = (M.editableMeshes or 0) + 1
+  return e
+end
+function methods:AddVertex(v) assert(getmetatable(v) == Vector3, "EditableMesh:AddVertex expects a Vector3") local id = #self.__verts + 1 self.__verts[id] = v return id end
+function methods:AddTriangle(a, b, c)
+  assert(self.__verts[a] and self.__verts[b] and self.__verts[c], "EditableMesh:AddTriangle unknown vertex id")
+  assert(a ~= b and b ~= c and a ~= c, "EditableMesh:AddTriangle degenerate triangle")
+  local id = #self.__tris + 1 self.__tris[id] = {a, b, c} return id
+end
+function methods:AddNormal(n) if n ~= nil then assert(getmetatable(n) == Vector3, "EditableMesh:AddNormal expects a Vector3 or nothing") end self.__normals = self.__normals + 1 return self.__normals end
+function methods:AddUV(uv) assert(getmetatable(uv) == Vector2, "EditableMesh:AddUV expects a Vector2") self.__uvs = self.__uvs + 1 return self.__uvs end
+function methods:SetFaceNormals(fid, ids)
+  assert(self.__tris[fid], "EditableMesh:SetFaceNormals unknown face id")
+  assert(type(ids) == "table" and #ids == 3, "EditableMesh:SetFaceNormals expects 3 normal ids")
+  for _, id in ipairs(ids) do assert(type(id) == "number" and id >= 1 and id <= self.__normals, "EditableMesh:SetFaceNormals unknown normal id") end
+  self.__faceNormals = self.__faceNormals + 1
+end
+function methods:SetFaceUVs(fid, ids) assert(self.__tris[fid], "EditableMesh:SetFaceUVs unknown face id") assert(type(ids) == "table" and #ids == 3, "EditableMesh:SetFaceUVs expects 3 uv ids") self.__faceUVs = self.__faceUVs + 1 end
+function methods:RemoveUnused() return 0 end
+function methods:GetVertices() local t = {} for i in ipairs(self.__verts) do t[i] = i end return t end
+function methods:GetFaces() local t = {} for i in ipairs(self.__tris) do t[i] = i end return t end
+function methods:GetPosition(id) return self.__verts[id] end
+function methods:GetFaceVertices(fid) local f = self.__tris[fid] return {f[1], f[2], f[3]} end
+function methods:CreateMeshPartAsync(content, opts)
+  assert(type(content) == "table" and content.__content and content.Object and content.Object.ClassName == "EditableMesh", "AssetService:CreateMeshPartAsync expects Content.fromObject(EditableMesh)")
+  local em = content.Object
+  assert(#em.__tris > 0, "CreateMeshPartAsync: mesh has no faces")
+  assert(#em.__verts <= 60000 and #em.__tris <= 20000, "CreateMeshPartAsync: mesh exceeds the EditableMesh limits")
+  local mn, mx = nil, nil
+  for _, v in ipairs(em.__verts) do
+    if not mn then mn = v mx = v else mn = Vector3.new(math.min(mn.X, v.X), math.min(mn.Y, v.Y), math.min(mn.Z, v.Z)) mx = Vector3.new(math.max(mx.X, v.X), math.max(mx.Y, v.Y), math.max(mx.Z, v.Z)) end
+  end
+  local mp = new("MeshPart", "MeshPart")
+  mp.Size = mx - mn
+  mp.__mesh = em
+  mp.__fidelity = opts and opts.CollisionFidelity or nil
+  M.meshParts = (M.meshParts or 0) + 1
+  return mp
+end
 function methods:CreateAssetAsync(obj, assetType, opts)
   M.createdAssets = M.createdAssets or {}
   local id = 900000 + #M.createdAssets + 1
@@ -837,9 +884,11 @@ _G.buffer = {
   readu8 = function(b, o) if o < 0 or o >= b.__n then error("buffer access out of bounds") end return b.__b[o] or 0 end,
   fill = function(b, o, v, n) for i = o, o + (n or (b.__n - o)) - 1 do b.__b[i] = v end end,
 }
+_G.PhysicalProperties = { new = function(d, f, e, fw, ew) assert(type(d) == "number", "PhysicalProperties.new expects numbers") return {Density = d, Friction = f or 0.3, Elasticity = e or 0.5, FrictionWeight = fw or 1, ElasticityWeight = ew or 1} end }
 _G.Content = { fromObject = function(o) return {Object=o, SourceType="Object", __content=true} end, fromAssetId = function(id) return {Uri="rbxassetid://"..tostring(id), SourceType="Uri", __content=true} end, fromUri = function(u) return {Uri=u, SourceType="Uri", __content=true} end, none = {SourceType="None", __content=true} }
 string.split = function(s, sep) local out={} for piece in (s..sep):gmatch("(.-)"..sep:gsub("%p","%%%0")) do out[#out+1]=piece end return out end
 math.clamp = function(v,a,b) return math.max(a, math.min(b, v)) end
+math.atan2 = math.atan2 or function(y, x) return math.atan(y, x) end  -- Luau keeps math.atan2; Lua 5.4+ folded it into math.atan
 table.find = table.find or function(t, v) for i, x in ipairs(t) do if x == v then return i end end return nil end
 math.round = math.round or function(x) if x >= 0 then return math.floor(x + 0.5) end return math.ceil(x - 0.5) end
 _G.warn = function(...) M.warnings[#M.warnings+1]=table.concat({...}," ") end
