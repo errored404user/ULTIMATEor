@@ -26,7 +26,7 @@
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
 
-  const VERSION = "2.3.0";
+  const VERSION = "2.4.0";
   const q = (s) => '"' + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "\\r").replace(/\n/g, "\\n") + '"';
   const num = (v) => { const x = Number(v); return isFinite(x) ? x : null; };
   const ident = (v, d) => { const s = String(v || d || "Effect").replace(/[^A-Za-z0-9_]/g, ""); return /^[A-Za-z_]/.test(s) ? s : "_" + s; };
@@ -295,6 +295,8 @@
       "local rec=wp() local lib,mod,made=loadRuntime()",
       theme ? "if lib.PALETTES[" + q(theme) + "] then mod:SetAttribute('DefaultPalette'," + q(theme) + ") else wpDone(rec) return fail('unknown palette " + theme + " - choose one of: ' .. table.concat((function() local n={} for k in pairs(lib.PALETTES) do n[#n+1]=k end table.sort(n) return n end)(), ', ')) end" : "",
       tier ? "if lib.TIERS[" + q(tier) + "] then mod:SetAttribute('DefaultTier'," + q(tier) + ") else wpDone(rec) return fail('tier must be High, Medium or Low') end" : "",
+      // 2.4.0: no palette asked -> the project style (project_style -> ServerStorage._TotalStyle.vfx) decides
+      theme ? "" : "if not mod:GetAttribute('DefaultPalette') then local st=game:GetService('ServerStorage'):FindFirstChild('_TotalStyle') local sp=st and st:GetAttribute('vfx') if sp and lib.PALETTES[sp] then mod:SetAttribute('DefaultPalette',sp) end end",
       "wpDone(rec)",
       "local fams=lib.families() local names={} for i,f in ipairs(fams) do names[i]=f.name end",
       "return ok({module=mod:GetFullName(),version=lib.VERSION,installed=made,families=names,palettes=(function() local n={} for k in pairs(lib.PALETTES) do n[#n+1]=k end table.sort(n) return n end)(),default_palette=mod:GetAttribute('DefaultPalette'),default_tier=mod:GetAttribute('DefaultTier') or 'auto',usage='local VFX=require(game.ReplicatedStorage.TotalVFX) local h=VFX.play(\"impact\", cframeOrPartOrAttachment, {palette=\"ember\", normal=hitNormal}) -- server: VFX.cast(...) replicates to nearby clients; h:Stop() / h:Destroy() / h.Completed'},",

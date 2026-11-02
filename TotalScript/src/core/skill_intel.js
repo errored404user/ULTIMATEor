@@ -18,7 +18,7 @@
 // DOM-free at top level (loaded in node by the tests).
 (function (root) {
   "use strict";
-  const VERSION = "2.3.0";
+  const VERSION = "2.4.0";
 
   // ───────────────────────── expert library ─────────────────────────
   // Fields: id, title, env (roblox | blender | general), summary (one line
@@ -236,13 +236,13 @@
     avoid: { blender: 5, gui: 3, ui: 2, script: 2 },
     intents: ["implement", "continue", "plan"],
     procedure: [
-      "Set direction before geometry: `brief_get` (or `brief_set` when the user gives genre / palette / scale) and `style_guide` for palette, materials and proportions; read `selection_info` / `inspect_instance` for the site.",
+      "Set direction before geometry: `project_style {op:\"set\", preset}` once (every structure / weapon / furniture / vfx / ui builder then defaults to it), `brief_set` for the brief, `style_guide` for proportions; read `selection_info` for the site.",
       "Block out at human scale (a door ≈ 7×12 studs, a floor ≈ 12-14 studs): `model_hollow_box` for rooms, `model_wall` for walls, `model_build` for a whole JSON parts spec (arches, roofs), `wedge_create` for slopes, `model_prefab` for hand-proportioned props, `model_pipe` for rails / cables, `model_array_radial` for pillars / seats.",
-      "Group and pivot: `model_group`, `model_center_pivot`, `model_snap_to_ground`; align / distribute repeated pieces with `model_align` / `model_distribute`.",
-      "Openings and details with CSG only where needed: `model_subtract` (doors, windows), `model_union` sparingly (unions cost more than parts).",
-      "Materials and colour from the style guide in one pass: `model_paint`; keep everything anchored (`model_anchor_fix` / `physics_anchor_all`).",
+      "Group and pivot: `model_group`, `model_center_pivot`, `model_snap_to_ground`; repeated pieces: `kit_save` once, then `kit_place {name, grid | line | positions}` instead of rebuilding; `model_align` / `model_distribute` to tidy.",
+      "Openings with CSG only where needed: `model_subtract` (doors, windows), `model_union` sparingly (unions cost more than parts).",
+      "Materials and colour in one pass: `model_paint`; keep everything anchored (`model_anchor_fix` / `physics_anchor_all`).",
       "Terrain: whole worlds with `map_generate {preset}` or `terrain_generate {biome, size, seed}`; sculpt with `terrain_shape`, rivers / roads with `terrain_path`, lakes / oceans with `terrain_water`, repaint with `terrain_paint_biome`; props on the real ground with `environment_scatter`, roads with `road_build`; read back with `terrain_info`. Local fills: `terrain_fill_region`, `terrain_paint`, `terrain_height`.",
-      "Mood: `lighting_set_preset` or `style_lighting_apply`, `sky_set`, `atmosphere_setup`; snapshot before experimenting (`lighting_snapshot` / `lighting_restore`).",
+      "Mood: `lighting_set_preset` or `style_lighting_apply`, `sky_set`, `atmosphere_setup`; `lighting_snapshot` before experimenting.",
       "Critique and verify: `model_check` (floating / buried / sliver parts), `model_report`, a screenshot from `camera_look_at`; then score it - `quality_audit {path}` must reach 85 (`quality_fix` for the mechanical findings, palette / materials / lighting by hand); stop when the scene matches the brief at the stated scale.",
     ],
     pitfalls: ["Unanchored scenery (falls on play).", "Pivots at the model centre (props float) - bottom-centre pivot, snap to ground.", "Dozens of CSG unions for simple shapes (slow, ugly collisions)."],
@@ -280,8 +280,8 @@
     avoid: { blender: 3 },
     intents: [],
     procedure: [
-      "Measure: `bench_run` with suite \"performance\" (busy loops, per-frame tree scans, Touched without debounce, particle / shadow-light / part budgets, one-script-per-part), `diagnostics_audit` (unanchored parts, missing humanoid states, emitter counts), `project_health_report`, `model_report` on heavy models, `memory_get`, `script_stats`.",
-      "Fix the cheap wins safely: `diagnostics_fix_common` (anchor static scenery, StreamingEnabled, etc.) and `model_optimize` (CastShadow off on tiny parts, surfaces); confirm nothing gameplay-critical was anchored by mistake.",
+      "Measure: `perf_audit` (place-wide score + findings), `bench_run` with suite \"performance\" (busy loops, per-frame tree scans, Touched without debounce, particle / shadow-light / part budgets, one-script-per-part), `diagnostics_audit` (unanchored parts, missing humanoid states, emitter counts), `project_health_report`, `model_report` on heavy models, `memory_get`, `script_stats`.",
+      "Fix the cheap wins safely: `perf_audit` scores the place 0-100 and names the op per finding; `perf_fix` {ops} applies them in one undoable step (free parts anchored, tiny shadows, Precise meshes, emitter caps, shadow lights); `model_optimize` for one model; confirm nothing gameplay-critical was anchored by mistake.",
       "Scripts: `script_lint` for per-frame work in Heartbeat / RenderStepped, busy loops, connections never disconnected; `script_deprecations_fix` for wait()/spawn(); cache services and instances outside loops.",
       "Physics: anchor what never moves (`physics_anchor_all`), reduce unions, use collision groups (`collision_group_set`) to stop needless pair checks.",
       "Effects and audio: `vfx_validate` / `sfx_validate` for runaway emitters and stacked sounds.",

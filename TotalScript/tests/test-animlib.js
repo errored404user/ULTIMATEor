@@ -30,6 +30,8 @@ const required = {
   preview: { duration: 1 },
   simulate: { t: 0, all: true },
   map_axes: { angle: 30, filter: ["LeftUpperLeg", "RightUpperLeg"] },
+  retarget: { to: "R6" }, // 2.4.0
+  library: {},
   test: {},
   stop_preview: {},
   close: {},

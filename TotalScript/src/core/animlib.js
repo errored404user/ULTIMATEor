@@ -1394,6 +1394,303 @@ function api.build(a)
 			anim.Loop and " looping" or "", rig.Name, savedPath and (" - also saved to " .. savedPath .. " for the Animation Editor") or ""))
 end
 
+-- ── 2.4.0 retarget: R15 <-> R6 with a canonical joint map ──────────────
+-- R15 -> R6 composes the chain poses that collapse into one R6 limb
+-- (UpperArm * LowerArm -> "Left Arm"; LowerTorso * UpperTorso -> Torso; the
+-- hand / foot poses are dropped and reported). R6 -> R15 gives the R6 pose to
+-- the upper joint of the chain and leaves the lower joints at identity. Pose
+-- positions are scaled by the rig height ratio (or scale_positions).
+local R15_CHAINS = {
+	{ r6 = "Torso", r15 = { "LowerTorso", "UpperTorso" } },
+	{ r6 = "Head", r15 = { "Head" } },
+	{ r6 = "Left Arm", r15 = { "LeftUpperArm", "LeftLowerArm", "LeftHand" } },
+	{ r6 = "Right Arm", r15 = { "RightUpperArm", "RightLowerArm", "RightHand" } },
+	{ r6 = "Left Leg", r15 = { "LeftUpperLeg", "LeftLowerLeg", "LeftFoot" } },
+	{ r6 = "Right Leg", r15 = { "RightUpperLeg", "RightLowerLeg", "RightFoot" } },
+}
+local CANON_TREE = {
+	R6 = { HumanoidRootPart = { Torso = { Head = {}, ["Left Arm"] = {}, ["Right Arm"] = {}, ["Left Leg"] = {}, ["Right Leg"] = {} } } },
+	R15 = { HumanoidRootPart = { LowerTorso = {
+		UpperTorso = { Head = {}, LeftUpperArm = { LeftLowerArm = { LeftHand = {} } }, RightUpperArm = { RightLowerArm = { RightHand = {} } } },
+		LeftUpperLeg = { LeftLowerLeg = { LeftFoot = {} } }, RightUpperLeg = { RightLowerLeg = { RightFoot = {} } },
+	} } },
+}
+local function rigTypeOf(rig)
+	if not rig then return nil end
+	local h = rig:FindFirstChildOfClass("Humanoid")
+	local okT, t = pcall(function() return h.RigType.Name end)
+	if okT and (t == "R6" or t == "R15") then return t end
+	if rig:FindFirstChild("UpperTorso") then return "R15" end
+	if rig:FindFirstChild("Torso") then return "R6" end
+	return nil
+end
+local function clipRigType(anim)
+	local pinned = pinOf(anim)
+	local t = rigTypeOf(pinned)
+	if t then return t, pinned end
+	local kfs = sortedKeyframes(anim)
+	if #kfs == 0 then return nil, nil end
+	if findPose(kfs[1], "UpperTorso") or findPose(kfs[1], "LeftUpperArm") then return "R15", nil end
+	if findPose(kfs[1], "Torso") or findPose(kfs[1], "Left Arm") then return "R6", nil end
+	return nil, nil
+end
+local function findRigOfType(t, path)
+	if path and path ~= "" then
+		local r = resolvePath(path)
+		if not r or not r:IsA("Model") or not r:FindFirstChildOfClass("Humanoid") then error("rig_path '" .. tostring(path) .. "' is not a Model with a Humanoid") end
+		if rigTypeOf(r) ~= t then error("rig_path '" .. tostring(path) .. "' is " .. tostring(rigTypeOf(r)) .. ", not " .. t) end
+		return r
+	end
+	local best, bestScore = nil, -1
+	for _, m in ipairs(workspace:GetDescendants()) do
+		if m:IsA("Model") and m:FindFirstChildOfClass("Humanoid") and rigTypeOf(m) == t and rigRoot(m) then
+			local score = 0
+			for _, d in ipairs(m:GetDescendants()) do if d:IsA("Motor6D") then score = score + 1 end end
+			if score > bestScore then bestScore = score; best = m end
+		end
+	end
+	return best
+end
+local function rigHeight(rig)
+	if not rig then return nil end
+	local okE, size = pcall(function() return rig:GetExtentsSize() end)
+	if okE and size and size.Y > 0 then return size.Y end
+	return nil
+end
+local function scaledPose(cf, scale)
+	if scale == 1 then return cf end
+	local rot = cf - cf.Position
+	return CFrame.new(cf.Position * scale) * rot
+end
+
+function api.retarget(a)
+	local name = tostring(a.name or "")
+	local src
+	if name ~= "" then src = findAnim(name) else src = activeAnim() end
+	if not src then return fail(name ~= "" and ("no animation named '" .. name .. "' in the library") or "no animation open - pass name or animation_open first") end
+	local to = tostring(a.to or a.to_rig or ""):upper()
+	if to ~= "R6" and to ~= "R15" then return fail("to must be R6 or R15") end
+	local from, srcRig = clipRigType(src)
+	if not from then return fail("cannot tell whether '" .. src.Name .. "' is R6 or R15 (no pinned rig and no recognisable bones)") end
+	if from == to then return fail(("'%s' is already an %s animation - nothing to retarget"):format(src.Name, to)) end
+	local target = findRigOfType(to, a.rig_path)
+	local newName = tostring(a.save_as or "")
+	if newName == "" then newName = src.Name .. "_" .. to end
+	local existing = findAnim(newName)
+	if existing and not a.overwrite then return fail(("an animation named '%s' ALREADY EXISTS - pass overwrite=true or another save_as"):format(newName)) end
+	local scale = tonumber(a.scale_positions)
+	local hs, ht = rigHeight(srcRig), rigHeight(target)
+	if not scale then scale = (hs and ht and hs > 0) and (ht / hs) or 1 end
+	scale = math.floor(scale * 1000 + 0.5) / 1000
+	-- the bone map (optional overrides: {R15Bone = "R6 bone"} / {R6Bone = {"UpperArm",...}})
+	local chains = {}
+	for _, c in ipairs(R15_CHAINS) do chains[#chains + 1] = { r6 = c.r6, r15 = c.r15 } end
+	if type(a.bone_map) == "table" then
+		for k, v in pairs(a.bone_map) do
+			if type(v) == "table" then chains[#chains + 1] = { r6 = tostring(k), r15 = v }
+			else
+				local placed = false
+				for _, c in ipairs(chains) do if c.r6 == tostring(v) then c.r15[#c.r15 + 1] = tostring(k) placed = true end end
+				if not placed then chains[#chains + 1] = { r6 = tostring(v), r15 = { tostring(k) } } end
+			end
+		end
+	end
+	local kfs = sortedKeyframes(src)
+	if #kfs == 0 then return fail("'" .. src.Name .. "' has no keyframes") end
+	if existing then existing:Destroy() end
+	local dst = Instance.new("KeyframeSequence")
+	dst.Name = newName
+	dst.Loop = src.Loop
+	dst.Priority = src.Priority
+	local durV = src:FindFirstChild("Duration")
+	local d0 = Instance.new("NumberValue") d0.Name = "Duration" d0.Value = durV and durV.Value or (kfs[#kfs].Time) d0.Parent = dst
+	local mapped, unmapped, approx = {}, {}, {}
+	local seenUnmapped = {}
+	local function note(list, seen, v) if not seen[v] then seen[v] = true list[#list + 1] = v end end
+	local seenMapped, seenApprox = {}, {}
+	local function buildTree(parentPose, spec, lookup)
+		for boneName, kids in pairs(spec) do
+			local p = Instance.new("Pose")
+			p.Name = boneName
+			local cf, es, ed = lookup(boneName)
+			if cf then p.CFrame = cf end
+			if es then p.EasingStyle = es end
+			if ed then p.EasingDirection = ed end
+			if parentPose then parentPose:AddSubPose(p) end
+			buildTree(p, kids, lookup)
+			if not parentPose then return p end
+		end
+	end
+	for _, kf in ipairs(kfs) do
+		local nk = Instance.new("Keyframe")
+		nk.Time = kf.Time
+		nk.Name = kf.Name
+		local srcPoses = {}
+		local function collect(p) srcPoses[p.Name] = p for _, sub in ipairs(p:GetSubPoses()) do collect(sub) end end
+		for _, p in ipairs(kf:GetPoses()) do collect(p) end
+		local lookup
+		if to == "R6" then
+			lookup = function(bone)
+				if bone == "HumanoidRootPart" then local sp = srcPoses.HumanoidRootPart if sp then note(mapped, seenMapped, "HumanoidRootPart -> HumanoidRootPart") return scaledPose(sp.CFrame, scale), sp.EasingStyle, sp.EasingDirection end return nil end
+				for _, c in ipairs(chains) do
+					if c.r6 == bone then
+						local cf, es, ed, used = CFrame.new(), nil, nil, 0
+						for i, r15b in ipairs(c.r15) do
+							local sp = srcPoses[r15b]
+							if sp then
+								if i <= 2 then cf = cf * sp.CFrame used = used + 1 if not es then es, ed = sp.EasingStyle, sp.EasingDirection end
+								elseif sp.CFrame ~= CFrame.new() then note(approx, seenApprox, r15b .. " pose dropped (R6 has no " .. r15b .. ")") end
+							end
+						end
+						if used > 0 then
+							note(mapped, seenMapped, table.concat(c.r15, "*", 1, math.min(2, #c.r15)) .. " -> " .. bone)
+							if #c.r15 >= 2 then note(approx, seenApprox, bone .. " = " .. c.r15[1] .. " * " .. c.r15[2] .. " (composed)") end
+							return scaledPose(cf, scale), es, ed
+						end
+						return nil
+					end
+				end
+				return nil
+			end
+			for srcName in pairs(srcPoses) do
+				local known = srcName == "HumanoidRootPart"
+				for _, c in ipairs(chains) do for _, b in ipairs(c.r15) do if b == srcName then known = true end end end
+				if not known then note(unmapped, seenUnmapped, srcName) end
+			end
+		else
+			lookup = function(bone)
+				if bone == "HumanoidRootPart" then local sp = srcPoses.HumanoidRootPart if sp then note(mapped, seenMapped, "HumanoidRootPart -> HumanoidRootPart") return scaledPose(sp.CFrame, scale), sp.EasingStyle, sp.EasingDirection end return nil end
+				for _, c in ipairs(chains) do
+					local sp = srcPoses[c.r6]
+					if sp then
+						if c.r15[1] == bone then
+							note(mapped, seenMapped, c.r6 .. " -> " .. bone)
+							if #c.r15 > 1 then note(approx, seenApprox, c.r6 .. " drives " .. bone .. " only (" .. table.concat(c.r15, ", ", 2) .. " stay identity)") end
+							return scaledPose(sp.CFrame, scale), sp.EasingStyle, sp.EasingDirection
+						end
+						for i = 2, #c.r15 do if c.r15[i] == bone then return CFrame.new(), sp.EasingStyle, sp.EasingDirection end end
+					end
+				end
+				return nil
+			end
+			for srcName in pairs(srcPoses) do
+				local known = srcName == "HumanoidRootPart"
+				for _, c in ipairs(chains) do if c.r6 == srcName then known = true end end
+				if not known then note(unmapped, seenUnmapped, srcName) end
+			end
+		end
+		local rootPose = buildTree(nil, CANON_TREE[to], lookup)
+		nk:AddPose(rootPose)
+		for _, m in ipairs(kf:GetMarkers()) do local mk = Instance.new("KeyframeMarker") mk.Name = m.Name mk.Value = m.Value mk.Parent = nk end
+		nk.Parent = dst
+	end
+	dst:SetAttribute("Total_Retarget", from .. "->" .. to)
+	dst:SetAttribute("Total_Source", src.Name)
+	dst:SetAttribute("Total_Time", os.time())
+	if target then dst:SetAttribute("RS_RigPath", pathOf(target)) end
+	dst.Parent = LIB
+	ACTIVE.Value = newName
+	LENGTH.Value = d0.Value
+	if target then RIGREF.Value = pathOf(target) end
+	table.sort(mapped) table.sort(unmapped) table.sort(approx)
+	local d = inspectAnim(dst)
+	return okdata({ name = newName, source = src.Name, from = from, to = to, keyframes = #kfs, mapped = mapped, unmapped = unmapped, approximations = approx, scale_positions = scale, rig = target and target.Name or nil, pinned = target ~= nil, inspect = d },
+		("retargeted '%s' (%s) -> '%s' (%s): %d keyframes, %d joint map(s), %d unmapped%s, positions x%s%s. %s. Now open: animation_preview to check it%s."):format(
+			src.Name, from, newName, to, #kfs, #mapped, #unmapped, #unmapped > 0 and (" (" .. table.concat(unmapped, ", ") .. ")") or "", tostring(scale),
+			#approx > 0 and (". Approximations: " .. table.concat(approx, "; ")) or "",
+			target and ("Pinned to rig '" .. target.Name .. "'") or ("No " .. to .. " rig in Workspace - not pinned; add one (rig_build / animation_select_rig) before previewing"),
+			to == "R6" and " - composed limbs lose the elbow / knee bend, retouch with animation_set_pose if needed" or ""))
+end
+
+-- ── 2.4.0 clip library: tags, notes, search, export, rename, delete ──────
+local function clipMeta(c)
+	local kfs = sortedKeyframes(c)
+	local durV = c:FindFirstChild("Duration")
+	local bones = 0
+	if kfs[1] then local function cnt(p) bones = bones + 1 for _, s in ipairs(p:GetSubPoses()) do cnt(s) end end for _, p in ipairs(kfs[1]:GetPoses()) do cnt(p) end end
+	local pinned = pinOf(c)
+	local tags = {}
+	for t in tostring(c:GetAttribute("Total_Tags") or ""):gmatch("[^,]+") do tags[#tags + 1] = t end
+	return {
+		name = c.Name, keyframes = #kfs, duration = math.max(durV and durV.Value or 0, kfs[#kfs] and kfs[#kfs].Time or 0), loop = c.Loop, priority = c.Priority.Name,
+		bones = bones, rig = pinned and pinned.Name or nil, rig_type = clipRigType(c), tags = tags, notes = c:GetAttribute("Total_Notes"),
+		retarget = c:GetAttribute("Total_Retarget"), source = c:GetAttribute("Total_Source"), updated = c:GetAttribute("Total_Time"), active = ACTIVE.Value == c.Name,
+	}
+end
+function api.library(a)
+	local op = tostring(a.lop or "list")
+	local name = tostring(a.name or "")
+	local function need()
+		local c
+		if name ~= "" then c = findAnim(name) else c = activeAnim() end
+		if not c then error(name ~= "" and ("no animation named '" .. name .. "' in the library") or "name is required (or open an animation first)") end
+		return c
+	end
+	if op == "list" or op == "search" then
+		local q = tostring(a.query or ""):lower()
+		local rigF = tostring(a.rig or ""):upper()
+		local tagF = tostring(a.tag or ""):lower()
+		local out = {}
+		for _, c in ipairs(getAnims()) do
+			if c:IsA("KeyframeSequence") then
+				local m = clipMeta(c)
+				local hay = (m.name .. " " .. table.concat(m.tags, " ") .. " " .. tostring(m.notes or "")):lower()
+				local hit = (q == "" or hay:find(q, 1, true) ~= nil) and (rigF == "" or m.rig_type == rigF)
+				if hit and tagF ~= "" then hit = false for _, t in ipairs(m.tags) do if t:lower() == tagF then hit = true end end end
+				if hit then out[#out + 1] = m end
+			end
+		end
+		table.sort(out, function(x, y) return x.name < y.name end)
+		local lines = {}
+		for _, m in ipairs(out) do lines[#lines + 1] = ("%s%s (%s, %d kf, %.2fs%s%s%s)"):format(m.name, m.active and "*" or "", m.rig_type or "?", m.keyframes, m.duration, m.loop and ", loop" or "", #m.tags > 0 and (", tags: " .. table.concat(m.tags, ",")) or "", m.rig and (", rig " .. m.rig) or "") end
+		return okdata({ op = op, clips = out, count = #out, query = q ~= "" and q or nil }, ("%d clip(s)%s%s: %s"):format(#out, q ~= "" and (" matching '" .. q .. "'") or "", rigF ~= "" and (" for " .. rigF) or "", #out > 0 and table.concat(lines, "; ") or "library is empty - animation_generate or animation_create first"))
+	elseif op == "tag" then
+		local c = need()
+		if a.tags ~= nil then
+			local list = {}
+			if type(a.tags) == "table" then for _, t in ipairs(a.tags) do if tostring(t) ~= "" then list[#list + 1] = tostring(t) end end
+			else for t in tostring(a.tags):gmatch("[^,]+") do list[#list + 1] = (t:gsub("^%s+", ""):gsub("%s+$", "")) end end
+			c:SetAttribute("Total_Tags", table.concat(list, ","))
+		end
+		if a.notes ~= nil then c:SetAttribute("Total_Notes", tostring(a.notes)) end
+		c:SetAttribute("Total_Time", os.time())
+		local m = clipMeta(c)
+		return okdata(m, ("tagged '%s': [%s]%s"):format(c.Name, table.concat(m.tags, ", "), m.notes and (" - " .. m.notes) or ""))
+	elseif op == "export" then
+		local c = need()
+		local full = inspectAnim(c)
+		local allKfs = {}
+		for _, kf in ipairs(sortedKeyframes(c)) do
+			local bonesOut = {}
+			local function collect(p) bonesOut[p.Name] = poseToTable(p) for _, sub in ipairs(p:GetSubPoses()) do collect(sub) end end
+			for _, p in ipairs(kf:GetPoses()) do collect(p) end
+			local markersOut = {}
+			for _, mk in ipairs(kf:GetMarkers()) do markersOut[#markersOut + 1] = { name = mk.Name, value = mk.Value } end
+			allKfs[#allKfs + 1] = { t = kf.Time, bones = bonesOut, markers = markersOut }
+		end
+		full.keyframes = allKfs full.truncated = false
+		full.meta = clipMeta(c)
+		return okdata(full, ("exported '%s': %d keyframes x %d bones as JSON (degrees YXZ, positions in studs) - feed it to animation_build / keep it in a skill; animation_export_rbxmx for a Studio-importable file"):format(c.Name, #allKfs, #full.bones))
+	elseif op == "rename" then
+		local c = need()
+		local newName = tostring(a.new_name or "")
+		if newName == "" then return fail("new_name is required") end
+		if findAnim(newName) then return fail(("an animation named '%s' already exists"):format(newName)) end
+		local old = c.Name
+		c.Name = newName
+		if ACTIVE.Value == old then ACTIVE.Value = newName end
+		c:SetAttribute("Total_Time", os.time())
+		return okdata(clipMeta(c), ("renamed '%s' -> '%s'"):format(old, newName))
+	elseif op == "delete" then
+		local c = need()
+		local old = c.Name
+		if ACTIVE.Value == old then stopPreview(true) ACTIVE.Value = "" end
+		c:Destroy()
+		return okdata({ deleted = old }, ("deleted '%s' from the library (Ctrl+Z restores it)"):format(old))
+	end
+	return fail("unknown library op '" .. op .. "' - use list, search, tag, export, rename or delete")
+end
+
 local dispatch = {
 	select_rig = api.select_rig, clear_rig_selection = api.clear_rig_selection,
 	create = api.create, open = api.open, list = api.list,
@@ -1409,6 +1706,7 @@ local dispatch = {
 	preview = api.preview, simulate = api.simulate, test = api.test,
 	map_axes = api.map_axes,
 	rig_info = api.rig_info, build = api.build,
+	retarget = api.retarget, library = api.library,
 }
 
 local args = jdec([==[__ARGS_JSON__]==])
@@ -1648,6 +1946,33 @@ const ANIM_COMMANDS = [
     name: "animation_close",
     description: "Close the session: stop any preview loop and reset the rig to its rest pose. Use this for cleanup when you are done with an animation.",
     params: {}
+  },
+  {
+    name: "animation_retarget",
+    description: "2.4.0: convert a library clip between R15 and R6 with the canonical joint map (R15->R6 composes UpperArm*LowerArm into 'Left Arm', LowerTorso*UpperTorso into Torso and drops hand / foot poses; R6->R15 drives the upper joint of each chain and leaves the lower ones at identity). Copies easing, markers, Loop and Priority, scales positions by the rig height ratio, pins the new clip to the best matching rig in Workspace and opens it. Reports mapped / unmapped joints and every approximation.",
+    params: {
+      to: { type: "string", req: true, desc: "target rig: R6 or R15" },
+      name: { type: "string", req: false, desc: "source clip (default: the open animation)" },
+      save_as: { type: "string", req: false, desc: "new clip name (default <name>_<to>)" },
+      rig_path: { type: "string", req: false, desc: "pin to this rig Model instead of auto-detecting one of the target type" },
+      scale_positions: { type: "number", req: false, desc: "position multiplier (default: target height / source height)" },
+      bone_map: { type: "object", req: false, desc: "extra joints, e.g. {\"Tail\":\"Torso\"} (R15 bone -> R6 bone) or {\"Torso\":[\"LowerTorso\",\"UpperTorso\"]}" },
+      overwrite: { type: "boolean", req: false, desc: "replace an existing clip of the same name" }
+    }
+  },
+  {
+    name: "animation_library",
+    description: "2.4.0: manage the clip library in ServerStorage: list every KeyframeSequence with rig type, keyframes, duration, loop, tags and pinned rig; search by name / tag / notes / rig; tag {name, tags, notes}; export {name} as portable JSON (all keyframes, degrees YXZ); rename {name, new_name}; delete {name}. Tags and notes live on the clip as attributes, so they survive save / reopen.",
+    params: {
+      op: { type: "string", req: false, desc: "list | search | tag | export | rename | delete (default list)" },
+      name: { type: "string", req: false, desc: "clip name (default: the open animation for tag / export)" },
+      query: { type: "string", req: false, desc: "search text (name, tags, notes)" },
+      rig: { type: "string", req: false, desc: "filter: R6 or R15" },
+      tag: { type: "string", req: false, desc: "filter: exact tag" },
+      tags: { type: "array", req: false, desc: "tag op: tags to set (replaces)" },
+      notes: { type: "string", req: false, desc: "tag op: free-text notes" },
+      new_name: { type: "string", req: false, desc: "rename op" }
+    }
   }
 ];
 
@@ -1795,6 +2120,40 @@ function buildLuau(op, args) {
       if (!Array.isArray(base.keys) || !base.keys.length) return { err: "ERROR calling 'animation_build': the clip has no keyframes." };
       if (!Array.isArray(base.bones) || !base.bones.length) return { err: "ERROR calling 'animation_build': no bones to write." };
     }
+  } else if (op === "retarget") {
+    const to = String(args.to || args.to_rig || "").toUpperCase();
+    if (to !== "R6" && to !== "R15") return { err: "ERROR calling 'animation_retarget': 'to' must be R6 or R15." };
+    base.to = to;
+    if (args.name !== undefined && String(args.name).trim()) base.name = String(args.name).trim();
+    if (args.save_as !== undefined && String(args.save_as).trim()) base.save_as = String(args.save_as).trim();
+    if (args.rig_path !== undefined && String(args.rig_path).trim()) base.rig_path = String(args.rig_path).trim();
+    if (args.scale_positions !== undefined) {
+      const sc = Number(args.scale_positions);
+      if (!(Number.isFinite(sc) && sc > 0)) return { err: "ERROR calling 'animation_retarget': 'scale_positions' must be a positive number (1 = keep positions)." };
+      base.scale_positions = sc;
+    }
+    if (args.bone_map !== undefined) {
+      if (!args.bone_map || typeof args.bone_map !== "object" || Array.isArray(args.bone_map)) return { err: "ERROR calling 'animation_retarget': 'bone_map' must be an object {R15Bone: 'R6 bone'}." };
+      base.bone_map = args.bone_map;
+    }
+    if (args.overwrite === true) base.overwrite = true;
+  } else if (op === "library") {
+    const lop = String(args.op || "list");
+    if (!new Set(["list", "search", "tag", "export", "rename", "delete"]).has(lop)) return { err: "ERROR calling 'animation_library': op must be list, search, tag, export, rename or delete." };
+    base.op = "library";
+    base.lop = lop;
+    if (args.name !== undefined && String(args.name).trim()) base.name = String(args.name).trim();
+    if ((lop === "rename" || lop === "delete") && !base.name) return { err: `ERROR calling 'animation_library': 'name' is required for ${lop}.` };
+    if (lop === "rename") {
+      if (!args.new_name || !String(args.new_name).trim()) return { err: "ERROR calling 'animation_library': 'new_name' is required for rename." };
+      base.new_name = String(args.new_name).trim();
+    }
+    if (lop === "tag") {
+      if (args.tags === undefined && args.notes === undefined) return { err: "ERROR calling 'animation_library': tag needs 'tags' (array or comma list) and/or 'notes'." };
+      if (args.tags !== undefined) base.tags = Array.isArray(args.tags) ? args.tags.map(String) : String(args.tags);
+      if (args.notes !== undefined) base.notes = String(args.notes);
+    }
+    for (const k of ["query", "rig", "tag"]) if (args[k] !== undefined && String(args[k]).trim()) base[k] = String(args[k]).trim();
   } else if (op === "map_axes") {
     if (args.filter) {
       const list = Array.isArray(args.filter) ? args.filter : [args.filter];

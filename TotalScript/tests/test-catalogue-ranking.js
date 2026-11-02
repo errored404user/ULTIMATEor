@@ -1,5 +1,5 @@
 // 2.3.0 — CATALOGUE RANKING + REGISTRY HYGIENE.
-// The 2.3.0 audit measured the embedded catalogue a model really receives on
+// The 2.4.0 audit measured the embedded catalogue a model really receives on
 // the default 20 000-char budget: 267 of 653 commands had a signature and the
 // signature budget inside each family went to the ALPHABETICALLY first names
 // (anchored_set, billboard_gui_create, animation_add_keyframe...) while

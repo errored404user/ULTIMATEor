@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript model kit (2.3.0) - real procedural builders for the things
+// TotalScript model kit (2.4.0) - real procedural builders for the things
 // people actually ask an agent to model: buildings and structures, vehicles,
 // weapons, furniture, smooth EditableMesh shapes, detail passes and seeded
 // variants.
@@ -32,13 +32,13 @@
 // Nothing here invents asset ids: geometry is Parts, WedgeParts,
 // CornerWedgeParts and EditableMesh triangles built from arithmetic.
 //
-// Verification level (2.3.0): every command runs green in tests/modelkit-sim.py
+// Verification level (2.4.0): every command runs green in tests/modelkit-sim.py
 // (mocked DataModel) and the Luau parses; NOT verified in Studio yet: hip-roof
 // CornerWedgePart orientation, wedge blade tips, the hinge-motor drive feel and
 // AssetService:CreateMeshPartAsync (the sim only checks the triangle lists).
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
-  const VERSION = "2.3.0";
+  const VERSION = "2.4.0";
 
   const STRUCTURES = ["house", "tower", "castle_wall", "gatehouse", "bridge", "staircase", "spiral_staircase", "archway", "fence", "gate", "roof", "dungeon_room", "dock", "watchtower", "windmill", "lighthouse", "barn", "pergola"];
   const STYLES = ["medieval", "rustic", "modern", "fantasy", "scifi", "desert", "stone", "industrial"];
@@ -66,6 +66,12 @@ local function num(v, d, lo, hi) local n = tonumber(v) if n == nil then n = d en
 local function clamp(v, a, b) if v < a then return a end if v > b then return b end return v end
 local function vec(a, dx, dy, dz) if typeof(a) == "Vector3" then return a end if type(a) ~= "table" then return Vector3.new(dx or 0, dy or 0, dz or 0) end return Vector3.new(num(a[1], dx or 0), num(a[2], dy or 0), num(a[3], dz or 0)) end
 local function key(v, d) if v == nil or v == "" then return d end local s = tostring(v):lower():gsub("[%s%-]", "_") return s end
+-- 2.4.0: when the call does not name a style, the project style (project_style -> ServerStorage._TotalStyle) decides
+local function projectStyle(field)
+  local okS, v = pcall(function() local f = game:GetService("ServerStorage"):FindFirstChild("_TotalStyle") return f and f:GetAttribute(field) end)
+  if okS and type(v) == "string" and v ~= "" then return v end
+  return nil
+end
 local function C(r, g, b) return Color3.fromRGB(r, g, b) end
 local function shade(c, k) return Color3.new(clamp(c.R * k, 0, 1), clamp(c.G * k, 0, 1), clamp(c.B * k, 0, 1)) end
 local function rnd(seed) local s = math.floor(num(seed, 1)) % 2147483647 if s <= 0 then s = s + 2147483646 end return function(lo, hi) s = (s * 48271) % 2147483647 local r = (s - 1) / 2147483646 if lo == nil then return r end return lo + (hi - lo) * r end end
@@ -2060,6 +2066,7 @@ function CMD.structure_build(a)
   local kind = key(a.kind, "house")
   local fn = K[kind]
   if not fn then error("unknown structure kind " .. tostring(a.kind)) end
+  if a.style == nil or a.style == "" then a.style = projectStyle("model") end
   local S = styleOf(a, kind == "dungeon_room" and "stone" or "medieval")
   local R = rootCF(a)
   local m = makeModel(a, "Structure", kind)
@@ -2094,6 +2101,7 @@ function CMD.weapon_build(a)
   local kind = key(a.kind, "sword")
   local fn = W[kind]
   if not fn then error("unknown weapon kind " .. tostring(a.kind)) end
+  if a.style == nil or a.style == "" then a.style = projectStyle("weapon") end
   local S = wstyle(a)
   local asTool = a.as_tool ~= false
   local R = rootCF(a)
@@ -2126,6 +2134,7 @@ function CMD.furniture_build(a)
   local kind = key(a.kind, "sofa")
   local fn = F[kind]
   if not fn then error("unknown furniture kind " .. tostring(a.kind)) end
+  if a.style == nil or a.style == "" then a.style = projectStyle("furniture") end
   local S = fstyle(a)
   local R = rootCF(a)
   local m = makeModel(a, "Furniture", kind)

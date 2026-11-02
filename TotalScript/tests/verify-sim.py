@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify pack (2.3.0) - place_checkpoint + ui_test against the miniature Roblox DataModel.
+"""Verify pack (2.4.0) - place_checkpoint + ui_test against the miniature Roblox DataModel.
 
 tests/test-verify-pack.js checks the pack statically (registration, params, validation,
 wiring). This script runs the REAL generated Luau in tests/roblox_sim.py:
