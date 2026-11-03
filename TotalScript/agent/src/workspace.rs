@@ -1068,7 +1068,8 @@ fn ref_terms(query: &str) -> Vec<String> {
 }
 
 /// Walk `root` for Markdown notes, skipping hidden / underscore folders (the
-/// vault's _tools, _assets, .obsidian) — bounded by REFERENCE_MAX_FILES.
+/// vault's _tools, _assets, .obsidian) and ALL-CAPS hub files — bounded by
+/// REFERENCE_MAX_FILES.
 fn ref_collect(root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
@@ -1083,6 +1084,11 @@ fn ref_collect(root: &Path) -> Vec<PathBuf> {
                 if name.starts_with('.') || name.starts_with('_') || IGNORED_DIRS.contains(&name.as_str()) { continue; }
                 stack.push(p);
             } else if name.to_lowercase().ends_with(".md") {
+                // Hub files (SYMPTOMS.md, INDEX_SLIM.md, ROUTER.md, README.md, CHANGELOG.md…)
+                // mention every topic and would top every query; they are read on
+                // purpose (SYMPTOMS rows) instead of being ranked as notes.
+                let stem = &name[..name.len() - 3];
+                if !stem.is_empty() && stem.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_' || c == '-') { continue; }
                 out.push(p);
                 if out.len() >= REFERENCE_MAX_FILES { return out; }
             }
@@ -1424,6 +1430,7 @@ mod tests {
         assert!(out.contains("4 MB per key"), "{out}");
         assert!(out.contains("Sections: Limits · Budgets"), "{out}");
         assert!(!out.contains("ignored"), "_tools must be skipped: {out}");
+        assert!(!out.contains("3. SYMPTOMS"), "hub files are not ranked as notes: {out}");
         assert!(out.contains("data resets on rejoin") && !out.contains("lag spike"), "{out}");
         let sec = tool_reference_read(&ws, &serde_json::json!({"title": "DataStore Limits and Budgets", "heading": "budgets"})).await.unwrap();
         assert!(sec.contains("## Budgets") && sec.contains("GetAsync budget") && !sec.contains("4,194,304"), "{sec}");

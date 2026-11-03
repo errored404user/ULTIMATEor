@@ -61,7 +61,7 @@ ok("B1 Workspace keeps an optional reference_dir with set/get", ws.includes("ref
 ok("B2 reference_search / reference_read / luau_check are in catalog, dispatch and the unknown-tool list",
   ["reference_search", "reference_read", "luau_check"].every((n) =>
     ws.includes(`"name": "${n}"`) && ws.includes(`"${n}" => tool_${n}(ws, a).await`)) && ws.includes("reference_search, reference_read, luau_check. Call list_commands"));
-ok("B3 search skips hidden / underscore folders and is bounded", ws.includes("name.starts_with('.') || name.starts_with('_')") && ws.includes("REFERENCE_MAX_FILES") && ws.includes("REFERENCE_BODY_BYTES"));
+ok("B3 search skips hidden / underscore folders and ALL-CAPS hub files, and is bounded", ws.includes("name.starts_with('.') || name.starts_with('_')") && ws.includes("c.is_ascii_uppercase() || c.is_ascii_digit()") && ws.includes("REFERENCE_MAX_FILES") && ws.includes("REFERENCE_BODY_BYTES"));
 ok("B4 TL;DR follows LihFolk markers, then ## TL;DR, then first paragraph", ws.includes('body.find("tldr:start")') && ws.includes('"## tl;dr"') && ws.includes("strip_prefix(\"---\")"));
 ok("B5 SYMPTOMS.md rows ride along (best 6 by term hits)", ws.includes('root.join("SYMPTOMS.md")') && ws.includes("take(6)"));
 ok("B6 LihFolk is credited as CC BY 4.0, never bundled", ws.includes('LihFolk Vault V2, CC BY 4.0') && gui.includes("download it yourself; nothing is bundled") && !fs.existsSync(path.join(root, "LihFolk Vault V2")));
