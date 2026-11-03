@@ -828,6 +828,13 @@ async fn start() -> anyhow::Result<()> {
     if settings.full_access || env_first(&["TOTAL_FULL_ACCESS", "ROBLOXSCRIPT_FULL_ACCESS"]).map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false) {
         workspace.set_full_access(true);
     }
+    if !settings.reference_dir.trim().is_empty() {
+        match workspace.set_reference_dir(&settings.reference_dir) {
+            Ok(Some(shown)) => shared.log(&format!("reference library: {shown}")),
+            Ok(None) => {}
+            Err(e) => shared.log(&format!("reference library not available: {e:#} (Settings → Workspace)")),
+        }
+    }
     shared.attach_workspace(workspace.root_display(), workspace.full_flag());
     shared.log(&format!("TotalScript Desktop v{} — native bridge for roblox studio / local fs", env!("CARGO_PKG_VERSION")));
     shared.log(&format!("workspace: {}", workspace.root_display()));
@@ -1001,6 +1008,22 @@ async fn ui_command_loop(state: AppState, mut rx: tokio::sync::mpsc::UnboundedRe
                     }
                     Err(e) => {
                         state.ui.track("error", format!("workspace switch failed: {}", gui_truncate(&format!("{e:#}"), 160)));
+                        Err(format!("{e:#}"))
+                    }
+                };
+                let _ = reply.send(result);
+            }
+            gui::UiCommand::SetReferenceDir { path, reply } => {
+                let result = match state.workspace.set_reference_dir(&path) {
+                    Ok(shown) => {
+                        match &shown {
+                            Some(p) => state.ui.track("bridge", format!("reference library set to {p}")),
+                            None => state.ui.track("bridge", "reference library turned off"),
+                        }
+                        Ok(shown)
+                    }
+                    Err(e) => {
+                        state.ui.track("error", format!("reference library failed: {}", gui_truncate(&format!("{e:#}"), 160)));
                         Err(format!("{e:#}"))
                     }
                 };

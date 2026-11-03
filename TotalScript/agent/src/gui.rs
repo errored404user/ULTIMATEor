@@ -183,6 +183,27 @@ pub struct Activity {
     pub text: String,
 }
 
+/// Per-tool counters for the session report (name + engine → ok/fail/time).
+#[derive(Default, Clone, Debug)]
+pub struct ToolStat { pub ok: usize, pub fail: usize, pub total_ms: u128, pub max_ms: u128 }
+
+/// 2.7: everything "Copy session report" prints. Fed by `track()` from the
+/// same one-line activity texts the Home list shows, so there is exactly one
+/// place that knows a tool ran — and it never stores arguments, results,
+/// chat text or keys, only names, counts and timings.
+#[derive(Default, Debug)]
+pub struct SessionStats {
+    pub started: String,
+    pub tools: HashMap<String, ToolStat>,
+    /// Where calls came from: chat · toolkit · terminal · extension.
+    pub sources: HashMap<String, usize>,
+    /// (clock, text) of the last errors, newest last.
+    pub errors: VecDeque<(String, String)>,
+    pub luau_warnings: usize,
+}
+
+const SESSION_ERRORS_CAP: usize = 30;
+
 /// State shared between the tokio runtime (producer) and the window (consumer).
 pub struct UiShared {
     pub studio_running: AtomicBool,
@@ -203,6 +224,7 @@ pub struct UiShared {
     /// Monotonic count of `track()` calls so the window can toast new events.
     pub activity_seq: AtomicUsize,
     pub boot: Instant,
+    pub session: Mutex<SessionStats>,
 }
 
 impl UiShared {
@@ -224,6 +246,7 @@ impl UiShared {
             bridge_listening: AtomicBool::new(false),
             activity_seq: AtomicUsize::new(0),
             boot: Instant::now(),
+            session: Mutex::new(SessionStats { started: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), ..SessionStats::default() }),
         }
     }
 
@@ -262,14 +285,81 @@ impl UiShared {
 
     /// Record a "Recent activity" entry (tool calls, connections, Studio state).
     pub fn track(&self, kind: &str, text: impl Into<String>) {
+        let text = text.into();
+        let at = chrono::Local::now().format("%H:%M:%S").to_string();
+        self.record_session(kind, &text, &at);
         let mut list = self.activity.lock().unwrap_or_else(|e| e.into_inner());
         if list.len() >= ACTIVITY_CAP { list.pop_back(); }
-        list.push_front(Activity {
-            at: chrono::Local::now().format("%H:%M:%S").to_string(),
-            kind: kind.to_string(),
-            text: text.into(),
-        });
+        list.push_front(Activity { at, kind: kind.to_string(), text });
         self.activity_seq.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Fold one activity line into the session counters. Tool lines look like
+    /// `name (engine) · 123 ms · chat` (source optional = extension), errors
+    /// like `name (engine) failed: …`; anything else is kept only as text.
+    fn record_session(&self, kind: &str, text: &str, at: &str) {
+        let mut st = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        match kind {
+            "tool" => {
+                let mut parts = text.split(" · ");
+                let label = parts.next().unwrap_or(text).trim().to_string();
+                let ms: u128 = parts.next().and_then(|p| p.trim().strip_suffix(" ms")).and_then(|n| n.trim().parse().ok()).unwrap_or(0);
+                let source = parts.next().map(|p| p.trim().to_string()).unwrap_or_else(|| "extension".to_string());
+                let e = st.tools.entry(label).or_default();
+                e.ok += 1; e.total_ms += ms; if ms > e.max_ms { e.max_ms = ms; }
+                *st.sources.entry(source).or_default() += 1;
+            }
+            "error" => {
+                if let Some((label, _)) = text.split_once(" failed: ") {
+                    st.tools.entry(label.trim().to_string()).or_default().fail += 1;
+                }
+                if st.errors.len() >= SESSION_ERRORS_CAP { st.errors.pop_front(); }
+                st.errors.push_back((at.to_string(), text.to_string()));
+            }
+            "chat" if text.starts_with("luau_check:") => {
+                let n: usize = text.split_whitespace().nth(1).and_then(|n| n.parse().ok()).unwrap_or(1);
+                st.luau_warnings += n;
+            }
+            _ => {}
+        }
+    }
+
+    /// Plain-text session report: counts, timings and the last errors —
+    /// no tool arguments, no results, no chat text, no keys.
+    pub fn session_report_text(&self) -> String {
+        let st = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        let mut out = String::new();
+        out.push_str(&format!("TotalScript Desktop {} — session report\n", env!("CARGO_PKG_VERSION")));
+        out.push_str(&format!("started: {} · uptime: {}\n", st.started, human_duration(self.boot.elapsed())));
+        let calls: usize = st.tools.values().map(|t| t.ok + t.fail).sum();
+        let ok: usize = st.tools.values().map(|t| t.ok).sum();
+        let fails: usize = st.tools.values().map(|t| t.fail).sum();
+        let total_ms: u128 = st.tools.values().map(|t| t.total_ms).sum();
+        out.push_str(&format!("tool calls: {calls} ({ok} ok, {fails} failed) · tool time: {} · deprecated-API warnings: {}\n", human_duration(Duration::from_millis(total_ms.min(u64::MAX as u128) as u64)), st.luau_warnings));
+        if !st.sources.is_empty() {
+            let mut src: Vec<(&String, &usize)> = st.sources.iter().collect();
+            src.sort_by(|a, b| b.1.cmp(a.1).then_with(|| a.0.cmp(b.0)));
+            out.push_str(&format!("sources: {}\n", src.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(" · ")));
+        }
+        if calls == 0 {
+            out.push_str("\nno tool has run yet in this session.\n");
+        } else {
+            out.push_str("\ntool                                      calls   ok  fail   avg ms   max ms\n");
+            let mut rows: Vec<(&String, &ToolStat)> = st.tools.iter().collect();
+            rows.sort_by(|a, b| (b.1.ok + b.1.fail).cmp(&(a.1.ok + a.1.fail)).then_with(|| a.0.cmp(b.0)));
+            for (name, t) in rows.iter().take(30) {
+                let n = t.ok + t.fail;
+                let avg = if t.ok > 0 { t.total_ms / t.ok as u128 } else { 0 };
+                out.push_str(&format!("{:<40} {:>6} {:>4} {:>5} {:>8} {:>8}\n", crate::gui_truncate(name, 40), n, t.ok, t.fail, avg, t.max_ms));
+            }
+            if rows.len() > 30 { out.push_str(&format!("… {} more tools\n", rows.len() - 30)); }
+        }
+        if !st.errors.is_empty() {
+            out.push_str(&format!("\nlast {} error(s):\n", st.errors.len().min(10)));
+            let skip = st.errors.len().saturating_sub(10);
+            for (at, text) in st.errors.iter().skip(skip) { out.push_str(&format!("  {at}  {text}\n")); }
+        }
+        out
     }
 
     pub fn set_roblox_tools(&self, tools: &[serde_json::Value]) {
@@ -303,6 +393,8 @@ pub enum UiCommand {
     KillStudio,
     SetFullAccess(bool),
     SetWorkspace { path: String, reply: Sender<Result<String, String>> },
+    /// Point reference_search at a notes folder (empty = off). Reply = shown path or None.
+    SetReferenceDir { path: String, reply: Sender<Result<Option<String>, String>> },
     SetMcpCommand(String),
     RunTool { engine: String, name: String, args: serde_json::Value, reply: Sender<ToolReply> },
     RunCommand { command: String, reply: Sender<ToolReply> },
@@ -322,6 +414,8 @@ pub struct Settings {
     pub start_hidden: bool,
     pub launch_at_login: bool,
     pub workspace_root: String,
+    /// 2.7: optional folder of Markdown notes for reference_search (empty = off).
+    pub reference_dir: String,
     pub mcp_command: String,
     pub full_access: bool,
     pub compact: bool,
@@ -377,6 +471,7 @@ impl Default for Settings {
             start_hidden: false,
             launch_at_login: false,
             workspace_root: String::new(),
+            reference_dir: String::new(),
             mcp_command: String::new(),
             full_access: false,
             compact: false,
@@ -812,7 +907,11 @@ pub struct App {
     /// Appearance → palette search box.
     palette_query: String,
     picker_rx: Option<Receiver<Option<String>>>,
+    /// Which text field the running folder picker fills.
+    picker_for_reference: bool,
     workspace_rx: Option<Receiver<Result<String, String>>>,
+    draft_reference: String,
+    reference_rx: Option<Receiver<Result<Option<String>, String>>>,
     tray: Option<TrayState>,
     /// Handle the tray worker can use to raise this window again (Windows:
     /// HWND; elsewhere a marker that the egui context is registered).
@@ -871,6 +970,7 @@ impl App {
         let mut app = Self {
             draft_workspace: shared.root(),
             draft_mcp: settings.mcp_command.clone(),
+            draft_reference: settings.reference_dir.clone(),
             shared,
             cmd_tx,
             settings,
@@ -912,7 +1012,9 @@ impl App {
             settings_note: String::new(),
             palette_query: String::new(),
             picker_rx: None,
+            picker_for_reference: false,
             workspace_rx: None,
+            reference_rx: None,
             tray,
             native_hwnd: None,
             size_dirty: false,
@@ -1129,7 +1231,7 @@ impl App {
         let picked = self.picker_rx.as_ref().map(|rx| rx.try_recv());
         if let Some(result) = picked {
             match result {
-                Ok(Some(path)) => { self.draft_workspace = path; self.picker_rx = None; }
+                Ok(Some(path)) => { if self.picker_for_reference { self.draft_reference = path; } else { self.draft_workspace = path; } self.picker_rx = None; }
                 Ok(None) => { self.picker_rx = None; }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
                 Err(_) => { self.picker_rx = None; }
@@ -1155,6 +1257,25 @@ impl App {
                 Ok(Err(e)) => { self.workspace_rx = None; self.settings_note = format!("Workspace switch failed: {e}"); self.toast("Workspace switch failed", false); }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
                 Err(_) => { self.workspace_rx = None; }
+            }
+        }
+        // Reference library switch
+        let rf = self.reference_rx.as_ref().map(|rx| rx.try_recv());
+        if let Some(result) = rf {
+            match result {
+                Ok(Ok(shown)) => {
+                    self.reference_rx = None;
+                    self.settings.reference_dir = shown.clone().unwrap_or_default();
+                    let _ = self.settings.save();
+                    self.draft_reference = self.settings.reference_dir.clone();
+                    match shown {
+                        Some(p) => { self.settings_note = format!("Reference library is now {p}"); self.toast("Reference library set", true); }
+                        None => { self.settings_note = "Reference library turned off".into(); self.toast("Reference library off", true); }
+                    }
+                }
+                Ok(Err(e)) => { self.reference_rx = None; self.settings_note = format!("Reference library not set: {e}"); self.toast("Reference library not set", false); }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(_) => { self.reference_rx = None; }
             }
         }
     }
@@ -1217,6 +1338,8 @@ impl App {
         if let Some(fatal) = s.fatal.lock().unwrap_or_else(|e| e.into_inner()).clone() {
             out.push_str(&format!("FATAL: {fatal}\n"));
         }
+        out.push_str("\n--- session ---\n");
+        out.push_str(&s.session_report_text());
         out.push_str("\n--- last 40 log lines ---\n");
         let logs = s.logs.lock().unwrap_or_else(|e| e.into_inner());
         let skip = logs.len().saturating_sub(40);
@@ -1548,6 +1671,11 @@ impl App {
                     let text = self.diagnostics_text();
                     ui.output_mut(|o| o.copied_text = text);
                     self.toast("Diagnostics copied to clipboard", true);
+                }
+                if pill(ui, t, "Copy session report", false).on_hover_text("Which tools ran this session, how often, how fast, what failed — names and numbers only, no arguments or chat text").clicked() {
+                    let text = self.shared.session_report_text();
+                    ui.output_mut(|o| o.copied_text = text);
+                    self.toast("Session report copied to clipboard", true);
                 }
             });
             ui.add_space(10.0);
@@ -2352,6 +2480,7 @@ impl App {
                     ui.add(egui::TextEdit::singleline(&mut self.draft_workspace).hint_text(if cfg!(windows) { "C:\\Users\\you\\TotalWorkspace" } else { "~/TotalWorkspace" }).desired_width(420.0).font(TextStyle::Monospace));
                     let picking = self.picker_rx.is_some();
                     if ui.add_enabled(!picking, egui::Button::new(if picking { "Choosing…" } else { "Browse…" })).clicked() {
+                        self.picker_for_reference = false;
                         self.picker_rx = Some(pick_folder(&self.draft_workspace));
                     }
                     let switching = self.workspace_rx.is_some();
@@ -2369,6 +2498,28 @@ impl App {
                     save = true;
                     let _ = self.cmd_tx.send(UiCommand::SetFullAccess(full));
                 }
+                ui.add_space(8.0);
+                ui.label(RichText::new("Reference library (optional)").strong().color(t.text));
+                ui.label(RichText::new(if self.settings.reference_dir.trim().is_empty() { "Off — the AI answers limits and API questions from memory only.".to_string() } else { format!("Active: {}", self.settings.reference_dir) }).monospace().color(t.muted));
+                ui.horizontal(|ui| {
+                    ui.add(egui::TextEdit::singleline(&mut self.draft_reference).hint_text(if cfg!(windows) { "C:\\Users\\you\\LihFolk Vault V2" } else { "~/LihFolk Vault V2" }).desired_width(420.0).font(TextStyle::Monospace));
+                    let picking = self.picker_rx.is_some();
+                    if ui.add_enabled(!picking, egui::Button::new(if picking { "Choosing…" } else { "Browse…" })).clicked() {
+                        self.picker_for_reference = true;
+                        self.picker_rx = Some(pick_folder(&self.draft_reference));
+                    }
+                    let switching = self.reference_rx.is_some();
+                    let changed = self.draft_reference.trim() != self.settings.reference_dir.trim();
+                    if ui.add_enabled(changed && !switching, pill_widget(t, if switching { "Applying…" } else { "Apply" }, true)).clicked() {
+                        let (tx, rx) = std::sync::mpsc::channel();
+                        if self.cmd_tx.send(UiCommand::SetReferenceDir { path: self.draft_reference.trim().to_string(), reply: tx }).is_ok() { self.reference_rx = Some(rx); }
+                    }
+                    if ui.add_enabled(!self.settings.reference_dir.trim().is_empty() && !switching, egui::Button::new("Turn off")).clicked() {
+                        let (tx, rx) = std::sync::mpsc::channel();
+                        if self.cmd_tx.send(UiCommand::SetReferenceDir { path: String::new(), reply: tx }).is_ok() { self.reference_rx = Some(rx); }
+                    }
+                });
+                ui.label(RichText::new("A folder of Markdown notes the AI can search with reference_search before stating limits, defaults or 2025-26 API changes (one call, three note summaries). Works with LihFolk Vault V2 (github.com/lihfolk-cy/v2-vault, notes CC BY 4.0 — download it yourself; nothing is bundled), a creator-docs clone or your own notes. Nothing leaves your PC except the snippets the AI reads.").small().color(t.muted));
             });
             section_card(ui, t, "05", "Roblox Studio MCP", "How this bridge reaches Studio.", |ui| {
                 ui.label(RichText::new(format!("Active launcher: {}", mcp_launcher_display())).monospace().color(t.muted));
@@ -2439,7 +2590,8 @@ impl App {
                     if ui.button("Open settings.json").clicked() { open_external(&Settings::path().to_string_lossy()); }
                     if ui.button("Reset settings").clicked() {
                         let keep_ws = self.settings.workspace_root.clone();
-                        self.settings = Settings { workspace_root: keep_ws, ..Settings::default() };
+                        let keep_ref = self.settings.reference_dir.clone();
+                        self.settings = Settings { workspace_root: keep_ws, reference_dir: keep_ref, ..Settings::default() };
                         self.draft_mcp.clear();
                         retheme = true; save = true;
                         self.settings_note = "Settings reset to defaults (workspace kept).".into();
@@ -3651,6 +3803,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
             "Restart Studio MCP (Ctrl+R) restarts the helper that talks to Studio; Probe Studio (F5) re-checks the place link.",
             "Capture Studio viewport (Ctrl+Shift+S) grabs a screenshot through the helper and shows it here — the same picture the AI sees when it verifies its work.",
             "Copy diagnostics copies a plain-text report (versions, ports, helper state, tool count) you can paste into a bug report. It contains no keys and no chat text.",
+            "Copy session report copies what ran since the app started: every tool with calls / ok / failed / average and slowest time, where the calls came from (chat, toolkit, terminal, extension), deprecated-API warnings and the last errors. Names and numbers only — no arguments, results or chat text.",
             "Quick access cards jump to the other pages.",
         ],
     },
@@ -3708,6 +3861,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
             "Your layout: Comfortable or Compact density cards, Sharp / Soft / Round corners, UI size 90–125 %, icon-rail and two-line sidebar switches. Appearance: 16 palettes (TotalScript Aqua by default, Gold, Emerald, Graphite, Midnight, Nord, Violet, Rosé, Crimson, Sunset, Ocean, Mocha, Forest, and the light Paper, Snow and Sage) with a search box, a custom accent colour (picker, hex or six quick swatches) and Motion / Backdrop / Glow effect switches; every change applies instantly.",
             "Behaviour: keep running in the notification area when the window is closed, start hidden, always show the checklist, launch at sign-in (hidden).",
             "Workspace: the folder the AI may use outside Studio, and the FULL PC ACCESS switch.",
+            "Reference library (optional, same card): a folder of Markdown notes — for example LihFolk Vault V2 (notes CC BY 4.0, download it yourself) or your own — that the AI searches with reference_search before stating a limit, default or API change. Off until you set it; nothing is bundled.",
             "Roblox Studio MCP: the launcher command for the helper.",
             "AI chat (side panel): provider, API key, model and base URL for the in-app chat.",
             "Donate: Robux game passes, if TotalScript saves you time. About: version, rebuild command, keyboard list, repository link. Diagnostics: live status grid and 'Copy diagnostics'.",

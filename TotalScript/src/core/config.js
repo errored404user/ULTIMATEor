@@ -39,7 +39,7 @@ const RS = (() => {
     if (/^animation_/.test(n)) return "generate";
     if (/^generate_/.test(n)) return "generate";
     // AgentScript (LOCAL) engine tools
-    if (/^(workspace_info|list_directory|tree|read_file|search_files|grep_files|file_exists|count_lines|find_todos|list_by_ext|grep_count)$/.test(n))
+    if (/^(workspace_info|list_directory|tree|read_file|search_files|grep_files|file_exists|count_lines|find_todos|list_by_ext|grep_count|reference_search|reference_read|luau_check)$/.test(n))
       return "read";
     if (/^(write_file|edit_file|create_folder|delete_path|move_path|append_file|copy_file|replace_in_files|touch_file|write_json|patch_json|concat_files|scaffold_file)$/.test(n))
       return "edit";
@@ -1039,6 +1039,13 @@ ${catalogueBlock
       "Opens a file/folder/URL with the OS default app - good for showing the user a result in Explorer or a browser.",
     download_file:
       "Streams an http(s) URL to disk (200 MB cap). Prefer this over run_command curl for reliability and size caps.",
+    // 2.7.0: desktop reference library + API freshness (total-core 2.7+)
+    reference_search:
+      "Local notes only (the user's reference folder, e.g. LihFolk Vault V2). Cite the note titles you used; if it says 'not configured', answer from memory and say the limit was not verified.",
+    reference_read:
+      "One section of one note - use the exact title from reference_search and a few heading words.",
+    luau_check:
+      "Deterministic deprecated-API scan, not a syntax check. Fix every non-(advice) line before execute_luau; (advice) lines are optional.",
   };
 
   // A short, clearly-labelled reminder of the available commands, injected under

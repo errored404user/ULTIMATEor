@@ -21,7 +21,7 @@ const manifest = JSON.parse(read("manifest.json"));
 const html = read("codecraft.html");
 
 // ── module surface ──────────────────────────────────────────────────────────
-ok("A1 TotalExplorer VERSION 2.6.0, frozen, Workspace first in ROOTS, caps 200 / 60", X.VERSION === "2.6.0" && Object.isFrozen(X) && X.ROOTS[0] === "Workspace" && X.ROOTS.includes("StarterGui") && X.CHILD_CAP === 200 && X.SEARCH_CAP === 60);
+ok("A1 TotalExplorer VERSION 2.7.0, frozen, Workspace first in ROOTS, caps 200 / 60", X.VERSION === "2.7.0" && Object.isFrozen(X) && X.ROOTS[0] === "Workspace" && X.ROOTS.includes("StarterGui") && X.CHILD_CAP === 200 && X.SEARCH_CAP === 60);
 const probes = [X.rootLua(), X.childrenLua("Workspace.Hero"), X.propsLua("Workspace.Hero"), X.searchLua("crate")];
 ok("A2 read-only probes: marked, JSONEncode, no Instance.new / Destroy / Source = / Parent =", probes.every((c) => c.startsWith(X.PROBE_MARK) && /return hs:JSONEncode\(/.test(c) && !/Instance\.new|:Destroy\(|\.Source\s*=|\.Parent\s*=/.test(c)));
 ok("A3 probe Luau stays plain Lua (no +=, no continue) so the lupa sim can run it", probes.concat([X.selectLua("Workspace.X")]).every((c) => !/\+=/.test(c) && !/\bcontinue\b/.test(c)));
@@ -59,7 +59,7 @@ ok("B13 expandTo opens every loaded ancestor of a path", (() => { st.nodes.Works
 // ── render ──────────────────────────────────────────────────────────────────
 st.results = null;
 const h = X.render(st);
-ok("C1 render: versioned root, search box, reload, target chip with untarget", /data-rs-explorer="2\.6\.0"/.test(h) && /data-ex-search/.test(h) && /data-ex-action="reload"/.test(h) && /Target: <b>Crate<\/b>/.test(h) && /data-ex-action="untarget"/.test(h));
+ok("C1 render: versioned root, search box, reload, target chip with untarget", /data-rs-explorer="2\.7\.0"/.test(h) && /data-ex-search/.test(h) && /data-ex-action="reload"/.test(h) && /Target: <b>Crate<\/b>/.test(h) && /data-ex-action="untarget"/.test(h));
 ok("C2 render: tree rows carry data-ex-toggle / data-ex-select, depth var, aria tree roles", /role="tree"/.test(h) && /data-ex-toggle="Workspace"/.test(h) && /data-ex-select="Workspace.Hero"/.test(h) && /style="--d:1"/.test(h) && /role="treeitem"/.test(h));
 ok("C3 render: selected row + target pill + 'selected in Studio' pill", /rs-ex-row on rs-ex-target/.test(h) && /<b class="rs-ex-pill">target<\/b>/.test(h) && /selected in Studio/.test(h));
 ok("C4 render: inspector shows class, parent, property rows, colour swatch, attribute, tags and all five actions", /<b>Crate<\/b> <small>Part<\/small>/.test(h) && /<th>Parent<\/th><td>Workspace<\/td>/.test(h) && /<th>Size<\/th><td>4, 4, 4<\/td>/.test(h) && /rs-ex-swatch" style="background:#ff0000"/.test(h) && /<th>@Kind<\/th><td>loot<\/td>/.test(h) && /<th>Tags<\/th><td>Loot<\/td>/.test(h) && ["target|untarget", "studio-select", "copy", "ask", "refresh"].every((a) => new RegExp('data-ex-action="(' + a + ')"').test(h)));
@@ -172,7 +172,7 @@ if (!JSDOM) { console.log("skip jsdom walk (jsdom not installed)"); finish(); }
   try {
     await waitFor(() => d.getElementById("rs-bar"), 8000, "#rs-bar");
     await sleep(700);
-    ok("walk W1: page boots with TotalExplorer + __rsExplorer on window and no page errors", w.TotalExplorer && w.TotalExplorer.VERSION === "2.6.0" && w.__rsExplorer && typeof w.__rsExplorer.reload === "function" && pageErrors.length === 0, pageErrors.join(" | "));
+    ok("walk W1: page boots with TotalExplorer + __rsExplorer on window and no page errors", w.TotalExplorer && w.TotalExplorer.VERSION === "2.7.0" && w.__rsExplorer && typeof w.__rsExplorer.reload === "function" && pageErrors.length === 0, pageErrors.join(" | "));
     const chip = d.getElementById("rs-target-chip");
     ok("walk W2: #rs-target-chip exists in the bar and is hidden while no target is set", !!chip && chip.hidden === true);
     d.getElementById("rs-cards-btn").click(); await sleep(250);

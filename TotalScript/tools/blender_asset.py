@@ -1,4 +1,4 @@
-# TotalScript asset builder (2.6.0). Sent to Blender as execute_code like
+# TotalScript asset builder (2.7.0). Sent to Blender as execute_code like
 # blender_ops.py; tokens CMD / ARGS / OUT / MESH are filled by TotalScript.
 #
 # Commands

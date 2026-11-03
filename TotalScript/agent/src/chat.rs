@@ -318,7 +318,12 @@ fn system_prompt(state: &AppState, cat: &Catalogue, instructions: &str, tools_en
         s.push_str("- get_studio_state / studio_plugin_status report what is open. screen_capture returns a viewport screenshot (look at it to judge visuals). Plugin commands (studio_*, csg_*, open_script, script_live_update, screenshot_frame…) exist only while the TotalScript Studio plugin is connected.\n");
         s.push_str("- Workspace tools (read_file, write_file, edit_file, tree, run_command…) operate on the user's project folder");
         if !root.is_empty() { s.push_str(&format!(" at {root}")); }
-        s.push_str(". Use them for Rojo-style projects, assets and notes.\n\n");
+        s.push_str(". Use them for Rojo-style projects, assets and notes.\n");
+        s.push_str("- luau_check {code} flags deprecated Roblox APIs before you run code (it also runs automatically on every execute_luau).");
+        if state.workspace.reference_dir().is_some() {
+            s.push_str(" reference_search {query} looks limits, defaults, policy and 2025-26 API changes up in the user's local reference library (one call, ~600 tokens) — use it before stating a number or a service limit, and cite the note titles; reference_read {title, heading} prints one section.");
+        }
+        s.push_str("\n\n");
         s.push_str("WORKING STYLE\n- Plan briefly in one or two sentences, then execute. Verify results (count children, print names/positions, take a screenshot for visuals) before reporting.\n- Prefer complete, production-quality Luau: typed where sensible, services cached, no deprecated APIs, server/client split respected (LocalScripts under StarterPlayerScripts/StarterGui, Scripts under ServerScriptService).\n- Destructive actions (deleting many instances, overwriting scripts, running shell commands) need an explicit user request. run_command, process_kill, delete_path, download_file and open_path pause the turn until the user clicks Allow in this window — if the result says DENIED, do not retry, ask instead. write_file / edit_file keep a copy of the previous version in .totalscript-backups/.\n- Final answers are short: what was done, where it lives, what to check. No filler.\n\n");
     } else {
         s.push_str("Tools are disabled for this chat — answer with code and precise Studio instructions the user can apply by hand.\n\n");
@@ -876,6 +881,12 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
             let _ = events.send(ChatEvent::Status(format!("step {steps}/{max_steps} · running {real}")));
             let _ = events.send(ChatEvent::ToolStart { id: id.clone(), name: real.clone(), args: args.clone() });
             let fail_key = format!("{real}\n{}", args); // 1.69: taken before `args` moves into the executor
+            // 2.7: deterministic deprecated-API scan of Luau that is about to run in
+            // Studio. Never blocks — the findings ride along with the tool result so
+            // the model fixes them in its next step (wait → task.wait, BodyMovers …).
+            let luau_findings: Vec<(usize, usize, String)> = if real == "execute_luau" {
+                args.get("code").and_then(|v| v.as_str()).map(workspace::luau_check).unwrap_or_default()
+            } else { Vec::new() };
             let t0 = Instant::now();
             let outcome = if !by_wire.contains_key(&call.name) {
                 Err(anyhow::anyhow!("unknown tool '{}' — only the advertised tools exist", call.name))
@@ -907,6 +918,13 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
             let _ = events.send(ChatEvent::ToolDone { id: id.clone(), name: real.clone(), ok, text: text.clone(), images: images.clone(), elapsed_ms });
             let mut content = if ok { text.clone() } else { format!("ERROR: {text}") };
             if content.trim().is_empty() { content = if ok { "(no output)".into() } else { "ERROR (no message)".into() }; }
+            if !luau_findings.is_empty() {
+                content.push_str(&format!("\n[luau_check: {} deprecated/legacy API use(s) in that code — ran anyway, fix next time:", luau_findings.len()));
+                for (l, c, m) in luau_findings.iter().take(8) { content.push_str(&format!("\n  L{l}:{c} {m}")); }
+                if luau_findings.len() > 8 { content.push_str(&format!("\n  … {} more", luau_findings.len() - 8)); }
+                content.push(']');
+                state.ui.track("chat", format!("luau_check: {} warning(s) on execute_luau", luau_findings.len()));
+            }
             // 1.69: repeated-failure guard. The identical call failing again and
             // again is the classic dead loop; tell the model after the second
             // time, stop the turn after the fourth.

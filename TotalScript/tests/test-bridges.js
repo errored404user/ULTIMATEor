@@ -51,7 +51,7 @@ async function checkEngine({ port, id, name }) {
       const intro = await checkEngine(e);
       if (e.id === "local") {
         if (intro.ok !== true) failures.push("AS not ready (workspace down?)");
-        if (intro.tools.length !== 18) failures.push(`AS catalog ${intro.tools.length}/18 tools`);
+        if (intro.tools.length !== 21) failures.push(`AS catalog ${intro.tools.length}/21 tools`);
         if (intro.servers[0].alive !== true) failures.push("AS server not alive");
         console.log(`PASS ${e.name} (${e.id}) : READY, ${intro.tools.length} tools`);
       } else {

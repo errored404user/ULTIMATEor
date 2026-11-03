@@ -90,6 +90,10 @@ pub struct Workspace {
     /// behavior). Flipped at runtime via POST /api/local-full. Shared with the
     /// GUI status window so the badge is always live.
     full_access: Arc<AtomicBool>,
+    /// Optional local reference library (a folder of Markdown notes — e.g.
+    /// LihFolk Vault V2, a creator-docs clone or your own notes) searched by
+    /// `reference_search`. None = the tool answers "not configured".
+    reference_dir: std::sync::RwLock<Option<PathBuf>>,
 }
 
 impl Workspace {
@@ -114,8 +118,26 @@ impl Workspace {
         let canon_root = std::fs::canonicalize(&root)
             .map_err(|e| anyhow::anyhow!("cannot canonicalize {}: {e}", root.display()))?;
         tracing::info!("workspace root: {}", canon_root.display());
-        Ok(Self { canon_root: std::sync::RwLock::new(canon_root), full_access: Arc::new(AtomicBool::new(false)) })
+        Ok(Self { canon_root: std::sync::RwLock::new(canon_root), full_access: Arc::new(AtomicBool::new(false)), reference_dir: std::sync::RwLock::new(None) })
     }
+
+    /// Point the reference tools at a folder of Markdown notes (empty = off).
+    /// Returns the display path, or an error when the folder does not exist.
+    pub fn set_reference_dir(&self, dir: &str) -> anyhow::Result<Option<String>> {
+        let dir = dir.trim();
+        if dir.is_empty() {
+            *self.reference_dir.write().unwrap_or_else(|e| e.into_inner()) = None;
+            return Ok(None);
+        }
+        let canon = std::fs::canonicalize(dir).map_err(|e| anyhow::anyhow!("reference folder {dir} unavailable: {e}"))?;
+        if !canon.is_dir() { anyhow::bail!("reference folder {dir} is not a folder"); }
+        let shown = deverbatim_string(&canon);
+        *self.reference_dir.write().unwrap_or_else(|e| e.into_inner()) = Some(canon);
+        tracing::info!("reference library: {shown}");
+        Ok(Some(shown))
+    }
+
+    pub fn reference_dir(&self) -> Option<PathBuf> { self.reference_dir.read().unwrap_or_else(|e| e.into_inner()).clone() }
 
     /// Current canonical root (cloned; the lock is never held across awaits).
     pub fn root(&self) -> PathBuf { self.canon_root.read().unwrap_or_else(|e| e.into_inner()).clone() }
@@ -1019,13 +1041,328 @@ pub async fn dispatch(ws: &Workspace, name: &str, args: serde_json::Value) -> Re
         "process_kill" => tool_process_kill(ws, a).await,
         "open_path" => tool_open_path(ws, a).await,
         "download_file" => tool_download_file(ws, a).await,
+        "reference_search" => tool_reference_search(ws, a).await,
+        "reference_read" => tool_reference_read(ws, a).await,
+        "luau_check" => tool_luau_check(ws, a).await,
         other => Err(format!(
             "unknown tool '{other}'. Available AgentScript tools: workspace_info, list_directory, tree, \
 read_file, write_file, edit_file, create_folder, delete_path, move_path, search_files, grep_files, \
-run_command, file_info, env_info, process_list, process_kill (FULL mode), open_path, download_file. \
-Call list_commands for full parameter details."
+run_command, file_info, env_info, process_list, process_kill (FULL mode), open_path, download_file, \
+reference_search, reference_read, luau_check. Call list_commands for full parameter details."
         )),
     }
+}
+
+// -- reference library (local Markdown notes) ----------------------------
+
+const REFERENCE_MAX_FILES: usize = 6000;
+const REFERENCE_BODY_BYTES: usize = 24 * 1024;
+
+struct RefNote { title: String, rel: String, path: PathBuf, score: i64 }
+
+fn ref_terms(query: &str) -> Vec<String> {
+    let stop = ["the", "a", "an", "to", "in", "on", "of", "for", "and", "or", "is", "my", "how", "do", "i", "with", "it", "that", "this", "roblox", "studio", "luau"];
+    let mut out: Vec<String> = query.to_lowercase().split(|c: char| !c.is_alphanumeric() && c != '_').filter(|w| w.len() >= 2 && !stop.contains(w)).map(str::to_string).collect();
+    out.sort(); out.dedup();
+    out
+}
+
+/// Walk `root` for Markdown notes, skipping hidden / underscore folders (the
+/// vault's _tools, _assets, .obsidian) — bounded by REFERENCE_MAX_FILES.
+fn ref_collect(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        let mut entries: Vec<_> = rd.filter_map(|e| e.ok()).collect();
+        entries.sort_by_key(|e| e.file_name());
+        for e in entries {
+            let p = e.path();
+            let name = e.file_name().to_string_lossy().to_string();
+            if p.is_dir() {
+                if name.starts_with('.') || name.starts_with('_') || IGNORED_DIRS.contains(&name.as_str()) { continue; }
+                stack.push(p);
+            } else if name.to_lowercase().ends_with(".md") {
+                out.push(p);
+                if out.len() >= REFERENCE_MAX_FILES { return out; }
+            }
+        }
+    }
+    out
+}
+
+fn ref_title(path: &Path) -> String { path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default() }
+
+fn ref_read_head(path: &Path) -> String {
+    let Ok(mut f) = std::fs::File::open(path) else { return String::new() };
+    use std::io::Read;
+    let mut buf = vec![0u8; REFERENCE_BODY_BYTES];
+    let n = f.read(&mut buf).unwrap_or(0);
+    buf.truncate(n);
+    String::from_utf8_lossy(&buf).to_string()
+}
+
+/// Score a note: title hits weigh 6, tag/frontmatter hits 3, body hits 1 each
+/// (capped per term so one long note cannot drown the others), every term
+/// present anywhere +4, all terms in the title +10.
+fn ref_score(title: &str, body: &str, terms: &[String]) -> i64 {
+    if terms.is_empty() { return 0; }
+    let tl = title.to_lowercase();
+    let bl = body.to_lowercase();
+    let front = bl.strip_prefix("---").and_then(|r| r.find("\n---").map(|i| r[..i].to_string())).unwrap_or_default();
+    let mut score = 0i64;
+    let mut all_body = true;
+    let mut all_title = true;
+    for t in terms {
+        let in_title = tl.contains(t.as_str());
+        let body_hits = bl.matches(t.as_str()).count().min(12) as i64;
+        if in_title { score += 6; } else { all_title = false; }
+        if front.contains(t.as_str()) { score += 3; }
+        if body_hits == 0 && !in_title { all_body = false; }
+        score += body_hits;
+    }
+    if all_body { score += 4; }
+    if all_title { score += 10; }
+    score
+}
+
+/// TL;DR block: `tldr:start`…`tldr:end` markers (LihFolk), else a `## TL;DR`
+/// / `## Summary` section, else the first paragraph after the frontmatter.
+fn ref_tldr(body: &str, max: usize) -> String {
+    let text = if let (Some(a), Some(b)) = (body.find("tldr:start"), body.find("tldr:end")) {
+        if b > a { body[a..b].lines().skip(1).filter(|l| !l.trim_start().starts_with("<!--") && !l.trim().is_empty()).collect::<Vec<_>>().join("\n") } else { String::new() }
+    } else { String::new() };
+    let text = if text.trim().is_empty() {
+        let mut sec: Option<usize> = None;
+        let mut pos = 0usize;
+        for line in body.split_inclusive('\n') {
+            let ll = line.trim().to_lowercase();
+            if ["## tl;dr", "## tldr", "## summary", "## in short"].iter().any(|h| ll.starts_with(h)) { sec = Some(pos + line.len()); break; }
+            pos += line.len();
+        }
+        match sec {
+            Some(i) => { let rest = &body[i..]; let end = rest.find("\n## ").unwrap_or(rest.len()); rest[..end].trim().to_string() }
+            None => {
+                let mut rest = body;
+                if let Some(r) = rest.strip_prefix("---") { if let Some(i) = r.find("\n---") { rest = &r[i + 4..]; } }
+                rest.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#') && !l.starts_with("<!--") && !l.starts_with("[[")).take(6).collect::<Vec<_>>().join("\n")
+            }
+        }
+    } else { text };
+    let mut out = text.trim().to_string();
+    if out.len() > max { let mut cut = max; while !out.is_char_boundary(cut) { cut -= 1; } out.truncate(cut); out.push('…'); }
+    out
+}
+
+fn ref_headings(body: &str, max: usize) -> Vec<String> {
+    body.lines().filter_map(|l| l.strip_prefix("## ")).map(|h| h.trim().to_string()).filter(|h| !h.eq_ignore_ascii_case("connected notes")).take(max).collect()
+}
+
+fn ref_source_note(root: &Path) -> String {
+    let name = root.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    if name.to_lowercase().contains("lihfolk") || (root.join("ROUTER.md").exists() && root.join("SYMPTOMS.md").exists()) {
+        format!("Source: {name} — LihFolk Vault V2, CC BY 4.0 (credit \"LihFolk Vault V2\" when you reuse note text; code snippets inside notes need no credit).")
+    } else {
+        format!("Source: {name} (local reference library).")
+    }
+}
+
+pub async fn tool_reference_search(ws: &Workspace, args: &serde_json::Value) -> Result<String, String> {
+    let query = arg_str(args, "query")?;
+    let k = args.get("k").and_then(|v| v.as_u64()).unwrap_or(3).clamp(1, 6) as usize;
+    let Some(root) = ws.reference_dir() else {
+        return Ok("Reference library not configured. Ask the user to set a notes folder in TotalScript Desktop → Settings → Workspace → Reference library (for example the LihFolk Vault V2 folder, github.com/lihfolk-cy/v2-vault, CC BY 4.0). Answer from your own knowledge meanwhile and say the limits were not verified.".into());
+    };
+    let terms = ref_terms(&query);
+    if terms.is_empty() { return Err("query has no searchable words".into()); }
+    let started = Instant::now();
+    let (notes, symptoms, scanned) = tokio::task::spawn_blocking({
+        let root = root.clone(); let terms = terms.clone();
+        move || {
+            let files = ref_collect(&root);
+            let scanned = files.len();
+            let mut notes: Vec<RefNote> = Vec::new();
+            for p in &files {
+                let title = ref_title(p);
+                let body = ref_read_head(p);
+                let score = ref_score(&title, &body, &terms);
+                if score > 0 {
+                    let rel = p.strip_prefix(&root).map(|r| r.to_string_lossy().replace('\\', "/")).unwrap_or_else(|_| title.clone());
+                    notes.push(RefNote { title, rel, path: p.clone(), score });
+                }
+            }
+            notes.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.title.cmp(&b.title)));
+            notes.truncate(k);
+            // SYMPTOMS.md (LihFolk: "| symptom | cause | fix | note |" rows): best 6 rows by term hits
+            let mut symptoms: Vec<(usize, String)> = Vec::new();
+            if let Ok(text) = std::fs::read_to_string(root.join("SYMPTOMS.md")) {
+                for line in text.lines() {
+                    let ll = line.to_lowercase();
+                    if !line.contains('|') || ll.contains("---") { continue; }
+                    let hits = terms.iter().filter(|t| ll.contains(t.as_str())).count();
+                    if hits > 0 { symptoms.push((hits, line.trim().to_string())); }
+                }
+            }
+            symptoms.sort_by(|a, b| b.0.cmp(&a.0));
+            let symptoms: Vec<String> = symptoms.into_iter().take(6).map(|(_, l)| l).collect();
+            (notes, symptoms, scanned)
+        }
+    }).await.map_err(|e| e.to_string())?;
+    if notes.is_empty() {
+        return Ok(format!("No note matches \"{query}\" ({scanned} notes scanned in {} ms). Try other words or an exact API name.\n{}", started.elapsed().as_millis(), ref_source_note(&root)));
+    }
+    let mut out = format!("Top {} of {scanned} notes for \"{query}\" ({} ms):\n", notes.len(), started.elapsed().as_millis());
+    for (i, n) in notes.iter().enumerate() {
+        let body = ref_read_head(&n.path);
+        out.push_str(&format!("\n{}. {}  [{}]\n", i + 1, n.title, n.rel));
+        let tldr = ref_tldr(&body, if i == 0 { 900 } else { 500 });
+        if !tldr.is_empty() { for l in tldr.lines() { out.push_str("   "); out.push_str(l.trim_start_matches("- ").trim()); out.push('\n'); } }
+        if i == 0 {
+            let heads = ref_headings(&body, 10);
+            if !heads.is_empty() { out.push_str(&format!("   Sections: {}\n", heads.join(" · "))); }
+        }
+    }
+    if !symptoms.is_empty() {
+        out.push_str("\nSymptom → cause → fix:\n");
+        for l in symptoms { out.push_str("   "); out.push_str(&l); out.push('\n'); }
+    }
+    out.push_str("\nRead one section with reference_read {title, heading}. Cite the note titles you used.\n");
+    out.push_str(&ref_source_note(&root));
+    Ok(out)
+}
+
+pub async fn tool_reference_read(ws: &Workspace, args: &serde_json::Value) -> Result<String, String> {
+    let title = arg_str(args, "title")?;
+    let heading = args.get("heading").and_then(|v| v.as_str()).unwrap_or("").trim().to_lowercase();
+    let Some(root) = ws.reference_dir() else { return Err("reference library not configured (Settings → Workspace → Reference library)".into()); };
+    let want = title.trim().to_lowercase();
+    let found = tokio::task::spawn_blocking({ let root = root.clone(); move || {
+        let files = ref_collect(&root);
+        files.iter().find(|p| ref_title(p).to_lowercase() == want).or_else(|| files.iter().find(|p| ref_title(p).to_lowercase().contains(&want))).cloned()
+    } }).await.map_err(|e| e.to_string())?;
+    let Some(path) = found else { return Err(format!("no note titled \"{title}\" — use the exact title from reference_search")); };
+    let body = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let section = if heading.is_empty() {
+        let t = ref_tldr(&body, 1600);
+        if t.is_empty() { body.chars().take(1600).collect() } else { t }
+    } else {
+        let words: Vec<&str> = heading.split_whitespace().collect();
+        let mut best: Option<(usize, usize)> = None;
+        let mut pos = 0usize;
+        for line in body.split_inclusive('\n') {
+            if line.starts_with("## ") || line.starts_with("### ") {
+                let hl = line.to_lowercase();
+                let hits = words.iter().filter(|w| hl.contains(*w)).count();
+                if hits > 0 && best.map(|(h, _)| hits > h).unwrap_or(true) { best = Some((hits, pos)); }
+            }
+            pos += line.len();
+        }
+        let Some((_, start)) = best else {
+            return Err(format!("no heading matching \"{heading}\" in \"{}\". Headings: {}", ref_title(&path), ref_headings(&body, 20).join(" · ")));
+        };
+        let rest = &body[start..];
+        let after = &rest[rest.find('\n').map(|i| i + 1).unwrap_or(rest.len())..];
+        let end = after.find("\n## ").unwrap_or(after.len());
+        format!("{}\n{}", rest.lines().next().unwrap_or(""), &after[..end])
+    };
+    let mut text: String = section.chars().take(3500).collect();
+    if text.len() < section.len() { text.push_str("\n… (section truncated at 3500 chars)"); }
+    Ok(format!("{} — {}\n\n{}\n\n{}", ref_title(&path), path.strip_prefix(&root).map(|r| r.to_string_lossy().replace('\\', "/")).unwrap_or_default(), text.trim(), ref_source_note(&root)))
+}
+
+// -- Luau API freshness check ---------------------------------------------
+
+/// (needle, message). Only members the Creator Docs mark deprecated/removed,
+/// plus three "(advice)" rows from the docs' performance / robustness notes
+/// (task library 2021, BodyMovers → constraints, Raycast, PivotTo, Animator,
+/// collision groups by name 2022, Instance.new parent argument).
+const LUAU_RULES: &[(&str, &str)] = &[
+    ("wait(", "global wait() is deprecated — use task.wait(seconds) (returns the real elapsed time, no 30 Hz throttle)"),
+    ("spawn(", "global spawn() is deprecated — use task.spawn(fn) (or task.defer when it may run next frame)"),
+    ("delay(", "global delay() is deprecated — use task.delay(seconds, fn)"),
+    (":connect(", "lowercase :connect() is deprecated — use :Connect()"),
+    (":wait(", "lowercase :wait() is deprecated — use :Wait()"),
+    (":disconnect(", "lowercase :disconnect() is deprecated — use :Disconnect()"),
+    ("FindPartOnRay", "FindPartOnRay / FindPartOnRayWithIgnoreList are deprecated — use workspace:Raycast(origin, direction, RaycastParams)"),
+    ("FindPartsInRegion3", "FindPartsInRegion3* is deprecated — use workspace:GetPartBoundsInBox / GetPartsInPart"),
+    ("BodyVelocity", "BodyVelocity is deprecated — use LinearVelocity (with an Attachment)"),
+    ("BodyPosition", "BodyPosition is deprecated — use AlignPosition"),
+    ("BodyGyro", "BodyGyro is deprecated — use AlignOrientation"),
+    ("BodyForce", "BodyForce is deprecated — use VectorForce"),
+    ("BodyAngularVelocity", "BodyAngularVelocity is deprecated — use AngularVelocity"),
+    ("BodyThrust", "BodyThrust is deprecated — use VectorForce"),
+    ("RocketPropulsion", "RocketPropulsion is deprecated — use LinearVelocity / AlignPosition"),
+    ("SetPrimaryPartCFrame", "SetPrimaryPartCFrame is deprecated — use model:PivotTo(cframe)"),
+    ("GetPrimaryPartCFrame", "GetPrimaryPartCFrame is deprecated — use model:GetPivot()"),
+    (":LoadAnimation(", "__LOADANIM__"),
+    ("GetTextSize", "TextService:GetTextSize is deprecated — use TextService:GetTextBoundsAsync(params)"),
+    ("GetCollisionGroupId", "GetCollisionGroupId / GetCollisionGroupName are deprecated — collision groups are addressed by name (part.CollisionGroup)"),
+    ("RemoveCollisionGroup", "RemoveCollisionGroup is deprecated — use PhysicsService:UnregisterCollisionGroup(name)"),
+    ("SetPartCollisionGroup", "SetPartCollisionGroup is deprecated — set part.CollisionGroup = \"Name\" (string) directly"),
+    ("CreateCollisionGroup", "CreateCollisionGroup is deprecated — use PhysicsService:RegisterCollisionGroup(name)"),
+    ("PointsService", "PointsService was removed years ago — drop it"),
+    ("unpack(", "global unpack is deprecated — use table.unpack"),
+    ("math.pow(", "math.pow is deprecated — use the ^ operator"),
+    ("table.getn(", "table.getn is deprecated — use #t"),
+    ("ypcall(", "ypcall is removed — pcall yields fine now"),
+    ("LoadLibrary(", "LoadLibrary is removed — RbxUtility / RbxGui no longer exist"),
+    ("Instance.new(\"", "__INSTANCE_NEW__"),
+    ("Mouse.KeyDown", "Mouse.KeyDown/KeyUp are deprecated — use UserInputService.InputBegan or ContextActionService"),
+    ("Mouse.KeyUp", "Mouse.KeyDown/KeyUp are deprecated — use UserInputService.InputBegan or ContextActionService"),
+    (".Changed:Connect(", "__CHANGED__"),
+    ("GetService(\"Chat\")", "legacy Chat service is deprecated for new games — use TextChatService (TextChannels, OnIncomingMessage)"),
+    ("DataStoreService:GetDataStore", "__DATASTORE__"),
+];
+
+/// Deterministic deprecated-API scan. Returns (line, column, message).
+pub fn luau_check(code: &str) -> Vec<(usize, usize, String)> {
+    let mut out = Vec::new();
+    for (ln, raw) in code.lines().enumerate() {
+        let line = match raw.find("--") { Some(i) if !raw[..i].contains('"') && !raw[..i].contains('\'') => &raw[..i], _ => raw };
+        if line.trim().is_empty() { continue; }
+        for (needle, msg) in LUAU_RULES {
+            let Some(col) = line.find(*needle) else { continue };
+            // word-boundary for the short globals so `task.wait(` / `:Wait(` / `myspawn(` do not trip
+            if matches!(*needle, "wait(" | "spawn(" | "delay(" | "unpack(" | "ypcall(") {
+                let before = line[..col].chars().last();
+                if matches!(before, Some(c) if c.is_alphanumeric() || c == '_' || c == '.' || c == ':') { continue; }
+            }
+            let message = match *msg {
+                "__INSTANCE_NEW__" => {
+                    // Instance.new("Part", parent): second argument is a documented performance anti-pattern
+                    let rest = &line[col + needle.len()..];
+                    match rest.find('"') { Some(q) if rest[q + 1..].trim_start().starts_with(',') => "(advice) Instance.new(class, parent) — set properties first and assign .Parent LAST (the parent argument makes every later property change replicate)".to_string(), _ => continue }
+                }
+                "__CHANGED__" => {
+                    if line.contains("GetPropertyChangedSignal") { continue }
+                    "(advice) .Changed fires for every property — prefer :GetPropertyChangedSignal(\"Name\"):Connect(...)".to_string()
+                }
+                "__LOADANIM__" => {
+                    if line.contains("Animator") { continue }
+                    "Humanoid:LoadAnimation / AnimationController:LoadAnimation are deprecated — load through the Animator child (humanoid.Animator:LoadAnimation)".to_string()
+                }
+                "__DATASTORE__" => {
+                    if code.contains("pcall") { continue }
+                    "(advice) DataStore calls can throw — wrap GetAsync / SetAsync / UpdateAsync in pcall and retry with backoff; prefer UpdateAsync for read-modify-write".to_string()
+                }
+                m => m.to_string(),
+            };
+            out.push((ln + 1, col + 1, message));
+        }
+    }
+    out
+}
+
+pub async fn tool_luau_check(_ws: &Workspace, args: &serde_json::Value) -> Result<String, String> {
+    let code = arg_str(args, "code")?;
+    let findings = luau_check(&code);
+    let lines = code.lines().count();
+    if findings.is_empty() {
+        return Ok(format!("luau_check: no deprecated or removed Roblox API found in {lines} line(s). (Syntax and runtime errors are still only caught by Studio.)"));
+    }
+    let mut out = format!("luau_check: {} warning(s) in {lines} line(s) — fix before running in Studio:\n", findings.len());
+    for (l, c, m) in &findings { out.push_str(&format!("  L{l}:{c}  {m}\n")); }
+    Ok(out)
 }
 
 fn schema(props: serde_json::Value, req: &[&str]) -> serde_json::Value {
@@ -1054,6 +1391,9 @@ pub fn catalog() -> Vec<serde_json::Value> {
         serde_json::json!({"name": "process_kill", "description": "Kill a process by PID. Requires FULL PC ACCESS mode - refused otherwise by design.", "inputSchema": schema(serde_json::json!({"pid": {"type": "integer"}}), &["pid"])}),
         serde_json::json!({"name": "open_path", "description": "Open a file/folder (workspace-relative, absolute in FULL mode) or an http(s) URL with the OS default application.", "inputSchema": schema(serde_json::json!({"path": {"type": "string"}}), &["path"])}),
         serde_json::json!({"name": "download_file", "description": "Download an http(s) URL to a path (200 MB cap, streamed). Path follows sandbox rules.", "inputSchema": schema(serde_json::json!({"url": {"type": "string"}, "path": {"type": "string"}}), &["url", "path"])}),
+        serde_json::json!({"name": "reference_search", "description": "Look a Roblox question up in the user's LOCAL reference library (a folder of Markdown notes set in Settings -> Workspace, e.g. LihFolk Vault V2 or a creator-docs clone). One call returns the best 3 notes as title + TL;DR + section list, plus symptom->fix lines when the library has a SYMPTOMS.md. ~600 tokens. Use it for limits, defaults, policy and 2025-26 API changes - not for plain Luau logic. Cite the note titles you used.", "inputSchema": schema(serde_json::json!({"query": {"type": "string"}, "k": {"type": "integer", "description": "notes to return, 1-6 (default 3)"}}), &["query"])}),
+        serde_json::json!({"name": "reference_read", "description": "Read ONE section of a reference note found by reference_search: give the note title and a few words of the heading. Prints just that section (capped), never the whole note.", "inputSchema": schema(serde_json::json!({"title": {"type": "string"}, "heading": {"type": "string"}}), &["title"])}),
+        serde_json::json!({"name": "luau_check", "description": "Deterministic Roblox API freshness check for Luau BEFORE it runs in Studio: flags deprecated or removed members (wait/spawn/delay -> task.*, BodyMovers -> constraints, FindPartOnRay -> Raycast, SetPrimaryPartCFrame -> PivotTo, Humanoid:LoadAnimation -> Animator, lowercase :connect/:wait, unpack/math.pow/table.getn, Instance.new(class, parent)...). Returns line-numbered warnings with the replacement; no network, no execution.", "inputSchema": schema(serde_json::json!({"code": {"type": "string"}}), &["code"])}),
     ]
 }
 
@@ -1066,6 +1406,49 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         Workspace::new(Some(dir.to_str().unwrap())).unwrap()
+    }
+
+    #[tokio::test]
+    async fn reference_search_ranks_titles_and_reads_sections() {
+        let ws = temp_ws("refs");
+        let lib = ws.root().join("vault");
+        std::fs::create_dir_all(lib.join("04 Data")).unwrap();
+        std::fs::create_dir_all(lib.join("_tools")).unwrap();
+        std::fs::write(lib.join("04 Data").join("DataStore Limits and Budgets.md"), "---\ntags: [datastore, limits]\n---\n<!-- tldr:start -->\n- 4 MB per key, 50 chars key name\n- 60 + 10*players writes per minute\n<!-- tldr:end -->\n## Limits\nA key holds up to 4,194,304 bytes.\n## Budgets\nGetAsync budget grows with players.\n## Connected notes\n[[x]]\n").unwrap();
+        std::fs::write(lib.join("04 Data").join("Session Locking.md"), "# Session locking\nUse UpdateAsync with a lock field so two servers never write the same datastore key.\n## Pattern\nlock, write, release.\n").unwrap();
+        std::fs::write(lib.join("_tools").join("ignored.md"), "datastore datastore datastore limits limits").unwrap();
+        std::fs::write(lib.join("SYMPTOMS.md"), "| Symptom | Cause | Fix | Note |\n|---|---|---|---|\n| datastore data resets on rejoin | SetAsync raced | use UpdateAsync + session lock | Session Locking |\n| lag spike | too many parts | stream | Perf |\n").unwrap();
+        ws.set_reference_dir(lib.to_str().unwrap()).unwrap().unwrap();
+        let out = tool_reference_search(&ws, &serde_json::json!({"query": "datastore limits"})).await.unwrap();
+        assert!(out.contains("1. DataStore Limits and Budgets"), "{out}");
+        assert!(out.contains("4 MB per key"), "{out}");
+        assert!(out.contains("Sections: Limits · Budgets"), "{out}");
+        assert!(!out.contains("ignored"), "_tools must be skipped: {out}");
+        assert!(out.contains("data resets on rejoin") && !out.contains("lag spike"), "{out}");
+        let sec = tool_reference_read(&ws, &serde_json::json!({"title": "DataStore Limits and Budgets", "heading": "budgets"})).await.unwrap();
+        assert!(sec.contains("## Budgets") && sec.contains("GetAsync budget") && !sec.contains("4,194,304"), "{sec}");
+        let none = tool_reference_search(&ws, &serde_json::json!({"query": "zzqqxx"})).await.unwrap();
+        assert!(none.starts_with("No note matches"), "{none}");
+        ws.set_reference_dir("").unwrap();
+        let off = tool_reference_search(&ws, &serde_json::json!({"query": "datastore"})).await.unwrap();
+        assert!(off.starts_with("Reference library not configured"), "{off}");
+        assert!(ws.set_reference_dir("/definitely/not/here").is_err());
+    }
+
+    #[test]
+    fn luau_check_flags_deprecated_and_keeps_modern() {
+        let bad = "wait(1)\nlocal bv = Instance.new(\"BodyVelocity\", part)\nmodel:SetPrimaryPartCFrame(cf)\nhum:LoadAnimation(anim)\npart.Touched:connect(f)\nlocal a, b = unpack(t)\n-- wait(2) in a comment is fine\n";
+        let f = luau_check(bad);
+        let msgs: Vec<String> = f.iter().map(|(l, _, m)| format!("{l}:{m}")).collect();
+        assert!(msgs.iter().any(|m| m.starts_with("1:global wait()")), "{msgs:?}");
+        assert!(msgs.iter().any(|m| m.starts_with("2:BodyVelocity")), "{msgs:?}");
+        assert!(msgs.iter().any(|m| m.starts_with("2:(advice) Instance.new(class, parent)")), "{msgs:?}");
+        assert!(msgs.iter().any(|m| m.starts_with("3:SetPrimaryPartCFrame")), "{msgs:?}");
+        assert!(msgs.iter().any(|m| m.starts_with("5:lowercase :connect()")), "{msgs:?}");
+        assert!(msgs.iter().any(|m| m.starts_with("6:global unpack")), "{msgs:?}");
+        assert!(!msgs.iter().any(|m| m.starts_with("7:")), "comments are skipped: {msgs:?}");
+        let good = "task.wait(1)\nlocal p = Instance.new(\"Part\")\np.Parent = workspace\nmodel:PivotTo(cf)\nhum.Animator:LoadAnimation(anim)\np.Touched:Connect(f)\nlocal a, b = table.unpack(t)\nlocal ok = pcall(function() return store:GetAsync(k) end)\n";
+        assert!(luau_check(good).is_empty(), "{:?}", luau_check(good));
     }
 
     #[test]
