@@ -2183,7 +2183,7 @@ impl App {
             if ui.add_enabled(!running && studio_link, pill_widget(t, if running { "Running in Studio…" } else { "Run in Studio" }, true)).on_hover_text("Ctrl+Enter").clicked() { run = true; }
             if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Enter)) && !running && studio_link { run = true; }
             if ui.button("Copy").clicked() { let c = self.luau_code.clone(); ui.output_mut(|o| o.copied_text = c); }
-            if let Some(job) = &self.luau_run { ui.label(RichText::new(format!("{:.1}s", job.started.elapsed().as_secs_f32())).small().color(t.muted)); }
+            if let Some(job) = &self.luau_run { ui.label(RichText::new(format!("{} · {:.1}s", job.name, job.started.elapsed().as_secs_f32())).small().color(t.muted)); }
             ui.label(RichText::new("execute_luau · Edit DataModel · print() output comes back below").small().color(t.muted));
         });
         if run && !self.luau_code.trim().is_empty() {
@@ -3298,16 +3298,6 @@ fn list_row(ui: &mut egui::Ui, t: Theme, selected: bool, height: f32, paint: imp
     if resp.hovered() { ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand); }
     paint(ui.painter(), rect);
     resp
-}
-
-fn section_header(ui: &mut egui::Ui, t: Theme, title: &str, count: usize, color: Color32) {
-    ui.add_space(2.0);
-    ui.horizontal(|ui| {
-        status_dot(ui, color);
-        ui.label(RichText::new(title).small().strong().color(t.muted));
-        ui.label(RichText::new(format!("{count}")).small().color(t.muted));
-    });
-    ui.add_space(2.0);
 }
 
 /// Two-line tool row: name + engine dot, then a one-line description.
