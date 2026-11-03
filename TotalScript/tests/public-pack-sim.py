@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Featured Public Skills (2.5.0) against the miniature Roblox DataModel.
+"""Featured Public Skills (2.6.0) against the miniature Roblox DataModel.
 
 tests/test-public-packs.js checks the pack statically (validation, registration, UI,
 command). This script does what a user would: installs the pack into PublicSkills in

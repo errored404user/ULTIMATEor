@@ -132,7 +132,7 @@ const RSProvider = (() => {
 
   // ── composer ─────────────────────────────────────────────────────────────
   // Notion AI (app.notion.com/ai) uses an obfuscated, hashed-class DOM where the
-  // composer is NOT reliably a bare [contenteditable] div. The original v2.5.0
+  // composer is NOT reliably a bare [contenteditable] div. The original v2.6.0
   // provider only looked for [contenteditable], which returned null on the real
   // /ai page (diag: notion.providerLoaded editor:false items:0) - so Start
   // silently did nothing. Broaden detection to every common rich-text/chat
@@ -1491,7 +1491,7 @@ const RSProvider = (() => {
     if (stop) {
       if (!_stopSince) _stopSince = now;
       // Trust a continuously present stop button for 5 min (long planning),
-      // same policy as the Arena provider after v2.5.0.
+      // same policy as the Arena provider after v2.6.0.
       return (now - _stopSince < 300000) || (now - _streamAt < 300000);
     }
     _stopSince = 0;
