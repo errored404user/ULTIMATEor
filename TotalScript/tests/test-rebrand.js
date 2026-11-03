@@ -77,14 +77,14 @@ ok("aqua CSS: tokens, swatch, ornament, tile, menu head, cards, work cards, redu
 ok("aqua block is appended last (wins the cascade) and has no dead #rs-bar::after rule", css.lastIndexOf('html[data-rs-theme="aqua"]') > css.lastIndexOf('html[data-rs-theme="night"]') && !css.slice(css.indexOf("AQUA — TotalScript")).includes("#rs-bar::after"));
 ok("swatch photo shipped", exists("ui/swatch-aqua.jpg") && fs.statSync(path.join(root, "ui/swatch-aqua.jpg")).size > 20000);
 ok("popup defaults to aqua", popup.includes('<html data-theme="aqua">') && popup.includes('html[data-theme="aqua"]{--bg:#03161c;') && read("popup.js").includes('setAttribute("data-theme", "aqua")'));
-ok("desktop app: Aqua palette is the default, Gold kept", gui.includes('theme: "aqua".into(),') && gui.includes('("aqua", "TotalScript Aqua"), ("gold", "Gold")') && gui.includes('"gold" => Theme {') && gui.includes("Color32::from_rgb(34, 211, 238)"));
+ok("desktop app: Aqua palette is the default, Gold kept", gui.includes('theme: "aqua".into(),') && gui.includes('Palette { id: "aqua", name: "TotalScript Aqua"') && gui.includes('Palette { id: "gold", name: "Gold"') && gui.includes("accent: [34, 211, 238]") && gui.includes("unwrap_or(&PALETTES[0])"));
 ok("theme preview harness defaults to aqua", read("tools/theme-preview/harness.js").includes("totalTheme = 'aqua'"));
 ok("night skin still exists as a selectable style", css.includes('html[data-rs-theme="night"] {') && /night:\s*\{ name: "Night"/.test(main));
 
 // ── 5. release pins ───────────────────────────────────────────────────────────
 const readme = read("README.md");
 ok("README 1.71.0 entry + title", /\*\*1\.71\.0 — TotalScript: the rename, and Aqua as the default skin\.\*\*/.test(readme) && readme.startsWith("# TotalScript — "));
-ok("version pins 2.4.0", manifest.version === "2.4.0" && /^version = "2\.4\.0"/m.test(cargo) && lua.includes('local VERSION = "2.4.0"') && lock.includes('name = "total-agent"\nversion = "2.4.0"'));
+ok("version pins 2.5.0", manifest.version === "2.5.0" && /^version = "2\.5\.0"/m.test(cargo) && lua.includes('local VERSION = "2.5.0"') && lock.includes('name = "total-agent"\nversion = "2.5.0"'));
 
 console.log((failed ? "FAIL  " : "OK    ") + "test-rebrand: " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

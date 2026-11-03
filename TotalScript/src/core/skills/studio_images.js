@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript image pack (2.4.0) - the catalogue half of the Image Studio.
+// TotalScript image pack (2.5.0) - the catalogue half of the Image Studio.
 //
 // Registers the image_* commands (descriptions + params so the command contract
 // validates calls and the model sees them in the catalogue). The commands run in
@@ -10,7 +10,7 @@
 // can compile it; main.js intercepts the command before buildLuau either way.
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
-  const VERSION = "2.4.0";
+  const VERSION = "2.5.0";
   // imagegen.js loads later in the bundle (just before videostudio.js), so resolve it lazily.
   const ig = () => (typeof TotalImageGen !== "undefined" && TotalImageGen) || (typeof window !== "undefined" && window.TotalImageGen) || null;
   const S = (type, req, desc) => ({ type, req: !!req, desc: desc || "" });

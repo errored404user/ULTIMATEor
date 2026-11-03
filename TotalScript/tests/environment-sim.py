@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Environment pack (2.4.0) against the miniature Roblox DataModel.
+"""Environment pack (2.5.0) against the miniature Roblox DataModel.
 
 tests/test-environment-pack.js checks the pack statically (registration, params,
 validation, wiring). This script runs the REAL generated Luau for all nine commands
-in tests/roblox_sim.py, which for 2.4.0 grew a 4-stud voxel Terrain store
+in tests/roblox_sim.py, which for 2.5.0 grew a 4-stud voxel Terrain store
 (Read/WriteVoxels, FillBlock / FillBall / FillCylinder), Region3, a deterministic
 math.noise and an opt-in downward Raycast (terrain column top / anchored part top).
 

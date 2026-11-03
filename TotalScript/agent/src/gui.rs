@@ -19,7 +19,7 @@ use std::{
 };
 
 use eframe::egui;
-use egui::{Align, Color32, FontFamily, FontId, Layout, Margin, RichText, Rounding, Sense, Stroke, TextStyle, Vec2};
+use egui::{Align, Color32, FontFamily, FontId, Layout, Margin, Pos2, RichText, Rounding, Sense, Stroke, TextStyle, Vec2};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -419,80 +419,107 @@ struct Theme {
     warn: Color32,
     bad: Color32,
     info: Color32,
+    /// Light palettes invert the surface ladder (panels get darker, not lighter).
+    light: bool,
 }
 
+/// One entry of the Appearance palette grid. Surfaces (panel, border…) are
+/// derived from `bg` tinted towards `accent`, so every palette stays coherent
+/// and a new one is a single line here.
+struct Palette {
+    id: &'static str,
+    name: &'static str,
+    blurb: &'static str,
+    light: bool,
+    bg: [u8; 3],
+    text: [u8; 3],
+    muted: [u8; 3],
+    accent: [u8; 3],
+    accent2: [u8; 3],
+    accent_ink: [u8; 3],
+}
+
+const PALETTES: &[Palette] = &[
+    // Aqua — the default since 1.71.0 (matches the extension's Aqua skin).
+    Palette { id: "aqua", name: "TotalScript Aqua", blurb: "Deep teal, cyan accent — the default", light: false, bg: [3, 22, 28], text: [230, 255, 251], muted: [127, 200, 192], accent: [34, 211, 238], accent2: [20, 184, 166], accent_ink: [3, 32, 36] },
+    Palette { id: "gold", name: "Gold", blurb: "Warm black with amber highlights", light: false, bg: [9, 9, 11], text: [244, 244, 245], muted: [161, 161, 170], accent: [245, 158, 11], accent2: [251, 191, 36], accent_ink: [20, 14, 2] },
+    Palette { id: "emerald", name: "Emerald", blurb: "Forest green, mint accent", light: false, bg: [7, 14, 12], text: [236, 253, 245], muted: [134, 180, 160], accent: [52, 211, 153], accent2: [16, 185, 129], accent_ink: [2, 24, 16] },
+    Palette { id: "graphite", name: "Graphite", blurb: "Neutral slate, no colour cast", light: false, bg: [12, 13, 16], text: [241, 245, 249], muted: [148, 163, 184], accent: [226, 232, 240], accent2: [148, 163, 184], accent_ink: [15, 18, 24] },
+    Palette { id: "midnight", name: "Midnight", blurb: "Navy night sky with sky-blue accent", light: false, bg: [8, 13, 30], text: [232, 238, 255], muted: [141, 156, 196], accent: [96, 165, 250], accent2: [129, 140, 248], accent_ink: [6, 14, 36] },
+    Palette { id: "nord", name: "Nord", blurb: "Arctic blue-grey, frost accent", light: false, bg: [36, 41, 51], text: [236, 239, 244], muted: [160, 170, 190], accent: [136, 192, 208], accent2: [129, 161, 193], accent_ink: [24, 30, 40] },
+    Palette { id: "violet", name: "Violet", blurb: "Plum dark with lavender glow", light: false, bg: [19, 12, 32], text: [243, 236, 255], muted: [170, 152, 200], accent: [167, 139, 250], accent2: [192, 132, 252], accent_ink: [22, 10, 44] },
+    Palette { id: "rose", name: "Rosé", blurb: "Charcoal with pink-rose accent", light: false, bg: [26, 12, 18], text: [255, 240, 246], muted: [200, 150, 170], accent: [251, 113, 133], accent2: [244, 114, 182], accent_ink: [40, 8, 18] },
+    Palette { id: "crimson", name: "Crimson", blurb: "Near-black with red accents", light: false, bg: [16, 8, 10], text: [250, 240, 240], muted: [170, 140, 145], accent: [239, 68, 68], accent2: [251, 113, 133], accent_ink: [36, 6, 8] },
+    Palette { id: "sunset", name: "Sunset", blurb: "Dusk purple with coral accent", light: false, bg: [24, 12, 28], text: [255, 244, 238], muted: [196, 160, 170], accent: [251, 146, 60], accent2: [244, 114, 182], accent_ink: [40, 14, 6] },
+    Palette { id: "ocean", name: "Ocean", blurb: "Deep blue water, aquamarine accent", light: false, bg: [4, 18, 36], text: [230, 244, 255], muted: [130, 170, 200], accent: [45, 212, 191], accent2: [56, 189, 248], accent_ink: [2, 30, 34] },
+    Palette { id: "mocha", name: "Mocha", blurb: "Espresso brown, caramel accent", light: false, bg: [22, 16, 13], text: [250, 243, 236], muted: [180, 160, 145], accent: [217, 160, 102], accent2: [232, 190, 140], accent_ink: [34, 20, 8] },
+    Palette { id: "forest", name: "Forest", blurb: "Moss and lime for a calmer screen", light: false, bg: [10, 18, 10], text: [240, 250, 236], muted: [150, 180, 140], accent: [163, 230, 53], accent2: [74, 222, 128], accent_ink: [12, 30, 4] },
+    Palette { id: "paper", name: "Paper", blurb: "Light — warm white with ink text", light: true, bg: [247, 245, 240], text: [28, 25, 23], muted: [110, 104, 96], accent: [14, 116, 144], accent2: [8, 145, 178], accent_ink: [255, 255, 255] },
+    Palette { id: "snow", name: "Snow", blurb: "Light — cool white with blue accent", light: true, bg: [244, 247, 251], text: [15, 23, 42], muted: [100, 116, 139], accent: [37, 99, 235], accent2: [79, 70, 229], accent_ink: [255, 255, 255] },
+    Palette { id: "sage", name: "Sage", blurb: "Light — soft green tint, emerald accent", light: true, bg: [242, 247, 243], text: [20, 36, 28], muted: [96, 122, 108], accent: [5, 150, 105], accent2: [13, 148, 136], accent_ink: [255, 255, 255] },
+];
+
+fn rgb(c: [u8; 3]) -> Color32 { Color32::from_rgb(c[0], c[1], c[2]) }
+
+/// Linear blend `a → b` by `k` (0..1), per channel.
+fn mix(a: Color32, b: Color32, k: f32) -> Color32 {
+    let k = k.clamp(0.0, 1.0);
+    let ch = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * k).round().clamp(0.0, 255.0) as u8;
+    Color32::from_rgb(ch(a.r(), b.r()), ch(a.g(), b.g()), ch(a.b(), b.b()))
+}
+
+/// `color` at `alpha` (0..255) — for glows, backdrops and hover washes.
+fn alpha(c: Color32, a: u8) -> Color32 { Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), a) }
+
 impl Theme {
+    fn palette(id: &str) -> &'static Palette {
+        PALETTES.iter().find(|p| p.id == id).unwrap_or(&PALETTES[0])
+    }
+
     fn by_id(id: &str) -> Theme {
-        match id {
-            "emerald" => Theme {
-                bg: Color32::from_rgb(7, 14, 12),
-                bg2: Color32::from_rgb(10, 20, 17),
-                panel: Color32::from_rgb(13, 25, 21),
-                panel2: Color32::from_rgb(18, 33, 28),
-                border: Color32::from_rgb(30, 54, 46),
-                border2: Color32::from_rgb(46, 84, 70),
-                text: Color32::from_rgb(232, 245, 238),
-                muted: Color32::from_rgb(134, 164, 150),
-                accent: Color32::from_rgb(52, 211, 153),
-                accent2: Color32::from_rgb(16, 185, 129),
-                accent_ink: Color32::from_rgb(4, 24, 16),
-                ok: Color32::from_rgb(74, 222, 128),
-                warn: Color32::from_rgb(250, 204, 21),
-                bad: Color32::from_rgb(248, 113, 113),
-                info: Color32::from_rgb(96, 165, 250),
-            },
-            "graphite" => Theme {
-                bg: Color32::from_rgb(12, 12, 14),
-                bg2: Color32::from_rgb(16, 16, 19),
-                panel: Color32::from_rgb(21, 21, 25),
-                panel2: Color32::from_rgb(28, 28, 33),
-                border: Color32::from_rgb(42, 42, 50),
-                border2: Color32::from_rgb(62, 62, 72),
-                text: Color32::from_rgb(240, 240, 244),
-                muted: Color32::from_rgb(142, 142, 156),
-                accent: Color32::from_rgb(226, 232, 240),
-                accent2: Color32::from_rgb(148, 163, 184),
-                accent_ink: Color32::from_rgb(12, 12, 14),
-                ok: Color32::from_rgb(74, 222, 128),
-                warn: Color32::from_rgb(250, 204, 21),
-                bad: Color32::from_rgb(248, 113, 113),
-                info: Color32::from_rgb(96, 165, 250),
-            },
-            "gold" => Theme {
-                bg: Color32::from_rgb(11, 10, 8),
-                bg2: Color32::from_rgb(16, 14, 10),
-                panel: Color32::from_rgb(22, 19, 13),
-                panel2: Color32::from_rgb(30, 26, 17),
-                border: Color32::from_rgb(52, 44, 26),
-                border2: Color32::from_rgb(86, 72, 38),
-                text: Color32::from_rgb(247, 241, 226),
-                muted: Color32::from_rgb(166, 152, 118),
-                accent: Color32::from_rgb(244, 196, 48),
-                accent2: Color32::from_rgb(214, 158, 22),
-                accent_ink: Color32::from_rgb(28, 20, 4),
-                ok: Color32::from_rgb(86, 222, 134),
-                warn: Color32::from_rgb(250, 204, 21),
-                bad: Color32::from_rgb(248, 113, 113),
-                info: Color32::from_rgb(96, 165, 250),
-            },
-            // Aqua — the default since 1.71.0 (matches the extension's Aqua skin).
-            _ => Theme {
-                bg: Color32::from_rgb(3, 22, 28),
-                bg2: Color32::from_rgb(5, 30, 37),
-                panel: Color32::from_rgb(7, 38, 46),
-                panel2: Color32::from_rgb(10, 50, 60),
-                border: Color32::from_rgb(18, 78, 90),
-                border2: Color32::from_rgb(28, 118, 134),
-                text: Color32::from_rgb(230, 255, 251),
-                muted: Color32::from_rgb(127, 200, 192),
-                accent: Color32::from_rgb(34, 211, 238),
-                accent2: Color32::from_rgb(20, 184, 166),
-                accent_ink: Color32::from_rgb(3, 32, 36),
+        let p = Theme::palette(id);
+        let bg = rgb(p.bg);
+        let accent = rgb(p.accent);
+        let text = rgb(p.text);
+        if p.light {
+            let ink = text;
+            Theme {
+                bg,
+                bg2: mix(bg, ink, 0.035),
+                panel: mix(bg, Color32::WHITE, 0.6),
+                panel2: mix(bg, ink, 0.05),
+                border: mix(bg, ink, 0.14),
+                border2: mix(bg, ink, 0.28),
+                text,
+                muted: rgb(p.muted),
+                accent,
+                accent2: rgb(p.accent2),
+                accent_ink: rgb(p.accent_ink),
+                ok: Color32::from_rgb(22, 163, 74),
+                warn: Color32::from_rgb(180, 120, 0),
+                bad: Color32::from_rgb(220, 38, 38),
+                info: Color32::from_rgb(2, 132, 199),
+                light: true,
+            }
+        } else {
+            Theme {
+                bg,
+                bg2: mix(bg, accent, 0.035),
+                panel: mix(bg, accent, 0.08),
+                panel2: mix(bg, accent, 0.14),
+                border: mix(bg, accent, 0.30),
+                border2: mix(bg, accent, 0.50),
+                text,
+                muted: rgb(p.muted),
+                accent,
+                accent2: rgb(p.accent2),
+                accent_ink: rgb(p.accent_ink),
                 ok: Color32::from_rgb(86, 222, 134),
                 warn: Color32::from_rgb(250, 204, 21),
                 bad: Color32::from_rgb(248, 113, 113),
                 info: Color32::from_rgb(125, 211, 252),
-            },
+                light: false,
+            }
         }
     }
 
@@ -513,7 +540,7 @@ impl Theme {
         style.spacing.indent = 18.0;
         style.spacing.scroll.bar_width = 8.0;
 
-        let mut v = egui::Visuals::dark();
+        let mut v = if self.light { egui::Visuals::light() } else { egui::Visuals::dark() };
         v.override_text_color = Some(self.text);
         v.panel_fill = self.bg;
         v.window_fill = self.panel;
@@ -582,6 +609,21 @@ impl Page {
             Page::Terminal => "Terminal",
             Page::Help => "Help",
             Page::Settings => "Settings",
+        }
+    }
+
+    /// Two or three words under the sidebar title (the reference look:
+    /// "Overview / At a glance", "Settings / Make it yours").
+    fn blurb(self) -> &'static str {
+        match self {
+            Page::Home => "At a glance",
+            Page::Chat => "Your model, in Studio",
+            Page::Explorer => "Workspace files",
+            Page::Tools => "Every bridge tool",
+            Page::Servers => "MCP & channels",
+            Page::Terminal => "Console & Luau",
+            Page::Help => "Setup & how-to",
+            Page::Settings => "Make it yours",
         }
     }
 
@@ -719,6 +761,8 @@ pub struct App {
     draft_workspace: String,
     draft_mcp: String,
     settings_note: String,
+    /// Appearance → palette search box.
+    palette_query: String,
     picker_rx: Option<Receiver<Option<String>>>,
     workspace_rx: Option<Receiver<Result<String, String>>>,
     tray: Option<TrayState>,
@@ -822,6 +866,7 @@ impl App {
             new_name: String::new(),
             delete_armed: None,
             settings_note: String::new(),
+            palette_query: String::new(),
             picker_rx: None,
             workspace_rx: None,
             tray,
@@ -1199,11 +1244,10 @@ impl App {
                     ui.label(RichText::new("Desktop").color(t.muted));
                     ui.add_space(8.0);
                     let online = self.shared.studio_connected.load(Ordering::Relaxed);
-                    let (dot, text) = if online { (t.ok, "Studio linked") }
-                        else if self.shared.studio_running.load(Ordering::Relaxed) { (t.warn, "Studio open · MCP not linked") }
-                        else { (t.muted, "Studio closed") };
-                    status_dot(ui, dot);
-                    ui.label(RichText::new(text).small().color(t.muted));
+                    let (dot, text) = if online { (t.ok, "STUDIO LINKED") }
+                        else if self.shared.studio_running.load(Ordering::Relaxed) { (t.warn, "STUDIO OPEN · MCP NOT LINKED") }
+                        else { (t.muted, "STUDIO CLOSED") };
+                    status_chip(ui, t, text, dot);
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         ui.spacing_mut().item_spacing.x = 2.0;
                         if window_button(ui, WinGlyph::Close, t.bad, t).clicked() { ctx.send_viewport_cmd(egui::ViewportCommand::Close); }
@@ -1247,7 +1291,7 @@ impl App {
     fn sidebar(&mut self, ctx: &egui::Context) {
         let t = self.theme;
         egui::SidePanel::left("sidebar")
-            .exact_width(228.0)
+            .exact_width(236.0)
             .resizable(false)
             .frame(egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).inner_margin(Margin::symmetric(12.0, 14.0)))
             .show(ctx, |ui| {
@@ -1259,50 +1303,75 @@ impl App {
                         ui.label(RichText::new("Workspace bridge").small().color(t.muted));
                     });
                 });
-                ui.add_space(14.0);
-                ui.label(RichText::new("WORKSPACE").small().strong().color(t.muted));
-                ui.add_space(4.0);
+                ui.add_space(16.0);
+                section_label(ui, t, "YOUR WORKSPACE");
+                ui.add_space(6.0);
                 for (n, page) in Page::ALL.iter().enumerate() {
                     let page = *page;
-                    if page == Page::Help { ui.add_space(8.0); ui.label(RichText::new("SYSTEM").small().strong().color(t.muted)); ui.add_space(4.0); }
+                    if page == Page::Help { ui.add_space(10.0); section_label(ui, t, "SYSTEM"); ui.add_space(6.0); }
                     let selected = self.page == page;
-                    let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 34.0), Sense::click());
+                    let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 44.0), Sense::click());
                     let resp = resp.on_hover_text(format!("{}  (Ctrl+{})", page.title(), n + 1));
                     if resp.hovered() { ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand); }
-                    let fill = if selected { t.accent.linear_multiply(0.18) } else if resp.hovered() { t.panel2 } else { Color32::TRANSPARENT };
-                    ui.painter().rect_filled(rect, Rounding::same(10.0), fill);
+                    let painter = ui.painter();
                     if selected {
-                        let bar = egui::Rect::from_min_size(rect.min + Vec2::new(0.0, 8.0), Vec2::new(3.0, rect.height() - 16.0));
-                        ui.painter().rect_filled(bar, Rounding::same(2.0), t.accent);
+                        // Filled card with an accent outline — the "current page" look.
+                        painter.rect_filled(rect, Rounding::same(12.0), mix(t.panel, t.accent, if t.light { 0.10 } else { 0.08 }));
+                        painter.rect_stroke(rect, Rounding::same(12.0), Stroke::new(1.0_f32, alpha(t.accent, 170)));
+                    } else if resp.hovered() {
+                        painter.rect_filled(rect, Rounding::same(12.0), t.panel);
+                        painter.rect_stroke(rect, Rounding::same(12.0), Stroke::new(1.0_f32, t.border));
                     }
-                    let icon_rect = egui::Rect::from_center_size(rect.left_center() + Vec2::new(22.0, 0.0), Vec2::splat(16.0));
-                    let color = if selected { t.accent } else { t.muted };
-                    nav_icon(ui.painter(), icon_rect, page, color);
-                    ui.painter().text(
-                        rect.left_center() + Vec2::new(42.0, 0.0),
+                    // Icon chip
+                    let chip = egui::Rect::from_center_size(rect.left_center() + Vec2::new(24.0, 0.0), Vec2::splat(30.0));
+                    painter.rect_filled(chip, Rounding::same(9.0), if selected { alpha(t.accent, 46) } else { alpha(t.border, if t.light { 90 } else { 140 }) });
+                    let icon_rect = egui::Rect::from_center_size(chip.center(), Vec2::splat(15.0));
+                    nav_icon(painter, icon_rect, page, if selected { t.accent } else { t.muted });
+                    painter.text(
+                        rect.left_center() + Vec2::new(48.0, -8.0),
                         egui::Align2::LEFT_CENTER,
                         page.title(),
                         FontId::new(14.0, FontFamily::Proportional),
-                        if selected { t.text } else { t.muted },
+                        if selected { t.text } else { mix(t.text, t.muted, 0.35) },
+                    );
+                    painter.text(
+                        rect.left_center() + Vec2::new(48.0, 9.0),
+                        egui::Align2::LEFT_CENTER,
+                        page.blurb(),
+                        FontId::new(11.0, FontFamily::Proportional),
+                        if selected { mix(t.muted, t.accent, 0.4) } else { t.muted },
                     );
                     if page == Page::Chat && self.chat_turn.is_some() {
-                        ui.painter().circle_filled(rect.right_center() - Vec2::new(16.0, 0.0), 3.5, t.warn);
+                        painter.circle_filled(rect.right_center() - Vec2::new(16.0, 0.0), 3.5, t.warn);
+                    } else if selected {
+                        painter.circle_filled(rect.right_center() - Vec2::new(16.0, 0.0), 2.5, t.accent);
                     }
                     if resp.clicked() { self.page = page; }
                     ui.add_space(2.0);
                 }
                 ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
                     let s = &self.shared;
-                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
+                    // Short windows: keep only the ONLINE/OFFLINE line.
+                    let roomy = ui.available_height() > 190.0;
+                    let up = s.bridge_listening.load(Ordering::Relaxed) && s.fatal.lock().unwrap_or_else(|e| e.into_inner()).is_none();
+                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, if up { alpha(t.ok, 110) } else { t.border })).rounding(Rounding::same(14.0)).inner_margin(Margin::same(12.0));
                     frame.show(ui, |ui| {
                         ui.set_width(ui.available_width());
-                        ui.label(RichText::new("BRIDGE").small().strong().color(t.muted));
-                        row_status(ui, t, "HTTP 3000", s.bridge_listening.load(Ordering::Relaxed) && s.fatal.lock().unwrap_or_else(|e| e.into_inner()).is_none());
-                        row_status(ui, t, "WS 17613 roblox", s.roblox_clients.load(Ordering::Relaxed) > 0);
-                        row_status(ui, t, "WS 17615 local", s.local_clients.load(Ordering::Relaxed) > 0);
-                        row_status(ui, t, "Studio MCP helper", s.mcp_alive.load(Ordering::Relaxed));
-                        ui.add_space(2.0);
-                        ui.label(RichText::new(format!("up {}", human_duration(s.boot.elapsed()))).small().color(t.muted));
+                        ui.horizontal(|ui| {
+                            section_label(ui, t, "BRIDGE");
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                ui.label(RichText::new(if up { "ONLINE" } else { "OFFLINE" }).size(10.5).strong().color(if up { t.ok } else { t.bad }));
+                            });
+                        });
+                        if roomy {
+                            ui.add_space(4.0);
+                            row_status(ui, t, "HTTP 3000", up);
+                            row_status(ui, t, "WS 17613 roblox", s.roblox_clients.load(Ordering::Relaxed) > 0);
+                            row_status(ui, t, "WS 17615 local", s.local_clients.load(Ordering::Relaxed) > 0);
+                            row_status(ui, t, "Studio MCP helper", s.mcp_alive.load(Ordering::Relaxed));
+                        }
+                        ui.add_space(4.0);
+                        ui.label(RichText::new(format!("up {}  ·  v{}", human_duration(s.boot.elapsed()), env!("CARGO_PKG_VERSION"))).small().color(t.muted));
                     });
                 });
             });
@@ -1310,12 +1379,30 @@ impl App {
 
     fn page_header(&self, ui: &mut egui::Ui) {
         let t = self.theme;
-        ui.vertical(|ui| {
-            ui.spacing_mut().item_spacing.y = 2.0;
-            ui.label(RichText::new(self.page.title()).size(24.0).strong().color(t.text));
-            ui.label(RichText::new(self.page.subtitle()).color(t.muted));
+        let s = &self.shared;
+        let up = s.bridge_listening.load(Ordering::Relaxed) && s.fatal.lock().unwrap_or_else(|e| e.into_inner()).is_none();
+        let studio = s.studio_connected.load(Ordering::Relaxed);
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 3.0;
+                // Breadcrumb: "— SETTINGS / AQUA"
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    let (bar, _) = ui.allocate_exact_size(Vec2::new(14.0, 2.0), Sense::hover());
+                    ui.painter().rect_filled(bar, Rounding::same(1.0), t.accent);
+                    let crumb = format!("{} / {}", self.page.title().to_uppercase(), Theme::palette(&self.settings.theme).name.to_uppercase());
+                    ui.label(RichText::new(crumb).size(10.5).strong().color(t.accent));
+                });
+                ui.label(RichText::new(self.page.title()).size(26.0).strong().color(t.text));
+                ui.label(RichText::new(self.page.subtitle()).color(t.muted));
+            });
+            ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                status_chip(ui, t, if up { "BRIDGE ONLINE" } else { "BRIDGE OFFLINE" }, if up { t.ok } else { t.bad });
+                if studio { status_chip(ui, t, "STUDIO", t.accent); }
+            });
         });
-        ui.add_space(12.0);
+        ui.add_space(14.0);
     }
 
     // ── pages ──
@@ -2210,16 +2297,38 @@ impl App {
         let mut save = false;
         let mut retheme = false;
         egui::ScrollArea::vertical().id_salt("settings").auto_shrink([false, false]).show(ui, |ui| {
-            settings_section(ui, t, "Appearance", |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Theme");
-                    for (id, label) in [("aqua", "TotalScript Aqua"), ("gold", "Gold"), ("emerald", "Emerald"), ("graphite", "Graphite")] {
-                        if ui.selectable_label(self.settings.theme == id, label).clicked() { self.settings.theme = id.into(); retheme = true; save = true; }
+            section_card(ui, t, "01", "Your layout", "Pick the density that fits your screen — applies instantly.", |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
+                    for (compact, name, blurb) in [(false, "Comfortable", "Roomier cards and 14 px text"), (true, "Compact", "Tighter spacing for small screens")] {
+                        if layout_card(ui, t, name, blurb, compact, self.settings.compact == compact).clicked() && self.settings.compact != compact {
+                            self.settings.compact = compact; retheme = true; save = true;
+                        }
                     }
                 });
-                if ui.checkbox(&mut self.settings.compact, "Compact density").changed() { retheme = true; save = true; }
             });
-            settings_section(ui, t, "Behaviour", |ui| {
+            section_card(ui, t, "02", "Appearance", "Choose a palette. Light and dark palettes, all with the same layout.", |ui| {
+                ui.horizontal(|ui| {
+                    ui.add(egui::TextEdit::singleline(&mut self.palette_query).hint_text("Search palettes…").desired_width(260.0));
+                    if !self.palette_query.is_empty() && ui.small_button("clear").clicked() { self.palette_query.clear(); }
+                    ui.label(RichText::new(format!("{} palettes · current: {}", PALETTES.len(), Theme::palette(&self.settings.theme).name)).small().color(t.muted));
+                });
+                ui.add_space(6.0);
+                let q = self.palette_query.trim().to_lowercase();
+                let mut shown = 0usize;
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(10.0, 10.0);
+                    for pal in PALETTES {
+                        if !q.is_empty() && !pal.name.to_lowercase().contains(&q) && !pal.blurb.to_lowercase().contains(&q) && !pal.id.contains(&q) { continue; }
+                        shown += 1;
+                        if palette_card(ui, t, pal, self.settings.theme == pal.id).clicked() && self.settings.theme != pal.id {
+                            self.settings.theme = pal.id.into(); retheme = true; save = true;
+                        }
+                    }
+                });
+                if shown == 0 { ui.label(RichText::new(format!("No palette matches \"{}\".", self.palette_query.trim())).color(t.muted)); }
+            });
+            section_card(ui, t, "03", "Behaviour", "Tray, autostart and what Home shows.", |ui| {
                 if ui.checkbox(&mut self.settings.close_to_tray, if HAS_TRAY { "Keep running in the notification area when the window is closed" } else { "Keep running in the background when the window is closed (run total-core again to reopen it)" }).changed() { save = true; }
                 if ui.checkbox(&mut self.settings.start_hidden, if HAS_TRAY { "Start hidden in the notification area" } else { "Start hidden (background bridge only)" }).changed() { save = true; }
                 if ui.checkbox(&mut self.settings.show_checklist, "Always show the setup checklist on Home").changed() { save = true; }
@@ -2230,7 +2339,7 @@ impl App {
                     }
                 }
             });
-            settings_section(ui, t, "Workspace", |ui| {
+            section_card(ui, t, "04", "Workspace", "The folder the AgentScript file tools and the Explorer work in.", |ui| {
                 ui.label(RichText::new(format!("Active root: {}", self.shared.root())).monospace().color(t.muted));
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut self.draft_workspace).hint_text(if cfg!(windows) { "C:\\Users\\you\\TotalWorkspace" } else { "~/TotalWorkspace" }).desired_width(420.0).font(TextStyle::Monospace));
@@ -2254,7 +2363,7 @@ impl App {
                     let _ = self.cmd_tx.send(UiCommand::SetFullAccess(full));
                 }
             });
-            settings_section(ui, t, "Roblox Studio MCP", |ui| {
+            section_card(ui, t, "05", "Roblox Studio MCP", "How this bridge reaches Studio.", |ui| {
                 ui.label(RichText::new(format!("Active launcher: {}", mcp_launcher_display())).monospace().color(t.muted));
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut self.draft_mcp).hint_text(format!("empty = {}", crate::default_mcp_launcher_hint())).desired_width(420.0).font(TextStyle::Monospace));
@@ -2269,7 +2378,7 @@ impl App {
                 });
                 ui.label(RichText::new("A custom launcher is any command that speaks MCP over stdio (for example a different mcp.bat or a wrapper script). TOTAL_MCP_COMMAND in the environment still takes precedence at start.").small().color(t.muted));
             });
-            settings_section(ui, t, "AI chat (side panel)", |ui| {
+            section_card(ui, t, "06", "AI chat (side panel)", "Provider, key and model for the built-in chat.", |ui| {
                 ui.label(RichText::new("Bring your own API key: CodeCraft, OpenAI, OpenRouter, Groq, DeepSeek, Gemini, xAI, Mistral, Together, a local Ollama / LM Studio or any OpenAI-compatible endpoint. The model you pick receives the bridge's Studio, plugin and workspace tools and works in Studio for you.").small().color(t.muted));
                 ui.horizontal(|ui| {
                     if pill(ui, t, if self.settings.chat_panel_open { "Hide chat panel" } else { "Open chat panel" }, true).clicked() { self.toggle_chat(); }
@@ -2283,12 +2392,12 @@ impl App {
                 });
                 ui.label(RichText::new(format!("Keys and the chosen model are stored in plain text in {} — only on this PC. Ctrl+J toggles the panel.", Settings::path().display())).small().color(t.muted));
             });
-            settings_section(ui, t, "Donate", |ui| {
+            section_card(ui, t, "07", "Donate", "Free tool — a Robux game pass says thanks.", |ui| {
                 ui.label(RichText::new("TotalScript is free. If it saves you time, a Robux game-pass donation keeps it going — each button opens the pass on roblox.com.").color(t.muted));
                 ui.add_space(6.0);
                 donation_row(ui, t);
             });
-            settings_section(ui, t, "About", |ui| {
+            section_card(ui, t, "08", "About", "Version, repository and rebuild notes.", |ui| {
             ui.horizontal(|ui| {
                 self.logo_mark(ui, 40.0);
                 ui.vertical(|ui| {
@@ -2304,7 +2413,7 @@ impl App {
                 if pill(ui, t, "Open repository", false).clicked() { open_external(&format!("https://github.com/{REPO}")); }
             });
         });
-        settings_section(ui, t, "Diagnostics", |ui| {
+        section_card(ui, t, "09", "Diagnostics", "Paths, ports and a one-click copy for bug reports.", |ui| {
                 let s = &self.shared;
                 egui::Grid::new("diag-grid").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
                     ui.label(RichText::new("Version").color(t.muted)); ui.label(format!("TotalScript Desktop {} ({} {})", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH)); ui.end_row();
@@ -2384,8 +2493,9 @@ impl eframe::App for App {
         if self.page != Page::Chat { self.chat_panel(ctx); }
         let t = self.theme;
         egui::CentralPanel::default()
-            .frame(egui::Frame::none().fill(t.bg).inner_margin(Margin::symmetric(22.0, 18.0)))
+            .frame(egui::Frame::none().fill(t.bg).inner_margin(Margin::symmetric(24.0, 18.0)))
             .show(ctx, |ui| {
+                paint_backdrop(ui.painter(), ui.max_rect().expand2(Vec2::new(24.0, 18.0)), t);
                 self.page_header(ui);
                 match self.page {
                     Page::Home => self.page_home(ui),
@@ -3255,14 +3365,150 @@ fn donation_row(ui: &mut egui::Ui, t: Theme) {
 }
 
 fn settings_section(ui: &mut egui::Ui, t: Theme, title: &str, add: impl FnOnce(&mut egui::Ui)) {
-    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
+    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::same(16.0));
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.label(RichText::new(title).size(16.0).strong().color(t.text));
         ui.add_space(6.0);
         add(ui);
     });
-    ui.add_space(10.0);
+    ui.add_space(12.0);
+}
+
+/// Numbered section card — "04  Your layout" with a muted subtitle and a
+/// hairline under the heading (the Settings look from the reference).
+fn section_card(ui: &mut egui::Ui, t: Theme, index: &str, title: &str, subtitle: &str, add: impl FnOnce(&mut egui::Ui)) {
+    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(16.0)).inner_margin(Margin::same(18.0));
+    frame.show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 10.0;
+            ui.label(RichText::new(index).size(13.0).strong().monospace().color(t.accent));
+            ui.label(RichText::new(title).size(18.0).strong().color(t.text));
+        });
+        if !subtitle.is_empty() { ui.label(RichText::new(subtitle).color(t.muted)); }
+        ui.add_space(8.0);
+        let (line, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), Sense::hover());
+        ui.painter().rect_filled(line, Rounding::ZERO, t.border);
+        ui.add_space(12.0);
+        add(ui);
+    });
+    ui.add_space(14.0);
+}
+
+/// Density picker card with a tiny painted window preview.
+fn layout_card(ui: &mut egui::Ui, t: Theme, name: &str, blurb: &str, compact: bool, selected: bool) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(232.0, 118.0), Sense::click());
+    if resp.hovered() { ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand); }
+    let p = ui.painter();
+    p.rect_filled(rect, Rounding::same(14.0), if selected { mix(t.panel2, t.accent, 0.06) } else { t.bg2 });
+    p.rect_stroke(rect, Rounding::same(14.0), Stroke::new(if selected { 1.5_f32 } else { 1.0_f32 }, if selected { t.accent } else if resp.hovered() { t.border2 } else { t.border }));
+    // mini window preview
+    let prev = egui::Rect::from_min_size(rect.min + Vec2::new(14.0, 14.0), Vec2::new(rect.width() - 28.0, 58.0));
+    p.rect_filled(prev, Rounding::same(6.0), t.bg);
+    p.rect_stroke(prev, Rounding::same(6.0), Stroke::new(1.0_f32, t.border));
+    let side = egui::Rect::from_min_size(prev.min, Vec2::new(prev.width() * 0.28, prev.height()));
+    p.rect_filled(side, Rounding { nw: 6.0, sw: 6.0, ne: 0.0, se: 0.0 }, t.panel);
+    let rows = if compact { 5 } else { 3 };
+    let gap = (prev.height() - 12.0) / rows as f32;
+    for i in 0..rows {
+        let y = prev.top() + 6.0 + i as f32 * gap;
+        let h = if compact { 4.0 } else { 7.0 };
+        p.rect_filled(egui::Rect::from_min_size(Pos2::new(side.left() + 5.0, y), Vec2::new(side.width() - 10.0, h)), Rounding::same(2.0), if i == 0 { t.accent } else { t.border2 });
+        p.rect_filled(egui::Rect::from_min_size(Pos2::new(side.right() + 8.0, y), Vec2::new(prev.width() * 0.5, h)), Rounding::same(2.0), t.panel2);
+    }
+    p.text(rect.min + Vec2::new(14.0, 84.0), egui::Align2::LEFT_CENTER, name, FontId::new(14.0, FontFamily::Proportional), t.text);
+    p.text(rect.min + Vec2::new(14.0, 101.0), egui::Align2::LEFT_CENTER, blurb, FontId::new(11.0, FontFamily::Proportional), t.muted);
+    check_box(p, rect.right_top() + Vec2::new(-26.0, 84.0), selected, t);
+    resp
+}
+
+/// Palette card: swatch thumbnail, name, blurb and a check box.
+fn palette_card(ui: &mut egui::Ui, t: Theme, pal: &Palette, selected: bool) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(228.0, 70.0), Sense::click());
+    if resp.hovered() { ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand); }
+    let p = ui.painter();
+    p.rect_filled(rect, Rounding::same(12.0), if selected { mix(t.panel2, t.accent, 0.06) } else { t.bg2 });
+    p.rect_stroke(rect, Rounding::same(12.0), Stroke::new(if selected { 1.5_f32 } else { 1.0_f32 }, if selected { t.accent } else if resp.hovered() { t.border2 } else { t.border }));
+    // thumbnail: the palette's own bg / panel / accent
+    let th = egui::Rect::from_min_size(rect.min + Vec2::new(10.0, 10.0), Vec2::new(50.0, 50.0));
+    let pt = Theme::by_id(pal.id);
+    p.rect_filled(th, Rounding::same(9.0), pt.bg);
+    p.rect_stroke(th, Rounding::same(9.0), Stroke::new(1.0_f32, pt.border2));
+    p.rect_filled(egui::Rect::from_min_size(th.min + Vec2::new(7.0, 7.0), Vec2::new(14.0, 36.0)), Rounding::same(3.0), pt.panel2);
+    p.rect_filled(egui::Rect::from_min_size(th.min + Vec2::new(25.0, 7.0), Vec2::new(18.0, 5.0)), Rounding::same(2.0), pt.accent);
+    p.rect_filled(egui::Rect::from_min_size(th.min + Vec2::new(25.0, 16.0), Vec2::new(18.0, 4.0)), Rounding::same(2.0), pt.border2);
+    p.rect_filled(egui::Rect::from_min_size(th.min + Vec2::new(25.0, 24.0), Vec2::new(12.0, 4.0)), Rounding::same(2.0), pt.border2);
+    p.circle_filled(th.min + Vec2::new(29.0, 39.0), 3.0, pt.accent2);
+    p.circle_filled(th.min + Vec2::new(38.0, 39.0), 3.0, pt.ok);
+    let name_col = if selected { t.text } else { mix(t.text, t.muted, 0.2) };
+    p.text(rect.min + Vec2::new(70.0, 24.0), egui::Align2::LEFT_CENTER, pal.name, FontId::new(13.5, FontFamily::Proportional), name_col);
+    let blurb_font = FontId::new(10.5, FontFamily::Proportional);
+    let galley = p.layout(pal.blurb.to_string(), blurb_font, t.muted, 118.0);
+    p.galley(rect.min + Vec2::new(70.0, 34.0), galley, t.muted);
+    check_box(p, rect.right_top() + Vec2::new(-22.0, 24.0), selected, t);
+    resp
+}
+
+/// 16 px check box glyph used by the picker cards.
+fn check_box(p: &egui::Painter, center: Pos2, on: bool, t: Theme) {
+    let r = egui::Rect::from_center_size(center, Vec2::splat(16.0));
+    if on {
+        p.rect_filled(r, Rounding::same(4.0), t.accent);
+        p.line_segment([center + Vec2::new(-4.0, 0.0), center + Vec2::new(-1.0, 3.0)], Stroke::new(2.0_f32, t.accent_ink));
+        p.line_segment([center + Vec2::new(-1.0, 3.0), center + Vec2::new(4.5, -3.5)], Stroke::new(2.0_f32, t.accent_ink));
+    } else {
+        p.rect_stroke(r, Rounding::same(4.0), Stroke::new(1.2_f32, t.border2));
+    }
+}
+
+/// Small uppercase outlined chip with a square status dot — "■ BRIDGE ONLINE".
+fn status_chip(ui: &mut egui::Ui, t: Theme, text: &str, color: Color32) -> egui::Response {
+    let font = FontId::new(10.5, FontFamily::Proportional);
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font.clone(), color);
+    let size = Vec2::new(galley.size().x + 30.0, 24.0);
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, Rounding::same(8.0), alpha(color, if t.light { 18 } else { 26 }));
+    painter.rect_stroke(rect, Rounding::same(8.0), Stroke::new(1.0_f32, alpha(color, 150)));
+    let dot = egui::Rect::from_center_size(rect.left_center() + Vec2::new(12.0, 0.0), Vec2::splat(6.0));
+    painter.rect_filled(dot, Rounding::same(1.5), color);
+    painter.text(rect.left_center() + Vec2::new(21.0, 0.0), egui::Align2::LEFT_CENTER, text, font, color);
+    resp
+}
+
+/// Sidebar / card section label: accent dash + spaced uppercase caption.
+fn section_label(ui: &mut egui::Ui, t: Theme, text: &str) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        let (bar, _) = ui.allocate_exact_size(Vec2::new(10.0, 2.0), Sense::hover());
+        ui.painter().rect_filled(bar, Rounding::same(1.0), t.accent);
+        ui.label(RichText::new(text).size(10.5).strong().color(t.muted));
+    });
+}
+
+/// Faint geometric backdrop behind every page (soft accent glow in the top
+/// right, a few thin diagonal lines and dots). Painted below the content, so
+/// it never competes with it; alpha stays low on light palettes too.
+fn paint_backdrop(painter: &egui::Painter, rect: egui::Rect, t: Theme) {
+    let a = if t.light { 10 } else { 16 };
+    let glow = alpha(t.accent, a);
+    let tr = rect.right_top();
+    painter.circle_filled(tr + Vec2::new(-80.0, 40.0), 190.0, alpha(t.accent, a / 2));
+    painter.circle_filled(tr + Vec2::new(-80.0, 40.0), 110.0, glow);
+    painter.circle_filled(rect.left_bottom() + Vec2::new(120.0, -60.0), 140.0, alpha(t.accent2, a / 2));
+    let line = Stroke::new(1.0_f32, alpha(t.border2, if t.light { 60 } else { 90 }));
+    for i in 0..5 {
+        let x = tr.x - 60.0 - i as f32 * 42.0;
+        painter.line_segment([Pos2::new(x, rect.top()), Pos2::new(x - 180.0, rect.top() + 180.0)], line);
+    }
+    let dots = alpha(t.accent, if t.light { 50 } else { 70 });
+    for i in 0..6 {
+        let p = Pos2::new(tr.x - 40.0 - i as f32 * 61.0, rect.top() + 24.0 + ((i * 37) % 90) as f32);
+        painter.circle_filled(p, 1.6, dots);
+    }
+    painter.circle_stroke(tr + Vec2::new(-150.0, 120.0), 52.0, Stroke::new(1.0_f32, alpha(t.accent, a + 10)));
+    painter.circle_stroke(tr + Vec2::new(-150.0, 120.0), 36.0, Stroke::new(1.0_f32, alpha(t.accent, a + 4)));
 }
 
 /// Simple vector icons for the navigation (no emoji fonts needed).
@@ -3411,7 +3657,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
         page: Some(Page::Settings),
         summary: "Everything that is remembered between starts. Each change saves on its own; nothing is sent anywhere.",
         steps: &[
-            "Appearance: TotalScript Aqua, Gold, Emerald or Graphite theme; Compact density for small screens.",
+            "Your layout: Comfortable or Compact density cards. Appearance: 16 palettes (TotalScript Aqua by default, Gold, Emerald, Graphite, Midnight, Nord, Violet, Rosé, Crimson, Sunset, Ocean, Mocha, Forest, and the light Paper, Snow and Sage) with a search box; the chosen palette applies instantly.",
             "Behaviour: keep running in the notification area when the window is closed, start hidden, always show the checklist, launch at sign-in (hidden).",
             "Workspace: the folder the AI may use outside Studio, and the FULL PC ACCESS switch.",
             "Roblox Studio MCP: the launcher command for the helper.",
