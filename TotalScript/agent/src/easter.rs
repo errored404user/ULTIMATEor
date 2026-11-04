@@ -174,7 +174,7 @@ pub fn feather_shapes(rect: Rect) -> Vec<egui::Shape> {
     let black = Color32::from_rgb(18, 18, 20);
     let white = Color32::from_rgb(250, 250, 250);
     let backdrop = Color32::from_rgb(236, 236, 238);
-    let ink = Stroke::new(1.3, black);
+    let ink = Stroke::new(1.3_f32, black);
     out.push(egui::Shape::rect_filled(rect, 18.0, backdrop));
 
     // shaft: quadratic bezier from the quill (bottom right) sweeping up to the tip
@@ -227,8 +227,8 @@ pub fn feather_shapes(rect: Rect) -> Vec<egui::Shape> {
     while i < n {
         let ahead = (i + 5).min(n);
         if half_r(i as f32 / n as f32) > 2.0 {
-            out.push(egui::Shape::line_segment([shaft[i], left_edge[ahead]], Stroke::new(0.9, Color32::from_rgb(205, 205, 210))));
-            out.push(egui::Shape::line_segment([shaft[i], right_edge[ahead]], Stroke::new(0.9, Color32::from_rgb(140, 140, 146))));
+            out.push(egui::Shape::line_segment([shaft[i], left_edge[ahead]], Stroke::new(0.9_f32, Color32::from_rgb(205, 205, 210))));
+            out.push(egui::Shape::line_segment([shaft[i], right_edge[ahead]], Stroke::new(0.9_f32, Color32::from_rgb(140, 140, 146))));
         }
         i += 2;
     }
@@ -237,21 +237,21 @@ pub fn feather_shapes(rect: Rect) -> Vec<egui::Shape> {
         let ahead = (i + 5).min(n);
         let e = if right { right_edge[ahead] } else { left_edge[ahead] };
         let inner = e + (shaft[i] - e) * 0.45;
-        out.push(egui::Shape::line_segment([e, inner], Stroke::new(2.0, backdrop)));
+        out.push(egui::Shape::line_segment([e, inner], Stroke::new(2.0_f32, backdrop)));
     }
     // outline, shaft, quill (black with a white highlight), downy wisps at the vane base
     out.push(egui::Shape::line(left_edge, ink));
     out.push(egui::Shape::line(right_edge, ink));
-    out.push(egui::Shape::line(shaft.clone(), Stroke::new(2.0, black)));
-    out.push(egui::Shape::line(shaft[..=quill_end].to_vec(), Stroke::new(3.4, black)));
-    out.push(egui::Shape::line(shaft[..=quill_end].to_vec(), Stroke::new(1.2, white)));
+    out.push(egui::Shape::line(shaft.clone(), Stroke::new(2.0_f32, black)));
+    out.push(egui::Shape::line(shaft[..=quill_end].to_vec(), Stroke::new(3.4_f32, black)));
+    out.push(egui::Shape::line(shaft[..=quill_end].to_vec(), Stroke::new(1.2_f32, white)));
     for k in 0..6usize {
         let i = quill_end + 1 + k;
         let tn = tangent(i);
         let nrm = Vec2::new(-tn.y, tn.x);
         let len = 4.0 + k as f32 * 1.5;
-        out.push(egui::Shape::line_segment([shaft[i], shaft[i] + nrm * len - tn * len * 0.8], Stroke::new(1.0, black)));
-        out.push(egui::Shape::line_segment([shaft[i], shaft[i] - nrm * len * 1.3 - tn * len * 0.8], Stroke::new(1.0, black)));
+        out.push(egui::Shape::line_segment([shaft[i], shaft[i] + nrm * len - tn * len * 0.8], Stroke::new(1.0_f32, black)));
+        out.push(egui::Shape::line_segment([shaft[i], shaft[i] - nrm * len * 1.3 - tn * len * 0.8], Stroke::new(1.0_f32, black)));
     }
     out
 }
