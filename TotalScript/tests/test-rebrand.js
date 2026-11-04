@@ -25,7 +25,7 @@ const ALLOW = [
   /support\.join\("ORscript"\)/, /ORscript-era/, /old `?ORscript`?/, /from the ORscript-era/,  // comments / docs about the migration
   /"orscript-animation"/, /\^orscript-/,  // old export formats still import
   /FindFirstChild\(['"]OR_UI(?:Bindings|Behaviours|Events)['"]\)/, /'OR_UIBindings'\}/, /match\('\^OR_'\)/, /sub\(1,3\)=='OR_'/,  // old GUI binding store / behaviour script / events folder / OR_-prefixed effects still recognised
-  /ORscript\*? (keys|settings|folder)/, /ORscript → TotalScript/, /ORscript is now/, /was ORscript/, /ORscript\*/,
+  /ORscript\*? (keys|settings|folder)/, /ORscript → TotalScript/, /ORscript is now/, /was ORscript/, /ORscript\*/,  /He took my ORscript and became popular/,  // 2.9.1 PlazCode easter egg line (agent/src/easter.rs) — the user's exact text, quoting the old name on purpose
 ];
 const BRAND = /ORscript|OrScript|Orscript|ORSCRIPT|orscript|\bor-core\b|\bor_core\b|\bor-agent\b|\bor_agent\b|\bOR_[A-Za-z0-9_]+|\bOR(?:Paint|GuiStudio|Orchestrator|TaskList|Reasoning|AgentCrew|TemplateRegistry|AnimStudio|AnimEngine|ProjectAnalyzer|CommandRegistry|GuiTemplates|GuiGen|Screenshot|UICollisionManager|ProjectWorker|LuauLib|BlueprintLib|Brief)\b|--or-|--orx-|data-or-theme|\borTheme\b|\bor_screenshot\b|\bor_debug\b|\bor_status\b|\b_orInternal\b|\[OR-AGENT\]|System note from OR\b/;
 const leaks = [];
@@ -84,7 +84,7 @@ ok("night skin still exists as a selectable style", css.includes('html[data-rs-t
 // ── 5. release pins ───────────────────────────────────────────────────────────
 const readme = read("README.md");
 ok("README 1.71.0 entry + title", /\*\*1\.71\.0 — TotalScript: the rename, and Aqua as the default skin\.\*\*/.test(readme) && readme.startsWith("# TotalScript — "));
-ok("version pins 2.9.0", manifest.version === "2.9.0" && /^version = "2\.9\.0"/m.test(cargo) && lua.includes('local VERSION = "2.9.0"') && lock.includes('name = "total-agent"\nversion = "2.9.0"'));
+ok("version pins 2.9.1", manifest.version === "2.9.1" && /^version = "2\.9\.1"/m.test(cargo) && lua.includes('local VERSION = "2.9.1"') && lock.includes('name = "total-agent"\nversion = "2.9.1"'));
 
 console.log((failed ? "FAIL  " : "OK    ") + "test-rebrand: " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

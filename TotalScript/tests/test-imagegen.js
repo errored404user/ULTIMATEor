@@ -26,7 +26,7 @@ const ok = (name, cond, detail) => { n++; if (cond) console.log("ok   " + name);
 const I = require(path.join(R, "src/core/imagegen.js"));
 
 // ── A. pure ──
-ok("A1 VERSION 2.9.0, 7 kinds, 8 styles, 5 commands, frozen API", I.VERSION === "2.9.0" && I.KIND_IDS.length === 7 && I.STYLE_IDS.length === 8 && I.COMMANDS.length === 5 && Object.isFrozen(I));
+ok("A1 VERSION 2.9.1, 7 kinds, 8 styles, 5 commands, frozen API", I.VERSION === "2.9.1" && I.KIND_IDS.length === 7 && I.STYLE_IDS.length === 8 && I.COMMANDS.length === 5 && Object.isFrozen(I));
 ok("A2 specs: thumbnail 1920x1080 16:9 not for Studio; icon 512; gui_icon transparent 256 studio edge; texture 512", I.spec("thumbnail").w === 1920 && I.spec("thumbnail").h === 1080 && I.spec("thumbnail").studio === null && I.spec("icon").w === 512 && I.spec("gui_icon").transparent === true && I.spec("gui_icon").studio === 256 && I.spec("texture").studio === 512);
 ok("A3 unknown kind falls back to gui_panel", I.spec("nope").id === "gui_panel");
 const pT = I.buildPrompt({ prompt: "a knight on a cliff", kind: "thumbnail" });
@@ -156,7 +156,7 @@ function dom(html) { const d = new JSDOM(html, { pretendToBeVisual: true, url: "
     const cmds = Object.fromEntries(S.SKILL_COMMANDS.filter((c) => /^image_(generate|pickup|to_gui|thumbnail|list)$/.test(c.name)).map((c) => [c.name, c]));
     ok("F3 catalogue: 4 visible image commands + hidden image_list, each with params and a req prompt on image_generate", Object.keys(cmds).length === 5 && !cmds.image_generate.hidden && !cmds.image_pickup.hidden && !cmds.image_to_gui.hidden && !cmds.image_thumbnail.hidden && cmds.image_list.hidden === true && cmds.image_generate.params.prompt.req === true && cmds.image_to_gui.params.publish && cmds.image_thumbnail.params.kind, Object.keys(cmds));
     ok("F4 descriptions are honest: live preview session-only, Studio cannot set thumbnails, never claim an image exists", /session-only/.test(cmds.image_to_gui.description) && /NO API for an experience thumbnail/.test(cmds.image_thumbnail.description) && /Never claim an image exists/.test(cmds.image_generate.description));
-    ok("F5 IMAGE_COMMANDS / IMAGE_VERSION exposed; SKILL_OPS includes them; the pack is after meshkit so no duplicate names", JSON.stringify(S.IMAGE_COMMANDS) === JSON.stringify(I.COMMANDS) && S.IMAGE_VERSION === "2.9.0" && S.SKILL_OPS.includes("image_to_gui") && S.SKILL_COMMANDS.filter((c) => c.name === "image_to_gui").length === 1);
+    ok("F5 IMAGE_COMMANDS / IMAGE_VERSION exposed; SKILL_OPS includes them; the pack is after meshkit so no duplicate names", JSON.stringify(S.IMAGE_COMMANDS) === JSON.stringify(I.COMMANDS) && S.IMAGE_VERSION === "2.9.1" && S.SKILL_OPS.includes("image_to_gui") && S.SKILL_COMMANDS.filter((c) => c.name === "image_to_gui").length === 1);
     const bl = S.buildLuau("image_to_gui", { name: "X", kind: "gui_panel" });
     ok("F6 buildLuau(image_to_gui) compiles a real program from a 2x2 placeholder (parser check path); the browser-only commands return an err, never Luau", bl && bl.code && /CreateEditableImage/.test(bl.code) && S.buildLuau("image_generate", {}).err && /browser/.test(S.buildLuau("image_pickup", {}).err));
     const main = read("src/core/main.js");

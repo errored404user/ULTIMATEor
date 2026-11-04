@@ -99,6 +99,7 @@ fn init_file_logger(ui: Option<Arc<gui::UiShared>>) {
 }
 
 mod chat;
+mod easter;
 mod gui;
 mod plugin;
 mod workspace;

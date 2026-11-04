@@ -943,6 +943,8 @@ pub struct App {
     settings_note: String,
     /// Appearance → palette search box.
     palette_query: String,
+    /// 2.9.1 easter eggs opened from the palette search box.
+    egg: crate::easter::EggState,
     picker_rx: Option<Receiver<Option<String>>>,
     /// Which text field the running folder picker fills.
     picker_for_reference: bool,
@@ -1048,6 +1050,7 @@ impl App {
             delete_armed: None,
             settings_note: String::new(),
             palette_query: String::new(),
+            egg: crate::easter::EggState::default(),
             picker_rx: None,
             picker_for_reference: false,
             workspace_rx: None,
@@ -2455,6 +2458,7 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut self.palette_query).hint_text("Search palettes…").desired_width(260.0));
                     if !self.palette_query.is_empty() && ui.small_button("Clear").clicked() { self.palette_query.clear(); }
+                    self.egg.observe(&self.palette_query);
                     ui.label(RichText::new(format!("{} palettes · current: {}", PALETTES.len(), Theme::palette(&self.settings.theme).name)).small().color(t.muted));
                 });
                 ui.add_space(6.0);
@@ -2707,6 +2711,7 @@ impl eframe::App for App {
             });
 
         self.chat_setup_window(ctx);
+        { let t = self.theme; self.egg.show(ctx, t.text, t.muted, t.accent); }
 
         // Toast
         if let Some((text, at, ok)) = self.toast.clone() {
