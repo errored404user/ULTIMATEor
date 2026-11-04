@@ -1,4 +1,4 @@
-// TotalScript — screenshot_compare (2.8.0)
+// TotalScript — screenshot_compare (2.9.0)
 //
 // Visual verification used to be "take total_screenshot and judge it". A model
 // looking at one picture cannot tell whether its change did anything: the
@@ -198,7 +198,7 @@
     return { ok: true, before: publicEntry(before), after: publicEntry(after), diff: d, text: describe(d, before, after) };
   }
 
-  const api = { remember, list, latest, clear, resolve: (r, o) => publicEntry(resolve(r, o)), setDecoder, decode, diff, describe, compare, downsample, resample, MAX_KEPT, MAX_WIDTH, SAME_PCT, DEFAULT_THRESHOLD, CELLS, VERSION: "2.8.0" };
+  const api = { remember, list, latest, clear, resolve: (r, o) => publicEntry(resolve(r, o)), setDecoder, decode, diff, describe, compare, downsample, resample, MAX_KEPT, MAX_WIDTH, SAME_PCT, DEFAULT_THRESHOLD, CELLS, VERSION: "2.9.0" };
   if (typeof window !== "undefined") window.TotalScreenshotDiff = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })();

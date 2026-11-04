@@ -12,7 +12,7 @@
 // definition of "what a good import looks like".
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
-  const VERSION = "2.8.0";
+  const VERSION = "2.9.0";
   const MI = (typeof TotalMeshImport !== "undefined" && TotalMeshImport) || (typeof window !== "undefined" && window.TotalMeshImport) || null;
 
   const C = [
