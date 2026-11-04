@@ -186,3 +186,81 @@ except Exception as e:
         ln = int(m.group(1)); lines = code.split("\n")
         print("\n".join(f"{i+1}: {lines[i]}" for i in range(max(0, ln-4), min(len(lines), ln+2))))
     print("FAIL ", msg[:800]); sys.exit(1)
+
+# 3. 2.8.0 pair mode: the deterministic missing-reference check runs against a
+#    tiny stub place (services with a few children) in a fresh runtime.
+pair = grab("local PAIR = {", "local function pairExcerpt")
+PAIR_STUBS = r'''
+TOTALSCRIPT_ENV = {}
+os = { time = function() return 1700000000 end, clock = function() return 0 end }
+local function node(name, children)
+  local n = { Name = name, _kids = children or {} }
+  function n:FindFirstChild(c) return self._kids[c] end
+  function n:GetFullName() return self.Name end
+  return n
+end
+local PLACE = {
+  ReplicatedStorage = node("ReplicatedStorage", { Remotes = node("Remotes"), Shared = node("Shared") }),
+  ServerStorage = node("ServerStorage", { Maps = node("Maps") }),
+  ServerScriptService = node("ServerScriptService", {}),
+  Workspace = node("Workspace", { Door = node("Door"), Baseplate = node("Baseplate") }),
+  Lighting = node("Lighting", {}),
+  StarterGui = node("StarterGui", { HUD = node("HUD") }),
+}
+game = { GetService = function(_, n) return PLACE[n] or error("unknown service " .. tostring(n)) end }
+'''
+PAIR_TEST = r'''
+local SRC = table.concat({
+  "local RS = game:GetService(\"ReplicatedStorage\")",
+  "local SS = game.ServerStorage",
+  "local remotes = RS:WaitForChild(\"Remotes\")",          -- exists
+  "local cfg = RS:WaitForChild(\"Config\")",               -- missing
+  "local maps = SS:FindFirstChild(\"Maps\")",              -- exists
+  "local lobby = SS:FindFirstChild(\"Lobby\")",            -- missing
+  "local door = workspace:WaitForChild(\"Door\")",         -- exists (global alias)
+  "local gate = workspace:WaitForChild(\"Gate\")",         -- missing
+  "local hud = game.StarterGui.HUD",                         -- exists
+  "local shop = game.StarterGui.Shop",                       -- missing (one hop)
+  "local again = RS:WaitForChild(\"Config\")",             -- duplicate → reported once
+  "-- RS:WaitForChild(\"Commented\") must be ignored",
+  "local deep = RS.Remotes.Deep.Thing",                      -- deeper than one hop → not checked
+  "local p = game.Workspace.Door.Parent",                    -- Parent is not a child name
+  "local unknown = Foo:WaitForChild(\"Bar\")",             -- unknown holder → ignored
+}, "\n")
+local out = pairMissingRefs(SRC)
+local got = {}
+for _, f in ipairs(out) do got[#got + 1] = f.line .. ":" .. f.ref end
+local joined = table.concat(got, " ")
+assert(#out == 4, "expected 4 findings, got " .. #out .. " → " .. joined)
+assert(joined == "4:ReplicatedStorage.Config 6:ServerStorage.Lobby 8:Workspace.Gate 10:StarterGui.Shop", joined)
+assert(out[1].message:find("WaitForChild would wait forever") and out[2].message:find("FindFirstChild returns nil") and out[4].message:find("indexing it errors"), "messages carry the consequence")
+assert(TOTALSCRIPT_ENV.missingRefs == pairMissingRefs, "exposed to plugin_execute_luau helpers")
+-- cap: never more than 8 findings for one script
+local many = {}
+for i = 1, 12 do many[#many + 1] = "local x" .. i .. " = game.Lighting.Missing" .. i end
+assert(#pairMissingRefs(table.concat(many, "\n")) == 8, "cap at 8")
+-- noise filter and push gate
+assert(pairNoise("CoreGui.RobloxGui") and pairNoise("Workspace.Camera") and pairNoise("ServerStorage._TotalScriptCache") and pairNoise("Players.Bob.PlayerGui") and not pairNoise("Workspace.Door"), "noise filter")
+PAIR.enabled = true
+pairPush({ kind = "select", count = 0 })
+assert(#PAIR.events == 1 and PAIR.events[1].at == 1700000000, "push stamps os.time")
+PAIR.jobsActive = 1
+pairPush({ kind = "select", count = 0 })
+assert(#PAIR.events == 1, "nothing recorded while a TotalScript job runs")
+PAIR.jobsActive = 0
+for i = 1, 60 do pairPush({ kind = "select", count = i }) end
+assert(#PAIR.events == PAIR_MAX_EVENTS and PAIR.events[#PAIR.events].count == 60, "bounded, newest kept")
+print("PASS  pair mode: missing-reference check (aliases, workspace global, one hop, comments, dedupe, cap 8), noise filter, push gate")
+'''
+L2 = lua54.LuaRuntime()
+# the pair block is plain Lua; the `+=` rewrite must not touch its `%s*=%s*` patterns
+code2 = PAIR_STUBS + pair + PAIR_TEST
+try:
+    L2.execute(code2)
+except Exception as e:
+    msg = str(e)
+    m = re.search(r":(\d+):", msg)
+    if m:
+        ln = int(m.group(1)); lines = code2.split("\n")
+        print("\n".join(f"{i+1}: {lines[i]}" for i in range(max(0, ln-4), min(len(lines), ln+2))))
+    print("FAIL ", msg[:800]); sys.exit(1)

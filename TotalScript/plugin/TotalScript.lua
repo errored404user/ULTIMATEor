@@ -1,5 +1,5 @@
 --!nocheck
--- TotalScript Studio plugin  (TotalScript 2.7.0)
+-- TotalScript Studio plugin  (TotalScript 2.8.0)
 -- SPDX-License-Identifier: GPL-3.0-or-later
 --
 -- A tiny worker that lives INSIDE Roblox Studio and lets TotalScript (the browser
@@ -35,6 +35,7 @@
 --   POST /api/plugin/hello   {client_id, version, place_name, place_id, universe_id, user_id, user_name, studio_version, capabilities, open_cloud_key?}
 --   GET  /api/plugin/poll?client_id=...   -> {ok, job:{id,name,args}|null}   (long poll, ~20 s)
 --   POST /api/plugin/result  {id, ok, result, error?}
+--   POST /api/plugin/event   {client_id, events:[...]}   (2.8.0 pair mode, batched)
 
 local HttpService = game:GetService("HttpService")
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
@@ -50,7 +51,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 if not plugin then return end
 if RunService:IsRunning() then return end -- edit mode only; play-test DataModels do not run the worker
 
-local VERSION = "2.7.0"
+local VERSION = "2.8.0"
 local DEFAULT_BRIDGE = "http://127.0.0.1:3000"
 local CLIENT_ID = "studio-plugin-" .. tostring(math.random(100000, 999999))
 local CAPABILITIES = {
@@ -65,10 +66,13 @@ local CAPABILITIES = {
 	"eclipse_status", "eclipse_open", "eclipse_handoff", "eclipse_import", "eclipse_play",
 	-- 1.45.0 animation publishing
 	"animation_export", "animation_apply",
+	-- 2.8.0 pair mode
+	"pair_watch",
 }
 local TOTALSCRIPT_ENV = {} -- helper table exposed to plugin_execute_luau as `TotalScript` (filled below)
 
 local hello -- defined with the worker loop below
+local unloading = false
 -- Settings carry over from the ORscript-era plugin: read the TotalScript key
 -- first and fall back to the old ORscript key so nothing is lost on rename.
 local function settingWithLegacy(key)
@@ -2212,6 +2216,242 @@ local function request(method, path, body)
 	return data, nil
 end
 
+-- ───────────────────────── 2.8.0 Pair mode ─────────────────────────
+-- The user builds by hand, the plugin watches: selection, script edits (after
+-- a 2 s typing pause), instances added / removed and property changes on the
+-- selected instances become compact events that are POSTed to total-core
+-- (/api/plugin/event) in batches. total-core runs its deterministic checks on
+-- edited scripts and shows findings in the desktop window and in the AI's next
+-- turn. Nothing is recorded while a TotalScript job runs (that is the AI's own
+-- work), and nothing is sent anywhere but 127.0.0.1.
+local PAIR = { enabled = false, events = {}, conns = {}, dirty = {}, docs = {}, jobsActive = 0, lastJobEnd = -10, selConns = {}, selAt = nil, lastSel = "", props = {}, inst = nil, flushing = false }
+local PAIR_MAX_EVENTS, PAIR_SOURCE_CAP, PAIR_EXCERPT_LINES, PAIR_IDLE = 40, 24000, 24, 2
+local PAIR_SERVICES = { ReplicatedStorage = true, ServerStorage = true, ServerScriptService = true, StarterGui = true, StarterPack = true, StarterPlayer = true, Workspace = true, Lighting = true, SoundService = true, ReplicatedFirst = true }
+
+local function pairNoise(full)
+	return full:find("^CoreGui") or full:find("^PluginGuiService") or full:find("^Workspace%.Camera") or full:find("TotalScript") or full:find("^ServerStorage%._Total") or full:find("^ServerStorage%.RobloxScript") or full:find("^Players%.")
+end
+local function pairFull(inst)
+	local okN, full = pcall(function() return inst:GetFullName() end)
+	return okN and full or "?"
+end
+local function pairPush(ev)
+	if not PAIR.enabled then return end
+	if PAIR.jobsActive > 0 or os.clock() - PAIR.lastJobEnd < 1.5 then return end
+	ev.at = os.time()
+	PAIR.events[#PAIR.events + 1] = ev
+	while #PAIR.events > PAIR_MAX_EVENTS do table.remove(PAIR.events, 1) end
+end
+
+-- Deterministic name check: `Svc:WaitForChild("X")`, `game.Svc.X`, `Svc.X` and
+-- the same through `local RS = game:GetService("Svc")` aliases, where Svc is a
+-- top-level service and X is not a direct child of it in this place. Only one
+-- hop deep on purpose (deeper paths are usually runtime-created).
+local function pairMissingRefs(source)
+	local out, seen, alias = {}, {}, {}
+	for svc in pairs(PAIR_SERVICES) do alias[svc] = svc end
+	alias.workspace = "Workspace"
+	for name, svc in source:gmatch("local%s+([%a_][%w_]*)%s*=%s*game%s*:%s*GetService%s*%(%s*[\"']([%a]+)[\"']%s*%)") do if PAIR_SERVICES[svc] then alias[name] = svc end end
+	for name, svc in source:gmatch("local%s+([%a_][%w_]*)%s*=%s*game%.([%a]+)%s*\n") do if PAIR_SERVICES[svc] then alias[name] = svc end end
+	local function check(lineNo, who, child, how)
+		local svc = alias[who]
+		if not svc or #out >= 8 then return end
+		local key = svc .. "." .. child
+		if seen[key] then return end
+		seen[key] = true
+		local okS, s = pcall(function() return game:GetService(svc) end)
+		if okS and s and not s:FindFirstChild(child) then
+			out[#out + 1] = { line = lineNo, ref = key, message = key .. " does not exist in this place" .. how }
+		end
+	end
+	local lineNo = 0
+	for line in (source .. "\n"):gmatch("(.-)\n") do
+		lineNo = lineNo + 1
+		local code = line:gsub("%-%-.*$", "")
+		for who, child in code:gmatch("([%a_][%w_]*)%s*:%s*WaitForChild%s*%(%s*[\"']([%w_]+)[\"']") do check(lineNo, who, child, " (WaitForChild would wait forever)") end
+		for who, child in code:gmatch("([%a_][%w_]*)%s*:%s*FindFirstChild%s*%(%s*[\"']([%w_]+)[\"']%s*%)") do check(lineNo, who, child, " (FindFirstChild returns nil)") end
+		for svc, child in code:gmatch("game%.([%a]+)%.([%a_][%w_]*)") do if PAIR_SERVICES[svc] and child ~= "Parent" then check(lineNo, svc, child, " (indexing it errors)") end end
+	end
+	return out
+end
+TOTALSCRIPT_ENV.missingRefs = pairMissingRefs
+
+local function pairExcerpt(text, line)
+	local lines, n = {}, 0
+	for l in (text .. "\n"):gmatch("(.-)\n") do n = n + 1 lines[n] = l end
+	local half = math.floor(PAIR_EXCERPT_LINES / 2)
+	local from = math.max(1, (line or 1) - half)
+	local to = math.min(n, from + PAIR_EXCERPT_LINES - 1)
+	local out = {}
+	for i = from, to do out[#out + 1] = string.format("%4d  %s", i, lines[i]) end
+	return table.concat(out, "\n"), from, to
+end
+
+local function pairFlushScript(doc, force)
+	local d = PAIR.dirty[doc]
+	if not d then return end
+	if not force and os.clock() - d.at < PAIR_IDLE then return end
+	PAIR.dirty[doc] = nil
+	local okS, scr = pcall(function() return doc:GetScript() end)
+	if not okS or not scr then return end
+	local full = pairFull(scr)
+	if pairNoise(full) then return end
+	local okT, text = pcall(function() return doc:GetText() end)
+	if not okT or type(text) ~= "string" then return end
+	local ev = { kind = "script", path = full, class = scr.ClassName, lines = select(2, text:gsub("\n", "")) + 1, edits = d.count }
+	ev.excerpt, ev.from_line, ev.to_line = pairExcerpt(text, d.line)
+	ev.source = #text <= PAIR_SOURCE_CAP and text or text:sub(1, PAIR_SOURCE_CAP)
+	ev.truncated = #text > PAIR_SOURCE_CAP
+	local okM, missing = pcall(pairMissingRefs, text)
+	ev.missing = okM and missing or {}
+	pairPush(ev)
+end
+
+local function pairSelection()
+	local sel = Selection:Get()
+	local names, sig = {}, {}
+	for i, inst in ipairs(sel) do
+		if i > 6 then break end
+		names[#names + 1] = pairFull(inst) .. " (" .. inst.ClassName .. ")"
+	end
+	for _, inst in ipairs(sel) do sig[#sig + 1] = pairFull(inst) end
+	table.sort(sig)
+	return sel, names, table.concat(sig, "|")
+end
+
+local function pairWatchProps(sel)
+	for _, c in ipairs(PAIR.selConns) do pcall(function() c:Disconnect() end) end
+	PAIR.selConns = {}
+	for i, inst in ipairs(sel) do
+		if i > 8 then break end
+		local full = pairFull(inst)
+		if not pairNoise(full) then
+			local okC, c = pcall(function()
+				return inst.Changed:Connect(function(prop)
+					if type(prop) ~= "string" or prop == "Parent" then return end
+					local key = full .. "\n" .. prop
+					local p = PAIR.props[key]
+					local okV, v = pcall(function() return tostring(inst[prop]) end)
+					v = okV and v:sub(1, 60) or "?"
+					if p then p.count = p.count + 1 p.value = v p.at = os.clock()
+					else PAIR.props[key] = { path = full, class = inst.ClassName, property = prop, value = v, count = 1, at = os.clock() } end
+				end)
+			end)
+			if okC and c then PAIR.selConns[#PAIR.selConns + 1] = c end
+		end
+	end
+end
+
+local function pairInstance(kind, inst)
+	local full = pairFull(inst)
+	if pairNoise(full) then return end
+	local okC, cls = pcall(function() return inst.ClassName end)
+	local p = PAIR.inst or { added = 0, removed = 0, samples = {}, at = 0 }
+	PAIR.inst = p
+	p[kind] = p[kind] + 1
+	p.at = os.clock()
+	if #p.samples < 6 then p.samples[#p.samples + 1] = (kind == "added" and "+ " or "- ") .. full .. " (" .. (okC and cls or "?") .. ")" end
+end
+
+local function pairTick()
+	-- scripts idle long enough
+	for doc in pairs(PAIR.dirty) do pairFlushScript(doc, false) end
+	-- selection, debounced
+	if PAIR.selAt and os.clock() - PAIR.selAt > 0.6 then
+		PAIR.selAt = nil
+		local okS, sel, names, sig = pcall(pairSelection)
+		if okS and sig ~= PAIR.lastSel then
+			PAIR.lastSel = sig
+			pairPush({ kind = "select", count = #sel, items = names })
+			pairWatchProps(sel)
+		end
+	end
+	-- property edits, merged per (instance, property) after 1 s of quiet
+	for key, p in pairs(PAIR.props) do
+		if os.clock() - p.at > 1 then
+			PAIR.props[key] = nil
+			pairPush({ kind = "prop", path = p.path, class = p.class, property = p.property, value = p.value, count = p.count })
+		end
+	end
+	-- instances added / removed, merged after 1 s of quiet
+	if PAIR.inst and os.clock() - PAIR.inst.at > 1 then
+		local p = PAIR.inst
+		PAIR.inst = nil
+		pairPush({ kind = "instances", added = p.added, removed = p.removed, samples = p.samples })
+	end
+end
+
+local function pairFlushEvents()
+	if PAIR.flushing or #PAIR.events == 0 then return end
+	PAIR.flushing = true
+	local batch = PAIR.events
+	PAIR.events = {}
+	local data = request("POST", "/api/plugin/event", { client_id = CLIENT_ID, events = batch })
+	if not data then
+		-- keep the newest events for the next try (bounded)
+		for _, ev in ipairs(PAIR.events) do batch[#batch + 1] = ev end
+		while #batch > PAIR_MAX_EVENTS do table.remove(batch, 1) end
+		PAIR.events = batch
+	end
+	PAIR.flushing = false
+end
+
+local function pairStop()
+	if not PAIR.enabled then return end
+	PAIR.enabled = false
+	for _, c in ipairs(PAIR.conns) do pcall(function() c:Disconnect() end) end
+	for _, c in ipairs(PAIR.selConns) do pcall(function() c:Disconnect() end) end
+	PAIR.conns, PAIR.selConns, PAIR.dirty, PAIR.props, PAIR.inst, PAIR.events = {}, {}, {}, {}, nil, {}
+	log("pair mode off")
+end
+
+local function pairStart()
+	if PAIR.enabled then return end
+	PAIR.enabled = true
+	PAIR.lastSel = ""
+	local function on(signal, fn) local okC, c = pcall(function() return signal:Connect(fn) end) if okC and c then PAIR.conns[#PAIR.conns + 1] = c end end
+	on(Selection.SelectionChanged, function() PAIR.selAt = os.clock() end)
+	on(ScriptEditorService.TextDocumentDidChange, function(doc, changes)
+		if PAIR.jobsActive > 0 then return end
+		local okB, bar = pcall(function() return doc:IsCommandBar() end)
+		if okB and bar then return end
+		local d = PAIR.dirty[doc] or { count = 0 }
+		d.count = d.count + 1
+		d.at = os.clock()
+		pcall(function()
+			local ch = type(changes) == "table" and changes[1]
+			if ch and ch.range and ch.range.start then d.line = ch.range.start.line end
+		end)
+		PAIR.dirty[doc] = d
+	end)
+	on(ScriptEditorService.TextDocumentDidClose, function(doc) pcall(pairFlushScript, doc, true) end)
+	on(game.DescendantAdded, function(inst) if PAIR.jobsActive == 0 then pairInstance("added", inst) end end)
+	on(game.DescendantRemoving, function(inst) if PAIR.jobsActive == 0 then pairInstance("removed", inst) end end)
+	PAIR.selAt = os.clock()
+	task.spawn(function()
+		local sinceFlush = 0
+		while PAIR.enabled and not unloading do
+			pcall(pairTick)
+			sinceFlush = sinceFlush + 1
+			if sinceFlush >= 3 then sinceFlush = 0 pcall(pairFlushEvents) end
+			task.wait(0.5)
+		end
+	end)
+	log("pair mode on - watching selection, script edits, instances and properties")
+end
+
+local function pairStatus()
+	local docs = 0
+	for _ in pairs(PAIR.dirty) do docs = docs + 1 end
+	return { enabled = PAIR.enabled, pending_events = #PAIR.events, dirty_scripts = docs, watching_props = #PAIR.selConns, version = VERSION }
+end
+
+function H.pair_watch(a)
+	a = a or {}
+	if a.enabled == true then pairStart() elseif a.enabled == false then pairStop() end
+	return pairStatus()
+end
+
 hello = function()
 	local info = placeInfo()
 	info.client_id = CLIENT_ID
@@ -2234,7 +2474,10 @@ local function runJob(job)
 	if not handler then
 		result = { id = job.id, ok = false, error = "unknown plugin command '" .. tostring(job.name) .. "' (plugin " .. VERSION .. ")" }
 	else
+		PAIR.jobsActive = PAIR.jobsActive + 1
 		local okR, res = pcall(handler, job.args or {})
+		PAIR.jobsActive = math.max(0, PAIR.jobsActive - 1)
+		PAIR.lastJobEnd = os.clock()
 		if okR then
 			if typeof(res) == "table" and res.__text ~= nil then
 				result = { id = job.id, ok = true, result = res.__text, text = true }
@@ -2259,8 +2502,7 @@ local function runJob(job)
 	return delivered
 end
 
-local unloading = false
-plugin.Unloading:Connect(function() unloading = true end)
+plugin.Unloading:Connect(function() unloading = true pcall(pairStop) end)
 
 task.spawn(function()
 	pcall(function() HttpService.HttpEnabled = true end)

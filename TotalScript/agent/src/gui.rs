@@ -225,6 +225,13 @@ pub struct UiShared {
     pub activity_seq: AtomicUsize,
     pub boot: Instant,
     pub session: Mutex<SessionStats>,
+    /// 2.8.0 pair mode mirror: switch, kept event count, findings per script.
+    pub pair_enabled: AtomicBool,
+    pub pair_events: AtomicUsize,
+    pub pair_findings: Mutex<Vec<(String, usize)>>,
+    pub pair_seq: AtomicUsize,
+    /// Seconds since boot when the Studio plugin last talked to the bridge (0 = never).
+    pub plugin_seen: AtomicUsize,
 }
 
 impl UiShared {
@@ -247,7 +254,31 @@ impl UiShared {
             activity_seq: AtomicUsize::new(0),
             boot: Instant::now(),
             session: Mutex::new(SessionStats { started: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), ..SessionStats::default() }),
+            pair_enabled: AtomicBool::new(false),
+            pair_events: AtomicUsize::new(0),
+            pair_findings: Mutex::new(Vec::new()),
+            pair_seq: AtomicUsize::new(0),
+            plugin_seen: AtomicUsize::new(0),
         }
+    }
+
+    /// Called by every plugin HTTP handler; the plugin polls every ~20 s.
+    pub fn plugin_touch(&self) {
+        self.plugin_seen.store(self.boot.elapsed().as_secs() as usize + 1, Ordering::Relaxed);
+    }
+
+    /// The TotalScript Studio plugin talked to the bridge within the last 45 s.
+    pub fn plugin_connected(&self) -> bool {
+        let seen = self.plugin_seen.load(Ordering::Relaxed);
+        seen > 0 && self.boot.elapsed().as_secs() as usize + 1 - seen < 45
+    }
+
+    /// Mirror of `plugin::Hub::pair_summary` for the window (no async there).
+    pub fn set_pair(&self, enabled: bool, events: usize, findings: Vec<(String, usize)>) {
+        self.pair_enabled.store(enabled, Ordering::Relaxed);
+        self.pair_events.store(events, Ordering::Relaxed);
+        *self.pair_findings.lock().unwrap_or_else(|e| e.into_inner()) = findings;
+        self.pair_seq.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn attach_workspace(&self, root: String, full_flag: Arc<AtomicBool>) {
@@ -396,6 +427,8 @@ pub enum UiCommand {
     /// Point reference_search at a notes folder (empty = off). Reply = shown path or None.
     SetReferenceDir { path: String, reply: Sender<Result<Option<String>, String>> },
     SetMcpCommand(String),
+    /// 2.8.0 pair mode on / off (persisted; forwarded to the Studio plugin).
+    SetPair(bool),
     RunTool { engine: String, name: String, args: serde_json::Value, reply: Sender<ToolReply> },
     RunCommand { command: String, reply: Sender<ToolReply> },
     /// One AI chat turn (side panel). Events stream back until `Finished`.
@@ -461,6 +494,9 @@ pub struct Settings {
     pub sidebar_rail: bool,
     /// Second line under every sidebar title.
     pub sidebar_blurbs: bool,
+    /// 2.8.0 pair mode: the Studio plugin reports what you do by hand and the
+    /// chat model sees it (restored on the next start).
+    pub pair_mode: bool,
 }
 
 impl Default for Settings {
@@ -495,6 +531,7 @@ impl Default for Settings {
             motion: true,
             backdrop: true,
             glow: true,
+            pair_mode: false,
             sidebar_rail: false,
             sidebar_blurbs: true,
         }
@@ -1179,6 +1216,8 @@ impl App {
             for a in items.into_iter().rev() {
                 match a.kind.as_str() {
                     "bridge" | "studio" => self.toast(a.text.clone(), true),
+                    // pair mode: only findings and the on/off lines deserve a toast; "clean" edits stay in the feed
+                    "pair" if !a.text.contains(" clean") => self.toast(a.text.clone(), !a.text.contains("finding(s)")),
                     "error" => self.toast(a.text.clone(), false),
                     _ => {}
                 }
@@ -1850,7 +1889,7 @@ impl App {
                         for a in list.iter().take(80) {
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new(&a.at).monospace().small().color(t.muted));
-                                let color = match a.kind.as_str() { "tool" => t.accent, "studio" => t.ok, "bridge" => t.info, "error" => t.bad, _ => t.muted };
+                                let color = match a.kind.as_str() { "tool" => t.accent, "studio" => t.ok, "bridge" => t.info, "pair" => t.warn, "error" => t.bad, _ => t.muted };
                                 tag(ui, &a.kind, color);
                                 ui.add(egui::Label::new(RichText::new(&a.text).small().color(t.text)).wrap());
                             });
@@ -3101,9 +3140,17 @@ impl App {
                     if !self.chat_setup_open { let _ = self.settings.save(); }
                 }
                 if pill(ui, t, "New", false).on_hover_text("Start a fresh conversation").clicked() { self.chat_new(); }
+                let pair_on = self.shared.pair_enabled.load(Ordering::Relaxed);
+                if pill(ui, t, "Pair", pair_on).on_hover_text(if pair_on { "Pair mode is on: the Studio plugin reports what you do by hand (selection, script edits, new instances, property changes) and the model sees it each turn. Click to stop." } else { "Pair mode: build by hand in Studio while the model watches, checks your edited scripts and comments only on concrete findings. Needs the TotalScript Studio plugin." }).clicked() {
+                    self.settings.pair_mode = !pair_on;
+                    let _ = self.settings.save();
+                    self.shared.set_pair(!pair_on, 0, Vec::new());
+                    let _ = self.cmd_tx.send(UiCommand::SetPair(!pair_on));
+                }
                 if ui.add_enabled(!self.chat_items.is_empty(), egui::Button::new(RichText::new("Export").small())).on_hover_text("Save the transcript as Markdown in the workspace").clicked() { self.chat_export(); }
             });
         });
+        self.chat_pair_line(ui);
         ui.horizontal(|ui| {
             let (dot, text) = if busy { (t.warn, if self.chat_status.is_empty() { "working…".to_string() } else { self.chat_status.clone() }) }
                 else if !self.chat_ready() { (t.muted, "not configured — open Setup".to_string()) }
@@ -3115,6 +3162,33 @@ impl App {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.label(RichText::new(format!("{} in · {} out", self.chat_tokens.0, self.chat_tokens.1)).small().color(t.muted)).on_hover_text("Tokens used in this conversation (as reported by the provider)");
                 });
+            }
+        });
+    }
+
+    /// 2.8.0: one line under the chat header while pair mode is on — what the
+    /// plugin reported so far and a button that hands the findings to the model.
+    fn chat_pair_line(&mut self, ui: &mut egui::Ui) {
+        if !self.shared.pair_enabled.load(Ordering::Relaxed) { return; }
+        let t = self.theme;
+        let events = self.shared.pair_events.load(Ordering::Relaxed);
+        let findings: Vec<(String, usize)> = self.shared.pair_findings.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let total: usize = findings.iter().map(|(_, n)| n).sum();
+        let studio = self.shared.plugin_connected();
+        ui.horizontal(|ui| {
+            status_dot(ui, if !studio { t.muted } else if total > 0 { t.warn } else { t.ok });
+            let text = if !studio { "Pair · waiting for the Studio plugin".to_string() }
+                else if events == 0 { "Pair · watching Studio · nothing yet".to_string() }
+                else { format!("Pair · watching · {events} event{} · {total} finding{}", if events == 1 { "" } else { "s" }, if total == 1 { "" } else { "s" }) };
+            let hover = if findings.is_empty() { "Script edits are checked for deprecated APIs and references to children that do not exist.".to_string() }
+                else { findings.iter().map(|(p, n)| format!("{p}: {n}")).collect::<Vec<_>>().join("\n") };
+            ui.label(RichText::new(text).small().color(t.muted)).on_hover_text(hover);
+            if total > 0 && self.chat_turn.is_none() {
+                if ui.add(egui::Button::new(RichText::new("Ask AI to review").small())).on_hover_text("Sends the open findings to the model and asks for fixes with a short explanation each").clicked() {
+                    let paths: Vec<String> = findings.iter().filter(|(_, n)| *n > 0).map(|(p, _)| p.clone()).collect();
+                    self.chat_input = format!("Pair mode found issues in {}. Review the findings and fix them (explain each change briefly, keep the rest of my code as it is).", paths.join(", "));
+                    self.chat_send();
+                }
             }
         });
     }
@@ -3817,6 +3891,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
             "Ctrl+J toggles the chat as a side panel so it stays open while you use Explorer, MCP Servers or Terminal.",
             "Roblox tools need the Studio MCP helper and a linked place; workspace tools work as soon as the bridge is up.",
             "Tool cards expand to show the full JSON result and any screenshot the tool returned. 'copy' on a message copies its text.",
+            "Pair (header pill): pair mode. You build by hand in Studio; the TotalScript plugin reports your selection, script edits (after a two-second typing pause), new or removed instances and property changes to the app. Each edited script is checked for deprecated APIs and WaitForChild / FindFirstChild names that do not exist, and the model sees the new events plus open findings at the start of every turn — it is told to comment only on concrete findings and never to redo your work. 'Ask AI to review' sends the findings as a message. Changes made by TotalScript itself are filtered out. Off by default; the switch is remembered.",
         ],
     },
     HelpTopic {

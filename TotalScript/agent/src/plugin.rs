@@ -14,6 +14,8 @@
 //!   POST /api/plugin/result   job outcome
 //!   GET  /api/plugin/status   connection + capability summary
 //!   POST /api/plugin/config   {open_cloud_key}
+//!   POST /api/plugin/event    2.8.0 pair mode: batched Studio events (selection,
+//!                             script edits, instances, properties) from the plugin
 use std::{
     collections::{HashMap, VecDeque},
     io::Cursor,
@@ -110,6 +112,243 @@ pub struct Hub {
     key: Mutex<Option<String>>,
     seq: AtomicU64,
     installed: Mutex<Option<String>>,
+    /// 2.8.0 pair mode feed (see `PairState`).
+    pub pair: Mutex<PairState>,
+    /// Number of TotalScript-driven Studio changes in flight right now and
+    /// when the oldest started (unix secs) — events in that span are not the user's.
+    ai_active: AtomicU64,
+    ai_open_since: AtomicU64,
+}
+
+// ───────────────────────── 2.8.0 pair mode ─────────────────────────
+
+/// One thing the user did in Studio, as reported by the plugin. `source` is
+/// only present on `script` events and is dropped right after the checks ran.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PairEvent {
+    pub kind: String,
+    pub at: u64,
+    pub path: String,
+    pub class: String,
+    pub lines: u64,
+    pub edits: u64,
+    pub from_line: u64,
+    pub to_line: u64,
+    pub excerpt: String,
+    #[serde(skip_serializing)]
+    pub source: String,
+    pub truncated: bool,
+    pub missing: Vec<Value>,
+    pub count: u64,
+    pub items: Vec<String>,
+    pub property: String,
+    pub value: String,
+    pub added: u64,
+    pub removed: u64,
+    pub samples: Vec<String>,
+}
+
+/// Deterministic findings for one script the user edited (latest edit wins).
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct PairFinding {
+    pub path: String,
+    pub class: String,
+    pub at: u64,
+    pub lines: Vec<String>,
+}
+
+#[derive(Default)]
+pub struct PairState {
+    /// The desktop switch. The plugin is told on every (re)connect.
+    pub enabled: bool,
+    pub events: VecDeque<(u64, PairEvent)>,
+    pub seq: u64,
+    /// Events up to this seq were already shown to the model.
+    pub seen_seq: u64,
+    pub findings: Vec<PairFinding>,
+    /// Unix-second windows in which TotalScript itself was changing the place
+    /// (MCP execute_luau or plugin jobs); events inside them are the AI's own
+    /// work and are dropped.
+    pub ai_windows: VecDeque<(u64, u64)>,
+    pub dropped_ai: u64,
+    pub received: u64,
+}
+
+const PAIR_EVENTS_CAP: usize = 60;
+const PAIR_FINDINGS_CAP: usize = 12;
+const PAIR_AI_WINDOWS_CAP: usize = 40;
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// Guard returned by `Hub::ai_begin`: while alive (and 2 s after it drops) the
+/// place is being changed by TotalScript, not the user.
+pub struct AiActivity { hub: std::sync::Arc<Hub>, started: u64 }
+impl Drop for AiActivity {
+    fn drop(&mut self) {
+        let hub = self.hub.clone();
+        let started = self.started;
+        if hub.ai_active.fetch_sub(1, Ordering::SeqCst) <= 1 { hub.ai_open_since.store(0, Ordering::SeqCst); }
+        if let Ok(rt) = tokio::runtime::Handle::try_current() {
+            rt.spawn(async move {
+                let mut p = hub.pair.lock().await;
+                if p.ai_windows.len() >= PAIR_AI_WINDOWS_CAP { p.ai_windows.pop_front(); }
+                p.ai_windows.push_back((started.saturating_sub(1), unix_now() + 2));
+            });
+        }
+    }
+}
+
+impl Hub {
+    /// Mark the start of a TotalScript-driven change (dropped guard = end).
+    pub fn ai_begin(self: &std::sync::Arc<Self>) -> AiActivity {
+        let now = unix_now();
+        if self.ai_active.fetch_add(1, Ordering::SeqCst) == 0 { self.ai_open_since.store(now, Ordering::SeqCst); }
+        AiActivity { hub: self.clone(), started: now }
+    }
+
+    fn ai_busy_at(&self, at: u64) -> bool {
+        if self.ai_active.load(Ordering::SeqCst) == 0 { return false; }
+        let since = self.ai_open_since.load(Ordering::SeqCst);
+        since > 0 && at + 1 >= since
+    }
+
+    pub async fn pair_enabled(&self) -> bool { self.pair.lock().await.enabled }
+
+    pub async fn set_pair_enabled(&self, on: bool) {
+        let mut p = self.pair.lock().await;
+        p.enabled = on;
+        if !on { p.events.clear(); p.findings.clear(); p.seen_seq = p.seq; }
+    }
+
+    /// Fold a batch from the plugin into the feed. Returns the summaries the
+    /// UI should show (one per edited script, with its finding count).
+    pub async fn pair_ingest(&self, events: Vec<PairEvent>) -> Vec<(String, usize)> {
+        let mut out = Vec::new();
+        let mut p = self.pair.lock().await;
+        if !p.enabled { return out; }
+        for mut ev in events {
+            p.received += 1;
+            // currently open window: the AI is mid-tool and the guard has not dropped yet
+            let in_ai = self.ai_busy_at(ev.at) || p.ai_windows.iter().any(|(a, b)| ev.at >= *a && ev.at <= *b);
+            if in_ai { p.dropped_ai += 1; continue; }
+            if ev.kind == "script" && !ev.path.is_empty() {
+                let mut lines: Vec<String> = crate::workspace::luau_check(&ev.source)
+                    .into_iter()
+                    .map(|(l, c, m)| format!("L{l}:{c} {m}"))
+                    .collect();
+                for m in &ev.missing {
+                    let line = m.get("line").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let msg = m.get("message").and_then(|v| v.as_str()).unwrap_or("");
+                    if !msg.is_empty() { lines.push(format!("L{line} {msg}")); }
+                }
+                lines.truncate(12);
+                p.findings.retain(|f| f.path != ev.path);
+                if !lines.is_empty() {
+                    if p.findings.len() >= PAIR_FINDINGS_CAP { p.findings.remove(0); }
+                    p.findings.push(PairFinding { path: ev.path.clone(), class: ev.class.clone(), at: ev.at, lines: lines.clone() });
+                }
+                out.push((format!("{} ({})", ev.path, ev.class), lines.len()));
+                ev.source.clear();
+                ev.missing.clear();
+            }
+            p.seq += 1;
+            let seq = p.seq;
+            if p.events.len() >= PAIR_EVENTS_CAP { p.events.pop_front(); }
+            p.events.push_back((seq, ev));
+        }
+        out
+    }
+
+    /// Compact text for the model: what happened since the last turn + open
+    /// findings. Marks the events as seen.
+    pub async fn pair_prompt_block(&self) -> String {
+        let mut p = self.pair.lock().await;
+        if !p.enabled { return String::new(); }
+        let fresh: Vec<String> = p.events.iter().filter(|(seq, _)| *seq > p.seen_seq).map(|(_, e)| pair_event_line(e, true)).collect();
+        p.seen_seq = p.seq;
+        let mut s = String::from("PAIR MODE (on): the user is building by hand in Studio and you are watching. Rules: never redo or undo what the user just did; comment only on concrete findings; if you must edit an instance or script the user touched below, say so first and keep their work. Ask before large changes.\n");
+        if fresh.is_empty() {
+            s.push_str("Since your last turn: nothing new from Studio.\n");
+        } else {
+            s.push_str(&format!("Since your last turn ({} events, newest last):\n", fresh.len()));
+            let skip = fresh.len().saturating_sub(20);
+            if skip > 0 { s.push_str(&format!("  … {skip} older events omitted\n")); }
+            for l in fresh.iter().skip(skip) { s.push_str("  "); s.push_str(l); s.push('\n'); }
+        }
+        if p.findings.is_empty() {
+            s.push_str("Open findings: none.\n");
+        } else {
+            s.push_str("Open findings (deterministic checks on the user's edited scripts — mention them, offer the fix, do not silently rewrite):\n");
+            for f in &p.findings {
+                s.push_str(&format!("  {} ({}):\n", f.path, f.class));
+                for l in &f.lines { s.push_str("    - "); s.push_str(l); s.push('\n'); }
+            }
+        }
+        s
+    }
+
+    /// Full feed for the `pair_feed` tool / the UI.
+    pub async fn pair_feed_text(&self) -> String {
+        let p = self.pair.lock().await;
+        if !p.enabled { return "Pair mode is off. Turn it on in TotalScript Desktop → AI Chat → Pair (or call pair_watch {enabled:true}) and the plugin starts reporting what the user does in Studio.".into(); }
+        let mut s = format!("Pair mode on · {} events kept ({} received, {} were TotalScript's own work and dropped)\n", p.events.len(), p.received, p.dropped_ai);
+        if p.events.is_empty() { s.push_str("No Studio activity recorded yet.\n"); }
+        for (_, e) in p.events.iter().rev().take(40).collect::<Vec<_>>().into_iter().rev() { s.push_str(&pair_event_line(e, false)); s.push('\n'); }
+        if !p.findings.is_empty() {
+            s.push_str("\nOpen findings:\n");
+            for f in &p.findings {
+                s.push_str(&format!("  {} ({})\n", f.path, f.class));
+                for l in &f.lines { s.push_str("    - "); s.push_str(l); s.push('\n'); }
+            }
+        }
+        s
+    }
+
+    pub async fn pair_summary(&self) -> (bool, usize, Vec<(String, usize)>) {
+        let p = self.pair.lock().await;
+        (p.enabled, p.events.len(), p.findings.iter().map(|f| (f.path.clone(), f.lines.len())).collect())
+    }
+}
+
+fn pair_event_line(e: &PairEvent, with_excerpt: bool) -> String {
+    let at = chrono::DateTime::<chrono::Local>::from(std::time::UNIX_EPOCH + Duration::from_secs(e.at)).format("%H:%M:%S");
+    match e.kind.as_str() {
+        "script" => {
+            let mut s = format!("{at} edited {} ({}, {} lines, {} edit(s){})", e.path, e.class, e.lines, e.edits, if e.truncated { ", long script truncated for checks" } else { "" });
+            if with_excerpt && !e.excerpt.is_empty() {
+                s.push_str(&format!(" — lines {}–{}:\n", e.from_line, e.to_line));
+                for l in e.excerpt.lines().take(24) { s.push_str("      "); s.push_str(l); s.push('\n'); }
+                let _ = s.pop();
+            }
+            s
+        }
+        "select" => if e.count == 0 { format!("{at} cleared the selection") } else { format!("{at} selected {}: {}", e.count, e.items.join(", ")) },
+        "prop" => format!("{at} set {}.{} = {}{}", e.path, e.property, e.value, if e.count > 1 { format!(" ({} changes)", e.count) } else { String::new() }),
+        "instances" => format!("{at} instances: +{} / -{} {}", e.added, e.removed, e.samples.join("; ")),
+        other => format!("{at} {other}"),
+    }
+}
+
+pub async fn event_handler(State(state): State<AppState>, Json(req): Json<Value>) -> impl IntoResponse {
+    state.plugin.touch().await;
+    state.ui.plugin_touch();
+    // one malformed event must not drop the whole batch
+    let events: Vec<PairEvent> = req.get("events").and_then(|v| v.as_array()).map(|arr| arr.iter().filter_map(|e| serde_json::from_value(e.clone()).ok()).collect()).unwrap_or_default();
+    let n = events.len();
+    let scripts = state.plugin.pair_ingest(events).await;
+    for (label, findings) in &scripts {
+        if *findings > 0 {
+            state.ui.track("pair", format!("{label} edited — {findings} finding(s), see AI Chat → Pair"));
+        } else {
+            state.ui.track("pair", format!("{label} edited — clean"));
+        }
+    }
+    let (enabled, kept, findings) = state.plugin.pair_summary().await;
+    state.ui.set_pair(enabled, kept, findings);
+    Json(json!({ "ok": true, "received": n, "enabled": enabled }))
 }
 
 impl Hub {
@@ -123,6 +362,9 @@ impl Hub {
             key: Mutex::new(std::env::var("TOTAL_OPEN_CLOUD_KEY").ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())),
             seq: AtomicU64::new(1),
             installed: Mutex::new(None),
+            pair: Mutex::new(PairState::default()),
+            ai_active: AtomicU64::new(0),
+            ai_open_since: AtomicU64::new(0),
         }
     }
 
@@ -237,6 +479,7 @@ pub async fn hello_handler(State(state): State<AppState>, Json(req): Json<Value>
     if let Some(k) = req.get("open_cloud_key").and_then(|v| v.as_str()).map(str::trim).filter(|k| !k.is_empty()) {
         state.plugin.set_key(Some(k.to_string())).await;
     }
+    state.ui.plugin_touch();
     if fresh {
         state.ui.track(
             "studio",
@@ -246,6 +489,17 @@ pub async fn hello_handler(State(state): State<AppState>, Json(req): Json<Value>
             ),
         );
         tracing::info!("studio plugin connected: {:?}", info);
+        // 2.8.0: the desktop Pair switch survives Studio restarts — tell the new plugin.
+        if state.plugin.pair_enabled().await && info.capabilities.iter().any(|c| c == "pair_watch") {
+            let st = state.clone();
+            tokio::spawn(async move {
+                match st.plugin.run("pair_watch", json!({"enabled": true}), Duration::from_secs(15)).await {
+                    Ok(r) if r.ok => st.ui.track("pair", "pair mode re-armed in Studio"),
+                    Ok(r) => st.ui.track("error", format!("pair mode: {}", r.error.unwrap_or_default())),
+                    Err(e) => st.ui.track("error", format!("pair mode: {e:#}")),
+                }
+            });
+        }
     }
     Json(json!({
         "ok": true,
@@ -258,6 +512,7 @@ pub async fn hello_handler(State(state): State<AppState>, Json(req): Json<Value>
 
 pub async fn poll_handler(State(state): State<AppState>, Query(_q): Query<HashMap<String, String>>) -> impl IntoResponse {
     state.plugin.touch().await;
+    state.ui.plugin_touch();
     let deadline = tokio::time::Instant::now() + POLL_WAIT;
     loop {
         if let Some(job) = state.plugin.queue.lock().await.pop_front() {
@@ -359,12 +614,13 @@ const STUDIO_COMMANDS: &[(&str, u64)] = &[
     // 1.45.0 — animation publishing
     ("animation_export", 60),
     ("animation_apply", 30),
+    ("pair_watch", 15),
 ];
 const CLOUD_COMMANDS: &[&str] = &["cloud_gamepass_create", "cloud_gamepass_update", "cloud_gamepass_list", "cloud_product_create", "cloud_product_update", "cloud_product_list", "cloud_animation_publish"];
 
 pub fn is_plugin_tool(name: &str) -> bool {
     let bare = name.rsplit('/').next().unwrap_or(name);
-    bare == "studio_plugin_status" || STUDIO_COMMANDS.iter().any(|(n, _)| *n == bare) || CLOUD_COMMANDS.contains(&bare)
+    bare == "studio_plugin_status" || bare == "pair_feed" || STUDIO_COMMANDS.iter().any(|(n, _)| *n == bare) || CLOUD_COMMANDS.contains(&bare)
 }
 
 pub fn tools(connected: bool, key_set: bool) -> Vec<Value> {
@@ -421,6 +677,9 @@ pub fn tools(connected: bool, key_set: bool) -> Vec<Value> {
             tool("eclipse_play", "Preview a KeyframeSequence / Animation (path) or AnimLib clip (animation) on the rig in edit mode (Animator:StepAnimations): loop, speed, duration; action=stop ends it. Pair with total_screenshot.", json!({"path": {"type": "string"}, "animation": {"type": "string"}, "rig_path": {"type": "string"}, "loop": {"type": "boolean"}, "speed": {"type": "number"}, "duration": {"type": "number"}, "action": {"type": "string"}}), &[]),
             // ── 1.45.0 animation publishing ──
             tool("animation_export", "Serialise a KeyframeSequence (path, or animation = AnimLib / AnimSaves name, or the Explorer selection) to .rbxmx XML plus creator ids, ready for upload. Used by animation_publish.", json!({"path": {"type": "string"}, "animation": {"type": "string"}, "rig_path": {"type": "string"}}), &[]),
+            // ── 2.8.0 pair mode ──
+            tool("pair_watch", "Pair mode switch: enabled=true makes the Studio plugin report what the USER does by hand (selection, script edits after a typing pause, instances added/removed, property changes) to this bridge; each edited script is checked deterministically (deprecated APIs, references to children that do not exist). Use when the user says 'watch me', 'pair with me', 'review as I go'. Omit enabled to read the status.", json!({"enabled": {"type": "boolean"}}), &[]),
+            tool("pair_feed", "Everything pair mode recorded (last 40 Studio events + open findings per script). Your system prompt already carries the NEW events each turn; call this for the full picture or when the user asks 'what did I change'.", json!({}), &[]),
             tool("animation_apply", "After an upload: create / update ReplicatedStorage.Animations.<name> (Animation with AnimationId rbxassetid://asset_id), tag the source KeyframeSequence, optionally copy it under rig_path.Animations.", json!({"asset_id": {"type": "number"}, "name": {"type": "string"}, "path": {"type": "string"}, "parent": {"type": "string"}, "rig_path": {"type": "string"}}), &["asset_id"]),
         ]);
     }
@@ -469,6 +728,7 @@ pub async fn try_execute_luau(state: &AppState, args: &Value) -> Option<anyhow::
     if !dm.eq_ignore_ascii_case("edit") {
         return None;
     }
+    let _ai = state.plugin.ai_begin();
     match state.plugin.run("plugin_execute_luau", args.clone(), Duration::from_secs(60)).await {
         Ok(res) => Some(render(res, "execute_luau")),
         // Studio already took the job: it may still be running. Falling back
@@ -490,6 +750,19 @@ pub async fn call(state: &AppState, name: &str, args: Value) -> anyhow::Result<M
     let args = if args.is_object() { args } else { json!({}) };
     match bare.as_str() {
         "studio_plugin_status" => Ok(text_out(serde_json::to_string_pretty(&status_json(state).await).unwrap_or_default())),
+        "pair_feed" => Ok(text_out(state.plugin.pair_feed_text().await)),
+        "pair_watch" => {
+            let want = args.get("enabled").and_then(|v| v.as_bool());
+            if let Some(on) = want { state.plugin.set_pair_enabled(on).await; }
+            let run = state.plugin.run("pair_watch", args, Duration::from_secs(15)).await;
+            let (enabled, kept, findings) = state.plugin.pair_summary().await;
+            state.ui.set_pair(enabled, kept, findings);
+            if let Some(on) = want { state.ui.track("pair", if on { "pair mode on (asked by the model)" } else { "pair mode off (asked by the model)" }); }
+            match run {
+                Ok(res) => render(res, "pair_watch"),
+                Err(e) => Ok(text_out(format!("Pair mode switch is now {} on the desktop side, but the Studio plugin did not take it: {e:#}. It is applied automatically when the plugin (re)connects.", if enabled { "ON" } else { "OFF" }))),
+            }
+        }
         "cloud_gamepass_create" => cloud::gamepass_create(state, &args).await.map(|v| text_out(v.to_string())),
         "cloud_gamepass_update" => cloud::gamepass_update(state, &args).await.map(|v| text_out(v.to_string())),
         "cloud_gamepass_list" => cloud::gamepass_list(state, &args).await.map(|v| text_out(v.to_string())),
@@ -499,6 +772,7 @@ pub async fn call(state: &AppState, name: &str, args: Value) -> anyhow::Result<M
         "cloud_animation_publish" => cloud::animation_publish(state, &args).await.map(|v| text_out(v.to_string())),
         _ => {
             let secs = STUDIO_COMMANDS.iter().find(|(n, _)| *n == bare).map(|(_, s)| *s).unwrap_or(60);
+            let _ai = state.plugin.ai_begin();
             let res = state.plugin.run(&bare, args, Duration::from_secs(secs)).await?;
             render(res, &bare)
         }
@@ -974,5 +1248,72 @@ mod cloud {
             "moderation": last.pointer("/response/moderationResult/moderationState").cloned().unwrap_or(Value::Null),
             "next": "animation_apply {asset_id, name} creates ReplicatedStorage.Animations.<name> with the AnimationId",
         }))
+    }
+}
+
+#[cfg(test)]
+mod pair_tests {
+    use super::*;
+
+    fn script(path: &str, at: u64, source: &str) -> PairEvent {
+        PairEvent { kind: "script".into(), at, path: path.into(), class: "Script".into(), lines: source.lines().count() as u64, edits: 1, source: source.into(), ..PairEvent::default() }
+    }
+
+    #[tokio::test]
+    async fn pair_feed_checks_scripts_and_marks_seen() {
+        let hub = std::sync::Arc::new(Hub::new());
+        // off → nothing is kept and the prompt block stays empty
+        hub.pair_ingest(vec![script("Workspace.A", 100, "wait(1)")]).await;
+        assert_eq!(hub.pair_summary().await.1, 0);
+        assert!(hub.pair_prompt_block().await.is_empty());
+
+        hub.set_pair_enabled(true).await;
+        let mut bad = script("ServerScriptService.Main", 200, "local p = workspace:WaitForChild(\"Door\")\nwait(1)\nprint(p)");
+        bad.missing = vec![json!({"line": 1, "ref": "Door", "message": "Workspace has no child \"Door\""})];
+        let out = hub.pair_ingest(vec![
+            PairEvent { kind: "select".into(), at: 150, count: 1, items: vec!["Workspace.Part (Part)".into()], ..PairEvent::default() },
+            bad,
+            script("StarterPlayerScripts.Clean", 201, "task.wait(1)"),
+        ]).await;
+        assert_eq!(out.len(), 2, "one summary per script event: {out:?}");
+        assert!(out[0].1 >= 2, "deprecated wait + missing child → at least 2 findings: {out:?}");
+        assert_eq!(out[1].1, 0);
+        let (enabled, kept, findings) = hub.pair_summary().await;
+        assert!(enabled);
+        assert_eq!(kept, 3);
+        assert_eq!(findings.len(), 1, "clean scripts carry no finding entry");
+
+        let block = hub.pair_prompt_block().await;
+        assert!(block.starts_with("PAIR MODE (on)"));
+        assert!(block.contains("3 events"));
+        assert!(block.contains("ServerScriptService.Main") && block.contains("no child \"Door\"") && block.contains("Workspace.Part (Part)"));
+        // the source itself never reaches the model
+        assert!(!block.contains("print(p)"));
+        // second turn: nothing new, findings still open
+        let again = hub.pair_prompt_block().await;
+        assert!(again.contains("nothing new from Studio") && again.contains("Open findings") && again.contains("no child"));
+
+        // a fixed script clears its finding
+        hub.pair_ingest(vec![script("ServerScriptService.Main", 300, "task.wait(1)")]).await;
+        assert!(hub.pair_summary().await.2.is_empty());
+        let feed = hub.pair_feed_text().await;
+        assert!(feed.contains("4 events kept") && feed.contains("selected 1"));
+
+        // events inside an AI window are TotalScript's own work and are dropped
+        let guard = hub.ai_begin();
+        hub.pair_ingest(vec![PairEvent { kind: "instances".into(), at: unix_now(), added: 5, ..PairEvent::default() }]).await;
+        drop(guard);
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        hub.pair_ingest(vec![PairEvent { kind: "instances".into(), at: unix_now(), added: 1, ..PairEvent::default() }]).await;
+        let p = hub.pair.lock().await;
+        assert_eq!(p.dropped_ai, 2, "both the in-flight and the just-finished window must filter: {}", p.dropped_ai);
+        assert_eq!(p.events.len(), 4);
+        drop(p);
+        // the user's own work a while later passes
+        hub.pair_ingest(vec![PairEvent { kind: "instances".into(), at: unix_now() + 10, added: 1, ..PairEvent::default() }]).await;
+        assert_eq!(hub.pair_summary().await.1, 5);
+
+        hub.set_pair_enabled(false).await;
+        assert_eq!(hub.pair_summary().await.1, 0);
     }
 }

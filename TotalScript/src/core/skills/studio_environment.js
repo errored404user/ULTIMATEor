@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript environment pack (2.7.0) - procedural terrain, maps, water,
+// TotalScript environment pack (2.8.0) - procedural terrain, maps, water,
 // biome painting, foliage / rock scatter and ground-following roads.
 //
 // Before this pack the agent could only FillBlock / FillBall a region of one
@@ -24,7 +24,7 @@
 // invents asset ids: every prop is built from Parts / WedgeParts.
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
-  const VERSION = "2.7.0";
+  const VERSION = "2.8.0";
 
   const BIOMES = ["plains", "hills", "mountains", "island", "archipelago", "desert", "tundra", "canyon", "volcanic", "swamp", "mesa", "alpine"];
   const SHAPE_OPS = ["mountain", "hill", "crater", "plateau", "valley", "ridge", "volcano", "basin", "dune", "flatten", "raise", "lower"];

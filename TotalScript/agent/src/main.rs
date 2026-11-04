@@ -836,12 +836,18 @@ async fn start() -> anyhow::Result<()> {
         }
     }
     shared.attach_workspace(workspace.root_display(), workspace.full_flag());
+    let pair_at_boot = settings.pair_mode;
     shared.log(&format!("TotalScript Desktop v{} — native bridge for roblox studio / local fs", env!("CARGO_PKG_VERSION")));
     shared.log(&format!("workspace: {}", workspace.root_display()));
     if workspace.full_access() { shared.log("FULL PC ACCESS enabled at boot (TOTAL_FULL_ACCESS=1)"); }
     shared.log("listening: http://127.0.0.1:3000 · ws 17613 (roblox) · 17615 (agentscript)");
     shared.log(&format!("settings: {}", gui::Settings::path().display()));
     let state = AppState::new(result_tx, mcp_alive, roblox_proc.clone(), workspace, shared.clone());
+    if pair_at_boot {
+        state.plugin.set_pair_enabled(true).await;
+        shared.set_pair(true, 0, Vec::new());
+        shared.log("pair mode: on (starts when the Studio plugin connects)");
+    }
     // Studio plugin: keep the local copy in sync with the one embedded in this
     // build. Studio picks the file up on its next start (or Plugins → reload).
     match plugin::install() {
@@ -1029,6 +1035,23 @@ async fn ui_command_loop(state: AppState, mut rx: tokio::sync::mpsc::UnboundedRe
                 };
                 let _ = reply.send(result);
             }
+            gui::UiCommand::SetPair(on) => {
+                let state2 = state.clone();
+                tokio::spawn(async move {
+                    state2.plugin.set_pair_enabled(on).await;
+                    let (enabled, kept, findings) = state2.plugin.pair_summary().await;
+                    state2.ui.set_pair(enabled, kept, findings);
+                    if state2.plugin.connected().await {
+                        match state2.plugin.run("pair_watch", serde_json::json!({"enabled": on}), std::time::Duration::from_secs(15)).await {
+                            Ok(r) if r.ok => state2.ui.track("pair", if on { "pair mode on — the plugin now reports what you do in Studio" } else { "pair mode off" }),
+                            Ok(r) => state2.ui.track("error", format!("pair mode: {}", r.error.unwrap_or_else(|| "plugin refused".into()))),
+                            Err(e) => state2.ui.track("error", format!("pair mode: {} (older Studio plugin? restart Studio once)", gui_truncate(&format!("{e:#}"), 160))),
+                        }
+                    } else {
+                        state2.ui.track("pair", if on { "pair mode armed — it starts when the Studio plugin connects" } else { "pair mode off" });
+                    }
+                });
+            }
             gui::UiCommand::SetMcpCommand(command) => {
                 let command = command.trim().to_string();
                 if command.is_empty() {
@@ -1156,6 +1179,7 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
         .route("/api/plugin/result", post(plugin::result_handler))
         .route("/api/plugin/status", get(plugin::status_handler))
         .route("/api/plugin/config", post(plugin::config_handler))
+        .route("/api/plugin/event", post(plugin::event_handler))
         .route("/ws", get(ws_handler))
         .with_state(state)
         .layer(cors)
@@ -1304,6 +1328,8 @@ async fn roblox_tools_with_plugin(state: &AppState) -> anyhow::Result<Vec<serde_
 }
 
 async fn roblox_tool(state: &AppState, name: &str, args: serde_json::Value) -> anyhow::Result<McpToolOutput> {
+    // 2.8.0 pair mode: whatever this tool changes in Studio is TotalScript's work, not the user's.
+    let _ai = state.plugin.ai_begin();
     // execute_luau fast path: the Studio plugin runs Edit-mode Luau without the
     // stdio helper's 20 s budget and studio_id dance; MCP remains the fallback.
     if name.rsplit('/').next().unwrap_or(name) == "execute_luau" {

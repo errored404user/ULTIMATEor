@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript model kit (2.7.0) - real procedural builders for the things
+// TotalScript model kit (2.8.0) - real procedural builders for the things
 // people actually ask an agent to model: buildings and structures, vehicles,
 // weapons, furniture, smooth EditableMesh shapes, detail passes and seeded
 // variants.
@@ -32,13 +32,13 @@
 // Nothing here invents asset ids: geometry is Parts, WedgeParts,
 // CornerWedgeParts and EditableMesh triangles built from arithmetic.
 //
-// Verification level (2.7.0): every command runs green in tests/modelkit-sim.py
+// Verification level (2.8.0): every command runs green in tests/modelkit-sim.py
 // (mocked DataModel) and the Luau parses; NOT verified in Studio yet: hip-roof
 // CornerWedgePart orientation, wedge blade tips, the hinge-motor drive feel and
 // AssetService:CreateMeshPartAsync (the sim only checks the triangle lists).
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
-  const VERSION = "2.7.0";
+  const VERSION = "2.8.0";
 
   const STRUCTURES = ["house", "tower", "castle_wall", "gatehouse", "bridge", "staircase", "spiral_staircase", "archway", "fence", "gate", "roof", "dungeon_room", "dock", "watchtower", "windmill", "lighthouse", "barn", "pergola"];
   const STYLES = ["medieval", "rustic", "modern", "fantasy", "scifi", "desert", "stone", "industrial"];

@@ -307,7 +307,7 @@ async fn catalogue(state: &AppState) -> Catalogue {
     Catalogue { tools, studio_linked: studio, plugin_connected, note }
 }
 
-fn system_prompt(state: &AppState, cat: &Catalogue, instructions: &str, tools_enabled: bool) -> String {
+fn system_prompt(state: &AppState, cat: &Catalogue, instructions: &str, tools_enabled: bool, pair: &str) -> String {
     let root = state.ui.root();
     let mut s = String::new();
     s.push_str("You are TotalScript, an expert Roblox engineer working inside the total-core desktop bridge on the user's PC. ");
@@ -315,7 +315,7 @@ fn system_prompt(state: &AppState, cat: &Catalogue, instructions: &str, tools_en
         s.push_str("You act through tools — call them instead of describing what you would do. Never claim something was built, changed or verified unless a tool result shows it.\n\n");
         s.push_str("STUDIO TOOLS\n");
         s.push_str("- execute_luau {code, datamodel_type:\"edit\"} runs Luau inside Roblox Studio (Edit mode, full Instance API, plugin security). Everything you print() comes back as the result — print what you need to inspect or verify. Build with Instance.new, set properties, set Parent last. Scripts: Instance.new(\"Script\"/\"LocalScript\"/\"ModuleScript\") and assign .Source as a string. Use game:GetService(\"ChangeHistoryService\"):SetWaypoint() after edits so the user can undo. One logical step per call; keep each script under ~200 lines; on an error read the message, fix the code and retry.\n");
-        s.push_str("- get_studio_state / studio_plugin_status report what is open. screen_capture returns a viewport screenshot (look at it to judge visuals). Plugin commands (studio_*, csg_*, open_script, script_live_update, screenshot_frame…) exist only while the TotalScript Studio plugin is connected.\n");
+        s.push_str("- get_studio_state / studio_plugin_status report what is open. pair_watch {enabled:true} starts PAIR MODE: the plugin reports what the user does by hand and you review as they go (only when they ask you to watch). screen_capture returns a viewport screenshot (look at it to judge visuals). Plugin commands (studio_*, csg_*, open_script, script_live_update, screenshot_frame…) exist only while the TotalScript Studio plugin is connected.\n");
         s.push_str("- Workspace tools (read_file, write_file, edit_file, tree, run_command…) operate on the user's project folder");
         if !root.is_empty() { s.push_str(&format!(" at {root}")); }
         s.push_str(". Use them for Rojo-style projects, assets and notes.\n");
@@ -333,6 +333,12 @@ fn system_prompt(state: &AppState, cat: &Catalogue, instructions: &str, tools_en
     s.push_str(&format!("- TotalScript Studio plugin: {}\n", if cat.plugin_connected { "connected" } else { "not connected (plugin commands unavailable)" }));
     if !cat.note.is_empty() { s.push_str(&format!("- {}\n", cat.note)); }
     s.push_str(&format!("- Date: {}\n", chrono::Local::now().format("%Y-%m-%d")));
+    // 2.8.0 pair mode: what the user did by hand since the last turn + open findings.
+    if !pair.is_empty() {
+        s.push('\n');
+        s.push_str(pair);
+        if tools_enabled { s.push_str("pair_feed {} returns the whole recorded feed; pair_watch {enabled:false} stops watching when the user asks.\n"); }
+    }
     let extra = instructions.trim();
     if !extra.is_empty() {
         s.push_str("\nUSER INSTRUCTIONS\n");
@@ -697,7 +703,8 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
 
     let _ = events.send(ChatEvent::Status("collecting bridge tools".into()));
     let cat = if req.tools { catalogue(&state).await } else { Catalogue { tools: Vec::new(), studio_linked: state.ui.studio_connected.load(Ordering::Relaxed), plugin_connected: state.plugin.connected().await, note: String::new() } };
-    let system = system_prompt(&state, &cat, &req.instructions, req.tools && !cat.tools.is_empty());
+    let pair = state.plugin.pair_prompt_block().await;
+    let system = system_prompt(&state, &cat, &req.instructions, req.tools && !cat.tools.is_empty(), &pair);
     let tool_defs: Vec<Value> = cat.tools.iter().map(|t| t.def.clone()).collect();
     let by_wire: HashMap<String, (&'static str, String)> = cat.tools.iter().map(|t| (t.wire.clone(), (t.engine, t.name.clone()))).collect();
     let schema_by_wire: HashMap<String, Value> = cat.tools.iter().map(|t| (t.wire.clone(), t.def.pointer("/function/parameters").cloned().unwrap_or(json!({})))).collect();

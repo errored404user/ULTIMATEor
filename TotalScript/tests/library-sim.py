@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Library pack (2.7.0) - kit_save / kit_place / kit_library / project_style against
+"""Library pack (2.8.0) - kit_save / kit_place / kit_library / project_style against
 the miniature Roblox DataModel.
 
 tests/test-library-pack.js checks the pack statically (registration, params, validation,
@@ -131,7 +131,7 @@ ok("kit_library list with no store: ok, count 0, tells how to save", r.get("ok")
 r = run("save_lamp", programs["save_lamp"])
 ok("kit_save Workspace.Lamp: kit 'Lamp' with tags prop/street, category prop, Model class, 3 descendants, size string", r.get("ok") and r["data"]["name"] == "Lamp" and r["data"]["tags"] == ["prop", "street"] and r["data"]["category"] == "prop" and r["data"]["class"] == "Model" and r["data"]["descendants"] == 3 and "x" in str(r["data"]["size"]), r)
 st = json.loads(L.eval("function() local k = game:GetService('ServerStorage')._TotalKits.Lamp local a = k:FindFirstChild('Asset') return M.jsonEncode({asset = a and a.ClassName, pp = a and a.PrimaryPart and a.PrimaryPart.Name, src = k:GetAttribute('Total_Source'), ver = k:GetAttribute('Total_Kit'), orig = a:GetAttribute('Total_AssetName'), n = #a:GetDescendants()}) end")())
-ok("the store holds Folder Lamp > Asset (Model, PrimaryPart Post, 3 descendants, Total_Source Workspace.Lamp, Total_Kit version)", st["asset"] == "Model" and st["pp"] == "Post" and st["src"] == "Workspace.Lamp" and st["ver"] == "2.7.0" and st["orig"] == "Lamp" and st["n"] == 3, st)
+ok("the store holds Folder Lamp > Asset (Model, PrimaryPart Post, 3 descendants, Total_Source Workspace.Lamp, Total_Kit version)", st["asset"] == "Model" and st["pp"] == "Post" and st["src"] == "Workspace.Lamp" and st["ver"] == "2.8.0" and st["orig"] == "Lamp" and st["n"] == 3, st)
 ok("the original Lamp is untouched", L.eval("function() return workspace:FindFirstChild('Lamp') ~= nil and #workspace.Lamp:GetDescendants() end")() == 3)
 
 r = run("save_folder", programs["save_folder"])
