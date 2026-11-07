@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript verify pack (2.9.1) - place checkpoints and UI wiring tests.
+// TotalScript verify pack (2.10.0) - place checkpoints and UI wiring tests.
 //
 //   place_checkpoint {op:save|restore|list|diff|delete, path, name}
 //       Scoped "time machine": save = Clone() of one subtree (or a service's
@@ -32,7 +32,7 @@
 // the mocked DataModel in tests/verify-sim.py can run it.
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
-  const VERSION = "2.9.1";
+  const VERSION = "2.10.0";
   const CP_OPS = ["save", "restore", "list", "diff", "delete"];
   const STORE = "_TotalCheckpoints";
   const MAX_SAVE = 20000;

@@ -1784,11 +1784,11 @@ impl App {
                 }
             });
             ui.add_space(10.0);
-            ui.horizontal_wrapped(|ui| {
+            ui.horizontal(|ui| {
                 ui.label(RichText::new("Donate").strong().color(t.text));
-                ui.label(RichText::new("free tool — a Robux game pass says thanks:").small().color(t.muted));
-                donation_row(ui, t);
+                ui.add(egui::Label::new(RichText::new("free tool — a Robux game pass says thanks:").small().color(t.muted)).truncate());
             });
+            donation_row(ui, t);
         });
         ui.add_space(14.0);
 

@@ -90,7 +90,7 @@ ok("D3 Home has Copy session report and diagnostics embed it", gui.includes('"Co
 ok("D4 report is names and numbers only", gui.includes("no tool arguments, no results, no chat text, no keys") && !gui.includes("st.args") && gui.includes("tool                                      calls   ok  fail   avg ms   max ms"));
 
 // ── E. docs ────────────────────────────────────────────────────────────
-ok("E1 README documents 2.9.1 with the four items and this test",
+ok("E1 README documents 2.10.0 with the four items and this test",
   readme.includes("**2.7.0") && /reference_search/.test(readme) && /luau_check/.test(readme) && /session report/i.test(readme) && readme.includes("icon.res") && readme.includes("test-desktop-reference.js"));
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL OK");
