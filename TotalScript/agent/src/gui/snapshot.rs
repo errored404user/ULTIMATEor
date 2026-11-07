@@ -204,7 +204,7 @@ fn run_frame(ctx: &egui::Context, app: &mut App, size: Vec2, time: f64) -> egui:
 fn snapshot_every_page_at_three_sizes() {
     let out_dir = std::env::var("TOTAL_SNAPSHOTS").ok().map(PathBuf::from);
     if let Some(d) = &out_dir { let _ = std::fs::create_dir_all(d); }
-    let ctx = egui::Context::new();
+    let ctx = egui::Context::default();
     let shared = Arc::new(UiShared::new(Arc::new(AtomicBool::new(true))));
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel::<UiCommand>();
     let mut settings = Settings::default();
@@ -285,7 +285,7 @@ fn snapshot_every_page_at_three_sizes() {
 
 #[test]
 fn fonts_cover_turkish_and_arrows() {
-    let ctx = egui::Context::new();
+    let ctx = egui::Context::default();
     install_fonts(&ctx);
     let _ = run_probe(&ctx);
     let text = "ç ğ ı İ ö ş ü Ç Ğ I Ö Ş Ü → — · … × « » ▶ •";
