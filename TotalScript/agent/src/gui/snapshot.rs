@@ -155,7 +155,7 @@ fn inspect_text(shapes: &[egui::epaint::ClippedShape], report: &mut TextReport) 
 }
 
 fn seed(app: &mut App, shared: &Arc<UiShared>) {
-    shared.log("INFO TotalScript Desktop 2.10.0 — bridge listening on 127.0.0.1:3000");
+    shared.log("INFO TotalScript Desktop 2.11.0 — bridge listening on 127.0.0.1:3000");
     shared.log("INFO workspace: C:\\Users\\Gürkan\\Belgeler\\İş Projeleri\\TotalWorkspace (Türkçe karakter testi: ç ğ ı İ ö ş ü Ç Ğ Ö Ş Ü)");
     shared.log("WARN Studio open, MCP not linked yet → enable 'Studio as MCP server' and probe");
     shared.log("ERROR execute_luau failed: Workspace.Oyuncu.Karakter is not a valid member of Model \"Oyuncu\" (stack: ServerScriptService.Başlat:12)");
@@ -280,7 +280,44 @@ fn snapshot_every_page_at_three_sizes() {
     }
     app.settings.chat_panel_open = false;
 
-    println!("snapshot: {frames} page×size frames (+1 with the chat panel)");
+    // 2.11.0 overlays: the command palette (with a query typed) and the
+    // notification center, both on Home at the default size.
+    let overlay = |app: &mut App, name: &str, total: &mut TextReport, textures: &mut Textures| {
+        let mut last = None;
+        for k in 0..3 {
+            let out = run_frame(&ctx, app, Vec2::new(1280.0, 820.0), 30.0 + k as f64 * 0.1);
+            textures.apply(&out.textures_delta);
+            last = Some(out);
+        }
+        let out = last.unwrap();
+        let mut rep = TextReport::default();
+        inspect_text(&out.shapes, &mut rep);
+        for c in &rep.clipped { total.clipped.push(format!("[{name} 1280x820] {c}")); }
+        for e in &rep.elided { total.elided.push(format!("[{name} 1280x820] {e}")); }
+        for b in &rep.boxes { total.boxes.push(format!("[{name} 1280x820] {b}")); }
+        if let Some(dir) = &out_dir {
+            let mut canvas = Canvas::new(1280, 820, app.theme.bg);
+            let prims = ctx.tessellate(out.shapes.clone(), 1.0);
+            canvas.draw(&prims, 1.0, &textures);
+            canvas.save(&dir.join(format!("{name}-1280x820.png"))).expect("write png");
+        }
+    };
+    app.page = Page::Home;
+    app.open_palette();
+    app.palette.query = "stud".into();
+    app.palette.just_opened = false;
+    overlay(&mut app, "home-palette", &mut total, &mut textures);
+    app.palette.open = false;
+    app.notify(NoticeKind::Ok, "Studio viewport captured", "app");
+    app.notify(NoticeKind::Warn, "pair: 2 finding(s) in ServerScriptService.Başlat", "pair");
+    app.notify(NoticeKind::Err, "execute_luau failed: Oyuncu is not a valid member of Model", "error");
+    app.notices.open = true;
+    overlay(&mut app, "home-notices", &mut total, &mut textures);
+    app.notices.open = false;
+    app.notices.clear();
+    frames += 2;
+
+    println!("snapshot: {frames} page×size frames (+1 with the chat panel, incl. palette + notification overlays)");
     println!("snapshot: {} cut text(s), {} elided text(s), {} replacement box(es)", total.clipped.len(), total.elided.len(), total.boxes.len());
     for c in total.clipped.iter().take(120) { println!("  CUT    {c}"); }
     for e in total.elided.iter().take(40) { println!("  ELIDED {e}"); }

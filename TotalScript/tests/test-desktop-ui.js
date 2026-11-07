@@ -8,6 +8,8 @@ let pass = 0, fail = 0;
 function ok(name, cond, extra) { if (cond) { pass++; console.log("ok    " + name); } else { fail++; console.log("FAIL  " + name + (extra ? " — " + extra : "")); } }
 const read = (p) => fs.readFileSync(p, "utf8");
 const gui = read("agent/src/gui.rs");
+// 2.11.0: the window is split into gui.rs + gui/*.rs sub-modules; `guiAll` is everything.
+const guiAll = gui + "\n" + fs.readdirSync("agent/src/gui").filter((f) => f.endsWith(".rs")).sort().map((f) => read("agent/src/gui/" + f)).join("\n");
 const snap = read("agent/src/gui/snapshot.rs");
 const ws = read("agent/src/workspace.rs");
 const wf = read(path.join("..", ".github", "workflows", "desktop.yml"));
@@ -34,7 +36,7 @@ ok("B5 radius tokens exist on Theme and follow Settings → Corners", /r_btn: f3
 ok("B6 no 999-radius pills remain", !gui.includes("Rounding::same(999.0)"));
 ok("B7 destructive actions use the danger kind (delete file, kill Studio, quit, forget keys)",
   /danger\(ui, t, if armed \{ "Confirm delete" \} else \{ "Delete" \}\)/.test(gui) && /Btn::Danger\)\)\.on_hover_text\("Ends every RobloxStudio process/.test(gui) &&
-  /danger\(ui, t, "Quit TotalScript \(stop bridge\)"\)/.test(gui) && /Forget all API keys \(\{n\}\)"\), Btn::Danger\)/.test(gui));
+  /danger\(ui, t, "Quit TotalScript \(stop bridge\)"\)/.test(guiAll) && /Forget all API keys \(\{n\}\)"\), Btn::Danger\)/.test(gui) && /Forget all API keys \(\{keys\}\)"\), Btn::Danger\)/.test(guiAll));
 
 // C — layout rules that the snapshots caught
 ok("C1 Home is one scroll area (hero, cards, checklist, columns)", (() => { const a = gui.indexOf('id_salt("home-scroll")'); return a > 0 && a < gui.indexOf("Bridge failed to start") && a < gui.indexOf("// Hero") && a < gui.indexOf("// Status cards") && a < gui.indexOf("// Setup checklist"); })());
@@ -63,7 +65,7 @@ ok("E1 windows shell line forces UTF-8 and keeps quotes", /fn windows_shell_line
 
 // F — release pins
 const manifest = JSON.parse(read("manifest.json"));
-ok("F1 version pins 2.10.0 (manifest / crate / lock / plugin)", manifest.version === "2.10.0" && /^version = "2\.10\.0"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "2\.10\.0"/.test(read("agent/Cargo.lock")) && read("plugin/TotalScript.lua").includes('local VERSION = "2.10.0"'));
+ok("F1 version pins 2.11.0 (manifest / crate / lock / plugin)", manifest.version === "2.11.0" && /^version = "2\.11\.0"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "2\.11\.0"/.test(read("agent/Cargo.lock")) && read("plugin/TotalScript.lua").includes('local VERSION = "2.11.0"'));
 ok("F2 README 2.10.0 block + Testing line", /\*\*2\.10\.0 — Desktop UI overhaul/.test(readme) && /node tests\/test-desktop-ui\.js/.test(readme));
 ok("F3 no new crate (Cargo.lock unchanged apart from the version)", !/name = "(fontdue|rusttype|resvg|tiny-skia|cosmic-text)"/.test(read("agent/Cargo.lock")));
 

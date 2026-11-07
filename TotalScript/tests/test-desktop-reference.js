@@ -6,6 +6,8 @@ const path = require("path");
 const root = path.join(__dirname, "..");
 const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
 const gui = read("agent/src/gui.rs");
+// 2.11.0: the window is split into gui.rs + gui/*.rs sub-modules; `guiAll` is everything.
+const guiAll = gui + "\n" + fs.readdirSync(path.join(root, "agent/src/gui")).filter((f) => f.endsWith(".rs")).sort().map((f) => read("agent/src/gui/" + f)).join("\n");
 const main = read("agent/src/main.rs");
 const ws = read("agent/src/workspace.rs");
 const chat = read("agent/src/chat.rs");
@@ -67,7 +69,7 @@ ok("B5 SYMPTOMS.md rows ride along (best 6 by term hits)", ws.includes('root.joi
 ok("B6 LihFolk is credited as CC BY 4.0, never bundled", ws.includes('LihFolk Vault V2, CC BY 4.0') && gui.includes("download it yourself; nothing is bundled") && !fs.existsSync(path.join(root, "LihFolk Vault V2")));
 ok("B7 unconfigured library answers in words instead of failing", ws.includes('return Ok("Reference library not configured.'));
 ok("B8 Settings field + card + UiCommand + start-up application", gui.includes("pub reference_dir: String") && gui.includes('"Reference library (optional)"') && gui.includes("UiCommand::SetReferenceDir { path: self.draft_reference") && main.includes("gui::UiCommand::SetReferenceDir { path, reply }") && main.includes("workspace.set_reference_dir(&settings.reference_dir)"));
-ok("B9 Reset-to-defaults keeps the reference folder like the workspace", gui.includes("reference_dir: keep_ref, ..Settings::default()"));
+ok("B9 Reset-to-defaults keeps the reference folder like the workspace (and the 2.11.0 workspace list)", guiAll.includes("reference_dir: keep_ref, recent_workspaces: keep_recent, favorite_workspaces: keep_fav, ..Settings::default()"));
 ok("B10 chat system prompt mentions reference_search only when a library is set", chat.includes("if state.workspace.reference_dir().is_some()") && chat.includes("reference_search {query} looks limits"));
 ok("B11 unit test covers ranking, section read, skip dirs, symptoms, off state", ws.includes("async fn reference_search_ranks_titles_and_reads_sections()") && ws.includes('assert!(!out.contains("ignored")'));
 
@@ -86,11 +88,11 @@ ok("C7 unit test pins bad vs modern snippets", ws.includes("fn luau_check_flags_
 ok("D1 SessionStats is fed from track() and capped", gui.includes("pub session: Mutex<SessionStats>") && gui.includes("self.record_session(kind, &text, &at);") && gui.includes("SESSION_ERRORS_CAP"));
 ok("D2 parser matches the real activity formats", gui.includes('text.split(" · ")') && gui.includes('strip_suffix(" ms")') && gui.includes('text.split_once(" failed: ")')
   && main.includes("({engine}) · {elapsed_ms} ms · toolkit") && chat.includes("({engine}) · {elapsed_ms} ms · chat") && main.includes("({eng}) failed: {}"));
-ok("D3 Home has Copy session report and diagnostics embed it", gui.includes('"Copy session report"') && gui.includes("self.shared.session_report_text()") && gui.includes('out.push_str("\\n--- session ---\\n");'));
+ok("D3 Home has Copy session report and diagnostics embed it", gui.includes('"Copy session report"') && guiAll.includes("self.shared.session_report_text()") && gui.includes('out.push_str("\\n--- session ---\\n");'));
 ok("D4 report is names and numbers only", gui.includes("no tool arguments, no results, no chat text, no keys") && !gui.includes("st.args") && gui.includes("tool                                      calls   ok  fail   avg ms   max ms"));
 
 // ── E. docs ────────────────────────────────────────────────────────────
-ok("E1 README documents 2.10.0 with the four items and this test",
+ok("E1 README documents 2.11.0 with the four items and this test",
   readme.includes("**2.7.0") && /reference_search/.test(readme) && /luau_check/.test(readme) && /session report/i.test(readme) && readme.includes("icon.res") && readme.includes("test-desktop-reference.js"));
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL OK");

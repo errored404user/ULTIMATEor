@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Device pack (2.10.0) - device_audit + device_fix against the miniature Roblox DataModel.
+"""Device pack (2.11.0) - device_audit + device_fix against the miniature Roblox DataModel.
 
 tests/test-device-pack.js checks the pack statically (registration, params, validation,
 wiring, prompt budget). This script runs the REAL generated Luau in tests/roblox_sim.py

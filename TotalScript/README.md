@@ -105,7 +105,7 @@ There is no animation window any more. The AI animates straight from the chat: `
 
 ## Agent
 
-- Native crate: `agent/` (`total-agent` 2.10.0) — the total-core bridge plus the TotalScript Desktop window (eframe/egui) with, since 1.37.0, an **AI Chat side panel**: bring your own API key (CodeCraft, OpenAI, OpenRouter, Groq, DeepSeek, Gemini, xAI, Mistral, Together, local Ollama / LM Studio, custom URL), pick a model from `/models`, and the model drives Studio through the bridge's own tools (Studio MCP, plugin commands, workspace files) — see `agent/README.md`.
+- Native crate: `agent/` (`total-agent` 2.11.0) — the total-core bridge plus the TotalScript Desktop window (eframe/egui) with, since 1.37.0, an **AI Chat side panel**: bring your own API key (CodeCraft, OpenAI, OpenRouter, Groq, DeepSeek, Gemini, xAI, Mistral, Together, local Ollama / LM Studio, custom URL), pick a model from `/models`, and the model drives Studio through the bridge's own tools (Studio MCP, plugin commands, workspace files) — see `agent/README.md`.
 - Service worker skips stale-socket reconnect and MCP heal while a `call_tool` is in flight (the 25 s stale window used to kill long tools).
 - 659 advertised Studio commands (27 of them the 1.22.0 work-mode pack, 13 the 1.29.0 design pack, 11 the 1.30.0 gfx pack, 6 the 1.31.0 blueprint pack, 6 the 1.32.0 project pack, 2 the 1.33.0 inspect pack, 15 the 1.48.0 GUI Studio pack) plus 112 hidden legacy aliases that stay callable (`list_commands`), a 24-command animation suite, AgentScript file/terminal tools.
 **2.10.0 — Desktop UI overhaul (fonts, one button family, every page re-laid out, headless snapshots in CI).** Only `agent/` changed; no new crate (`--locked`), no new port, no behaviour change in the bridge.
