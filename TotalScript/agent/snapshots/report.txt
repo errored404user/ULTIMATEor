@@ -44,4 +44,4 @@ snapshot: 2 cut text(s), 48 elided text(s), 0 replacement box(es)
   ELIDED [home-palette 1280x820] Console, shell commands, Luau in Studio
 snapshot: 0 cut text(s) at the default 1280x820 window
 test gui::snapshot::snapshot_every_page_at_three_sizes ... ok
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out; finished in 4.79s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out; finished in 6.14s
