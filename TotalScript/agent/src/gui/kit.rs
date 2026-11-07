@@ -9,7 +9,7 @@ use super::*;
 /// Icons painted with strokes so they scale with `ui_scale` and follow the
 /// theme colour — the bundled Inter subset has no icon glyphs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum Icon { Bell, Search, Close, Check, Copy, Folder, Refresh, Star, StarFilled, Trash, Play, Stop, Gear, Info, Warn, Terminal, Palette, List, Pulse }
+pub(super) enum Icon { Bell, Search, Close, Copy, Folder, Refresh, Star, StarFilled, Trash, Play, Gear, Info, Warn, Terminal, Palette, List, Pulse }
 
 pub(super) fn paint_icon(p: &egui::Painter, r: egui::Rect, icon: Icon, c: Color32) {
     let s = Stroke::new(1.6_f32, c);
@@ -32,10 +32,6 @@ pub(super) fn paint_icon(p: &egui::Painter, r: egui::Rect, icon: Icon, c: Color3
         Icon::Close => {
             p.line_segment([pt(0.22, 0.22), pt(0.78, 0.78)], s);
             p.line_segment([pt(0.78, 0.22), pt(0.22, 0.78)], s);
-        }
-        Icon::Check => {
-            p.line_segment([pt(0.18, 0.54), pt(0.42, 0.78)], Stroke::new(2.0_f32, c));
-            p.line_segment([pt(0.42, 0.78), pt(0.84, 0.26)], Stroke::new(2.0_f32, c));
         }
         Icon::Copy => {
             p.rect_stroke(egui::Rect::from_min_max(pt(0.34, 0.3), pt(0.9, 0.9)), Rounding::same(2.0), s);
@@ -83,9 +79,6 @@ pub(super) fn paint_icon(p: &egui::Painter, r: egui::Rect, icon: Icon, c: Color3
         }
         Icon::Play => {
             p.add(egui::Shape::convex_polygon(vec![pt(0.26, 0.14), pt(0.86, 0.5), pt(0.26, 0.86)], c, Stroke::NONE));
-        }
-        Icon::Stop => {
-            p.rect_filled(egui::Rect::from_min_max(pt(0.22, 0.22), pt(0.78, 0.78)), Rounding::same(2.0), c);
         }
         Icon::Gear => {
             p.circle_stroke(pt(0.5, 0.5), w * 0.36, Stroke::new(2.2_f32, c));

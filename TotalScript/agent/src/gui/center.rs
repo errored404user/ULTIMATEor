@@ -131,7 +131,7 @@ impl App {
                         ui.end_row();
                         for (name, st) in tools.iter().take(40) {
                             let n = (st.ok + st.fail).max(1) as u128;
-                            ui.add(egui::Label::new(RichText::new(name).monospace().small().color(t.text)).truncate());
+                            ui.horizontal(|ui| { ui.set_min_width(170.0); ui.add(egui::Label::new(RichText::new(name).monospace().small().color(t.text)).truncate()); });
                             ui.label(RichText::new(st.ok.to_string()).small().color(t.ok));
                             ui.label(RichText::new(st.fail.to_string()).small().color(if st.fail > 0 { t.bad } else { t.muted }));
                             ui.label(RichText::new(format!("{} ms", st.total_ms / n)).small().color(t.muted));

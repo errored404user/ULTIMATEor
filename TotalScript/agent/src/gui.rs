@@ -915,7 +915,7 @@ impl Page {
             Page::Activity => "What is running now, the event feed with filters, and this session's tool statistics",
             Page::Diagnostics => "Live checks of the bridge, Studio, workspace and files — with a fix button on each problem",
             Page::Help => "What every page, button and shortcut does — and how to get Studio linked (F1)",
-            Page::Settings => "Appearance, behaviour, workspace, Studio MCP and diagnostics",
+            Page::Settings => "Ten categories, one search box, export / import — every change applies instantly",
         }
     }
 
@@ -1678,6 +1678,12 @@ impl App {
                     ui.add_space(6.0);
                 }
                 let mut nav: Option<Page> = None;
+                // Nine pages do not always fit above the bridge card (short
+                // windows, two-line items): the list scrolls instead of
+                // running under the card. Reserve the compact card's height.
+                let reserve = if rail { 78.0 } else { 86.0 };
+                egui::ScrollArea::vertical().id_salt("nav-scroll").max_height((ui.available_height() - reserve).max(120.0)).auto_shrink([false, true])
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
                 for page in Page::ALL.iter() {
                     let page = *page;
                     if page == Page::Activity {
@@ -1732,6 +1738,7 @@ impl App {
                     if resp.clicked() { nav = Some(page); }
                     ui.add_space(2.0);
                 }
+                });
                 if let Some(page) = nav { self.go(page); }
                 ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
                     let s = &self.shared;
@@ -1753,7 +1760,7 @@ impl App {
                         return;
                     }
                     // Short windows: keep only the ONLINE/OFFLINE line.
-                    let roomy = ui.available_height() > 190.0;
+                    let roomy = ui.available_height() > 240.0;
                     let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, if up { alpha(t.ok, 110) } else { t.border })).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::same(12.0));
                     frame.show(ui, |ui| {
                         ui.set_width(ui.available_width());
@@ -1875,7 +1882,7 @@ impl App {
                 if pill(ui, t, "Restart Studio MCP", false).on_hover_text("Ctrl+R").clicked() { action = Some(Action::RestartMcp); }
                 if pill(ui, t, "Probe Studio", false).on_hover_text("F5").clicked() { action = Some(Action::ProbeStudio); }
                 let capturing = self.snapshot_run.is_some();
-                if ui.add_enabled(!capturing, pill_widget(t, if capturing { "Capturing…" } else { "Capture viewport" }, false)).on_hover_text("Ctrl+Shift+S").clicked() { action = Some(Action::Capture); }
+                if busy_button(ui, t, "Capture viewport", "Capturing…", capturing, Btn::Secondary).on_hover_text("Ctrl+Shift+S").clicked() { action = Some(Action::Capture); }
                 if ghost(ui, t, "Command palette").on_hover_text("Ctrl+K").clicked() { self.palette.just_opened = true; self.palette.open = true; self.palette.query.clear(); self.palette.selected = 0; }
             });
         });

@@ -99,7 +99,7 @@ impl App {
                         ui.set_max_width(360.0);
                         ui.horizontal(|ui| {
                             status_dot(ui, color);
-                            ui.add(egui::Label::new(RichText::new(&n.text).color(t.text)).wrap());
+                            ui.add(egui::Label::new(RichText::new(&n.text).color(t.text)).wrap()).on_hover_text(format!("{} · {} · click to open the notification center", n.kind.label(), n.clock));
                             if icon_button(ui, t, Icon::Close, "Dismiss", false).clicked() { hide = Some(n.id); }
                         });
                     });
