@@ -1681,7 +1681,7 @@ impl App {
                 // Nine pages do not always fit above the bridge card (short
                 // windows, two-line items): the list scrolls instead of
                 // running under the card. Reserve the compact card's height.
-                let reserve = if rail { 78.0 } else { 86.0 };
+                let reserve = if rail { 92.0 } else { 124.0 };  // measured: rail block ≈ 84 px, compact card ≈ 108 px, + spacing
                 egui::ScrollArea::vertical().id_salt("nav-scroll").max_height((ui.available_height() - reserve).max(120.0)).auto_shrink([false, true])
                     .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
                 for page in Page::ALL.iter() {
