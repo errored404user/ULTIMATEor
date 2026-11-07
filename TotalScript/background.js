@@ -129,7 +129,7 @@ function setMcpLifecycle(next, detail={}) { mcpLifecycle=next;mcpTrace("lifecycl
 // A bounded, human-readable event log for the popup (Activity tab, bell,
 // error viewer). Lives in chrome.storage.session (cleared when the browser
 // closes; survives MV3 worker restarts), capped at ACTIVITY_MAX entries.
-// Entries: {at, kind: tool|conn|engine|server|blender, level: ok|info|warn|error,
+// Entries: {at, kind: tool|conn|engine|server|blender|creation, level: ok|info|warn|error,
 // text, tool?, code?, ms?, engine?}. No prompts, no conversation text.
 const ACTIVITY_MAX = 200;
 const ACTIVITY_KEY = "tsActivity";
@@ -2087,6 +2087,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case "activity_clear": {
         await clearActivity();
         sendResponse({ ok: true });
+        break;
+      }
+      // 2.13.0: a content-script note for the Activity Center (creation report
+      // summary). Kind + level are whitelisted, text is a short derived summary
+      // (counts and domain names - never the request or the reply).
+      case "activity_note": {
+        const kind = /^(creation|tool|server)$/.test(String(msg.kind || "")) ? String(msg.kind) : "creation";
+        const level = /^(ok|info|warn|error)$/.test(String(msg.level || "")) ? String(msg.level) : "info";
+        const text = String(msg.text || "").replace(/[\r\n]+/g, " ").slice(0, 200);
+        if (text) pushActivity(kind, level, text, { code: msg.code != null ? String(msg.code).slice(0, 60) : undefined });
+        sendResponse({ ok: !!text });
         break;
       }
       // ── ZeroScript Rust pipe — CORS bypass via background (content script → background → 127.0.0.1) ──

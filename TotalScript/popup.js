@@ -711,6 +711,7 @@ $("open-cards-public").addEventListener("click", () => openCards("public"));
 // live: the content script listens to storage.onChanged for the key (applies
 // instantly on every AI tab); otherwise it is read on the next page load and
 // the row says so.
+const CREATION_PROFILES = [["standard", "Standard"], ["high", "High quality"], ["professional", "Professional"], ["masterpiece", "Masterpiece"]];
 const EFFORT_LEVELS = [["low", "Low — quick answers"], ["mid", "Medium (default)"], ["high", "High — checks its work"], ["max", "Max — plans, builds, verifies"], ["ultimate", "Ultimate — exhaustive"]];
 const CATEGORIES = [
   { id: "general", title: "General", sub: "Startup, background tabs, sounds, notifications", icon: "sliders", items: [
@@ -729,8 +730,9 @@ const CATEGORIES = [
     { id: "motion", pref: "motion", type: "toggle", label: "Animations", sub: "Transitions, pulses and toasts. Off also follows your system's reduced-motion setting." },
     { id: "brand", type: "action", label: "On-page bar look", sub: "Name, logo, colours, button style, typeface and size of the bar on AI pages — edited on the page itself.", button: "Customize on the AI page", run: () => $("settings").click() },
   ] },
-  { id: "agents", title: "AI & Agents", sub: "Reasoning effort, plan mode, auto-fix, debugger, Multi-Agent, custom prompt", icon: "brain", items: [
+  { id: "agents", title: "AI & Agents", sub: "Reasoning effort, creation quality, plan mode, auto-fix, debugger, Multi-Agent, custom prompt", icon: "brain", items: [
     { id: "effort", key: "rsThinkingLevel", type: "select", default: "mid", live: true, label: "Reasoning effort", sub: "How hard the AI thinks before it acts — through the prompt only; the site's model is never switched.", options: EFFORT_LEVELS },
+    { id: "cprofile", key: "rsCreationProfile", type: "select", default: "high", live: true, label: "Creation quality", sub: "How strictly a build is checked against your request: Standard = one reminder for missing parts; High = every part must be read back + integration checks; Professional = audits + a second round; Masterpiece = three rounds. Always capped by the provider's limits.", options: CREATION_PROFILES },
     { id: "extra", key: "rsExtraThinking", type: "toggle", default: false, live: true, label: "Extra thinking", sub: "The AI questions every assumption before acting (the Think button on the bar)." },
     { id: "plan", key: "rsPlanMode", type: "toggle", default: false, live: true, label: "Plan mode", sub: "Write the plan first, then build step by step." },
     { id: "autofix", key: "rsAutoFix", type: "toggle", default: true, live: true, label: "Auto-fix playtest errors", sub: "Watches Output during Play and sends new errors to the AI." },
@@ -780,7 +782,7 @@ const CATEGORIES = [
     { id: "donate", type: "donate", label: "Donate" },
   ] },
 ];
-const RS_KEYS_ALL = ["rsWorkMode", "rsPermMode", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsAutoFixStopPlay", "rsAutoDebug", "rsBgMode", "rsSounds", VOLUME_KEY, "rsSettingsAdvanced", "rsThinkingLevel", "rsReasoningModes", "rsEffortExtras", "rsPlanMode", "rsGuiBrief", "rsMultiAgent", "rsGentlePacing", "rsCustomPrompt", "rsKeybinds", "rsBrand", "rsDebugDiagnostics", "rsAllowPublishAutomation", "rsImageTools", "rs-engine", PREF_KEY];
+const RS_KEYS_ALL = ["rsWorkMode", "rsPermMode", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsAutoFixStopPlay", "rsAutoDebug", "rsBgMode", "rsSounds", VOLUME_KEY, "rsSettingsAdvanced", "rsThinkingLevel", "rsReasoningModes", "rsEffortExtras", "rsPlanMode", "rsCreationProfile", "rsGuiBrief", "rsMultiAgent", "rsGentlePacing", "rsCustomPrompt", "rsKeybinds", "rsBrand", "rsDebugDiagnostics", "rsAllowPublishAutomation", "rsImageTools", "rs-engine", PREF_KEY];
 const EXPORT_KEYS = RS_KEYS_ALL.filter((k) => k !== "rsImageTools");
 let currentCat = null;
 const catById = (id) => CATEGORIES.find((c) => c.id === id);

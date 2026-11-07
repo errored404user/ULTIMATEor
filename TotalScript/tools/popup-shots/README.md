@@ -33,4 +33,4 @@ width for the base / night / void themes and counts the line boxes of every
 label. A label with more lines than words is being squeezed letter-by-letter
 (the 2.12.0 regression: `overflow-wrap: anywhere` on a flex item collapses its
 minimum width to one glyph). Exit code 1 on any squeezed label; PNGs land in
-`/tmp/tray-*.png` (`ui/snapshots/tray-rows-*.png` are the 2.12.1 results).
+`/tmp/tray-*.png` (`ui/snapshots/tray-rows-*.png` are the 2.13.0 results).

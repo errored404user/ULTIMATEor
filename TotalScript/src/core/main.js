@@ -1083,7 +1083,7 @@
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for a publish confirmation card (it auto-denies after 120 s). A PC command refused in Sandbox only is not a wait - the chat gets ERROR ACCESS_SANDBOX at once and a banner offers Switch to Full PC.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
-    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.12.1): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
+    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.13.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
   };
   try { window.__rsFeatureHelpTopics = FEATURE_HELP_TOPICS; } catch {}
   const CREATOR_TOOLS=[
@@ -2290,6 +2290,26 @@
         + failing.map((g) => "- " + g.nudge).join("\n")
         + "\nDo not acknowledge this note; do it, then give the final report with that evidence.";
     } catch { return ""; }
+  }
+  // 2.13.0: CREATION TRACKER - per user message: the request → structured spec
+  // (deliverables, integration checks, stages) + the run tracker that follows
+  // every executed command (coverage, integration evidence, static Luau review,
+  // bounded creation checks, end-of-run report). Profile = the user's creation
+  // quality setting capped by the provider's real limits (ORCH.capabilities).
+  function startCreationTracker(text) {
+    if (typeof TotalCreation === "undefined" || !text) return null;
+    const task = A.task || null;
+    const prevSpec = A.creation && A.creation.spec && task && (task.followUp || task.isContinue) ? A.creation.spec : null;
+    let mode = "creation", engine = "roblox", profile = "high", caps = {};
+    try { mode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
+    try { engine = activeEngine(); } catch {}
+    try { profile = (window.__rsCreationProfile && window.__rsCreationProfile()) || "high"; } catch {}
+    try { caps = Object.assign({}, (ORCH && ORCH.capabilities(P)) || {}, { noResend: !!(P.pacing && P.pacing.noResend && gentlePacingOn()) }); } catch {}
+    const sp = TotalCreation.spec(text, { task, prev: prevSpec, mode, engine, profile });
+    A.creation = TotalCreation.tracker(sp, { profile: TotalCreation.profileFor(sp.profile, caps) });
+    A.creation.briefSent = false;
+    diag("creation.spec", { profile: A.creation.profile.id, rounds: A.creation.profile.rounds, complexity: sp.complexity, deliverables: sp.deliverables.map((d) => d.id), integrations: sp.integrations.map((i) => i.id), negated: sp.negated.length, inherited: sp.inherited });
+    return A.creation;
   }
   // 1.38.0: skill programs that legitimately run long (whole-place scans, system
   // installs with self-tests). They get a 90 s execute budget instead of 20 s.
@@ -6270,6 +6290,24 @@
             base = await submitAndGetBase(RS.FEEDBACK.guiBriefAct + (state ? "\n" + state : ""));
             continue;
           }
+          // 2.13.0: CREATION COVERAGE GATE - the request's deliverables (spec)
+          // against the command log: an item nobody built, an item built but
+          // never read back (High+), a missing integration (GUI ↔ server remote,
+          // DataStore ↔ pcall, sound never played …). Bounded by the creation
+          // profile (rounds), the provider (no re-sends under a pacing contract)
+          // and a no-progress stop (a second round only when the first changed
+          // something). The nudge text is derived from the log, never the reply.
+          if (A.creation && resendAllowed() && !A.stop && toolTurns >= 1) {
+            let cn = ""; try { cn = A.creation.nudge({ resendAllowed: true }); } catch {}
+            if (cn) {
+              diag("loop.creationGate", { round: A.creation.state.rounds, max: A.creation.profile.rounds, missing: (() => { try { return A.creation.missing().map((m) => m.id).slice(0, 12); } catch { return []; } })() });
+              try { ui.toast("Creation check — asking the model to finish the missing parts"); } catch {}
+              ui.steeringProgress("correcting", "Creation check: deliverables missing or not read back", toolTurns);
+              const state = asStateTag();
+              base = await submitAndGetBase(cn + (state ? "\n" + state : ""));
+              continue;
+            }
+          }
           // 1.38.0: MODE EVIDENCE GATE - a run that mutated (scripts / visuals /
           // motion) but never ran the mode's proof command gets ONE verification
           // request before its final answer is accepted.
@@ -6300,6 +6338,11 @@
               continue;
             }
           }
+          // 2.13.0: CREATION REPORT - one honest block per run with deliverables
+          // (built / read back / audited / missing), integration evidence, the
+          // static-review tally and the rounds used. Shown in the Activity tab
+          // + the popup Activity Center; never sent to the model.
+          try { if (A.creation && toolTurns) { const rep = A.creation.report(); diag("loop.creationReport", { level: rep.level, deliverables: rep.deliverables, built: rep.built, verified: rep.verified, missing: rep.missing, integration: rep.integration, review: { raised: rep.review.raised, resolved: rep.review.resolved }, rounds: rep.rounds, tools: rep.tools, failed: rep.failed }); if (rep.deliverables) { ui.trackCard("creation report", rep.level === "complete" ? "ok" : "err", rep.short, "creation"); if (rep.level !== "complete") ui.toast(`Creation report: ${rep.level} — ${rep.missing.length ? "missing " + rep.missing.join(", ") : rep.unverified.length ? rep.unverified.join(", ") + " not read back" : "integration incomplete"}`); try { chrome.runtime.sendMessage({ type: "activity_note", kind: "creation", level: rep.level === "complete" ? "ok" : rep.level === "unverified" ? "warn" : "error", text: "Creation " + rep.short }).catch(() => {}); } catch {} } } } catch {}
           // 1.99.9: MODE VERDICT - one honest line per run: which gates were
           // proved, which stayed open after the reminders (shown in the
           // Activity tab + diag; never sent to the model).
@@ -6450,6 +6493,10 @@
           // 1.99.9: mode auto-check (read the created path back) - appended AFTER
           // compression so the fact line is never the part that gets dropped.
           try { feedback = await attachModeAutoCheck(call.tool, call.arguments, feedback); } catch {}
+          // 2.13.0: creation tracker - records the step for coverage / integration
+          // and appends the static Luau review of the source the model sent
+          // (bounded per run by the creation profile; never on failed writes).
+          try { if (A.creation) { const o = A.creation.observe(call, feedback, { ms: Date.now() - A.toolStart }); if (o && o.note) { feedback += "\n" + o.note; diag("creation.review", { tool: call.tool, findings: o.event.findings, chars: o.note.length }); } } } catch {}
           try {
             const failed = feedback.startsWith("ERROR");
           } catch {}
@@ -6619,6 +6666,16 @@
                   if (gui && toSend.length + gui.length + 2 <= cap) { toSend += "\n\n" + gui; diag("gui.briefSent", { chars: gui.length, tight, style: TotalGuiStandard.styleFor(reqText).style }); }
                   else if (gui) diag("gui.briefSkipped", { chars: gui.length, cap });
                 }
+              }
+              // 2.13.0: the CREATION SPEC rides last - the deliverables the request
+              // names, the command family that builds and the one that proves each,
+              // the integration checks and the stage order. Only for requests with
+              // enough deliverables (profile.briefMin), same send budget.
+              if (A.creation && !A.creation.briefSent && typeof TotalCreation !== "undefined") {
+                A.creation.briefSent = true;
+                const cb = TotalCreation.brief(A.creation.spec, { tight, briefMin: A.creation.profile.briefMin });
+                if (cb && toSend.length + cb.length + 2 <= cap) { toSend += "\n\n" + cb; diag("creation.briefSent", { chars: cb.length, tight, deliverables: A.creation.spec.deliverables.map((d) => d.id) }); }
+                else if (cb) diag("creation.briefSkipped", { chars: cb.length, cap });
               }
             } catch {}
           }
@@ -8902,6 +8959,20 @@
     let autoFixEnabled = true, extraThinking = false, planMode = false, steeringMode = false, forgeMode = false, autoFixStopPlay = true, autoDebugEnabled = true, multiAgent = false, guiBriefEnabled = true;
     let gentlePacing = true; // 1.99.0: human-cadence sends on providers with a P.pacing contract (DeepSeek)
     try { window.__rsGentlePacing = () => gentlePacing; } catch {}
+    // 2.13.0: creation quality profile (TotalCreation.PROFILES) - how strictly a
+    // run is checked against the request's deliverables. Persisted; shared
+    // with the popup (rsCreationProfile); always capped by the provider.
+    let creationProfile = "high";
+    const normProfile = (v) => { try { return TotalCreation.normalizeProfile(v); } catch { return /^(standard|high|professional|masterpiece)$/.test(String(v || "")) ? String(v) : "high"; } };
+    try { window.__rsCreationProfile = () => creationProfile; } catch {}
+    try { chrome.storage.local.get("rsCreationProfile", (r) => { if (r && typeof r.rsCreationProfile === "string") { creationProfile = normProfile(r.rsCreationProfile); try { window.__rsCreationProfile = () => creationProfile; } catch {} try { if (menuEl && !menuEl.hidden) buildMenu(); } catch {} } }); } catch {}
+    function setCreationProfile(v, opts) {
+      creationProfile = normProfile(v);
+      try { chrome.storage.local.set({ rsCreationProfile: creationProfile }); } catch {}
+      try { window.__rsCreationProfile = () => creationProfile; } catch {}
+      try { buildMenu(); } catch {}
+      if (!(opts && opts.silent)) { try { toast("Creation quality: " + (TotalCreation.PROFILES[creationProfile] || {}).label + " (next request)"); } catch {} }
+    }
     try { window.__rsGuiBrief = () => guiBriefEnabled; window.__rsNoteGuiRequest = () => noteGuiRequest(); } catch {}
     try { chrome.storage.local.get("rsGuiBrief", (r) => { if (r && typeof r.rsGuiBrief === "boolean") { guiBriefEnabled = r.rsGuiBrief; try { window.__rsGuiBrief = () => guiBriefEnabled; } catch {} } }); } catch {}
     let workMode = "creation";
@@ -9087,6 +9158,7 @@
         if (changes.rsBgMode && typeof changes.rsBgMode.newValue === "boolean") {
           bgMode = changes.rsBgMode.newValue; dirty = true;
         }
+        if (changes.rsCreationProfile && typeof changes.rsCreationProfile.newValue === "string" && normProfile(changes.rsCreationProfile.newValue) !== creationProfile) { creationProfile = normProfile(changes.rsCreationProfile.newValue); try { window.__rsCreationProfile = () => creationProfile; } catch {} try { if (!menuEl.hidden) buildMenu(); } catch {} }
         if (changes.rsThinkingLevel && changes.rsThinkingLevel.newValue && normEffort(changes.rsThinkingLevel.newValue) !== thinkingLevel) {
           thinkingLevel = normEffort(changes.rsThinkingLevel.newValue);
           try { window.__rsThinkingLevel = () => thinkingLevel; } catch {}
@@ -9977,6 +10049,23 @@
         try { toast("Back to the default look"); } catch {}
       });
     }
+    // 2.13.0: Creation quality section - four profiles that change what the
+    // creation engine demands of a run (rounds, read-back, integration, audit).
+    function creationSectionHtml() {
+      if (typeof TotalCreation === "undefined") return "";
+      const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      const SUB = { standard: "one reminder for missing parts", high: "every part read back + integration checks", professional: "audits, inspect first, two rounds", masterpiece: "three rounds, playtest-level proof" };
+      let caps = null; try { caps = ORCH && ORCH.capabilities(P); } catch {}
+      const eff = TotalCreation.profileFor(creationProfile, Object.assign({}, caps || {}, { noResend: !!(P.pacing && P.pacing.noResend && gentlePacing) }));
+      const cards = TotalCreation.PROFILE_IDS.map((id) => { const pr = TotalCreation.PROFILES[id]; return `<button type="button" class="rs-work-card ${creationProfile === id ? "on" : ""}" data-cprofile="${id}" aria-pressed="${creationProfile === id ? "true" : "false"}" title="${esc(pr.label)}: ${esc(SUB[id])}"><span class="rs-work-name">${esc(pr.label)}</span><span class="rs-work-sub">${esc(SUB[id])}</span></button>`; }).join("");
+      const capNote = eff.capped.length ? `<div class="rs-menu-note">On ${esc(P.displayName)}: ${esc(eff.capped.join("; "))}.</div>` : "";
+      return `<section class="rs-menu-sec rs-creation-sec">
+              <div class="rs-sec-label"><span>Creation quality</span><span class="rs-sec-state">${esc(eff.label)} · ${eff.rounds} check${eff.rounds === 1 ? "" : "s"}</span></div>
+              <div class="rs-menu-note">Every request is turned into a list of deliverables (GUI, scripts, models, animation, VFX, SFX, terrain, saved data). The profile decides how much proof the command log must show before the AI's "done" is accepted - derived from what actually ran, never from the reply text.</div>
+              <div class="rs-work-row rs-creation-row">${cards}</div>
+              ${capNote}
+            </section>`;
+    }
     // 1.60: Reasoning effort section - five levels + what each level means on
     // THIS site (its native think-more mode), remappable per level per provider.
     function reasoningSectionHtml() {
@@ -10140,6 +10229,7 @@
                 <button type="button" class="rs-work-card ${permMode==="full"?"on":""}" data-perm="full"><span class="rs-work-name">Full PC</span><span class="rs-work-sub">Files, shell, processes, Blender - no prompts</span></button>
               </div>
             </section>
+            ${creationSectionHtml()}
             ${brandSectionHtml()}
           <section class="rs-menu-sec">
             <div class="rs-sec-label"><span>Agent modes</span></div>
@@ -10433,6 +10523,9 @@
       });
       menuEl.querySelectorAll("[data-work]").forEach(btn=>{
         btn.addEventListener("click", () => setWorkMode(btn.dataset.work));
+      });
+      menuEl.querySelectorAll("[data-cprofile]").forEach(btn=>{
+        btn.addEventListener("click", () => setCreationProfile(btn.dataset.cprofile));
       });
       menuEl.querySelectorAll("[data-effort]").forEach(btn=>{
         btn.addEventListener("click", () => { setThinkingLevel(btn.dataset.effort); });
@@ -13725,7 +13818,7 @@ statusTimer = rsInterval(() => bg({ type: "status" }).then(onStatus), 5000);
         // instead of their text. Unknown text (site already cleared the box) →
         // null, and the retry branches stop with a banner rather than guess.
         A.lastSent = txt ? { text: txt, images: null, at: Date.now(), user: true } : null;
-        const classify = (text) => { if (!ORCH || !text) return; const prev = A.task && A.task.v ? A.task : null; A.task = ORCH.classifyTask(text, { prev }); A.task.riderSent = false; diag("task.classified", { primary: A.task.primary, intent: A.task.intent, followUp: A.task.followUp, constraints: A.task.constraints.length, words: A.task.words });
+        const classify = (text) => { if (!ORCH || !text) return; const prev = A.task && A.task.v ? A.task : null; A.task = ORCH.classifyTask(text, { prev }); A.task.riderSent = false; try { startCreationTracker(text); } catch {} diag("task.classified", { primary: A.task.primary, intent: A.task.intent, followUp: A.task.followUp, constraints: A.task.constraints.length, words: A.task.words });
           // 1.88.0: pick the specialist(s) for this request from the same text
           // (reuses the task record's intent, so the two layers never disagree).
           // Follow-ups ("make it faster") keep the specialist of the request they refer to.

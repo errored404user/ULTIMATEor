@@ -6057,6 +6057,9 @@ html[data-rs-theme="void"] .rs-template-head{background:linear-gradient(180deg,r
 .rs-work-row.rs-work-creation{grid-template-columns:minmax(0,1fr)}
 /* 1.99.5: Access has two states (Sandbox only / Full PC). */
 .rs-work-row.rs-access-row{grid-template-columns:1fr 1fr}
+/* 2.13.0 — creation quality: four profile cards, two per row (names wrap, never one glyph per line) */
+.rs-work-row.rs-creation-row{grid-template-columns:1fr 1fr}
+.rs-creation-row .rs-work-sub{overflow-wrap:break-word}
 .rs-work-creation .rs-work-card{min-height:48px}
 .rs-sec-state{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--total-accent,#9ca8ff)}
 

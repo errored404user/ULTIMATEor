@@ -33,7 +33,7 @@
 // content script (window.TotalOrchestrator).
 const TotalOrchestrator = (() => {
   "use strict";
-  const VERSION = "2.12.1";
+  const VERSION = "2.13.0";
 
   // ───────────────────────── 1. task understanding ─────────────────────────
   const CATEGORY_RE = {
@@ -462,8 +462,21 @@ const TotalOrchestrator = (() => {
       tightPrompt: !!(num("sysMaxChars") && num("sysMaxChars") < 16000) || !!P.compactCommandList,
       timings: { genIdleMs: T.GEN_IDLE_MS || null, reasonIdleMs: T.REASON_IDLE_MS || null, warmupMs: T.WARMUP_MS || null, reasonNoReplyMs: T.REASON_NOREPLY_MS || null, stableMs: T.STABLE_MS || null, responseTimeoutMs: T.RESPONSE_TIMEOUT_MS || null, prestartMs: T.PRESTART_MS || null, genStopGraceMs: T.GEN_STOP_GRACE_MS || null },
       promptExtra: typeof P.promptExtra === "string" ? P.promptExtra.length : 0,
+      // 2.13.0 — creation-engine inputs (real adapter fields only):
+      //   pacing        the adapter's human-cadence contract (DeepSeek) or null
+      //   pacingNoResend  true = the contract forbids automatic re-sends; the
+      //                 creation / mode / effort gates then only REPORT
+      //   commandFormat "plain" = the adapter cannot carry fenced-json commands
+      //                 (Vani); the loop uses the bare ###LUA### protocol
+      //   commandlessRetries  how many "no command in the reply" retries the
+      //                 adapter asks for (Vani 2); null = loop default
+      pacing: P.pacing && typeof P.pacing === "object" ? { minGapMs: num2(P.pacing.minGapMs), maxGapMs: num2(P.pacing.maxGapMs), perHour: num2(P.pacing.perHour), perDay: num2(P.pacing.perDay), noResend: !!P.pacing.noResend } : null,
+      pacingNoResend: !!(P.pacing && P.pacing.noResend),
+      commandFormat: P.commandFormat === "plain" ? "plain" : "json",
+      commandlessRetries: Number.isFinite(Number(P.commandlessRetries)) ? Math.max(0, Math.min(5, Number(P.commandlessRetries))) : null,
     };
   }
+  const num2 = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null);
 
   // ───────────────────────── 7. redaction ─────────────────────────
   const SECRET_RES = [
