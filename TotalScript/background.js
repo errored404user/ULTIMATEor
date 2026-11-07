@@ -125,6 +125,40 @@ let toolsCacheAt = 0;
 const mcpDiagnostics = [];
 function mcpTrace(operation, detail={}) { const row={timestamp:new Date().toISOString(),connectionId,requestId:detail.requestId||null,server:engineLabel(),transport:"websocket",operation,duration:detail.duration||0,status:detail.status||mcpLifecycle,errorCode:detail.errorCode||null,retryCount:detail.retryCount??reconnectAttempts};mcpDiagnostics.push(row);if(mcpDiagnostics.length>100)mcpDiagnostics.shift(); }
 function setMcpLifecycle(next, detail={}) { mcpLifecycle=next;mcpTrace("lifecycle",{...detail,status:next}); }
+// ── 2.12.0 Activity Center ──────────────────────────────────────────────────
+// A bounded, human-readable event log for the popup (Activity tab, bell,
+// error viewer). Lives in chrome.storage.session (cleared when the browser
+// closes; survives MV3 worker restarts), capped at ACTIVITY_MAX entries.
+// Entries: {at, kind: tool|conn|engine|server|blender, level: ok|info|warn|error,
+// text, tool?, code?, ms?, engine?}. No prompts, no conversation text.
+const ACTIVITY_MAX = 200;
+const ACTIVITY_KEY = "tsActivity";
+let activityRing = null; // lazy-loaded from session storage
+let activityWrite = Promise.resolve();
+async function activityLoad() {
+  if (activityRing) return activityRing;
+  try { const o = await chrome.storage.session.get(ACTIVITY_KEY); activityRing = Array.isArray(o[ACTIVITY_KEY]) ? o[ACTIVITY_KEY].slice(-ACTIVITY_MAX) : []; }
+  catch { activityRing = []; }
+  return activityRing;
+}
+function pushActivity(kind, level, text, extra) {
+  const item = { at: Date.now(), kind: String(kind || "info"), level: String(level || "info"), text: String(text || "").slice(0, 300), ...(extra || {}) };
+  if (item.tool != null) item.tool = String(item.tool).slice(0, 120);
+  if (item.code != null) item.code = String(item.code).slice(0, 60);
+  if (item.engine == null) item.engine = engine;
+  activityWrite = activityWrite.then(async () => {
+    const ring = await activityLoad();
+    ring.push(item);
+    while (ring.length > ACTIVITY_MAX) ring.shift();
+    try { await chrome.storage.session.set({ [ACTIVITY_KEY]: ring }); } catch {}
+  }).catch(() => {});
+  chrome.runtime.sendMessage({ type: "rs-activity", item }).catch(() => {});
+  return item;
+}
+async function clearActivity() {
+  activityRing = [];
+  try { await chrome.storage.session.remove(ACTIVITY_KEY); } catch {}
+}
 let manualStudioDisconnect = false;
 let heartbeatTimer = null;
 let lastMessageAt = 0; // timestamp of the last frame received from the bridge
@@ -373,6 +407,7 @@ function connect() {
     reconnectAttempts = 0;
     connectionId = `mcp-${Date.now().toString(36)}`;
     setMcpLifecycle("CONNECTED");mcpTrace("connect",{duration:Math.round(performance.now()-mcpConnectStarted),status:"CONNECTED"});
+    pushActivity("conn", "ok", `Bridge connected (${engineLabel()})`, { ms: Math.round(performance.now() - mcpConnectStarted) });
     lastMessageAt = Date.now();
     log(`connected to ${engineLabel()} bridge (${url})`);
     startHeartbeat();
@@ -394,6 +429,7 @@ function connect() {
 
   sock.onclose = () => {
     if (sock !== ws) return;
+    if (connected) pushActivity("conn", manualStudioDisconnect ? "info" : "warn", manualStudioDisconnect ? "Bridge disconnected on request" : "Bridge connection dropped — reconnecting", { code: manualStudioDisconnect ? undefined : "MCP_CONNECTION_CLOSED" });
     connected = false;
     mcpAlive = false;
     studioConnected = null;
@@ -1814,6 +1850,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         studioProc = null;
         robloxEditorConnected = false;
         failAllPending(`engine switched to ${engine}`);
+        pushActivity("engine", "info", `Engine switched to ${engine === "local" ? "AgentScript" : "Roblox"}`);
         reconnectDelay = RECONNECT_MIN;
         connect();
         broadcastStatus();
@@ -1954,6 +1991,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           if (retry) r=retry;
         }
         mcpTrace("tool_invocation",{requestId:r?.requestId||msg.requestId,duration:Math.round(performance.now()-toolStarted),status:r?.ok?"OK":"ERROR",errorCode:r?.mcpErrorCode||r?.errorCode});
+        {
+          const toolMs = Math.round(performance.now() - toolStarted);
+          if (r && r.ok) pushActivity("tool", "ok", `${bareTool} ok`, { tool: msg.name, ms: toolMs });
+          else pushActivity("tool", "error", `${bareTool} failed: ${String((r && r.error) || "no answer").slice(0, 160)}`, { tool: msg.name, ms: toolMs, code: (r && (r.errorCode || r.mcpErrorCode)) || (r && r.kind === "timeout" ? "MCP_REQUEST_TIMEOUT" : "MCP_SERVER_UNAVAILABLE") });
+        }
         if (r && !r.ok && !r.errorCode) {
           const detail=String(r.error||"");
           r.mcpErrorCode = r.kind === "timeout" ? "MCP_REQUEST_TIMEOUT" : r.kind === "disconnected" ? "MCP_CONNECTION_CLOSED" : "MCP_PROTOCOL_ERROR";
@@ -1980,7 +2022,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           const tools = await send({ type: "list_tools" }, 10000);
           if (tools && tools.ok && Array.isArray(tools.tools)) toolsCache = tools.tools;
           mcpAlive = true;
-        }
+          pushActivity("server", "ok", `${engineLabel()} server restarted (${toolsCache.length} tools)`);
+        } else pushActivity("server", "error", `Server restart failed: ${String((r && r.error) || "bridge offline").slice(0, 160)}`, { code: (r && r.errorCode) || "MCP_SERVER_UNAVAILABLE" });
         sendResponse(r);
         break;
       }
@@ -1994,7 +2037,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         break;
       }
       case "blender_connect": {
-        sendResponse(await connectBlender());
+        const br = await connectBlender();
+        pushActivity("blender", br && br.blender ? "ok" : "warn", br && br.blender ? "Blender addon linked (port 9876)" : `Blender did not answer: ${String((br && br.error) || "addon not running").slice(0, 120)}`);
+        sendResponse(br);
         break;
       }
       case "blender_status": {
@@ -2003,6 +2048,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       case "blender_disconnect": {
         setBlender(false, "");
+        pushActivity("blender", "info", "Blender addon unlinked");
         broadcastStatus();
         sendResponse({ ok: true, blender: false });
         break;
@@ -2017,19 +2063,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           type: "add_server", server_id: msg.server_id,
           command: msg.command, args: msg.args, env: msg.env,
         }, 15000);
+        pushActivity("server", r && r.ok ? "ok" : "error", r && r.ok ? `MCP server added: ${String(msg.server_id || "")}` : `Adding MCP server ${String(msg.server_id || "")} failed: ${String((r && r.error) || "no answer").slice(0, 120)}`);
         sendResponse(r);
         break;
       }
       case "remove_server": {
         const r = await send({ type: "remove_server", server_id: msg.server_id }, 15000);
+        pushActivity("server", r && r.ok ? "info" : "error", r && r.ok ? `MCP server removed: ${String(msg.server_id || "")}` : `Removing MCP server ${String(msg.server_id || "")} failed`);
         sendResponse(r);
         break;
       }
       case "reconnect":
         reconnectDelay = RECONNECT_MIN;
+        if (!connected) pushActivity("conn", "info", "Reconnect requested");
         connect();
         sendResponse({ ok: true });
         break;
+      case "activity_log": {
+        const ring = await activityLoad();
+        sendResponse({ ok: true, items: ring.slice(-ACTIVITY_MAX), max: ACTIVITY_MAX });
+        break;
+      }
+      case "activity_clear": {
+        await clearActivity();
+        sendResponse({ ok: true });
+        break;
+      }
       // ── ZeroScript Rust pipe — CORS bypass via background (content script → background → 127.0.0.1) ──
       case "rs-push":
       case "push_payload": {

@@ -8782,3 +8782,45 @@ html.rs-light .rs-toast-n { background: rgba(0,0,0,0.08); color: #0f172a; }
 @media (max-width: 760px) { #rs-root.rs-setup-visible #rs-notify { right: 18px; top: auto; bottom: 96px; } }
 #rs-status-pill.rs-status-reconnecting .rs-status-dot { animation: rs-dot-pulse 1.1s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { #rs-status-pill.rs-status-reconnecting .rs-status-dot { animation: none; } }
+
+/* ═══ 2.12.0 — settings tray navigation + rendering normalisation ═══════════
+   Appended last on purpose: these rules win over the older per-section
+   styling above without rewriting it. Tokens mirror ui/tokens.css (the
+   content script cannot link a second stylesheet). */
+#rs-menu { --rs-ui-font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, "Noto Sans", sans-serif; --rs-ui-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; --rs-ui-focus: 0 0 0 2px rgba(16,15,14,1), 0 0 0 4px #22d3ee; font-family: var(--rs-ui-font); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; font-variant-ligatures: none; }
+html.rs-light #rs-menu { --rs-ui-focus: 0 0 0 2px #fff, 0 0 0 4px #0891b2; }
+/* search + section chips (built by decorateMenu) */
+.rs-menu-nav { position: sticky; top: 0; z-index: 2; display: grid; gap: 8px; padding: 10px 14px; background: rgba(16,15,14,0.97); backdrop-filter: blur(22px) saturate(1.08); -webkit-backdrop-filter: blur(22px) saturate(1.08); border-bottom: 1px solid rgba(255,255,255,0.07); }
+html.rs-light .rs-menu-nav { background: rgba(255,255,255,0.96); border-bottom-color: rgba(0,0,0,0.08); }
+.rs-menu-search { display: block; margin: 0; }
+.rs-menu-search input { width: 100%; box-sizing: border-box; height: 32px; padding: 0 10px 0 30px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa1b1' stroke-width='2' stroke-linecap='round'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>") no-repeat 9px center / 14px 14px; color: #f3f1ee; font: 12.5px var(--rs-ui-font); outline: none; }
+.rs-menu-search input::placeholder { color: #7a7a82; }
+.rs-menu-search input:focus-visible { box-shadow: var(--rs-ui-focus); border-color: transparent; }
+html.rs-light .rs-menu-search input { background-color: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.12); color: #0f172a; }
+.rs-menu-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.rs-menu-chip { height: 22px; padding: 0 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: #a9a9b2; font: 600 10.5px/1 var(--rs-ui-font); cursor: pointer; white-space: nowrap; transition: background .13s ease, color .13s ease; }
+.rs-menu-chip:hover { background: rgba(255,255,255,0.07); color: #f3f1ee; }
+.rs-menu-chip.on { background: rgba(34,211,238,0.14); border-color: rgba(34,211,238,0.4); color: #9ff3ff; }
+.rs-menu-chip:focus-visible { outline: none; box-shadow: var(--rs-ui-focus); }
+html.rs-light .rs-menu-chip { border-color: rgba(0,0,0,0.12); color: #475569; }
+html.rs-light .rs-menu-chip:hover { background: rgba(0,0,0,0.05); color: #0f172a; }
+html.rs-light .rs-menu-chip.on { background: rgba(8,145,178,0.12); border-color: rgba(8,145,178,0.4); color: #0e7490; }
+#rs-menu.rs-menu-simple .rs-menu-chip.rs-adv { display: none; }
+#rs-menu [data-rs-filtered] { display: none !important; }
+.rs-menu-empty { padding: 22px 14px; text-align: center; color: #82828b; font-size: 12px; }
+/* every control in the tray: consistent focus ring, no clipped labels,
+   wrapping for long technical strings, mono for code-like values */
+#rs-menu button:focus-visible, #rs-menu input:focus-visible, #rs-menu select:focus-visible, #rs-menu textarea:focus-visible, #rs-menu [tabindex]:focus-visible { outline: none; box-shadow: var(--rs-ui-focus); }
+#rs-menu .rs-tip-opt > span:first-child, #rs-menu .rs-site-name > span:first-child, #rs-menu .rs-mcp-name { min-width: 0; overflow-wrap: anywhere; }
+#rs-menu .rs-tip-sub, #rs-menu .rs-menu-note, #rs-menu .rs-mcp-url { overflow-wrap: anywhere; line-height: 1.4; }
+#rs-menu .rs-mcp-url, #rs-menu [data-keybind], #rs-menu code, #rs-menu kbd { font-family: var(--rs-ui-mono); font-variant-ligatures: none; }
+#rs-menu button[disabled], #rs-menu [aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+#rs-menu .rs-sec-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+#rs-menu .rs-sec-label > span:first-child { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8d8d96; }
+#rs-menu .rs-sec-state { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; }
+@media (prefers-reduced-motion: reduce) { #rs-menu, #rs-menu * { animation: none !important; transition: none !important; } }
+/* bar + panels: Unicode-safe text rendering (Turkish ç ğ ı İ ö ş ü, long
+   command names, paths) — never clipped mid-glyph, never ligatured */
+#rs-root, #rs-root *, #rs-cards-window, #rs-cards-window * { font-variant-ligatures: none; }
+#rs-root .rs-toast-m, #rs-root .rs-banner, #rs-cards-window .rs-template-empty span, #rs-cards-window p { overflow-wrap: anywhere; }
+#rs-root code, #rs-root pre, #rs-cards-window code, #rs-cards-window pre { font-family: "Cascadia Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; overflow-wrap: anywhere; white-space: pre-wrap; }

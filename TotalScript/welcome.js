@@ -9,3 +9,13 @@ const openTab = (url) => { try { chrome.tabs.create({ url }); } catch { window.o
 document.getElementById("open-ai")?.addEventListener("click", () => openTab(DEFAULT_AI_URL));
 document.getElementById("open-discord")?.addEventListener("click", () => openTab(DISCORD_URL));
 document.getElementById("close")?.addEventListener("click", () => { try { window.close(); } catch {} });
+// 2.12.0: follow the popup's Appearance choice (tsPopup) when one exists.
+try {
+  chrome.storage.local.get("tsPopup", (r) => {
+    const p = r && r.tsPopup && typeof r.tsPopup === "object" ? r.tsPopup : {};
+    const html = document.documentElement;
+    if (["dark", "light", "system"].includes(p.theme)) html.setAttribute("data-ts-theme", p.theme);
+    if (["aqua", "violet", "emerald", "amber", "rose", "slate"].includes(p.accent)) html.setAttribute("data-accent", p.accent);
+    if (p.motion === false) html.setAttribute("data-motion", "off");
+  });
+} catch {}

@@ -26,7 +26,7 @@ const src = read("src/core/skills/studio_verify.js");
 const LIB = S.VERIFY_LIB;
 
 // ── A. registration ───────────────────────────────────────────────────────────
-ok("A1 pack exports VERIFY_COMMANDS (2 names) + VERSION 2.11.0 + LIB + validateVerify", JSON.stringify(S.VERIFY_COMMANDS) === JSON.stringify(NAMES) && S.VERIFY_VERSION === "2.11.0" && typeof LIB === "string" && typeof S.validateVerify === "function");
+ok("A1 pack exports VERIFY_COMMANDS (2 names) + VERSION 2.12.0 + LIB + validateVerify", JSON.stringify(S.VERIFY_COMMANDS) === JSON.stringify(NAMES) && S.VERIFY_VERSION === "2.12.0" && typeof LIB === "string" && typeof S.validateVerify === "function");
 ok("A2 both are registered ONCE, visible, with description + params", NAMES.every((n) => byName.has(n) && !byName.get(n).hidden && byName.get(n).description.length > 120 && Object.keys(byName.get(n).params).length >= 4) && S.SKILL_COMMANDS.filter((c) => NAMES.includes(c.name)).length === 2);
 ok("A3 SKILL_COMMANDS spliced, not reassigned; SKILL_OPS lists the names", /const arr = RobloxScriptSkills\.SKILL_COMMANDS;[\s\S]*?for \(const c of C\) arr\.push\(c\);/.test(src) && !/RobloxScriptSkills\.SKILL_COMMANDS\s*=/.test(src) && NAMES.every((n) => S.SKILL_OPS.includes(n)));
 ok("A4 required params: op for place_checkpoint, path for ui_test; op desc lists save|restore|list|diff|delete", byName.get("place_checkpoint").params.op.req === true && byName.get("place_checkpoint").params.path.req === false && byName.get("ui_test").params.path.req === true && /save\|restore\|list\|diff\|delete/.test(byName.get("place_checkpoint").params.op.desc));
@@ -73,7 +73,7 @@ ok("E5 NEXT_STEP hints for place_checkpoint / ui_test / screenshot_compare point
 ok("E6 config prompt: a VERIFY line teaches place_checkpoint / ui_test / screenshot_compare", /- VERIFY: \\`place_checkpoint\\`/.test(config) && /\\`ui_test\\`/.test(config) && /\\`screenshot_compare\\`/.test(config));
 ok("E7 visible catalogue ceiling moved to 622 in 2.3.0 (628 since the 2.4.0 library + perf packs, 630 since the 2.9.0 device pack) and the count matches the pin", /never above 630/.test(read("tests/test-not-implemented.js")) && S.SKILL_COMMANDS.filter((c) => !c.hidden).length === 630, S.SKILL_COMMANDS.filter((c) => !c.hidden).length);
 ok("E8 prompt budgets still hold (ChatGPT compact <= 14000)", (() => { const c = { window: {}, console, chrome: global.chrome }; c.window = c; c.window.__rsWorkMode = () => "creation"; vm.createContext(c); vm.runInContext(config + ";this.__RS=RS;", c); const tight = c.__RS.buildCompactPrompt ? c.__RS.buildCompactPrompt({ siteName: "ChatGPT", providerId: "chatgpt" }) : ""; return !c.__RS.buildCompactPrompt || tight.length <= 14000; })());
-ok("E9 README documents the 2.11.0 verification release", /2\.11\.0/.test(read("README.md")) && /place_checkpoint/.test(read("README.md")) && /ui_test/.test(read("README.md")) && /screenshot_compare/.test(read("README.md")));
+ok("E9 README documents the 2.12.0 verification release", /2\.12\.0/.test(read("README.md")) && /place_checkpoint/.test(read("README.md")) && /ui_test/.test(read("README.md")) && /screenshot_compare/.test(read("README.md")));
 
 console.log(`\n${fail === 0 ? "OK   " : "FAIL "} test-verify-pack: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

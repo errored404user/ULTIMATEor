@@ -1083,7 +1083,7 @@
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for a publish confirmation card (it auto-denies after 120 s). A PC command refused in Sandbox only is not a wait - the chat gets ERROR ACCESS_SANDBOX at once and a banner offers Switch to Full PC.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
-    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.11.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
+    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.12.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
   };
   try { window.__rsFeatureHelpTopics = FEATURE_HELP_TOPICS; } catch {}
   const CREATOR_TOOLS=[
@@ -10019,6 +10019,56 @@
               <details class="rs-effort-preview rs-adv"><summary>What the AI is told (advanced)</summary><pre class="rs-effort-pre">${esc(preview)}</pre></details>
             </section>`;
     }
+    // 2.12.0 — settings tray navigation: a search box + one chip per section,
+    // built from the rendered sections (no second copy of the menu markup).
+    // Searching hides the rows / sections that do not match; chips scroll to a
+    // section. Pure post-render decoration: every control keeps its handler.
+    function decorateMenu() {
+      if (!menuEl) return;
+      const head = menuEl.querySelector(".rs-menu-head");
+      const secs = [...menuEl.querySelectorAll(".rs-menu-sec")].filter((sec) => sec.querySelector(".rs-sec-label"));
+      if (!head || secs.length < 3) return;
+      const nav = document.createElement("div");
+      nav.className = "rs-menu-nav";
+      nav.innerHTML = '<label class="rs-menu-search"><span class="rs-sr-only">Search settings</span><input type="search" placeholder="Search settings\u2026" autocomplete="off" spellcheck="false"></label><div class="rs-menu-chips" role="tablist" aria-label="Sections"></div>';
+      const chips = nav.querySelector(".rs-menu-chips");
+      const input = nav.querySelector("input");
+      secs.forEach((sec, i) => {
+        const label = sec.querySelector(".rs-sec-label > span");
+        const name = label ? label.textContent.trim() : "";
+        if (!name) return;
+        if (!sec.id) sec.id = "rs-menu-sec-" + i;
+        const chip = document.createElement("button");
+        chip.type = "button"; chip.className = "rs-menu-chip" + (sec.classList.contains("rs-adv") ? " rs-adv" : ""); chip.textContent = name; chip.dataset.sec = sec.id;
+        chip.addEventListener("click", (e) => { e.stopPropagation(); input.value = ""; filter(""); try { sec.scrollIntoView({ block: "start", behavior: "smooth" }); } catch { sec.scrollIntoView(); } chips.querySelectorAll(".rs-menu-chip").forEach((c) => c.classList.toggle("on", c === chip)); });
+        chips.appendChild(chip);
+      });
+      const ROW = ".rs-site-opt, .rs-tip-opt, [data-mode], .rs-mcp-item, label:has([data-keybind]), .rs-work-card, [data-perm]";
+      const filter = (q) => {
+        q = String(q || "").trim().toLowerCase();
+        let shown = 0;
+        for (const sec of secs) {
+          const label = sec.querySelector(".rs-sec-label");
+          const secName = label ? label.textContent.toLowerCase() : "";
+          const rows = [...sec.querySelectorAll(ROW)];
+          if (!q) { sec.removeAttribute("data-rs-filtered"); rows.forEach((r) => r.removeAttribute("data-rs-filtered")); shown++; continue; }
+          const secHit = secName.includes(q);
+          let any = secHit;
+          rows.forEach((r) => { const hit = secHit || r.textContent.toLowerCase().includes(q); r.toggleAttribute("data-rs-filtered", !hit); if (hit) any = true; });
+          if (!rows.length) any = secHit || sec.textContent.toLowerCase().includes(q);
+          sec.toggleAttribute("data-rs-filtered", !any);
+          if (any) shown++;
+        }
+        menuEl.classList.toggle("rs-menu-searching", !!q);
+        let empty = menuEl.querySelector(".rs-menu-empty");
+        if (!shown) { if (!empty) { empty = document.createElement("div"); empty.className = "rs-menu-empty"; menuEl.appendChild(empty); } empty.textContent = "Nothing matches \u201c" + q + "\u201d"; }
+        else if (empty) empty.remove();
+      };
+      input.addEventListener("input", () => filter(input.value));
+      input.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") { input.value = ""; filter(""); input.blur(); } });
+      input.addEventListener("click", (e) => e.stopPropagation());
+      head.insertAdjacentElement("afterend", nav);
+    }
     function buildMenu() {
       try { window.__rsBuildMenu = buildMenu; } catch {}
       const here = (P.displayName || "").toLowerCase();
@@ -10165,6 +10215,7 @@
             </div>
           </section>
           <div class="rs-menu-foot">TotalScript v${EXT_VERSION} • ${currentEngine==="local"?"AS":currentEngine==="anim"?"AN":"RS"} • ${esc(P.displayName)}</div>`;
+      try { decorateMenu(); } catch {}
       const open = (url) => {
         try {
           if (url && /^(?:chrome|moz)-extension:\/\//.test(url)) {
@@ -13355,6 +13406,12 @@ rsInterval(() => {
     }
     if (msg && msg.type === "rs-open-menu") {
       ui.openMenu(false); // from the popup's Settings button — opens at the top (Switch AI / custom prompt)
+    }
+    if (msg && msg.type === "rs-open-cards") {
+      // 2.12.0: popup → Tools → "Open the cards panel" / "Public skills". Same
+      // centred window the bar's templates button opens; tab is optional.
+      const tab = msg.tab === "public" || msg.tab === "tasks" || msg.tab === "activity" || msg.tab === "explorer" ? msg.tab : "library";
+      try { ui.openTray(tab); } catch {}
     }
   });
 

@@ -16,8 +16,12 @@
   --cc-warn: #f5c542;
   --cc-code: #0f1218;
   --cc-radius: 14px;
-  --cc-font: "Inter", "SF Pro Display", -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
-  --cc-mono: ui-monospace, "JetBrains Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+  /* 2.12.0: typography, durations and focus come from the shared design tokens
+     (ui/tokens.css, linked before this sheet); the amber CodeCraft palette stays. */
+  --cc-font: var(--ts-font, "Inter", "SF Pro Display", -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif);
+  --cc-mono: var(--ts-mono, ui-monospace, "JetBrains Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace);
+  --cc-focus: var(--ts-focus, 0 0 0 2px #0b0d12, 0 0 0 4px #f5c542);
+  --cc-dur: var(--ts-dur-2, 160ms);
 }
 /* Follows the OS scheme; the TotalScript core samples the page background and
    toggles html.rs-light to match, so both selectors carry the same palette. */
@@ -420,4 +424,10 @@ code { font-family: var(--cc-mono); font-size: 0.92em; background: var(--cc-pane
   .cc-field input { width: 100%; }
   .cc-msg { padding: 0 12px; }
   .cc-dock { padding: 6px 10px 10px; }
+}
+
+/* 2.12.0 — keyboard focus is visible on every control (shared token). */
+.cc-btn:focus-visible, .cc-send:focus-visible, .cc-input:focus-visible, .cc-select:focus-visible, button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible {
+  outline: none;
+  box-shadow: var(--cc-focus);
 }
