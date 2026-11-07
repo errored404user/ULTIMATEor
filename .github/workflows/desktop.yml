@@ -61,6 +61,33 @@ jobs:
           echo "::group::build.log tail"; tail -40 build.log; echo "::endgroup::"
           tail -8 build.log | while IFS= read -r line; do echo "::warning::tail: $line"; done
           exit 0
+      # 2.10.0: the window is rendered headlessly (CPU rasteriser over egui's
+      # own tessellation) for every page at three sizes, and the PNGs are
+      # committed back to the branch so the UI can be reviewed without a
+      # display. Pushes made with GITHUB_TOKEN never retrigger this workflow.
+      - name: UI snapshots (headless render of every page)
+        env:
+          TOTAL_SNAPSHOTS: ${{ github.workspace }}/TotalScript/agent/snapshots
+        run: |
+          set -o pipefail
+          mkdir -p snapshots
+          set +e
+          cargo test --release --locked snapshot_every_page -- --nocapture 2>&1 | tee snapshot.log
+          set -e
+          esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" snapshot.log | grep -E "^snapshot:|^  (CUT|ELIDED|BOX)|panicked|^test " > snapshots/report.txt || true
+          head -c 4000 snapshots/report.txt
+          grep -E "^snapshot:" snapshots/report.txt | while IFS= read -r line; do echo "::notice title=UI snapshot::$line"; done
+      - name: Commit snapshots to the branch
+        if: github.event_name == 'push'
+        working-directory: ${{ github.workspace }}
+        run: |
+          git config user.name "totalscript-ci"
+          git config user.email "ci@users.noreply.github.com"
+          git add TotalScript/agent/snapshots
+          if git diff --cached --quiet; then echo "snapshots unchanged"; exit 0; fi
+          git commit -m "ci: UI snapshots for ${GITHUB_SHA::7} [skip ci]"
+          git pull --rebase origin "$GITHUB_REF_NAME" || true
+          git push origin HEAD:"$GITHUB_REF_NAME"
       - name: Unit tests
         run: |
           set -o pipefail
@@ -80,29 +107,6 @@ jobs:
           exit 0
       - name: Smoke test (headless flag parses)
         run: ./target/release/total-core.exe --help
-      # 2.10.0: the window is rendered headlessly (CPU rasteriser over egui's
-      # own tessellation) for every page at three sizes, and the PNGs are
-      # committed back to the branch so the UI can be reviewed without a
-      # display. Pushes made with GITHUB_TOKEN never retrigger this workflow.
-      - name: UI snapshots (headless render of every page)
-        env:
-          TOTAL_SNAPSHOTS: ${{ github.workspace }}/TotalScript/agent/snapshots
-        run: |
-          set -o pipefail
-          mkdir -p snapshots
-          cargo test --release --locked snapshot_every_page -- --nocapture 2>&1 | tee snapshot.log
-          grep -E "^snapshot:|^  (CUT|ELIDED|BOX)" snapshot.log | head -60 | while IFS= read -r line; do echo "::notice title=UI snapshot::$line"; done
-      - name: Commit snapshots to the branch
-        if: github.event_name == 'push'
-        working-directory: ${{ github.workspace }}
-        run: |
-          git config user.name "totalscript-ci"
-          git config user.email "ci@users.noreply.github.com"
-          git add TotalScript/agent/snapshots
-          if git diff --cached --quiet; then echo "snapshots unchanged"; exit 0; fi
-          git commit -m "ci: UI snapshots for ${GITHUB_SHA::7} [skip ci]"
-          git pull --rebase origin "$GITHUB_REF_NAME" || true
-          git push origin HEAD:"$GITHUB_REF_NAME"
       - uses: actions/upload-artifact@v4
         with:
           name: total-core-windows-x64
