@@ -1681,7 +1681,7 @@ impl App {
                 // Nine pages do not always fit above the bridge card (short
                 // windows, two-line items): the list scrolls instead of
                 // running under the card. Reserve the compact card's height.
-                let reserve = if rail { 92.0 } else { 124.0 };  // measured: rail block ≈ 84 px, compact card ≈ 108 px, + spacing
+                let reserve = if rail { 92.0 } else { 62.0 };  // measured: rail block ≈ 84 px; the one-line bridge card ≈ 44 px (the taller cards are only used when there is room)
                 egui::ScrollArea::vertical().id_salt("nav-scroll").max_height((ui.available_height() - reserve).max(120.0)).auto_shrink([false, true])
                     .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
                 for page in Page::ALL.iter() {
@@ -1761,6 +1761,29 @@ impl App {
                     }
                     // Short windows: keep only the ONLINE/OFFLINE line.
                     let roomy = ui.available_height() > 240.0;
+                    let tight = ui.available_height() < 150.0;
+                    if tight {
+                        // One line: "— BRIDGE  ● OFFLINE · up 4s · v2.11.0   «" — the nine
+                        // nav items keep their blurbs at the default 1280×820 window.
+                        egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, if up { alpha(t.ok, 110) } else { t.border })).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::symmetric(12.0, 8.0)).show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 6.0;
+                                let c = if up { t.ok } else { t.bad };
+                                let (d, _) = ui.allocate_exact_size(Vec2::splat(8.0), Sense::hover());
+                                let k = if up { pulse(ctx, self.settings.motion) } else { 0.0 };
+                                ui.painter().circle_filled(d.center(), 3.0 + k * 0.8, c);
+                                ui.label(RichText::new(if up { "ONLINE" } else { "OFFLINE" }).size(10.5).strong().color(c));
+                                ui.add(egui::Label::new(RichText::new(format!("· up {}  ·  v{}", human_duration(s.boot.elapsed()), env!("CARGO_PKG_VERSION"))).small().color(t.muted)).truncate());
+                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                    if ui.add(egui::Button::new(RichText::new("«").size(13.0).color(t.muted)).frame(false)).on_hover_text("Collapse to an icon rail").clicked() {
+                                        self.settings.sidebar_rail = true; let _ = self.settings.save();
+                                    }
+                                });
+                            }).response.on_hover_text(format!("Bridge {}\nHTTP 3000 · WS 17613 roblox · WS 17615 local", if up { "ONLINE" } else { "OFFLINE" }));
+                        });
+                        return;
+                    }
                     let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, if up { alpha(t.ok, 110) } else { t.border })).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::same(12.0));
                     frame.show(ui, |ui| {
                         ui.set_width(ui.available_width());
