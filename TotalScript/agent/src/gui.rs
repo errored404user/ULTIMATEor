@@ -646,6 +646,47 @@ fn corner(settings_corners: u8, soft: f32) -> f32 {
     match settings_corners { 0 => (soft * 0.35).round(), 2 => (soft * 1.5).round(), _ => soft }
 }
 
+// ───────────────────────────── fonts ─────────────────────────────
+//
+// 2.10.0: the window ships its own text faces instead of egui's defaults.
+// egui's Ubuntu-Light has no "→" (U+2192) — the glyph this UI uses in 60+
+// labels — so every arrow rendered as the "◻" replacement box, and a Light
+// weight at 14 px reads thin on Windows. Inter (SIL OFL, subset to Latin +
+// Latin Extended + Greek + Cyrillic + punctuation + arrows + symbols, see
+// assets/fonts/) covers Turkish (ç ğ ı İ ö ş ü) and the arrows; Medium and
+// SemiBold give buttons and headings real weight instead of a colour change.
+// Hack stays the monospace face; Inter sits behind it as the first fallback.
+
+const FONT_MEDIUM: &str = "inter-medium";
+const FONT_SEMIBOLD: &str = "inter-semibold";
+fn family_medium() -> FontFamily { FontFamily::Name(FONT_MEDIUM.into()) }
+fn family_semibold() -> FontFamily { FontFamily::Name(FONT_SEMIBOLD.into()) }
+/// Medium-weight proportional text at `size` (labels on buttons, row titles).
+fn font_medium(size: f32) -> FontId { FontId::new(size, family_medium()) }
+/// SemiBold proportional text at `size` (headings, numbers that must pop).
+fn font_semibold(size: f32) -> FontId { FontId::new(size, family_semibold()) }
+
+fn install_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert("Inter".into(), egui::FontData::from_static(include_bytes!("../assets/fonts/Inter-Regular.ttf")));
+    fonts.font_data.insert("InterMedium".into(), egui::FontData::from_static(include_bytes!("../assets/fonts/Inter-Medium.ttf")));
+    fonts.font_data.insert("InterSemiBold".into(), egui::FontData::from_static(include_bytes!("../assets/fonts/Inter-SemiBold.ttf")));
+    // Proportional: Inter first, egui's own faces (Ubuntu-Light, Noto Emoji,
+    // the emoji icon font) stay behind it as fallbacks for anything exotic.
+    let prop = fonts.families.entry(FontFamily::Proportional).or_default();
+    prop.insert(0, "Inter".into());
+    let fallbacks = prop.clone();
+    let mut medium = vec!["InterMedium".to_string()]; medium.extend(fallbacks.iter().cloned());
+    let mut semibold = vec!["InterSemiBold".to_string()]; semibold.extend(fallbacks.iter().cloned());
+    fonts.families.insert(family_medium(), medium);
+    fonts.families.insert(family_semibold(), semibold);
+    // Monospace: Hack first (code, paths, logs), Inter as the first fallback
+    // so a Turkish or symbol character in a path never becomes a box.
+    let mono = fonts.families.entry(FontFamily::Monospace).or_default();
+    mono.insert(1.min(mono.len()), "Inter".into());
+    ctx.set_fonts(fonts);
+}
+
 impl Theme {
     fn palette(id: &str) -> &'static Palette {
         PALETTES.iter().find(|p| p.id == id).unwrap_or(&PALETTES[0])
@@ -716,10 +757,10 @@ impl Theme {
         let mut style = (*ctx.style()).clone();
         let base = if compact { 13.0 } else { 14.0 };
         style.text_styles = [
-            (TextStyle::Heading, FontId::new(base + 8.0, FontFamily::Proportional)),
+            (TextStyle::Heading, font_semibold(base + 8.0)),
             (TextStyle::Body, FontId::new(base, FontFamily::Proportional)),
-            (TextStyle::Button, FontId::new(base, FontFamily::Proportional)),
-            (TextStyle::Small, FontId::new(base - 2.5, FontFamily::Proportional)),
+            (TextStyle::Button, font_medium(base)),
+            (TextStyle::Small, FontId::new(base - 2.0, FontFamily::Proportional)),
             (TextStyle::Monospace, FontId::new(base - 1.0, FontFamily::Monospace)),
         ]
         .into();
@@ -782,7 +823,7 @@ impl Theme {
 
 // ───────────────────────────── pages ─────────────────────────────
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Page { Home, Chat, Explorer, Servers, Terminal, Help, Settings }
 
 impl Page {
@@ -985,7 +1026,7 @@ fn native_window_handle() -> Option<isize> {
 
 impl App {
     fn new(
-        cc: &eframe::CreationContext<'_>,
+        egui_ctx: &egui::Context,
         shared: Arc<UiShared>,
         cmd_tx: UnboundedSender<UiCommand>,
         settings: Settings,
@@ -994,11 +1035,12 @@ impl App {
         tray: Option<TrayState>,
     ) -> Self {
         let theme = Theme::from_settings(&settings);
-        theme.apply(&cc.egui_ctx, &settings);
-        let _ = UI_CTX.set(cc.egui_ctx.clone());
+        install_fonts(egui_ctx);
+        theme.apply(egui_ctx, &settings);
+        let _ = UI_CTX.set(egui_ctx.clone());
         let logo = logo_rgba.as_ref().map(|(rgba, w, h)| {
             let image = egui::ColorImage::from_rgba_unmultiplied([*w as usize, *h as usize], rgba);
-            cc.egui_ctx.load_texture("totalscript-logo", image, egui::TextureOptions::LINEAR)
+            egui_ctx.load_texture("totalscript-logo", image, egui::TextureOptions::LINEAR)
         });
         let local_tools: Vec<ToolInfo> = crate::workspace::catalog()
             .iter()
@@ -1762,7 +1804,7 @@ impl App {
                     step(ui, fatal.is_none() && listening, "Bridge running", "starting the local ports…");
                     step(ui, ext_ok, "Browser extension connected", "open a supported AI chat (ChatGPT, Claude, Gemini, DeepSeek…) in a browser with the TotalScript extension — it connects by itself within a few seconds");
                     step(ui, studio_proc, "Roblox Studio is open", "start Roblox Studio and open a place");
-                    step(ui, studio_link, "Studio MCP enabled and linked", "in Studio: Assistant → ⋯ → Manage MCP Servers → Enable Studio as MCP server, then press Probe Studio");
+                    step(ui, studio_link, "Studio MCP enabled and linked", "in Studio: Assistant → … → Manage MCP Servers → Enable Studio as MCP server, then press Probe Studio");
                     step(ui, ws_ready, "Workspace folder ready", "pick a folder in Settings → Workspace (used by the AgentScript file tools)");
                     if !all_ok {
                         ui.add_space(6.0);
@@ -2202,7 +2244,7 @@ impl App {
                 let q = self.catalog_query.trim().to_lowercase();
                 let shown: Vec<&ToolInfo> = tools.iter().filter(|x| q.is_empty() || x.name.to_lowercase().contains(&q) || x.description.to_lowercase().contains(&q) || x.params.iter().any(|(p, _)| p.to_lowercase().contains(&q))).collect();
                 if shown.is_empty() {
-                    ui.label(RichText::new(if tools.is_empty() { "No tools reported yet. Roblox Studio → Assistant → ⋯ → Manage MCP Servers → Enable Studio as MCP server, then start the helper." } else { "Nothing matches." }).small().color(t.muted));
+                    ui.label(RichText::new(if tools.is_empty() { "No tools reported yet. Roblox Studio → Assistant → … → Manage MCP Servers → Enable Studio as MCP server, then start the helper." } else { "Nothing matches." }).small().color(t.muted));
                 } else {
                     ui.label(RichText::new("Called by the extension and the AI chat; Studio tools appear once the helper runs.").small().color(t.muted));
                     ui.add_space(4.0);
@@ -2657,7 +2699,13 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) { self.frame(ctx); }
+}
+
+impl App {
+    /// One UI frame. Separate from `eframe::App::update` so the headless
+    /// snapshot test (`gui::snapshot`) can drive the same code.
+    fn frame(&mut self, ctx: &egui::Context) {
         if self.first_frame {
             self.first_frame = false;
             if self.start_hidden {
@@ -2743,6 +2791,9 @@ impl eframe::App for App {
         ctx.request_repaint_after(Duration::from_millis(if busy { 120 } else if self.settings.motion && self.settings.backdrop && focused { 80 } else { 700 }));
     }
 }
+
+#[cfg(test)]
+mod snapshot;
 
 // ───────────────────────────── AI chat side panel ─────────────────────────────
 
@@ -3867,7 +3918,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
         summary: "TotalScript Desktop is the bridge between the TotalScript browser extension (the AI site you chat on) and your PC: Roblox Studio through the Studio MCP helper, and a local project folder (the AgentScript workspace). The AI never touches your PC directly — every action goes through this app, on localhost only (HTTP 127.0.0.1:3000, extension channels 17613 / 17615).",
         steps: &[
             "1. Leave this app running. Closing the window keeps the bridge alive in the background (Settings → Behaviour decides whether it hides to the notification area).",
-            "2. Open Roblox Studio → Assistant → ⋯ → Manage MCP Servers → turn on 'Studio as MCP server'.",
+            "2. Open Roblox Studio → Assistant → … → Manage MCP Servers → turn on 'Studio as MCP server'.",
             "3. Open a place (File → New → Baseplate is enough).",
             "4. In the browser, press ▶ Start Agent on the TotalScript bar. Home ticks each of these steps off live.",
             "Then just describe what you want in the chat ('build a lobby', 'fix the error in Output'). The AI reads the place first, builds, playtests and screenshots to verify.",
@@ -3954,7 +4005,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
         steps: &[
             "'Start Roblox Studio to link' — Studio is not running. Start it and open a place.",
             "'Helper not running' — press Restart Studio MCP (Ctrl+R). If it dies again, check the launcher in Settings → Roblox Studio MCP (Roblox installs mcp.bat with Studio; the field's placeholder shows the expected path) and read the console on the Terminal page for the error.",
-            "'Enable Studio as MCP server, then probe' — in Studio: Assistant → ⋯ → Manage MCP Servers → turn on 'Studio as MCP server'. Then Probe (F5). Accept Studio's permission prompt if it shows one.",
+            "'Enable Studio as MCP server, then probe' — in Studio: Assistant → … → Manage MCP Servers → turn on 'Studio as MCP server'. Then Probe (F5). Accept Studio's permission prompt if it shows one.",
             "'not linked' with Studio running and the switch on — make sure a place is open (not just the Studio start page), then Probe again.",
             "Extension says 'Agent app offline' — this app is not running, or another copy is holding port 3000. Only one bridge can run at a time; the app raises the existing window instead of starting twice.",
             "Still stuck: Copy diagnostics on Home and share it together with the last console lines.",
@@ -4368,7 +4419,7 @@ pub fn run_gui(shared: Arc<UiShared>, cmd_tx: UnboundedSender<UiCommand>, settin
             let make_tray = || -> Option<TrayState> { None };
             let tray = make_tray();
             Ok(Box::new(App::new(
-                _cc,
+                &_cc.egui_ctx,
                 app_shared,
                 cmd_tx,
                 settings,

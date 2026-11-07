@@ -774,12 +774,25 @@ pub async fn tool_run_command(ws: &Workspace, args: &serde_json::Value) -> Resul
 
 enum RunErr { Spawn(std::io::Error), Timeout }
 
+/// The single raw `cmd.exe` argument used by `run_shell` on Windows.
+#[allow(dead_code)]
+fn windows_shell_line(command: &str) -> String {
+    format!("/S /C \"chcp 65001 >nul & {command}\"")
+}
+
 #[cfg(windows)]
 async fn run_shell(command: &str, cwd: &Path, timeout_secs: u64) -> Result<std::process::Output, RunErr> {
     use std::process::Stdio;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let mut cmd = tokio::process::Command::new("cmd");
-    cmd.args(["/C", command])
+    // 2.10.0: one raw argument instead of ["/C", command]. `/S` makes cmd
+    // strip exactly the outer quotes (so quotes inside the user's command
+    // survive — std used to backslash-escape them), and `chcp 65001` switches
+    // this hidden console to UTF-8 before the command runs: without it `dir`,
+    // `type`, `echo` and every other built-in answer in the OEM code page
+    // (CP857 on a Turkish Windows) and ç ğ ı İ ö ş ü came out as "�" in the
+    // Terminal page and in chat tool results.
+    cmd.raw_arg(windows_shell_line(command))
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -1406,6 +1419,14 @@ pub fn catalog() -> Vec<serde_json::Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_shell_line_keeps_quotes_and_forces_utf8() {
+        let line = windows_shell_line("echo \"a b\" && dir");
+        assert!(line.starts_with("/S /C \"chcp 65001 >nul & "), "{line}");
+        assert!(line.ends_with("echo \"a b\" && dir\""), "{line}");
+        assert!(!line.contains("\\\""), "no backslash-escaped quotes: {line}");
+    }
 
     fn temp_ws(tag: &str) -> Workspace {
         let dir = std::env::temp_dir().join(format!("rs-ws-test-{tag}-{}", std::process::id()));
