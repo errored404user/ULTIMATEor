@@ -1,5 +1,12 @@
-snapshot: 21 page×size frames (+1 with the chat panel)
-snapshot: 0 cut text(s), 21 elided text(s), 0 replacement box(es)
+snapshot: 29 page×size frames (+1 with the chat panel, incl. palette + notification overlays)
+snapshot: 2 cut text(s), 50 elided text(s), 0 replacement box(es)
+  CUT    [chat 960x620] "Baktım: `StarterGui.Hud.Sprint` 60×60 px offset…" cut x0 y26 at [110.0 282.2]
+  CUT    [home+chat 960x620] "phone: 2 blocker(s), 3 warning(s), 1 note(s)\nco…" cut x0 y26 at [594.0 152.2]
+  ELIDED [home 1280x820] binding http 3000 · ws 17613 · ws 17615
+  ELIDED [home 1280x820] Console, shell commands, Luau in Studio
+  ELIDED [home 1280x820] Running jobs, feed and session stats
+  ELIDED [home 1280x820] For a bug report — no keys, no chat text
+  ELIDED [home 1280x820] Which tools ran, how often, how fast
   ELIDED [servers 1280x820] Create a file or OVERWRITE an existing one with complete ne…
   ELIDED [servers 1280x820] Exact-match string replacement inside a file. Replaces the …
   ELIDED [servers 1280x820] Run a terminal command in the workspace root: installs, bui…
@@ -21,6 +28,20 @@ snapshot: 0 cut text(s), 21 elided text(s), 0 replacement box(es)
   ELIDED [servers 960x620] Deterministic Roblox API freshness check for Luau BEFORE it…
   ELIDED [terminal 1000x660] Enter runs · Up/Down history · 60 s timeout · sandboxed unl…
   ELIDED [terminal 960x620] Enter runs · Up/Down history · 60 s timeout · sandboxed unl…
+  ELIDED [activity 1280x820] execute_luau
+  ELIDED [activity 1000x660] execute_luau
+  ELIDED [settings 1280x820] Studio MCP, plugin, extension
+  ELIDED [settings 1280x820] Every key the window handles
+  ELIDED [settings 1280x820] Paths, reset, import / export
+  ELIDED [settings 1000x660] Studio MCP, plugin, extension
+  ELIDED [settings 1000x660] Every key the window handles
+  ELIDED [settings 1000x660] Paths, reset, import / export
+  ELIDED [settings 960x620] Studio MCP, plugin, extension
+  ELIDED [settings 960x620] Every key the window handles
+  ELIDED [settings 960x620] Paths, reset, import / export
+  ELIDED [home+chat 960x620] no workspace yet · Studio linked · extension not connected
+  ELIDED [home+chat 960x620] binding http 3000 · ws 17613 · ws 17615
+  ELIDED [home+chat 960x620] MCP helper linked to a Studio place
 snapshot: 0 cut text(s) at the default 1280x820 window
 test gui::snapshot::snapshot_every_page_at_three_sizes ... ok
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out; finished in 3.23s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out; finished in 8.02s
