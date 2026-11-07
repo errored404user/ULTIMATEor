@@ -1,6 +1,9 @@
 snapshot: 21 page×size frames (+1 with the chat panel)
-snapshot: 1 cut text(s), 21 elided text(s), 0 replacement box(es)
-  CUT    [chat 1000x660] "phone: 2 blocker(s), 3 warning(s), 1 note(s)\nco…" cut x0 y4 at [118.0 264.2]
+snapshot: 4 cut text(s), 21 elided text(s), 0 replacement box(es)
+  CUT    [home+chat 960x620] "SmallDono · R$ 10" cut x13 y0 at [452.6 477.0]
+  CUT    [home+chat 960x620] "NormalDono · R$ 25" cut x26 y0 at [452.6 518.0]
+  CUT    [home+chat 960x620] "BigDono · R$ 100" cut x7 y0 at [452.6 559.0]
+  CUT    [home+chat 960x620] "HUGEDONO · R$ 500" cut x35 y12 at [452.6 600.0]
   ELIDED [servers 1280x820] Create a file or OVERWRITE an existing one with complete ne…
   ELIDED [servers 1280x820] Exact-match string replacement inside a file. Replaces the …
   ELIDED [servers 1280x820] Run a terminal command in the workspace root: installs, bui…
@@ -24,4 +27,4 @@ snapshot: 1 cut text(s), 21 elided text(s), 0 replacement box(es)
   ELIDED [terminal 960x620] Enter runs · Up/Down history · 60 s timeout · sandboxed unl…
 snapshot: 0 cut text(s) at the default 1280x820 window
 test gui::snapshot::snapshot_every_page_at_three_sizes ... ok
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out; finished in 5.60s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out; finished in 4.55s
