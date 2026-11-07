@@ -8770,7 +8770,7 @@ html.rs-light .rs-public-feat-body>p,html.rs-light .rs-public-feat-copy p{color:
 #rs-notify > .rs-banner, #rs-notify > .rs-toast { position: static !important; top: auto !important; right: auto !important; left: auto !important; bottom: auto !important; width: auto !important; margin: 0 !important; box-sizing: border-box; pointer-events: auto; }
 #rs-notify > .rs-toast { align-self: flex-end; max-width: 100% !important; display: inline-flex; align-items: center; gap: 8px; cursor: default; }
 #rs-notify > .rs-toast:hover { border-color: rgba(255,255,255,0.18); }
-.rs-toast-m { min-width: 0; overflow-wrap: anywhere; }
+.rs-toast-m { min-width: 0; overflow-wrap: break-word; }
 .rs-toast-n { flex: none; font-size: 10.5px; font-weight: 700; line-height: 1; padding: 3px 6px; border-radius: 999px; background: rgba(255,255,255,0.1); color: #e8e8ec; }
 html.rs-light .rs-toast-n { background: rgba(0,0,0,0.08); color: #0f172a; }
 /* a banner asked for twice nudges instead of stacking a copy */
@@ -8811,16 +8811,27 @@ html.rs-light .rs-menu-chip.on { background: rgba(8,145,178,0.12); border-color:
 /* every control in the tray: consistent focus ring, no clipped labels,
    wrapping for long technical strings, mono for code-like values */
 #rs-menu button:focus-visible, #rs-menu input:focus-visible, #rs-menu select:focus-visible, #rs-menu textarea:focus-visible, #rs-menu [tabindex]:focus-visible { outline: none; box-shadow: var(--rs-ui-focus); }
-#rs-menu .rs-tip-opt > span:first-child, #rs-menu .rs-site-name > span:first-child, #rs-menu .rs-mcp-name { min-width: 0; overflow-wrap: anywhere; }
-#rs-menu .rs-tip-sub, #rs-menu .rs-menu-note, #rs-menu .rs-mcp-url { overflow-wrap: anywhere; line-height: 1.4; }
+/* break-word (NOT anywhere): `anywhere` shrinks a flex item's min-content to
+   one glyph, so a row label next to a nowrap aside got squeezed and wrapped
+   letter-by-letter (2.12.0 regression). break-word keeps the longest word as
+   the floor and only splits a word that is wider than the whole row. */
+#rs-menu .rs-tip-opt > span:first-child, #rs-menu .rs-site-name > span:first-child, #rs-menu .rs-mcp-name { overflow-wrap: break-word; }
+/* label + aside rows (checklist / tutorial / ad): the aside used to be nowrap
+   and wider than the row, so the LABEL paid for it. Now the label keeps at
+   least half the row and whole words; the aside wraps, right-aligned. */
+#rs-menu .rs-tip-opt:not(.rs-tip-rbx) > span:first-child { flex: 1 1 auto; min-width: 50%; }
+#rs-menu .rs-tip-opt:not(.rs-tip-rbx) > .rs-tip-sub { flex: 0 1 auto; min-width: 0; max-width: 50%; white-space: normal; text-align: right; line-height: 1.35; overflow-wrap: break-word; }
+#rs-menu .rs-menu-note { overflow-wrap: break-word; line-height: 1.45; }
 #rs-menu .rs-mcp-url, #rs-menu [data-keybind], #rs-menu code, #rs-menu kbd { font-family: var(--rs-ui-mono); font-variant-ligatures: none; }
 #rs-menu button[disabled], #rs-menu [aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
-#rs-menu .rs-sec-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+#rs-menu .rs-sec-label { display: flex; align-items: center; justify-content: flex-start; gap: 8px; min-width: 0; }
+#rs-menu .rs-sec-label > span:first-child { flex: none; white-space: nowrap; margin-right: auto; } /* margin, not space-between: themes draw a ::before rule on the label row */
 #rs-menu .rs-sec-label > span:first-child { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8d8d96; }
 #rs-menu .rs-sec-state { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; }
+#rs-menu .rs-sec-state::before { content: none; } /* the themes' dash belongs to the label, not to the state text */
 @media (prefers-reduced-motion: reduce) { #rs-menu, #rs-menu * { animation: none !important; transition: none !important; } }
 /* bar + panels: Unicode-safe text rendering (Turkish ç ğ ı İ ö ş ü, long
    command names, paths) — never clipped mid-glyph, never ligatured */
 #rs-root, #rs-root *, #rs-cards-window, #rs-cards-window * { font-variant-ligatures: none; }
-#rs-root .rs-toast-m, #rs-root .rs-banner, #rs-cards-window .rs-template-empty span, #rs-cards-window p { overflow-wrap: anywhere; }
-#rs-root code, #rs-root pre, #rs-cards-window code, #rs-cards-window pre { font-family: "Cascadia Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
+#rs-root .rs-banner, #rs-cards-window .rs-template-empty span, #rs-cards-window p { overflow-wrap: break-word; }
+#rs-root code, #rs-root pre, #rs-cards-window code, #rs-cards-window pre { font-family: "Cascadia Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; overflow-wrap: break-word; }

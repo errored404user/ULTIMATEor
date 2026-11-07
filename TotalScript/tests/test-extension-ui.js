@@ -49,7 +49,11 @@ async function boot(shot) {
   w.eval(shim);
   const errors = []; w.addEventListener("error", (e) => errors.push(String(e.message)));
   w.eval(popupJs);
-  await sleep(60);
+  // Wait for the first status round-trip to land (the shim answers on a
+  // macrotask; a fixed 60 ms was flaky on a cold jsdom), then one more tick
+  // for the dependent renders. Hard cap so a broken popup still fails fast.
+  for (let t = 0; t < 150 && w.document.getElementById("state").textContent === "Bridge: …"; t++) await sleep(10);
+  await sleep(40);
   return { w, d: w.document, errors, calls: w.__shotCalls };
 }
 const visible = (el) => { for (let n = el; n; n = n.parentElement) if (n.hidden || n.getAttribute("aria-hidden") === "true") return false; return true; };
@@ -59,7 +63,7 @@ const visible = (el) => { for (let n = el; n; n = n.parentElement) if (n.hidden 
   {
     const { w, d, errors } = await boot({ tabs: [TAB_DS] });
     ok("A1 boots with no page errors (offline)", errors.length === 0, errors.join(" | "));
-    ok("A2 version pill reads the manifest", d.getElementById("ver").textContent === "v2.12.0");
+    ok("A2 version pill reads the manifest", d.getElementById("ver").textContent === "v2.12.1");
     ok("A3 connection monitor says the bridge is offline with the run hint", /Bridge is offline — run bin\/total-core/.test(d.getElementById("state").textContent));
     ok("A4 getting-started checklist shows 0/4 and the first step is current", d.getElementById("steps-progress").textContent === "0/4" && d.querySelector('#start-steps li[data-step="bridge"]').className === "now");
     ok("A5 provider row recognises the DeepSeek tab", /DeepSeek in this tab/.test(d.getElementById("provider-state").textContent) && d.getElementById("site-tag").textContent === "DeepSeek");
@@ -186,7 +190,7 @@ const visible = (el) => { for (let n = el; n; n = n.parentElement) if (n.hidden 
     let exported = null; const origBlob = w.Blob; w.Blob = function (parts, o) { exported = parts.join(""); return new origBlob(parts, o); };
     d.querySelector('#set-panel [data-item="export"] .ts-btn').click(); await sleep(20);
     const ex = JSON.parse(exported);
-    ok("C15 export carries settings but strips the brand logo and the learned image tools", ex.settings.rsBrand.name === "Benim" && ex.settings.rsBrand.logo === undefined && !("rsImageTools" in ex.settings) && ex.totalscript === "2.12.0");
+    ok("C15 export carries settings but strips the brand logo and the learned image tools", ex.settings.rsBrand.name === "Benim" && ex.settings.rsBrand.logo === undefined && !("rsImageTools" in ex.settings) && ex.totalscript === "2.12.1");
     // reset all confirms + removes keys
     d.querySelector('#set-panel [data-item="resetAll"] .ts-btn').click(); await sleep(10);
     ok("C16 Reset everything confirms first", d.getElementById("dlg").hasAttribute("open") && /Reset every TotalScript setting/.test(d.getElementById("dlg-title").textContent));

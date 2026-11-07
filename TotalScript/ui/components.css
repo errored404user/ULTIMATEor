@@ -117,8 +117,8 @@ code, kbd, pre, .ts-input, .ts-textarea, .ts-select, .ts-wrap { font-variant-lig
 .ts-row.clickable:hover { background: var(--ts-surface-2); }
 .ts-row:focus-visible { box-shadow: inset var(--ts-focus); }
 .ts-row-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.ts-row-title { font-size: calc(var(--ts-fs-md) * var(--ts-scale)); font-weight: 580; color: var(--ts-text); overflow-wrap: anywhere; }
-.ts-row-sub { font-size: calc(var(--ts-fs-sm) * var(--ts-scale)); color: var(--ts-text-2); line-height: 1.4; overflow-wrap: anywhere; }
+.ts-row-title { font-size: calc(var(--ts-fs-md) * var(--ts-scale)); font-weight: 580; color: var(--ts-text); overflow-wrap: break-word; }
+.ts-row-sub { font-size: calc(var(--ts-fs-sm) * var(--ts-scale)); color: var(--ts-text-2); line-height: 1.4; overflow-wrap: break-word; }
 .ts-row-end { flex: none; display: flex; align-items: center; gap: var(--ts-s2); }
 .ts-switch { flex: none; position: relative; width: var(--ts-toggle-w); height: var(--ts-toggle-h); border-radius: var(--ts-r-pill); background: var(--ts-surface-3); border: 1px solid var(--ts-line-strong); transition: background var(--ts-dur-2) var(--ts-ease), border-color var(--ts-dur-2) var(--ts-ease); }
 .ts-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: calc(var(--ts-toggle-h) - 6px); height: calc(var(--ts-toggle-h) - 6px); border-radius: 50%; background: var(--ts-text-2); transition: transform var(--ts-dur-2) var(--ts-ease), background var(--ts-dur-2) var(--ts-ease); }

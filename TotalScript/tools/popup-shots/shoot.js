@@ -1,4 +1,4 @@
-// Renders popup.html (and welcome.html) in headless Chromium with chrome-shim.js
+// Renders popup.html (and welcome.html) in headless Chromium (tray rows: tray-wrap.js) with chrome-shim.js
 // standing in for the extension APIs, and writes PNGs to ui/snapshots/.
 // Dev tool: node tools/popup-shots/shoot.js [outDir]
 //   needs: npm i @sparticuz/chromium puppeteer-core  (+ LD_LIBRARY_PATH to al2023 libs on Debian)
