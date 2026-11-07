@@ -1,0 +1,13 @@
+"use strict";
+const fs=require("fs"),assert=require("assert");
+const main=fs.readFileSync("src/core/main.js","utf8"),bg=fs.readFileSync("background.js","utf8"),shot=fs.readFileSync("src/core/screenshot.js","utf8"),config=fs.readFileSync("src/core/config.js","utf8");
+assert(main.includes('["auto", "studio", "game", "viewport", "blender", "tab"]'),"tool schema must accept target=blender");
+assert(main.includes('name: "get_viewport_screenshot"')&&main.includes('timeout: 30000'),"Blender capture needs a real native call and practical timeout");
+assert(shot.includes('target === "blender"')&&shot.includes('hooks.blender'),"screenshot router must select Blender explicitly");
+assert(bg.includes('function blenderScreenshotImages(result)'),"bridge must accept addons that return image payloads directly");
+assert(bg.includes('function localImageBase64(imagePath)'),"bridge must support the installed filepath-based Blender addon");
+assert(bg.includes('filepath:shot')&&bg.includes('_totalScreenshotPath:shot'),"addon must receive its required sandboxed filepath");
+assert(bg.includes('textwrap.wrap(data,3000)')&&bg.includes('localRead(output,offset,8)'),"base64 transfer must be chunked without native output truncation");
+assert(bg.includes('images: screenshotImages'),"bridge must return provider-ready images");
+assert(config.includes('blender for Blender’s live 3D viewport'),"agent must know how to request Blender screenshots");
+console.log("PASS  Blender screenshots support required filepath capture and bounded image attachment transport");

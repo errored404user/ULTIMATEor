@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;height:100%;background:#292a2d;font-family:sans-serif;color:#eee}
+#app{display:flex;flex-direction:column;height:100vh}
+#log{flex:1;overflow:auto;padding:20px}
+.ds-message{margin:12px auto;max-width:720px}.ds-markdown{padding:10px;background:#333}
+#composer-wrap{padding:0 20px 24px}
+#card{max-width:760px;margin:0 auto;border-radius:24px;background:#404045;padding:14px 16px;box-sizing:border-box}
+textarea{width:100%;height:48px;background:transparent;border:0;color:#eee;resize:none;font-size:16px}
+.row{display:flex;gap:8px;align-items:center;margin-top:8px}
+.ds-button{padding:6px 12px;border-radius:16px;background:#555;color:#eee;border:0}.ds-button--primary{margin-left:auto;background:#4d6bfe;border-radius:50%;width:32px;height:32px}
+#app.centered #log{flex:1;display:flex;align-items:flex-end;justify-content:center}
+#app.centered #log .ds-message{display:none}
+#app.centered #greet{display:block;font-size:26px;font-weight:700;margin:0 0 28px}
+#app.centered #composer-wrap{flex:1}
+#greet{display:none}
+</style></head><body><div id="app"><div id="log"><h1 id="greet">Good evening. How can I help?</h1>
+<div class="ds-message"><div class="ds-markdown">hello</div></div><div class="ds-message"><div class="ds-markdown">world</div></div>
+</div><div id="composer-wrap"><div id="card"><textarea placeholder="Message DeepSeek"></textarea><div class="row"><button class="ds-button">DeepThink</button><button class="ds-button">Search</button><button class="ds-button ds-button--primary" aria-label="Send">↑</button></div></div></div></div><script>if(/centered/.test(location.search))document.getElementById("app").classList.add("centered");</script></body></html>

@@ -1,0 +1,184 @@
+name: TotalScript Desktop (Rust)
+
+on:
+  push:
+    paths:
+      - "TotalScript/agent/**"
+      - ".github/workflows/desktop.yml"
+  workflow_dispatch:
+
+# Compiler / test failures are re-emitted as GitHub annotations (::error
+# file=…,line=…::…) so they show up on the commit and in the Checks API even
+# when the raw log is not reachable.
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: TotalScript/agent
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: TotalScript/agent
+      - name: Build (release)
+        run: |
+          set -o pipefail
+          (cargo build --release --locked --message-format=short 2>&1 || cargo build --release --message-format=short 2>&1) | tee build.log
+      - name: Annotate compiler warnings (dead code and everything else)
+        if: always()
+        run: |
+          set +e
+          [ -f build.log ] || exit 0
+          # cargo colours its output even under tee; strip ANSI first or ": warning" never matches.
+          esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" build.log > build.plain
+          total=$(grep -cE '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain)
+          dead=$(grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | grep -ciE 'never used|never read|never constructed|unused|dead_code')
+          echo "::notice title=total-agent compiler warnings::$total warning(s), $dead dead-code"
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | sort -u | head -10 | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::warning file=TotalScript/agent/$f,line=$l::$msg"
+          done
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | sort -u | sed -n '11,20p' | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::notice file=TotalScript/agent/$f,line=$l::$msg"
+          done
+          exit 0
+      - name: Annotate compiler errors
+        if: failure()
+        run: |
+          set +e
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' build.log | head -10 | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::error file=TotalScript/agent/$f,line=$l::$msg"
+          done
+          grep -iE 'error' build.log | grep -vE '^[^ :]+\.rs:[0-9]+:[0-9]+: error' | head -12 | while IFS= read -r line; do echo "::error::$line"; done
+          echo "::group::build.log tail"; tail -40 build.log; echo "::endgroup::"
+          tail -8 build.log | while IFS= read -r line; do echo "::warning::tail: $line"; done
+          exit 0
+      # 2.10.0: the window is rendered headlessly (CPU rasteriser over egui's
+      # own tessellation) for every page at three sizes, and the PNGs are
+      # committed back to the branch so the UI can be reviewed without a
+      # display. Pushes made with GITHUB_TOKEN never retrigger this workflow.
+      - name: UI snapshots (headless render of every page)
+        env:
+          TOTAL_SNAPSHOTS: ${{ github.workspace }}/TotalScript/agent/snapshots
+        run: |
+          set -o pipefail
+          mkdir -p snapshots
+          set +e
+          cargo test --release --locked snapshot_every_page -- --nocapture 2>&1 | tee snapshot.log
+          set -e
+          esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" snapshot.log | grep -E "^snapshot:|^  (CUT|ELIDED|BOX)|panicked|^test " > snapshots/report.txt || true
+          head -c 4000 snapshots/report.txt
+          grep -E "^snapshot:" snapshots/report.txt | while IFS= read -r line; do echo "::notice title=UI snapshot::$line"; done
+      - name: Commit snapshots to the branch
+        if: github.event_name == 'push'
+        working-directory: ${{ github.workspace }}
+        run: |
+          git config user.name "totalscript-ci"
+          git config user.email "ci@users.noreply.github.com"
+          git add TotalScript/agent/snapshots
+          if git diff --cached --quiet; then echo "snapshots unchanged"; exit 0; fi
+          git commit -m "ci: UI snapshots for ${GITHUB_SHA::7} [skip ci]"
+          git pull --rebase origin "$GITHUB_REF_NAME" || true
+          git push origin HEAD:"$GITHUB_REF_NAME"
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          cargo test --release --locked --message-format=short 2>&1 | tee test.log
+      - name: Annotate test failures
+        if: failure()
+        run: |
+          set +e
+          [ -f test.log ] || exit 0
+          esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" test.log > test.plain
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' test.plain | head -10 | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::error file=TotalScript/agent/$f,line=$l::$msg"
+          done
+          grep -E "^test .* FAILED|panicked at|^---- |^error" test.plain | head -20 | while IFS= read -r line; do echo "::error::$line"; done
+          tail -6 test.plain | while IFS= read -r line; do echo "::warning::tail: $line"; done
+          exit 0
+      - name: Smoke test (headless flag parses)
+        run: ./target/release/total-core.exe --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: total-core-windows-x64
+          path: TotalScript/agent/target/release/total-core.exe
+
+  macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: TotalScript/agent
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: TotalScript/agent
+      - name: Build (release)
+        run: |
+          set -o pipefail
+          (cargo build --release --locked --message-format=short 2>&1 || cargo build --release --message-format=short 2>&1) | tee build.log
+      - name: Annotate compiler warnings (dead code and everything else)
+        if: always()
+        run: |
+          set +e
+          [ -f build.log ] || exit 0
+          # cargo colours its output even under tee; strip ANSI first or ": warning" never matches.
+          esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" build.log > build.plain
+          total=$(grep -cE '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain)
+          dead=$(grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | grep -ciE 'never used|never read|never constructed|unused|dead_code')
+          echo "::notice title=total-agent compiler warnings::$total warning(s), $dead dead-code"
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | sort -u | head -10 | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::warning file=TotalScript/agent/$f,line=$l::$msg"
+          done
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: warning' build.plain | sort -u | sed -n '11,20p' | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::notice file=TotalScript/agent/$f,line=$l::$msg"
+          done
+          exit 0
+      - name: Annotate compiler errors
+        if: failure()
+        run: |
+          set +e
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' build.log | head -10 | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::error file=TotalScript/agent/$f,line=$l::$msg"
+          done
+          grep -iE 'error' build.log | grep -vE '^[^ :]+\.rs:[0-9]+:[0-9]+: error' | head -12 | while IFS= read -r line; do echo "::error::$line"; done
+          echo "::group::build.log tail"; tail -40 build.log; echo "::endgroup::"
+          tail -8 build.log | while IFS= read -r line; do echo "::warning::tail: $line"; done
+          exit 0
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          cargo test --release --locked --message-format=short 2>&1 | tee test.log
+      - name: Annotate test failures
+        if: failure()
+        run: |
+          set +e
+          [ -f test.log ] || exit 0
+          esc=$(printf '\033'); sed -e "s/${esc}\[[0-9;]*m//g" test.log > test.plain
+          grep -E '^[^ :]+\.rs:[0-9]+:[0-9]+: error' test.plain | head -10 | while IFS= read -r line; do
+            f="${line%%:*}"; rest="${line#*:}"; l="${rest%%:*}"; msg="${line#*: }"
+            echo "::error file=TotalScript/agent/$f,line=$l::$msg"
+          done
+          grep -E "^test .* FAILED|panicked at|^---- |^error" test.plain | head -20 | while IFS= read -r line; do echo "::error::$line"; done
+          tail -6 test.plain | while IFS= read -r line; do echo "::warning::tail: $line"; done
+          exit 0
+      - name: Smoke test
+        run: ./target/release/total-core --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: total-core-macos
+          path: TotalScript/agent/target/release/total-core

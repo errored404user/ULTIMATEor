@@ -1,0 +1,1718 @@
+{
+  "_about": "Labelled prompts for tests/skill-bench.js (1.99.6). Each task: the user's text as typed (typos kept), the context the loop has (engine / mode), the expert that must rank first (or null when nothing should be injected), optional alternates accepted at top-1, and the registry commands the chosen expert must reference. Edit by adding real prompts - never by relabelling one so it passes.",
+  "tasks": [
+    {
+      "id": "lua01",
+      "text": "write a module that handles cooldowns for abilities with task.delay",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "luau_scripting",
+      "commands": [
+        "script_create",
+        "module_scaffold"
+      ]
+    },
+    {
+      "id": "lua02",
+      "text": "my for loop over GetChildren is skipping items when I destroy them inside the loop",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair",
+      "alt": [
+        "luau_scripting"
+      ]
+    },
+    {
+      "id": "lua03",
+      "text": "convert this script to --!strict and add types to the functions",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "luau_scripting",
+      "commands": [
+        "script_check"
+      ]
+    },
+    {
+      "id": "lua04",
+      "text": "make a ModuleScript Signal class like GoodSignal",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "luau_scripting"
+    },
+    {
+      "id": "lua05",
+      "text": "server script that gives every player 10 coins every minute",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "luau_scripting",
+      "alt": [
+        "gameplay_systems",
+        "data_persistence"
+      ]
+    },
+    {
+      "id": "lua06",
+      "text": "add a metatable based OOP class for Enemy with inheritance",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "luau_scripting"
+    },
+    {
+      "id": "net01",
+      "text": "make a RemoteEvent so the client can buy an item and the server checks the price",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "networking",
+      "commands": [
+        "remote_handler"
+      ]
+    },
+    {
+      "id": "net02",
+      "text": "exploiters are giving themselves infinite money, how do I secure my shop",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "networking",
+      "commands": [
+        "bench_run"
+      ]
+    },
+    {
+      "id": "net03",
+      "text": "the client fires DealDamage with any number and the server just applies it",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "networking"
+    },
+    {
+      "id": "net04",
+      "text": "add rate limiting to my remotes so people cant spam them",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "networking"
+    },
+    {
+      "id": "net05",
+      "text": "should i use a RemoteFunction or RemoteEvent for requesting inventory from the server",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "networking"
+    },
+    {
+      "id": "net06",
+      "text": "anti cheat for speed hacking and teleport hacks",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "networking"
+    },
+    {
+      "id": "net07",
+      "text": "audit my game for security problems and backdoors",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "networking",
+      "alt": [
+        "project_analysis"
+      ],
+      "commands": [
+        "bench_run"
+      ]
+    },
+    {
+      "id": "dat01",
+      "text": "save the players coins and level with datastore and load them when they rejoin",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "data_persistence",
+      "commands": [
+        "bench_run"
+      ]
+    },
+    {
+      "id": "dat02",
+      "text": "leaderstats with Coins and Wins that persist",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "data_persistence"
+    },
+    {
+      "id": "dat03",
+      "text": "players lose their data when the server shuts down",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "data_persistence",
+      "alt": [
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "dat04",
+      "text": "set up ProfileService style session locking for my data",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "data_persistence"
+    },
+    {
+      "id": "dat05",
+      "text": "global leaderboard top 100 with OrderedDataStore updated every 60 seconds",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "data_persistence",
+      "alt": [
+        "gameplay_systems"
+      ]
+    },
+    {
+      "id": "gp01",
+      "text": "make a sword combat system with combos, blocking and hit detection",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems"
+    },
+    {
+      "id": "gp02",
+      "text": "NPC that patrols between waypoints and chases the player when close using pathfinding",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems"
+    },
+    {
+      "id": "gp03",
+      "text": "round system: lobby, 30 second intermission, teleport to map, last one standing wins",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems"
+    },
+    {
+      "id": "gp04",
+      "text": "inventory with stackable items and a hotbar",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems",
+      "alt": [
+        "ui_ux"
+      ]
+    },
+    {
+      "id": "gp05",
+      "text": "quest system with daily quests and rewards",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems"
+    },
+    {
+      "id": "gp06",
+      "text": "tycoon with droppers, conveyors and buttons that unlock upgrades",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems"
+    },
+    {
+      "id": "gp07",
+      "text": "add a pet system where pets follow the player and give a coin multiplier",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems"
+    },
+    {
+      "id": "gp08",
+      "text": "obby checkpoints with stages saved",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems",
+      "alt": [
+        "data_persistence"
+      ]
+    },
+    {
+      "id": "ui01",
+      "text": "make a shop gui with 6 items, prices and a buy button, dark theme",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "ui_ux",
+      "commands": [
+        "ui_screen_generate"
+      ]
+    },
+    {
+      "id": "ui02",
+      "text": "my hud looks bad on phones, the buttons overlap",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "ui_ux",
+      "alt": [
+        "debug_repair"
+      ],
+      "commands": [
+        "ui_responsive_fix"
+      ]
+    },
+    {
+      "id": "ui03",
+      "text": "settings menu with tabs, toggles and a slider for music volume",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "ui_ux"
+    },
+    {
+      "id": "ui04",
+      "text": "redesign my main menu to look like a modern AAA game",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "ui_ux"
+    },
+    {
+      "id": "ui05",
+      "text": "health bar that tweens smoothly and flashes red when low",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "ui_ux"
+    },
+    {
+      "id": "ui06",
+      "text": "notification toast system top right that stacks",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "ui_ux"
+    },
+    {
+      "id": "ui07",
+      "text": "the TextLabel font is tiny on 4k and huge on mobile",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "ui_ux",
+      "alt": [
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "an01",
+      "text": "make a sword swing animation for r15 and play it when the tool is activated",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "animation",
+      "commands": [
+        "animation_preview"
+      ]
+    },
+    {
+      "id": "an02",
+      "text": "idle animation that breathes and sways slightly, looped",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "animation"
+    },
+    {
+      "id": "an03",
+      "text": "my animation plays in studio but not in game",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "animation",
+      "alt": [
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "an04",
+      "text": "walk cycle for a 4 legged dog rig",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "animation"
+    },
+    {
+      "id": "an05",
+      "text": "door that opens with a tween when a player comes near",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "animation",
+      "alt": [
+        "gameplay_systems",
+        "luau_scripting"
+      ]
+    },
+    {
+      "id": "an06",
+      "text": "animate the rig doing a backflip with proper anticipation and follow through",
+      "ctx": {
+        "engine": "roblox",
+        "mode": "animate"
+      },
+      "expect": "animation"
+    },
+    {
+      "id": "vf01",
+      "text": "fire effect on the torch with embers and a flickering light",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "vfx"
+    },
+    {
+      "id": "vf02",
+      "text": "magic circle under the player when they cast a spell with glowing runes",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "vfx"
+    },
+    {
+      "id": "vf03",
+      "text": "explosion with shockwave, smoke and debris",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "vfx"
+    },
+    {
+      "id": "vf04",
+      "text": "add bloom and color correction so the neon signs pop at night",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "vfx",
+      "alt": [
+        "world_building"
+      ]
+    },
+    {
+      "id": "vf05",
+      "text": "rain particles and fog for a horror map",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "vfx",
+      "alt": [
+        "world_building"
+      ]
+    },
+    {
+      "id": "sf01",
+      "text": "footstep sounds that change on grass, wood and metal",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "sfx"
+    },
+    {
+      "id": "sf02",
+      "text": "background music that crossfades between lobby and match",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "sfx"
+    },
+    {
+      "id": "sf03",
+      "text": "the sound plays for everyone instead of just the player who clicked",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "sfx",
+      "alt": [
+        "networking",
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "sf04",
+      "text": "ambient wind and birds in the forest area with a sound region",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "sfx"
+    },
+    {
+      "id": "ci01",
+      "text": "intro cutscene: camera flies over the castle then zooms to the player",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "cinematics"
+    },
+    {
+      "id": "ci02",
+      "text": "boss intro sequence with camera shake and slow motion",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "cinematics",
+      "alt": [
+        "animation"
+      ]
+    },
+    {
+      "id": "ci03",
+      "text": "make a trailer shot orbiting the map at sunset",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "cinematics"
+    },
+    {
+      "id": "wb01",
+      "text": "build a medieval castle with towers, walls and a gatehouse",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "world_building",
+      "commands": [
+        "quality_audit"
+      ]
+    },
+    {
+      "id": "wb02",
+      "text": "generate terrain with hills, a lake and a forest",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "world_building"
+    },
+    {
+      "id": "wb03",
+      "text": "make the lighting look like golden hour with long shadows",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "world_building",
+      "alt": [
+        "vfx"
+      ]
+    },
+    {
+      "id": "wb04",
+      "text": "sci fi corridor with panels, pipes and emissive strips",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "world_building"
+    },
+    {
+      "id": "wb05",
+      "text": "a cozy cafe interior with tables chairs and a counter",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "world_building"
+    },
+    {
+      "id": "wb06",
+      "text": "spawn area for my simulator game, bright and cartoony",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "world_building"
+    },
+    {
+      "id": "db01",
+      "text": "ServerScriptService.Main:42: attempt to index nil with 'Humanoid'",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair",
+      "commands": [
+        "get_console_output",
+        "script_read"
+      ]
+    },
+    {
+      "id": "db02",
+      "text": "nothing happens when I click the button",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair",
+      "alt": [
+        "ui_ux"
+      ]
+    },
+    {
+      "id": "db03",
+      "text": "the script worked yesterday and now it doesnt work at all",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair"
+    },
+    {
+      "id": "db04",
+      "text": "infinite yield possible on WaitForChild('Coins')",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair"
+    },
+    {
+      "id": "db05",
+      "text": "why does my character fall through the floor when the game starts",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair"
+    },
+    {
+      "id": "db06",
+      "text": "fix my game, something is wrong but I dont know what",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair",
+      "commands": [
+        "bench_run",
+        "project_health_report"
+      ]
+    },
+    {
+      "id": "pf01",
+      "text": "my game lags with 20 players, the server is at 5 fps",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "performance",
+      "commands": [
+        "bench_run"
+      ]
+    },
+    {
+      "id": "pf02",
+      "text": "optimize the map, it has 40000 parts and mobile crashes",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "performance"
+    },
+    {
+      "id": "pf03",
+      "text": "memory keeps growing over time until the server dies",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "performance",
+      "alt": [
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "pf04",
+      "text": "should I enable StreamingEnabled and what will break",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "performance"
+    },
+    {
+      "id": "pf05",
+      "text": "reduce draw calls and triangle count on these meshes",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "performance"
+    },
+    {
+      "id": "pa01",
+      "text": "explain how my codebase is structured and which modules depend on each other",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "project_analysis"
+    },
+    {
+      "id": "pa02",
+      "text": "refactor the 3000 line main script into modules",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "project_analysis",
+      "alt": [
+        "luau_scripting"
+      ]
+    },
+    {
+      "id": "pa03",
+      "text": "benchmark my place and give me a scorecard with what to fix first",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "project_analysis",
+      "commands": [
+        "bench_run",
+        "bench_history"
+      ]
+    },
+    {
+      "id": "pa04",
+      "text": "review my game code and rate it against best practices",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "project_analysis",
+      "commands": [
+        "bench_run"
+      ]
+    },
+    {
+      "id": "pa05",
+      "text": "document the architecture of my existing game",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "project_analysis"
+    },
+    {
+      "id": "bl01",
+      "text": "model a low poly sword in blender with a bevelled edge and a leather grip",
+      "ctx": {
+        "engine": "roblox",
+        "mode": "blender"
+      },
+      "expect": "blender_modeling"
+    },
+    {
+      "id": "bl02",
+      "text": "procedural rock with displacement and a stone material",
+      "ctx": {
+        "engine": "roblox",
+        "mode": "blender"
+      },
+      "expect": "blender_modeling"
+    },
+    {
+      "id": "bl03",
+      "text": "make a hard surface crate with inset panels and bolts in Blender",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "blender_modeling"
+    },
+    {
+      "id": "bl04",
+      "text": "sculpt an organic tree trunk with roots",
+      "ctx": {
+        "engine": "roblox",
+        "mode": "blender"
+      },
+      "expect": "blender_modeling"
+    },
+    {
+      "id": "br01",
+      "text": "export this blender model to roblox as fbx with the right scale and collision",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "blender_to_roblox"
+    },
+    {
+      "id": "br02",
+      "text": "the mesh imported into studio is huge and rotated 90 degrees",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "blender_to_roblox",
+      "alt": [
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "br03",
+      "text": "send the finished model from Blender to Studio and check it landed",
+      "ctx": {
+        "engine": "roblox",
+        "mode": "blender"
+      },
+      "expect": "blender_to_roblox"
+    },
+    {
+      "id": "cr01",
+      "text": "write the lore for my fantasy kingdom and name the 4 factions",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "creative_production"
+    },
+    {
+      "id": "cr02",
+      "text": "write a description for my game page that makes people click",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "creative_production"
+    },
+    {
+      "id": "cr03",
+      "text": "art direction for a neon cyberpunk city: palette, mood, references",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "creative_production",
+      "alt": [
+        "world_building"
+      ]
+    },
+    {
+      "id": "ge01",
+      "text": "write a python script that renames files in a folder by date",
+      "ctx": {
+        "engine": "local"
+      },
+      "expect": "general_engineering"
+    },
+    {
+      "id": "ge02",
+      "text": "explain the difference between a mutex and a semaphore",
+      "ctx": {
+        "engine": "local"
+      },
+      "expect": "general_engineering"
+    },
+    {
+      "id": "ge03",
+      "text": "set up a github actions workflow that runs my tests on push",
+      "ctx": {
+        "engine": "local"
+      },
+      "expect": "general_engineering"
+    },
+    {
+      "id": "ge04",
+      "text": "fix this javascript: TypeError: Cannot read properties of undefined (reading 'map')",
+      "ctx": {
+        "engine": "local"
+      },
+      "expect": "general_engineering",
+      "alt": [
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "no01",
+      "text": "hi",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": null
+    },
+    {
+      "id": "no02",
+      "text": "thanks that worked",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": null
+    },
+    {
+      "id": "no03",
+      "text": "ok continue",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": null
+    },
+    {
+      "id": "mx01",
+      "text": "make a boss fight: the boss has 3 phases, a health bar on screen, roars with a camera shake and drops loot that saves",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems",
+      "alt": [
+        "ui_ux",
+        "data_persistence"
+      ]
+    },
+    {
+      "id": "mx02",
+      "text": "when the player buys the sword the server must verify the coins and then save it",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "networking",
+      "alt": [
+        "data_persistence",
+        "gameplay_systems"
+      ]
+    },
+    {
+      "id": "mx03",
+      "text": "polish the whole game before release: check security, performance and that all the UI buttons work",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "project_analysis",
+      "alt": [
+        "networking",
+        "performance"
+      ],
+      "commands": [
+        "bench_run"
+      ]
+    },
+    {
+      "id": "mx04",
+      "text": "cinematic sword slash animation with a trail and an impact sound",
+      "ctx": {
+        "engine": "roblox",
+        "mode": "animate"
+      },
+      "expect": "animation",
+      "alt": [
+        "cinematics",
+        "vfx"
+      ]
+    },
+    {
+      "id": "h01",
+      "text": "players can walk through the wall i just built",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair",
+      "alt": [
+        "world_building"
+      ]
+    },
+    {
+      "id": "h02",
+      "text": "give new players a starter sword and 100 coins on first join",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems",
+      "alt": [
+        "data_persistence",
+        "luau_scripting"
+      ]
+    },
+    {
+      "id": "h03",
+      "text": "the shop remote lets anyone buy for free if they send 0",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "networking",
+      "alt": [
+        "gameplay_systems"
+      ]
+    },
+    {
+      "id": "h04",
+      "text": "loading screen with a progress bar and tips while assets preload",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "ui_ux"
+    },
+    {
+      "id": "h05",
+      "text": "make the car headlights and taillights glow at night",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "vfx",
+      "alt": [
+        "world_building"
+      ]
+    },
+    {
+      "id": "h06",
+      "text": "gun shot sound with a random pitch and a distant echo",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "sfx"
+    },
+    {
+      "id": "h07",
+      "text": "victory dance emote when a player wins the round",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "animation",
+      "alt": [
+        "gameplay_systems"
+      ]
+    },
+    {
+      "id": "h08",
+      "text": "ending cutscene where the camera pulls back and fades to black",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "cinematics"
+    },
+    {
+      "id": "h09",
+      "text": "a pirate ship with sails, cannons and a crows nest",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "world_building",
+      "alt": [
+        "blender_modeling"
+      ]
+    },
+    {
+      "id": "h10",
+      "text": "why is the server memory at 2 GB after an hour",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "performance",
+      "alt": [
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "h11",
+      "text": "what would you change in my scripts before I publish",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "project_analysis",
+      "alt": [
+        "luau_scripting",
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "h12",
+      "text": "low poly barrel with a wood texture, under 500 tris",
+      "ctx": {
+        "engine": "roblox",
+        "mode": "blender"
+      },
+      "expect": "blender_modeling",
+      "alt": [
+        "blender_to_roblox"
+      ]
+    },
+    {
+      "id": "h13",
+      "text": "the imported mesh has no collision, players walk through it",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "blender_to_roblox",
+      "alt": [
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "h14",
+      "text": "names for 10 magic swords with a one line description each",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "creative_production"
+    },
+    {
+      "id": "h15",
+      "text": "write a sql query that returns the top 5 customers by revenue",
+      "ctx": {
+        "engine": "local"
+      },
+      "expect": "general_engineering"
+    },
+    {
+      "id": "h16",
+      "text": "save the players settings like music volume so they persist",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "data_persistence",
+      "alt": [
+        "ui_ux",
+        "sfx"
+      ]
+    },
+    {
+      "id": "h17",
+      "text": "a coroutine that yields every frame is freezing my game",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair",
+      "alt": [
+        "luau_scripting",
+        "performance"
+      ]
+    },
+    {
+      "id": "h18",
+      "text": "zombie wave survival with a shop between waves",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems"
+    },
+    {
+      "id": "h19",
+      "text": "lol nice",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": null
+    },
+    {
+      "id": "h20",
+      "text": "rain that only falls outdoors and not under roofs",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "vfx",
+      "alt": [
+        "world_building",
+        "luau_scripting"
+      ]
+    },
+    {
+      "id": "k01",
+      "text": "my leaderboard shows 0 for everyone even though coins change",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair",
+      "alt": [
+        "data_persistence"
+      ]
+    },
+    {
+      "id": "k02",
+      "text": "dash ability on Q with a 3 second cooldown and a little speed trail",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems",
+      "alt": [
+        "luau_scripting",
+        "vfx"
+      ]
+    },
+    {
+      "id": "k03",
+      "text": "only the owner of the house should be able to open its door",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "networking",
+      "alt": [
+        "gameplay_systems",
+        "luau_scripting"
+      ]
+    },
+    {
+      "id": "k04",
+      "text": "daily login streak that remembers the day even after a restart",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "data_persistence",
+      "alt": [
+        "gameplay_systems"
+      ]
+    },
+    {
+      "id": "k05",
+      "text": "scoreboard in the corner showing kills and deaths for each team",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "ui_ux",
+      "alt": [
+        "gameplay_systems"
+      ]
+    },
+    {
+      "id": "k06",
+      "text": "the npc should wave when you walk past him",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "animation",
+      "alt": [
+        "gameplay_systems"
+      ]
+    },
+    {
+      "id": "k07",
+      "text": "portal that swirls purple and hums",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "vfx",
+      "alt": [
+        "sfx"
+      ]
+    },
+    {
+      "id": "k08",
+      "text": "lower the music when someone talks in the cutscene",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "sfx",
+      "alt": [
+        "cinematics"
+      ]
+    },
+    {
+      "id": "k09",
+      "text": "a slow pan across the valley when the round begins",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "cinematics",
+      "alt": [
+        "gameplay_systems"
+      ]
+    },
+    {
+      "id": "k10",
+      "text": "abandoned hospital, dim flickering lights, long corridors",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "world_building",
+      "alt": [
+        "vfx"
+      ]
+    },
+    {
+      "id": "k11",
+      "text": "too many parts in the city, phones overheat",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "performance"
+    },
+    {
+      "id": "k12",
+      "text": "which of my modules are never required by anything",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "project_analysis",
+      "alt": [
+        "luau_scripting"
+      ]
+    },
+    {
+      "id": "k13",
+      "text": "a stylised mushroom house with a chimney, blender",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "blender_modeling"
+    },
+    {
+      "id": "k14",
+      "text": "get my blender character into studio with the rig intact",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "blender_to_roblox",
+      "alt": [
+        "blender_modeling",
+        "animation"
+      ]
+    },
+    {
+      "id": "k15",
+      "text": "catchy name and tagline for a tower defence game",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "creative_production"
+    },
+    {
+      "id": "k16",
+      "text": "bash one liner to count lines in all .lua files",
+      "ctx": {
+        "engine": "local"
+      },
+      "expect": "general_engineering"
+    },
+    {
+      "id": "k17",
+      "text": "wrap the datastore calls so a failed save retries three times",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "data_persistence",
+      "alt": [
+        "luau_scripting"
+      ]
+    },
+    {
+      "id": "k18",
+      "text": "Workspace.Door.Script:7: attempt to compare number with nil",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair"
+    },
+    {
+      "id": "k19",
+      "text": "yes do that",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": null
+    },
+    {
+      "id": "k20",
+      "text": "a type-safe event bus module shared by server and client",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "luau_scripting",
+      "alt": [
+        "networking"
+      ]
+    },
+    {
+      "id": "r01",
+      "text": "the kill feed shows the wrong player name",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair",
+      "alt": [
+        "ui_ux"
+      ]
+    },
+    {
+      "id": "r02",
+      "text": "hunger and thirst meters that slowly drain and can be refilled",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems",
+      "alt": [
+        "ui_ux"
+      ]
+    },
+    {
+      "id": "r03",
+      "text": "players are teleporting coins into their inventory with exploits",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "networking",
+      "alt": [
+        "gameplay_systems"
+      ]
+    },
+    {
+      "id": "r04",
+      "text": "keep the players rebirth count forever",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "data_persistence",
+      "alt": [
+        "gameplay_systems"
+      ]
+    },
+    {
+      "id": "r05",
+      "text": "a minimap in the top left that follows the player",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "ui_ux"
+    },
+    {
+      "id": "r06",
+      "text": "the character should crouch when c is held",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "animation",
+      "alt": [
+        "gameplay_systems",
+        "luau_scripting"
+      ]
+    },
+    {
+      "id": "r07",
+      "text": "make the waterfall splash and mist at the bottom",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "vfx",
+      "alt": [
+        "world_building"
+      ]
+    },
+    {
+      "id": "r08",
+      "text": "creepy whispers that get louder near the basement",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "sfx"
+    },
+    {
+      "id": "r09",
+      "text": "a dramatic reveal of the final boss arena from above",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "cinematics",
+      "alt": [
+        "world_building",
+        "gameplay_systems"
+      ]
+    },
+    {
+      "id": "r10",
+      "text": "japanese shrine garden with a koi pond and lanterns",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "world_building"
+    },
+    {
+      "id": "r11",
+      "text": "the game takes 2 minutes to load for people on wifi",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "performance",
+      "alt": [
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "r12",
+      "text": "map out which scripts talk to which remotes",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "project_analysis",
+      "alt": [
+        "networking"
+      ]
+    },
+    {
+      "id": "r13",
+      "text": "sci-fi helmet with visor and side vents in blender",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "blender_modeling"
+    },
+    {
+      "id": "r14",
+      "text": "the exported fbx loses its materials in studio",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "blender_to_roblox",
+      "alt": [
+        "debug_repair",
+        "blender_modeling"
+      ]
+    },
+    {
+      "id": "r15",
+      "text": "write the update log post for version 2 of my game",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "creative_production"
+    },
+    {
+      "id": "r16",
+      "text": "dockerfile for a node api with a healthcheck",
+      "ctx": {
+        "engine": "local"
+      },
+      "expect": "general_engineering"
+    },
+    {
+      "id": "r17",
+      "text": "a shared config module with typed fields the server and client both read",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "luau_scripting",
+      "alt": [
+        "networking",
+        "project_analysis"
+      ]
+    },
+    {
+      "id": "r18",
+      "text": "Players.Noob.PlayerGui.Shop.Main.LocalScript:12: Buy is not a valid member of Frame",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair",
+      "alt": [
+        "ui_ux"
+      ]
+    },
+    {
+      "id": "r19",
+      "text": "great, next",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": null
+    },
+    {
+      "id": "r20",
+      "text": "trading between two players with a confirm step on both sides",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems",
+      "alt": [
+        "networking",
+        "ui_ux"
+      ]
+    }
+  ],
+  "_holdout": "Round 4, written AFTER all 1.99.6 tuning (rounds 1-3 were folded into `tasks` once they had been used). Never tuned against in 1.99.6 - this is the honest generalisation number; its floor is deliberately lower. When a later release tunes on it, fold it into `tasks` and write a new round.",
+  "holdout": [
+    {
+      "id": "q01",
+      "text": "my proximity prompt fires twice every time",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair",
+      "alt": [
+        "gameplay_systems",
+        "luau_scripting"
+      ]
+    },
+    {
+      "id": "q02",
+      "text": "fishing minigame with a timing bar and rare catches",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems",
+      "alt": [
+        "ui_ux"
+      ]
+    },
+    {
+      "id": "q03",
+      "text": "people are spamming the chat remote and crashing the server",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "networking",
+      "alt": [
+        "performance",
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "q04",
+      "text": "migrate old player saves to the new format without losing anything",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "data_persistence"
+    },
+    {
+      "id": "q05",
+      "text": "a radial wheel for choosing emotes",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "ui_ux",
+      "alt": [
+        "animation"
+      ]
+    },
+    {
+      "id": "q06",
+      "text": "blend from walking to running smoothly instead of snapping",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "animation"
+    },
+    {
+      "id": "q07",
+      "text": "the sword should leave a glowing arc when swung",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "vfx",
+      "alt": [
+        "gameplay_systems",
+        "animation"
+      ]
+    },
+    {
+      "id": "q08",
+      "text": "footsteps sound like the player is walking on metal everywhere",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "sfx",
+      "alt": [
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "q09",
+      "text": "a shot that follows the kart around the first corner",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "cinematics",
+      "alt": [
+        "gameplay_systems"
+      ]
+    },
+    {
+      "id": "q10",
+      "text": "a wild west town with a saloon and a sheriff office",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "world_building"
+    },
+    {
+      "id": "q11",
+      "text": "the server heartbeat is at 20 instead of 60",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "performance",
+      "alt": [
+        "debug_repair"
+      ]
+    },
+    {
+      "id": "q12",
+      "text": "list every place a remote is fired from the client",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "project_analysis",
+      "alt": [
+        "networking"
+      ]
+    },
+    {
+      "id": "q13",
+      "text": "ornate wooden treasure chest with a curved lid, modelled in blender",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "blender_modeling"
+    },
+    {
+      "id": "q14",
+      "text": "my mesh is 14k triangles, is that ok for roblox and how do i bring it over",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "blender_to_roblox",
+      "alt": [
+        "blender_modeling",
+        "performance"
+      ]
+    },
+    {
+      "id": "q15",
+      "text": "a short teaser text for the halloween event",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "creative_production"
+    },
+    {
+      "id": "q16",
+      "text": "regex that matches roblox asset urls",
+      "ctx": {
+        "engine": "local"
+      },
+      "expect": "general_engineering"
+    },
+    {
+      "id": "q17",
+      "text": "a module that caches expensive lookups with an expiry",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "luau_scripting",
+      "alt": [
+        "performance"
+      ]
+    },
+    {
+      "id": "q18",
+      "text": "ReplicatedStorage.Modules.Util:33: attempt to call a nil value (method 'Round')",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "debug_repair"
+    },
+    {
+      "id": "q19",
+      "text": "perfect, thanks!",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": null
+    },
+    {
+      "id": "q20",
+      "text": "spectator mode after you die that cycles through alive players",
+      "ctx": {
+        "engine": "roblox"
+      },
+      "expect": "gameplay_systems",
+      "alt": [
+        "cinematics",
+        "ui_ux"
+      ]
+    }
+  ]
+}
