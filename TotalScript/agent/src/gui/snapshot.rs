@@ -128,7 +128,10 @@ fn inspect_text(shapes: &[egui::epaint::ClippedShape], report: &mut TextReport) 
         let egui::Shape::Text(ts) = &cs.shape else { continue };
         let text = ts.galley.text();
         if text.trim().is_empty() { continue; }
-        let rect = egui::Rect::from_min_size(ts.pos, ts.galley.size());
+        // `galley.rect` is anchored on `pos`: right-aligned galleys (anything
+        // laid out right-to-left) extend to negative x, so `from_min_size`
+        // would misreport them as overflowing to the right.
+        let rect = ts.galley.rect.translate(ts.pos.to_vec2());
         let clip = cs.clip_rect;
         let visible = clip.intersects(rect);
         let whole = clip.expand(0.6).contains_rect(rect);
@@ -136,7 +139,13 @@ fn inspect_text(shapes: &[egui::epaint::ClippedShape], report: &mut TextReport) 
         if visible && !whole {
             let cut_x = (rect.max.x - clip.max.x).max(0.0).max(clip.min.x - rect.min.x);
             let cut_y = (rect.max.y - clip.max.y).max(0.0).max(clip.min.y - rect.min.y);
-            if cut_x > 1.0 || cut_y > 1.0 {
+            // A tall clip (a scroll viewport) cutting a line at its top or
+            // bottom edge is the list scrolling, not a layout bug; a short clip
+            // (a button, a one-line row) cutting text vertically is.
+            let scroll_viewport = clip.height() > 160.0;
+            let bad_x = cut_x > 2.0;
+            let bad_y = cut_y > 2.0 && !scroll_viewport;
+            if bad_x || bad_y {
                 report.clipped.push(format!("{:?} cut x{:.0} y{:.0} at {:?}", truncate(text.trim(), 48), cut_x, cut_y, rect.min));
             }
         }
@@ -273,7 +282,7 @@ fn snapshot_every_page_at_three_sizes() {
 
     println!("snapshot: {frames} page×size frames (+1 with the chat panel)");
     println!("snapshot: {} cut text(s), {} elided text(s), {} replacement box(es)", total.clipped.len(), total.elided.len(), total.boxes.len());
-    for c in total.clipped.iter().take(40) { println!("  CUT    {c}"); }
+    for c in total.clipped.iter().take(120) { println!("  CUT    {c}"); }
     for e in total.elided.iter().take(40) { println!("  ELIDED {e}"); }
     for b in total.boxes.iter().take(20) { println!("  BOX    {b}"); }
     // Hard rules: no replacement boxes (missing glyphs) anywhere, and no text

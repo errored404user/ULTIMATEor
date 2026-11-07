@@ -578,6 +578,11 @@ struct Theme {
     info: Color32,
     /// Light palettes invert the surface ladder (panels get darker, not lighter).
     light: bool,
+    /// Corner radii (2.10.0 design tokens): buttons / inputs, cards, chips.
+    /// Set from Settings → Corners so every surface follows the same choice.
+    r_btn: f32,
+    r_card: f32,
+    r_chip: f32,
 }
 
 /// One entry of the Appearance palette grid. Surfaces (panel, border…) are
@@ -696,7 +701,11 @@ impl Theme {
 
     /// Palette + the user's Settings (custom accent).
     fn from_settings(settings: &Settings) -> Theme {
-        Theme::build(Theme::palette(&settings.theme), parse_hex(&settings.accent))
+        let mut t = Theme::build(Theme::palette(&settings.theme), parse_hex(&settings.accent));
+        t.r_btn = corner(settings.corners, 8.0);
+        t.r_card = corner(settings.corners, 12.0);
+        t.r_chip = corner(settings.corners, 6.0);
+        t
     }
 
     fn build(p: &Palette, accent_override: Option<Color32>) -> Theme {
@@ -727,6 +736,9 @@ impl Theme {
                 bad: Color32::from_rgb(220, 38, 38),
                 info: Color32::from_rgb(2, 132, 199),
                 light: true,
+                r_btn: 8.0,
+                r_card: 12.0,
+                r_chip: 6.0,
             }
         } else {
             Theme {
@@ -746,13 +758,16 @@ impl Theme {
                 bad: Color32::from_rgb(248, 113, 113),
                 info: Color32::from_rgb(125, 211, 252),
                 light: false,
+                r_btn: 8.0,
+                r_card: 12.0,
+                r_chip: 6.0,
             }
         }
     }
 
     fn apply(&self, ctx: &egui::Context, settings: &Settings) {
         let compact = settings.compact;
-        let r = corner(settings.corners, 10.0);
+        let r = self.r_btn;
         ctx.set_zoom_factor(settings.ui_scale.clamp(0.8, 1.5));
         let mut style = (*ctx.style()).clone();
         let base = if compact { 13.0 } else { 14.0 };
@@ -765,8 +780,8 @@ impl Theme {
         ]
         .into();
         style.spacing.item_spacing = Vec2::new(10.0, 8.0);
-        style.spacing.button_padding = Vec2::new(14.0, 7.0);
-        style.spacing.interact_size = Vec2::new(40.0, 26.0);
+        style.spacing.button_padding = Vec2::new(14.0, 8.0);
+        style.spacing.interact_size = Vec2::new(40.0, 32.0);
         style.spacing.indent = 18.0;
         style.spacing.scroll.bar_width = 8.0;
 
@@ -775,7 +790,7 @@ impl Theme {
         v.panel_fill = self.bg;
         v.window_fill = self.panel;
         v.window_stroke = Stroke::new(1.0_f32, self.border2);
-        v.window_rounding = Rounding::same(corner(settings.corners, 14.0));
+        v.window_rounding = Rounding::same(self.r_card);
         v.menu_rounding = Rounding::same(r);
         v.extreme_bg_color = self.bg2;
         v.faint_bg_color = self.panel2;
@@ -1483,6 +1498,8 @@ impl App {
                         else if self.shared.studio_running.load(Ordering::Relaxed) { (t.warn, "STUDIO OPEN · MCP NOT LINKED") }
                         else { (t.muted, "STUDIO CLOSED") };
                     status_chip(ui, t, text, dot, online && self.settings.motion);
+                    let up = self.shared.bridge_listening.load(Ordering::Relaxed) && self.shared.fatal.lock().unwrap_or_else(|e| e.into_inner()).is_none();
+                    if !up { status_chip(ui, t, "BRIDGE OFFLINE", t.bad, false).on_hover_text("The local bridge is not listening yet — the extension cannot connect"); }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         ui.spacing_mut().item_spacing.x = 2.0;
                         if window_button(ui, WinGlyph::Close, t.bad, t).clicked() { ctx.send_viewport_cmd(egui::ViewportCommand::Close); }
@@ -1638,7 +1655,7 @@ impl App {
                     }
                     // Short windows: keep only the ONLINE/OFFLINE line.
                     let roomy = ui.available_height() > 190.0;
-                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, if up { alpha(t.ok, 110) } else { t.border })).rounding(Rounding::same(corner(self.settings.corners, 14.0))).inner_margin(Margin::same(12.0));
+                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, if up { alpha(t.ok, 110) } else { t.border })).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::same(12.0));
                     frame.show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         ui.horizontal(|ui| {
@@ -1682,27 +1699,21 @@ impl App {
             let e = 1.0 - (1.0 - k) * (1.0 - k);
             if k < 1.0 { ui.add_space(10.0 * (1.0 - e)); ui.set_opacity(0.15 + 0.85 * e); ui.ctx().request_repaint(); }
         }
-        let up = s.bridge_listening.load(Ordering::Relaxed) && s.fatal.lock().unwrap_or_else(|e| e.into_inner()).is_none();
-        let studio = s.studio_connected.load(Ordering::Relaxed);
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.spacing_mut().item_spacing.y = 3.0;
-                // Breadcrumb: "— SETTINGS / AQUA"
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 6.0;
-                    let (bar, _) = ui.allocate_exact_size(Vec2::new(14.0, 2.0), Sense::hover());
-                    ui.painter().rect_filled(bar, Rounding::same(1.0), t.accent);
-                    let crumb = format!("{} / {}", self.page.title().to_uppercase(), Theme::palette(&self.settings.theme).name.to_uppercase());
-                    ui.label(RichText::new(crumb).size(10.5).strong().color(t.accent));
-                });
-                ui.label(RichText::new(self.page.title()).size(26.0).strong().color(t.text));
-                ui.label(RichText::new(self.page.subtitle()).color(t.muted));
-            });
-            ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+        // Status chips live in the title bar and the sidebar card; the page
+        // header is just the title, so nothing fights the backdrop on the right.
+        let _ = s;
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 3.0;
+            // Breadcrumb: "— SETTINGS / AQUA"
+            ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
-                status_chip(ui, t, if up { "BRIDGE ONLINE" } else { "BRIDGE OFFLINE" }, if up { t.ok } else { t.bad }, up && self.settings.motion);
-                if studio { status_chip(ui, t, "STUDIO LINKED", t.accent, false); }
+                let (bar, _) = ui.allocate_exact_size(Vec2::new(14.0, 2.0), Sense::hover());
+                ui.painter().rect_filled(bar, Rounding::same(1.0), t.accent);
+                let crumb = format!("{} / {}", self.page.title().to_uppercase(), Theme::palette(&self.settings.theme).name.to_uppercase());
+                ui.label(RichText::new(crumb).size(10.5).strong().color(t.accent));
             });
+            ui.label(RichText::new(self.page.title()).size(26.0).strong().color(t.text));
+            ui.add(egui::Label::new(RichText::new(self.page.subtitle()).color(t.muted)).truncate());
         });
         ui.add_space(14.0);
     }
@@ -1721,8 +1732,11 @@ impl App {
         let listening = s.bridge_listening.load(Ordering::Relaxed);
         let channels = s.roblox_clients.load(Ordering::Relaxed) + s.local_clients.load(Ordering::Relaxed);
 
+        egui::ScrollArea::vertical().id_salt("home-scroll").auto_shrink([false, false]).show(ui, |ui| {
+        // Leave room for the floating scrollbar so cards never sit under it.
+        ui.set_max_width(ui.available_width() - 8.0);
         if let Some(f) = fatal.clone() {
-            let frame = egui::Frame::none().fill(t.bad.linear_multiply(0.15)).stroke(Stroke::new(1.0_f32, t.bad)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
+            let frame = egui::Frame::none().fill(t.bad.linear_multiply(0.15)).stroke(Stroke::new(1.0_f32, t.bad)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::same(12.0));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.label(RichText::new("Bridge failed to start").strong().color(t.bad));
@@ -1732,7 +1746,7 @@ impl App {
         }
 
         // Hero
-        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border2)).rounding(Rounding::same(16.0)).inner_margin(Margin::same(18.0));
+        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border2)).rounding(Rounding::same(t.r_card + 4.0)).inner_margin(Margin::same(18.0));
         frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
@@ -1771,24 +1785,57 @@ impl App {
         });
         ui.add_space(14.0);
 
+        // Status cards
+        let cards: [(&str, String, String, Color32); 4] = [
+            ("Bridge",
+                if fatal.is_some() { "Error".into() } else if !listening { "Starting…".into() } else if channels > 0 { "Online".into() } else { "Listening".into() },
+                if fatal.is_some() { "see the message above".into() }
+                else if !listening { "binding http 3000 · ws 17613 · ws 17615".into() }
+                else if channels > 0 { format!("{channels} extension channel(s) · up {}", human_duration(s.boot.elapsed())) }
+                else { "waiting for the extension — open a supported AI chat tab".into() },
+                if fatal.is_some() { t.bad } else if !listening { t.warn } else if channels > 0 { t.ok } else { t.info }),
+            ("Roblox Studio",
+                if studio_link { "Connected".into() } else if studio_proc { "Open · not linked".into() } else { "Closed".into() },
+                if studio_link { "MCP helper linked to a Studio place".into() } else if studio_proc { if mcp { "Enable Studio as MCP server, then probe".into() } else { "Helper not running — restart MCP".into() } } else { "Start Roblox Studio to link".into() },
+                if studio_link { t.ok } else if studio_proc { t.warn } else { t.muted }),
+            ("Tools", format!("{}", tools.len()), format!("{} Studio · {} local", tools.iter().filter(|x| x.engine == "roblox").count(), self.local_tools.len()), if tools.len() > self.local_tools.len() { t.ok } else { t.warn }),
+            ("Workspace", if ws_ready { "Ready".into() } else { "Missing".into() }, short_path(&s.root(), 34) + if s.full_access() { " · FULL ACCESS" } else { "" }, if ws_ready { if s.full_access() { t.warn } else { t.ok } } else { t.bad }),
+        ];
+        let ncols = if ui.available_width() < 900.0 { 2 } else { 4 };
+        ui.columns(ncols, |cols| {
+            for (i, (title, value, sub, color)) in cards.iter().enumerate() {
+                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::same(14.0));
+                frame.show(&mut cols[i % ncols], |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        status_dot(ui, *color);
+                        ui.label(RichText::new(*title).small().strong().color(t.muted));
+                    });
+                    ui.label(RichText::new(value).size(20.0).strong().color(t.text));
+                    ui.label(RichText::new(sub).small().color(t.muted));
+                });
+            }
+        });
+        ui.add_space(14.0);
+
         // Setup checklist — the "what do I do next" card. Hidden once every
         // step is green unless the user keeps it on in Settings.
         {
             let ext_ok = channels > 0;
             let all_ok = fatal.is_none() && listening && ext_ok && studio_proc && studio_link && ws_ready;
             if !all_ok || self.settings.show_checklist {
-                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, if all_ok { t.ok.linear_multiply(0.5) } else { t.border2 })).rounding(Rounding::same(14.0)).inner_margin(Margin::same(14.0));
+                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, if all_ok { t.ok.linear_multiply(0.5) } else { t.border2 })).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::same(14.0));
                 frame.show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(if all_ok { "Everything is connected" } else { "Setup checklist" }).size(16.0).strong().color(t.text));
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if all_ok && ui.small_button("Hide").clicked() { self.settings.show_checklist = false; let _ = self.settings.save(); }
+                            if all_ok && ghost(ui, t, "Hide").clicked() { self.settings.show_checklist = false; let _ = self.settings.save(); }
                         });
                     });
                     ui.add_space(4.0);
                     let step = |ui: &mut egui::Ui, done: bool, title: &str, hint: &str| {
-                        ui.horizontal(|ui| {
+                        ui.horizontal_top(|ui| {
                             let (rect, _) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::hover());
                             if done {
                                 ui.painter().circle_filled(rect.center(), 8.0, t.ok);
@@ -1797,8 +1844,11 @@ impl App {
                             } else {
                                 ui.painter().circle_stroke(rect.center(), 8.0, Stroke::new(1.6_f32, t.warn));
                             }
-                            ui.label(RichText::new(title).strong().color(if done { t.text } else { t.warn }));
-                            if !done { ui.label(RichText::new(hint).small().color(t.muted)); }
+                            ui.vertical(|ui| {
+                                ui.spacing_mut().item_spacing.y = 1.0;
+                                ui.label(RichText::new(title).strong().color(if done { t.text } else { t.warn }));
+                                if !done { ui.add(egui::Label::new(RichText::new(hint).small().color(t.muted)).wrap()); }
+                            });
                         });
                     };
                     step(ui, fatal.is_none() && listening, "Bridge running", "starting the local ports…");
@@ -1821,47 +1871,14 @@ impl App {
             }
         }
 
-        // Status cards
-        let cards: [(&str, String, String, Color32); 4] = [
-            ("Bridge",
-                if fatal.is_some() { "Error".into() } else if !listening { "Starting…".into() } else if channels > 0 { "Online".into() } else { "Listening".into() },
-                if fatal.is_some() { "see the message above".into() }
-                else if !listening { "binding http 3000 · ws 17613 · ws 17615".into() }
-                else if channels > 0 { format!("{channels} extension channel(s) · up {}", human_duration(s.boot.elapsed())) }
-                else { "waiting for the extension — open a supported AI chat tab".into() },
-                if fatal.is_some() { t.bad } else if !listening { t.warn } else if channels > 0 { t.ok } else { t.info }),
-            ("Roblox Studio",
-                if studio_link { "Connected".into() } else if studio_proc { "Open · not linked".into() } else { "Closed".into() },
-                if studio_link { "MCP helper linked to a Studio place".into() } else if studio_proc { if mcp { "Enable Studio as MCP server, then probe".into() } else { "Helper not running — restart MCP".into() } } else { "Start Roblox Studio to link".into() },
-                if studio_link { t.ok } else if studio_proc { t.warn } else { t.muted }),
-            ("Tools", format!("{}", tools.len()), format!("{} Studio · {} local", tools.iter().filter(|x| x.engine == "roblox").count(), self.local_tools.len()), if tools.len() > self.local_tools.len() { t.ok } else { t.warn }),
-            ("Workspace", if ws_ready { "Ready".into() } else { "Missing".into() }, short_path(&s.root(), 34) + if s.full_access() { " · FULL ACCESS" } else { "" }, if ws_ready { if s.full_access() { t.warn } else { t.ok } } else { t.bad }),
-        ];
-        let ncols = if ui.available_width() < 900.0 { 2 } else { 4 };
-        ui.columns(ncols, |cols| {
-            for (i, (title, value, sub, color)) in cards.iter().enumerate() {
-                let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::same(14.0));
-                frame.show(&mut cols[i % ncols], |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.horizontal(|ui| {
-                        status_dot(ui, *color);
-                        ui.label(RichText::new(*title).small().strong().color(t.muted));
-                    });
-                    ui.label(RichText::new(value).size(20.0).strong().color(t.text));
-                    ui.label(RichText::new(sub).small().color(t.muted));
-                });
-            }
-        });
-        ui.add_space(14.0);
-
-        egui::ScrollArea::vertical().id_salt("home-scroll").auto_shrink([false, false]).show(ui, |ui| {
+        {
             ui.columns(2, |cols| {
                 // Left: Studio viewport + quick access
                 {
                     let ui = &mut cols[0];
                     ui.label(RichText::new("Studio viewport").size(16.0).strong().color(t.text));
                     ui.add_space(6.0);
-                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
+                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::same(10.0));
                     frame.show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         match &self.snapshot {
@@ -1881,7 +1898,7 @@ impl App {
                         ui.horizontal(|ui| {
                             let capturing = self.snapshot_run.is_some();
                             if ui.add_enabled(!capturing && studio_link, pill_widget(t, if capturing { "Capturing…" } else { "Capture" }, true)).clicked() { self.capture_studio(); }
-                            if self.snapshot.is_some() && ui.button("Clear").clicked() { self.snapshot = None; }
+                            if self.snapshot.is_some() && pill(ui, t, "Clear", false).clicked() { self.snapshot = None; }
                             if !studio_link { ui.label(RichText::new("Link Studio first").small().color(t.muted)); }
                         });
                     });
@@ -1896,7 +1913,7 @@ impl App {
                         ("Settings", "Theme, tray behaviour, workspace, MCP launcher", Page::Settings),
                     ];
                     for (title, sub, page) in items {
-                        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::symmetric(12.0, 10.0));
+                        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::symmetric(12.0, 10.0));
                         let resp = frame.show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             ui.horizontal(|ui| {
@@ -1920,11 +1937,11 @@ impl App {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new("Recent activity").size(16.0).strong().color(t.text));
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if ui.small_button("Clear").clicked() { s.activity.lock().unwrap_or_else(|e| e.into_inner()).clear(); }
+                            if ghost(ui, t, "Clear").clicked() { s.activity.lock().unwrap_or_else(|e| e.into_inner()).clear(); }
                         });
                     });
                     ui.add_space(6.0);
-                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
+                    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::same(10.0));
                     frame.show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         let list = s.activity.lock().unwrap_or_else(|e| e.into_inner()).clone();
@@ -1942,6 +1959,7 @@ impl App {
                     });
                 }
             });
+        }
         });
     }
 
@@ -1976,45 +1994,55 @@ impl App {
             }
             if let Some(p) = go { self.navigate(p); }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.button("Show in folder").clicked() { open_external(&self.explorer_dir.to_string_lossy()); }
-                if ui.button("Refresh").on_hover_text("F5").clicked() { self.refresh_explorer(); }
+                if pill(ui, t, "Show in folder", false).clicked() { open_external(&self.explorer_dir.to_string_lossy()); }
+                if pill(ui, t, "Refresh", false).on_hover_text("F5").clicked() { self.refresh_explorer(); }
                 let can_up = (self.explorer_dir != root && self.explorer_dir.starts_with(&root)) || self.shared.full_access();
-                if ui.add_enabled(can_up, egui::Button::new("Up")).clicked() {
+                if ui.add_enabled(can_up, button_widget(t, "Up", Btn::Secondary)).clicked() {
                     if let Some(parent) = self.explorer_dir.parent().map(|p| p.to_path_buf()) { self.navigate(parent); }
                 }
                 if self.explorer_dir != root && pill(ui, t, "Workspace root", false).clicked() { self.navigate(root.clone()); }
             });
         });
         ui.add_space(6.0);
+        // Second row, laid out from the right so the path box takes whatever
+        // width is left instead of pushing the buttons off the page.
         ui.horizontal(|ui| {
-            let jump = ui.add(egui::TextEdit::singleline(&mut self.explorer_jump).font(TextStyle::Monospace).hint_text("folder path…").desired_width(360.0));
-            if (jump.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) || ui.button("Go").clicked() {
+            let name = self.new_name.trim().to_string();
+            let valid = !name.is_empty() && !name.contains(['/', '\\']);
+            let mut jump_now = false;
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if ui.add_enabled(valid, button_widget(t, "New file", Btn::Secondary)).clicked() {
+                    let p = self.explorer_dir.join(&name);
+                    if p.exists() { self.toast("Already exists", false); } else {
+                        match std::fs::write(&p, b"") { Ok(()) => { self.new_name.clear(); self.refresh_explorer(); self.open_file(p); self.toast("File created", true); } Err(e) => self.toast(format!("{e}"), false) }
+                    }
+                }
+                if ui.add_enabled(valid, button_widget(t, "New folder", Btn::Secondary)).clicked() {
+                    let p = self.explorer_dir.join(&name);
+                    match std::fs::create_dir_all(&p) { Ok(()) => { self.new_name.clear(); self.refresh_explorer(); self.toast("Folder created", true); } Err(e) => self.toast(format!("{e}"), false) }
+                }
+                ui.add(egui::TextEdit::singleline(&mut self.new_name).hint_text("new name…").desired_width(150.0));
+                ui.separator();
+                if pill(ui, t, "Go", false).clicked() { jump_now = true; }
+                let w = (ui.available_width() - 4.0).max(120.0);
+                let jump = ui.add(egui::TextEdit::singleline(&mut self.explorer_jump).font(TextStyle::Monospace).hint_text("folder path…").desired_width(w));
+                if jump.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) { jump_now = true; }
+            });
+            if jump_now {
                 let target = PathBuf::from(self.explorer_jump.trim());
                 self.navigate(target);
             }
-            ui.separator();
-            ui.add(egui::TextEdit::singleline(&mut self.new_name).hint_text("new name…").desired_width(180.0));
-            let name = self.new_name.trim().to_string();
-            let valid = !name.is_empty() && !name.contains(['/', '\\']);
-            if ui.add_enabled(valid, egui::Button::new("New folder")).clicked() {
-                let p = self.explorer_dir.join(&name);
-                match std::fs::create_dir_all(&p) { Ok(()) => { self.new_name.clear(); self.refresh_explorer(); self.toast("Folder created", true); } Err(e) => self.toast(format!("{e}"), false) }
-            }
-            if ui.add_enabled(valid, egui::Button::new("New file")).clicked() {
-                let p = self.explorer_dir.join(&name);
-                if p.exists() { self.toast("Already exists", false); } else {
-                    match std::fs::write(&p, b"") { Ok(()) => { self.new_name.clear(); self.refresh_explorer(); self.open_file(p); self.toast("File created", true); } Err(e) => self.toast(format!("{e}"), false) }
-                }
-            }
-            if !self.explorer_note.is_empty() {
-                ui.label(RichText::new(&self.explorer_note).color(t.warn));
-                if ui.small_button("Dismiss").clicked() { self.explorer_note.clear(); }
-            }
         });
+        if !self.explorer_note.is_empty() {
+            ui.horizontal(|ui| {
+                ui.add(egui::Label::new(RichText::new(&self.explorer_note).color(t.warn)).truncate());
+                if ghost(ui, t, "Dismiss").clicked() { self.explorer_note.clear(); }
+            });
+        }
         ui.add_space(8.0);
 
         // ── split: file list | editor ──
-        let panel_frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
+        let panel_frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::same(8.0));
         egui::SidePanel::left("explorer-tree")
             .frame(panel_frame)
             .resizable(true)
@@ -2058,8 +2086,7 @@ impl App {
                             }
                             let size_text = if is_dir { String::new() } else { human_size(size) };
                             let size_w = if is_dir { 0.0 } else { 62.0 };
-                            let max_chars = (((r.width() - 36.0 - size_w) / 7.4).floor() as usize).max(6);
-                            p.text(r.left_center() + Vec2::new(30.0, 0.0), egui::Align2::LEFT_CENTER, truncate(&name, max_chars), FontId::monospace(13.0), if is_dir { t.text } else if selected { t.accent } else { t.text });
+                            paint_text_fit(p, r.left_center() + Vec2::new(30.0, 0.0), egui::Align2::LEFT_CENTER, &name, FontId::monospace(13.0), if selected && !is_dir { t.accent } else { t.text }, r.width() - 36.0 - size_w);
                             if !is_dir {
                                 p.text(r.right_center() - Vec2::new(6.0, 0.0), egui::Align2::RIGHT_CENTER, size_text, FontId::proportional(11.0), t.muted);
                             }
@@ -2076,7 +2103,7 @@ impl App {
                 });
             });
 
-        let editor_frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(10.0));
+        let editor_frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::same(10.0));
         egui::CentralPanel::default()
             .frame(egui::Frame::none().inner_margin(Margin { left: 10.0, right: 0.0, top: 0.0, bottom: 0.0 }))
             .show_inside(ui, |ui| {
@@ -2087,7 +2114,7 @@ impl App {
                             ui.add_space(24.0);
                             ui.vertical_centered(|ui| {
                                 ui.label(RichText::new("No file open").size(16.0).strong().color(t.text));
-                                ui.label(RichText::new("Pick a file on the left to preview and edit it. Text files up to 2 MB open inline; Ctrl+S saves.").color(t.muted));
+                                ui.add(egui::Label::new(RichText::new("Pick a file on the left to preview and edit it. Text files up to 2 MB open inline; Ctrl+S saves.").color(t.muted)).wrap());
                             });
                         }
                         Some(path) => {
@@ -2097,14 +2124,14 @@ impl App {
                                 ui.label(RichText::new(format!("{} lines · {}", self.explorer_text.lines().count(), human_size(self.explorer_text.len() as u64))).small().color(t.muted));
                                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                     let armed = self.delete_armed.map(|a| a.elapsed() < Duration::from_secs(3)).unwrap_or(false);
-                                    if ui.button(RichText::new(if armed { "Confirm delete" } else { "Delete" }).color(t.bad)).clicked() {
+                                    if danger(ui, t, if armed { "Confirm delete" } else { "Delete" }).clicked() {
                                         if armed {
                                             match std::fs::remove_file(&path) { Ok(()) => { self.explorer_file = None; self.explorer_text.clear(); self.refresh_explorer(); self.toast("Deleted", true); } Err(e) => self.toast(format!("{e}"), false) }
                                             self.delete_armed = None;
                                         } else { self.delete_armed = Some(Instant::now()); }
                                     }
-                                    if ui.button("Show in folder").clicked() { open_external(&path.to_string_lossy()); }
-                                    if ui.button("Copy path").clicked() { let p = path.to_string_lossy().to_string(); ui.output_mut(|o| o.copied_text = p); }
+                                    if pill(ui, t, "Show in folder", false).clicked() { open_external(&path.to_string_lossy()); }
+                                    if pill(ui, t, "Copy path", false).clicked() { let p = path.to_string_lossy().to_string(); ui.output_mut(|o| o.copied_text = p); }
                                     if ui.add_enabled(self.explorer_dirty, pill_widget(t, "Save", true)).on_hover_text("Ctrl+S").clicked() { self.save_file(); }
                                 });
                             });
@@ -2137,7 +2164,7 @@ impl App {
 
         egui::ScrollArea::vertical().id_salt("servers").auto_shrink([false, false]).show(ui, |ui| {
             // Roblox Studio MCP
-            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
+            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::same(14.0));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
@@ -2148,7 +2175,7 @@ impl App {
                         if pill(ui, t, "Restart helper", true).clicked() { self.send(UiCommand::RestartMcp, "Restarting Studio MCP helper"); }
                         if pill(ui, t, "Probe", false).clicked() { self.send(UiCommand::ProbeStudio, "Probing Studio"); }
                         let armed = self.kill_armed.map(|a| a.elapsed() < Duration::from_secs(3)).unwrap_or(false);
-                        if ui.add_enabled(studio_proc, egui::Button::new(RichText::new(if armed { "Confirm: kill Studio" } else { "Kill Roblox Studio" }).color(t.bad))).clicked() {
+                        if ui.add_enabled(studio_proc, button_widget(t, if armed { "Confirm: kill Studio" } else { "Kill Roblox Studio" }, Btn::Danger)).on_hover_text("Ends every RobloxStudio process (press twice within 3 s)").clicked() {
                             if armed { self.kill_armed = None; self.send(UiCommand::KillStudio, "Killing Roblox Studio processes"); } else { self.kill_armed = Some(Instant::now()); }
                         }
                     });
@@ -2161,10 +2188,10 @@ impl App {
                     ui.label(RichText::new("Launcher").color(t.muted)); ui.label(RichText::new(mcp_launcher_display()).monospace()); ui.end_row();
                 });
                 ui.horizontal_wrapped(|ui| {
-                    if ui.small_button("Open launcher folder").clicked() {
+                    if ghost(ui, t, "Open launcher folder").clicked() {
                         if let Some(dir) = crate::mcp_launcher_folder() { open_external(&dir.to_string_lossy()); }
                     }
-                    if ui.small_button("Change launcher…").clicked() { self.go(Page::Settings); }
+                    if ghost(ui, t, "Change launcher…").clicked() { self.go(Page::Settings); }
                 });
                 if !studio_link {
                     ui.add_space(4.0);
@@ -2174,7 +2201,7 @@ impl App {
             ui.add_space(8.0);
 
             // Local filesystem
-            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
+            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::same(14.0));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 let ready = s.workspace_ready.load(Ordering::Relaxed);
@@ -2204,7 +2231,7 @@ impl App {
             ui.add_space(8.0);
 
             // Extension channels
-            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
+            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::same(14.0));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.label(RichText::new("Extension channels").size(16.0).strong().color(t.text));
@@ -2217,8 +2244,8 @@ impl App {
                     ui.label(RichText::new("WS local").color(t.muted)); ui.label(RichText::new("ws://127.0.0.1:17615").monospace()); ui.label(if lc > 0 { format!("{lc} connected") } else { "no extension connected".to_string() }); ui.end_row();
                 });
                 ui.horizontal_wrapped(|ui| {
-                    if ui.small_button("Open status JSON").clicked() { open_external("http://127.0.0.1:3000/api/status"); }
-                    if ui.small_button("Copy endpoints").clicked() {
+                    if ghost(ui, t, "Open status JSON").clicked() { open_external("http://127.0.0.1:3000/api/status"); }
+                    if ghost(ui, t, "Copy endpoints").clicked() {
                         ui.output_mut(|o| o.copied_text = "http://127.0.0.1:3000\nws://127.0.0.1:17613\nws://127.0.0.1:17615".to_string());
                         self.toast("Endpoints copied", true);
                     }
@@ -2229,7 +2256,7 @@ impl App {
 
             // Tool catalogue (read-only) — what the AI can call through this bridge.
             let tools = self.all_tools();
-            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(14.0));
+            let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::same(14.0));
             frame.show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
@@ -2237,7 +2264,7 @@ impl App {
                     ui.label(RichText::new("Tool catalogue").size(16.0).strong().color(t.text));
                     ui.label(RichText::new(format!("{} Studio · {} workspace", tools.len() - self.local_tools.len(), self.local_tools.len())).small().color(t.muted));
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if !self.catalog_query.is_empty() && ui.small_button("Clear").clicked() { self.catalog_query.clear(); }
+                        if !self.catalog_query.is_empty() && ghost(ui, t, "Clear").clicked() { self.catalog_query.clear(); }
                         ui.add(egui::TextEdit::singleline(&mut self.catalog_query).hint_text("Search tools…").desired_width(220.0));
                     });
                 });
@@ -2270,23 +2297,34 @@ impl App {
             .show_inside(ui, |ui| {
             // console
             {
+                // Two short rows that fit the narrowest pane (320 px): title +
+                // filter, then the level switch + actions. One long row used to
+                // overflow, which made egui grow the pane every frame.
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Bridge console").strong().color(t.text));
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let w = (ui.available_width() - 6.0).clamp(60.0, 240.0);
+                        ui.add(egui::TextEdit::singleline(&mut self.log_query).hint_text("filter…").desired_width(w));
+                    });
+                });
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
                     for (lvl, label) in [(0u8, "all"), (1, "info+"), (2, "warn+"), (3, "error")] {
                         if ui.selectable_label(self.log_level == lvl, label).clicked() { self.log_level = lvl; }
                     }
-                    ui.add(egui::TextEdit::singleline(&mut self.log_query).hint_text("filter…").desired_width(110.0));
-                    if ui.small_button("Clear").clicked() { self.shared.clear_logs(); }
-                    if ui.small_button("Copy").clicked() {
-                        let text = self.shared.logs.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned().collect::<Vec<_>>().join("\n");
-                        ui.output_mut(|o| o.copied_text = text);
-                    }
-                    if ui.small_button("Log file").clicked() { open_external(&log_path().to_string_lossy()); }
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ghost(ui, t, "Log file").on_hover_text("Open the log file").clicked() { open_external(&log_path().to_string_lossy()); }
+                        if ghost(ui, t, "Copy").on_hover_text("Copy every line").clicked() {
+                            let text = self.shared.logs.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned().collect::<Vec<_>>().join("\n");
+                            ui.output_mut(|o| o.copied_text = text);
+                        }
+                        if ghost(ui, t, "Clear").clicked() { self.shared.clear_logs(); }
+                    });
                 });
-                let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
+                let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::same(8.0));
                 frame.show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.set_min_height(avail - 50.0);
+                    ui.set_min_height(avail - 84.0);
                     let logs = self.shared.logs.lock().unwrap_or_else(|e| e.into_inner()).clone();
                     let q = self.log_query.trim().to_lowercase();
                     egui::ScrollArea::vertical().id_salt("console").auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
@@ -2307,21 +2345,27 @@ impl App {
             // runner
             {
                 ui.horizontal(|ui| {
-                    for (mode, label) in [(RunnerMode::Command, "Workspace command"), (RunnerMode::Luau, "Luau in Studio")] {
-                        if ui.selectable_label(self.runner_mode == mode, RichText::new(label).strong()).clicked() { self.runner_mode = mode; }
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    for (mode, label) in [(RunnerMode::Command, "Command"), (RunnerMode::Luau, "Luau in Studio")] {
+                        if ui.selectable_label(self.runner_mode == mode, RichText::new(label).strong()).on_hover_text(match mode { RunnerMode::Command => "Shell command in the workspace (run_command)", RunnerMode::Luau => "Run Luau in the open Studio place (execute_luau)" }).clicked() { self.runner_mode = mode; }
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if ui.small_button("Clear output").clicked() { self.term_output.clear(); }
-                        match self.runner_mode {
-                            RunnerMode::Command => { ui.label(RichText::new(format!("cwd {}", short_path(&self.shared.root(), 36))).monospace().small().color(t.muted)); }
-                            RunnerMode::Luau => { status_dot(ui, if studio_link { t.ok } else { t.muted }); ui.label(RichText::new(if studio_link { "Studio linked" } else { "Studio not linked" }).small().color(t.muted)); }
-                        }
+                        if ghost(ui, t, "Clear").on_hover_text("Clear the output below").clicked() { self.term_output.clear(); }
                     });
                 });
-                let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(8.0));
+                ui.horizontal(|ui| {
+                    match self.runner_mode {
+                        RunnerMode::Command => {
+                            let root = self.shared.root();
+                            ui.add(egui::Label::new(RichText::new(format!("cwd {root}")).monospace().small().color(t.muted)).truncate()).on_hover_text(root);
+                        }
+                        RunnerMode::Luau => { status_dot(ui, if studio_link { t.ok } else { t.muted }); ui.label(RichText::new(if studio_link { "Studio linked" } else { "Studio not linked" }).small().color(t.muted)); }
+                    }
+                });
+                let frame = egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::same(8.0));
                 frame.show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.set_min_height(avail - 50.0);
+                    ui.set_min_height(avail - 84.0);
                     match self.runner_mode {
                         RunnerMode::Command => self.command_runner(ui),
                         RunnerMode::Luau => self.luau_runner(ui, studio_link),
@@ -2348,7 +2392,7 @@ impl App {
         let mut submit = false;
         ui.horizontal(|ui| {
             ui.label(RichText::new(">").strong().color(t.accent));
-            let resp = ui.add(egui::TextEdit::singleline(&mut self.term_cmd).hint_text("dir, git status, npm test …").font(TextStyle::Monospace).desired_width(ui.available_width() - 70.0));
+            let resp = ui.add(egui::TextEdit::singleline(&mut self.term_cmd).hint_text("dir, git status, npm test…").font(TextStyle::Monospace).desired_width((ui.available_width() - 78.0).max(80.0)));
             if resp.has_focus() {
                 let (up, down) = ui.input(|i| (i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown)));
                 if up && !self.term_history.is_empty() {
@@ -2364,7 +2408,7 @@ impl App {
                 }
             }
             if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) { submit = true; resp.request_focus(); }
-            if ui.add_enabled(self.term_run.is_none(), egui::Button::new("Run")).clicked() { submit = true; }
+            if ui.add_enabled(self.term_run.is_none(), button_widget(t, "Run", Btn::Primary)).clicked() { submit = true; }
         });
         if submit && self.term_run.is_none() && !self.term_cmd.trim().is_empty() {
             let command = self.term_cmd.trim().to_string();
@@ -2382,7 +2426,8 @@ impl App {
         }
         ui.horizontal(|ui| {
             if let Some(run) = &self.term_run { ui.label(RichText::new(format!("running {:.1}s", run.started.elapsed().as_secs_f32())).small().color(t.muted)); }
-            ui.label(RichText::new("Runs through the local engine's run_command — Enter to run, Up/Down for history, 60 s default timeout, sandboxed unless FULL PC ACCESS.").small().color(t.muted));
+            ui.add(egui::Label::new(RichText::new("Enter runs · Up/Down history · 60 s timeout · sandboxed unless FULL PC ACCESS").small().color(t.muted)).truncate())
+                .on_hover_text("Runs through the local engine's run_command tool — the same one the AI uses.");
         });
     }
 
@@ -2394,9 +2439,9 @@ impl App {
             let running = self.luau_run.is_some();
             if ui.add_enabled(!running && studio_link, pill_widget(t, if running { "Running in Studio…" } else { "Run in Studio" }, true)).on_hover_text("Ctrl+Enter").clicked() { run = true; }
             if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Enter)) && !running && studio_link { run = true; }
-            if ui.button("Copy").clicked() { let c = self.luau_code.clone(); ui.output_mut(|o| o.copied_text = c); }
+            if ghost(ui, t, "Copy").clicked() { let c = self.luau_code.clone(); ui.output_mut(|o| o.copied_text = c); }
             if let Some(job) = &self.luau_run { ui.label(RichText::new(format!("{} · {:.1}s", job.name, job.started.elapsed().as_secs_f32())).small().color(t.muted)); }
-            ui.label(RichText::new("execute_luau · Edit DataModel · print() output comes back below").small().color(t.muted));
+            ui.add(egui::Label::new(RichText::new("execute_luau · Edit DataModel · print() output below").small().color(t.muted)).truncate());
         });
         if run && !self.luau_code.trim().is_empty() {
             let code = self.luau_code.clone();
@@ -2413,10 +2458,13 @@ impl App {
         let mut goto: Option<Page> = None;
         ui.horizontal(|ui| {
             ui.label(RichText::new("Search").color(t.muted));
-            ui.add(egui::TextEdit::singleline(&mut self.help_query).hint_text("page, button, shortcut or problem — e.g. Luau, API key, tray, not linked…").desired_width(420.0));
-            if !self.help_query.is_empty() && ui.small_button("Clear").on_hover_text("Esc").clicked() { self.help_query.clear(); }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.label(RichText::new(format!("{} topics · F1 opens this page from anywhere", HELP_TOPICS.len())).small().color(t.muted));
+                if !self.help_query.is_empty() && ghost(ui, t, "Clear").on_hover_text("Esc").clicked() { self.help_query.clear(); }
+                let w = (ui.available_width() - 8.0).clamp(120.0, 460.0);
+                ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                    ui.add(egui::TextEdit::singleline(&mut self.help_query).hint_text("page, button, shortcut or problem — e.g. Luau, API key, tray…").desired_width(w));
+                });
             });
         });
         ui.add_space(8.0);
@@ -2499,7 +2547,7 @@ impl App {
             section_card(ui, t, "02", "Appearance", "Palette, accent colour and effects. Light and dark palettes share the same layout.", |ui| {
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut self.palette_query).hint_text("Search palettes…").desired_width(260.0));
-                    if !self.palette_query.is_empty() && ui.small_button("Clear").clicked() { self.palette_query.clear(); }
+                    if !self.palette_query.is_empty() && ghost(ui, t, "Clear").clicked() { self.palette_query.clear(); }
                     self.egg.observe(&self.palette_query);
                     ui.label(RichText::new(format!("{} palettes · current: {}", PALETTES.len(), Theme::palette(&self.settings.theme).name)).small().color(t.muted));
                 });
@@ -2564,7 +2612,7 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut self.draft_workspace).hint_text(if cfg!(windows) { "C:\\Users\\you\\TotalWorkspace" } else { "~/TotalWorkspace" }).desired_width(420.0).font(TextStyle::Monospace));
                     let picking = self.picker_rx.is_some();
-                    if ui.add_enabled(!picking, egui::Button::new(if picking { "Choosing…" } else { "Browse…" })).clicked() {
+                    if ui.add_enabled(!picking, button_widget(t, if picking { "Choosing…" } else { "Browse…" }, Btn::Secondary)).clicked() {
                         self.picker_for_reference = false;
                         self.picker_rx = Some(pick_folder(&self.draft_workspace));
                     }
@@ -2574,7 +2622,7 @@ impl App {
                         let (tx, rx) = std::sync::mpsc::channel();
                         if self.cmd_tx.send(UiCommand::SetWorkspace { path: self.draft_workspace.trim().to_string(), reply: tx }).is_ok() { self.workspace_rx = Some(rx); }
                     }
-                    if ui.button("Open").clicked() { open_external(&self.shared.root()); }
+                    if pill(ui, t, "Open", false).clicked() { open_external(&self.shared.root()); }
                 });
                 ui.label(RichText::new("Applies immediately to the AgentScript engine and the Explorer, and is remembered for the next start. --workspace and TOTAL_WORKSPACE_ROOT still win when given.").small().color(t.muted));
                 let mut full = self.shared.full_access();
@@ -2589,7 +2637,7 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut self.draft_reference).hint_text(if cfg!(windows) { "C:\\Users\\you\\LihFolk Vault V2" } else { "~/LihFolk Vault V2" }).desired_width(420.0).font(TextStyle::Monospace));
                     let picking = self.picker_rx.is_some();
-                    if ui.add_enabled(!picking, egui::Button::new(if picking { "Choosing…" } else { "Browse…" })).clicked() {
+                    if ui.add_enabled(!picking, button_widget(t, if picking { "Choosing…" } else { "Browse…" }, Btn::Secondary)).clicked() {
                         self.picker_for_reference = true;
                         self.picker_rx = Some(pick_folder(&self.draft_reference));
                     }
@@ -2599,7 +2647,7 @@ impl App {
                         let (tx, rx) = std::sync::mpsc::channel();
                         if self.cmd_tx.send(UiCommand::SetReferenceDir { path: self.draft_reference.trim().to_string(), reply: tx }).is_ok() { self.reference_rx = Some(rx); }
                     }
-                    if ui.add_enabled(!self.settings.reference_dir.trim().is_empty() && !switching, egui::Button::new("Turn off")).clicked() {
+                    if ui.add_enabled(!self.settings.reference_dir.trim().is_empty() && !switching, button_widget(t, "Turn off", Btn::Secondary)).clicked() {
                         let (tx, rx) = std::sync::mpsc::channel();
                         if self.cmd_tx.send(UiCommand::SetReferenceDir { path: String::new(), reply: tx }).is_ok() { self.reference_rx = Some(rx); }
                     }
@@ -2617,7 +2665,7 @@ impl App {
                         let _ = self.cmd_tx.send(UiCommand::SetMcpCommand(cmd));
                         self.send(UiCommand::RestartMcp, "Launcher updated — restarting Studio MCP helper");
                     }
-                    if ui.button("Use default").clicked() { self.draft_mcp.clear(); }
+                    if pill(ui, t, "Use default", false).clicked() { self.draft_mcp.clear(); }
                 });
                 ui.label(RichText::new("A custom launcher is any command that speaks MCP over stdio (for example a different mcp.bat or a wrapper script). TOTAL_MCP_COMMAND in the environment still takes precedence at start.").small().color(t.muted));
             });
@@ -2625,9 +2673,9 @@ impl App {
                 ui.label(RichText::new("Bring your own API key: CodeCraft, OpenAI, OpenRouter, Groq, DeepSeek, Gemini, xAI, Mistral, Together, a local Ollama / LM Studio or any OpenAI-compatible endpoint. The model you pick receives the bridge's Studio, plugin and workspace tools and works in Studio for you.").small().color(t.muted));
                 ui.horizontal(|ui| {
                     if pill(ui, t, if self.settings.chat_panel_open { "Hide chat panel" } else { "Open chat panel" }, true).clicked() { self.toggle_chat(); }
-                    if ui.button("Open chat setup").clicked() { self.settings.chat_panel_open = true; self.chat_setup_open = true; save = true; }
+                    if pill(ui, t, "Open chat setup", false).clicked() { self.settings.chat_panel_open = true; self.chat_setup_open = true; save = true; }
                     let n = self.settings.chat_keys.values().filter(|k| !k.trim().is_empty()).count();
-                    if ui.add_enabled(n > 0, egui::Button::new(format!("Forget all API keys ({n})"))).clicked() {
+                    if ui.add_enabled(n > 0, button_widget(t, &format!("Forget all API keys ({n})"), Btn::Danger)).clicked() {
                         self.settings.chat_keys.clear();
                         save = true;
                         self.settings_note = "API keys removed from settings.json".into();
@@ -2671,9 +2719,9 @@ impl App {
                         ui.output_mut(|o| o.copied_text = text);
                         self.toast("Diagnostics copied", true);
                     }
-                    if ui.button("Open log file").clicked() { open_external(&log_path().to_string_lossy()); }
-                    if ui.button("Open settings.json").clicked() { open_external(&Settings::path().to_string_lossy()); }
-                    if ui.button("Reset settings").clicked() {
+                    if pill(ui, t, "Open log file", false).clicked() { open_external(&log_path().to_string_lossy()); }
+                    if pill(ui, t, "Open settings.json", false).clicked() { open_external(&Settings::path().to_string_lossy()); }
+                    if pill(ui, t, "Reset settings", false).clicked() {
                         let keep_ws = self.settings.workspace_root.clone();
                         let keep_ref = self.settings.reference_dir.clone();
                         self.settings = Settings { workspace_root: keep_ws, reference_dir: keep_ref, ..Settings::default() };
@@ -2681,13 +2729,13 @@ impl App {
                         retheme = true; save = true;
                         self.settings_note = "Settings reset to defaults (workspace kept).".into();
                     }
-                    if ui.button(RichText::new("Quit TotalScript (stop bridge)").color(t.bad)).clicked() { self.quit_now = true; request_quit(&self.shared); }
+                    if danger(ui, t, "Quit TotalScript (stop bridge)").clicked() { self.quit_now = true; request_quit(&self.shared); }
                 });
             });
             if !self.settings_note.is_empty() {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(&self.settings_note).color(t.warn));
-                    if ui.small_button("Dismiss").clicked() { self.settings_note.clear(); }
+                    if ghost(ui, t, "Dismiss").clicked() { self.settings_note.clear(); }
                 });
             }
         });
@@ -2774,7 +2822,7 @@ impl App {
                     .show(ctx, |ui| {
                         ui.set_opacity(ease.min(fade));
                         let color = if ok { t.ok } else { t.bad };
-                        egui::Frame::none().fill(t.panel2).stroke(Stroke::new(1.0_f32, color)).rounding(Rounding::same(corner(self.settings.corners, 10.0))).inner_margin(Margin::symmetric(14.0, 10.0)).shadow(egui::epaint::Shadow { offset: Vec2::new(0.0, 4.0), blur: 14.0, spread: 0.0, color: alpha(Color32::BLACK, if t.light { 40 } else { 110 }) }).show(ui, |ui| {
+                        egui::Frame::none().fill(t.panel2).stroke(Stroke::new(1.0_f32, color)).rounding(Rounding::same(t.r_btn)).inner_margin(Margin::symmetric(14.0, 10.0)).shadow(egui::epaint::Shadow { offset: Vec2::new(0.0, 4.0), blur: 14.0, spread: 0.0, color: alpha(Color32::BLACK, if t.light { 40 } else { 110 }) }).show(ui, |ui| {
                             ui.horizontal(|ui| { status_dot(ui, color); ui.label(RichText::new(text).color(t.text)); });
                         });
                     });
@@ -3125,7 +3173,7 @@ impl App {
             .show_inside(ui, |ui| {
                 let rect = column_rect(ui);
                 ui.allocate_ui_at_rect(rect, |ui| {
-                    egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(12.0, 10.0)).show(ui, |ui| {
+                    egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::symmetric(12.0, 10.0)).show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         self.chat_composer(ui, &ctx);
                     });
@@ -3137,7 +3185,7 @@ impl App {
                 let rect = column_rect(ui);
                 ui.allocate_ui_at_rect(rect, |ui| {
                     ui.set_min_height(rect.height());
-                    egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(12.0, 8.0)).show(ui, |ui| {
+                    egui::Frame::none().fill(t.bg2).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::symmetric(12.0, 8.0)).show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         self.chat_header(ui, true);
                     });
@@ -3203,7 +3251,7 @@ impl App {
                     self.shared.set_pair(!pair_on, 0, Vec::new());
                     let _ = self.cmd_tx.send(UiCommand::SetPair(!pair_on));
                 }
-                if ui.add_enabled(!self.chat_items.is_empty(), egui::Button::new(RichText::new("Export").small())).on_hover_text("Save the transcript as Markdown in the workspace").clicked() { self.chat_export(); }
+                if ui.add_enabled(!self.chat_items.is_empty(), button_widget(t, "Export", Btn::Ghost)).on_hover_text("Save the transcript as Markdown in the workspace").clicked() { self.chat_export(); }
             });
         });
         self.chat_pair_line(ui);
@@ -3240,7 +3288,7 @@ impl App {
                 else { findings.iter().map(|(p, n)| format!("{p}: {n}")).collect::<Vec<_>>().join("\n") };
             ui.label(RichText::new(text).small().color(t.muted)).on_hover_text(hover);
             if total > 0 && self.chat_turn.is_none() {
-                if ui.add(egui::Button::new(RichText::new("Ask AI to review").small())).on_hover_text("Sends the open findings to the model and asks for fixes with a short explanation each").clicked() {
+                if ui.add(button_widget(t, "Ask AI to review", Btn::Secondary)).on_hover_text("Sends the open findings to the model and asks for fixes with a short explanation each").clicked() {
                     let paths: Vec<String> = findings.iter().filter(|(_, n)| *n > 0).map(|(p, _)| p.clone()).collect();
                     self.chat_input = format!("Pair mode found issues in {}. Review the findings and fix them (explain each change briefly, keep the rest of my code as it is).", paths.join(", "));
                     self.chat_send();
@@ -3251,7 +3299,7 @@ impl App {
 
     fn chat_setup(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
-        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border2)).rounding(Rounding::same(12.0)).inner_margin(Margin::same(12.0));
+        let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border2)).rounding(Rounding::same(t.r_card)).inner_margin(Margin::same(12.0));
         frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.label(RichText::new("PROVIDER").small().strong().color(t.muted));
@@ -3368,7 +3416,8 @@ impl App {
             return;
         }
         egui::ScrollArea::vertical().id_salt("chat-scroll").auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
-            ui.set_width(ui.available_width());
+            // keep a gutter for the floating scrollbar
+            ui.set_max_width(ui.available_width() - 8.0);
             let avail = ui.available_width();
             let last = self.chat_items.len().saturating_sub(1);
             let mut fill_input: Option<String> = None;
@@ -3377,7 +3426,7 @@ impl App {
                     ChatRole::User => {
                         // Right-aligned bubble; text inside stays left-aligned.
                         ui.with_layout(Layout::top_down(Align::Max), |ui| {
-                            egui::Frame::none().fill(t.accent.linear_multiply(0.16)).stroke(Stroke::new(1.0_f32, t.accent.linear_multiply(0.45))).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(14.0, 10.0)).show(ui, |ui| {
+                            egui::Frame::none().fill(t.accent.linear_multiply(0.16)).stroke(Stroke::new(1.0_f32, t.accent.linear_multiply(0.45))).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::symmetric(14.0, 10.0)).show(ui, |ui| {
                                 ui.set_max_width(avail * 0.8);
                                 ui.with_layout(Layout::top_down(Align::Min), |ui| {
                                     ui.add(egui::Label::new(RichText::new(&msg.text).size(15.0).color(t.text)).wrap());
@@ -3390,7 +3439,7 @@ impl App {
                         });
                     }
                     ChatRole::Assistant => {
-                        egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::symmetric(14.0, 12.0)).show(ui, |ui| {
+                        egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::symmetric(14.0, 12.0)).show(ui, |ui| {
                             ui.set_width(avail - 4.0);
                             ui.spacing_mut().item_spacing.y = 6.0;
                             ui.horizontal(|ui| {
@@ -3469,7 +3518,7 @@ impl App {
                 } else {
                     let can = !self.chat_input.trim().is_empty();
                     if ui.add_enabled(can, pill_widget(t, "Send", true)).clicked() { send = true; }
-                    if ui.add(egui::Button::new(RichText::new("Capture").small())).on_hover_text("Ask the model to screenshot Studio and describe what it sees").clicked() {
+                    if ui.add(button_widget(t, "Capture", Btn::Ghost)).on_hover_text("Ask the model to screenshot Studio and describe what it sees").clicked() {
                         self.chat_input = "Take a screenshot of the Studio viewport and tell me what you see.".into();
                         send = true;
                     }
@@ -3513,7 +3562,7 @@ fn chat_tool_card(ui: &mut egui::Ui, t: Theme, card: &mut ChatToolCard) {
                     ui.add(egui::Label::new(RichText::new(truncate(&card.result, 8000)).monospace().small().color(if card.ok == Some(false) { t.bad } else { t.text })).wrap());
                 });
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new(RichText::new("copy result").small())).clicked() { let r = card.result.clone(); ui.output_mut(|o| o.copied_text = r); }
+                    if ui.add(button_widget(t, "copy result", Btn::Ghost)).clicked() { let r = card.result.clone(); ui.output_mut(|o| o.copied_text = r); }
                 });
             }
             for (tex, size) in &card.images {
@@ -3564,8 +3613,19 @@ fn status_dot(ui: &mut egui::Ui, color: Color32) {
 }
 
 fn tag(ui: &mut egui::Ui, text: &str, color: Color32) {
-    let frame = egui::Frame::none().fill(color.linear_multiply(0.18)).stroke(Stroke::new(1.0_f32, color.linear_multiply(0.6))).rounding(Rounding::same(999.0)).inner_margin(Margin::symmetric(7.0, 2.0));
+    let frame = egui::Frame::none().fill(color.linear_multiply(0.18)).stroke(Stroke::new(1.0_f32, color.linear_multiply(0.6))).rounding(Rounding::same(6.0)).inner_margin(Margin::symmetric(7.0, 2.0));
     frame.show(ui, |ui| { ui.label(RichText::new(text).small().color(color)); });
+}
+
+/// One line of text that never overflows `max_w`: laid out as a galley with an
+/// ellipsis at the cut, so it is exact for any font (the old character-count
+/// estimate left long file and tool names running under the size column).
+fn paint_text_fit(p: &egui::Painter, pos: egui::Pos2, align: egui::Align2, text: &str, font: FontId, color: Color32, max_w: f32) {
+    let mut job = egui::text::LayoutJob::simple_singleline(text.to_string(), font, color);
+    job.wrap = egui::text::TextWrapping::truncate_at_width(max_w.max(12.0));
+    let galley = p.layout_job(job);
+    let rect = align.anchor_size(pos, galley.size());
+    p.galley(rect.min, galley, color);
 }
 
 /// Clickable list row with hover/selection background; the closure paints the content.
@@ -3590,11 +3650,10 @@ fn tool_row(ui: &mut egui::Ui, t: Theme, tool: &ToolInfo, selected: bool) -> egu
     let engine_color = if tool.engine == "roblox" { t.accent } else { t.info };
     list_row(ui, t, selected, 44.0, |p, r| {
         p.circle_filled(r.left_center() + Vec2::new(14.0, 0.0), 3.5, engine_color);
-        let max_name = (((r.width() - 40.0) / 7.6).floor() as usize).max(8);
-        p.text(r.left_top() + Vec2::new(28.0, 7.0), egui::Align2::LEFT_TOP, truncate(&name, max_name), FontId::monospace(13.0), if selected { t.accent } else { t.text });
-        let max_desc = (((r.width() - 40.0) / 6.0).floor() as usize).max(12);
+        let max_w = r.width() - 40.0;
+        paint_text_fit(p, r.left_top() + Vec2::new(28.0, 7.0), egui::Align2::LEFT_TOP, &name, FontId::monospace(13.0), if selected { t.accent } else { t.text }, max_w);
         let line = if desc.trim().is_empty() { format!("{params} parameter(s)") } else { desc.clone() };
-        p.text(r.left_bottom() + Vec2::new(28.0, -7.0), egui::Align2::LEFT_BOTTOM, truncate(line.trim(), max_desc), FontId::proportional(11.5), t.muted);
+        paint_text_fit(p, r.left_bottom() + Vec2::new(28.0, -7.0), egui::Align2::LEFT_BOTTOM, line.trim(), FontId::proportional(11.5), t.muted, max_w);
     })
 }
 
@@ -3606,30 +3665,59 @@ fn pulse(ctx: &egui::Context, on: bool) -> f32 {
     0.5 + 0.5 * (time * std::f32::consts::TAU / 1.6).sin()
 }
 
-fn pill_widget(t: Theme, text: &str, primary: bool) -> egui::Button<'static> {
-    let b = if primary {
-        egui::Button::new(RichText::new(text).strong().color(t.accent_ink)).fill(t.accent).stroke(Stroke::new(1.0_f32, t.accent2))
-    } else {
-        egui::Button::new(RichText::new(text).color(t.text)).fill(t.panel2).stroke(Stroke::new(1.0_f32, t.border2))
+/// Button family (2.10.0). One height (32 px, 28 px for ghost), one radius
+/// (`Theme::r_btn`, follows Settings → Corners), one hover/pressed language:
+/// * Primary   — filled accent, for the one action a card is about.
+/// * Secondary — raised surface with a border, the default.
+/// * Ghost     — transparent until hovered; inline / toolbar actions.
+/// * Danger    — red text on a faint red surface; destructive actions.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Btn { Primary, Secondary, Ghost, Danger }
+
+fn button_widget(t: Theme, text: &str, kind: Btn) -> egui::Button<'static> {
+    let b = match kind {
+        Btn::Primary => egui::Button::new(RichText::new(text).strong().color(t.accent_ink)).fill(t.accent).stroke(Stroke::new(1.0_f32, t.accent2)),
+        Btn::Secondary => egui::Button::new(RichText::new(text).color(t.text)).fill(t.panel2).stroke(Stroke::new(1.0_f32, t.border2)),
+        Btn::Ghost => egui::Button::new(RichText::new(text).small().color(t.text)).fill(Color32::TRANSPARENT).stroke(Stroke::new(1.0_f32, alpha(t.border2, 110))),
+        Btn::Danger => egui::Button::new(RichText::new(text).strong().color(t.bad)).fill(alpha(t.bad, if t.light { 18 } else { 28 })).stroke(Stroke::new(1.0_f32, alpha(t.bad, 140))),
     };
-    b.rounding(Rounding::same(999.0)).min_size(Vec2::new(0.0, 30.0))
+    let h = if kind == Btn::Ghost { 28.0 } else { 32.0 };
+    b.rounding(Rounding::same(t.r_btn)).min_size(Vec2::new(0.0, h))
 }
 
-/// Pill button: pointer cursor, soft accent glow on hover (primary) and a
-/// brighter outline on hover (secondary). The glow is painted under the
-/// button so text never changes.
-fn pill(ui: &mut egui::Ui, t: Theme, text: &str, primary: bool) -> egui::Response {
-    let resp = ui.add(pill_widget(t, text, primary));
-    if resp.hovered() { ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand); }
+/// Pointer cursor + a soft outline that fades in on hover (and a wider accent
+/// glow for primary buttons). Painted under the button, so the label never
+/// moves or changes colour.
+fn button(ui: &mut egui::Ui, t: Theme, text: &str, kind: Btn) -> egui::Response {
+    let resp = ui.add(button_widget(t, text, kind));
+    if resp.hovered() && resp.enabled() { ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand); }
     let k = ui.ctx().animate_bool_with_time(resp.id.with("glow"), resp.hovered() && resp.enabled(), 0.15);
     if k > 0.0 {
-        let c = if primary { t.accent } else { t.border2 };
-        let glow_layer = ui.painter();
-        glow_layer.rect_stroke(resp.rect.expand(2.0), Rounding::same(999.0), Stroke::new(2.0_f32, alpha(c, (70.0 * k) as u8)));
-        if primary { glow_layer.rect_stroke(resp.rect.expand(5.0), Rounding::same(999.0), Stroke::new(3.0_f32, alpha(c, (28.0 * k) as u8))); }
+        let c = match kind { Btn::Primary => t.accent, Btn::Danger => t.bad, _ => t.border2 };
+        let r = Rounding::same(t.r_btn + 2.0);
+        ui.painter().rect_stroke(resp.rect.expand(2.0), r, Stroke::new(2.0_f32, alpha(c, (70.0 * k) as u8)));
+        if kind == Btn::Primary { ui.painter().rect_stroke(resp.rect.expand(5.0), Rounding::same(t.r_btn + 5.0), Stroke::new(3.0_f32, alpha(c, (28.0 * k) as u8))); }
+    }
+    if resp.has_focus() {
+        ui.painter().rect_stroke(resp.rect.expand(1.5), Rounding::same(t.r_btn + 1.5), Stroke::new(1.5_f32, t.accent));
     }
     resp
 }
+
+fn pill_widget(t: Theme, text: &str, primary: bool) -> egui::Button<'static> {
+    button_widget(t, text, if primary { Btn::Primary } else { Btn::Secondary })
+}
+
+/// Primary (filled) or secondary (outlined) button — see `button`.
+fn pill(ui: &mut egui::Ui, t: Theme, text: &str, primary: bool) -> egui::Response {
+    button(ui, t, text, if primary { Btn::Primary } else { Btn::Secondary })
+}
+
+/// Quiet inline action (toolbar "Clear", "Copy", "Dismiss").
+fn ghost(ui: &mut egui::Ui, t: Theme, text: &str) -> egui::Response { button(ui, t, text, Btn::Ghost) }
+
+/// Destructive action (delete, kill, quit).
+fn danger(ui: &mut egui::Ui, t: Theme, text: &str) -> egui::Response { button(ui, t, text, Btn::Danger) }
 
 #[derive(Clone, Copy)]
 enum WinGlyph { Minimize, Maximize, Close }
@@ -3671,7 +3759,7 @@ fn donation_row(ui: &mut egui::Ui, t: Theme) {
 }
 
 fn settings_section(ui: &mut egui::Ui, t: Theme, title: &str, add: impl FnOnce(&mut egui::Ui)) {
-    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(14.0)).inner_margin(Margin::same(16.0));
+    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::same(16.0));
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.label(RichText::new(title).size(16.0).strong().color(t.text));
@@ -3684,7 +3772,7 @@ fn settings_section(ui: &mut egui::Ui, t: Theme, title: &str, add: impl FnOnce(&
 /// Numbered section card — "04  Your layout" with a muted subtitle and a
 /// hairline under the heading (the Settings look from the reference).
 fn section_card(ui: &mut egui::Ui, t: Theme, index: &str, title: &str, subtitle: &str, add: impl FnOnce(&mut egui::Ui)) {
-    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(16.0)).inner_margin(Margin::same(18.0));
+    let frame = egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card + 4.0)).inner_margin(Margin::same(18.0));
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
@@ -3805,8 +3893,8 @@ fn status_chip(ui: &mut egui::Ui, t: Theme, text: &str, color: Color32, live: bo
     let (rect, resp) = ui.allocate_exact_size(size, Sense::hover());
     let k = if live { pulse(ui.ctx(), true) } else { 0.0 };
     let painter = ui.painter();
-    painter.rect_filled(rect, Rounding::same(8.0), alpha(color, if t.light { 18 } else { 26 }));
-    painter.rect_stroke(rect, Rounding::same(8.0), Stroke::new(1.0_f32, alpha(color, 150)));
+    painter.rect_filled(rect, Rounding::same(t.r_chip), alpha(color, if t.light { 18 } else { 26 }));
+    painter.rect_stroke(rect, Rounding::same(t.r_chip), Stroke::new(1.0_f32, alpha(color, 150)));
     let dot = egui::Rect::from_center_size(rect.left_center() + Vec2::new(12.0, 0.0), Vec2::splat(6.0));
     painter.rect_filled(dot, Rounding::same(1.5), color);
     if live { painter.rect_stroke(dot.expand(1.5 + 3.0 * k), Rounding::same(3.0), Stroke::new(1.0_f32, alpha(color, (120.0 * (1.0 - k)) as u8))); }
