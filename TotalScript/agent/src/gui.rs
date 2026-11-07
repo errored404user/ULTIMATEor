@@ -1179,7 +1179,14 @@ impl App {
     fn refresh_explorer(&mut self) {
         self.explorer_entries.clear();
         let Ok(read) = std::fs::read_dir(&self.explorer_dir) else {
-            self.explorer_note = format!("Cannot read {}", self.explorer_dir.display());
+            let shown = self.explorer_dir.display().to_string();
+            self.explorer_note = if shown.trim().is_empty() {
+                "No workspace folder yet — pick one in Settings → Workspace".to_string()
+            } else if !self.explorer_dir.exists() {
+                format!("Folder does not exist: {shown}")
+            } else {
+                format!("Cannot read {shown} (permission?)")
+            };
             return;
         };
         let mut entries: Vec<ExplorerEntry> = read
@@ -2180,7 +2187,7 @@ impl App {
                         }
                     });
                 });
-                egui::Grid::new("studio-grid").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
+                egui::Grid::new("studio-grid").num_columns(2).spacing([16.0, 4.0]).min_row_height(22.0).show(ui, |ui| {
                     ui.label(RichText::new("Helper process").color(t.muted)); ui.label(if mcp { "running (stdio JSON-RPC)" } else { "not running" }); ui.end_row();
                     ui.label(RichText::new("Studio process").color(t.muted)); ui.label(if studio_proc { "RobloxStudio detected" } else { "not detected" }); ui.end_row();
                     ui.label(RichText::new("Place link").color(t.muted)); ui.label(if studio_link { "connected — get_studio_state answers" } else { "not linked" }); ui.end_row();
@@ -2215,8 +2222,8 @@ impl App {
                         if pill(ui, t, "Explorer", false).clicked() { self.go(Page::Explorer); }
                     });
                 });
-                egui::Grid::new("local-grid").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
-                    ui.label(RichText::new("Root").color(t.muted)); ui.label(RichText::new(s.root()).monospace()); ui.end_row();
+                egui::Grid::new("local-grid").num_columns(2).spacing([16.0, 4.0]).min_row_height(22.0).show(ui, |ui| {
+                    ui.label(RichText::new("Root").color(t.muted)); let root = s.root(); if root.trim().is_empty() { ui.label(RichText::new("not set — Change workspace…").color(t.warn)); } else { ui.add(egui::Label::new(RichText::new(root).monospace()).truncate()); } ui.end_row();
                     ui.label(RichText::new("State").color(t.muted)); ui.label(if ready { "ready" } else { "folder missing" }); ui.end_row();
                     ui.label(RichText::new("Tools").color(t.muted)); ui.label(format!("{} (workspace_info, read/write/edit_file, grep, run_command, …)", self.local_tools.len())); ui.end_row();
                 });
@@ -2238,7 +2245,7 @@ impl App {
                 ui.add_space(4.0);
                 let rc = s.roblox_clients.load(Ordering::Relaxed);
                 let lc = s.local_clients.load(Ordering::Relaxed);
-                egui::Grid::new("channels-grid").num_columns(3).spacing([16.0, 4.0]).show(ui, |ui| {
+                egui::Grid::new("channels-grid").num_columns(3).spacing([16.0, 4.0]).min_row_height(22.0).show(ui, |ui| {
                     ui.label(RichText::new("HTTP").color(t.muted)); ui.label(RichText::new("http://127.0.0.1:3000").monospace()); ui.label("status / connect / push / result / ws"); ui.end_row();
                     ui.label(RichText::new("WS roblox").color(t.muted)); ui.label(RichText::new("ws://127.0.0.1:17613").monospace()); ui.label(if rc > 0 { format!("{rc} connected") } else { "no extension connected".to_string() }); ui.end_row();
                     ui.label(RichText::new("WS local").color(t.muted)); ui.label(RichText::new("ws://127.0.0.1:17615").monospace()); ui.label(if lc > 0 { format!("{lc} connected") } else { "no extension connected".to_string() }); ui.end_row();
@@ -2357,7 +2364,8 @@ impl App {
                     match self.runner_mode {
                         RunnerMode::Command => {
                             let root = self.shared.root();
-                            ui.add(egui::Label::new(RichText::new(format!("cwd {root}")).monospace().small().color(t.muted)).truncate()).on_hover_text(root);
+                            let shown = if root.trim().is_empty() { "cwd — no workspace folder (Settings → Workspace)".to_string() } else { format!("cwd {root}") };
+                            ui.add(egui::Label::new(RichText::new(shown).monospace().small().color(t.muted)).truncate()).on_hover_text(root);
                         }
                         RunnerMode::Luau => { status_dot(ui, if studio_link { t.ok } else { t.muted }); ui.label(RichText::new(if studio_link { "Studio linked" } else { "Studio not linked" }).small().color(t.muted)); }
                     }
@@ -2523,7 +2531,7 @@ impl App {
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(10.0, 10.0);
-                    for (id, name, blurb) in [(0u8, "Sharp", "Crisp 3–5 px radii"), (1u8, "Soft", "The default 10 px"), (2u8, "Round", "Pillowy 15 px radii")] {
+                    for (id, name, blurb) in [(0u8, "Sharp", "3–4 px radii"), (1u8, "Soft", "8 px buttons, 12 px cards"), (2u8, "Round", "12–18 px radii")] {
                         if choice_card(ui, t, name, blurb, self.settings.corners == id, 150.0, motion, id).clicked() && self.settings.corners != id {
                             self.settings.corners = id; retheme = true; save = true;
                         }
@@ -2706,7 +2714,7 @@ impl App {
         });
         section_card(ui, t, "09", "Diagnostics", "Paths, ports and a one-click copy for bug reports.", |ui| {
                 let s = &self.shared;
-                egui::Grid::new("diag-grid").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
+                egui::Grid::new("diag-grid").num_columns(2).spacing([16.0, 4.0]).min_row_height(22.0).show(ui, |ui| {
                     ui.label(RichText::new("Version").color(t.muted)); ui.label(format!("TotalScript Desktop {} ({} {})", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH)); ui.end_row();
                     ui.label(RichText::new("Uptime").color(t.muted)); ui.label(human_duration(s.boot.elapsed())); ui.end_row();
                     ui.label(RichText::new("Settings file").color(t.muted)); ui.label(RichText::new(Settings::path().to_string_lossy().to_string()).monospace()); ui.end_row();
@@ -3225,12 +3233,25 @@ impl App {
     fn chat_header(&mut self, ui: &mut egui::Ui, in_page: bool) {
         let t = self.theme;
         let busy = self.chat_turn.is_some();
+        // Row 1: title + provider/model (truncated to the room left), close
+        // button on the right. Row 2: the actions, wrapping when the panel is
+        // narrow instead of running over the title.
         ui.horizontal(|ui| {
             if !in_page { ui.label(RichText::new("AI Chat").size(16.0).strong().color(t.text)); }
             let model = self.chat_model();
             let sub = if model.is_empty() { format!("{} · no model", self.chat_provider().name) } else { format!("{} · {}", self.chat_provider().name, model) };
-            ui.label(RichText::new(truncate(&sub, 44)).small().color(t.muted)).on_hover_text(sub);
+            let mut close = false;
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if !in_page && window_button(ui, WinGlyph::Close, t.text, t).on_hover_text("Hide the chat panel (Ctrl+J)").clicked() { close = true; }
+                ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                    ui.add(egui::Label::new(RichText::new(&sub).small().color(t.muted)).truncate()).on_hover_text(sub.clone());
+                });
+            });
+            if close { self.toggle_chat(); }
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            ui.with_layout(Layout::right_to_left(Align::Center).with_main_wrap(true), |ui| {
                 if in_page {
                     if pill(ui, t, "Side panel", false).on_hover_text("Keep chatting in a side panel while you use the other pages (Ctrl+J)").clicked() {
                         self.settings.chat_panel_open = true;
@@ -3238,7 +3259,7 @@ impl App {
                         self.go(Page::Home);
                         self.chat_pending_focus = true;
                     }
-                } else if window_button(ui, WinGlyph::Close, t.text, t).on_hover_text("Hide the chat panel (Ctrl+J)").clicked() { self.toggle_chat(); }
+                }
                 if pill(ui, t, "Setup", self.chat_setup_open).on_hover_text("Provider, API key, model, tools").clicked() {
                     self.chat_setup_open = !self.chat_setup_open;
                     if !self.chat_setup_open { let _ = self.settings.save(); }
@@ -3440,7 +3461,7 @@ impl App {
                     }
                     ChatRole::Assistant => {
                         egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, t.border)).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::symmetric(14.0, 12.0)).show(ui, |ui| {
-                            ui.set_width(avail - 4.0);
+                            ui.set_width(ui.available_width());
                             ui.spacing_mut().item_spacing.y = 6.0;
                             ui.horizontal(|ui| {
                                 status_dot(ui, if idx == last && busy { t.warn } else { t.accent });
@@ -3682,7 +3703,9 @@ fn button_widget(t: Theme, text: &str, kind: Btn) -> egui::Button<'static> {
         Btn::Danger => egui::Button::new(RichText::new(text).strong().color(t.bad)).fill(alpha(t.bad, if t.light { 18 } else { 28 })).stroke(Stroke::new(1.0_f32, alpha(t.bad, 140))),
     };
     let h = if kind == Btn::Ghost { 28.0 } else { 32.0 };
-    b.rounding(Rounding::same(t.r_btn)).min_size(Vec2::new(0.0, h))
+    // A button label never wraps: in a wrapping row the whole button moves to
+    // the next line instead (the donation pills used to break mid-word).
+    b.wrap_mode(egui::TextWrapMode::Extend).rounding(Rounding::same(t.r_btn)).min_size(Vec2::new(0.0, h))
 }
 
 /// Pointer cursor + a soft outline that fades in on hover (and a wider accent
