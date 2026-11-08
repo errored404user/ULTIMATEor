@@ -4,6 +4,7 @@
 //
 //   cd TotalScript && npm i --no-save jsdom && node tests/vani-e2e.js
 //   CLOSED=1 node tests/vani-e2e.js   # no composer (landing page): bar warns, nothing sent
+//   REMOUNT=1 node tests/vani-e2e.js  # composer re-mounts for 3 s right when the first result is due
 //   DIAG=1 ...                        # print the [rs-diag] trace
 //
 // The fake page follows what the adapter documents about c.vani.ai (a Next.js
@@ -41,6 +42,12 @@ let bridgeDrops = 0;
 // MISSING the identical call goes through and the part is created ONCE.
 const TIMEOUT = !!process.env.TIMEOUT;
 let timeouts = 0;
+// REMOUNT=1: right after the first reply ends (the catalogue is about to be
+// typed back) the site re-mounts the composer for 3 s - a Next.js route
+// change into /c/<id> / allowance-banner re-layout. The adapter must wait for
+// the box instead of throwing "chat box not found" (which ended the turn) and
+// scanError must not report "input box disappeared" during the gap.
+const REMOUNT = !!process.env.REMOUNT;
 const composer = `
     <form id="composer" class="composer rounded-3xl border" data-rect="320,690,900,90">
       <textarea id="ed" name="message" placeholder="Message" rows="1" data-rect="330,700,780,60"></textarea>
@@ -101,6 +108,7 @@ function startGenerating() {
 }
 function stopGenerating(c) {
   generating = false; if (stopBtn) stopBtn.remove(); stopBtn = null; send.style.display = "";
+  if (REMOUNT && phase === 1) { const host = form.parentElement; form.remove(); setTimeout(() => host.appendChild(form), 3000); }
   const tb = d.createElement("div"); tb.className = "actions flex gap-2";
   for (const label of ["Copy", "Regenerate", "Good response", "Bad response"]) { const b = d.createElement("button"); b.setAttribute("aria-label", label); b.textContent = label; tb.appendChild(b); }
   c.parentElement.appendChild(tb);
@@ -273,7 +281,10 @@ const PART = "TotalScript_ProviderParityTest";
     ok("agent loop ended after the final prose reply", true);
     // The core's own post-command log scan (GetLogHistory) and the 1.99.9 work-mode
     // probes (preflight / read-back, marked "TotalScript mode probe") are internal, not model commands.
-    const luauCalls = toolCalls.filter((c) => c.name === "execute_luau" && !/GetLogHistory|TotalScript mode probe/.test(String(c.arguments.code || "")));
+    // Only the MODEL's commands count: the autofix playtest watcher's idle
+    // RunService:IsRunning() probe (main.js checkPlaytestErrors) is a background
+    // poller and can fire inside the idle gap on a slow / loaded machine.
+    const luauCalls = toolCalls.filter((c) => c.name === "execute_luau" && !/GetLogHistory|TotalScript mode probe|return tostring\(rs:IsRunning\(\)\)/.test(String(c.arguments.code || "")));
     ok("exactly two model commands reached the bridge (create + read-back) - the remembered turns were never re-run", luauCalls.length === (BRIDGE_DROP ? 3 : TIMEOUT ? 4 : 2), luauCalls.length + " calls");
     ok("5 sends total: bootstrap, catalogue, request, 2 results" + (BRIDGE_DROP ? " (+1 bridge-down error, spliced out above)" : ""), userMessages.length === 5, userMessages.length + "");
     if (simReady) {
@@ -297,5 +308,5 @@ const PART = "TotalScript_ProviderParityTest";
     ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || "));
   } catch (e) { console.error(e); process.exitCode = 1; }
   sim.close();
-  finish(BRIDGE_DROP ? "vani-e2e (BRIDGE_DROP)" : TIMEOUT ? "vani-e2e (TIMEOUT)" : "vani-e2e", pageErrors);
+  finish(BRIDGE_DROP ? "vani-e2e (BRIDGE_DROP)" : TIMEOUT ? "vani-e2e (TIMEOUT)" : REMOUNT ? "vani-e2e (REMOUNT)" : "vani-e2e", pageErrors);
 })();

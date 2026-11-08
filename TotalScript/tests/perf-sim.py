@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Perf pack (2.15.0) - perf_audit / perf_fix against the miniature Roblox DataModel.
+"""Perf pack (2.16.0) - perf_audit / perf_fix against the miniature Roblox DataModel.
 
 tests/test-perf-pack.js checks the pack statically (registration, params, validation,
 wiring, scoring rules). This script runs the REAL generated Luau in tests/roblox_sim.py

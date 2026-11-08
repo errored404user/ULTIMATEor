@@ -25,7 +25,7 @@ const gatesSrc = main.slice(main.indexOf("  const MODE_GATES = {"), main.indexOf
 const MODE_GATES = new Function(gatesSrc + "\nreturn MODE_GATES;")();
 
 // ── module surface ──────────────────────────────────────────────────────────
-ok("A1 TotalWorkModes VERSION 2.15.0, ids creation/blender/animate/blockbench, frozen", W.VERSION === "2.15.0" && JSON.stringify(W.IDS) === JSON.stringify(["creation", "blender", "animate", "blockbench"]) && Object.isFrozen(W));
+ok("A1 TotalWorkModes VERSION 2.16.0, ids creation/blender/animate/blockbench, frozen", W.VERSION === "2.16.0" && JSON.stringify(W.IDS) === JSON.stringify(["creation", "blender", "animate", "blockbench"]) && Object.isFrozen(W));
 ok("A2 normalize() maps unknown / animator → creation and keeps the three ids", W.normalize("animator") === "creation" && W.normalize("ANIMATE") === "animate" && W.normalize("blender") === "blender" && W.normalize() === "creation");
 ok("A3 DOES text per mode names concrete behaviours (preflight, gate strip, read back, verdict)", W.IDS.every((id) => /[Pp]reflight/.test(W.DOES[id]) && /gate strip/i.test(W.DOES[id]) && /read back/i.test(W.DOES[id]) && /verdict/i.test(W.DOES[id])));
 ok("A4 GATE_LABEL covers every MODE_GATES id", Object.values(MODE_GATES).flat().every((g) => W.GATE_LABEL[g.id]));
@@ -118,7 +118,7 @@ ok("I3 main.js: probes go through bg call_tool execute_luau (datamodel Edit) / B
 ok("I4 main.js: Blender precondition = status → connect attempt, then hard brief + ui.banner (throttled) + Activity card", /async function blenderReady\(\)[\s\S]{0,500}type: "blender_connect"/.test(main) && /brief\.kind = "precondition"; brief\.text = pre\.brief;/.test(main) && /ui\.banner\("warn", pre\.title, pre\.message\)/.test(main));
 ok("I5 main.js: gate strip rendered at loop start, after every tool (A.runTools.add) and at completion; exposed as ui.renderModeGates", /A\.runTools = new Set\(\);\n\s*try \{ ui\.renderModeGates\(\); \} catch \{\}/.test(main) && /A\.runTools\.add\(bareToolName\(call\.tool\)\); ui\.renderModeGates\(\);/.test(main) && /renderModeGates, /.test(main.slice(main.indexOf("    return { runTemplateById"))));
 ok("I6 main.js: #rs-mode-gates element in the bar + renderModeGates uses TotalWorkModes.gateStates/gateStripHtml on MODE_GATES[workMode]", /<span id="rs-mode-gates" hidden/.test(main) && /function renderModeGates\(\)[\s\S]{0,700}TotalWorkModes\.gateStates\(gates, A\.runTools \|\| \[\]\)[\s\S]{0,200}TotalWorkModes\.gateStripHtml\(workMode, states\)/.test(main));
-ok("I7 main.js: mode gate = up to MODE_GATE_ROUNDS (2) per run, counter not boolean (2.15.0: no resendAllowed gate - gentle mode removed)", /const MODE_GATE_ROUNDS = 2;/.test(main) && /let modeGateRounds = 0;/.test(main) && /if \(modeGateRounds < MODE_GATE_ROUNDS && !A\.stop && toolTurns >= 2\)/.test(main) && !/resendAllowed\(\)/.test(main) && /modeGateRounds\+\+;/.test(main) && !/modeGateSent/.test(main));
+ok("I7 main.js: mode gate = up to MODE_GATE_ROUNDS (2) per run, counter not boolean (2.16.0: no resendAllowed gate - gentle mode removed)", /const MODE_GATE_ROUNDS = 2;/.test(main) && /let modeGateRounds = 0;/.test(main) && /if \(modeGateRounds < MODE_GATE_ROUNDS && !A\.stop && toolTurns >= 2\)/.test(main) && !/resendAllowed\(\)/.test(main) && /modeGateRounds\+\+;/.test(main) && !/modeGateSent/.test(main));
 ok("I8 main.js: verdict card + diag loop.modeVerdict right before steeringProgress(\"complete\")", /WM\.verdict\(currentWorkMode\(\), states, modeGateRounds\)[\s\S]{0,400}diag\("loop\.modeVerdict"[\s\S]{0,300}ui\.trackCard\("mode verdict"[\s\S]{0,400}ui\.steeringProgress\("complete"/.test(main));
 ok("I9 main.js: auto-check appended AFTER compressToolFeedback (never the dropped part), per executed call with its arguments", /try \{ feedback = compressToolFeedback\(feedback, call\.tool\); \} catch \{\}\n[\s\S]{0,300}feedback = await attachModeAutoCheck\(call\.tool, call\.arguments, feedback\);/.test(main));
 ok("I10 main.js: attachModeAutoCheck skips the local engine, requires a live Blender flag for Blender probes, appends (never prefixes) the line", /async function attachModeAutoCheck\(toolName, args, feedback\)[\s\S]{0,300}activeEngine\(\) === "local"\) return feedback;[\s\S]{0,900}return String\(feedback \|\| ""\) \+ "\\n" \+ line;/.test(main) && /probe\.kind === "blender" && !\(A\.bridge && A\.bridge\.blender === true\)\) return feedback;/.test(main));
@@ -211,7 +211,7 @@ if (!JSDOM) { console.log("skip jsdom walk (jsdom not installed)"); finish(); }
   try {
     await waitFor(() => d.getElementById("rs-bar"), 8000, "#rs-bar");
     await sleep(700);
-    ok("walk W1: page boots with TotalWorkModes on window and no page errors", w.TotalWorkModes && w.TotalWorkModes.VERSION === "2.15.0" && pageErrors.length === 0, pageErrors.join(" | "));
+    ok("walk W1: page boots with TotalWorkModes on window and no page errors", w.TotalWorkModes && w.TotalWorkModes.VERSION === "2.16.0" && pageErrors.length === 0, pageErrors.join(" | "));
     const strip = d.getElementById("rs-mode-gates");
     ok("walk W2: #rs-mode-gates exists in the bar and is hidden before a session starts", !!strip && strip.hidden === true);
     w.__rsSetWorkMode("animate"); await sleep(80);

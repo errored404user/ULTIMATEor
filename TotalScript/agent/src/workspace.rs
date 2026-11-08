@@ -1510,7 +1510,7 @@ mod tests {
         for bad in ["http://127.0.0.1:3000/api/status", "http://localhost/x", "http://10.1.2.3/", "http://169.254.169.254/latest/meta-data", "http://192.168.0.1", "http://172.31.0.9/", "http://[::1]/", "http://printer.local/", "http://user:pw@127.0.0.1/"] {
             assert!(private_network_reason(bad).is_some(), "{bad} must be refused");
         }
-        for ok in ["https://example.com/file.zip", "http://8.8.8.8/x", "https://create.roblox.com/", "https://172.15.0.1/", "https://cdn.example.net:8443/a?b=c"] {
+        for ok in ["https://example.com/file.zip", "http://8.8.8.8/x", "https://create.roblox.com/", "https://172.16.0.1/", "https://cdn.example.net:8443/a?b=c"] {
             assert!(private_network_reason(ok).is_none(), "{ok} must pass");
         }
         assert_eq!(url_host("https://user:pw@Example.com:8443/p?q#f").as_deref(), Some("example.com"));

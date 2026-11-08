@@ -1763,7 +1763,7 @@ impl App {
                     let roomy = ui.available_height() > 240.0;
                     let tight = ui.available_height() < 150.0;
                     if tight {
-                        // One line: "— BRIDGE  ● OFFLINE · up 4s · v2.15.0   «" — the nine
+                        // One line: "— BRIDGE  ● OFFLINE · up 4s · v2.16.0   «" — the nine
                         // nav items keep their blurbs at the default 1280×820 window.
                         egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, if up { alpha(t.ok, 110) } else { t.border })).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::symmetric(12.0, 8.0)).show(ui, |ui| {
                             ui.set_width(ui.available_width());

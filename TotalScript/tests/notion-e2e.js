@@ -609,7 +609,7 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       const badge = d.getElementById("rs-work-badge");
       ok("bar badge shows the custom mode on its Creation base (legacy visualizer base migrated)", !!badge && badge.textContent === "HORROR" && w.__rsWorkMode() === "creation" && w.__rsPublicMode() && w.__rsPublicMode().name === "horror_builder", badge && badge.textContent + " / " + w.__rsWorkMode());
       const sysPrompt = (() => { try { return w.eval("RS").buildSystemPrompt({ siteName: "Notion" }); } catch (e) { return "ERR " + e; } })();
-      ok("system prompt now carries the custom mandate", /CUSTOM WORK MODE: HORROR BUILDER/.test(sysPrompt) && /layered on VISUALIZER/.test(sysPrompt) && /Custom work modes available: Horror Builder/.test(sysPrompt), sysPrompt.slice(0, 60));
+      ok("system prompt now carries the custom mandate", /CUSTOM WORK MODE: HORROR BUILDER/.test(sysPrompt) && /layered on TOTALITY/.test(sysPrompt) && /Custom work modes available: Horror Builder/.test(sysPrompt), sysPrompt.slice(0, 60));
       // Public tab in the cards panel lists both items.
       const cardsBtn = d.getElementById("rs-cards-btn") || [...d.querySelectorAll("#rs-bar button")].find((b) => /cards|library|templates/i.test(b.getAttribute("aria-label") || b.title || b.textContent || ""));
       if (cardsBtn) { cardsBtn.click(); await sleep(200); const tab = d.querySelector('.rs-cards-tab[data-tab="public"]'); if (tab) { tab.click(); await sleep(200); } }
@@ -652,12 +652,18 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       await waitFor(() => userMessages.length >= 4, 30000, "planner handoff result");
       ok("total_agent planner handoff shows the board", /CREW HANDOFF #1/.test(userMessages[3]) && /ROLE=planner/.test(userMessages[3]), userMessages[3].slice(0, 100).replace(/\n/g, " "));
       await waitFor(() => userMessages.length >= 5, 30000, "guarded mutation result");
-      ok("planner mutation refused by the role guard, nothing executed", /ROLE GUARD/.test(userMessages[4]) && !toolCalls.some((c) => c.name === "execute_luau"), userMessages[4].slice(0, 100).replace(/\n/g, " "));
+      // The role guard must keep the PLANNER's SimPart Luau off the bridge. The
+      // work-mode preflight's read-only probes (RunService:IsRunning(), console
+      // read) are also execute_luau calls and legitimately run at this point -
+      // count only Luau that carries the planner's mutation (gemini/claude-e2e
+      // filter the same probes out of their "model Luau" counts).
+      const plannerLuau = () => toolCalls.filter((c) => c.name === "execute_luau" && /SimPart/.test(String(c.arguments && c.arguments.code || "")));
+      ok("planner mutation refused by the role guard, nothing executed", /ROLE GUARD/.test(userMessages[4]) && plannerLuau().length === 0, userMessages[4].slice(0, 100).replace(/\n/g, " ") + " | planner luau on bridge: " + plannerLuau().length);
       await waitFor(() => userMessages.length >= 6, 30000, "builder handoff result");
       ok("builder handoff shows GOAL + PLAN", /GOAL: SimPart in Workspace/.test(userMessages[5]) && /1\. \[>\] Create SimPart/.test(userMessages[5]));
       const badge = d.getElementById("rs-crew-badge");
       ok("bar shows the crew badge for the builder", !!badge && !badge.hidden && badge.textContent === "BUILD", badge && badge.textContent);
-      await waitFor(() => toolCalls.some((c) => c.name === "execute_luau"), 30000, "builder execute_luau");
+      await waitFor(() => plannerLuau().length >= 1, 30000, "builder execute_luau");
       await waitFor(() => userMessages.length >= 8, 30000, "done refused");
       ok("done is refused before verification", /NOT DONE YET/.test(userMessages[7]) && /TESTER has not verified/.test(userMessages[7]), userMessages[7].slice(0, 100).replace(/\n/g, " "));
       await waitFor(() => userMessages.length >= 11, 45000, "done accepted");

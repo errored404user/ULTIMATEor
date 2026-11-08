@@ -550,7 +550,11 @@ const RSProvider = (() => {
   }
 
   async function typeAndSend(text, images) {
-    const editor = getEditor();
+    let editor = getEditor();
+    // 2.16: the composer can be mid-remount (route change into /c/<id> after
+    // the first send, allowance banner re-layout) exactly when a tool result
+    // is ready. Throwing at once ended the turn; wait a bounded moment first.
+    if (!editor) { await waitFor(() => !!getEditor(), 6000); editor = getEditor(); diag("vani.editorWait", { found: !!editor }); }
     if (!editor) throw new Error("Vani chat box not found — open c.vani.ai/chat");
     editor.focus();
     await sleep(40);
@@ -613,6 +617,7 @@ const RSProvider = (() => {
     if (b) { try { b.click(); } catch {} }
   }
 
+  let _editorGoneAt = 0;
   function scanError() {
     const ne = netError();
     if (ne) return ne;
@@ -624,7 +629,15 @@ const RSProvider = (() => {
       }
     } catch {}
     if (allowanceExhausted()) return "Vani's free guest allowance is used up — log in for your own allowance, then retry.";
-    if (!getEditor() && !loginGatePresent()) return "The input box disappeared (session ended?).";
+    // 2.16: debounced - the core polls this every second and ends the turn on
+    // any string; a composer that is merely re-mounting must not count. Only
+    // report after it has been gone for 4 s straight.
+    if (!getEditor() && !loginGatePresent()) {
+      if (!_editorGoneAt) _editorGoneAt = Date.now();
+      if (Date.now() - _editorGoneAt > 4000) return "The input box disappeared (session ended?).";
+      return null;
+    }
+    _editorGoneAt = 0;
     return null;
   }
   const isTooLongMsg = (text) => RE.tooLong.test(text);

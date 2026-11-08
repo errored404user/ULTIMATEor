@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// blockbench_mcp.js - 2.15.0 Blockbench MCP (Streamable HTTP client + the
+// blockbench_mcp.js - 2.16.0 Blockbench MCP (Streamable HTTP client + the
 // curated bb_* command table).
 //
 // Blockbench (https://www.blockbench.net) is the free low-poly / voxel-style
@@ -32,7 +32,7 @@
 // via importScripts (classic service worker) and by tests via require.
 const TotalBlockbenchMcp = (() => {
   "use strict";
-  const VERSION = "2.15.0";
+  const VERSION = "2.16.0";
   const DEFAULT_URL = "http://localhost:3000/bb-mcp";
   const PROTOCOL_VERSION = "2025-06-18";
   const CLIENT_INFO = { name: "TotalScript", version: VERSION };

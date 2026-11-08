@@ -337,7 +337,12 @@ const RSProvider = (() => {
   }
 
   async function typeAndSend(text, images) {
-    const editor = getEditor();
+    let editor = getEditor();
+    // 2.16: a tool result can be ready while Svelte has the textarea unmounted
+    // (route change after the first send, heavy list re-render). Throwing at
+    // once ended the whole turn with "input box not found"; wait a bounded
+    // moment for it to come back first.
+    if (!editor) { await waitFor(() => !!getEditor(), 6000); editor = getEditor(); diag("glm.editorWait", { found: !!editor }); }
     if (!editor) throw new Error("GLM input box not found");
     editor.focus();
     setTextareaValue(editor, text);
@@ -368,10 +373,22 @@ const RSProvider = (() => {
       return false;
     }, 8000);
     diag("glm.send", { enabled, busy: isBusyNow() });
-    if (!clickSendButton() && !isBusyNow()) {
+    const pressEnter = () => {
       const o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
       editor.dispatchEvent(new KeyboardEvent("keydown", o));
       editor.dispatchEvent(new KeyboardEvent("keyup", o));
+    };
+    const clicked = clickSendButton();
+    if (!clicked && !isBusyNow()) pressEnter();
+    // 2.16: verify the send LANDED (the site clears the textarea / shows the
+    // stop button). A click that Svelte swallowed mid-re-render used to leave
+    // the text sitting in the box until the core's slower retry loop noticed.
+    // One bounded retry through the other path; never more (duplicate-send
+    // safety stays with the core).
+    const landed = await waitFor(() => !!stopButton() || editorText().trim() === "" || editorText() !== text, 1500);
+    if (!landed && !isBusyNow()) {
+      diag("glm.send.retryOnce", { via: clicked ? "enter" : "click" });
+      if (clicked) pressEnter(); else if (!clickSendButton()) pressEnter();
     }
   }
 
@@ -388,6 +405,7 @@ const RSProvider = (() => {
   }
 
   // ── Error / limit detection (site chrome only) ────────────────────────────
+  let _editorGoneAt = 0;
   function scanError() {
     try {
       for (const el of document.querySelectorAll(S.errorSurfaces)) {
@@ -397,7 +415,19 @@ const RSProvider = (() => {
         if (t.length > 8 && t.length < 600 && RE.contextLimit.test(t)) return t.slice(0, 240);
       }
     } catch {}
-    if (!getEditor()) return "The input box disappeared (session ended?).";
+    // 2.16: debounce the missing-composer verdict. The core polls scanError
+    // every second while it waits for the reply and treats ANY string as a
+    // provider error that ends the turn. z.ai is a Svelte SPA: the first send
+    // of a chat navigates / → /c/<uuid> and heavy re-renders can unmount the
+    // textarea for a moment - a single empty poll used to abort a perfectly
+    // live turn with "input box disappeared". Only report after the editor has
+    // been gone for 4 s straight.
+    if (!getEditor()) {
+      if (!_editorGoneAt) _editorGoneAt = Date.now();
+      if (Date.now() - _editorGoneAt > 4000) return "The input box disappeared (session ended?).";
+      return null;
+    }
+    _editorGoneAt = 0;
     return null;
   }
   const isTooLongMsg = (text) => RE.tooLong.test(text);
@@ -523,7 +553,12 @@ const RSProvider = (() => {
   // command shape AND mark the reply root (`.chat-assistant`, which keeps its
   // identity) with .rs-cmd-mask so a CSS rule re-hides recreated wrappers with
   // zero flash. Also catch a stray bare inline command paragraph.
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###mcp_tool###/i;
+  // 2.16: also the plain ###CMD name### opener. The parser accepts it on every
+  // provider, so when the model answers in that shape the command RAN but the
+  // <pre> was never camouflaged - the raw block stayed visible and the core's
+  // ensureOwnedChip saw "raw command visible" on every sweep and rebuilt the
+  // chip forever (the rebuild storm the Arena notes describe).
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*cmd\s|###mcp_tool###/i;
   function findToolBlockSpot(item /*, chip */) {
     if (!item) return null;
     let hidAny = null;

@@ -565,7 +565,7 @@ PROVE: animation_preview after every pass (judge timing, arcs, weight, seam) →
 REPORT: rig type, clips (length / priority / loop), what the preview and play-test showed, published ids only if returned, what is unverified.
 NEVER: done without a preview; wrong rig type; Humanoid:LoadAnimation; leaked tracks; invented asset ids; Action clips without priorities.`,
     },
-    // 2.15.0 BLOCKBENCH: low-poly modeling inside Blockbench through its MCP
+    // 2.16.0 BLOCKBENCH: low-poly modeling inside Blockbench through its MCP
     // plugin (bb_* commands, see src/core/blockbench_mcp.js); the finished
     // piece is EXPORTED to a file and the user imports it with Studio's Import 3D.
     blockbench: {

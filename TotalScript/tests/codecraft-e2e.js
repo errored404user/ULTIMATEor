@@ -18,7 +18,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "u
 const pageHtml = fs.readFileSync(path.join(ROOT, "codecraft.html"), "utf8");
 const scripts = [...pageHtml.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]);
 const NOKEY = !!process.env.NOKEY;
-const API = "codecraft"; // 2.15.0: the DeepSeek API profile was removed - one profile
+const API = "codecraft"; // 2.16.0: the DeepSeek API profile was removed - one profile
 const PROF = { query: "", name: "CodeCraft API", base: "https://codecraftapi.com/v1/", hostRe: /^https:\/\/codecraftapi\.com\/v1\//, keyRe: /^Bearer cc_[A-Za-z0-9]{20,}$/, key: "cc_" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4", storeKey: "rsCodeCraft", models: ["claude-opus-4.8", "kimi-k3", "gpt-5.6-terra", "deepseek-v4-pro-max"], model: "kimi-k3", fallback: 10, prefix: "cc_", keysHint: /API Keys/ };
 const ERR402 = !!process.env.ERR402;
 const log = (...a) => console.log("[harness]", ...a);

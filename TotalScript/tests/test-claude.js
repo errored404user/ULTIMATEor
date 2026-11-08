@@ -39,8 +39,54 @@ ok("banner is not a fake model-switch", !main.includes("into the right mode"));
 const ds = fs.readFileSync(path.join(root, "src/providers/deepseek.js"), "utf8");
 ok("DeepSeek Start is not blocked on Expert", ds.includes("const ready = !!getEditor()"));
 
+// ── 2.16 regressions (static) ──
+ok("turn identity is per node, not a text prefix (same-prefix turns used to collide)", claude.includes("const _idMap = new WeakMap()") && !claude.includes('":" + (item.textContent || "").slice(0, 24)'));
+ok("itemKey is exported so the core's turn dedupe can use it", /lastAssistantId, itemKey, readAssistant/.test(claude));
+ok("no blind last-button send fallback", !claude.includes("return buttons[buttons.length - 1] || null") && claude.includes("function sendButtonAny"));
+ok("send waits for the button to light up, nudges, then Enter, then verifies once", claude.includes("send.enterFallback") && claude.includes("send.retryOnce") && claude.includes(", 8000)"));
+ok("long payloads keep head AND tail", claude.includes("lines omitted") && claude.includes("send.truncated"));
+ok("Stop seen-then-gone ends the turn after a 1 s double-quiet window; text-idle stays the fallback", claude.includes("STOP_GONE_QUIET_MS = 1000") && claude.includes("_stopSeenItem === last") && claude.includes("now - _streamAt < timings.GEN_IDLE_MS"));
+ok("a composer mid-remount is waited for, not thrown on", claude.includes("claude.editorWait") && claude.includes("waitFor(() => !!getEditor(), 6000)"));
+
+// ── 2.16 regressions (behavioural, jsdom optional) ──
+let JSDOM = null; try { ({ JSDOM } = require("jsdom")); } catch {}
+if (JSDOM) {
+  const dom = new JSDOM(`<main>
+    <div class="font-claude-response"><div data-is-thinking="false"><p>Let me think about what the user needs</p></div><div class="standard-markdown"><p>Understood, working on it now. A</p></div></div>
+    <div class="font-claude-response"><div data-is-thinking="false"><p>Let me think about what the user needs</p></div><div class="standard-markdown"><p>Understood, working on it now. B</p></div></div>
+    <fieldset><div class="ProseMirror" contenteditable="true"><p>hi</p></div>
+      <button aria-label="Attach files"></button><button data-testid="model-selector-dropdown">Claude Sonnet 4.5</button>
+      <button aria-label="Send message" disabled></button></fieldset></main>`, { url: "https://claude.ai/chat/abc", runScripts: "outside-only" });
+  const w = dom.window;
+  w.Element.prototype.getBoundingClientRect = function () { return { width: 120, height: 30, top: 0, left: 0, right: 120, bottom: 30 }; };
+  w.eval(claude);
+  const P = w.RSProvider;
+  const items = P.allItems();
+  const k0 = P.itemKey(items[0]), k1 = P.itemKey(items[1]);
+  ok("two assistant turns with identical 24-char prefixes get DIFFERENT ids", items.length === 2 && k0 !== k1 && Number.isFinite(Number(k0)) && Number(k1) > Number(k0));
+  ok("the id is stable while the turn streams / gets a chip", (items[1].querySelector("p").textContent += " more", P.itemKey(items[1]) === k1) && P.lastAssistantId() === k1);
+  const sent = [];
+  w.document.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => sent.push(b.getAttribute("aria-label") || b.getAttribute("data-testid"))));
+  const ed = P.getEditor();
+  const o = { key: "Enter", code: "Enter", bubbles: true, cancelable: true };
+  // disabled send button + enabled attach/model buttons: the old fallback clicked the model picker.
+  let enterSeen = 0; ed.addEventListener("keydown", (e) => { if (e.key === "Enter") enterSeen++; });
+  w.document.execCommand = () => true;
+  const t0 = Date.now();
+  P.typeAndSend("hello").then(() => {
+    ok("with the send button disabled nothing else in the composer is clicked", sent.length === 0, JSON.stringify(sent));
+    ok("…and Enter is dispatched after a bounded wait (≤ 8 s + one verify)", enterSeen >= 1 && Date.now() - t0 < 11000);
+    finishClaude();
+  });
+} else {
+  console.log("SKIP  behavioural checks (jsdom not installed: cd TotalScript && npm i --no-save jsdom)");
+  finishClaude();
+}
+
+function finishClaude() {
 if (process.exitCode) {
   console.log("\nSome Claude checks failed.");
   process.exit(process.exitCode);
 }
 console.log("\nClaude provider checks passed.");
+}

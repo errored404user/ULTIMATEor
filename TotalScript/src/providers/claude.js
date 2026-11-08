@@ -58,7 +58,12 @@ const RSProvider = (() => {
   const SEND_MAX_CHARS = 100000;
   const SEND_MAX_LINES = 500;
   const INSERT_CHUNK_LINES = 25;
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###mcp_tool###/i;
+  // 2.16: also the plain ###CMD name### opener. The parser accepts it on every
+  // provider, so when the model answers in that shape the command RAN but the
+  // <pre> was never camouflaged - the raw block stayed visible and the core's
+  // ensureOwnedChip saw "raw command visible" on every sweep and rebuilt the
+  // chip forever (the rebuild storm the Arena notes describe).
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*cmd\s|###mcp_tool###/i;
 
   const RE = {
     contextLimit: /conversation.{0,20}(too long|limit)|too many (tokens|characters)|maximum.{0,16}(length|context)|context window/i,
@@ -136,7 +141,14 @@ const RSProvider = (() => {
     const cap = _family === "haiku" ? Math.min(SEND_MAX_CHARS, 60000) : SEND_MAX_CHARS;
     if (s.length > cap) s = s.slice(0, cap) + "\n…[truncated]";
     const lines = s.split("\n");
-    if (lines.length > SEND_MAX_LINES) s = lines.slice(0, SEND_MAX_LINES).join("\n") + "\n…[truncated]";
+    if (lines.length > SEND_MAX_LINES) {
+      // 2.16: keep head AND tail. A head-only cut silently dropped the end of
+      // long payloads - exactly where the closing instruction / last catalogue
+      // rows / final error lines live - with nothing telling the model.
+      const head = Math.floor(SEND_MAX_LINES * 0.85), tail = SEND_MAX_LINES - head;
+      s = lines.slice(0, head).join("\n") + `\n…[${lines.length - SEND_MAX_LINES} of ${lines.length} lines omitted]\n` + lines.slice(-tail).join("\n");
+      diag("send.truncated", { lines: lines.length, kept: SEND_MAX_LINES });
+    }
     return s;
   }
 
@@ -214,13 +226,26 @@ const RSProvider = (() => {
     const it = assistantItems();
     return it.length ? it[it.length - 1] : null;
   };
+  // 2.16: per-NODE turn identity. The old key was data-testid + the first 24
+  // characters of the turn's text - assistant turns carry no testid and, with
+  // extended thinking on, their text starts with the thinking prose ("Let me
+  // think about…"), so two consecutive turns produced the SAME key. The core
+  // compares lastAssistantId() against the token captured at send time to tell
+  // "the new reply" from "the old one still on screen": an equal key meant
+  // every tool-feedback turn sat in the 30 s no-new-turn gate (or, worse, the
+  // previous answer was re-parsed). A monotonic id handed out per element is
+  // stable across streaming/chip insertion and never collides; a React re-key
+  // of the same turn gets a fresh id, which the core's byte-identical-text
+  // stale check already handles.
+  const _idMap = new WeakMap();
+  let _idSeq = 0;
   const itemKey = (item) => {
-    if (!item || !item.getAttribute) return null;
-    return item.getAttribute("data-message-id")
-      || item.getAttribute("data-testid") + ":" + (item.textContent || "").slice(0, 24)
-      || null;
+    if (!item || typeof item !== "object") return null;
+    let id = _idMap.get(item);
+    if (id == null) { id = ++_idSeq; _idMap.set(item, id); }
+    return id;
   };
-  const lastAssistantId = () => itemKey(lastAssistant());
+  const lastAssistantId = () => { const it = lastAssistant(); return it ? itemKey(it) : null; };
 
   function replyRoot(item) {
     if (!item) return null;
@@ -341,7 +366,21 @@ const RSProvider = (() => {
       const l = labelOf(b);
       if (l.includes("send") && !l.includes("stop")) return b;
     }
-    return buttons[buttons.length - 1] || null;
+    // 2.16: NO "last button in the composer" fallback. While the real send
+    // button is disabled (empty box, ProseMirror still digesting the insert)
+    // that fallback returned whatever sat last in the fieldset - attach,
+    // dictate, model picker - and typeAndSend clicked it, while the click hook
+    // counted a click on it as a user send. Unknown is unknown: return null and
+    // let typeAndSend fall back to Enter.
+    return null;
+  }
+  // Raw send button regardless of enabled state (to wait for it to light up).
+  function sendButtonAny() {
+    for (const s of ['button[aria-label="Send message"]', 'button[aria-label*="Send message" i]', 'button[data-testid="send-button"]']) {
+      const b = document.querySelector(s);
+      if (b && !inTurn(b)) return b;
+    }
+    return null;
   }
 
   function streamText(item) {
@@ -361,12 +400,27 @@ const RSProvider = (() => {
     }
     if (len > _streamMax) { _streamMax = len; _streamAt = now; }
   }
+  // 2.16: "stop seen, then gone" ends the turn after a short double-quiet
+  // window (stop control absent ≥ 1 s AND no text growth ≥ 1 s) instead
+  // of the family GEN_IDLE tail (2.8 s Sonnet 4.5 / 2.0 s Opus) on EVERY turn:
+  // Claude keeps one Stop control up for the whole response (thinking +
+  // answer), so its disappearance is the completion signal; the text-idle
+  // window stays the fallback for turns where no Stop control was ever seen
+  // (selector drift, instant answers). A sub-second flicker changes nothing,
+  // and the core still holds thinking-only / open-block turns on its own.
+  const STOP_GONE_QUIET_MS = 1000;
+  let _stopSeenItem = null, _stopGoneAt = 0;
   function isGenerating() {
     sampleStream();
-    if (stopButton()) return true;
     const last = lastAssistant();
+    if (stopButton()) { _stopSeenItem = last; _stopGoneAt = 0; return true; }
     if (last && last.querySelector('[data-is-thinking="true"], [data-thinking="true"], [data-is-streaming="true"]')) return true;
-    return _streamMax > 1 && Date.now() - _streamAt < timings.GEN_IDLE_MS;
+    const now = Date.now();
+    if (last && _stopSeenItem === last && _streamMax > 1) {
+      if (!_stopGoneAt) _stopGoneAt = now;
+      return (now - _stopGoneAt < STOP_GONE_QUIET_MS) || (now - _streamAt < STOP_GONE_QUIET_MS);
+    }
+    return _streamMax > 1 && now - _streamAt < timings.GEN_IDLE_MS;
   }
   const isBusyNow = () => isGenerating();
   const isHardGenerating = () => !!stopButton();
@@ -438,7 +492,11 @@ const RSProvider = (() => {
   }
 
   async function typeAndSend(text, images) {
-    const ed = getEditor();
+    let ed = getEditor();
+    // 2.16: the composer can be mid-remount (route change after the first
+    // send, artifact panel toggling) exactly when a tool result is ready.
+    // Throwing immediately ended the turn; wait a bounded moment first.
+    if (!ed) { await waitFor(() => !!getEditor(), 6000); ed = getEditor(); diag("claude.editorWait", { found: !!ed }); }
     if (!ed) throw new Error("Claude input box not found");
     text = truncateForSend(text);
     const relock = _locked;
@@ -455,13 +513,47 @@ const RSProvider = (() => {
         }
         return;
       }
-      await waitFor(() => !!sendButton(), 2000);
-      const btn = sendButton();
-      if (btn && btn.disabled) { diag("send.disabled", {}); return; }
-      if (btn) { btn.click(); return; }
-      const o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
-      ed.dispatchEvent(new KeyboardEvent("keydown", o));
-      ed.dispatchEvent(new KeyboardEvent("keyup", o));
+      // 2.16: the send button stays disabled until ProseMirror has flushed the
+      // inserted text into React state - on a big bootstrap that can lag the
+      // last execCommand by well over the old 2 s wait, after which the adapter
+      // used to dispatch Enter into a box the site still saw as empty (nothing
+      // sent; the core's resend loop then typed the whole prompt again).
+      // Wait up to 8 s for the button to light up, nudging the editor with an
+      // input event every 700 ms; only then fall back to Enter, and verify.
+      const t0 = Date.now();
+      let nudged = 0;
+      const lit = await waitFor(() => {
+        if (sendButton()) return true;
+        const raw = sendButtonAny();
+        if (raw && raw.disabled && Date.now() - t0 > 700 * (nudged + 1) && nudged < 10) {
+          nudged++;
+          try { ed.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: " " })); } catch {}
+        }
+        return false;
+      }, 8000);
+      const before = editorText().trim();
+      const btn = lit ? sendButton() : null;
+      if (btn) { btn.click(); diag("send.click", { waitMs: Date.now() - t0, nudged }); }
+      else {
+        diag("send.enterFallback", { waitMs: Date.now() - t0, nudged, disabled: !!(sendButtonAny() && sendButtonAny().disabled) });
+        const o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
+        ed.dispatchEvent(new KeyboardEvent("keydown", o));
+        ed.dispatchEvent(new KeyboardEvent("keyup", o));
+      }
+      // Landed = the site cleared the box or started generating. If neither
+      // happened within 1.5 s the click/Enter was swallowed: try the OTHER
+      // path exactly once (bounded; the core's own retry covers the rest).
+      const landed = await waitFor(() => !!stopButton() || editorText().trim() !== before || editorText().trim() === "", 1500);
+      if (!landed) {
+        const again = sendButton();
+        diag("send.retryOnce", { via: again ? "click" : "enter" });
+        if (again) again.click();
+        else {
+          const o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
+          ed.dispatchEvent(new KeyboardEvent("keydown", o));
+          ed.dispatchEvent(new KeyboardEvent("keyup", o));
+        }
+      }
     } finally {
       if (relock) { const e2 = getEditor(); if (e2) e2.setAttribute("contenteditable", "false"); }
     }
@@ -590,7 +682,7 @@ const RSProvider = (() => {
     get resendSystemEvery() { return _resendEvery; },
     init({ diag: d } = {}) { if (d) diag = d; applyModelCaps("init"); },
     allItems, isUserItem, isAssistantItem, itemText, classifyText,
-    assistantCount, userCount, lastAssistant, lastAssistantId, readAssistant,
+    assistantCount, userCount, lastAssistant, lastAssistantId, itemKey, readAssistant,
     streamLen, snapshot,
     getEditor, editorText, chatIsEmpty, isFreshChat, composerFrame, barAnchor,
     setInputLock, typeAndSend, stopGeneration,

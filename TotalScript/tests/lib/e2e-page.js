@@ -47,6 +47,7 @@ function studioSim() {
       const p = pending.get(m.id); if (p) { pending.delete(m.id); p(m); }
     }
   });
+  try { py.stdin.on("error", () => { unavailable = true; }); } catch {}
   py.on("exit", () => { unavailable = true; ready(false); for (const p of pending.values()) p({ ok: false, text: "studio sim exited" }); pending.clear(); });
   return {
     ready: () => readyP,
@@ -56,7 +57,10 @@ function studioSim() {
       const id = ++seq;
       return new Promise((res) => { pending.set(id, res); py.stdin.write(JSON.stringify({ id, code }) + "\n"); });
     },
-    close() { try { py.stdin.write(JSON.stringify({ op: "quit" }) + "\n"); } catch {} try { py.kill(); } catch {} },
+    // Mark the sim gone BEFORE the kill lands: the page's idle pollers (autofix
+    // playtest probe) can still call exec() inside the ~50 ms finish() window and a
+    // write on the closed pipe would turn a green run into an EPIPE exit 1.
+    close() { unavailable = true; try { py.stdin.write(JSON.stringify({ op: "quit" }) + "\n"); } catch {} try { py.kill(); } catch {} },
   };
 }
 

@@ -24,7 +24,7 @@ const isCodeCraftTab = (url) => !!(url && CODECRAFT_PAGE_URL && url.startsWith(C
 const isSupportedTab = (url) => !!url && (SUPPORTED_HOSTS.some((h) => url.includes(h)) || isCodeCraftTab(url));
 const ENGINE_KEY = "rs-engine"; // "roblox" | "local"
 const ENGINES = ["roblox", "local"];
-const WORK_MODES = ["creation", "blender", "animate", "blockbench"]; // 1.95.0: + Blender (Blender-first 3D); 1.99.4: + Animator (id "animate"); 2.15.0: + Blockbench (MCP plugin, low-poly models → file → Studio Import 3D)
+const WORK_MODES = ["creation", "blender", "animate", "blockbench"]; // 1.95.0: + Blender (Blender-first 3D); 1.99.4: + Animator (id "animate"); 2.16.0: + Blockbench (MCP plugin, low-poly models → file → Studio Import 3D)
 const BRAND_LOGO_RE = /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i;
 function sanitizeBrandLite(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
