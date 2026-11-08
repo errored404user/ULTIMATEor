@@ -201,13 +201,6 @@ html.rs-light #rs-bar.rs-bar-anchored {
 #rs-bar.rs-prov-qwen { font-family: "Inter", ui-sans-serif, sans-serif; }
 #rs-bar.rs-prov-arena { font-family: "Inter", ui-sans-serif, sans-serif; }
 #rs-bar.rs-prov-glm { font-family: "Inter", ui-sans-serif, sans-serif; }
-#rs-bar.rs-prov-meta { font-family: "Optimistic Text", "Inter", ui-sans-serif, sans-serif; }
-
-/* Meta AI's composer card has a large corner radius (rounded-32 = 32px), so the
-    full-width anchored bar's left/right ends run under the curve - the brand and
-    the Discord/switch/support icons crowd the rounding. Inset the content by ~the
-    radius so both edges clear the corners cleanly. */
-#rs-bar.rs-bar-anchored.rs-prov-meta { padding-left: 30px; padding-right: 30px; }
 
 /* Microsoft Copilot + every inline-inside site share one unified
    clean header treatment: NO negative margins, NO custom widths — the bar is
@@ -250,13 +243,11 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-notion {
 #rs-bar.rs-bar-inline.rs-prov-kimi,
 #rs-bar.rs-bar-inline.rs-prov-glm,
 #rs-bar.rs-bar-inline.rs-prov-arena,
-#rs-bar.rs-bar-inline.rs-prov-meta,
 #rs-bar.rs-bar-inline.rs-prov-qwen,
 #rs-bar.rs-bar-inline.rs-prov-vani,
 #rs-bar.rs-bar-inline.rs-prov-codecraft,
-#rs-bar.rs-bar-inline.rs-prov-overchat,
 #rs-bar.rs-bar-inline.rs-prov-huggingchat,
-#rs-bar.rs-bar-inline.rs-prov-feather,
+#rs-bar.rs-bar-inline.rs-prov-openrouter,
 #rs-bar.rs-bar-anchored.rs-prov-deepseek,
 #rs-bar.rs-bar-anchored.rs-prov-chatgpt,
 #rs-bar.rs-bar-anchored.rs-prov-claude,
@@ -264,12 +255,10 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-notion {
 #rs-bar.rs-bar-anchored.rs-prov-kimi,
 #rs-bar.rs-bar-anchored.rs-prov-glm,
 #rs-bar.rs-bar-anchored.rs-prov-arena,
-#rs-bar.rs-bar-anchored.rs-prov-meta,
 #rs-bar.rs-bar-anchored.rs-prov-qwen,
 #rs-bar.rs-bar-anchored.rs-prov-vani,
-#rs-bar.rs-bar-anchored.rs-prov-overchat,
 #rs-bar.rs-bar-anchored.rs-prov-huggingchat,
-#rs-bar.rs-bar-anchored.rs-prov-feather {
+#rs-bar.rs-bar-anchored.rs-prov-openrouter {
   background: transparent;
   border: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -288,13 +277,11 @@ html.rs-light #rs-bar.rs-bar-inline.rs-prov-gemini,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-kimi,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-glm,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-arena,
-html.rs-light #rs-bar.rs-bar-inline.rs-prov-meta,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-qwen,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-vani,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-codecraft,
-html.rs-light html.rs-light #rs-bar.rs-bar-inline.rs-prov-overchat,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-huggingchat,
-html.rs-light #rs-bar.rs-bar-inline.rs-prov-feather,
+html.rs-light #rs-bar.rs-bar-inline.rs-prov-openrouter,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-deepseek,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-chatgpt,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-claude,
@@ -302,19 +289,13 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-gemini,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-kimi,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-glm,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-arena,
-html.rs-light #rs-bar.rs-bar-anchored.rs-prov-meta,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-qwen,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-vani,
-html.rs-light html.rs-light #rs-bar.rs-bar-anchored.rs-prov-overchat,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-huggingchat,
-html.rs-light #rs-bar.rs-bar-anchored.rs-prov-overchat,
-html.rs-light #rs-bar.rs-bar-anchored.rs-prov-feather,
-#rs-bar.rs-bar-anchored.rs-prov-huggingchat {
+html.rs-light #rs-bar.rs-bar-anchored.rs-prov-openrouter {
   background: transparent;
   border-bottom-color: rgba(0, 0, 0, 0.08);
 }
-/* Preserve Meta's large radius inset after the unified padding. */
-#rs-bar.rs-bar-anchored.rs-prov-meta { padding-left: 30px; padding-right: 30px; }
 
 /* Mode Switcher — rebuilt with real DOM thumb (no ::before) */
 @keyframes rs-roblox-pulse { from,to { box-shadow:none; } }
@@ -921,28 +902,6 @@ message-content.rs-cmd-mask code-block { display: none !important; }
    recreated fenced-code wrapper (a .not-prose box holding a <pre>) hidden with no
    flash. Inert elsewhere. */
 .rs-cmd-mask div.not-prose:has(pre) { display: none !important; }
-
-/* Meta AI (www.meta.ai, React): React recreates the reply's rendered code subtree
-   on stream settle and on the next send, wiping any per-element .rs-tool-hide
-   class. The assistant-message body keeps its identity (the chip is anchored at
-   item level), so the provider marks IT with .rs-cmd-mask and this rule keeps
-   every recreated command wrapper (the .ur-code-block that holds either the JSON
-   viewer widget or a plain <pre>) hidden with no flash. Inert elsewhere. */
-.rs-cmd-mask .ur-code-block { display: none !important; }
-
-/* Meta AI whole-turn chips (result / sys) alignment. A whole:true chip is pinned
-   as a direct child of the TURN ROOT, but Meta's turn root is FULL width (~1608px)
-   while the reply body lives in a nested `mx-auto max-w-3xl` (768px) centered
-   column. So a result chip's collapsible body stretched the chip to the full page
-   width, and the "Starting Up" sys chip sat at the raw page-left edge - neither
-   lined up with the tool chip (which anchors inside that centered column). Re-seat
-   whole chips onto the same 768px column: push the left edge in by the column's
-   own centering offset and cap the width to the column. `max()` keeps it sane on
-   narrow viewports where the column is full-width. */
-html.rs-site-meta .rs-hidden > .rs-chip {
-  margin-left: max(0px, calc((100% - 768px) / 2));
-  max-width: 768px;
-}
 
 /* Native menus and dialogs retain their host-defined stacking order. The UI
    Collision Manager hides or moves TotalScript instead of rewriting host z-index. */
@@ -6057,7 +6016,7 @@ html[data-rs-theme="void"] .rs-template-head{background:linear-gradient(180deg,r
 .rs-work-row.rs-work-creation{grid-template-columns:minmax(0,1fr)}
 /* 1.99.5: Access has two states (Sandbox only / Full PC). */
 .rs-work-row.rs-access-row{grid-template-columns:1fr 1fr}
-/* 2.13.0 — creation quality: four profile cards, two per row (names wrap, never one glyph per line) */
+/* 2.14.0 — creation quality: four profile cards, two per row (names wrap, never one glyph per line) */
 .rs-work-row.rs-creation-row{grid-template-columns:1fr 1fr}
 .rs-creation-row .rs-work-sub{overflow-wrap:break-word}
 .rs-work-creation .rs-work-card{min-height:48px}

@@ -16,8 +16,8 @@ const animlib = read("src/core/animlib.js"), animengine = read("src/core/animeng
 
 // ── A. the module and every reference to it are gone ──
 ok("A1 src/core/animstudio.js no longer exists", !exists("src/core/animstudio.js"));
-const lists = manifest.content_scripts.map((c) => c.js).filter((js) => js.includes("src/core/animlib.js")); // the 12 provider bundles (the rest are tiny helper scripts)
-ok("A2 no manifest bundle loads animstudio.js (12 bundles)", lists.length === 12 && lists.every((js) => !js.some((f) => /animstudio/.test(f))));
+const lists = manifest.content_scripts.map((c) => c.js).filter((js) => js.includes("src/core/animlib.js")); // the 11 provider bundles (the rest are tiny helper scripts)
+ok("A2 no manifest bundle loads animstudio.js (11 bundles)", lists.length === 11 && lists.every((js) => !js.some((f) => /animstudio/.test(f))));
 ok("A3 codecraft.html does not load it", !/animstudio/.test(html));
 ok("A4 the engine + animlib still load in every bundle, in order (animlib → animengine → … → reasoning → … → videostudio → main)", lists.every((js) => {
   const i = (f) => js.indexOf("src/core/" + f);

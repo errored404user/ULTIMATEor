@@ -17,13 +17,10 @@ const RSProvider = (() => {
   let diag = () => {};
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  // 1.99.0: API PROFILES. The same page + adapter serve any OpenAI-compatible
-  // API; the profile is chosen by the page URL (`codecraft.html?api=deepseek`).
-  // DeepSeek's official API (platform.deepseek.com, your own sk- key, pay as
-  // you go) is the route that is NOT subject to the web-chat account
-  // suspensions DeepSeek hands out for bot-like cadence - the agent loop can
-  // run at full speed here. Keys and chats are stored per profile and only
-  // ever sent to that profile's host.
+  // 1.99.0: API PROFILES. The same page + adapter can serve any OpenAI-compatible
+  // API; keys and chats are stored per profile and only ever sent to that
+  // profile's host. 2.14.0: the DeepSeek API profile was removed - CodeCraft is
+  // the only profile, so the page ignores any `?api=` query.
   const PROFILES = {
     codecraft: {
       id: "codecraft", name: "CodeCraft API", apiBase: "https://codecraftapi.com/v1", site: "https://codecraftapi.com",
@@ -40,17 +37,8 @@ const RSProvider = (() => {
       reasoningParam: true, modelLogos: true, tagline: "OpenAI-compatible chat",
       heroTitle: "Chat with any CodeCraft model", heroText: "Paste your cc_ key once, choose a model, then press Start in the TotalScript bar below to let the agent build in Roblox Studio — or just chat.",
     },
-    deepseek: {
-      id: "deepseek", name: "DeepSeek API", apiBase: "https://api.deepseek.com/v1", site: "https://platform.deepseek.com",
-      storeKey: "rsDeepSeekApi", defaultModel: "deepseek-chat", hostLabel: "api.deepseek.com",
-      fallbackModels: ["deepseek-chat", "deepseek-reasoner"],
-      keyRe: /^sk-[A-Za-z0-9]{20,}$/, keyPrefix: "sk-", keyPlaceholder: "sk-…  (platform.deepseek.com → API keys)",
-      keysHint: "platform.deepseek.com → API keys", keysUrl: "https://platform.deepseek.com/api_keys", pricingUrl: "https://platform.deepseek.com/usage", modelsUrl: "https://api-docs.deepseek.com/quick_start/pricing",
-      reasoningParam: false, modelLogos: false, tagline: "official API · your own key · no web-chat suspensions",
-      heroTitle: "DeepSeek through the official API", heroText: "chat.deepseek.com suspends accounts for bot-like message cadence. This page talks to api.deepseek.com with your own API key instead (pay as you go, top up at platform.deepseek.com) — the agent can run at full speed here. Paste the key, pick deepseek-chat or deepseek-reasoner, then press Start in the TotalScript bar below.",
-    },
   };
-  const PROFILE = (() => { try { const q = new URLSearchParams(location.search).get("api"); return PROFILES[q] || PROFILES.codecraft; } catch { return PROFILES.codecraft; } })();
+  const PROFILE = PROFILES.codecraft;
   const API_BASE = PROFILE.apiBase;
   const SITE = PROFILE.site;
   const STORE_KEY = PROFILE.storeKey;
@@ -84,7 +72,7 @@ const RSProvider = (() => {
   // 1.36.0: generation settings + page preferences live in the same record.
   const settings = { key: "", model: DEFAULT_MODEL, temperature: null, maxTokens: null, reasoning: "", instructions: "", autoRetry: true, ctrlEnter: false, showMeta: true, sideCollapsed: false };
   const SETTING_KEYS = ["key", "model", "temperature", "maxTokens", "reasoning", "instructions", "autoRetry", "ctrlEnter", "showMeta", "sideCollapsed"];
-  const CHAT_INDEX_KEY = STORE_KEY + "Chats"; // rsCodeCraftChats (unchanged) / rsDeepSeekApiChats
+  const CHAT_INDEX_KEY = STORE_KEY + "Chats"; // rsCodeCraftChats
   const CHAT_KEY_PREFIX = STORE_KEY + "Chat:";
   const USAGE_KEY = STORE_KEY + "Usage";
   const MAX_SAVED_CHATS = 200;
@@ -886,7 +874,7 @@ const RSProvider = (() => {
     if (settings.temperature != null && settings.temperature !== "") body.temperature = Number(settings.temperature);
     const mt = Number(settings.maxTokens);
     if (mt && mt > 0) body.max_tokens = Math.floor(mt);
-    if (settings.reasoning && PROFILE.reasoningParam) body.reasoning_effort = settings.reasoning; // DeepSeek's API rejects unknown fields - never sent there
+    if (settings.reasoning && PROFILE.reasoningParam) body.reasoning_effort = settings.reasoning; // only for profiles that accept the field
     return body;
   }
   async function runStream(st) {
@@ -1468,8 +1456,8 @@ const RSProvider = (() => {
     // OpenAI-style reasoning_effort ("" | low | medium | high) and calls this.
     async setReasoningMode(modeId, rule) {
       const v = rule && typeof rule.value === "string" ? rule.value : (modeId === "default" ? "" : String(modeId || ""));
-      // Profiles without reasoning_effort (DeepSeek API): effort stays prompt-only;
-      // thinking is the model choice (deepseek-reasoner), never switched by us.
+      // Profiles without reasoning_effort: effort stays prompt-only; thinking is
+      // the model choice, never switched by us.
       if (!PROFILE.reasoningParam) return { ok: true, how: "prompt-only", reason: NAME + " has no reasoning_effort field - pick " + (FALLBACK_MODELS[1] || "a reasoning model") + " in the model picker for thinking" };
       if (!/^(|low|medium|high)$/.test(v)) return { ok: false, how: "hook", reason: "unknown reasoning_effort " + v };
       if ((settings.reasoning || "") === v) return { ok: true, how: "already" };

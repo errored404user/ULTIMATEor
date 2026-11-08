@@ -1,5 +1,5 @@
 "use strict";
-// 2.13.0 — CREATION BENCHMARK: measures the Universal Creation Intelligence
+// 2.14.0 — CREATION BENCHMARK: measures the Universal Creation Intelligence
 // Engine (src/core/creation_engine.js) against a labelled corpus and against
 // the previous gate (the work-mode evidence gates in main.js), per provider.
 //
@@ -219,22 +219,22 @@ ok("static review: no false positive on clean snippets, recall 100% on the label
 // ── 5. per provider: REAL adapter caps → effective profile, brief / nudge within the send budget ──
 const providers = require(path.join(__dirname, "lib/load-providers.js"))(root).map((p) => ({ id: p.id, caps: O.capabilities(p.P) }));
 console.log("\n5. PER PROVIDER (real adapter flags; profile = High unless noted)");
-console.log("   provider      tight  budget   noResend  rounds  briefMin  notes  brief(full/tight)  nudge  fits-budget");
+console.log("   provider      tight  budget   rounds  briefMin  notes  brief(full/tight)  nudge  fits-budget");
 const provRows = {};
 const bigSpec = big;
 for (const p of providers) {
-  const caps = Object.assign({}, p.caps, { noResend: p.caps.pacingNoResend });
+  const caps = Object.assign({}, p.caps);
   const prof = C.profileFor("high", caps), master = C.profileFor("masterpiece", caps);
   const briefFull = C.brief(bigSpec, { tight: false, briefMin: 1 }).length, briefTight = C.brief(bigSpec, { tight: true, briefMin: 1 }).length;
   const T = C.tracker(bigSpec, { profile: prof }); T.observe({ tool: "ui_screen_generate", arguments: {} }, "ok");
   const nudge = T.nudge({ resendAllowed: true }).length;
   const budget = caps.sendCharBudget || null;
   const fits = !budget || ((prof.tight ? briefTight : briefFull) <= budget && nudge <= budget);
-  provRows[p.id] = { tight: prof.tight, sendCharBudget: budget, noResend: prof.noResend, rounds: prof.rounds, masterpieceRounds: master.rounds, briefMin: prof.briefMin, reviewNotes: prof.reviewNotes, brief: prof.tight ? briefTight : briefFull, nudge, fits, commandFormat: caps.commandFormat, commandlessRetries: caps.commandlessRetries, capped: prof.capped };
-  console.log(`   ${p.id.padEnd(13)} ${String(prof.tight).padEnd(6)} ${String(budget || "-").padEnd(8)} ${String(prof.noResend).padEnd(9)} ${String(prof.rounds + "/" + master.rounds).padEnd(7)} ${String(prof.briefMin).padEnd(9)} ${String(prof.reviewNotes).padEnd(6)} ${String(briefFull + "/" + briefTight).padEnd(18)} ${String(nudge).padEnd(6)} ${fits}`);
+  provRows[p.id] = { tight: prof.tight, sendCharBudget: budget, rounds: prof.rounds, masterpieceRounds: master.rounds, briefMin: prof.briefMin, reviewNotes: prof.reviewNotes, brief: prof.tight ? briefTight : briefFull, nudge, fits, commandFormat: caps.commandFormat, commandlessRetries: caps.commandlessRetries, capped: prof.capped };
+  console.log(`   ${p.id.padEnd(13)} ${String(prof.tight).padEnd(6)} ${String(budget || "-").padEnd(8)} ${String(prof.rounds + "/" + master.rounds).padEnd(7)} ${String(prof.briefMin).padEnd(9)} ${String(prof.reviewNotes).padEnd(6)} ${String(briefFull + "/" + briefTight).padEnd(18)} ${String(nudge).padEnd(6)} ${fits}`);
 }
-ok("providers: ≥ 12 real adapters loaded and the brief + nudge fit every declared send budget", providers.length >= 12 && Object.values(provRows).every((r) => r.fits), Object.entries(provRows).filter(([, r]) => !r.fits).map(([k]) => k));
-ok("providers: a pacing contract with noResend (DeepSeek) caps every profile to 0 checks; the others keep theirs", Object.entries(provRows).every(([id, r]) => (r.noResend ? r.rounds === 0 && r.masterpieceRounds === 0 : r.rounds === 1 && r.masterpieceRounds === 3)), provRows);
+ok("providers: ≥ 12 real adapters loaded and the brief + nudge fit every declared send budget", providers.length >= 11 && Object.values(provRows).every((r) => r.fits), Object.entries(provRows).filter(([, r]) => !r.fits).map(([k]) => k));
+ok("providers: every adapter keeps its full check budget (High 1 / Masterpiece 3) - 2.14.0 removed the DeepSeek gentle-mode cap", Object.entries(provRows).every(([id, r]) => r.rounds === 1 && r.masterpieceRounds === 3), provRows);
 
 const out = { version: C.VERSION, simulated: true, at: new Date().toISOString(), spec: { n: CORPUS.length, exact, precision, recall, perDomain, misses: specResults.filter((r) => !r.exact), heldOut: { n: HELD_OUT.length, exact: hoExact, misses: hoMiss } }, coverage: det, profiles: profRows, staticReview: { snippets: SNIPPETS.length, precision: pct(stp, stp + sfp), recall: pct(stp, stp + sfn), cleanFalsePositives: cleanFalse }, providers: provRows };
 try { fs.writeFileSync("/tmp/totalscript-creation-bench.json", JSON.stringify(out, null, 2)); console.log("\nreport written to /tmp/totalscript-creation-bench.json"); } catch {}

@@ -13,11 +13,9 @@ const SUPPORTED_HOSTS = [
   "claude.ai", "claude.com",
   "gemini.google.com", "kimi.ai", "www.kimi.ai", // 1.86.0: kimi.ai was injected (manifest) but the popup did not recognise the tab; 1.89.0: kimi.com dropped
   "chat.z.ai", "chat.qwen.ai", "arena.ai",
-  "www.meta.ai", "meta.ai",
   "www.notion.so", "app.notion.so", "www.notion.com", "notion.com", "c.vani.ai",
-  "overchat.ai", "www.overchat.ai", "huggingface.co", "www.huggingface.co",
+  "huggingface.co", "www.huggingface.co",
   "openrouter.ai", "www.openrouter.ai",
-  "feather-chat-link.base44.app", // 2.0.5: FeatherRBLX (Base44 app, adaptive multichat adapter)
 ];
 const DEFAULT_AI_URL = "https://chat.deepseek.com/";
 // CodeCraft API (codecraftapi.com) is API-only; TotalScript hosts its chat page.
@@ -70,11 +68,9 @@ const SITE_NAMES = {
   "kimi.ai": "Kimi",
   "chat.z.ai": "GLM", "chat.qwen.ai": "Qwen",
   "arena.ai": "Arena",
-  "meta.ai": "Meta AI",
   "www.notion.so": "Notion", "app.notion.so": "Notion", "www.notion.com": "Notion", "notion.com": "Notion",
   "c.vani.ai": "Vani Chat",
-  "feather-chat-link.base44.app": "FeatherRBLX",
-  "overchat.ai": "Overchat", "huggingface.co": "HuggingChat", "openrouter.ai": "OpenRouter",
+  "huggingface.co": "HuggingChat", "openrouter.ai": "OpenRouter",
 };
 const PROVIDER_SITES = [
   ["DeepSeek", "https://chat.deepseek.com/", "chat.deepseek.com"],
@@ -85,13 +81,10 @@ const PROVIDER_SITES = [
   ["GLM", "https://chat.z.ai/", "chat.z.ai"],
   ["Qwen", "https://chat.qwen.ai/", "chat.qwen.ai"],
   ["Arena", "https://arena.ai/", "arena.ai"],
-  ["Meta AI", "https://www.meta.ai/", "meta.ai"],
   ["Notion AI", "https://www.notion.so/", "notion.so"],
   ["Vani Chat", "https://c.vani.ai/", "c.vani.ai"],
-  ["Overchat", "https://overchat.ai/", "overchat.ai"],
   ["HuggingChat", "https://huggingface.co/chat/", "huggingface.co/chat"],
   ["OpenRouter", "https://openrouter.ai/chat", "openrouter.ai"],
-  ["FeatherRBLX", "https://feather-chat-link.base44.app/", "feather-chat-link.base44.app"],
 ];
 
 // ── tiny DOM / message helpers ─────────────────────────────────────────────
@@ -508,7 +501,6 @@ const QUICK_ACTIONS = [
   { id: "restart", label: "Restart server", icon: "refresh", run: (btn) => busy(btn, () => bg({ type: "restart_mcp" }).then((r) => { setTimeout(refresh, 600); return r && r.ok ? r : { ok: false }; }), { ok: "Server restarted", fail: "Restart failed — is the agent app running?" }) },
   { id: "ai-chat", label: "Open AI chat", icon: "chat", run: () => openUrl(prefs.defaultSite || DEFAULT_AI_URL), hint: "Opens your default AI site (Settings → Providers)" },
   { id: "codecraft", label: "CodeCraft chat", icon: "bolt", run: () => $("codecraft").click() },
-  { id: "deepseek-api", label: "DeepSeek API", icon: "shield", run: () => $("deepseek-api").click() },
   { id: "discord", label: "Discord", icon: "discord", run: () => $("discord").click() },
   { id: "settings-studio", label: "Studio & bridge", icon: "studio", run: () => { showView("settings"); openCategory("studio"); } },
   { id: "palette", label: "Command palette", icon: "search", run: () => openPalette() },
@@ -740,14 +732,12 @@ const CATEGORIES = [
     { id: "autodebug", key: "rsAutoDebug", type: "toggle", default: false, live: true, label: "Automatic debugger", sub: "After Studio edits, new Output errors are sent to the AI to fix." },
     { id: "guibrief", key: "rsGuiBrief", type: "toggle", default: true, live: true, label: "GUI brief", sub: "When you ask for a GUI, the build protocol (and the reference-image protocol) is sent right after your message." },
     { id: "multiagent", key: "rsMultiAgent", type: "toggle", default: false, live: true, label: "Multi-Agent crew", sub: "Planner → builder / scripter → reviewer → tester → debugger on a shared board." },
-    { id: "gentle", key: "rsGentlePacing", type: "toggle", default: true, live: true, label: "Gentle pacing", sub: "Space automatic messages out on sites that suspend bot-like accounts (DeepSeek web chat)." },
     { id: "prompt", key: "rsCustomPrompt", type: "textarea", default: "", label: "Custom prompt", sub: "Added below the system prompt on every new session. The built-in prompt cannot be edited.", placeholder: "e.g. Always comment your Luau code. Prefer small modular scripts." },
     { id: "modes", type: "action", label: "Work mode & access", sub: "Totality / Blender / Animator and Sandbox / Full PC live on Home.", button: "Go to Home", run: () => showView("home") },
   ] },
   { id: "providers", title: "Providers", sub: "AI sites, default chat, API chats with your own key", icon: "globe", items: [
     { id: "defaultSite", pref: "defaultSite", type: "select", label: "Default AI site", sub: "Used by “Open AI chat” and the command palette.", options: PROVIDER_SITES.map(([n, u]) => [u, n]) },
     { id: "codecraft", type: "action", label: "CodeCraft API chat", sub: "Any CodeCraft model with your own cc_ key — TotalScript hosts the chat page.", button: "Open", run: () => $("codecraft").click() },
-    { id: "deepseek-api", type: "action", label: "DeepSeek API chat", sub: "The official API with your own sk- key — no web-chat account suspensions.", button: "Open", run: () => $("deepseek-api").click() },
     { id: "sites", type: "providers", label: "Supported sites" },
   ] },
   { id: "studio", title: "Roblox Studio", sub: "Bridge, Studio MCP, engine, Blender, publishing", icon: "studio", items: [
@@ -782,7 +772,7 @@ const CATEGORIES = [
     { id: "donate", type: "donate", label: "Donate" },
   ] },
 ];
-const RS_KEYS_ALL = ["rsWorkMode", "rsPermMode", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsAutoFixStopPlay", "rsAutoDebug", "rsBgMode", "rsSounds", VOLUME_KEY, "rsSettingsAdvanced", "rsThinkingLevel", "rsReasoningModes", "rsEffortExtras", "rsPlanMode", "rsCreationProfile", "rsGuiBrief", "rsMultiAgent", "rsGentlePacing", "rsCustomPrompt", "rsKeybinds", "rsBrand", "rsDebugDiagnostics", "rsAllowPublishAutomation", "rsImageTools", "rs-engine", PREF_KEY];
+const RS_KEYS_ALL = ["rsWorkMode", "rsPermMode", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsAutoFixStopPlay", "rsAutoDebug", "rsBgMode", "rsSounds", VOLUME_KEY, "rsSettingsAdvanced", "rsThinkingLevel", "rsReasoningModes", "rsEffortExtras", "rsPlanMode", "rsCreationProfile", "rsGuiBrief", "rsMultiAgent", "rsCustomPrompt", "rsKeybinds", "rsBrand", "rsDebugDiagnostics", "rsAllowPublishAutomation", "rsImageTools", "rs-engine", PREF_KEY];
 const EXPORT_KEYS = RS_KEYS_ALL.filter((k) => k !== "rsImageTools");
 let currentCat = null;
 const catById = (id) => CATEGORIES.find((c) => c.id === id);
@@ -1113,19 +1103,8 @@ document.querySelectorAll(".dono[data-dono]").forEach((b) => b.addEventListener(
 document.getElementById("codecraft")?.addEventListener("click", () => {
   // Reuse an open CodeCraft chat tab (same conversation) instead of stacking copies.
   chrome.tabs.query({ url: CODECRAFT_PAGE_URL + "*" }, (tabs) => {
-    tabs = (tabs || []).filter((t) => !/[?&]api=/.test(String(t.url || "")));
     if (tabs.length) chrome.tabs.update(tabs[0].id, { active: true });
     else chrome.tabs.create({ url: CODECRAFT_PAGE_URL });
-  });
-});
-// 1.99.0 - DeepSeek through the official API (same page, ?api=deepseek profile):
-// the route that is not subject to chat.deepseek.com's account suspensions.
-document.getElementById("deepseek-api")?.addEventListener("click", () => {
-  const url = CODECRAFT_PAGE_URL + "?api=deepseek";
-  chrome.tabs.query({ url: CODECRAFT_PAGE_URL + "*" }, (tabs) => {
-    tabs = (tabs || []).filter((t) => /api=deepseek/.test(String(t.url || "")));
-    if (tabs.length) chrome.tabs.update(tabs[0].id, { active: true });
-    else chrome.tabs.create({ url });
   });
 });
 $("blender")?.addEventListener("click", () => {

@@ -15,7 +15,7 @@ const main = read("src/core/main.js"), css = read("overlay.css"), manifest = JSO
 // ── A. the module and every reference to it are gone ──
 ok("A1 src/core/paint.js no longer exists", !exists("src/core/paint.js"));
 const lists = manifest.content_scripts.map((c) => c.js).filter((js) => js.includes("src/core/main.js"));
-ok("A2 no manifest bundle loads paint.js (12 bundles)", lists.length === 12 && lists.every((js) => !js.some((f) => /paint\.js/.test(f))));
+ok("A2 no manifest bundle loads paint.js (11 bundles)", lists.length === 11 && lists.every((js) => !js.some((f) => /paint\.js/.test(f))));
 ok("A3 codecraft.html does not load it", !/paint\.js/.test(html));
 ok("A4 load order still holds without it: project_analyzer → reasoning → … → videostudio → main", lists.every((js) => { const i = (f) => js.indexOf("src/core/" + f); return i("project_analyzer.js") >= 0 && i("reasoning.js") === i("project_analyzer.js") + 1 && i("videostudio.js") > i("reasoning.js") && i("main.js") === i("videostudio.js") + 1; }));
 ok("A5 main.js: no TotalPaint / __rsOpenPaint / openPaint / paintCaptureStudio / #rs-paint-btn / Ctrl+Shift+P", !/TotalPaint|__rsOpenPaint|openPaint\b|paintCaptureStudio|rs-paint-btn|Shift\+P\b/.test(main));

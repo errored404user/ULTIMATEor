@@ -5,12 +5,10 @@ const vm = require('vm');
 const providerFiles = [
   'src/providers/arena.js', 'src/providers/chatgpt.js', 'src/providers/claude.js',
   'src/providers/deepseek.js', 'src/providers/gemini.js', 'src/providers/glm.js',
-  'src/providers/kimi.js', 'src/providers/meta.js', 'src/providers/vani.js',
+  'src/providers/kimi.js', 'src/providers/vani.js',
   'src/providers/qwen.js',
-  ['src/providers/multichat.js','overchat.ai'],
-  ['src/providers/multichat.js','overchat.ai'],
   ['src/providers/multichat.js','huggingface.co'],
-  ['src/providers/multichat.js','feather-chat-link.base44.app'],
+  ['src/providers/multichat.js','openrouter.ai'],
   // Extension-hosted chat page (no content_scripts entry: loaded by codecraft.html).
   ['src/providers/codecraft.js', 'codecraftapi.com', 'codecraft.html'],
 ];

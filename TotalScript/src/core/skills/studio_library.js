@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript library pack (2.13.0) - reusable asset kits and the shared
+// TotalScript library pack (2.14.0) - reusable asset kits and the shared
 // project style every generator reads.
 //
 //   kit_save {path, name?, tags?, category?, description?, replace?}
@@ -41,7 +41,7 @@
 // the mocked DataModel in tests/library-sim.py can run it.
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
-  const VERSION = "2.13.0";
+  const VERSION = "2.14.0";
   const STORE = "_TotalKits";
   const STYLE_STORE = "_TotalStyle";
   const MAX_SAVE = 20000;

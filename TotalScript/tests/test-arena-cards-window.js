@@ -8,7 +8,7 @@
 // (#rs-cards-window, role=dialog, mounted on <html>) matched, so main.js's
 // captcha/overlay branch hid the bar AND the cards panel on every placement pass.
 // Fix: every TotalScript top-level host carries data-rs-owned and the detectors
-// (arena.js, meta.js, ui_collision_manager.js) skip it.
+// (arena.js, ui_collision_manager.js) skip it.
 //
 // Perf (measured in this harness before the fix): readAssistant / isGenerating /
 // assistantCount / lastAssistantId each re-walked every turn with attribute
@@ -142,7 +142,6 @@ function boot(turnPairs) {
     ok((main.match(/modal\.setAttribute\("data-rs-owned", *"1"\)/g) || []).length >= 3, "B2 main.js template editor modals marked");
     for (const f of ["videostudio.js", "enhancer.js"]) ok(/data-rs-owned/.test(read("src/core/" + f)), "B3 " + f + " host marked");
     ok(/closest\("#rs-root, \[data-rs-owned\]"\)/.test(read("src/providers/arena.js")), "B4 arena.js overlayBlocking skips data-rs-owned");
-    ok(/closest\("#rs-root, \[data-rs-owned\]"\)/.test(read("src/providers/meta.js")), "B5 meta.js overlayBlocking (same pattern) skips data-rs-owned");
     ok(/closest\("#rs-root, \[data-rs-owned\]"\)/.test(read("src/core/ui_collision_manager.js")), "B6 collision manager never treats our windows as site overlays");
   }
 

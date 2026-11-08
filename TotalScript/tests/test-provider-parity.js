@@ -49,13 +49,6 @@ const PAGES = {
       <button id="send" type="submit" aria-label="Send message" data-rect="1140,690,40,40"><svg><path d="M1 1"/></svg></button></form></main>`,
     editorIsTextarea: true, userRow: null,
   },
-  meta: {
-    host: "www.meta.ai", path: "/", diagPrefix: "meta.tas", landed: "meta.tas.sent", unconfirmed: "meta.tas.sent", sentFlag: true,
-    html: `<main data-rect="0,0,1280,800"><div id="thread" data-rect="300,0,900,640"></div>
-      <div class="composer" data-rect="300,660,900,120"><textarea id="ed" data-testid="composer-input" data-rect="310,670,800,80"></textarea>
-      <button id="send" data-testid="composer-send-button" aria-label="Send" data-rect="1140,690,40,40"></button></div></main>`,
-    editorIsTextarea: true, userRow: null,
-  },
   multichat: {
     host: "huggingface.co", path: "/chat/", diagPrefix: "huggingchat.send", landed: "huggingchat.send.landed", unconfirmed: "huggingchat.send.unconfirmed",
     html: `<main data-rect="0,0,1280,800"><div id="thread" data-rect="300,0,900,640"></div>
@@ -84,7 +77,7 @@ function loadAdapter(id) {
 const SEND_PATH_FNS = ["getEditor", "typeAndSend", "ensureComposerReady", "enforceComposer", "installSendHooks", "readAssistant", "lastAssistant", "isGenerating", "isHardGenerating", "isBusyNow", "userCount", "assistantCount", "allItems", "chatIsEmpty", "conversationKey", "scanError", "findToolBlockSpot", "classifyText", "snapshot", "stopGeneration", "isTooLongMsg", "findContinueBtn", "clickContinueBtn", "editorText"];
 const base = loadAdapter("gemini").P;
 const table = [];
-const REPAIRED = ["vani", "arena", "meta", "multichat"]; // 1.89.0: mimo / clickup / oxalpha providers removed
+const REPAIRED = ["vani", "arena", "multichat"]; // 1.89.0: mimo / clickup / oxalpha providers removed; 2.14.0: meta removed
 for (const id of REPAIRED) {
   const { P } = loadAdapter(id);
   const missing = SEND_PATH_FNS.filter((f) => typeof base[f] === "function" && typeof P[f] !== "function");

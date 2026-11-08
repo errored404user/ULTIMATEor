@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript device pack (2.13.0) - mobile / tablet / console readiness.
+// TotalScript device pack (2.14.0) - mobile / tablet / console readiness.
 //
 //   device_audit {path?, devices?, limit?}
 //       Lays every ScreenGui (or the one under path) out on a phone (844x390),
@@ -32,7 +32,7 @@
 // the mocked DataModel in tests/device-sim.py can run it.
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
-  const VERSION = "2.13.0";
+  const VERSION = "2.14.0";
   const DEVICES = ["phone", "tablet", "console", "pc"];
   const FIX_OPS = ["text_constraints", "min_touch_size", "selectable", "safe_insets", "scale_sizes", "aspect_images"];
   const DEFAULT_OPS = ["text_constraints", "min_touch_size", "selectable", "safe_insets"];

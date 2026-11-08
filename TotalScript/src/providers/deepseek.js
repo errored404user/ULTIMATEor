@@ -1186,20 +1186,6 @@ const RSProvider = (() => {
     // this exclusion those quotes read as "raw block still visible" forever
     // (seen live: 60Hz chip rebuild spam + done→run→done chip flapping).
     thinkingSel: S.thinking,
-    // 1.99.0 gentle mode. DeepSeek's abuse detection suspends web-chat accounts
-    // (typically 48 h - 3 days) for bot-like cadence: dozens of messages per hour,
-    // instant follow-ups, stop/edit/regenerate loops, "using the chat as an API
-    // through an extension". The core paces every automatic send through this
-    // contract (orchestrator.paceDelay), caps sends per rolling hour, never
-    // re-sends after a dead or failed turn here, and stops on scanAccountBlock().
-    // Nothing in this contract hides TotalScript from the site - it only makes
-    // the extension behave like a person typing.
-    // 1.99.3: a person is not a metronome - after every 6 sends in one streak a
-    // 45-120 s break, at most 160 sends per rolling 24 h (shared across tabs and
-    // reloads), and after 36 sends in one unbroken run the loop waits for a CLICK
-    // before sending more. "Too frequently" toasts are a throttle (cool-down +
-    // tighter pacing), never reported as a suspension.
-    pacing: { minGapMs: 8000, maxGapMs: 20000, perHour: 30, breakEvery: 6, breakMinMs: 45000, breakMaxMs: 120000, perDay: 160, checkpointEvery: 36, noResend: true, label: "DeepSeek gentle mode", apiPage: "codecraft.html?api=deepseek", apiLabel: "Open DeepSeek API chat", apiHint: "The only route DeepSeek cannot suspend for cadence is its official API: TotalScript has a built-in DeepSeek API chat (popup → DeepSeek API chat, your own sk- key from platform.deepseek.com, pay as you go) where the agent runs at full speed." },
     scanAccountBlock,
     init({ diag: d } = {}) {
       if (d) diag = d;

@@ -1,7 +1,7 @@
 "use strict";
-// 2.13.0 — shared loader for the SIMULATED benchmarks: evaluates every chat-site
+// 2.14.0 — shared loader for the SIMULATED benchmarks: evaluates every chat-site
 // provider adapter from manifest.json inside a minimal window mock and returns
-// its REAL flags (ids, budgets, pacing, command format). Copied from
+// its REAL flags (ids, budgets, command format). Copied from
 // test-provider-bench.js so both benchmarks load exactly the same adapters.
 // Nothing here contacts a provider.
 const fs = require("fs"), path = require("path"), vm = require("vm");

@@ -86,7 +86,7 @@ chrome.storage?.onChanged.addListener((changes, area) => {
 // Chat sites where an TotalScript provider content script runs. Status pushes go
 // to every tab matching these. Add the new provider's URL pattern here (and in
 // manifest.json content_scripts + host_permissions) when integrating another AI.
-const PROVIDER_URLS = ["https://chat.deepseek.com/*", "https://deepseek.com/*", "https://chatgpt.com/*", "https://chat.openai.com/*", "https://claude.ai/*", "https://www.claude.ai/*", "https://claude.com/*", "https://www.claude.com/*", "https://gemini.google.com/*", "https://kimi.ai/*", "https://www.kimi.ai/*", "https://chat.z.ai/*", "https://chat.qwen.ai/*", "https://arena.ai/*", "https://www.meta.ai/*", "https://meta.ai/*", "https://c.vani.ai/*", "https://overchat.ai/*", "https://*.overchat.ai/*", "https://huggingface.co/chat/*", "https://openrouter.ai/*", "https://www.openrouter.ai/*", "https://feather-chat-link.base44.app/*", "https://www.notion.so/*", "https://app.notion.so/*", "https://www.notion.com/*", "https://notion.com/*", "https://*.notion.com/*"];
+const PROVIDER_URLS = ["https://chat.deepseek.com/*", "https://deepseek.com/*", "https://chatgpt.com/*", "https://chat.openai.com/*", "https://claude.ai/*", "https://www.claude.ai/*", "https://claude.com/*", "https://www.claude.com/*", "https://gemini.google.com/*", "https://kimi.ai/*", "https://www.kimi.ai/*", "https://chat.z.ai/*", "https://chat.qwen.ai/*", "https://arena.ai/*", "https://c.vani.ai/*", "https://huggingface.co/chat/*", "https://openrouter.ai/*", "https://www.openrouter.ai/*", "https://www.notion.so/*", "https://app.notion.so/*", "https://www.notion.com/*", "https://notion.com/*", "https://*.notion.com/*"];
 // CodeCraft API has no web chat: TotalScript hosts one at codecraft.html (an
 // extension page), which runs the same bundle and needs the same broadcasts.
 const CODECRAFT_PAGE = "codecraft.html";
@@ -1823,13 +1823,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // Only pages we ship may be opened this way (the AI switcher on a web
         // page cannot open chrome-extension:// URLs itself).
         const page = String(msg.page || "");
-        // 1.99.0: the API chat page takes a profile query (codecraft.html?api=deepseek)
-        const pm = page.match(/^([a-z]+\.html)(?:\?api=([a-z]+))?$/);
-        if (!pm || pm[1] !== CODECRAFT_PAGE) { sendResponse({ ok: false, error: "unknown extension page" }); break; }
-        const base = chrome.runtime.getURL(pm[1]);
-        const url = pm[2] ? base + "?api=" + pm[2] : base;
+        // 2.14.0: only the CodeCraft page itself (the API-profile query went with the DeepSeek API chat)
+        if (page !== CODECRAFT_PAGE) { sendResponse({ ok: false, error: "unknown extension page" }); break; }
+        const url = chrome.runtime.getURL(CODECRAFT_PAGE);
         try {
-          const tabs = (await chrome.tabs.query({ url: base + "*" })).filter((t) => (pm[2] ? String(t.url || "").includes("api=" + pm[2]) : !/[?&]api=/.test(String(t.url || ""))));
+          const tabs = await chrome.tabs.query({ url: url + "*" });
           if (tabs.length) { await chrome.tabs.update(tabs[0].id, { active: true }); try { await chrome.windows.update(tabs[0].windowId, { focused: true }); } catch {} }
           else await chrome.tabs.create({ url });
           sendResponse({ ok: true });
@@ -2089,7 +2087,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: true });
         break;
       }
-      // 2.13.0: a content-script note for the Activity Center (creation report
+      // 2.14.0: a content-script note for the Activity Center (creation report
       // summary). Kind + level are whitelisted, text is a short derived summary
       // (counts and domain names - never the request or the reply).
       case "activity_note": {

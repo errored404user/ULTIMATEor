@@ -33,7 +33,7 @@
 // content script (window.TotalOrchestrator).
 const TotalOrchestrator = (() => {
   "use strict";
-  const VERSION = "2.13.0";
+  const VERSION = "2.14.0";
 
   // ───────────────────────── 1. task understanding ─────────────────────────
   const CATEGORY_RE = {
@@ -182,11 +182,11 @@ const TotalOrchestrator = (() => {
     context_limit: { retryable: false, hint: "The conversation is too long for this model - open a fresh chat and continue there." },
     // 1.99.0: the ACCOUNT (not this request) was suspended or throttled for bot-like
     // use of the web chat. Never retried - every extra message lengthens the ban.
-    account_block: { retryable: false, hint: "The provider suspended or throttled this ACCOUNT for bot-like use of its web chat. TotalScript stopped and will not resend. Wait the stated time out, keep automatic messages paced (gentle mode), and for heavy automation use the desktop app with your own official API key." },
+    account_block: { retryable: false, hint: "The provider suspended or throttled this ACCOUNT for bot-like use of its web chat. TotalScript stopped and will not resend. Wait the stated time out; for heavy automation use the desktop app with your own official API key." },
     // 1.99.3: "you are sending messages too frequently" - a slow-down request, NOT
     // a suspension. One retry of the undelivered message after a long cool-down
-    // (minutes, like a person would), pacing tightened for the rest of the session.
-    throttled: { retryable: true, hint: "The provider asked to slow down (not a suspension). TotalScript cools down for a few minutes, retries the undelivered message once with tighter pacing, and otherwise stops so you can resume later." },
+    // (minutes, like a person would).
+    throttled: { retryable: true, hint: "The provider asked to slow down (not a suspension). TotalScript cools down for a few minutes, retries the undelivered message once, and otherwise stops so you can resume later." },
     rate_limit: { retryable: true, hint: "The provider is rate limiting this account - TotalScript waits and retries, then stops if it persists." },
     quota: { retryable: false, hint: "The account's usage allowance / credits are exhausted - wait for the reset or switch provider." },
     auth: { retryable: false, hint: "The session or API key is not accepted - sign in again / check the key, then press Start." },
@@ -238,90 +238,6 @@ const TotalOrchestrator = (() => {
     if (!m) return null;
     const d = new Date(m[1].replace(/,\s*(\d{1,2}:\d{2})$/, " $1"));
     return isNaN(d.getTime()) ? null : d;
-  }
-
-  // ── 1.99.0 gentle pacing ──────────────────────────────────────────────────
-  // paceDelay(sendLog, now, pacing, jitter) → { waitMs, reason, sentLastHour }.
-  // sendLog: timestamps (ms) of earlier sends; pacing: the provider's contract
-  // { minGapMs, maxGapMs, perHour }; jitter: 0..1 (caller passes Math.random()).
-  // The gap keeps automatic turns at a human cadence instead of firing the next
-  // message the millisecond a reply ends; the hourly budget caps a long agent run
-  // at what a person could plausibly type. Pure so it can be unit-tested.
-  function paceDelay(sendLog, now, pacing, jitter) {
-    const log = Array.isArray(sendLog) ? sendLog : [];
-    const p = pacing || {};
-    const hour = 3600000;
-    const recent = log.filter((t) => now - t < hour);
-    let waitMs = 0;
-    let reason = null;
-    const minGap = Math.max(0, Number(p.minGapMs) || 0);
-    const maxGap = Math.max(minGap, Number(p.maxGapMs) || minGap);
-    const last = log.length ? Math.max.apply(null, log) : null;
-    if (last != null && minGap > 0) {
-      const j = Math.min(1, Math.max(0, Number(jitter) || 0));
-      const gap = Math.round(minGap + (maxGap - minGap) * j);
-      if (now - last < gap) { waitMs = gap - (now - last); reason = "gap"; }
-    }
-    const perHour = Number(p.perHour) || 0;
-    if (perHour > 0 && recent.length >= perHour) {
-      const oldest = Math.min.apply(null, recent);
-      const until = oldest + hour - now;
-      if (until > waitMs) { waitMs = until; reason = "budget"; }
-    }
-    // 1.99.3 additive fields (all optional, 0/absent = off):
-    //   breakEvery / breakMinMs / breakMaxMs - after every N sends of an unbroken
-    //     streak (gaps < 10 min) the next send waits a longer "break" instead of
-    //     the usual gap. Steady 8-20 s metronome ticks for an hour are the thing
-    //     a cadence detector sees; people pause.
-    //   perDay - rolling 24 h cap on everything this tab sent (reason "day").
-    //   checkpointEvery - after N sends in one unbroken streak the plan carries
-    //     `checkpoint: true`: the caller must get a human click before sending
-    //     more. Nothing waits on a timer here; a person has to be present.
-    const dayMs = 86400000;
-    const today = log.filter((t) => now - t < dayMs);
-    const streak = streakLength(log, now);
-    const breakEvery = Number(p.breakEvery) || 0;
-    if (breakEvery > 0 && last != null && streak > 0 && streak % breakEvery === 0) {
-      const bmin = Math.max(0, Number(p.breakMinMs) || 60000);
-      const bmax = Math.max(bmin, Number(p.breakMaxMs) || bmin);
-      const j = Math.min(1, Math.max(0, Number(jitter) || 0));
-      const brk = Math.round(bmin + (bmax - bmin) * j);
-      if (now - last < brk && brk - (now - last) > waitMs) { waitMs = brk - (now - last); reason = "break"; }
-    }
-    const perDay = Number(p.perDay) || 0;
-    if (perDay > 0 && today.length >= perDay) {
-      const oldest = Math.min.apply(null, today);
-      const until = oldest + dayMs - now;
-      if (until > waitMs) { waitMs = until; reason = "day"; }
-    }
-    const checkpointEvery = Number(p.checkpointEvery) || 0;
-    const checkpoint = checkpointEvery > 0 && streak > 0 && streak % checkpointEvery === 0 && last != null && now - last < 600000;
-    return { waitMs: Math.max(0, waitMs), reason, sentLastHour: recent.length, sentToday: today.length, streak, checkpoint };
-  }
-  // streakLength(sendLog, now) → number of most-recent sends with < 10 min between
-  // neighbours (0 when the last send is itself older than 10 min = streak over).
-  function streakLength(sendLog, now) {
-    const log = (Array.isArray(sendLog) ? sendLog : []).slice().sort((a, b) => a - b);
-    if (!log.length || now - log[log.length - 1] >= 600000) return 0;
-    let n = 1;
-    for (let i = log.length - 1; i > 0; i--) { if (log[i] - log[i - 1] < 600000) n++; else break; }
-    return n;
-  }
-  // tightenPacing(pacing, strikes) → a stricter copy of the contract after the
-  // site asked to slow down `strikes` times this session: gaps double, the
-  // hourly budget halves (floor 4/h), the break comes sooner. Capped at 3
-  // strikes (x8). Pure - the caller keeps the strike count.
-  function tightenPacing(pacing, strikes) {
-    const p = Object.assign({}, pacing || {});
-    const s = Math.min(3, Math.max(0, strikes | 0));
-    if (!s) return p;
-    const f = Math.pow(2, s);
-    if (p.minGapMs) p.minGapMs = p.minGapMs * f;
-    if (p.maxGapMs) p.maxGapMs = p.maxGapMs * f;
-    if (p.perHour) p.perHour = Math.max(4, Math.floor(p.perHour / f));
-    if (p.breakEvery) p.breakEvery = Math.max(2, Math.ceil(p.breakEvery / 2));
-    p.strikes = s;
-    return p;
   }
 
   // retryDelay(cls, attempt /*1-based*/, waitMs) → ms to wait before retry
@@ -462,21 +378,15 @@ const TotalOrchestrator = (() => {
       tightPrompt: !!(num("sysMaxChars") && num("sysMaxChars") < 16000) || !!P.compactCommandList,
       timings: { genIdleMs: T.GEN_IDLE_MS || null, reasonIdleMs: T.REASON_IDLE_MS || null, warmupMs: T.WARMUP_MS || null, reasonNoReplyMs: T.REASON_NOREPLY_MS || null, stableMs: T.STABLE_MS || null, responseTimeoutMs: T.RESPONSE_TIMEOUT_MS || null, prestartMs: T.PRESTART_MS || null, genStopGraceMs: T.GEN_STOP_GRACE_MS || null },
       promptExtra: typeof P.promptExtra === "string" ? P.promptExtra.length : 0,
-      // 2.13.0 — creation-engine inputs (real adapter fields only):
-      //   pacing        the adapter's human-cadence contract (DeepSeek) or null
-      //   pacingNoResend  true = the contract forbids automatic re-sends; the
-      //                 creation / mode / effort gates then only REPORT
+      // 2.14.0 — creation-engine inputs (real adapter fields only):
       //   commandFormat "plain" = the adapter cannot carry fenced-json commands
       //                 (Vani); the loop uses the bare ###LUA### protocol
       //   commandlessRetries  how many "no command in the reply" retries the
       //                 adapter asks for (Vani 2); null = loop default
-      pacing: P.pacing && typeof P.pacing === "object" ? { minGapMs: num2(P.pacing.minGapMs), maxGapMs: num2(P.pacing.maxGapMs), perHour: num2(P.pacing.perHour), perDay: num2(P.pacing.perDay), noResend: !!P.pacing.noResend } : null,
-      pacingNoResend: !!(P.pacing && P.pacing.noResend),
       commandFormat: P.commandFormat === "plain" ? "plain" : "json",
       commandlessRetries: Number.isFinite(Number(P.commandlessRetries)) ? Math.max(0, Math.min(5, Number(P.commandlessRetries))) : null,
     };
   }
-  const num2 = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null);
 
   // ───────────────────────── 7. redaction ─────────────────────────
   const SECRET_RES = [
@@ -623,7 +533,7 @@ const TotalOrchestrator = (() => {
     }
   }
 
-  return { VERSION, classifyTask, taskLayer, classifyProviderError, retryDelay, ERROR_CLASSES, ACCOUNT_BLOCK_RE, ACCOUNT_SUSPEND_RE, THROTTLE_RE, suspendedUntil, paceDelay, streakLength, tightenPacing, validateToolArgs, argProblemsMessage, claimsCompletion, FEEDBACK, capabilities, redact, redactData, CATEGORY_LABEL, compactFeedback, PROBLEM_LINE_RE };
+  return { VERSION, classifyTask, taskLayer, classifyProviderError, retryDelay, ERROR_CLASSES, ACCOUNT_BLOCK_RE, ACCOUNT_SUSPEND_RE, THROTTLE_RE, suspendedUntil, validateToolArgs, argProblemsMessage, claimsCompletion, FEEDBACK, capabilities, redact, redactData, CATEGORY_LABEL, compactFeedback, PROBLEM_LINE_RE };
 })();
 if (typeof window !== "undefined") window.TotalOrchestrator = TotalOrchestrator;
 if (typeof module !== "undefined" && module.exports) module.exports = TotalOrchestrator;

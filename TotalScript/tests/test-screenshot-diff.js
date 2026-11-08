@@ -1,7 +1,7 @@
 // 2.3.0 — screenshot_compare / total_screenshot {compare:true}.
 // A: pure pixel maths of src/core/screenshot_diff.js on synthetic images
 //    (no browser, no decoder). B: capture memory + compare() with an injected
-//    decoder. C: wiring (manifest x12, codecraft.html, virtual tool, gate
+//    decoder. C: wiring (manifest x11, codecraft.html, virtual tool, gate
 //    proof, handler). D: jsdom boot of the real page - total_screenshot
 //    {target:"tab"} twice with a mocked tab capture, second call compare:true
 //    reports NO VISIBLE CHANGE / CHANGE through the real dispatcher.
@@ -73,7 +73,7 @@ ok("A12 describe(): CHANGE text carries %, scale words, bbox and regions; >= 60%
 
   // ── C. wiring ─────────────────────────────────────────────────────────────
   const main = fs.readFileSync("src/core/main.js", "utf8"), manifest = fs.readFileSync("manifest.json", "utf8"), cc = fs.readFileSync("codecraft.html", "utf8");
-  ok("C1 manifest lists screenshot_diff.js right after screenshot.js in all 12 bundles; codecraft.html loads it", (manifest.match(/"src\/core\/screenshot\.js",\n\s+"src\/core\/screenshot_diff\.js",/g) || []).length === 12 && /screenshot\.js"><\/script>\n\s*<script src="src\/core\/screenshot_diff\.js">/.test(cc));
+  ok("C1 manifest lists screenshot_diff.js right after screenshot.js in all 11 bundles; codecraft.html loads it", (manifest.match(/"src\/core\/screenshot\.js",\n\s+"src\/core\/screenshot_diff\.js",/g) || []).length === 11 && /screenshot\.js"><\/script>\n\s*<script src="src\/core\/screenshot_diff\.js">/.test(cc));
   ok("C2 total_screenshot schema gained compare / label / threshold and a screenshot_compare virtual tool is injected", /compare: \{ type: "boolean", description: "2\.3\.0: also measure the pixel delta/.test(main) && /name: "screenshot_compare",/.test(main) && /op: \{ type: "string", enum: \["compare", "list"\]/.test(main));
   ok("C3 the handler remembers every capture and appends the compare note; screenshot_compare has its own handler", /TotalScreenshotDiff\.remember\(result\.images\[0\], args\.label \|\| ""\)/.test(main) && /return result\.text \+ compareNote;/.test(main) && /if \(name === "screenshot_compare"\) \{/.test(main));
   ok("C4 the LOOK gate accepts screenshot_compare as proof and the helper lists carry it next to total_screenshot", /proof: \/\^\(total_screenshot\|screenshot_compare\|gfx_capture/.test(main) && (main.match(/"total_screenshot", "screenshot_compare", "total_debug"/g) || []).length === 2);
@@ -118,7 +118,7 @@ ok("A12 describe(): CHANGE text carries %, scale words, bbox and regions; >= 60%
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const until = Date.now() + 10000; while (Date.now() < until && !d.getElementById("rs-bar")) await sleep(50);
   await sleep(600);
-  ok("D1 page boots with screenshot_diff.js loaded (window.TotalScreenshotDiff) and no script errors", !!d.getElementById("rs-bar") && w.TotalScreenshotDiff && w.TotalScreenshotDiff.VERSION === "2.13.0" && errs.length === 0, errs.slice(0, 3));
+  ok("D1 page boots with screenshot_diff.js loaded (window.TotalScreenshotDiff) and no script errors", !!d.getElementById("rs-bar") && w.TotalScreenshotDiff && w.TotalScreenshotDiff.VERSION === "2.14.0" && errs.length === 0, errs.slice(0, 3));
   w.TotalScreenshotDiff.setDecoder(async (mime, data) => frames[Buffer.from(data, "base64").toString()]);
   const run = (tool, args) => w.__rsRunTool({ tool, arguments: args || {} });
   let out = await run("screenshot_compare", {});

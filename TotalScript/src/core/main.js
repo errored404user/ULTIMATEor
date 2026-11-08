@@ -927,20 +927,14 @@
     { name: "GLM", url: "https://chat.z.ai/" },
     { name: "Qwen", url: "https://chat.qwen.ai/" },
     { name: "Arena", url: "https://arena.ai/text/direct" },
-    { name: "Meta AI", url: "https://www.meta.ai/" },
     { name: "Vani Chat", url: "https://c.vani.ai/chat" },
     // CodeCraft is an OpenAI-compatible API with no web chat: TotalScript hosts
     // the chat itself (codecraft.html, bring-your-own cc_ key). The page URL
     // is extension-local, so it opens through the background worker.
     { name: "CodeCraft API", url: CODECRAFT_PAGE_URL, host: "codecraftapi.com · in TotalScript", extensionPage: "codecraft.html" },
-    // 1.99.0: DeepSeek's official API on the same page (?api=deepseek, own sk- key) -
-    // the route that chat.deepseek.com's account suspensions cannot touch.
-    { name: "DeepSeek API", url: CODECRAFT_PAGE_URL + "?api=deepseek", host: "api.deepseek.com · in TotalScript", extensionPage: "codecraft.html?api=deepseek" },
     { name: "Notion AI", url: "https://www.notion.so/chat" },
-    { name: "Overchat", url: "https://overchat.ai/" },
     { name: "HuggingChat", url: "https://huggingface.co/chat/" },
     { name: "OpenRouter Chat", url: "https://openrouter.ai/chat" },
-    { name: "FeatherRBLX", url: "https://feather-chat-link.base44.app/" },
   ];
 
   const A = {
@@ -1079,11 +1073,11 @@
     workmode:{title:"Work mode: Totality",summary:"There is ONE built-in work mode, Totality (named Creation until 1.73): the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. Custom Public-Skill modes layer their own mandate on top of it.",details:["Totality runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → total_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Totality automatically; custom modes created on an old base keep working on Totality.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send.","Two more built-in modes sit next to Totality: Blender (1.95.0, stored id blender - Blender-first 3D asset pipeline -> Studio) and Animator (1.99.4, stored id animate - rig -> clip -> animation_preview on the actual rig -> playback code through the Animator -> play-test, on R6 and R15; its RIG and PLAYBACK gates demand a preview and a play-tested playback script). The old pre-1.39 Animator id still migrates to Totality; the new mode is a different id."],howTo:["TotalScript menu → Work mode → Totality (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
     projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .totalscript-project-reference.json you can re-import."],howTo:["TotalScript menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
     permissions:{title:"Access: Sandbox only / Full PC",summary:"Two states since 1.99.5. Sandbox only (default) = Studio + the workspace folder; commands that leave it (run_command, process_kill, delete_path, move_path, download_file, open_path, execute_blender_code, blender_export_fbx) are refused with ERROR ACCESS_SANDBOX - no approval card. Full PC = those run directly and total-core's FULL PC ACCESS is switched on with it.",details:["Sandbox only never asks and never runs anything on the PC - ideal for Studio-only work; the refusal tells you which step needs Full PC and offers a one-click switch.","Full PC is one switch in two places: Settings → Access and the Session panel's Danger zone. Picking it persists rsPermMode and pushes FULL PC ACCESS to total-core (the agent's own state is mirrored back into the Session panel).","The old Ask state (confirm every write) was removed; a stored 'ask' reads as Sandbox only.","Publishing / marketplace changes always show a confirmation card unless the 'Allow publish automation' switch is on; it auto-denies after 120 s so a hidden card cannot stall the agent."],howTo:["TotalScript menu → Access → Sandbox only / Full PC","Session panel → Danger zone → FULL PC (same switch)"]},
-    providers:{title:"Chat providers",summary:"TotalScript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Meta, Arena, Notion, Vani, MultiChat and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["CodeCraft API (codecraftapi.com) has no web chat, so TotalScript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","DeepSeek API (1.99.1): the same hosted page pointed at api.deepseek.com with your own sk- key from platform.deepseek.com - the official API is not subject to the chat.deepseek.com account suspensions, so the agent runs at full speed there (popup → DeepSeek API chat, or the AI switcher → DeepSeek API). Gentle pacing on chat.deepseek.com only lowers the risk; it cannot remove it.","Compact composers (Notion, Vani, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the TotalScript bar appears above the composer"]},
+    providers:{title:"Chat providers",summary:"TotalScript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Arena, Notion, Vani, HuggingChat, OpenRouter Chat and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["CodeCraft API (codecraftapi.com) has no web chat, so TotalScript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","Compact composers (Notion, Vani, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the TotalScript bar appears above the composer"]},
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for a publish confirmation card (it auto-denies after 120 s). A PC command refused in Sandbox only is not a wait - the chat gets ERROR ACCESS_SANDBOX at once and a banner offers Switch to Full PC.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
-    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.13.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
+    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.14.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
   };
   try { window.__rsFeatureHelpTopics = FEATURE_HELP_TOPICS; } catch {}
   const CREATOR_TOOLS=[
@@ -1230,81 +1224,6 @@
     return txt.length > 0 && (txt === snap.text || txt === snap.reply);
   }
 
-  // 1.99.0: gentle pacing switch (settings tray → "Gentle pacing", default ON;
-  // only shown for providers that publish a P.pacing contract).
-  function gentlePacingOn() {
-    try { return !(window.__rsGentlePacing && window.__rsGentlePacing() === false); } catch { return true; }
-  }
-  // 1.99.0: the banner action that opens the provider's official-API chat page
-  // (P.pacing.apiPage, e.g. "codecraft.html?api=deepseek") through the background worker.
-  function apiPageAction() {
-    const page = P.pacing && P.pacing.apiPage;
-    if (!page) return null;
-    return { label: P.pacing.apiLabel || "Open the API chat", onClick: () => { bg({ type: "rs-open-extension-page", page }).catch(() => {}); } };
-  }
-  // 1.99.3: the send log is SHARED across tabs and SURVIVES reloads
-  // (chrome.storage.local "rsSendLog:<provider>", rolling 24 h). Until 1.99.2 it
-  // lived in memory only, so a reload - or a second DeepSeek tab - started from
-  // an empty log and could fire 30 more messages at once: exactly the burst the
-  // hourly budget exists to prevent. Merge-on-read, append-on-send; a lost
-  // entry in a two-tab race only makes the pacing slightly LESS strict, never
-  // more permissive than one tab alone.
-  function sendLogKey() { return "rsSendLog:" + (P && P.id || "provider"); }
-  function sendLogMerge(stored) {
-    const cut = Date.now() - 86400000;
-    const all = (A.sendLog || []).concat(Array.isArray(stored) ? stored : []).filter((t) => typeof t === "number" && t > cut);
-    A.sendLog = Array.from(new Set(all)).sort((a, b) => a - b);
-    return A.sendLog;
-  }
-  function sendLogLoad() {
-    return new Promise((res) => {
-      try { chrome.storage.local.get([sendLogKey()], (r) => res(sendLogMerge(r && r[sendLogKey()]))); }
-      catch { res(sendLogMerge(null)); }
-    });
-  }
-  function sendLogRecord(t) {
-    (A.sendLog = A.sendLog || []).push(t);
-    if (!P.pacing) return;
-    try { chrome.storage.local.get([sendLogKey()], (r) => { try { chrome.storage.local.set({ [sendLogKey()]: sendLogMerge(r && r[sendLogKey()]) }); } catch {} }); } catch {}
-  }
-  // 1.99.3: the contract actually applied = the provider's, tightened once per
-  // "slow down" the site sent this session (A.paceStrikes; orchestrator.tightenPacing).
-  function effectivePacing() {
-    return ORCH && ORCH.tightenPacing ? ORCH.tightenPacing(P.pacing, A.paceStrikes || 0) : P.pacing;
-  }
-  // 1.99.3: human checkpoint. After `checkpointEvery` sends in one unbroken
-  // streak the loop does not time out into the next message - it waits for a
-  // CLICK. Resolves true on the click, false on Stop. The point is that a person
-  // is demonstrably present every N automatic turns; nothing here is hidden
-  // from the site and nothing is sent until the click.
-  function humanCheckpoint(plan) {
-    return new Promise((res) => {
-      let done = false;
-      const finish = (v) => { if (done) return; done = true; A._checkpointOpen = false; res(v); };
-      A._checkpointOpen = true;
-      diag("send.checkpoint", { streak: plan.streak, sentLastHour: plan.sentLastHour });
-      try { ui.steeringProgress("sending", `Paused after ${plan.streak} messages in a row — click Continue when you're back`, 0); } catch {}
-      ui.banner("info", `${P.pacing.label || P.displayName}: still there?`,
-        `${plan.streak} messages went out in one unbroken run (${plan.sentLastHour} this hour). To keep this session looking like a person at the keyboard, TotalScript waits for you before sending more. Nothing was lost - click Continue to carry on, or Stop.`,
-        { label: "Continue", onClick: () => finish(true) });
-      const tick = setInterval(() => { if (A.stop) { clearInterval(tick); finish(false); } if (done) clearInterval(tick); }, 300);
-    });
-  }
-  // One-time explanation of WHY the loop is paced on this site + the official
-  // API route for heavy automation. Shown once per install (storage flag).
-  function gentleNoticeOnce() {
-    if (A._gentleNoticed || !P.pacing) return;
-    A._gentleNoticed = true;
-    try {
-      chrome.storage.local.get(["rsGentleNoticeShown"], (r) => {
-        if (r && r.rsGentleNoticeShown) return;
-        try { chrome.storage.local.set({ rsGentleNoticeShown: Date.now() }); } catch {}
-        ui.banner("info", P.pacing.label || "Gentle mode",
-          `${P.displayName} suspends web-chat accounts for bot-like use (dozens of messages per hour, instant follow-ups). TotalScript paces its automatic messages here (${Math.round((P.pacing.minGapMs || 0) / 1000)}–${Math.round((P.pacing.maxGapMs || 0) / 1000)} s apart, at most ${P.pacing.perHour}/hour${P.pacing.breakEvery ? `, a longer break every ${P.pacing.breakEvery}` : ""}${P.pacing.checkpointEvery ? `, and it asks you to click Continue after ${P.pacing.checkpointEvery} in a row` : ""}), skips its optional nudges and never re-sends after a failed turn - that lowers the risk but cannot remove it. ${P.pacing.apiHint || ""} You can switch the pacing off in Settings → Gentle pacing.`, apiPageAction());
-      });
-    } catch {}
-  }
-
   async function submitAndGetBase(text, images) {
     // ── Duplicate-submit suppression ──
     // The retry loop below can legitimately resend when a send clearly didn't
@@ -1324,47 +1243,6 @@
     if (!images && A._lastSubmit && A._lastSubmit.sig === _sig && !A._lastSubmit.answered && Date.now() - A._lastSubmit.at < 2500) {
       diag("send.duplicateSuppressed", {});
       return P.assistantCount();
-    }
-    // ── 1.99.0 gentle pacing (per-provider contract P.pacing, e.g. DeepSeek) ──
-    // Automatic turns are held to a human cadence (random gap inside
-    // [minGapMs, maxGapMs]) and to perHour sends per rolling hour. The user's own
-    // message (A.userSend, set by the start paths) never waits for the hourly
-    // budget - a person pressing Send is exactly the behaviour the site expects.
-    // Pure math lives in orchestrator.paceDelay; this only waits and reports.
-    const userSend = !!A.userSend; A.userSend = false;
-    if (P.pacing && gentlePacingOn() && ORCH && ORCH.paceDelay) {
-      await sendLogLoad();   // 1.99.3: other tabs' and pre-reload sends count too
-      const pacing = effectivePacing();
-      let plan = ORCH.paceDelay(A.sendLog, Date.now(), pacing, Math.random());
-      // The person's own message never waits for a budget, a break or a
-      // checkpoint - only the short gap (two sends 200 ms apart is not typing).
-      if (userSend && plan.reason !== "gap") plan = ORCH.paceDelay(A.sendLog, Date.now(), { minGapMs: pacing.minGapMs, maxGapMs: pacing.maxGapMs }, Math.random());
-      if (userSend) plan.checkpoint = false;
-      if (plan.checkpoint && !A.stop) {
-        const go = await humanCheckpoint(plan);
-        if (!go || A.stop) { diag("send.pacedCancelled", { at: "checkpoint" }); return P.assistantCount(); }
-        plan = ORCH.paceDelay(A.sendLog, Date.now(), pacing, Math.random());   // re-plan after the click
-      }
-      if (plan.waitMs > 0 && !A.stop) {
-        diag("send.paced", { waitMs: plan.waitMs, reason: plan.reason, sentLastHour: plan.sentLastHour, streak: plan.streak, strikes: A.paceStrikes || 0 });
-        const secs = Math.ceil(plan.waitMs / 1000);
-        const human = secs >= 90 ? Math.ceil(secs / 60) + " min" : secs + " s";
-        if (plan.reason === "budget") ui.toast(`${P.pacing.label || P.displayName}: ${plan.sentLastHour} messages this hour — next one in ${human} (Stop to cancel)`);
-        else if (plan.reason === "break") ui.toast(`${P.pacing.label || P.displayName}: short break after ${plan.streak} messages — next one in ${human}`);
-        else if (plan.reason === "day") ui.toast(`${P.pacing.label || P.displayName}: ${plan.sentToday} messages in 24 h — next one in ${human} (Stop to cancel)`);
-        try {
-          ui.steeringProgress("sending",
-            plan.reason === "budget" ? `Hourly budget reached (${plan.sentLastHour}/${pacing.perHour}) — waiting ${human}`
-            : plan.reason === "break" ? `Taking a break (${plan.streak} messages in a row) — ${human}`
-            : plan.reason === "day" ? `Daily budget reached (${plan.sentToday}/${pacing.perDay}) — waiting ${human}`
-            : `Pacing — next message in ${secs} s`, 0);
-        } catch {}
-        const t0 = Date.now();
-        while (Date.now() - t0 < plan.waitMs && !A.stop) await sleep(250);
-        if (A.stop) { diag("send.pacedCancelled", {}); return P.assistantCount(); }
-      }
-      A._pacedSend = true; // stamped into A.sendLog when the message actually lands (below)
-      gentleNoticeOnce();
     }
     A._lastSubmit = { sig: _sig, at: Date.now(), answered: false };
     A.lastSent = { text: String(text), images: images || null, at: Date.now() }; // 1.69: re-sent verbatim after a transient provider error
@@ -1403,7 +1281,7 @@
       // v1.10 rule was "never type/send while the tab is HIDDEN" - background
       // tabs throttle rendering, which made the landed-check unreliable and
       // duplicated sends. v1.12 background mode keeps sending in hidden tabs
-      // (the worker ticker keeps the pacing honest and the tail-fingerprint
+      // (the worker ticker keeps the cadence honest and the tail-fingerprint
       // below is count-independent); without background mode we still park.
       let tries = 0;
       let messageSent = false;
@@ -1442,7 +1320,6 @@
         tries++;
       }
       if (messageSent) diag("send.cleared", { tries });
-      if (A._pacedSend && (messageSent || landed())) { A._pacedSend = false; sendLogRecord(Date.now()); }
       // All retries exhausted with NO evidence the message landed (textarea never
       // cleared, no new turn). Silently returning here left the loop waiting for
       // a reply that will never come (~60s "empty" timeout) with zero explanation
@@ -2291,7 +2168,7 @@
         + "\nDo not acknowledge this note; do it, then give the final report with that evidence.";
     } catch { return ""; }
   }
-  // 2.13.0: CREATION TRACKER - per user message: the request → structured spec
+  // 2.14.0: CREATION TRACKER - per user message: the request → structured spec
   // (deliverables, integration checks, stages) + the run tracker that follows
   // every executed command (coverage, integration evidence, static Luau review,
   // bounded creation checks, end-of-run report). Profile = the user's creation
@@ -2304,7 +2181,7 @@
     try { mode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
     try { engine = activeEngine(); } catch {}
     try { profile = (window.__rsCreationProfile && window.__rsCreationProfile()) || "high"; } catch {}
-    try { caps = Object.assign({}, (ORCH && ORCH.capabilities(P)) || {}, { noResend: !!(P.pacing && P.pacing.noResend && gentlePacingOn()) }); } catch {}
+    try { caps = Object.assign({}, (ORCH && ORCH.capabilities(P)) || {}); } catch {}
     const sp = TotalCreation.spec(text, { task, prev: prevSpec, mode, engine, profile });
     A.creation = TotalCreation.tracker(sp, { profile: TotalCreation.profileFor(sp.profile, caps) });
     A.creation.briefSent = false;
@@ -5913,7 +5790,7 @@
                         // Stop click that landed before this loop actually started
     A.loopKey = null; // pinned by syncSessionState once this chat has an id + content
     let truncCount = 0;
-    const MAX_TRUNC = P.pacing && gentlePacingOn() ? 2 : 6;   // 1.99.3: fewer Continue clicks per turn on paced sites
+    const MAX_TRUNC = 6;
     // Dead-turn auto-retry budget (v1.12): ONE rescue for a dropped/quiet turn
     // per loop. Reset on every healthy turn (tool result or final text) so an
     // hour-long session can survive multiple one-off site hiccups, while a
@@ -5923,12 +5800,6 @@
     let commandlessGaveUp = false; // 1.76.0: the give-up note fires once per run
     let parseRetries = 0;
     let providerRetries = 0; // 1.69: bounded re-send after a TRANSIENT provider error (rate limit / busy / network)
-    // 1.99.0: on a gentle-mode provider (P.pacing.noResend) a dead, empty or
-    // transiently failed turn is NOT re-sent - a second copy of the same message
-    // is the stop/regenerate pattern DeepSeek's abuse detection scores.
-    // Also gates the OPTIONAL follow-up nudges (verification gates, false-success,
-    // GUI-brief, extra commandless retries): each is one more automatic message.
-    const resendAllowed = () => !(P.pacing && P.pacing.noResend && gentlePacingOn());
     let falseSuccessNudged = false; // 1.69: one "you said done but nothing ran" correction per run
     let luaFenceNudged = false; // 1.81.0: one "shown ```lua is not executed" correction per run
     let modeGateRounds = 0; // 1.38.0: evidence gate per run (1.99.9: up to 2 rounds, see MODE_GATE_ROUNDS)
@@ -6002,13 +5873,11 @@
             // 1.99.3: "sending messages too frequently" = slow down, NOT a suspension
             // (1.99.0-1.99.2 reported this as "account blocked" - a false verdict).
             // The message was never delivered, so after a real cool-down (3+ min,
-            // or what the site asked) it is sent ONCE more, unchanged, with the
-            // pacing tightened for the rest of the session. A second throttle in
-            // the same run stops the loop - resume by hand later.
-            A.paceStrikes = (A.paceStrikes || 0) + 1;
+            // or what the site asked) it is sent ONCE more, unchanged. A second
+            // throttle in the same run stops the loop - resume by hand later.
             A.throttleRetries = A.throttleRetries || 0;
             const cool = ORCH && A.lastSent && !A.stop && A.started ? ORCH.retryDelay("throttled", A.throttleRetries + 1, cls.waitMs) : null;
-            diag("loop.throttled", { strikes: A.paceStrikes, coolMs: cool, detail: String(res.detail || "").slice(0, 120) });
+            diag("loop.throttled", { n: A.throttleRetries + 1, coolMs: cool, detail: String(res.detail || "").slice(0, 120) });
             if (cool != null) {
               A.throttleRetries++;
               const mins = Math.max(1, Math.round(cool / 60000));
@@ -6016,7 +5885,7 @@
               const t0 = Date.now();
               while (Date.now() - t0 < cool && !A.stop) {
                 const left = Math.ceil((cool - (Date.now() - t0)) / 1000);
-                ui.steeringProgress("correcting", `${P.displayName} asked to slow down — cooling down ${left >= 90 ? Math.ceil(left / 60) + " min" : left + " s"} (pacing tightened)`, toolTurns);
+                ui.steeringProgress("correcting", `${P.displayName} asked to slow down — cooling down ${left >= 90 ? Math.ceil(left / 60) + " min" : left + " s"}`, toolTurns);
                 await sleep(1000);
               }
               if (A.stop) break;
@@ -6026,10 +5895,10 @@
             }
             ui.steeringProgress("error", `${P.displayName} asked to slow down again — paused`, toolTurns);
             ui.banner("warn", `${P.displayName} asked to slow down`,
-              `${P.displayName} said: "${String(res.detail || "").slice(0, 160)}". This is a throttle, not a suspension. TotalScript stopped so the account does not accumulate strikes - wait a few minutes, then send "continue". ${(P.pacing && P.pacing.apiHint) || ""}`.trim(), apiPageAction());
+              `${P.displayName} said: "${String(res.detail || "").slice(0, 160)}". This is a throttle, not a suspension. TotalScript stopped so the account does not accumulate strikes - wait a few minutes, then send "continue".`);
             break;
           }
-          const wait = cls && cls.retryable && resendAllowed() && ORCH && A.lastSent && !A.stop && A.started ? ORCH.retryDelay(cls.cls, providerRetries + 1, cls.waitMs) : null;
+          const wait = cls && cls.retryable && ORCH && A.lastSent && !A.stop && A.started ? ORCH.retryDelay(cls.cls, providerRetries + 1, cls.waitMs) : null;
           if (wait != null) {
             providerRetries++;
             diag("loop.providerRetry", { cls: cls.cls, n: providerRetries, waitMs: wait });
@@ -6049,7 +5918,7 @@
             diag("loop.accountBlock", { until: A.accountBlockedUntil, detail: String(res.detail || "").slice(0, 120) });
             ui.steeringProgress("error", `${P.displayName} suspended this account`, toolTurns);
             ui.banner("warn", `${P.displayName} blocked this account${until ? " until " + until.toLocaleString() : ""}`,
-              `${P.displayName} said: "${String(res.detail || "").slice(0, 200)}". TotalScript stopped and will not resend anything. ${(P.pacing && P.pacing.apiHint) || ""}`.trim(), apiPageAction());
+              `${P.displayName} said: "${String(res.detail || "").slice(0, 200)}". TotalScript stopped and will not resend anything.`);
             break;
           }
           ui.steeringProgress("error", "The provider request failed", toolTurns);
@@ -6067,7 +5936,7 @@
           // One automatic retry (v1.12): flaky providers (GLM under load, Arena
           // busy pages, Qwen cold caches) sometimes just DROP a turn. A single
           // "continue" nudge rescues the run; a second failure still stops.
-          if (deadRetries < 1 && resendAllowed() && !A.stop && A.started) {
+          if (deadRetries < 1 && !A.stop && A.started) {
             deadRetries++;
             diag("loop.deadRetry", { kind: "timeout", n: deadRetries });
             ui.toast(P.displayName + " went quiet — retrying once…");
@@ -6089,7 +5958,7 @@
         if (res.kind === "empty") {
           diag("empty.end", { stale: !!res.stale });
           if (res.stale) ui.toast(P.displayName + " showed the previous reply again - it was NOT re-run");
-          if (deadRetries < 1 && resendAllowed() && !A.stop && A.started) {
+          if (deadRetries < 1 && !A.stop && A.started) {
             deadRetries++;
             diag("loop.deadRetry", { kind: "empty", n: deadRetries });
             ui.toast(P.displayName + " sent nothing — retrying once…");
@@ -6206,7 +6075,7 @@
           // 1.69: false-success guard - prose that reports the work as done while
           // NO command has run in this task gets ONE correction (truthful report
           // or real commands), never a silent "complete".
-          if (!falseSuccessNudged && resendAllowed() && !A.stop && toolTurns === 0 && A.task && A.task.mutates && ORCH && ORCH.claimsCompletion(body, toolTurns)) {
+          if (!falseSuccessNudged && !A.stop && toolTurns === 0 && A.task && A.task.mutates && ORCH && ORCH.claimsCompletion(body, toolTurns)) {
             falseSuccessNudged = true;
             diag("loop.falseSuccess", { intent: A.task.intent, primary: A.task.primary });
             try { ui.toast("The model reported success without running anything — asking for the real commands"); } catch {}
@@ -6234,7 +6103,7 @@
           // 1.76.0: a provider may ask for more than one rescue (Vani: 2, with an
           // escalating second note) and can report its request-shaper status so
           // the toast tells the user whether the protocol even reached the model.
-          const maxRefuse = resendAllowed() ? Math.max(1, Math.min(3, Number(P.commandlessRetries) || 1)) : 1; // gentle providers: one nudge, never a series
+          const maxRefuse = Math.max(1, Math.min(3, Number(P.commandlessRetries) || 1));
           const bridgeInfo = () => { try { return typeof P.bridgeStatus === "function" ? P.bridgeStatus() : null; } catch { return null; } };
           if (refuseRetries < maxRefuse && !A.stop && (isCapabilityRefuse(body) || providerCommandless)) {
             refuseRetries++;
@@ -6282,7 +6151,7 @@
           }
           // 1.51.2: brief delivered, model still only talking (no command yet)
           // → ONE nudge to act; a real one-line question is allowed through.
-          if (A.guiBrief && A.guiBrief.sent && !A.guiBrief.nudged && resendAllowed() && !A.stop && toolTurns === 0 && !/\?\s*$/.test(body.trim())) {
+          if (A.guiBrief && A.guiBrief.sent && !A.guiBrief.nudged && !A.stop && toolTurns === 0 && !/\?\s*$/.test(body.trim())) {
             A.guiBrief.nudged = true;
             diag("guiBrief.nudge", {});
             ui.steeringProgress("correcting", "GUI brief — asking the model to start with a command", toolTurns);
@@ -6290,14 +6159,14 @@
             base = await submitAndGetBase(RS.FEEDBACK.guiBriefAct + (state ? "\n" + state : ""));
             continue;
           }
-          // 2.13.0: CREATION COVERAGE GATE - the request's deliverables (spec)
+          // 2.14.0: CREATION COVERAGE GATE - the request's deliverables (spec)
           // against the command log: an item nobody built, an item built but
           // never read back (High+), a missing integration (GUI ↔ server remote,
           // DataStore ↔ pcall, sound never played …). Bounded by the creation
-          // profile (rounds), the provider (no re-sends under a pacing contract)
+          // profile (rounds), the provider capabilities
           // and a no-progress stop (a second round only when the first changed
           // something). The nudge text is derived from the log, never the reply.
-          if (A.creation && resendAllowed() && !A.stop && toolTurns >= 1) {
+          if (A.creation && !A.stop && toolTurns >= 1) {
             let cn = ""; try { cn = A.creation.nudge({ resendAllowed: true }); } catch {}
             if (cn) {
               diag("loop.creationGate", { round: A.creation.state.rounds, max: A.creation.profile.rounds, missing: (() => { try { return A.creation.missing().map((m) => m.id).slice(0, 12); } catch { return []; } })() });
@@ -6311,7 +6180,7 @@
           // 1.38.0: MODE EVIDENCE GATE - a run that mutated (scripts / visuals /
           // motion) but never ran the mode's proof command gets ONE verification
           // request before its final answer is accepted.
-          if (modeGateRounds < MODE_GATE_ROUNDS && resendAllowed() && !A.stop && toolTurns >= 2) {
+          if (modeGateRounds < MODE_GATE_ROUNDS && !A.stop && toolTurns >= 2) {
             const nudge = modeGateNudge(A.runTools);
             if (nudge) {
               modeGateRounds++;
@@ -6325,7 +6194,7 @@
           }
           // 1.60: REASONING EFFORT GATE - high+ runs that mutated must read back;
           // max+ get one final self-review; ultimate must playtest / audit.
-          if (resendAllowed() && !A.stop && toolTurns >= 1 && typeof TotalReasoning !== "undefined") {
+          if (!A.stop && toolTurns >= 1 && typeof TotalReasoning !== "undefined") {
             let g = null;
             try { g = TotalReasoning.gate(window.__rsThinkingLevel && window.__rsThinkingLevel(), A.runTools, effortGate, window.__rsEffortExtras && window.__rsEffortExtras()); } catch {}
             if (g && !effortGate[g.id]) {
@@ -6338,7 +6207,7 @@
               continue;
             }
           }
-          // 2.13.0: CREATION REPORT - one honest block per run with deliverables
+          // 2.14.0: CREATION REPORT - one honest block per run with deliverables
           // (built / read back / audited / missing), integration evidence, the
           // static-review tally and the rounds used. Shown in the Activity tab
           // + the popup Activity Center; never sent to the model.
@@ -6493,7 +6362,7 @@
           // 1.99.9: mode auto-check (read the created path back) - appended AFTER
           // compression so the fact line is never the part that gets dropped.
           try { feedback = await attachModeAutoCheck(call.tool, call.arguments, feedback); } catch {}
-          // 2.13.0: creation tracker - records the step for coverage / integration
+          // 2.14.0: creation tracker - records the step for coverage / integration
           // and appends the static Luau review of the source the model sent
           // (bounded per run by the creation profile; never on failed writes).
           try { if (A.creation) { const o = A.creation.observe(call, feedback, { ms: Date.now() - A.toolStart }); if (o && o.note) { feedback += "\n" + o.note; diag("creation.review", { tool: call.tool, findings: o.event.findings, chars: o.note.length }); } } } catch {}
@@ -6667,7 +6536,7 @@
                   else if (gui) diag("gui.briefSkipped", { chars: gui.length, cap });
                 }
               }
-              // 2.13.0: the CREATION SPEC rides last - the deliverables the request
+              // 2.14.0: the CREATION SPEC rides last - the deliverables the request
               // names, the command family that builds and the one that proves each,
               // the integration checks and the stage order. Only for requests with
               // enough deliverables (profile.briefMin), same send budget.
@@ -6955,7 +6824,7 @@
   // once the window has elapsed with nothing to piggyback on.
   const RESEND_SYS_EVERY = P.resendSystemEvery || 0;
   // Injected tool results get their own, larger budget (see sysResendDue).
-  const RESEND_SYS_EVERY_RESULTS = P.pacing ? 20 : 12;   // 1.99.3: fewer byte-identical re-statements on paced sites
+  const RESEND_SYS_EVERY_RESULTS = 12;
 
   // How much conversation has accumulated since the operating instructions were
   // last stated. PERSISTED per conversation, because both simpler designs failed
@@ -7558,7 +7427,6 @@
         return;
       }
       const prompt = systemPrompt();
-      A.userSend = true; // 1.99.0: the person's own message - gap-paced, never budget-blocked
       const base = await submitAndGetBase(prompt);
       if (!alive()) return;
       // (syncSessionState pins A.startingKey to the conversation id once the chat
@@ -8957,9 +8825,7 @@
     // reload - they used to silently reset to these defaults on every page
     // refresh because only the setters ever touched chrome.storage.
     let autoFixEnabled = true, extraThinking = false, planMode = false, steeringMode = false, forgeMode = false, autoFixStopPlay = true, autoDebugEnabled = true, multiAgent = false, guiBriefEnabled = true;
-    let gentlePacing = true; // 1.99.0: human-cadence sends on providers with a P.pacing contract (DeepSeek)
-    try { window.__rsGentlePacing = () => gentlePacing; } catch {}
-    // 2.13.0: creation quality profile (TotalCreation.PROFILES) - how strictly a
+    // 2.14.0: creation quality profile (TotalCreation.PROFILES) - how strictly a
     // run is checked against the request's deliverables. Persisted; shared
     // with the popup (rsCreationProfile); always capped by the provider.
     let creationProfile = "high";
@@ -8983,8 +8849,7 @@
     try { window.__rsAutoDebug = () => autoDebugEnabled; } catch {}
     try { window.__rsMultiAgent = () => multiAgent; } catch {}
     try {
-      chrome.storage.local.get(["rsAutoFix", "rsExtraThinking", "rsPlanMode", "rsForgeMode", "rsAutoFixStopPlay", "rsWorkMode", "rsAutoDebug", "rsMultiAgent", "rsGentlePacing"], (r) => {
-        if (typeof r.rsGentlePacing === "boolean") gentlePacing = r.rsGentlePacing;
+      chrome.storage.local.get(["rsAutoFix", "rsExtraThinking", "rsPlanMode", "rsForgeMode", "rsAutoFixStopPlay", "rsWorkMode", "rsAutoDebug", "rsMultiAgent"], (r) => {
         if (!r) return;
         if (typeof r.rsAutoFix === "boolean") autoFixEnabled = r.rsAutoFix;
         if (typeof r.rsExtraThinking === "boolean") {
@@ -9129,7 +8994,6 @@
           try { window.__rsAutoDebug = () => autoDebugEnabled; } catch {}
           dirty = true;
         }
-        if (changes.rsGentlePacing && typeof changes.rsGentlePacing.newValue === "boolean") { gentlePacing = changes.rsGentlePacing.newValue; dirty = true; }
         if (changes.rsGuiBrief && typeof changes.rsGuiBrief.newValue === "boolean") {
           guiBriefEnabled = changes.rsGuiBrief.newValue;
           try { window.__rsGuiBrief = () => guiBriefEnabled; } catch {}
@@ -9327,9 +9191,6 @@
     setTimeout(tryResumeSession, 1800);
     function setAutoFix(v){ autoFixEnabled=!!v; try{chrome.storage.local.set({rsAutoFix: autoFixEnabled});}catch{}; buildMenu(); }
     function setAutoFixStopPlay(v){ autoFixStopPlay=!!v; try{chrome.storage.local.set({rsAutoFixStopPlay: autoFixStopPlay});}catch{}; buildMenu(); }
-    function setGentlePacing(v){ gentlePacing=!!v; try{chrome.storage.local.set({rsGentlePacing: gentlePacing});}catch{}; buildMenu(); }
-    // the row only renders for providers that publish a pacing contract
-    const pacingContract = () => { try { return (window.RSProvider && window.RSProvider.pacing) || null; } catch { return null; } };
     // ── Background mode (v1.12): keep working on other sites ──
     function setBgMode(v){
       bgMode = !!v;
@@ -10049,14 +9910,14 @@
         try { toast("Back to the default look"); } catch {}
       });
     }
-    // 2.13.0: Creation quality section - four profiles that change what the
+    // 2.14.0: Creation quality section - four profiles that change what the
     // creation engine demands of a run (rounds, read-back, integration, audit).
     function creationSectionHtml() {
       if (typeof TotalCreation === "undefined") return "";
       const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
       const SUB = { standard: "one reminder for missing parts", high: "every part read back + integration checks", professional: "audits, inspect first, two rounds", masterpiece: "three rounds, playtest-level proof" };
       let caps = null; try { caps = ORCH && ORCH.capabilities(P); } catch {}
-      const eff = TotalCreation.profileFor(creationProfile, Object.assign({}, caps || {}, { noResend: !!(P.pacing && P.pacing.noResend && gentlePacing) }));
+      const eff = TotalCreation.profileFor(creationProfile, Object.assign({}, caps || {}));
       const cards = TotalCreation.PROFILE_IDS.map((id) => { const pr = TotalCreation.PROFILES[id]; return `<button type="button" class="rs-work-card ${creationProfile === id ? "on" : ""}" data-cprofile="${id}" aria-pressed="${creationProfile === id ? "true" : "false"}" title="${esc(pr.label)}: ${esc(SUB[id])}"><span class="rs-work-name">${esc(pr.label)}</span><span class="rs-work-sub">${esc(SUB[id])}</span></button>`; }).join("");
       const capNote = eff.capped.length ? `<div class="rs-menu-note">On ${esc(P.displayName)}: ${esc(eff.capped.join("; "))}.</div>` : "";
       return `<section class="rs-menu-sec rs-creation-sec">
@@ -10248,11 +10109,6 @@
               <span class="rs-tgl-sub">Stop Play when an error is caught (off = keep playing while the AI fixes it).</span></span>
               <span class="rs-tgl ${autoFixStopPlay ? "on" : ""}"></span>
             </div>
-            ${pacingContract() ? `<div class="rs-tgl-row rs-adv" data-mode="gentle" role="switch" aria-checked="${gentlePacing}" tabindex="0">
-              <span class="rs-tgl-info"><span class="rs-tgl-name">Gentle pacing (${pacingContract().label || "account protection"})</span>
-              <span class="rs-tgl-sub">Automatic messages ${Math.round((pacingContract().minGapMs || 0) / 1000)}–${Math.round((pacingContract().maxGapMs || 0) / 1000)} s apart, max ${pacingContract().perHour}/hour${pacingContract().breakEvery ? `, a break every ${pacingContract().breakEvery}` : ""}${pacingContract().perDay ? `, max ${pacingContract().perDay}/day` : ""}${pacingContract().checkpointEvery ? `, a click from you every ${pacingContract().checkpointEvery} in a row` : ""}, no re-sends, shared across tabs — this site suspends accounts for bot-like cadence. Off = full speed at your own risk.</span></span>
-              <span class="rs-tgl ${gentlePacing ? "on" : ""}"></span>
-            </div>` : ""}
             <div class="rs-tgl-row rs-adv" data-mode="autodebug" role="switch" aria-checked="${autoDebugEnabled}" tabindex="0">
               <span class="rs-tgl-info"><span class="rs-tgl-name">Automatic Debugger</span><span class="rs-tgl-sub">After Studio edits, new Output errors are sent to the AI to fix.</span></span>
               <span class="rs-tgl ${autoDebugEnabled ? "on" : ""}"></span>
@@ -10352,7 +10208,6 @@
           else if(m==="extra") setExtraThinking(!extraThinking);
           else if(m==="plan") setPlanMode(!planMode);
           else if(m==="autodebug") setAutoDebug(!autoDebugEnabled);
-          else if(m==="gentle") setGentlePacing(!gentlePacing);
           else if(m==="guibrief") setGuiBrief(!guiBriefEnabled);
           else if(m==="multiagent") setMultiAgent(!multiAgent);
           else if(m==="tasklist") setTaskList(!taskListOn());
@@ -13117,7 +12972,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       b.querySelector(".rs-banner-t").textContent = title;
       b.querySelector(".rs-banner-m").textContent = msg;
       b.querySelector(".rs-banner-x").addEventListener("click", () => b.remove());
-      // 1.99.0: optional primary action ({ label, onClick }) - e.g. "Open DeepSeek API chat"
+      // 1.99.0: optional primary action ({ label, onClick })
       if (action && action.label && typeof action.onClick === "function") {
         const go = document.createElement("button");
         go.className = "rs-banner-go";
@@ -13831,7 +13686,6 @@ statusTimer = rsInterval(() => bg({ type: "status" }).then(onStatus), 5000);
       // A fresh user message = fresh intent: clear any previous manual stop so
       // the loop is allowed to run again.
       A.userStopped = false;
-      if (P.pacing) sendLogRecord(Date.now()); // 1.99.0: the person's own send counts toward the cadence / hourly budget too (1.99.3: persisted, shared across tabs)
       bumpSys("users");
       A.steeringStep = 0;
       ui.steeringProgress("waiting", "Request sent — waiting for the first action", 0);
@@ -14015,7 +13869,6 @@ if ((document.hidden && !bgMode) || A.userStopped) return;
     A.forceSysResend = false;
     diag("sys.resend", { via: "ownTurn", ...spent });
     try {
-      A.userSend = true;
       const base = await submitAndGetBase(systemPrompt({ embedCatalogue: false }));
       await waitForResponse(base);
     } catch (e) {

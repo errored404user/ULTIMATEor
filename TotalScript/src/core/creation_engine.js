@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/core/creation_engine.js — TotalCreation (2.13.0): the shared creation
+// src/core/creation_engine.js — TotalCreation (2.14.0): the shared creation
 // intelligence layer that every provider's agent loop runs through.
 //
 // What it adds on top of TotalOrchestrator.classifyTask (intent / category)
@@ -24,8 +24,8 @@
 //                            integration evidence and a quality audit are
 //                            required, how much of the static review reaches
 //                            the model. Every number is capped by the
-//                            provider's real limits (no re-sends on gentle
-//                            providers, tight briefs on compact ones).
+//                            provider's real limits (tight briefs on compact
+//                            providers, small send budgets).
 //   3. tracker(spec, opts)   RUN TRACKER. observe() records every executed
 //                            command (name, arg shape, ok, ms — never the
 //                            prompt), runs the static Luau review on the source
@@ -54,7 +54,7 @@
 // WHEN things are sent; this module only decides WHAT is true about the run.
 const TotalCreation = (() => {
   "use strict";
-  const VERSION = "2.13.0";
+  const VERSION = "2.14.0";
 
   // ───────────────────────── domains ─────────────────────────
   // did   = command families that BUILD the deliverable
@@ -213,12 +213,11 @@ const TotalCreation = (() => {
   function normalizeProfile(id) { const k = String(id || "").toLowerCase().trim(); return PROFILES[k] ? k : DEFAULT_PROFILE; }
 
   // profileFor(id, caps): the profile CAPPED by the provider's real limits.
-  //   caps = TotalOrchestrator.capabilities(P) (+ noResend / sendCharBudget)
+  //   caps = TotalOrchestrator.capabilities(P) (tightPrompt / sendCharBudget)
   function profileFor(id, caps) {
     const base = PROFILES[normalizeProfile(id)];
     const c = caps || {};
-    const p = Object.assign({}, base, { provider: c.id || null, tight: !!c.tightPrompt, noResend: !!c.noResend, capped: [] });
-    if (c.noResend) { p.rounds = 0; p.capped.push("rounds=0 (provider forbids automatic re-sends)"); }
+    const p = Object.assign({}, base, { provider: c.id || null, tight: !!c.tightPrompt, capped: [] });
     if (c.tightPrompt && p.reviewNotes > 3) { p.reviewNotes = 3; p.capped.push("reviewNotes=3 (compact prompt budget)"); }
     if (Number.isFinite(Number(c.sendCharBudget)) && Number(c.sendCharBudget) > 0 && Number(c.sendCharBudget) < 1200) { p.briefMin = Math.max(p.briefMin, 3); p.capped.push("brief only for 3+ deliverables (small send budget)"); }
     return p;
@@ -569,7 +568,7 @@ const TotalCreation = (() => {
     // nudge(ctx) → "" | message. Hard stop rules, in order:
     //   - nothing missing                     → ""
     //   - explain / inspect spec              → ""
-    //   - rounds used ≥ profile.rounds        → ""   (provider noResend ⇒ 0)
+    //   - rounds used ≥ profile.rounds        → ""
     //   - no successful relevant command since the previous round → "" (the
     //     model is not acting on the note; repeating it is the death spiral)
     //   - ctx.resendAllowed === false         → ""
