@@ -24,7 +24,7 @@ const isCodeCraftTab = (url) => !!(url && CODECRAFT_PAGE_URL && url.startsWith(C
 const isSupportedTab = (url) => !!url && (SUPPORTED_HOSTS.some((h) => url.includes(h)) || isCodeCraftTab(url));
 const ENGINE_KEY = "rs-engine"; // "roblox" | "local"
 const ENGINES = ["roblox", "local"];
-const WORK_MODES = ["creation", "blender", "animate"]; // 1.95.0: + Blender (Blender-first 3D); 1.99.4: + Animator (id "animate")
+const WORK_MODES = ["creation", "blender", "animate", "blockbench"]; // 1.95.0: + Blender (Blender-first 3D); 1.99.4: + Animator (id "animate"); 2.15.0: + Blockbench (MCP plugin, low-poly models → file → Studio Import 3D)
 const BRAND_LOGO_RE = /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i;
 function sanitizeBrandLite(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
@@ -42,6 +42,7 @@ const WORK_PRESETS = {
   creation: { thinking: "max", extra: false },
   blender: { thinking: "max", extra: false },
   animate: { thinking: "max", extra: false },
+  blockbench: { thinking: "max", extra: false },
 };
 
 // Sound volume (0-100) read by the content script at load. The key predates
@@ -421,7 +422,7 @@ function render(s) {
       sd.className = "ts-dot " + (editorOk && mcpOk ? "ok live" : (mcpOk && (app || proc)) ? "warn" : "");
       ss.textContent = !mcpOk ? "Waiting for the bridge…" : editorOk ? "MCP linked to an open place" : app ? "Studio MCP is on — open a place" : proc ? "Studio is open — switch on its MCP server" : "Not running";
       ss.className = "conn-state" + (editorOk && mcpOk ? " ok" : mcpOk && (app || proc) ? " warn" : "");
-      if (sb) { sb.hidden = !(mcpOk && s.blender); sb.className = "ts-badge accent"; sb.firstElementChild.textContent = "Blender linked"; }
+      if (sb) { sb.hidden = !(mcpOk && (s.blender || s.blockbench)); sb.className = "ts-badge accent"; sb.firstElementChild.textContent = s.blender && s.blockbench ? "Blender + Blockbench linked" : s.blockbench ? "Blockbench linked" : "Blender linked"; }
     }
   }
   // 1.40.0 Beginner mode: the hint row is a live checklist. It stays visible
@@ -625,12 +626,13 @@ function onActivityPush(item) {
 // ── tools ──────────────────────────────────────────────────────────────────
 let toolsData = [];
 let toolsLoadedAt = 0;
-const SERVER_LABEL = { roblox: "Roblox Studio", studio: "Roblox Studio", local: "AgentScript (this PC)", blender: "Blender", agent: "AgentScript (this PC)" };
+const SERVER_LABEL = { roblox: "Roblox Studio", studio: "Roblox Studio", local: "AgentScript (this PC)", blender: "Blender", agent: "AgentScript (this PC)", blockbench: "Blockbench" };
 function toolServer(t) {
   const n = String(t.name || "");
   if (t.server) return String(t.server);
   if (n.includes("/")) return n.split("/")[0];
   if (/^blender_|^(get_scene_info|execute_blender)/.test(n)) return "blender";
+  if (/^bb_/.test(n)) return "blockbench";
   if (/^(read_file|write_file|list_dir|run_command|search_files|move|delete|open_path|download|process|shell|fs_)/.test(n)) return "local";
   return "roblox";
 }
@@ -672,7 +674,7 @@ function renderTools() {
   const total = toolsData.length;
   $("tools-count").firstElementChild.textContent = q ? `${[...groups.values()].reduce((a, b) => a + b.length, 0)} of ${total}` : `${total} tools`;
   if (!groups.size) { root.appendChild(h(`<div class="ts-card"><div class="ts-empty">${icon("search", 20)}<b>${total ? "No tool matches" : "No tools yet"}</b><span>${total ? "Try a shorter word." : "The bridge has not reported its tools — press Refresh once it is connected."}</span></div></div>`)); return; }
-  const SERVER_ORDER = ["roblox", "studio", "local", "agent", "blender"];
+  const SERVER_ORDER = ["roblox", "studio", "local", "agent", "blender", "blockbench"];
   const rank = (s) => { const i = SERVER_ORDER.indexOf(s); return i < 0 ? 99 : i; };
   for (const [server, list] of [...groups.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))) {
     const card = h(`<div class="ts-card flush"><div class="tool-group"><div class="tool-head"><span class="ts-h3"></span><span class="ts-badge"><span>${list.length}</span></span></div><div class="ts-list"></div></div></div>`);
@@ -745,6 +747,7 @@ const CATEGORIES = [
     { id: "repair", type: "action", label: "Repair the Studio link", sub: "Restarts the Studio MCP helper inside the agent app — fixes “connected but every command fails” after a Studio update or sleep / resume.", button: "Restart server", run: (btn) => QUICK_ACTIONS.find((q) => q.id === "restart").run(btn) },
     { id: "reconnect", type: "action", label: "Reconnect the bridge", sub: `Re-dial ${RUN_CMD} on port 3000 / 17613 / 17615.`, button: "Reconnect", run: (btn) => QUICK_ACTIONS.find((q) => q.id === "reconnect").run(btn) },
     { id: "blender", type: "blender", label: "Blender MCP", sub: "Connects to the TotalScript addon running inside Blender on port 9876." },
+    { id: "blockbench", type: "blockbench", label: "Blockbench MCP", sub: "Connects to the Blockbench MCP plugin over localhost HTTP (default http://localhost:3000/bb-mcp — change the port in Blockbench settings if the desktop agent already uses 3000). Models are exported as files for Studio's Import 3D." },
     { id: "publish", key: "rsAllowPublishAutomation", type: "toggle", default: false, label: "Allow confirmed publishing without a per-operation prompt", sub: "Off by default. Roblox authentication, ownership, moderation and rate limits always apply." },
     { id: "diag", type: "action", label: "Diagnostics", sub: "Copy the bridge status, health check and your non-secret settings as JSON for a bug report.", button: "Copy diagnostics", run: (btn) => busy(btn, copyDiagnostics) },
   ] },
@@ -903,6 +906,32 @@ async function renderItem(it, stored) {
       b.addEventListener("click", () => busy(b, async () => { const on = b.dataset.on === "1"; const r = await bg({ type: on ? "blender_disconnect" : "blender_connect" }); const now = !!(r && r.blender); paint(now); if (!on && !now) { toast(r && r.error ? String(r.error) : "Blender did not answer on port 9876 — is the addon running?", "danger", 4500); return false; } return true; }, { ok: "Blender link updated" }));
       return row;
     }
+    case "blockbench": {
+      const row = rowShell(it, `<button type="button" class="ts-btn sm" id="blockbench-toggle"><span>…</span></button>`);
+      const main = row.querySelector(".ts-row-main");
+      const field = h(`<input id="blockbench-url" class="ts-input" type="url" spellcheck="false" placeholder="http://localhost:3000/bb-mcp" aria-label="Blockbench MCP URL" style="margin-top:6px;width:100%;box-sizing:border-box">`);
+      main.appendChild(field);
+      const b = row.querySelector("button");
+      const paint = (on, url) => { b.firstElementChild.textContent = on ? "Disconnect" : "Connect"; b.classList.toggle("danger", on); b.dataset.on = on ? "1" : ""; field.readOnly = on; if (url && !field.value) field.value = url; };
+      bg({ type: "blockbench_status", auto: false }).then((r) => paint(!!(r && r.blockbench), r && r.url));
+      field.addEventListener("change", async () => {
+        const url = String(field.value || "").trim();
+        const r = await bg({ type: "blockbench_set_url", url: url || "http://localhost:3000/bb-mcp" });
+        if (!r || !r.ok) toast(String((r && r.error) || "URL must point at localhost"), "warn");
+      });
+      b.addEventListener("click", () => busy(b, async () => {
+        const on = b.dataset.on === "1";
+        const url = String(field.value || "").trim();
+        const r = await bg(on ? { type: "blockbench_disconnect" } : (url ? { type: "blockbench_connect", url } : { type: "blockbench_connect" }));
+        const now = !!(r && r.blockbench);
+        paint(now, r && r.url);
+        if (!on && !now) { toast(r && r.error ? String(r.error).slice(0, 220) : "Blockbench did not answer — open Blockbench with the MCP plugin enabled.", "warn"); return false; }
+        if (!on && now) toast(`Blockbench linked — ${r.tools || 0} plugin tools`, "ok");
+        refresh();
+        return true;
+      }));
+      return row;
+    }
     case "imagetools": {
       const r = await storeGet(["rsImageTools"]);
       const n = Array.isArray(r.rsImageTools) ? r.rsImageTools.length : 0;
@@ -1037,6 +1066,7 @@ function paletteCommands() {
   add({ id: "engine:local", group: "Engine", title: "Use the AgentScript engine", icon: "terminal", run: () => setEngine("local") });
   add({ id: "mode:creation", group: "Work mode", title: "Totality mode", icon: "box", run: () => setWorkMode("creation") });
   add({ id: "mode:blender", group: "Work mode", title: "Blender mode", icon: "box", run: () => setWorkMode("blender") });
+  add({ id: "mode:blockbench", group: "Work mode", title: "Blockbench mode", icon: "box", run: () => setWorkMode("blockbench") });
   add({ id: "mode:animate", group: "Work mode", title: "Animator mode", icon: "box", run: () => setWorkMode("animate") });
   add({ id: "perm:sandbox", group: "Access", title: "Sandbox only", icon: "shield", run: () => setPermMode("sandbox") });
   add({ id: "perm:full", group: "Access", title: "Full PC access", sub: "asks to confirm", icon: "warn", danger: true, run: () => setPermMode("full") });
@@ -1108,6 +1138,9 @@ document.getElementById("codecraft")?.addEventListener("click", () => {
   });
 });
 $("blender")?.addEventListener("click", () => {
+  $("settings")?.click();
+});
+$("blockbench")?.addEventListener("click", () => {
   $("settings")?.click();
 });
 $("settings").addEventListener("click", () => {

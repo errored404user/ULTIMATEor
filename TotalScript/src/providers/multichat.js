@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/providers/multichat.js — adaptive provider for HuggingChat and OpenRouter Chat (2.14.0: Overchat + FeatherRBLX removed).
+// src/providers/multichat.js — adaptive provider for HuggingChat and OpenRouter Chat (2.15.0: Overchat + FeatherRBLX removed).
 // Each host is isolated to its plain text chat surface. DOM assumptions are semantic and fail visibly when the composer is unavailable.
 // eslint-disable-next-line no-unused-vars
 const RSProvider = (() => {

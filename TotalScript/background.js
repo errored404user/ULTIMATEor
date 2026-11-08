@@ -7,6 +7,9 @@
 // Contract with content.js: every sendMessage ALWAYS gets a response object,
 // even when the bridge is offline. The agentic loop must never hang waiting.
 
+// 2.15.0: Blockbench MCP client + curated bb_* table (pure JS, also required by
+// tests/test-blockbench-mode.js). Classic worker → importScripts.
+try { importScripts("src/core/blockbench_mcp.js"); } catch (e) { console.warn("[total-bg] blockbench_mcp.js not loaded", e); }
 const PORT_ROBLOX = 17613;
 const PORT_LOCAL = 17615; // AgentScript — native FS/terminal engine
 const RUST_ROBLOX_HTTP = "http://127.0.0.1:3000";
@@ -193,6 +196,15 @@ let localRoot = ""; // workspace path, injected into the AI's state line
 let blenderAddon = false; // blender-mcp addon listening on TCP 9876
 let blenderError = "";
 let blenderScriptsReady = false;
+// 2.15.0 Blockbench MCP (Streamable HTTP plugin inside the Blockbench desktop app)
+let bbClient = null;            // TotalBlockbenchMcp client for the configured URL
+let bbConnected = false;
+let bbError = "";
+let bbUrl = "";                 // normalized URL in use ("" = default)
+let bbRawTools = [];            // tools/list from the plugin (raw names, for bb_call / bb_tools)
+let bbServerInfo = null;
+const BB_URL_KEY = "rsBlockbenchUrl";
+const BB_DNR_RULE_ID = 215001;  // session rule: Origin → plugin origin for the one bb-mcp URL
 const BLENDER_TOOL_NAMES = new Set([
   "get_scene_info", "get_object_info", "execute_blender_code", "get_viewport_screenshot",
   "blender_export_fbx", "blender_import_fbx", "blender_export_obj", "blender_import_obj",
@@ -360,20 +372,25 @@ const BLENDER_TOOLS = [
 for (const t of BLENDER_TOOLS) BLENDER_TOOL_NAMES.add(t.name);
 
 function blenderServers(list) {
-  const rest = (Array.isArray(list) ? list : []).filter((s) => s && s.id !== "blender");
+  const rest = (Array.isArray(list) ? list : []).filter((s) => s && s.id !== "blender" && s.id !== "blockbench");
   if (blenderAddon) {
     rest.push({
       id: "blender", name: "Blender",
       alive: true, tools: BLENDER_TOOLS.length,
     });
   }
+  // 2.15.0: Blockbench rides the same list (popup "Servers", bar status).
+  if (bbConnected) rest.push({ id: "blockbench", name: "Blockbench", alive: true, tools: bbToolList().length, url: bbUrl, raw_tools: bbRawTools.length });
   return rest;
+}
+function bbToolList() {
+  try { return typeof TotalBlockbenchMcp !== "undefined" ? TotalBlockbenchMcp.toolList() : []; } catch { return []; }
 }
 function mergeBlenderTools(tools) {
   const base = Array.isArray(tools) ? tools.slice() : [];
-  if (!blenderAddon) return base;
   const have = new Set(base.map((t) => t && t.name));
-  for (const t of BLENDER_TOOLS) if (!have.has(t.name)) base.push(t);
+  if (blenderAddon) for (const t of BLENDER_TOOLS) if (!have.has(t.name)) base.push(t);
+  if (bbConnected) for (const t of bbToolList()) if (!have.has(t.name)) base.push(t);
   return base;
 }
 
@@ -767,6 +784,7 @@ function statusObj() {
     tools: mergeBlenderTools(toolsCache).length,
     servers: blenderServers(serversCache), engine,
     blender: blenderAddon, blender_error: blenderError || undefined,
+    blockbench: bbConnected, blockbench_url: bbUrl || undefined, blockbench_error: bbError || undefined,
   };
 }
 
@@ -1182,6 +1200,139 @@ async function connectBlender() {
   } catch {}
   broadcastStatus();
   return { ok: true, blender: true };
+}
+
+// ── Blockbench MCP (Streamable HTTP, 2.15.0) ────────────────────────────
+// The jasonjgardner/blockbench-mcp-plugin serves MCP over Streamable HTTP
+// inside the Blockbench desktop app (default http://localhost:3000/bb-mcp,
+// Blockbench → Settings → General → MCP Server Port / Endpoint). The worker
+// talks to it directly with fetch (host permission http://localhost/* +
+// http://127.0.0.1/*); src/core/blockbench_mcp.js owns the protocol and the
+// curated bb_* commands. Two facts drive the code below:
+//  - the plugin rejects any request whose Origin is not a loopback origin
+//    (its CSRF / DNS-rebinding guard; a service worker sends
+//    Origin: chrome-extension://<id>), so a declarativeNetRequest SESSION rule
+//    rewrites Origin to the plugin's own origin for that ONE URL and nothing
+//    else (declarativeNetRequestWithHostAccess, no install warning);
+//  - port 3000 is also the TotalScript desktop agent's HTTP port, so a refused
+//    connection on :3000 is explained as the port clash it usually is.
+const BB_ON_KEY = "rs-blockbench-on";
+let bbAutoTried = false;
+function bbStorageGet(keys) {
+  return new Promise((resolve) => { try { chrome.storage.local.get(keys, (o) => resolve(o || {})); } catch { resolve({}); } });
+}
+async function bbStoredUrl() {
+  const o = await bbStorageGet([BB_URL_KEY]);
+  return typeof o[BB_URL_KEY] === "string" ? o[BB_URL_KEY] : "";
+}
+function bbSetState(on, err) {
+  const was = bbConnected;
+  bbConnected = !!on;
+  bbError = on ? "" : String(err || bbError || "");
+  try { chrome.storage.local.set({ [BB_ON_KEY]: !!on }); } catch {}
+  if (was !== bbConnected) broadcastStatus();
+}
+async function bbOriginRule(norm) {
+  try {
+    if (!chrome.declarativeNetRequest || typeof chrome.declarativeNetRequest.updateSessionRules !== "function") return false;
+    const rules = norm ? [{
+      id: BB_DNR_RULE_ID, priority: 1,
+      action: { type: "modifyHeaders", requestHeaders: [{ header: "Origin", operation: "set", value: norm.origin }] },
+      condition: { urlFilter: "|" + norm.url, requestMethods: ["post", "get", "delete"], resourceTypes: ["xmlhttprequest"] },
+    }] : [];
+    await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [BB_DNR_RULE_ID], addRules: rules });
+    return true;
+  } catch (e) { log("blockbench origin rule failed", e); return false; }
+}
+async function bbPortConflict(norm) {
+  if (!norm || norm.port !== 3000) return "";
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 2000);
+    const r = await fetch(`${RUST_ROBLOX_HTTP}/api/status`, { method: "GET", signal: ctrl.signal });
+    clearTimeout(t);
+    if (r.ok) return "Port 3000 is taken by the TotalScript desktop agent (total-core), so the Blockbench MCP plugin cannot listen there. In Blockbench → Settings → General set MCP Server Port to 3100 (any free port), restart the plugin, then set the URL in TotalScript to http://localhost:3100/bb-mcp and connect again.";
+  } catch {}
+  return "";
+}
+async function connectBlockbench(urlOverride) {
+  if (typeof TotalBlockbenchMcp === "undefined") return { ok: false, blockbench: false, error: "blockbench_mcp.js did not load" };
+  const raw = typeof urlOverride === "string" && urlOverride.trim() ? urlOverride : await bbStoredUrl();
+  const norm = TotalBlockbenchMcp.normalizeUrl(raw);
+  if (!norm.ok) { bbSetState(false, norm.error); return { ok: false, blockbench: false, error: norm.error, code: "BAD_URL" }; }
+  bbUrl = norm.url;
+  const ruled = await bbOriginRule(norm);
+  try { if (bbClient) await bbClient.close(); } catch {}
+  bbClient = TotalBlockbenchMcp.createClient({ url: norm.url, fetch: (u, init) => fetch(u, init), timeoutMs: 60000 });
+  try {
+    const r = await bbClient.connect();
+    bbRawTools = Array.isArray(r.tools) ? r.tools : [];
+    bbServerInfo = r.serverInfo || null;
+    bbSetState(true, "");
+    broadcastStatus();
+    return { ok: true, blockbench: true, url: norm.url, tools: bbRawTools.length, serverInfo: bbServerInfo, originRule: ruled };
+  } catch (e) {
+    let err = String((e && e.message) || e);
+    if (e && (e.code === "UNREACHABLE" || e.code === "NOT_FOUND")) {
+      const clash = await bbPortConflict(norm);
+      if (clash) err = clash + " (" + err + ")";
+      else if (e.code === "UNREACHABLE") err += ". Blockbench must be open with the MCP plugin installed (File → Plugins → Load Plugin from URL → https://jasonjgardner.github.io/blockbench-mcp-plugin/mcp.js); the plugin prints its URL in Blockbench → Settings → General.";
+    }
+    if (e && e.code === "ORIGIN_REJECTED" && !ruled) err += " (TotalScript could not install the Origin header rule - chrome.declarativeNetRequest is unavailable in this browser.)";
+    bbSetState(false, err);
+    broadcastStatus();
+    return { ok: false, blockbench: false, error: err, code: (e && e.code) || "ERROR" };
+  }
+}
+async function disconnectBlockbench() {
+  try { if (bbClient) await bbClient.close(); } catch {}
+  bbClient = null; bbRawTools = []; bbServerInfo = null;
+  await bbOriginRule(null);
+  bbSetState(false, "");
+  broadcastStatus();
+}
+// One lazy reconnect per worker life when the user had Blockbench linked
+// before the worker restarted (the HTTP session does not survive it).
+async function bbAutoReconnect() {
+  if (bbConnected || bbAutoTried) return;
+  bbAutoTried = true;
+  const o = await bbStorageGet([BB_ON_KEY]);
+  if (o && o[BB_ON_KEY]) { try { await connectBlockbench(); } catch {} }
+}
+async function blockbenchCall(name, args, timeout) {
+  const bare = String(name || "").split("/").pop();
+  if (typeof TotalBlockbenchMcp === "undefined") return { ok: false, kind: "execution", error: "blockbench_mcp.js did not load" };
+  if (!bbConnected || !bbClient) await bbAutoReconnect();
+  if (!bbConnected || !bbClient) {
+    return { ok: false, kind: "disconnected", errorCode: "BLOCKBENCH_OFFLINE", error: "Blockbench is not connected" + (bbError ? " (" + bbError + ")" : "") + ". Settings → Roblox Studio → Blockbench MCP → Connect (Blockbench open, MCP plugin installed; URL " + (bbUrl || TotalBlockbenchMcp.DEFAULT_URL) + ")." };
+  }
+  let exportRoot = "";
+  if (bare === "bb_export") { try { exportRoot = await agentWorkspaceRoot(); } catch { exportRoot = ""; } }
+  const ctx = { tools: new Set(bbRawTools.map((t) => t && t.name).filter(Boolean)), exportRoot };
+  const planned = TotalBlockbenchMcp.plan(bare, args, ctx);
+  if (!planned.ok) return { ok: false, kind: "validation", errorCode: "INVALID_ARGUMENT", error: planned.error };
+  if (planned.local === "tools") return { ok: true, text: TotalBlockbenchMcp.describeTools(bbRawTools, args && args.filter) };
+  const perStep = Math.max(5000, Math.min(180000, Number(timeout) || 60000));
+  const results = [];
+  for (const st of planned.steps || []) {
+    try {
+      const result = await bbClient.callTool(st.tool, st.args, perStep);
+      results.push({ tool: st.tool, result, optional: !!st.optional });
+      if (TotalBlockbenchMcp.isErrorResult(result) && !st.optional) break;
+    } catch (e) {
+      const msg = String((e && e.message) || e);
+      results.push({ tool: st.tool, error: msg, optional: !!st.optional, code: e && e.code });
+      if (e && e.code === "UNREACHABLE") { bbSetState(false, msg); broadcastStatus(); }
+      if (!st.optional) break;
+    }
+  }
+  const out = TotalBlockbenchMcp.render(bare, planned, results, ctx);
+  if (out.error) {
+    pushActivity("blockbench", "error", `${bare} failed: ${out.error.slice(0, 120)}`);
+    return { ok: false, kind: "execution", error: out.error, images: out.images && out.images.length ? out.images : undefined };
+  }
+  if (bare === "bb_export") pushActivity("blockbench", "ok", planned.meta && planned.meta.path ? `Blockbench export written: ${planned.meta.path}` : "Blockbench export returned inline");
+  return { ok: true, text: out.text, images: out.images, path: planned.meta && planned.meta.path ? planned.meta.path : undefined };
 }
 
 async function agentWorkspaceRoot() {
@@ -1823,7 +1974,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // Only pages we ship may be opened this way (the AI switcher on a web
         // page cannot open chrome-extension:// URLs itself).
         const page = String(msg.page || "");
-        // 2.14.0: only the CodeCraft page itself (the API-profile query went with the DeepSeek API chat)
+        // 2.15.0: only the CodeCraft page itself (the API-profile query went with the DeepSeek API chat)
         if (page !== CODECRAFT_PAGE) { sendResponse({ ok: false, error: "unknown extension page" }); break; }
         const url = chrome.runtime.getURL(CODECRAFT_PAGE);
         try {
@@ -1957,6 +2108,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if(!manualStudioDisconnect){connect();await waitForConnection(6000);await refreshStudioStatus();}sendResponse({success:connected&&robloxEditorConnected===true,state:manualStudioDisconnect||!connected?"DISCONNECTED":robloxEditorConnected===true?([...pending.values()].some(p=>p.type==="call_tool")?"BUSY":"CONNECTED"):"ERROR",bridge:connected,studio:robloxEditorConnected===true,protocolVersion:"1.0",error:connected&&robloxEditorConnected===true?null:{code:"STUDIO_BRIDGE_OFFLINE",message:"Studio MCP did not answer the health probe"}});break;
       case "call_tool": {
         const timeout = (msg.timeout || 120000) + 10000;
+        // 2.15.0: curated Blockbench commands never touch the Studio / AgentScript sockets.
+        if (typeof TotalBlockbenchMcp !== "undefined" && TotalBlockbenchMcp.isCommand(msg.name)) {
+          sendResponse(await blockbenchCall(msg.name, msg.arguments, msg.timeout || 60000));
+          break;
+        }
         if (blenderAddon && isBlenderToolName(msg.name)) {
           sendResponse(await blenderCall(msg.name, msg.arguments, timeout));
           break;
@@ -2051,10 +2207,41 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: true, blender: false });
         break;
       }
+      case "blockbench_connect": {
+        if (typeof msg.url === "string") { try { await chrome.storage.local.set({ [BB_URL_KEY]: msg.url.trim() }); } catch {} }
+        const br = await connectBlockbench(typeof msg.url === "string" ? msg.url : "");
+        pushActivity("blockbench", br && br.blockbench ? "ok" : "warn", br && br.blockbench ? `Blockbench MCP linked (${br.url}, ${br.tools} plugin tools)` : `Blockbench did not answer: ${String((br && br.error) || "plugin not running").slice(0, 160)}`);
+        sendResponse(br);
+        break;
+      }
+      case "blockbench_status": {
+        if (msg.auto !== false) await bbAutoReconnect();
+        sendResponse({ ok: bbConnected, blockbench: bbConnected, url: bbUrl || (await bbStoredUrl()) || (typeof TotalBlockbenchMcp !== "undefined" ? TotalBlockbenchMcp.DEFAULT_URL : ""), tools: bbRawTools.length, serverInfo: bbServerInfo || undefined, error: bbError || undefined });
+        break;
+      }
+      case "blockbench_disconnect": {
+        await disconnectBlockbench();
+        pushActivity("blockbench", "info", "Blockbench MCP unlinked");
+        sendResponse({ ok: true, blockbench: false });
+        break;
+      }
+      case "blockbench_set_url": {
+        const url = String(msg.url || "").trim();
+        const norm = typeof TotalBlockbenchMcp !== "undefined" ? TotalBlockbenchMcp.normalizeUrl(url) : { ok: false, error: "client not loaded" };
+        if (!norm.ok) { sendResponse({ ok: false, error: norm.error }); break; }
+        try { await chrome.storage.local.set({ [BB_URL_KEY]: url }); } catch {}
+        if (bbConnected && norm.url !== bbUrl) await disconnectBlockbench();
+        sendResponse({ ok: true, url: norm.url });
+        break;
+      }
       case "add_server": {
         // Native bin/total-core.exe rejects custom MCP. Blender uses blender_connect.
         if (String(msg.server_id || "").toLowerCase() === "blender") {
           sendResponse(await connectBlender());
+          break;
+        }
+        if (String(msg.server_id || "").toLowerCase() === "blockbench") {
+          sendResponse(await connectBlockbench(typeof msg.url === "string" ? msg.url : ""));
           break;
         }
         const r = await send({
@@ -2087,7 +2274,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: true });
         break;
       }
-      // 2.14.0: a content-script note for the Activity Center (creation report
+      // 2.15.0: a content-script note for the Activity Center (creation report
       // summary). Kind + level are whitelisted, text is a short derived summary
       // (counts and domain names - never the request or the reply).
       case "activity_note": {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Model kit pack (2.14.0) against the miniature Roblox DataModel.
+"""Model kit pack (2.15.0) against the miniature Roblox DataModel.
 
 tests/test-modelkit-pack.js checks the pack statically (registration, params,
 validation, wiring). This script runs the REAL generated Luau of all seven commands

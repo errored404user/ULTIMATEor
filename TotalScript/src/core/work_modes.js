@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// src/core/work_modes.js — TotalWorkModes (2.14.0)
+// src/core/work_modes.js — TotalWorkModes (2.15.0)
 //
 // What a WORK MODE actually DOES at run time. Before 1.99.9 the three built-in
 // modes (creation = Totality, blender, animate = Animator) only shaped the
@@ -24,9 +24,9 @@
 //   PRECONDITION precondition(mode, ctx) → { ok } | { ok:false, title, message, brief }
 const TotalWorkModes = (() => {
   "use strict";
-  const VERSION = "2.14.0";
-  const IDS = ["creation", "blender", "animate"];
-  const BADGE = { creation: "TOTALITY", blender: "BLENDER", animate: "ANIMATOR" };
+  const VERSION = "2.15.0";
+  const IDS = ["creation", "blender", "animate", "blockbench"]; // 2.15.0: + Blockbench (low-poly models through the Blockbench MCP plugin)
+  const BADGE = { creation: "TOTALITY", blender: "BLENDER", animate: "ANIMATOR", blockbench: "BLOCKBENCH" };
   const BRIEF_MAX = 1200;
   const AUTO_MAX = 600;
   const PROBE_TIMEOUT_MS = 8000;
@@ -34,6 +34,7 @@ const TotalWorkModes = (() => {
   const GATE_LABEL = {
     scripts: "SCRIPTS", look: "LOOK", motion: "MOTION", quality: "QUALITY", systems: "SYSTEMS",
     asset: "ASSET", import: "IMPORT", rig: "RIG", playback: "PLAYBACK",
+    model: "MODEL", export: "EXPORT",
   };
   // What each mode does at run time — shown in the mode picker (separate line,
   // the WORK_MODES literal in popup/bar is pinned by tests and stays as is).
@@ -41,6 +42,7 @@ const TotalWorkModes = (() => {
     creation: "Preflight reads the place (parts, scripts, GUIs, remotes, lighting, selection) before the first command; live gate strip SCRIPTS / LOOK / MOTION / QUALITY / SYSTEMS; every build command is read back automatically; up to 2 verification rounds; verdict card at the end.",
     blender: "Checks the Blender bridge BEFORE the model acts (not connected = hard stop note + banner); preflight reads the Blender scene; gate strip ASSET / IMPORT / SCRIPTS / LOOK; every blender_* build is read back with get_object_info; verdict card at the end.",
     animate: "Preflight lists the rigs (RigType, Animator, Motor6D count), existing clips and whether AnimPlayer is installed; gate strip RIG / PLAYBACK / SCRIPTS / LOOK; clips and rigs are read back after every authoring command; verdict card at the end.",
+    blockbench: "Checks the Blockbench MCP plugin BEFORE the model acts (not connected = hard stop note + banner); preflight reads the open Blockbench project (format, element counts, groups); gate strip MODEL / EXPORT / SCRIPTS / LOOK; every bb_* build is read back with bb_status; the export path is reported for Studio's Import 3D (manual) - nothing is uploaded; verdict card at the end.",
   };
 
   function normalize(mode) {
@@ -141,6 +143,10 @@ const TotalWorkModes = (() => {
       if (!ctx.blenderConnected) return null; // precondition() already says it all
       return { kind: "blender", tool: "get_scene_info", args: {}, timeoutMs: PROBE_TIMEOUT_MS, mode };
     }
+    if (mode === "blockbench") {
+      if (!ctx.blockbenchConnected) return null;
+      return { kind: "blockbench", tool: "bb_status", args: { max_depth: 3 }, timeoutMs: PROBE_TIMEOUT_MS, mode };
+    }
     return { kind: "luau", code: PREFLIGHT_LUA[mode], timeoutMs: PROBE_TIMEOUT_MS, mode };
   }
 
@@ -172,6 +178,11 @@ const TotalWorkModes = (() => {
       if (!txt) lines.push("Blender scene could not be read (get_scene_info returned nothing). Run get_scene_info yourself before building.");
       else lines.push("Blender scene (get_scene_info, read before your first command): " + clip(txt.replace(/\s+/g, " "), 700));
       lines.push("Rules this mode enforces: build in Blender → blender_asset_validate + blender_asset_inspect (ASSET gate) → blender_send_to_studio → mesh_import_verify (IMPORT gate). Each blender_* build is read back automatically with get_object_info; the read-back is appended to that command's result.");
+    } else if (mode === "blockbench") {
+      const txt = String(data == null ? "" : (typeof data === "string" ? data : JSON.stringify(data))).trim();
+      if (!txt) lines.push("Blockbench project could not be read (bb_status returned nothing - no project open, or the plugin answered an error). Run bb_status yourself; if there is no project, bb_project {name, format:\"free\"} first.");
+      else lines.push("Blockbench project (bb_status, read before your first command): " + clip(txt.replace(/\s+/g, " "), 700));
+      lines.push("Rules this mode enforces: build with bb_cubes / bb_group / bb_texture / bb_animate (or bb_call) → bb_screenshot and LOOK at it (MODEL gate) → bb_export {format:\"obj\"|\"gltf\"|\"glb\"} and tell the user the file path + Studio → Home → Import 3D (EXPORT gate). Every bb_* build is read back automatically with bb_status. Never claim the model is in Studio: the import is the user's manual step.");
     } else if (!data || typeof data !== "object") {
       lines.push("The place could not be read before this request (the preflight probe failed or timed out). Do not assume it is empty: inspect with get_studio_state / inspect_service / ui_list_tree before creating anything.");
     } else if (mode === "animate") {
@@ -195,7 +206,7 @@ const TotalWorkModes = (() => {
       if (data.bench) lines.push("A previous bench_run exists - the next bench_run reports the delta.");
       if (data.playing) lines.push("Studio is PLAYING right now - stop play (start_stop_play) before editing the saved place.");
     }
-    lines.push("These are facts read from " + (mode === "blender" ? "Blender" : "Studio") + " just now; they are not an instruction to acknowledge. Act on them and keep the mode gates: the gate strip in the bar turns ✓ only when the proof command ran.");
+    lines.push("These are facts read from " + (mode === "blender" ? "Blender" : mode === "blockbench" ? "Blockbench" : "Studio") + " just now; they are not an instruction to acknowledge. Act on them and keep the mode gates: the gate strip in the bar turns ✓ only when the proof command ran.");
     return clip(lines.join("\n"), BRIEF_MAX);
   }
 
@@ -203,6 +214,7 @@ const TotalWorkModes = (() => {
   function briefSummary(mode, data) {
     mode = normalize(mode);
     if (mode === "blender") return data ? "Blender scene read" : "Blender scene not readable";
+    if (mode === "blockbench") return data ? "Blockbench project read" : "Blockbench project not readable";
     if (!data || typeof data !== "object") return "place not read (probe failed)";
     if (mode === "animate") return (Array.isArray(data.rigs) ? data.rigs.length : 0) + " rig(s) · " + (data.clips || 0) + " clip(s) · AnimPlayer " + (data.animPlayer ? "installed" : "missing");
     return (data.parts || 0) + " parts · " + (data.scripts || 0) + " scripts · " + (data.guis || 0) + " GUIs · " + (data.remotes || 0) + " remotes";
@@ -250,6 +262,7 @@ const TotalWorkModes = (() => {
   const GATE_PROOF_HINT = {
     scripts: "script_read / script_check / playtest", look: "total_screenshot", motion: "animation_preview", quality: "quality_audit", systems: "bench_run",
     asset: "blender_asset_validate / inspect", import: "mesh_import_verify", rig: "animation_preview / validate", playback: "script_check + playtest",
+    model: "bb_screenshot / bb_status", export: "bb_export",
   };
   function verdictLevel(states) {
     const st = states || [];
@@ -267,6 +280,7 @@ const TotalWorkModes = (() => {
   const CREATE_RE = {
     creation: /^(part_|model_|generate_procedural_model|ui_|gui_|script_(create|set_source|module|new)|module_scaffold|remote_scaffold|blueprint_install|design_kit_install|fx_|vfx_|lighting|atmosphere|terrain_|prop_|building_|furniture_|vehicle_|weapon_|npc_|spawn_|door_|platform_|mesh_import|blender_send_to_studio|create_instance|insert_model)/,
     blender: /^(blender_(?!asset_(validate|inspect)|render|turntable|status|connect|send_to_studio$)[a-z_]+|execute_blender_code$)/,
+    blockbench: /^bb_(project|cubes|cube_edit|group|remove|texture|animate|undo|call)$/,
     animate: /^(animation_(build|generate|create|set_pose|add_keyframe|update_keyframe|motion_preset|stagger_parts|polish|refine|import|layer|loop_set|export)|dummy_spawn$|target_dummy_spawn$|motor6d_set$|anim_player_install$|sequence_create$|cutscene_create$)/,
   };
   function extractPath(args, feedback) {
@@ -311,13 +325,20 @@ const TotalWorkModes = (() => {
     const name = bare(toolName);
     if (!name || READ_ONLY_RE.test(name)) return null;
     if (/^ERROR/i.test(String(feedback || "").trim())) return null;
+    if (mode === "blockbench") {
+      if (!CREATE_RE.blockbench.test(name)) return null;
+      if (name === "bb_texture" && !/^(create|apply)$/.test(String(args && args.action || ""))) return null;
+      if (name === "bb_call" && /^(get_|list_|capture_|find_|inspect_)/.test(String(args && args.tool || ""))) return null;
+      const label = (args && (args.name || args.id || args.tool)) ? String(args.name || args.id || args.tool) : name;
+      return { kind: "blockbench", tool: "bb_status", args: { max_depth: 3 }, label, timeoutMs: PROBE_TIMEOUT_MS, mode };
+    }
     if (mode === "blender" && CREATE_RE.blender.test(name)) {
       const a = args || {};
       const obj = typeof a.name === "string" ? a.name.trim() : (typeof a.object_name === "string" ? a.object_name.trim() : "");
       if (!obj) return null;
       return { kind: "blender", tool: "get_object_info", args: { name: obj }, label: obj, timeoutMs: PROBE_TIMEOUT_MS, mode };
     }
-    const re = mode === "blender" ? CREATE_RE.creation : CREATE_RE[mode];
+    const re = mode === "blender" || mode === "blockbench" ? CREATE_RE.creation : CREATE_RE[mode];
     if (!re || !re.test(name)) return null;
     const path = extractPath(args, feedback);
     if (!path) return null;
@@ -332,6 +353,11 @@ const TotalWorkModes = (() => {
       const txt = String(raw == null ? "" : raw).replace(/\s+/g, " ").trim();
       if (!txt) return "";
       return clip("[MODE AUTO-CHECK get_object_info " + probe.label + "] " + txt, AUTO_MAX);
+    }
+    if (probe.kind === "blockbench") {
+      const txt = String(raw == null ? "" : raw).replace(/\s+/g, " ").trim();
+      if (!txt) return "";
+      return clip("[MODE AUTO-CHECK bb_status after " + probe.label + "] " + txt, AUTO_MAX);
     }
     const d = parseResult(raw);
     if (!d) return "";
@@ -363,6 +389,14 @@ const TotalWorkModes = (() => {
         title: "Blender mode — Blender is not connected",
         message: "Blender work mode needs the Blender MCP add-on running (Blender → N-panel → Start MCP Server, then Menu → Connect Blender). Until then every blender_* command fails.",
         brief: header("blender", "PREFLIGHT") + "\nBLENDER NOT CONNECTED. Every blender_* command will fail right now. Do NOT emulate Blender with execute_luau or claim a Blender result. Tell the user to start the Blender MCP server (N-panel → Start MCP Server) and connect it from the TotalScript menu; Studio-side work (scripts, UI, lighting) can proceed meanwhile.\nDo not acknowledge this note; act on it.",
+      };
+    }
+    if (mode === "blockbench" && !ctx.blockbenchConnected) {
+      return {
+        ok: false,
+        title: "Blockbench mode — Blockbench is not connected",
+        message: "Blockbench work mode needs the Blockbench MCP plugin (Blockbench → File → Plugins → Load Plugin from URL → https://jasonjgardner.github.io/blockbench-mcp-plugin/mcp.js; it serves http://localhost:3000/bb-mcp) and Settings → Blockbench MCP → Connect. Until then every bb_* command fails.",
+        brief: header("blockbench", "PREFLIGHT") + "\nBLOCKBENCH NOT CONNECTED. Every bb_* command will fail right now. Do NOT emulate Blockbench with execute_luau or claim a Blockbench result. Tell the user in one sentence to open Blockbench with the MCP plugin enabled and press Connect under Settings → Blockbench MCP (default URL http://localhost:3000/bb-mcp; if the TotalScript desktop agent uses port 3000, change the plugin port in Blockbench settings). Studio-side work (scripts, parts, the Import 3D of an existing file by the user) still works.",
       };
     }
     return { ok: true };

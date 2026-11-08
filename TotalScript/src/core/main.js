@@ -1077,7 +1077,7 @@
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for a publish confirmation card (it auto-denies after 120 s). A PC command refused in Sandbox only is not a wait - the chat gets ERROR ACCESS_SANDBOX at once and a banner offers Switch to Full PC.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
-    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.14.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
+    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.15.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
   };
   try { window.__rsFeatureHelpTopics = FEATURE_HELP_TOPICS; } catch {}
   const CREATOR_TOOLS=[
@@ -2045,6 +2045,32 @@
     ],
     focus: /^(animation_|anim_player_install$|rig_|motor6d|eclipse_|sequence_|ability_sequence_|cutscene|camera_(?!shake_preset$)|tween|spring_(create|adjust)$|script_(create|read|check|edit|set_source|module)$|multi_edit$|start_stop_play$|studio_playtest$|get_console_output$|model_prefab$|sfx_|vfx_(play|library_install)$|total_screenshot$|search_game_tree$)/,
   };
+  // 2.15.0 BLOCKBENCH (id "blockbench"): low-poly modeling INSIDE Blockbench
+  // through the jasonjgardner/blockbench-mcp-plugin (Streamable HTTP on
+  // localhost, default :3000/bb-mcp). TotalScript's bb_* commands are the
+  // surface (validated in src/core/blockbench_mcp.js, run by the worker); the
+  // finished piece is EXPORTED to a file (OBJ / glTF / GLB / bbmodel) in the
+  // agent workspace and the user imports it with Studio's Import 3D - nothing
+  // is uploaded or inserted silently. The profile lives in config.js
+  // (WORK_MODE_PROMPTS.blockbench); MODE_GATES.blockbench demands a screenshot
+  // after building and an export at the end.
+  WORK_MODES.blockbench = {
+    name: "Blockbench", badge: "BLOCKBENCH", short: "Blockbench",
+    sub: "Low-poly models in Blockbench: project → groups → cubes → texture → animate → screenshot → export file → Studio Import 3D (manual)",
+    note: "Blockbench is the editor, a FILE is the hand-off. Build with bb_project → bb_group → bb_cubes → bb_texture → bb_animate, look at bb_screenshot after every pass, then bb_export {format:\"obj\"|\"gltf\"|\"glb\"} and tell the user the path + Studio → Home → Import 3D. Needs the Blockbench MCP plugin connected (Settings → Blockbench MCP); without it the mode stops with a note instead of pretending.",
+    toast: "Blockbench Work Mode — model in Blockbench, screenshot every pass, export a file for Studio's Import 3D",
+    starters: [
+      { label: "Blocky sword", prompt: "In Blockbench, build a low-poly fantasy sword about 40 units long: blade with a fuller, crossguard, wrapped grip, pommel - each as its own group with the pivot at the grip. Flat-colour textures per material, screenshot front and iso and fix what you see, then export it as OBJ and tell me the exact Import 3D steps and scale for Studio." },
+      { label: "Blocky character", prompt: "Model a 32-unit-tall blocky character in Blockbench: Body, Head, ArmL, ArmR, LegL, LegR groups with pivots at the joints, simple flat textures, an idle and a walk animation on the groups. Screenshot front and side, then export as glTF and explain how I import it into Studio." },
+      { label: "Dungeon kit", prompt: "Build a modular low-poly dungeon kit in Blockbench on a 16-unit grid: wall, wall with door, wall with window, corner pillar, floor tile and stairs as separate groups at the origin. Screenshot one assembled bay, export each piece as OBJ and list every file path with the shared import scale." },
+      { label: "Go-kart", prompt: "Model a stylized go-kart in Blockbench: body, seat, steering wheel and four wheel groups with pivots at the axles; animate the wheels rolling; screenshot side and iso; export as GLB and tell me the Studio import steps." },
+      { label: "Crate + barrel", prompt: "Make a wooden crate (16 units) and a barrel (12 × 16) in Blockbench with bevel-looking inset cubes and flat wood / iron colours. Screenshot both, export each as OBJ into the workspace and give me the Import 3D steps." },
+      { label: "Fix my model", prompt: "Read the project that is open in Blockbench (bb_status + screenshot), tell me what looks wrong (proportions, gaps, z-fighting, pivots), fix it with the smallest edits, screenshot again and export it as OBJ." },
+      { label: "Texture it", prompt: "Take the model open in Blockbench and give every group a flat-colour texture that reads at a distance (3-4 colours max, darker underside), apply them, screenshot and export as glTF so the colours travel with the mesh." },
+      { label: "Raw tool", prompt: "List the raw tools of the Blockbench MCP plugin that deal with meshes and UVs (bb_tools), then explain in two lines which of them you would use to turn the selected cube into a sloped roof, and do it with bb_call after I confirm." },
+    ],
+    focus: /^(bb_|total_screenshot$|model_report$|meshpart_create$|instance_(move|clone)$|rotate_model$|scale_model$|set_property$|script_(create|read|check)$|search_game_tree$)/,
+  };
   const WORK_MODE_IDS = Object.keys(WORK_MODES);
   const normalizeWorkMode = (id) => (WORK_MODE_IDS.includes(id) ? id : "creation");
   // 1.95.0: in Blender mode the Blender server's tools ride in the DEFAULT
@@ -2056,6 +2082,14 @@
       if (requested === "blender") return [];
       if (normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()) !== "blender") return [];
       return (A.toolList || []).filter((t) => t && t.server === "blender" && !t.hidden);
+    } catch { return []; }
+  }
+  // 2.15.0: same for the Blockbench family (server "blockbench") in Blockbench mode.
+  function blockbenchModeTools(requested) {
+    try {
+      if (requested === "blockbench") return [];
+      if (normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()) !== "blockbench") return [];
+      return (A.toolList || []).filter((t) => t && t.server === "blockbench" && !t.hidden);
     } catch { return []; }
   } // ultimate/visualizer/animator (and older fast/balanced/thorough/adaptive) → creation
   // UNIVERSAL commands: the navigation / inspection / scripting / verification
@@ -2152,6 +2186,20 @@
       nudge: "PLAYBACK: AnimPlayer was installed this run but nothing proves the clips play in game - script_read the playback script, script_check it, then start_stop_play + get_console_output and confirm the track actually played before the final report." },
   ];
   MODE_GATES.animate.push(...MODE_GATES.creation.filter((g) => g.id === "scripts" || g.id === "look"));
+  // 2.15.0 BLOCKBENCH: geometry built this run must have been LOOKED at
+  // (bb_screenshot) and must leave Blockbench as a file (bb_export) - the
+  // import into Studio is the user's manual step, so no gate claims it.
+  MODE_GATES.blockbench = [
+    { id: "model",
+      did: /^bb_(project|cubes|cube_edit|group|remove|texture|animate|call)$/,
+      proof: /^bb_(screenshot|status)$/,
+      nudge: "MODEL: you built or changed geometry in Blockbench this run but never looked at it - run bb_screenshot {} now, judge the render (silhouette, gaps, z-fighting, pivots), then bb_status to compare counts with your plan; fix what you see before the final report." },
+    { id: "export",
+      did: /^bb_(project|cubes|cube_edit|group|texture|animate)$/,
+      proof: /^bb_export$/,
+      nudge: "EXPORT: the Blockbench model never left Blockbench - run bb_export {format:\"obj\"} (or gltf / glb) and give the user the file path plus the Studio steps (Home → Import 3D → file → scale → Import). Do not claim it is in Studio." },
+  ];
+  MODE_GATES.blockbench.push(...MODE_GATES.creation.filter((g) => g.id === "scripts" || g.id === "look"));
   // Returns the gate nudge for the active mode when this run mutated without
   // proving, else "". `runTools` = bare names of every command executed this run.
   const MODE_GATE_ROUNDS = 2; // 1.99.9: a run gets at most two mode-gate reminders (was one)
@@ -2168,7 +2216,7 @@
         + "\nDo not acknowledge this note; do it, then give the final report with that evidence.";
     } catch { return ""; }
   }
-  // 2.14.0: CREATION TRACKER - per user message: the request → structured spec
+  // 2.15.0: CREATION TRACKER - per user message: the request → structured spec
   // (deliverables, integration checks, stages) + the run tracker that follows
   // every executed command (coverage, integration evidence, static Luau review,
   // bounded creation checks, end-of-run report). Profile = the user's creation
@@ -3186,7 +3234,8 @@
   // (1.39.0 Creation: scripting, blueprints, data, build, physics, lighting,
   // VFX, UI, animation, motion, ...). Order = catalogue order.
   const COMMAND_FAMILIES = [
-    { id: "blender", label: "BLENDER (3D ASSET PIPELINE → STUDIO)", re: /^(blender_|get_scene_info$|get_object_info$|execute_blender_code$|get_viewport_screenshot$|mesh_import_verify$)/ }, // 1.95.0: the Blender server's tools + the Studio read-back
+    { id: "blender", label: "BLENDER (3D ASSET PIPELINE → STUDIO)", re: /^(blender_|get_scene_info$|get_object_info$|execute_blender_code$|get_viewport_screenshot$|mesh_import_verify$)/ }, // 1.95.0
+    { id: "blockbench", label: "BLOCKBENCH (LOW-POLY MODELS → FILE → STUDIO IMPORT 3D)", re: /^bb_/ }, // 2.15.0: the Blender server's tools + the Studio read-back
     { id: "script", label: "SCRIPTING", re: /^(script_|multi_edit|module_scaffold|execute_luau|project_health_report|project_index_|tag_scaffold|tag_add|tag_remove|get_service|wait_for_child|log_tag|gc_run)/ },
     { id: "blueprint", label: "SYSTEM BLUEPRINTS", re: /^blueprint_/ },
     { id: "data", label: "DATA, REMOTES, NETWORK & MONETIZATION", re: /^(ds_|datastore_|get_datastore|ordered_(get|set)|session_lock_|session_analytics|remote_|remotes_list|bindable_|leaderstats_|profile_|gamepass_|developer_product|devproduct_|marketplace_|badge_|value_set|replicated_first|server_auto_restart|network_(ping|bandwidth)|premium_check)/ },
@@ -3207,9 +3256,10 @@
     { id: "other", label: "OTHER", re: /./ },
   ];
   const FAMILY_ORDER = {
-    creation: ["script", "blueprint", "data", "build", "physics", "lighting", "vfx", "ui", "animation", "motion", "gameplay", "terrain", "gfx", "blender", "audio", "play", "studio", "web", "other"],
-    blender: ["blender", "build", "script", "studio", "play", "lighting", "gfx", "physics", "terrain", "data", "blueprint", "vfx", "ui", "animation", "motion", "gameplay", "audio", "web", "other"],
-    animate: ["animation", "motion", "script", "gfx", "vfx", "audio", "play", "build", "studio", "gameplay", "ui", "lighting", "physics", "data", "blueprint", "terrain", "blender", "web", "other"],
+    creation: ["script", "blueprint", "data", "build", "physics", "lighting", "vfx", "ui", "animation", "motion", "gameplay", "terrain", "gfx", "blender", "blockbench", "audio", "play", "studio", "web", "other"],
+    blender: ["blender", "build", "script", "studio", "play", "lighting", "gfx", "physics", "terrain", "data", "blueprint", "vfx", "ui", "animation", "motion", "gameplay", "audio", "blockbench", "web", "other"],
+    animate: ["animation", "motion", "script", "gfx", "vfx", "audio", "play", "build", "studio", "gameplay", "ui", "lighting", "physics", "data", "blueprint", "terrain", "blender", "blockbench", "web", "other"],
+    blockbench: ["blockbench", "build", "script", "studio", "play", "gfx", "lighting", "physics", "terrain", "data", "blueprint", "vfx", "ui", "animation", "motion", "gameplay", "audio", "blender", "web", "other"],
   };
   const commandFamily = (name) => { const b = String(name || "").replace(/^[^.]*\./, ""); for (const f of COMMAND_FAMILIES) if (f.re.test(b)) return f.id; return "other"; };
   function familyOrderFor(modeId) { return FAMILY_ORDER[modeId] || FAMILY_ORDER.creation; }
@@ -3543,7 +3593,7 @@
   async function runModeProbe(probe) {
     if (!probe) return "";
     const ms = Math.max(1000, Number(probe.timeoutMs) || 8000);
-    const req = probe.kind === "blender"
+    const req = probe.kind === "blender" || probe.kind === "blockbench"
       ? bg({ type: "call_tool", name: probe.tool, arguments: probe.args || {}, timeout: ms })
       : bg({ type: "call_tool", name: "execute_luau", arguments: { code: probe.code, datamodel_type: "Edit" }, timeout: ms });
     const r = await Promise.race([req, new Promise((res) => setTimeout(() => res(null), ms))]);
@@ -3561,6 +3611,18 @@
     } catch {}
     return false;
   }
+  // Blockbench link for the precondition: live flag first, then status → connect
+  // (the worker re-dials the plugin once per worker life when it was linked).
+  async function blockbenchReady() {
+    try { if (A.bridge && A.bridge.blockbench === true) return true; } catch {}
+    try { if (window.__rsBlockbench && window.__rsBlockbench()) return true; } catch {}
+    try {
+      let st = await bg({ type: "blockbench_status" });
+      if (!(st && st.blockbench)) st = await bg({ type: "blockbench_connect" });
+      if (st && st.blockbench) { A.bridge = A.bridge || {}; A.bridge.blockbench = true; return true; }
+    } catch {}
+    return false;
+  }
   function startModePreflight() {
     A.modeBrief = null;
     try { if (A.explorerTarget) A.explorerTarget.sent = false; } catch {}
@@ -3572,19 +3634,20 @@
     A.modeBrief = brief;
     brief.promise = (async () => {
       const blenderUp = mode === "blender" ? await blenderReady() : false;
-      const pre = WM.precondition(mode, { blenderConnected: blenderUp });
+      const blockbenchUp = mode === "blockbench" ? await blockbenchReady() : false;
+      const pre = WM.precondition(mode, { blenderConnected: blenderUp, blockbenchConnected: blockbenchUp });
       if (!pre.ok) {
         brief.kind = "precondition"; brief.text = pre.brief; brief.pending = false;
         diag("mode.precondition", { mode, ok: false });
         try { if (!A._modePrecondBannerAt || Date.now() - A._modePrecondBannerAt > 60000) { A._modePrecondBannerAt = Date.now(); ui.banner("warn", pre.title, pre.message); } } catch {}
-        try { ui.trackCard("mode preflight", "err", "BLENDER · not connected", "mode"); } catch {}
+        try { ui.trackCard("mode preflight", "err", WM.BADGE[mode] + " · not connected", "mode"); } catch {}
         return;
       }
-      const probe = WM.preflight(mode, { engine, blenderConnected: blenderUp });
+      const probe = WM.preflight(mode, { engine, blenderConnected: blenderUp, blockbenchConnected: blockbenchUp });
       if (!probe) { brief.pending = false; return; }
       let raw = "";
       try { raw = await runModeProbe(probe); } catch {}
-      const data = probe.kind === "blender" ? (raw || null) : WM.parseResult(raw);
+      const data = probe.kind === "blender" || probe.kind === "blockbench" ? (raw || null) : WM.parseResult(raw);
       brief.data = data;
       brief.text = WM.renderBrief(mode, data, {});
       brief.pending = false;
@@ -3609,6 +3672,7 @@
     const probe = WM.autoCheck(mode, toolName, args, feedback);
     if (!probe) return feedback;
     if (probe.kind === "blender" && !(A.bridge && A.bridge.blender === true)) return feedback;
+    if (probe.kind === "blockbench" && !(A.bridge && A.bridge.blockbench === true)) return feedback;
     let raw = "";
     try { raw = await runModeProbe(probe); } catch {}
     const line = WM.renderAutoCheck(probe, raw);
@@ -5096,6 +5160,7 @@
       // only listed when asked for by exact name.
       const allScoped = A.toolList.filter((t) => (t.server || curEng) === requested && (!t.hidden || String(t.name || "").toLowerCase() === commandQuery));
       allScoped.push(...blenderModeTools(requested)); // 1.95.0: Blender mode lists the Blender family in the default catalogue
+      allScoped.push(...blockbenchModeTools(requested)); // 2.15.0: Blockbench mode lists the bb_* family
       const queryTerms = commandQuery.split(/\s+/).filter(Boolean);
       const queryMatches = (value) => !queryTerms.length
         || queryTerms.every((term) => String(value || "").toLowerCase().includes(term));
@@ -5372,6 +5437,40 @@
       try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(name, args, ok, res); } catch {}
       return res;
       }
+    }
+    // 2.15.0 Blockbench: bb_* never touch the Studio / AgentScript sockets. The
+    // worker validates the arguments (blockbench_mcp.js) and runs the plugin's
+    // real tools; here we only make sure the link is up and shape the answer.
+    if (/^bb_[a-z_]+$/.test(bareName)) {
+      if (!(A.bridge && A.bridge.blockbench)) {
+        let st = await bg({ type: "blockbench_status" });
+        if (!(st && st.blockbench)) st = await bg({ type: "blockbench_connect" });
+        if (st && st.blockbench) { A.bridge = A.bridge || {}; A.bridge.blockbench = true; }
+      }
+      if (!(A.bridge && A.bridge.blockbench)) {
+        return "ERROR BLOCKBENCH_OFFLINE calling '" + name + "': Blockbench is not connected. The user must open Blockbench with the MCP plugin (File → Plugins → Load Plugin from URL → https://jasonjgardner.github.io/blockbench-mcp-plugin/mcp.js) and press Connect under Settings → Blockbench MCP. Do not emulate the result.";
+      }
+      const timeout = bareName === "bb_export" || bareName === "bb_screenshot" ? 90000 : 60000;
+      const hardCap = new Promise((res) => setTimeout(() => res({ ok: false, kind: "timeout", error: "no response from Blockbench" }), timeout + 15000));
+      let stopTimer;
+      const stopWatch = new Promise((res) => { stopTimer = setInterval(() => { if (A.stop) res({ ok: false, kind: "stopped" }); }, 150); });
+      let r = await Promise.race([bg({ type: "call_tool", name: bareName, arguments: args || {}, timeout, requestId: A.activeRequestId }), hardCap, stopWatch]);
+      clearInterval(stopTimer);
+      r = cleanToolResult(r);
+      if (r && r.kind === "stopped") return "(stopped by user)";
+      if (!r) return RS.FEEDBACK.bridgeOffline;
+      if (r.ok) {
+        if (r.images && r.images.length) {
+          ui.showImages(r.images, name);
+          A.pendingImages = r.images;
+          const caption = r.text && r.text.trim() ? r.text.trim() : `${r.images.length} image(s) captured.`;
+          return `Output of '${name}':\n${caption}\n(The image is attached to THIS message - you can see it directly. Analyse it and continue.)`;
+        }
+        return `Output of '${name}':\n${r.text && r.text.length ? r.text : "(tool returned an empty result)"}`;
+      }
+      if (r.kind === "disconnected" || r.errorCode === "BLOCKBENCH_OFFLINE") { try { A.bridge.blockbench = false; } catch {} }
+      const errText = String((r.error && (r.error.message || r.error.error)) || r.error || "Blockbench command failed");
+      return /^ERROR\b/.test(errText) ? errText : "ERROR" + (r.errorCode ? " " + r.errorCode : "") + " calling '" + name + "': " + errText;
     }
     const BLENDER_OPS = new Set(["get_scene_info","get_object_info","execute_blender_code","get_viewport_screenshot","blender_export_fbx","blender_execute_code","blender_screenshot"]);
     if (BLENDER_OPS.has(bareName) || /^blender_/.test(bareName)) {
@@ -6159,7 +6258,7 @@
             base = await submitAndGetBase(RS.FEEDBACK.guiBriefAct + (state ? "\n" + state : ""));
             continue;
           }
-          // 2.14.0: CREATION COVERAGE GATE - the request's deliverables (spec)
+          // 2.15.0: CREATION COVERAGE GATE - the request's deliverables (spec)
           // against the command log: an item nobody built, an item built but
           // never read back (High+), a missing integration (GUI ↔ server remote,
           // DataStore ↔ pcall, sound never played …). Bounded by the creation
@@ -6207,7 +6306,7 @@
               continue;
             }
           }
-          // 2.14.0: CREATION REPORT - one honest block per run with deliverables
+          // 2.15.0: CREATION REPORT - one honest block per run with deliverables
           // (built / read back / audited / missing), integration evidence, the
           // static-review tally and the rounds used. Shown in the Activity tab
           // + the popup Activity Center; never sent to the model.
@@ -6362,7 +6461,7 @@
           // 1.99.9: mode auto-check (read the created path back) - appended AFTER
           // compression so the fact line is never the part that gets dropped.
           try { feedback = await attachModeAutoCheck(call.tool, call.arguments, feedback); } catch {}
-          // 2.14.0: creation tracker - records the step for coverage / integration
+          // 2.15.0: creation tracker - records the step for coverage / integration
           // and appends the static Luau review of the source the model sent
           // (bounded per run by the creation profile; never on failed writes).
           try { if (A.creation) { const o = A.creation.observe(call, feedback, { ms: Date.now() - A.toolStart }); if (o && o.note) { feedback += "\n" + o.note; diag("creation.review", { tool: call.tool, findings: o.event.findings, chars: o.note.length }); } } } catch {}
@@ -6536,7 +6635,7 @@
                   else if (gui) diag("gui.briefSkipped", { chars: gui.length, cap });
                 }
               }
-              // 2.14.0: the CREATION SPEC rides last - the deliverables the request
+              // 2.15.0: the CREATION SPEC rides last - the deliverables the request
               // names, the command family that builds and the one that proves each,
               // the integration checks and the stage order. Only for requests with
               // enough deliverables (profile.briefMin), same send budget.
@@ -6755,6 +6854,7 @@
         const requested = engine === "local" ? "local" : "roblox";
         const allScoped = A.toolList.filter((t) => t && (t.server || requested) === requested && !t.hidden);
         allScoped.push(...blenderModeTools(requested)); // 1.95.0: Blender mode embeds the Blender family too
+        allScoped.push(...blockbenchModeTools(requested)); // 2.15.0: Blockbench mode embeds the bb_* family too
         if (!allScoped.length) return "";
         const animLines = requested === "roblox" && typeof RSAnim !== "undefined" ? RSAnim.describeCommands() : [];
         const skillLines = requested === "roblox" && typeof RobloxScriptSkills !== "undefined" ? RobloxScriptSkills.describeCommands() : [];
@@ -8825,7 +8925,7 @@
     // reload - they used to silently reset to these defaults on every page
     // refresh because only the setters ever touched chrome.storage.
     let autoFixEnabled = true, extraThinking = false, planMode = false, steeringMode = false, forgeMode = false, autoFixStopPlay = true, autoDebugEnabled = true, multiAgent = false, guiBriefEnabled = true;
-    // 2.14.0: creation quality profile (TotalCreation.PROFILES) - how strictly a
+    // 2.15.0: creation quality profile (TotalCreation.PROFILES) - how strictly a
     // run is checked against the request's deliverables. Persisted; shared
     // with the popup (rsCreationProfile); always capped by the provider.
     let creationProfile = "high";
@@ -9613,6 +9713,7 @@
     }
     function syncBlenderFlag() {
       try { window.__rsBlender = () => blenderConnected(); } catch {}
+      try { window.__rsBlockbench = () => blockbenchConnected(); } catch {}
     }
     function blenderToolCount() {
       try { return (A.toolList || []).filter((t) => t && (t.server === "blender" || /^blender_|^get_scene_info$|^get_object_info$|^execute_blender_code$|^get_viewport_screenshot$/.test(String(t.name || "")))).length; } catch { return 0; }
@@ -9655,6 +9756,50 @@
             </div>`;
     }
     try { window.__rsBlender = () => blenderConnected(); } catch {}
+    // 2.15.0 Blockbench MCP card (Settings → MCP servers), same visual
+    // language as the Blender card. Offline = three steps + the URL field;
+    // connected = what the link unlocks + the live plugin tool count.
+    function blockbenchConnected() {
+      if (A.bridge && A.bridge.blockbench === true) return true;
+      const live = ((A.bridge && A.bridge.servers) || []);
+      return live.some((s) => s && s.id === "blockbench" && s.alive);
+    }
+    function blockbenchCardHtml() {
+      const on = blockbenchConnected();
+      const live = ((A.bridge && A.bridge.servers) || []).find((s) => s && s.id === "blockbench") || null;
+      const url = String((A.bridge && A.bridge.blockbench_url) || (live && live.url) || (A.blockbenchUrl || "")).trim();
+      const pill = `<span class="rs-blender-pill" role="status"><i aria-hidden="true"></i>${on ? "Connected" : "Offline"}</span>`;
+      const body = on
+        ? `<div class="rs-blender-caps" aria-label="Available through Blockbench">
+             <span class="rs-blender-cap"><b>Cubes &amp; groups</b> bb_cubes / bb_group</span>
+             <span class="rs-blender-cap"><b>Textures &amp; clips</b> bb_texture / bb_animate</span>
+             <span class="rs-blender-cap"><b>Export</b> OBJ · glTF · GLB → Studio Import 3D</span>
+             ${live && live.raw_tools ? `<span class="rs-blender-cap rs-blender-cap-n">${live.raw_tools} plugin tools</span>` : ""}
+           </div>`
+        : `<ol class="rs-blender-steps" aria-label="How to connect Blockbench">
+             <li><b>1</b><span>In Blockbench: <em>File → Plugins → Load Plugin from URL</em> → <code>https://jasonjgardner.github.io/blockbench-mcp-plugin/mcp.js</code></span></li>
+             <li><b>2</b><span>The plugin serves <em>http://localhost:3000/bb-mcp</em>. If the TotalScript desktop agent already uses port 3000, change the port in Blockbench → Settings → General → MCP Server Port and type the new URL below.</span></li>
+             <li><b>3</b><span>Press <em>Connect Blockbench</em>. The finished model is exported as a file; you import it with Studio → Home → Import 3D.</span></li>
+           </ol>`;
+      return `<div class="rs-blender-card rs-bb-card ${on ? "on" : ""}" id="rs-blockbench-card" data-state="${on ? "on" : "off"}">
+              <div class="rs-blender-head">
+                <span class="rs-blender-mark rs-bb-mark" aria-hidden="true"></span>
+                <div class="rs-blender-copy">
+                  <div class="rs-blender-title"><span class="rs-blender-name">Blockbench MCP</span>${pill}</div>
+                  <span class="rs-blender-sub">${on ? `Plugin live at ${escRs(url || "localhost")} — the AI models in Blockbench and exports files for Studio.` : "Talks to the Blockbench MCP plugin over HTTP on this computer. Nothing is uploaded; exports land in the agent workspace."}</span>
+                </div>
+              </div>
+              ${body}
+              <label class="rs-bb-url"><span>URL</span><input id="rs-blockbench-url" class="rs-mcp-field" type="url" spellcheck="false" placeholder="http://localhost:3000/bb-mcp" value="${escRs(url)}" ${on ? "readonly" : ""}></label>
+              <div class="rs-blender-note" id="rs-blockbench-note" hidden></div>
+              <div class="rs-blender-actions">
+                <button type="button" id="rs-mcp-blockbench" class="rs-blender-primary">${on ? "Reconnect" : "Connect Blockbench"}</button>
+                ${on ? '<button type="button" class="rs-blender-off" id="rs-mcp-blockbench-off">Disconnect</button>' : ""}
+                <button type="button" class="rs-blender-link" id="rs-blockbench-site" title="Open blockbench.net in a new tab">blockbench.net</button>
+              </div>
+            </div>`;
+    }
+    try { window.__rsBlockbench = () => blockbenchConnected(); } catch {}
     // The bridge (config.json + live health) is the SOURCE OF TRUTH for which
     // addon servers actually exist - chrome.storage.local is just a display-name
     // cache, and the two CAN drift (e.g. storage cleared, or config.json edited
@@ -9910,7 +10055,7 @@
         try { toast("Back to the default look"); } catch {}
       });
     }
-    // 2.14.0: Creation quality section - four profiles that change what the
+    // 2.15.0: Creation quality section - four profiles that change what the
     // creation engine demands of a run (rounds, read-back, integration, audit).
     function creationSectionHtml() {
       if (typeof TotalCreation === "undefined") return "";
@@ -10148,8 +10293,9 @@
           </section>
           <section class="rs-menu-sec rs-adv">
             <div class="rs-sec-label"><span>MCP servers</span></div>
-            <div class="rs-menu-note">Roblox Studio is primary. Blender connects to the addon running in Blender on port 9876.</div>
+            <div class="rs-menu-note">Roblox Studio is primary. Blender connects to the addon running in Blender on port 9876; Blockbench connects to its MCP plugin over localhost HTTP.</div>
             ${blenderCardHtml()}
+            ${blockbenchCardHtml()}
            ${mcpList}
            <div class="rs-mcp-sep"></div>
             <input id="rs-mcp-name" class="rs-mcp-field" placeholder="Name, e.g. Sketchfab" />
@@ -10363,6 +10509,73 @@
       const blenderSite = menuEl.querySelector("#rs-blender-site");
       if (blenderSite) blenderSite.addEventListener("click", () => {
         try { window.open("https://www.blender.org/", "_blank", "noopener"); } catch {}
+      });
+      // ── Blockbench MCP card (2.15.0) ──
+      const bbBtn = menuEl.querySelector("#rs-mcp-blockbench");
+      const bbCard = menuEl.querySelector("#rs-blockbench-card");
+      const bbNote = menuEl.querySelector("#rs-blockbench-note");
+      const bbUrlField = menuEl.querySelector("#rs-blockbench-url");
+      function setBbBusy(on, label) {
+        if (bbCard) bbCard.classList.toggle("busy", !!on);
+        if (!bbBtn) return;
+        bbBtn.disabled = !!on;
+        if (on) { bbBtn.dataset.label = bbBtn.textContent; bbBtn.innerHTML = `<span class="rs-mcp-spin"></span>${label || "Connecting…"}`; }
+        else if (bbBtn.dataset.label) bbBtn.textContent = bbBtn.dataset.label;
+      }
+      function showBbNote(text, kind) {
+        if (!bbNote) return;
+        bbNote.textContent = text || "";
+        bbNote.dataset.kind = kind || "error";
+        bbNote.hidden = !text;
+      }
+      if (bbUrlField && !bbUrlField.readOnly) bbUrlField.addEventListener("change", async () => {
+        const url = String(bbUrlField.value || "").trim();
+        A.blockbenchUrl = url;
+        if (!url) { try { await bg({ type: "blockbench_set_url", url: "http://localhost:3000/bb-mcp" }); } catch {} return; }
+        const r = await bg({ type: "blockbench_set_url", url });
+        if (!r || !r.ok) showBbNote(String((r && r.error) || "That URL is not accepted (localhost / 127.0.0.1 only)."), "error");
+        else showBbNote("", "info");
+      });
+      if (bbBtn) bbBtn.addEventListener("click", async () => {
+        if (mcpBusy) return;
+        showBbNote("");
+        setBbBusy(true, "Connecting…");
+        setMcpBusy(true, "Checking the Blockbench MCP plugin…");
+        const url = bbUrlField && !bbUrlField.readOnly ? String(bbUrlField.value || "").trim() : "";
+        const r = await bg(url ? { type: "blockbench_connect", url } : { type: "blockbench_connect" });
+        setMcpBusy(false);
+        if (!r || !r.ok) {
+          setBbBusy(false);
+          showBbNote(String((r && r.error) || "Blockbench did not answer. Open Blockbench with the MCP plugin enabled and try again.").slice(0, 400), "error");
+          try { toast("Couldn't reach Blockbench"); playSfx("error"); } catch {}
+          syncBlenderFlag();
+          return;
+        }
+        A.bridge = A.bridge || {}; A.bridge.blockbench = true; A.bridge.blockbench_url = r.url || url;
+        try { A.toolsAt = 0; } catch {}
+        try { await ensureTools(true); } catch {}
+        syncBlenderFlag();
+        try { toast(`Blockbench connected — ${r.tools || 0} plugin tools behind the bb_* commands`); playSfx("ok"); } catch {}
+        buildMenu();
+      });
+      const bbOff = menuEl.querySelector("#rs-mcp-blockbench-off");
+      if (bbOff) bbOff.addEventListener("click", async () => {
+        if (mcpBusy) return;
+        bbOff.disabled = true;
+        if (bbCard) bbCard.classList.add("busy");
+        setMcpBusy(true, "Disconnecting Blockbench…");
+        await bg({ type: "blockbench_disconnect" });
+        setMcpBusy(false);
+        try { if (A.bridge) A.bridge.blockbench = false; } catch {}
+        try { A.toolsAt = 0; } catch {}
+        try { await ensureTools(true); } catch {}
+        syncBlenderFlag();
+        try { toast("Blockbench disconnected"); playSfx("ok"); } catch {}
+        buildMenu();
+      });
+      const bbSite = menuEl.querySelector("#rs-blockbench-site");
+      if (bbSite) bbSite.addEventListener("click", () => {
+        try { window.open("https://www.blockbench.net/", "_blank", "noopener"); } catch {}
       });
 
       // ── Work mode cards ──
@@ -11945,6 +12158,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     function setStatus(s) {
       A.bridge = s;
       try { window.__rsBlender = () => !!(s && s.blender); } catch {}
+      try { window.__rsBlockbench = () => !!(s && s.blockbench); } catch {}
       // AgentScript ground truth from the agent process itself. Re-render the
       // open session panel so the Danger-zone toggle mirrors the agent.
       try {

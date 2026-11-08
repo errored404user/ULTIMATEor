@@ -17,7 +17,7 @@
     html[data-ts-theme="light"] .hero{background-image:none}
     @media (prefers-color-scheme: light){ html[data-ts-theme="system"] .hero{background-image:none} }
     .work{display:grid; gap:var(--ts-s2)}
-    .work.work-modes{grid-template-columns:1fr 1fr 1fr}
+    .work.work-modes{grid-template-columns:1fr 1fr} /* 2.15.0: four built-in modes → 2 × 2 */
     .work.work-access{grid-template-columns:1fr 1fr}
     #work-creation.on{background:linear-gradient(135deg,#9ff3ff 0%,#22d3ee 45%,#0e7490 100%); color:#03161c}
     #work-creation.on .work-sub{color:rgba(3,22,28,.78)}
@@ -25,6 +25,8 @@
     #work-blender.on .work-sub{color:rgba(28,13,4,.78)}
     #work-animate.on{background:linear-gradient(135deg,#ddd6fe 0%,#a78bfa 45%,#5b21b6 100%); color:#140a2e}
     #work-animate.on .work-sub{color:rgba(20,10,46,.78)}
+    #work-blockbench.on{background:linear-gradient(135deg,#bff3e8 0%,#2fbda1 45%,#0f5f52 100%); color:#06201b}
+    #work-blockbench.on .work-sub{color:rgba(6,32,27,.78)}
     .work-card.on .work-name{color:inherit}
     #start-steps li.ok .pip{background:var(--ts-ok); border-color:var(--ts-ok)}
     #start-steps li.ok .pip::after{content:""; position:absolute; left:3.5px; top:1px; width:3.5px; height:7px; border:solid var(--ts-accent-ink); border-width:0 2px 2px 0; transform:rotate(45deg)}
@@ -171,6 +173,10 @@
               <span class="work-name">Animator</span>
               <span class="work-sub" title="Rig → clip → preview on the rig → playback code → play-test; combos, locomotion, emotes, cutscenes, camera on R6 &amp; R15">Rig → clip → preview on the rig → playback code → play-test; combos, locomotion, emotes, cutscenes, camera on R6 &amp; R15</span>
             </button>
+            <button type="button" class="work-card" data-work="blockbench" id="work-blockbench">
+              <span class="work-name">Blockbench</span>
+              <span class="work-sub" title="Low-poly models in Blockbench through its MCP plugin: groups → cubes → texture → animate → screenshot → export OBJ / glTF → Studio Import 3D">Low-poly models in Blockbench through its MCP plugin: groups → cubes → texture → animate → screenshot → export OBJ / glTF → Studio Import 3D</span>
+            </button>
           </div>
           <div class="work work-access">
             <button type="button" class="work-card" data-perm="sandbox" id="perm-sandbox">
@@ -283,6 +289,7 @@
   <div hidden aria-hidden="true">
     <button type="button" id="settings">Open on-page menu</button>
     <button type="button" id="blender">Blender MCP — open menu</button>
+    <button type="button" id="blockbench">Blockbench MCP — open menu</button>
     <button type="button" id="codecraft" title="Chat with any CodeCraft model using your own cc_ API key">CodeCraft API chat (own key)</button>
     <button type="button" id="discord">Join Discord</button>
     <input id="publish-automation" type="checkbox">

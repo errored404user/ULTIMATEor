@@ -19,7 +19,7 @@ const RSProvider = (() => {
 
   // 1.99.0: API PROFILES. The same page + adapter can serve any OpenAI-compatible
   // API; keys and chats are stored per profile and only ever sent to that
-  // profile's host. 2.14.0: the DeepSeek API profile was removed - CodeCraft is
+  // profile's host. 2.15.0: the DeepSeek API profile was removed - CodeCraft is
   // the only profile, so the page ignores any `?api=` query.
   const PROFILES = {
     codecraft: {
