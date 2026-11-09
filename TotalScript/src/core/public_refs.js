@@ -1,4 +1,4 @@
-// src/core/public_refs.js — Public Skills → References (2.16.1)
+// src/core/public_refs.js — Public Skills → References (2.17.0)
 //
 // A reference LIBRARY the user curates on this device: official docs links,
 // plain notes, pasted Luau / GUI snippets and text files. Entries are attached
@@ -14,7 +14,7 @@
 (function () {
   "use strict";
   const root = typeof window !== "undefined" ? window : globalThis;
-  const VERSION = "2.16.1";
+  const VERSION = "2.17.0";
   const KEY = "rsPublicRefs";
   const KINDS = Object.freeze(["link", "note", "snippet"]);
   const LANGS = Object.freeze(["luau", "text", "json", "markdown"]);

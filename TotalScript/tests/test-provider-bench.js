@@ -51,7 +51,7 @@ for (const b of manifest.content_scripts.filter((c) => c.world !== "MAIN" && c.j
   providers.push({ id: P.id, P, caps: O.capabilities(P), file });
 }
 providers.sort((a, b) => a.id.localeCompare(b.id));
-ok("adapters loaded for the benchmark: " + providers.map((p) => p.id).join(", "), providers.length >= 11); // 1.89.0: 12 bundles after the provider removal; 2.16.1: 11 (meta removed)
+ok("adapters loaded for the benchmark: " + providers.map((p) => p.id).join(", "), providers.length >= 11); // 1.89.0: 12 bundles after the provider removal; 2.17.0: 11 (meta removed)
 // The desktop app (total-agent, OpenAI-compatible HTTP) is benchmarked from its source pins.
 providers.push({ id: "total-agent", P: null, caps: { id: "total-agent", name: "total-agent (HTTP tools)", vision: false, tightPrompt: false, sysMaxChars: 0, sendCharBudget: 0, maxBatchCommands: 8, timings: {} }, rust: true });
 

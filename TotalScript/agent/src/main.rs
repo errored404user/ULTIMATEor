@@ -102,6 +102,7 @@ mod chat;
 mod easter;
 mod gui;
 mod plugin;
+mod update;
 mod workspace;
 
 #[cfg(windows)]
@@ -293,6 +294,9 @@ struct Args {
     roblox_addr: String,
     #[arg(long, help = "Workspace root for the LOCAL (FS) engine [env: TOTAL_WORKSPACE_ROOT]")]
     workspace: Option<String>,
+    /// Set by the updater's relauncher: the version that just replaced itself.
+    #[arg(long, hide = true)]
+    updated_from: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -774,6 +778,13 @@ fn env_first(keys: &[&str]) -> Option<String> {
 }
 
 fn main() {
+    // Relaunched by the updater: the previous binary is still shutting down
+    // for a moment - wait until it released port 3000 so the single-instance
+    // checks below do not just raise the dying window and quit.
+    if std::env::args().any(|a| a == "--updated-from") {
+        let until = std::time::Instant::now() + Duration::from_secs(20);
+        while bridge_alive_on(3000) && std::time::Instant::now() < until { std::thread::sleep(Duration::from_millis(300)); }
+    }
     // Double-clicking total-core.exe while it is already in the notification area
     // should reopen that instance, not start a doomed second bridge on the same
     // ports. EnumWindows (other_agent_window) sees hidden windows too.
@@ -843,6 +854,19 @@ async fn start() -> anyhow::Result<()> {
     if workspace.full_access() { shared.log("FULL PC ACCESS enabled at boot (TOTAL_FULL_ACCESS=1)"); }
     shared.log("listening: http://127.0.0.1:3000 · ws 17613 (roblox) · 17615 (agentscript)");
     shared.log(&format!("settings: {}", gui::Settings::path().display()));
+    // 2.17.0 updater: restore its two settings, drop the binary a self-update
+    // left behind, and note the version jump once.
+    shared.update.set_daily(settings.update_check_daily);
+    if !settings.update_extension_dir.trim().is_empty() { shared.update.set_configured_dir(Some(PathBuf::from(settings.update_extension_dir.trim()))); }
+    if let Some(old) = update::cleanup_after_restart() { shared.log(&format!("updater: removed previous binary {}", old.display())); }
+    if let Some(from) = args.updated_from.as_deref() {
+        shared.log(&format!("updater: self-update finished - {from} → {}", env!("CARGO_PKG_VERSION")));
+        shared.track("update", format!("Updated from {from} to {} - the Studio plugin is refreshed on this start; reload the extension from its popup", env!("CARGO_PKG_VERSION")));
+    }
+    match shared.update.extension_dir() {
+        Some((dir, how)) => shared.log(&format!("updater: extension folder {} ({how}, v{})", dir.display(), update::manifest_version(&dir).unwrap_or_default())),
+        None => shared.log("updater: extension folder not found next to this binary - set it in Settings → Updates before using Update"),
+    }
     let state = AppState::new(result_tx, mcp_alive, roblox_proc.clone(), workspace, shared.clone());
     if pair_at_boot {
         state.plugin.set_pair_enabled(true).await;
@@ -1036,6 +1060,22 @@ async fn ui_command_loop(state: AppState, mut rx: tokio::sync::mpsc::UnboundedRe
                 };
                 let _ = reply.send(result);
             }
+            gui::UiCommand::UpdateCheck { force } => {
+                let st = state.clone();
+                tokio::spawn(async move {
+                    match st.ui.update.check(force).await {
+                        Ok(l) => {
+                            let newer = update::is_newer(&l.version, env!("CARGO_PKG_VERSION"));
+                            st.ui.track("update", if newer { format!("TotalScript {} is available - Settings → Updates to install", l.version) } else { format!("Up to date ({})", env!("CARGO_PKG_VERSION")) });
+                            let _ = st.ui.update.take_unannounced();
+                        }
+                        Err(e) => st.ui.track("error", format!("Update check failed: {e}")),
+                    }
+                });
+            }
+            gui::UiCommand::UpdateApply { components } => {
+                if let Err(e) = start_update(&state, components, None) { state.ui.track("error", format!("Update not started: {e}")); }
+            }
             gui::UiCommand::SetPair(on) => {
                 let state2 = state.clone();
                 tokio::spawn(async move {
@@ -1093,6 +1133,26 @@ fn kill_studio_processes() -> usize {
 }
 
 async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant, ui: Arc<gui::UiShared>) -> anyhow::Result<()> {
+    // 2.17.0 daily update check: one latest.json request per day while the
+    // switch is on; the result only ever becomes an Activity line + a badge in
+    // the extension. Installing always needs a click.
+    let upd_ui = ui.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        loop {
+            let hub = upd_ui.update.clone();
+            if hub.daily() && hub.needs_daily_check() {
+                match hub.check(false).await {
+                    Ok(l) => {
+                        upd_ui.log(&format!("updater: latest release {} (this app {})", l.version, env!("CARGO_PKG_VERSION")));
+                        if let Some(v) = hub.take_unannounced() { upd_ui.track("update", format!("TotalScript {v} is available - Settings → Updates (or the extension popup) to install")); }
+                    }
+                    Err(e) => upd_ui.log(&format!("updater: check failed: {e}")),
+                }
+            }
+            tokio::time::sleep(Duration::from_secs(30 * 60)).await;
+        }
+    });
     let watcher_state = state.clone();
     let watcher_ui = ui.clone();
     tokio::spawn(async move {
@@ -1181,6 +1241,10 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
         .route("/api/plugin/status", get(plugin::status_handler))
         .route("/api/plugin/config", post(plugin::config_handler))
         .route("/api/plugin/event", post(plugin::event_handler))
+        .route("/api/update/status", get(update_status_handler))
+        .route("/api/update/check", post(update_check_handler))
+        .route("/api/update/apply", post(update_apply_handler))
+        .route("/api/update/extension-folder", post(update_folder_handler))
         .route("/ws", get(ws_handler))
         .with_state(state)
         .layer(cors)
@@ -1195,6 +1259,76 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
     info!("Boot completed in {}ms", start.elapsed().as_millis());
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+// ───────────────────────── 2.17.0 updater endpoints ─────────────────────────
+// Extension origin only (origin_guard). The service worker calls these from
+// the popup's buttons; the GUI reaches the same Hub through UiCommand.
+
+/// Kick off an update job in the background. Err = busy / nothing to do.
+fn start_update(state: &AppState, components: Vec<String>, version: Option<String>) -> Result<(), String> {
+    if state.ui.update.is_busy() { return Err("an update is already running".into()); }
+    let hub = state.ui.update.clone();
+    let log_ui = state.ui.clone();
+    let log: Arc<dyn Fn(&str) + Send + Sync> = Arc::new(move |line: &str| { log_ui.log(&format!("updater: {line}")); log_ui.track("update", line.to_string()); });
+    let restart_state = state.clone();
+    let restart: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+        let st = restart_state.clone();
+        tokio::spawn(async move {
+            info!("updater: new binary in place — killing MCP helper tree and exiting for the relaunch");
+            st.roblox_mcp.lock().await.reset().await;
+            std::process::exit(0);
+        });
+    });
+    tokio::spawn(async move { let _ = hub.apply(components, version, log, restart).await; });
+    Ok(())
+}
+
+async fn update_status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    Json(state.ui.update.snapshot())
+}
+
+async fn update_check_handler(State(state): State<AppState>, body: String) -> impl IntoResponse {
+    let b: serde_json::Value = serde_json::from_str(&body).unwrap_or(serde_json::Value::Null);
+    let force = b.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+    match state.ui.update.check(force).await {
+        Ok(l) => {
+            if update::is_newer(&l.version, env!("CARGO_PKG_VERSION")) {
+                if let Some(v) = state.ui.update.take_unannounced() { state.ui.track("update", format!("TotalScript {v} is available - Settings → Updates (or the extension popup) to install")); }
+            }
+        }
+        Err(e) => tracing::warn!("updater: check failed: {e}"),
+    }
+    Json(state.ui.update.snapshot())
+}
+
+async fn update_apply_handler(State(state): State<AppState>, body: String) -> impl IntoResponse {
+    let b: serde_json::Value = serde_json::from_str(&body).unwrap_or(serde_json::Value::Null);
+    let components: Vec<String> = b.get("components").and_then(|c| c.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect()).unwrap_or_else(|| vec!["extension".into(), "app".into()]);
+    let version = b.get("version").and_then(|v| v.as_str()).map(|s| s.to_string()).filter(|s| !s.is_empty());
+    match start_update(&state, components, version) {
+        Ok(()) => {
+            tokio::time::sleep(Duration::from_millis(120)).await; // let the job record its first phase
+            Json(serde_json::json!({ "ok": true, "job": state.ui.update.job() })).into_response()
+        }
+        Err(e) => (axum::http::StatusCode::CONFLICT, Json(serde_json::json!({ "ok": false, "error": e }))).into_response(),
+    }
+}
+
+async fn update_folder_handler(State(state): State<AppState>, body: String) -> impl IntoResponse {
+    let b: serde_json::Value = serde_json::from_str(&body).unwrap_or(serde_json::Value::Null);
+    let path = b.get("path").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if !path.is_empty() && update::manifest_version(std::path::Path::new(&path)).is_none() {
+        return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({ "ok": false, "error": "that folder has no TotalScript manifest.json" }))).into_response();
+    }
+    state.ui.update.set_configured_dir(if path.is_empty() { None } else { Some(PathBuf::from(&path)) });
+    // Persist next to the other settings (the window mirrors the hub value each frame).
+    let mut settings = gui::Settings::load();
+    settings.update_extension_dir = path.clone();
+    if let Err(e) = settings.save() { tracing::warn!("updater: could not save settings: {e}"); }
+    let det = state.ui.update.extension_dir();
+    state.ui.track("update", if path.is_empty() { "extension folder cleared - auto-detection".to_string() } else { format!("extension folder set to {path}") });
+    Json(serde_json::json!({ "ok": true, "path": det.as_ref().map(|(p, _)| p.display().to_string()), "detected": det.as_ref().map(|(_, h)| *h) })).into_response()
 }
 
 async fn connect_handler(State(state): State<AppState>, Json(req): Json<serde_json::Value>) -> impl IntoResponse {

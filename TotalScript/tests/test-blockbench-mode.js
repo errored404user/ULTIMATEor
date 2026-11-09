@@ -1,4 +1,4 @@
-// 2.16.1 — BLOCKBENCH MCP + work mode. MOCKED: no Blockbench, no Studio, no AI
+// 2.17.0 — BLOCKBENCH MCP + work mode. MOCKED: no Blockbench, no Studio, no AI
 // site. A fake MCP "Streamable HTTP" server (node http) stands in for the
 // jasonjgardner/blockbench-mcp-plugin; the real client, the real curated
 // command table and the real background.js code path run against it.
@@ -121,7 +121,7 @@ function makeServer(opts) {
 
 (async () => {
   // ── A. pure module ────────────────────────────────────────────────────────
-  ok("A1 module: VERSION 2.16.1, default URL localhost:3000/bb-mcp, 14 curated commands all bb_*, toolList tags server blockbench", BB.VERSION === "2.16.1" && BB.DEFAULT_URL === "http://localhost:3000/bb-mcp" && BB.COMMAND_NAMES.length === 14 && BB.COMMAND_NAMES.every((n) => /^bb_[a-z_]+$/.test(n)) && BB.toolList().every((t) => t.server === "blockbench" && t.inputSchema && t.description));
+  ok("A1 module: VERSION 2.17.0, default URL localhost:3000/bb-mcp, 14 curated commands all bb_*, toolList tags server blockbench", BB.VERSION === "2.17.0" && BB.DEFAULT_URL === "http://localhost:3000/bb-mcp" && BB.COMMAND_NAMES.length === 14 && BB.COMMAND_NAMES.every((n) => /^bb_[a-z_]+$/.test(n)) && BB.toolList().every((t) => t.server === "blockbench" && t.inputSchema && t.description));
   const n1 = BB.normalizeUrl(""), n2 = BB.normalizeUrl("localhost:3100/bb-mcp/"), n3 = BB.normalizeUrl("http://evil.example.com:3000/bb-mcp"), n4 = BB.normalizeUrl("http://127.0.0.1:3000/bb-mcp?x=1"), n5 = BB.normalizeUrl("http://[::1]:3000/custom");
   ok("A2 normalizeUrl: empty → default; bare host:port gets http + trailing slash trimmed; remote host, query string rejected; ::1 allowed", n1.ok && n1.url === BB.DEFAULT_URL && n1.port === 3000 && n1.origin === "http://localhost:3000" && n2.ok && n2.url === "http://localhost:3100/bb-mcp" && n2.port === 3100 && !n3.ok && /this computer/.test(n3.error) && !n4.ok && n5.ok && n5.url === "http://[::1]:3000/custom", { n1, n2, n3, n4, n5 });
   const sse = BB.parseSse("event: message\ndata: {\"a\":1}\n\n: keepalive\n\ndata: {\"b\":\ndata: 2}\n\n");
@@ -305,7 +305,7 @@ function makeServer(opts) {
   ok("G4 popup badge: Studio card badge says Blockbench linked / Blender + Blockbench linked from the status", popup.includes('s.blender && s.blockbench ? "Blender + Blockbench linked" : s.blockbench ? "Blockbench linked" : "Blender linked"'));
 
   // ── H. README ─────────────────────────────────────────────────────────────
-  ok("H1 README: 2.16.1 block names Blockbench MCP (Streamable HTTP plugin, bb_* commands, export + manual Import 3D, Origin rule, port 3000 note) and the test is listed under Testing", /2\.16\.1/.test(readme) && /Blockbench/.test(readme) && /bb-mcp/.test(readme) && /Import 3D/.test(readme) && /declarativeNetRequest/.test(readme) && /test-blockbench-mode\.js/.test(readme));
+  ok("H1 README: 2.17.0 block names Blockbench MCP (Streamable HTTP plugin, bb_* commands, export + manual Import 3D, Origin rule, port 3000 note) and the test is listed under Testing", /2\.17\.0/.test(readme) && /Blockbench/.test(readme) && /bb-mcp/.test(readme) && /Import 3D/.test(readme) && /declarativeNetRequest/.test(readme) && /test-blockbench-mode\.js/.test(readme));
 
   console.log(failed ? `\n${failed} FAILED` : "\nALL OK");
   process.exit(failed ? 1 : 0);

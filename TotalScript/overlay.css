@@ -3956,7 +3956,7 @@ html.rs-light .rs-blender-note { color: #7a1f12; background: rgba(190,60,45,.1);
   .rs-blender-card.on .rs-blender-mark, .rs-blender-card.on .rs-blender-pill i { animation: none; }
 }
 
-/* ── Blockbench MCP card 2.16.1 ─────────────────────────────────────────────
+/* ── Blockbench MCP card 2.17.0 ─────────────────────────────────────────────
    Same component as the Blender card (shared classes), recoloured to
    Blockbench's teal and with a small URL field; the mark is a cube outline. */
 .rs-blender-card.rs-bb-card { --bl: #1e9c86; --bl2: #5ad0ba; --bl-ink: #06201b; }
@@ -6041,7 +6041,7 @@ html[data-rs-theme="void"] .rs-template-head{background:linear-gradient(180deg,r
 .rs-work-row.rs-work-creation{grid-template-columns:minmax(0,1fr)}
 /* 1.99.5: Access has two states (Sandbox only / Full PC). */
 .rs-work-row.rs-access-row{grid-template-columns:1fr 1fr}
-/* 2.16.1 — creation quality: four profile cards, two per row (names wrap, never one glyph per line) */
+/* 2.17.0 — creation quality: four profile cards, two per row (names wrap, never one glyph per line) */
 .rs-work-row.rs-creation-row{grid-template-columns:1fr 1fr}
 .rs-creation-row .rs-work-sub{overflow-wrap:break-word}
 .rs-work-creation .rs-work-card{min-height:48px}

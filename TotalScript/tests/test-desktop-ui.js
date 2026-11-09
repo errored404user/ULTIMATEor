@@ -65,7 +65,7 @@ ok("E1 windows shell line forces UTF-8 and keeps quotes", /fn windows_shell_line
 
 // F — release pins
 const manifest = JSON.parse(read("manifest.json"));
-ok("F1 version pins 2.16.1 (manifest / crate / lock / plugin)", manifest.version === "2.16.1" && /^version = "2\.16\.1"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "2\.16\.1"/.test(read("agent/Cargo.lock")) && read("plugin/TotalScript.lua").includes('local VERSION = "2.16.1"'));
+ok("F1 version pins 2.17.0 (manifest / crate / lock / plugin)", manifest.version === "2.17.0" && /^version = "2\.17\.0"/m.test(read("agent/Cargo.toml")) && /name = "total-agent"\nversion = "2\.17\.0"/.test(read("agent/Cargo.lock")) && read("plugin/TotalScript.lua").includes('local VERSION = "2.17.0"'));
 ok("F2 README 2.10.0 block + Testing line", /\*\*2\.10\.0 — Desktop UI overhaul/.test(readme) && /node tests\/test-desktop-ui\.js/.test(readme));
 ok("F3 no new crate (Cargo.lock unchanged apart from the version)", !/name = "(fontdue|rusttype|resvg|tiny-skia|cosmic-text)"/.test(read("agent/Cargo.lock")));
 

@@ -1,0 +1,266 @@
+name: TotalScript Release
+
+# 2.17.0 auto-updater source. Push a tag `vX.Y.Z` (matching manifest.json and
+# agent/Cargo.toml) and this publishes a GitHub Release with everything the
+# in-app updater (agent/src/update.rs) and the extension (src/core/updater.js)
+# read:
+#   latest.json                 version, tag, notes_url, assets[{name,size,sha256,url}]
+#   TotalScript-extension.tar   the unpacked extension folder (ustar, prefix TotalScript/,
+#                               fresh binaries in bin/) - what the app installs
+#   TotalScript.zip             the same folder for humans (chrome://extensions → Load unpacked)
+#   total-core-windows-x64.exe  the desktop app (self-update asset)
+#   total-core-macos-arm64      same for Apple Silicon (Intel: built when a runner exists)
+#   SHA256SUMS.txt
+#
+# Re-run for an existing tag: Actions → TotalScript Release → Run workflow → tag.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build and publish, e.g. v2.17.0"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  REPO_SLUG: errored404user/ULTIMATEor
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: TotalScript/agent
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: TotalScript/agent
+      - name: Build (release)
+        run: |
+          set -o pipefail
+          (cargo build --release --locked --message-format=short 2>&1 || cargo build --release --message-format=short 2>&1) | tee build.log
+      - name: "Unit tests (includes the updater: sha256 vectors, tar reader, folder swap)"
+        run: |
+          set -o pipefail
+          cargo test --release --locked --message-format=short 2>&1 | tee test.log
+      - name: Smoke test
+        run: ./target/release/total-core.exe --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: total-core-windows-x64
+          path: TotalScript/agent/target/release/total-core.exe
+          if-no-files-found: error
+
+  macos-arm64:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: TotalScript/agent
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: TotalScript/agent
+      - name: Build (release)
+        run: |
+          set -o pipefail
+          (cargo build --release --locked --message-format=short 2>&1 || cargo build --release --message-format=short 2>&1) | tee build.log
+      - name: Smoke test
+        run: ./target/release/total-core --help
+      - name: Name the binary for the release
+        run: |
+          uname -m | grep -q arm64 || { echo "::error::macos-latest is not arm64 any more - adjust release.yml"; exit 1; }
+          cp target/release/total-core target/release/total-core-macos-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: total-core-macos-arm64
+          path: TotalScript/agent/target/release/total-core-macos-arm64
+          if-no-files-found: error
+
+  # Intel Macs: best effort - the label comes and goes with GitHub's runner
+  # fleet. A missing runner must never block the release, so the job may fail
+  # and the release step just omits the asset (the app then says "no prebuilt
+  # total-core for macos-x86_64 - rebuild from source").
+  macos-x64:
+    runs-on: macos-15-intel
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: TotalScript/agent
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build (release)
+        run: cargo build --release --locked --message-format=short || cargo build --release --message-format=short
+      - name: Name the binary for the release
+        run: |
+          uname -m | grep -q x86_64 || { echo "not an Intel runner, skipping"; exit 1; }
+          cp target/release/total-core target/release/total-core-macos-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: total-core-macos-x64
+          path: TotalScript/agent/target/release/total-core-macos-x64
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [windows, macos-arm64, macos-x64]
+    if: ${{ !cancelled() && needs.windows.result == 'success' && needs.macos-arm64.result == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve tag and gate the three version numbers
+        id: ver
+        run: |
+          set -e
+          TAG="${{ github.event.inputs.tag }}"
+          [ -n "$TAG" ] || TAG="${GITHUB_REF#refs/tags/}"
+          case "$TAG" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "::error::tag '$TAG' is not vX.Y.Z"; exit 1;; esac
+          VER="${TAG#v}"
+          MANIFEST=$(python3 -c 'import json;print(json.load(open("TotalScript/manifest.json"))["version"])')
+          CARGO=$(grep -m1 -E '^version *= *"' TotalScript/agent/Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          UPDJS=$(grep -m1 -E 'const VERSION = "' TotalScript/src/core/updater.js | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "tag=$TAG manifest=$MANIFEST cargo=$CARGO updater.js=$UPDJS"
+          if [ "$VER" != "$MANIFEST" ] || [ "$VER" != "$CARGO" ] || [ "$VER" != "$UPDJS" ]; then
+            echo "::error::version mismatch: tag $VER, manifest.json $MANIFEST, Cargo.toml $CARGO, updater.js $UPDJS - bump them together before tagging"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: total-core-windows-x64
+          path: bins/win
+      - uses: actions/download-artifact@v4
+        with:
+          name: total-core-macos-arm64
+          path: bins/mac-arm64
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: total-core-macos-x64
+          path: bins/mac-x64
+
+      - name: Stage the extension folder with fresh binaries
+        run: |
+          set -e
+          rm -rf stage out && mkdir -p stage out
+          # Same exclusions as the repo's TotalScript.zip (no build tree, no git, no snapshots).
+          rsync -a --exclude '.git' --exclude 'agent/target' --exclude 'ui/snapshots' --exclude 'node_modules' \
+                --exclude '__pycache__' --exclude '.arena' --exclude 'tools/popup-shots/node_modules' \
+                TotalScript/ stage/TotalScript/
+          mkdir -p stage/TotalScript/bin
+          cp bins/win/total-core.exe stage/TotalScript/bin/total-core.exe
+          cp bins/mac-arm64/total-core-macos-arm64 stage/TotalScript/bin/total-core-macos-arm64
+          chmod +x stage/TotalScript/bin/total-core-macos-arm64
+          if [ -f bins/mac-x64/total-core-macos-x64 ]; then cp bins/mac-x64/total-core-macos-x64 stage/TotalScript/bin/ && chmod +x stage/TotalScript/bin/total-core-macos-x64; fi
+          # Assets the app installs / humans download.
+          cp bins/win/total-core.exe out/total-core-windows-x64.exe
+          cp bins/mac-arm64/total-core-macos-arm64 out/total-core-macos-arm64
+          [ -f bins/mac-x64/total-core-macos-x64 ] && cp bins/mac-x64/total-core-macos-x64 out/total-core-macos-x64 || true
+          # Plain ustar: the in-app reader (agent/src/update.rs) understands exactly this.
+          # GNU tar fails loudly on any name ustar cannot store, which is the gate we want.
+          ( cd stage && tar --format=ustar --owner=0 --group=0 --numeric-owner --mtime='2000-01-01 00:00Z' -cf ../out/TotalScript-extension.tar TotalScript )
+          ( cd stage && zip -qrD ../out/TotalScript.zip TotalScript )
+          ls -la out
+
+      - name: Verify the tar is what the app expects
+        run: |
+          set -e
+          tar -tf out/TotalScript-extension.tar | head -3
+          tar -tf out/TotalScript-extension.tar | grep -qx 'TotalScript/manifest.json'
+          tar -tf out/TotalScript-extension.tar | grep -qx 'TotalScript/bin/total-core.exe'
+          tar -tf out/TotalScript-extension.tar | grep -qx 'TotalScript/popup.html'
+          ! tar -tf out/TotalScript-extension.tar | grep -q '^TotalScript/agent/target/'
+          python3 - <<'PY'
+          import tarfile, json
+          t = tarfile.open("out/TotalScript-extension.tar")
+          members = t.getmembers()
+          assert all(m.name == "TotalScript" or m.name.startswith("TotalScript/") for m in members), "every entry under TotalScript/"
+          assert all(m.isfile() or m.isdir() for m in members), "only files and directories"
+          m = json.load(t.extractfile("TotalScript/manifest.json"))
+          print("archive manifest version", m["version"])
+          PY
+
+      - name: SHA256SUMS.txt + latest.json
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -e
+          cd out
+          sha256sum TotalScript-extension.tar TotalScript.zip total-core-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          python3 - <<'PY'
+          import json, os, hashlib, datetime
+          tag = os.environ["TAG"]; ver = os.environ["VERSION"]; repo = os.environ["REPO_SLUG"]
+          assets = []
+          for name in sorted(os.listdir(".")):
+              if name in ("SHA256SUMS.txt", "latest.json"): continue
+              data = open(name, "rb").read()
+              assets.append({"name": name, "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+                             "url": f"https://github.com/{repo}/releases/download/{tag}/{name}"})
+          latest = {"version": ver, "tag": tag,
+                    "published_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "notes_url": f"https://github.com/{repo}/releases/tag/{tag}",
+                    "assets": assets}
+          json.dump(latest, open("latest.json", "w"), indent=2)
+          print(json.dumps(latest, indent=2))
+          PY
+
+      - name: Release notes from the README version block
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          ver = os.environ["VERSION"]
+          text = open("TotalScript/README.md", encoding="utf-8").read()
+          # README release blocks are bold paragraphs: "**2.17.0 — TITLE.** text" until the next "**X.Y.Z — " or "## ".
+          m = re.search(r"(?ms)^\*\*" + re.escape(ver) + r" [^\n]*\n(.*?)(?=^\*\*\d+\.\d+\.\d+ |^## |\Z)", text)
+          body = ((m.group(0) if m else "").strip())[:6000]
+          with open("notes.md", "w", encoding="utf-8") as f:
+              f.write(f"## TotalScript {ver}\n\n")
+              f.write(body + "\n\n" if body else "")
+              f.write("### Install / update\n")
+              f.write("- Already on 2.17.0 or newer: the desktop app or the extension popup offers this version - press **Update**.\n")
+              f.write("- Fresh install: download `TotalScript.zip`, unzip, `chrome://extensions` → Load unpacked → the `TotalScript` folder, then run `bin/total-core.exe` (Windows) or `bin/total-core-macos-arm64` (Apple Silicon).\n")
+              f.write("- Every asset is listed with its sha256 in `latest.json` / `SHA256SUMS.txt`.\n")
+          PY
+          cat notes.md
+
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -e
+          if gh release view "$TAG" --repo "$REPO_SLUG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$REPO_SLUG" --title "TotalScript $VERSION" --notes-file notes.md --latest
+          else
+            gh release create "$TAG" --repo "$REPO_SLUG" --title "TotalScript $VERSION" --notes-file notes.md --latest
+          fi
+          gh release upload "$TAG" --repo "$REPO_SLUG" --clobber out/*
+          echo "published https://github.com/$REPO_SLUG/releases/tag/$TAG"
+          echo "latest.json → https://github.com/$REPO_SLUG/releases/latest/download/latest.json"

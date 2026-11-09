@@ -723,7 +723,7 @@ const RSProvider = (() => {
 
   // 1.78.1: also the "shown, not fenced" spellings (escaped / single-quoted /
   // bare keys) the core's relaxed parser now executes, so their <pre> is masked too.
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|\\"(?:command|tool)\\"\s*:|'(?:command|tool)'\s*:|[{,]\s*(?:command|tool)\s*:\s*["']|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.16.1: the ###CMD opener now needs its name + closer like RSParse.CMD_START_RE ("### Tool list" headings no longer mask)
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|\\"(?:command|tool)\\"\s*:|'(?:command|tool)'\s*:|[{,]\s*(?:command|tool)\s*:\s*["']|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.17.0: the ###CMD opener now needs its name + closer like RSParse.CMD_START_RE ("### Tool list" headings no longer mask)
   function findToolBlockSpot(item) {
     if (!item) return null;
     let parent = null, ref = null;

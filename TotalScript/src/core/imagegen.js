@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/core/imagegen.js — TotalScript Image Studio (2.16.1)
+// src/core/imagegen.js — TotalScript Image Studio (2.17.0)
 //
 // AI-generated images for game thumbnails, icons and GUI art, carried into
 // Roblox Studio. Two honest sources, nothing invented:
@@ -30,7 +30,7 @@
   "use strict";
   const G = typeof window !== "undefined" ? window : globalThis;
   if (G.TotalImageGen) return;
-  const VERSION = "2.16.1";
+  const VERSION = "2.17.0";
 
   // ───────────────────────── specs ─────────────────────────
   // w/h = delivered PNG size; studio = max EditableImage edge for the live carry

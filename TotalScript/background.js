@@ -7,9 +7,11 @@
 // Contract with content.js: every sendMessage ALWAYS gets a response object,
 // even when the bridge is offline. The agentic loop must never hang waiting.
 
-// 2.16.1: Blockbench MCP client + curated bb_* table (pure JS, also required by
+// 2.17.0: Blockbench MCP client + curated bb_* table (pure JS, also required by
 // tests/test-blockbench-mode.js). Classic worker → importScripts.
 try { importScripts("src/core/blockbench_mcp.js"); } catch (e) { console.warn("[total-bg] blockbench_mcp.js not loaded", e); }
+// 2.17.0: auto-updater (pure helpers shared with the popup and the node test).
+try { importScripts("src/core/updater.js"); } catch (e) { console.warn("[total-bg] updater.js not loaded", e); }
 const PORT_ROBLOX = 17613;
 const PORT_LOCAL = 17615; // AgentScript — native FS/terminal engine
 const RUST_ROBLOX_HTTP = "http://127.0.0.1:3000";
@@ -196,7 +198,7 @@ let localRoot = ""; // workspace path, injected into the AI's state line
 let blenderAddon = false; // blender-mcp addon listening on TCP 9876
 let blenderError = "";
 let blenderScriptsReady = false;
-// 2.16.1 Blockbench MCP (Streamable HTTP plugin inside the Blockbench desktop app)
+// 2.17.0 Blockbench MCP (Streamable HTTP plugin inside the Blockbench desktop app)
 let bbClient = null;            // TotalBlockbenchMcp client for the configured URL
 let bbConnected = false;
 let bbError = "";
@@ -379,7 +381,7 @@ function blenderServers(list) {
       alive: true, tools: BLENDER_TOOLS.length,
     });
   }
-  // 2.16.1: Blockbench rides the same list (popup "Servers", bar status).
+  // 2.17.0: Blockbench rides the same list (popup "Servers", bar status).
   if (bbConnected) rest.push({ id: "blockbench", name: "Blockbench", alive: true, tools: bbToolList().length, url: bbUrl, raw_tools: bbRawTools.length });
   return rest;
 }
@@ -1202,7 +1204,7 @@ async function connectBlender() {
   return { ok: true, blender: true };
 }
 
-// ── Blockbench MCP (Streamable HTTP, 2.16.1) ────────────────────────────
+// ── Blockbench MCP (Streamable HTTP, 2.17.0) ────────────────────────────
 // The jasonjgardner/blockbench-mcp-plugin serves MCP over Streamable HTTP
 // inside the Blockbench desktop app (default http://localhost:3000/bb-mcp,
 // Blockbench → Settings → General → MCP Server Port / Endpoint). The worker
@@ -1974,7 +1976,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // Only pages we ship may be opened this way (the AI switcher on a web
         // page cannot open chrome-extension:// URLs itself).
         const page = String(msg.page || "");
-        // 2.16.1: only the CodeCraft page itself (the API-profile query went with the DeepSeek API chat)
+        // 2.17.0: only the CodeCraft page itself (the API-profile query went with the DeepSeek API chat)
         if (page !== CODECRAFT_PAGE) { sendResponse({ ok: false, error: "unknown extension page" }); break; }
         const url = chrome.runtime.getURL(CODECRAFT_PAGE);
         try {
@@ -2108,7 +2110,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if(!manualStudioDisconnect){connect();await waitForConnection(6000);await refreshStudioStatus();}sendResponse({success:connected&&robloxEditorConnected===true,state:manualStudioDisconnect||!connected?"DISCONNECTED":robloxEditorConnected===true?([...pending.values()].some(p=>p.type==="call_tool")?"BUSY":"CONNECTED"):"ERROR",bridge:connected,studio:robloxEditorConnected===true,protocolVersion:"1.0",error:connected&&robloxEditorConnected===true?null:{code:"STUDIO_BRIDGE_OFFLINE",message:"Studio MCP did not answer the health probe"}});break;
       case "call_tool": {
         const timeout = (msg.timeout || 120000) + 10000;
-        // 2.16.1: curated Blockbench commands never touch the Studio / AgentScript sockets.
+        // 2.17.0: curated Blockbench commands never touch the Studio / AgentScript sockets.
         if (typeof TotalBlockbenchMcp !== "undefined" && TotalBlockbenchMcp.isCommand(msg.name)) {
           sendResponse(await blockbenchCall(msg.name, msg.arguments, msg.timeout || 60000));
           break;
@@ -2274,7 +2276,59 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: true });
         break;
       }
-      // 2.16.1: a content-script note for the Activity Center (creation report
+      // ── 2.17.0 auto-updater ──
+      case "update_status": {
+        sendResponse(UPD ? await updateStatusFor(true) : { ok: false, error: "updater.js not loaded" });
+        break;
+      }
+      case "update_check": {
+        if (!UPD) { sendResponse({ ok: false, error: "updater.js not loaded" }); break; }
+        const r = await checkForUpdate(msg.force !== false);
+        sendResponse({ ...(await updateStatusFor(true)), checked: r.ok, error: r.error || "" });
+        break;
+      }
+      case "update_set_enabled": {
+        try { await chrome.storage.local.set({ [UPD.PREF_KEY]: msg.enabled !== false }); } catch {}
+        sendResponse({ ok: true, enabled: msg.enabled !== false });
+        break;
+      }
+      case "update_skip": {
+        const st = await updState();
+        const v = typeof msg.version === "string" && UPD.parseVersion(msg.version) ? msg.version : (st.latest && st.latest.version) || "";
+        await updSave({ skipped: msg.unskip ? "" : v });
+        updBadge(!msg.unskip ? false : !!(st.latest && UPD.isNewer(st.latest.version, CURRENT_VERSION)));
+        sendResponse({ ok: true, skipped: msg.unskip ? "" : v });
+        break;
+      }
+      case "update_apply": {
+        // The APP does the work; we only ask and remember that we asked, so
+        // the popup can reload the extension when the app reports "done".
+        if (!UPD) { sendResponse({ ok: false, error: "updater.js not loaded" }); break; }
+        const comps = Array.isArray(msg.components) ? msg.components.filter((c) => UPD.COMPONENTS.includes(c)) : UPD.COMPONENTS.slice();
+        const st = await updState();
+        const version = (st.latest && st.latest.version) || "";
+        const r = await appFetch(UPD.APP_APPLY, { method: "POST", body: { components: comps, version }, longer: true });
+        if (!r.ok) { sendResponse({ ok: false, error: r.json && r.json.error ? String(r.json.error) : (r.status ? `desktop app answered ${r.status}` : "desktop app offline"), status: r.status }); break; }
+        await updSave({ applying: { at: Date.now(), version, components: comps } });
+        pushActivity("update", "info", `Update to ${version || "the latest release"} started (${comps.join(" + ")}) - the desktop app is downloading from GitHub Releases.`, { code: version });
+        sendResponse({ ok: true, job: r.json && r.json.job || null });
+        break;
+      }
+      case "update_set_folder": {
+        const r = await appFetch(UPD.APP_FOLDER, { method: "POST", body: { path: String(msg.path || "") } });
+        sendResponse(r.ok && r.json ? r.json : { ok: false, error: r.json && r.json.error ? String(r.json.error) : "desktop app offline" });
+        break;
+      }
+      case "update_reload": {
+        // Only after the app said the extension files are in place (the popup
+        // checks the job) and the user pressed Reload - never on its own.
+        await updSave({ applying: null, reloadedAt: Date.now() });
+        updBadge(false);
+        sendResponse({ ok: true });
+        setTimeout(() => { try { chrome.runtime.reload(); } catch {} }, 150);
+        break;
+      }
+      // 2.17.0: a content-script note for the Activity Center (creation report
       // summary). Kind + level are whitelisted, text is a short derived summary
       // (counts and domain names - never the request or the reply).
       case "activity_note": {
@@ -2662,6 +2716,99 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true; // async sendResponse
 });
 
+// ───────────────────────── 2.17.0 auto-updater ─────────────────────────
+// Check once a day (chrome.alarms wakes the worker; CHECK_EVERY_MS decides),
+// never install on its own. The desktop app does the file work (see
+// src/core/updater.js header); without it the popup only offers the download.
+const UPD = typeof TotalUpdater !== "undefined" ? TotalUpdater : null;
+const UPD_HTTP_MS = 2500;
+const CURRENT_VERSION = (() => { try { return chrome.runtime.getManifest().version; } catch { return "0.0.0"; } })();
+async function updState() { try { const o = await chrome.storage.local.get(UPD.STORAGE_KEY); return (o && o[UPD.STORAGE_KEY] && typeof o[UPD.STORAGE_KEY] === "object") ? o[UPD.STORAGE_KEY] : {}; } catch { return {}; } }
+async function updSave(patch) {
+  const cur = await updState();
+  const next = { ...cur, ...patch };
+  try { await chrome.storage.local.set({ [UPD.STORAGE_KEY]: next }); } catch {}
+  return next;
+}
+async function updEnabled() { try { const o = await chrome.storage.local.get(UPD.PREF_KEY); return o[UPD.PREF_KEY] !== false; } catch { return true; } }
+async function appFetch(path, init) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), UPD_HTTP_MS + (init && init.longer ? 20000 : 0));
+  try {
+    const r = await fetch(`${RUST_ROBLOX_HTTP}${path}`, { method: init && init.method || "GET", headers: { "Content-Type": "application/json" }, body: init && init.body ? JSON.stringify(init.body) : undefined, signal: ctrl.signal });
+    clearTimeout(t);
+    const text = await r.text();
+    let json = null; try { json = JSON.parse(text); } catch {}
+    return { ok: r.ok, status: r.status, json };
+  } catch (e) { clearTimeout(t); return { ok: false, status: 0, json: null, error: String(e && e.message || e) }; }
+}
+// The app's view: latest, extension folder, running job. null = app offline.
+async function updAppStatus() {
+  const r = await appFetch(UPD.APP_STATUS);
+  return r.ok && r.json ? UPD.fromAppStatus(r.json) : null;
+}
+function updBadge(on) {
+  try { chrome.action.setBadgeText({ text: on ? "NEW" : "" }); if (on) chrome.action.setBadgeBackgroundColor({ color: "#0e9f9a" }); } catch {}
+}
+// One check. Source order: the desktop app (it caches 6 h and does the real
+// work later) → latest.json straight from GitHub Releases. Records the
+// result, badges the icon and writes one Activity line per new version.
+async function checkForUpdate(force) {
+  if (!UPD) return { ok: false, error: "updater.js not loaded" };
+  const prev = await updState();
+  if (!force && prev.checkedAt && Date.now() - prev.checkedAt < UPD.CHECK_EVERY_MS) return { ok: true, cached: true, state: prev };
+  let latest = null, source = "", error = "";
+  const viaApp = await appFetch(UPD.APP_CHECK, { method: "POST", body: { force: !!force }, longer: true });
+  if (viaApp.ok && viaApp.json) {
+    const st = UPD.fromAppStatus(viaApp.json);
+    if (st && st.latest) { latest = st.latest; source = "app"; }
+    else if (st && st.error) error = st.error;
+  }
+  if (!latest && !(viaApp.ok && viaApp.json)) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 15000);
+      const r = await fetch(UPD.LATEST_JSON_URL, { cache: "no-store", redirect: "follow", signal: ctrl.signal });
+      clearTimeout(t);
+      if (r.ok) { latest = UPD.parseLatest(await r.text()); source = "github"; if (!latest) error = "latest.json unreadable"; }
+      else error = r.status === 404 ? "no release published yet" : `GitHub answered ${r.status}`;
+    } catch (e) { error = "GitHub unreachable: " + String(e && e.message || e).slice(0, 120); }
+  }
+  const state = await updSave({ checkedAt: Date.now(), latest: latest || prev.latest || null, source: latest ? source : prev.source || "", error: latest ? "" : error, current: CURRENT_VERSION });
+  const newer = !!(state.latest && UPD.isNewer(state.latest.version, CURRENT_VERSION));
+  const skipped = state.skipped && state.latest && UPD.compareVersions(state.skipped, state.latest.version) === 0;
+  updBadge(newer && !skipped);
+  if (newer && !skipped && state.announced !== state.latest.version) {
+    await updSave({ announced: state.latest.version });
+    pushActivity("update", "warn", `TotalScript ${state.latest.version} is available (you run ${CURRENT_VERSION}) - open the popup to update.`, { code: state.latest.version });
+  }
+  return { ok: !!latest, error: latest ? "" : error, state };
+}
+async function maybeCheckForUpdate() {
+  if (!(await updEnabled())) return;
+  const st = await updState();
+  if (st.checkedAt && Date.now() - st.checkedAt < UPD.CHECK_EVERY_MS) return;
+  await checkForUpdate(false);
+}
+// Everything the popup needs in one message.
+async function updateStatusFor(popup) {
+  const st = await updState();
+  const app = await updAppStatus();
+  const enabled = await updEnabled();
+  // The app's own check may be fresher (it runs daily too).
+  let latest = st.latest || null;
+  if (app && app.latest && (!latest || UPD.isNewer(app.latest.version, latest.version))) latest = app.latest;
+  const decision = UPD.decide({ current: CURRENT_VERSION, latest, checkedAt: Math.max(st.checkedAt || 0, app ? app.checkedAt || 0 : 0), error: st.error, skipped: st.skipped, appOnline: !!app, extensionDir: app ? app.extensionDir : undefined, job: app ? app.job : null });
+  return { ok: true, current: CURRENT_VERSION, enabled, popup: !!popup, state: { ...st, latest }, app, decision, releasesUrl: UPD.RELEASES_URL, manualSteps: UPD.MANUAL_STEPS, downloadUrl: latest ? UPD.downloadUrl(latest, UPD.ZIP_ASSET) : UPD.RELEASES_URL + "/latest" };
+}
+try {
+  if (UPD) {
+    chrome.alarms.create(UPD.ALARM, { periodInMinutes: UPD.ALARM_MINUTES });
+    chrome.alarms.onAlarm.addListener((a) => { if (a && a.name === UPD.ALARM) { maybeCheckForUpdate().catch(() => {}); } });
+    setTimeout(() => { maybeCheckForUpdate().catch(() => {}); }, 20000);
+  }
+} catch {}
+
 // Proc poll — keeps RS availability gated on the live Studio process
 refreshProcStatus();
 setInterval(refreshProcStatus, 5000);
@@ -2690,5 +2837,14 @@ async function maybeShowHello(details) {
   } catch (e) { return false; }
 }
 chrome.runtime.onInstalled.addListener((details) => { connect(); maybeShowHello(details); });
+// 2.17.0: after a reload with new files, close the loop the popup opened.
+chrome.runtime.onInstalled.addListener((details) => { noteUpdated(details).catch(() => {}); });
+async function noteUpdated(details) {
+  if (!UPD || !details || details.reason !== "update") return;
+  const from = details.previousVersion || "";
+  await updSave({ applying: null, updatedAt: Date.now(), updatedFrom: from || "", skipped: "" });
+  updBadge(false);
+  pushActivity("update", "ok", `TotalScript updated to ${CURRENT_VERSION}${from ? ` (from ${from})` : ""}.`, { code: CURRENT_VERSION });
+}
 
 connect();

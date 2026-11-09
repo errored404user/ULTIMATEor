@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Environment pack (2.16.1) against the miniature Roblox DataModel.
+"""Environment pack (2.17.0) against the miniature Roblox DataModel.
 
 tests/test-environment-pack.js checks the pack statically (registration, params,
 validation, wiring). This script runs the REAL generated Luau for all nine commands

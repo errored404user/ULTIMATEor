@@ -1077,7 +1077,7 @@
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for a publish confirmation card (it auto-denies after 120 s). A PC command refused in Sandbox only is not a wait - the chat gets ERROR ACCESS_SANDBOX at once and a banner offers Switch to Full PC.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
-    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.16.1): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
+    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.17.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
   };
   try { window.__rsFeatureHelpTopics = FEATURE_HELP_TOPICS; } catch {}
   const CREATOR_TOOLS=[
@@ -2045,7 +2045,7 @@
     ],
     focus: /^(animation_|anim_player_install$|rig_|motor6d|eclipse_|sequence_|ability_sequence_|cutscene|camera_(?!shake_preset$)|tween|spring_(create|adjust)$|script_(create|read|check|edit|set_source|module)$|multi_edit$|start_stop_play$|studio_playtest$|get_console_output$|model_prefab$|sfx_|vfx_(play|library_install)$|total_screenshot$|search_game_tree$)/,
   };
-  // 2.16.1 BLOCKBENCH (id "blockbench"): low-poly modeling INSIDE Blockbench
+  // 2.17.0 BLOCKBENCH (id "blockbench"): low-poly modeling INSIDE Blockbench
   // through the jasonjgardner/blockbench-mcp-plugin (Streamable HTTP on
   // localhost, default :3000/bb-mcp). TotalScript's bb_* commands are the
   // surface (validated in src/core/blockbench_mcp.js, run by the worker); the
@@ -2084,7 +2084,7 @@
       return (A.toolList || []).filter((t) => t && t.server === "blender" && !t.hidden);
     } catch { return []; }
   }
-  // 2.16.1: same for the Blockbench family (server "blockbench") in Blockbench mode.
+  // 2.17.0: same for the Blockbench family (server "blockbench") in Blockbench mode.
   function blockbenchModeTools(requested) {
     try {
       if (requested === "blockbench") return [];
@@ -2186,7 +2186,7 @@
       nudge: "PLAYBACK: AnimPlayer was installed this run but nothing proves the clips play in game - script_read the playback script, script_check it, then start_stop_play + get_console_output and confirm the track actually played before the final report." },
   ];
   MODE_GATES.animate.push(...MODE_GATES.creation.filter((g) => g.id === "scripts" || g.id === "look"));
-  // 2.16.1 BLOCKBENCH: geometry built this run must have been LOOKED at
+  // 2.17.0 BLOCKBENCH: geometry built this run must have been LOOKED at
   // (bb_screenshot) and must leave Blockbench as a file (bb_export) - the
   // import into Studio is the user's manual step, so no gate claims it.
   MODE_GATES.blockbench = [
@@ -2216,7 +2216,7 @@
         + "\nDo not acknowledge this note; do it, then give the final report with that evidence.";
     } catch { return ""; }
   }
-  // 2.16.1: CREATION TRACKER - per user message: the request → structured spec
+  // 2.17.0: CREATION TRACKER - per user message: the request → structured spec
   // (deliverables, integration checks, stages) + the run tracker that follows
   // every executed command (coverage, integration evidence, static Luau review,
   // bounded creation checks, end-of-run report). Profile = the user's creation
@@ -3235,7 +3235,7 @@
   // VFX, UI, animation, motion, ...). Order = catalogue order.
   const COMMAND_FAMILIES = [
     { id: "blender", label: "BLENDER (3D ASSET PIPELINE → STUDIO)", re: /^(blender_|get_scene_info$|get_object_info$|execute_blender_code$|get_viewport_screenshot$|mesh_import_verify$)/ }, // 1.95.0
-    { id: "blockbench", label: "BLOCKBENCH (LOW-POLY MODELS → FILE → STUDIO IMPORT 3D)", re: /^bb_/ }, // 2.16.1: the Blender server's tools + the Studio read-back
+    { id: "blockbench", label: "BLOCKBENCH (LOW-POLY MODELS → FILE → STUDIO IMPORT 3D)", re: /^bb_/ }, // 2.17.0: the Blender server's tools + the Studio read-back
     { id: "script", label: "SCRIPTING", re: /^(script_|multi_edit|module_scaffold|execute_luau|project_health_report|project_index_|tag_scaffold|tag_add|tag_remove|get_service|wait_for_child|log_tag|gc_run)/ },
     { id: "blueprint", label: "SYSTEM BLUEPRINTS", re: /^blueprint_/ },
     { id: "data", label: "DATA, REMOTES, NETWORK & MONETIZATION", re: /^(ds_|datastore_|get_datastore|ordered_(get|set)|session_lock_|session_analytics|remote_|remotes_list|bindable_|leaderstats_|profile_|gamepass_|developer_product|devproduct_|marketplace_|badge_|value_set|replicated_first|server_auto_restart|network_(ping|bandwidth)|premium_check)/ },
@@ -5160,7 +5160,7 @@
       // only listed when asked for by exact name.
       const allScoped = A.toolList.filter((t) => (t.server || curEng) === requested && (!t.hidden || String(t.name || "").toLowerCase() === commandQuery));
       allScoped.push(...blenderModeTools(requested)); // 1.95.0: Blender mode lists the Blender family in the default catalogue
-      allScoped.push(...blockbenchModeTools(requested)); // 2.16.1: Blockbench mode lists the bb_* family
+      allScoped.push(...blockbenchModeTools(requested)); // 2.17.0: Blockbench mode lists the bb_* family
       const queryTerms = commandQuery.split(/\s+/).filter(Boolean);
       const queryMatches = (value) => !queryTerms.length
         || queryTerms.every((term) => String(value || "").toLowerCase().includes(term));
@@ -5438,7 +5438,7 @@
       return res;
       }
     }
-    // 2.16.1 Blockbench: bb_* never touch the Studio / AgentScript sockets. The
+    // 2.17.0 Blockbench: bb_* never touch the Studio / AgentScript sockets. The
     // worker validates the arguments (blockbench_mcp.js) and runs the plugin's
     // real tools; here we only make sure the link is up and shape the answer.
     if (/^bb_[a-z_]+$/.test(bareName)) {
@@ -6258,7 +6258,7 @@
             base = await submitAndGetBase(RS.FEEDBACK.guiBriefAct + (state ? "\n" + state : ""));
             continue;
           }
-          // 2.16.1: CREATION COVERAGE GATE - the request's deliverables (spec)
+          // 2.17.0: CREATION COVERAGE GATE - the request's deliverables (spec)
           // against the command log: an item nobody built, an item built but
           // never read back (High+), a missing integration (GUI ↔ server remote,
           // DataStore ↔ pcall, sound never played …). Bounded by the creation
@@ -6306,7 +6306,7 @@
               continue;
             }
           }
-          // 2.16.1: CREATION REPORT - one honest block per run with deliverables
+          // 2.17.0: CREATION REPORT - one honest block per run with deliverables
           // (built / read back / audited / missing), integration evidence, the
           // static-review tally and the rounds used. Shown in the Activity tab
           // + the popup Activity Center; never sent to the model.
@@ -6461,7 +6461,7 @@
           // 1.99.9: mode auto-check (read the created path back) - appended AFTER
           // compression so the fact line is never the part that gets dropped.
           try { feedback = await attachModeAutoCheck(call.tool, call.arguments, feedback); } catch {}
-          // 2.16.1: creation tracker - records the step for coverage / integration
+          // 2.17.0: creation tracker - records the step for coverage / integration
           // and appends the static Luau review of the source the model sent
           // (bounded per run by the creation profile; never on failed writes).
           try { if (A.creation) { const o = A.creation.observe(call, feedback, { ms: Date.now() - A.toolStart }); if (o && o.note) { feedback += "\n" + o.note; diag("creation.review", { tool: call.tool, findings: o.event.findings, chars: o.note.length }); } } } catch {}
@@ -6635,7 +6635,7 @@
                   else if (gui) diag("gui.briefSkipped", { chars: gui.length, cap });
                 }
               }
-              // 2.16.1: the CREATION SPEC rides last - the deliverables the request
+              // 2.17.0: the CREATION SPEC rides last - the deliverables the request
               // names, the command family that builds and the one that proves each,
               // the integration checks and the stage order. Only for requests with
               // enough deliverables (profile.briefMin), same send budget.
@@ -6854,7 +6854,7 @@
         const requested = engine === "local" ? "local" : "roblox";
         const allScoped = A.toolList.filter((t) => t && (t.server || requested) === requested && !t.hidden);
         allScoped.push(...blenderModeTools(requested)); // 1.95.0: Blender mode embeds the Blender family too
-        allScoped.push(...blockbenchModeTools(requested)); // 2.16.1: Blockbench mode embeds the bb_* family too
+        allScoped.push(...blockbenchModeTools(requested)); // 2.17.0: Blockbench mode embeds the bb_* family too
         if (!allScoped.length) return "";
         const animLines = requested === "roblox" && typeof RSAnim !== "undefined" ? RSAnim.describeCommands() : [];
         const skillLines = requested === "roblox" && typeof RobloxScriptSkills !== "undefined" ? RobloxScriptSkills.describeCommands() : [];
@@ -8925,7 +8925,7 @@
     // reload - they used to silently reset to these defaults on every page
     // refresh because only the setters ever touched chrome.storage.
     let autoFixEnabled = true, extraThinking = false, planMode = false, steeringMode = false, forgeMode = false, autoFixStopPlay = true, autoDebugEnabled = true, multiAgent = false, guiBriefEnabled = true;
-    // 2.16.1: creation quality profile (TotalCreation.PROFILES) - how strictly a
+    // 2.17.0: creation quality profile (TotalCreation.PROFILES) - how strictly a
     // run is checked against the request's deliverables. Persisted; shared
     // with the popup (rsCreationProfile); always capped by the provider.
     let creationProfile = "high";
@@ -9756,7 +9756,7 @@
             </div>`;
     }
     try { window.__rsBlender = () => blenderConnected(); } catch {}
-    // 2.16.1 Blockbench MCP card (Settings → MCP servers), same visual
+    // 2.17.0 Blockbench MCP card (Settings → MCP servers), same visual
     // language as the Blender card. Offline = three steps + the URL field;
     // connected = what the link unlocks + the live plugin tool count.
     function blockbenchConnected() {
@@ -10055,7 +10055,7 @@
         try { toast("Back to the default look"); } catch {}
       });
     }
-    // 2.16.1: Creation quality section - four profiles that change what the
+    // 2.17.0: Creation quality section - four profiles that change what the
     // creation engine demands of a run (rounds, read-back, integration, audit).
     function creationSectionHtml() {
       if (typeof TotalCreation === "undefined") return "";
@@ -10510,7 +10510,7 @@
       if (blenderSite) blenderSite.addEventListener("click", () => {
         try { window.open("https://www.blender.org/", "_blank", "noopener"); } catch {}
       });
-      // ── Blockbench MCP card (2.16.1) ──
+      // ── Blockbench MCP card (2.17.0) ──
       const bbBtn = menuEl.querySelector("#rs-mcp-blockbench");
       const bbCard = menuEl.querySelector("#rs-blockbench-card");
       const bbNote = menuEl.querySelector("#rs-blockbench-note");
