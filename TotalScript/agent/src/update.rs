@@ -37,7 +37,6 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-pub const REPO: &str = "errored404user/ULTIMATEor";
 pub const RELEASES_URL: &str = "https://github.com/errored404user/ULTIMATEor/releases";
 pub const LATEST_JSON_URL: &str = "https://github.com/errored404user/ULTIMATEor/releases/latest/download/latest.json";
 pub const EXTENSION_ASSET: &str = "TotalScript-extension.tar";
