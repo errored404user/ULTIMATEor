@@ -193,6 +193,11 @@ const PART = "TotalScript_ProviderParityTest";
     ok("exactly two model commands reached the bridge (create + read-back); nothing re-ran", modelLuau.length === 2, modelLuau.length + " calls");
     ok("5 sends total, each a single submit", userMessages.length === 5 && submitAttempts === 5, userMessages.length + " sends, " + submitAttempts + " submits");
     ok("command blocks were masked in the transcript (rs-tool-hide on code-block)", !!history.querySelector("code-block.rs-tool-hide"));
+    // 2.16.1: the plain ###CMD name### blocks are masked too, not only the ###LUA### one
+    // (until 2.16.1 Gemini's CMD_SHAPE knew only ###LUA / ###MCP_TOOL / JSON, so both
+    // ###CMD blocks stayed visible in the transcript).
+    const cmdBlocks = [...history.querySelectorAll("code-block")].filter((cb) => /###\s*CMD\s/i.test(cb.textContent || ""));
+    ok("every ###CMD block is masked as well (list_commands + part_create), none left visible", cmdBlocks.length >= 2 && cmdBlocks.every((cb) => cb.classList.contains("rs-tool-hide")), cmdBlocks.length + " cmd blocks, " + cmdBlocks.filter((cb) => cb.classList.contains("rs-tool-hide")).length + " hidden");
     ok("reply text never carried the footer button labels into a command", !toolCalls.some((c) => /Good response|Bad response/.test(JSON.stringify(c.arguments || {}))));
     if (simReady) {
       const v = await sim.exec(`local p = workspace:FindFirstChild("${PART}") if not p then return "MISSING" end return { class = p.ClassName, size = { p.Size.X, p.Size.Y, p.Size.Z }, anchored = p.Anchored }`);

@@ -265,7 +265,9 @@ const PART = "TotalScript_ProviderParityTest";
       await waitFor(() => userMessages.length >= 4, 40000, "timeout result");
       ok("timeout: the model got a classified UNCERTAIN failure (timeout; 'MAY have run'), not a success", /ERROR/.test(userMessages[3]) && /\[diagnosis\] timeout/.test(userMessages[3]) && /MAY have run/.test(userMessages[3]) && !/"ok":\s*true/.test(userMessages[3]), userMessages[3].slice(0, 200).replace(/\n/g, " "));
       await waitFor(() => userMessages.length >= 5, 40000, "loop-guard hold");
-      const partCalls = () => toolCalls.filter((c) => c.name === "execute_luau" && new RegExp(PART).test(String(c.arguments.code || "")) && !/"EXISTS"|MISSING/.test(String(c.arguments.code || ""))).length;
+      // Only the model's part_create reaching the bridge counts - the Creation-mode
+      // postflight probe (read-only, 2.13.0+) names the deliverable too.
+      const partCalls = () => toolCalls.filter((c) => c.name === "execute_luau" && new RegExp(PART).test(String(c.arguments.code || "")) && !/"EXISTS"|MISSING|TotalScript mode probe/.test(String(c.arguments.code || ""))).length;
       ok("the identical resend was HELD by the loop guard (NOT RUN, read the state back first) and never reached the bridge", /\[LOOP GUARD\] NOT RUN/.test(userMessages[4]) && /MAY have run/.test(userMessages[4]) && partCalls() === 1, partCalls() + " part_create calls; " + userMessages[4].slice(-260).replace(/\n/g, " "));
       await waitFor(() => userMessages.length >= 6, 40000, "read-back probe");
       ok("the read-back ran and reported MISSING (the timed-out call never executed in the sim)", simReady ? /MISSING/.test(userMessages[5]) : /Output of 'execute_luau'/.test(userMessages[5]), userMessages[5].slice(0, 120).replace(/\n/g, " "));

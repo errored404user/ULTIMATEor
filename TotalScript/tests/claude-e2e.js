@@ -1,6 +1,6 @@
 "use strict";
 // End-to-end simulation of the WHOLE TotalScript bundle on a claude.ai-shaped
-// page (2.16.0). Optional (needs jsdom; lupa for the Studio stand-in):
+// page (2.16.1). Optional (needs jsdom; lupa for the Studio stand-in):
 //
 //   cd TotalScript && npm i --no-save jsdom && node tests/claude-e2e.js
 //   MODEL="Claude Opus 4.1" node tests/claude-e2e.js   # picker label → family caps

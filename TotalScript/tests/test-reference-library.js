@@ -16,7 +16,7 @@ const store = {};
 global.chrome = { storage: { local: { get(keys, cb) { const out = {}; for (const k of [].concat(keys)) if (k in store) out[k] = store[k]; setTimeout(() => cb(out), 0); }, set(obj) { Object.assign(store, JSON.parse(JSON.stringify(obj))); } } } };
 delete require.cache[require.resolve("../src/core/public_refs.js")];
 const L = require("../src/core/public_refs.js");
-ok("A1 PublicReferences exposes version 2.16.0, kinds link|note|snippet, limits, frozen API", L.VERSION === "2.16.0" && JSON.stringify(L.KINDS) === JSON.stringify(["link", "note", "snippet"]) && L.LIMITS.items === 80 && L.LIMITS.body === 16000 && Object.isFrozen(L) && L.KEY === "rsPublicRefs");
+ok("A1 PublicReferences exposes version 2.16.1, kinds link|note|snippet, limits, frozen API", L.VERSION === "2.16.1" && JSON.stringify(L.KINDS) === JSON.stringify(["link", "note", "snippet"]) && L.LIMITS.items === 80 && L.LIMITS.body === 16000 && Object.isFrozen(L) && L.KEY === "rsPublicRefs");
 let r = L.add({ kind: "link", url: "/docs/reference/engine/classes/TweenService", tags: "Tween, UI" });
 ok("A2 link: '/docs/...' resolves to create.roblox.com, title derived from the URL, tags normalised", r.ok && r.entry.url === "https://create.roblox.com/docs/reference/engine/classes/TweenService" && /TweenService/.test(r.entry.title) && JSON.stringify(r.entry.tags) === JSON.stringify(["tween", "ui"]) && r.entry.kind === "link");
 const linkId = r.entry.id;

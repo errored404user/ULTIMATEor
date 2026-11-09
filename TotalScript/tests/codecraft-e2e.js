@@ -6,6 +6,8 @@
 //   cd TotalScript && npm i --no-save jsdom && node tests/codecraft-e2e.js
 //   NOKEY=1 node tests/codecraft-e2e.js   # no API key saved: bar warns, Start refuses, nothing is fetched
 //   ERR402=1 node tests/codecraft-e2e.js  # the API answers 402 (out of tokens): visible error, no loop hang
+//   CMD=1 node tests/codecraft-e2e.js     # 2.16.1: the model writes the PLAIN ###CMD name### envelope as bare text
+//                                         # (no fence) - CodeCraft's own renderer must fence it and the adapter mask it
 //   DIAG=1 ...                            # print the [rs-diag] trace
 const fs = require("fs");
 const path = require("path");
@@ -18,9 +20,10 @@ const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "u
 const pageHtml = fs.readFileSync(path.join(ROOT, "codecraft.html"), "utf8");
 const scripts = [...pageHtml.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]);
 const NOKEY = !!process.env.NOKEY;
-const API = "codecraft"; // 2.16.0: the DeepSeek API profile was removed - one profile
+const API = "codecraft"; // 2.16.1: the DeepSeek API profile was removed - one profile
 const PROF = { query: "", name: "CodeCraft API", base: "https://codecraftapi.com/v1/", hostRe: /^https:\/\/codecraftapi\.com\/v1\//, keyRe: /^Bearer cc_[A-Za-z0-9]{20,}$/, key: "cc_" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4", storeKey: "rsCodeCraft", models: ["claude-opus-4.8", "kimi-k3", "gpt-5.6-terra", "deepseek-v4-pro-max"], model: "kimi-k3", fallback: 10, prefix: "cc_", keysHint: /API Keys/ };
 const ERR402 = !!process.env.ERR402;
+const CMD = !!process.env.CMD;
 const log = (...a) => console.log("[harness]", ...a);
 
 // ── page ──────────────────────────────────────────────────────────────────
@@ -236,9 +239,11 @@ const assistantRows = () => [...d.querySelectorAll("#cc-log article.cc-msg[data-
     const cmd = (name, params) => "```json\n" + JSON.stringify({ command: name, params }) + "\n```";
     modelReply = async (messages, lastText) => {
       phase++;
-      if (phase === 1) return { text: "Understood. Loading the command catalogue.\n```json\n{\"command\":\"list_commands\"}\n```", thinking: "The user wants me to bootstrap." };
+      if (phase === 1) return { text: CMD ? "Understood. Loading the command catalogue.\n###CMD list_commands###\n###END_CMD###" : "Understood. Loading the command catalogue.\n```json\n{\"command\":\"list_commands\"}\n```", thinking: "The user wants me to bootstrap." };
       if (phase === 2) return { text: "TotalScript is ready. Tell me what to build in Roblox Studio." };
-      if (phase === 3) return { text: "Creating the part now.\n###LUA###\nlocal p = Instance.new(\"Part\")\np.Name = \"SimPart\"\np.Parent = workspace\nprint(\"OK\")\n###END_LUA###" };
+      if (phase === 3) return { text: CMD
+        ? "Creating the part now.\n###CMD execute_luau###\ncode: <<<\nlocal p = Instance.new(\"Part\")\np.Name = \"SimPart\"\np.Parent = workspace\nprint(\"OK\")\n>>>\n###END_CMD###"
+        : "Creating the part now.\n###LUA###\nlocal p = Instance.new(\"Part\")\np.Name = \"SimPart\"\np.Parent = workspace\nprint(\"OK\")\n###END_LUA###" };
       if (phase === 4) return { text: "Done — **SimPart** was created in `Workspace`." };
       return { text: "Noted." };
     };
@@ -292,6 +297,12 @@ const assistantRows = () => [...d.querySelectorAll("#cc-log article.cc-msg[data-
     ok("final reply rendered as markdown (bold + code) once streaming ended", !!lastRow.querySelector(".cc-body strong") && !!lastRow.querySelector(".cc-body code") && !lastRow.querySelector(".cc-live"), lastRow.querySelector(".cc-body").innerHTML.slice(0, 120));
     if (process.env.DUMP) for (const r of assistantRows()) console.log("ROW:", r.className, r.innerHTML.replace(/\s+/g, " ").slice(0, 400));
     ok("command blocks are hidden behind TotalScript chips", assistantRows().some((r) => r.querySelector("pre.rs-tool-hide")));
+    if (CMD) {
+      // 2.16.1: both bare ###CMD envelopes were fenced by CodeCraft's renderer AND masked by the adapter - no command text left visible.
+      const pres = assistantRows().flatMap((r) => [...r.querySelectorAll("pre")]).filter((pre) => /###\s*CMD\s/i.test(pre.textContent || ""));
+      ok("CMD: both bare ###CMD name### envelopes were fenced into <pre> and masked (list_commands + execute_luau)", pres.length === 2 && pres.every((pre) => pre.classList.contains("rs-tool-hide")), pres.length + " pres, " + pres.filter((pre) => pre.classList.contains("rs-tool-hide")).length + " hidden");
+      ok("CMD: no visible ###CMD text outside a masked <pre>", !assistantRows().some((r) => [...r.querySelectorAll(".cc-body > :not(pre):not(.rs-chip)")].some((el) => /###\s*CMD\s/i.test(el.textContent || ""))));
+    }
     ok("status line reports model + tokens", d.getElementById("cc-status").textContent.includes(PROF.model) && /123 tokens/.test(d.getElementById("cc-status").textContent), d.getElementById("cc-status").textContent);
     ok("every API call carried the user's key to " + PROF.base + " only", apiCalls.every((c) => c.url.startsWith(PROF.base) && c.auth === "Bearer " + KEY), apiCalls.length + " calls");
     ok("conversation key is stable across the session", /^cc[a-z0-9]+$/.test(P.conversationKey()) && w.location.hash === "#c=" + P.conversationKey(), P.conversationKey());
@@ -317,7 +328,7 @@ const assistantRows = () => [...d.querySelectorAll("#cc-log article.cc-msg[data-
     process.exitCode = 1;
   } finally {
     const failed = results.filter((r) => !r[1]).length;
-    console.log(`\n${results.length - failed}/${results.length} checks passed${failed ? " — " + failed + " FAILED" : ""}`);
+    console.log(`\n${results.length - failed}/${results.length} checks passed${failed ? " — " + failed + " FAILED" : ""}${CMD ? " (CMD=1: plain ###CMD envelope)" : ""}`);
     setTimeout(() => process.exit(process.exitCode || 0), 50);
   }
 })();

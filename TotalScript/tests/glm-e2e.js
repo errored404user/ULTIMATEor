@@ -1,6 +1,6 @@
 "use strict";
 // End-to-end simulation of the WHOLE TotalScript bundle on a chat.z.ai-shaped
-// page (2.16.0). Optional (needs jsdom; lupa for the Studio stand-in):
+// page (2.16.1). Optional (needs jsdom; lupa for the Studio stand-in):
 //
 //   cd TotalScript && npm i --no-save jsdom && node tests/glm-e2e.js
 //   SLOW_SVELTE=1 node tests/glm-e2e.js   # send button re-enables 2 s after input

@@ -7,7 +7,7 @@
 // Contract with content.js: every sendMessage ALWAYS gets a response object,
 // even when the bridge is offline. The agentic loop must never hang waiting.
 
-// 2.16.0: Blockbench MCP client + curated bb_* table (pure JS, also required by
+// 2.16.1: Blockbench MCP client + curated bb_* table (pure JS, also required by
 // tests/test-blockbench-mode.js). Classic worker → importScripts.
 try { importScripts("src/core/blockbench_mcp.js"); } catch (e) { console.warn("[total-bg] blockbench_mcp.js not loaded", e); }
 const PORT_ROBLOX = 17613;
@@ -196,7 +196,7 @@ let localRoot = ""; // workspace path, injected into the AI's state line
 let blenderAddon = false; // blender-mcp addon listening on TCP 9876
 let blenderError = "";
 let blenderScriptsReady = false;
-// 2.16.0 Blockbench MCP (Streamable HTTP plugin inside the Blockbench desktop app)
+// 2.16.1 Blockbench MCP (Streamable HTTP plugin inside the Blockbench desktop app)
 let bbClient = null;            // TotalBlockbenchMcp client for the configured URL
 let bbConnected = false;
 let bbError = "";
@@ -379,7 +379,7 @@ function blenderServers(list) {
       alive: true, tools: BLENDER_TOOLS.length,
     });
   }
-  // 2.16.0: Blockbench rides the same list (popup "Servers", bar status).
+  // 2.16.1: Blockbench rides the same list (popup "Servers", bar status).
   if (bbConnected) rest.push({ id: "blockbench", name: "Blockbench", alive: true, tools: bbToolList().length, url: bbUrl, raw_tools: bbRawTools.length });
   return rest;
 }
@@ -1202,7 +1202,7 @@ async function connectBlender() {
   return { ok: true, blender: true };
 }
 
-// ── Blockbench MCP (Streamable HTTP, 2.16.0) ────────────────────────────
+// ── Blockbench MCP (Streamable HTTP, 2.16.1) ────────────────────────────
 // The jasonjgardner/blockbench-mcp-plugin serves MCP over Streamable HTTP
 // inside the Blockbench desktop app (default http://localhost:3000/bb-mcp,
 // Blockbench → Settings → General → MCP Server Port / Endpoint). The worker
@@ -1974,7 +1974,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // Only pages we ship may be opened this way (the AI switcher on a web
         // page cannot open chrome-extension:// URLs itself).
         const page = String(msg.page || "");
-        // 2.16.0: only the CodeCraft page itself (the API-profile query went with the DeepSeek API chat)
+        // 2.16.1: only the CodeCraft page itself (the API-profile query went with the DeepSeek API chat)
         if (page !== CODECRAFT_PAGE) { sendResponse({ ok: false, error: "unknown extension page" }); break; }
         const url = chrome.runtime.getURL(CODECRAFT_PAGE);
         try {
@@ -2108,7 +2108,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if(!manualStudioDisconnect){connect();await waitForConnection(6000);await refreshStudioStatus();}sendResponse({success:connected&&robloxEditorConnected===true,state:manualStudioDisconnect||!connected?"DISCONNECTED":robloxEditorConnected===true?([...pending.values()].some(p=>p.type==="call_tool")?"BUSY":"CONNECTED"):"ERROR",bridge:connected,studio:robloxEditorConnected===true,protocolVersion:"1.0",error:connected&&robloxEditorConnected===true?null:{code:"STUDIO_BRIDGE_OFFLINE",message:"Studio MCP did not answer the health probe"}});break;
       case "call_tool": {
         const timeout = (msg.timeout || 120000) + 10000;
-        // 2.16.0: curated Blockbench commands never touch the Studio / AgentScript sockets.
+        // 2.16.1: curated Blockbench commands never touch the Studio / AgentScript sockets.
         if (typeof TotalBlockbenchMcp !== "undefined" && TotalBlockbenchMcp.isCommand(msg.name)) {
           sendResponse(await blockbenchCall(msg.name, msg.arguments, msg.timeout || 60000));
           break;
@@ -2274,7 +2274,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: true });
         break;
       }
-      // 2.16.0: a content-script note for the Activity Center (creation report
+      // 2.16.1: a content-script note for the Activity Center (creation report
       // summary). Kind + level are whitelisted, text is a short derived summary
       // (counts and domain names - never the request or the reply).
       case "activity_note": {

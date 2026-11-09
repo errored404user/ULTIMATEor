@@ -1118,8 +1118,8 @@ const RSProvider = (() => {
   // insert the chip: {parent, ref} - or null if no tool block was found.
   function findToolBlockSpot(item, chip) {
     const P = RSParse;
-    const hasStart = (t) => P.LUA_START_RE.test(t) || t.includes("###mcp_tool###");
-    const hasEnd = (t) => P.LUA_END_RE.test(t) || t.includes("###end_mcp_tool###") || t.includes("###end-mcp_tool###");
+    const hasStart = (t) => P.LUA_START_RE.test(t) || P.CMD_START_RE.test(t) || t.includes("###mcp_tool###"); // 2.16.1: + ###CMD name###
+    const hasEnd = (t) => P.LUA_END_RE.test(t) || P.CMD_END_RE.test(t) || t.includes("###end_mcp_tool###") || t.includes("###end-mcp_tool###");
     const isJson = (t) => /\{\s*"(?:command|tool)"\s*:/.test(t);
     // The reply markdown containers (never the reasoning/think area).
     const containers = replyMds(item);

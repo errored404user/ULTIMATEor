@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TotalScript",
-  "version": "2.16.0",
+  "version": "2.16.1",
   "minimum_chrome_version": "111",
   "description": "Turn ChatGPT, Claude, DeepSeek, Gemini, Kimi, GLM, Qwen, Arena, Vani, Notion AI, HuggingChat or OpenRouter Chat into a Roblox Studio / AgentScript agent. Two engines (RS/AS), work modes, image-to-model, auto-fix playtest errors, and Extra Thinking.",
   "permissions": [
