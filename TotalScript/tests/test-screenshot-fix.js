@@ -1,5 +1,5 @@
 // 1.22.0 — "screen capture is not working: ERROR INVALID_ARGUMENT: Missing
-// required arg". Two defects, both covered live by `SHOT=1 node tests/notion-e2e.js`:
+// required arg". Two defects, both covered live by `SHOT=1 node tests/core-e2e.js`:
 //  1. src/core/screenshot.js (and templates.js / studio_bridge.js) were only
 //     listed for DeepSeek + NVIDIA, so total_screenshot answered "screenshot
 //     module missing" on every other provider and the model fell back to the
@@ -17,7 +17,6 @@ function ok(name, cond) { n++; if (!cond) { console.log("FAIL  " + name); proces
 const manifest = JSON.parse(read("manifest.json"));
 const main = read("src/core/main.js");
 const rs = read("agent/src/main.rs");
-const notion = read("src/providers/notion.js");
 
 const mainEntries = manifest.content_scripts.filter((cs) => (cs.js || []).includes("src/core/main.js"));
 ok("every provider bundle loads screenshot.js before main.js", mainEntries.length >= 10 && mainEntries.every((cs) => cs.js.indexOf("src/core/screenshot.js") >= 0 && cs.js.indexOf("src/core/screenshot.js") < cs.js.indexOf("src/core/main.js")));
@@ -29,6 +28,5 @@ ok("screen_capture always carries a studio_id (not only when the cached schema l
 ok("Studio tool calls retry once with a fresh studio_id on 'Missing required arg'", main.includes("async function callStudioToolWithId(name, args, timeout, requestId)") && main.includes("function studioIdComplaint(r)") && /callStudioToolWithId\(name, (?:args|wireArgs), timeout, A\.activeRequestId\)/.test(main) && main.includes("callStudioToolWithId(screenTool.name, callArgs, 90000, A.activeRequestId)"));
 ok("final error explains the studio_id requirement", main.includes("Studio requires a studio_id for '${bareName}'"));
 ok("total-core injects studio_id and retries at the bridge too", rs.includes("fn tool_wants_studio_id(&self, name: &str) -> bool") && rs.includes("async fn resolve_studio_id(&mut self) -> Option<String>") && rs.includes("fn studio_id_from_listing(text: &str) -> Option<String>") && rs.includes("fn missing_studio_id(text: &str) -> bool") && rs.includes("retry_with_fresh_studio_id(name, args).await"));
-ok("Notion attach never throws out of the loop when DataTransfer is missing", notion.includes('_lastAttachFailure = "unsupported"'));
-ok("e2e harness has the SHOT scenario", read("tests/notion-e2e.js").includes("Missing required arg: studio_id") && read("tests/notion-e2e.js").includes("const SHOT = !!process.env.SHOT"));
+ok("e2e harness has the SHOT scenario (moved from notion-e2e to core-e2e in 2.20.0)", read("tests/core-e2e.js").includes("Missing required arg: studio_id") && read("tests/core-e2e.js").includes("const SHOT = !!process.env.SHOT") && !fs.existsSync(path.join(ROOT, "tests/notion-e2e.js")));
 console.log(`\n${n} checks`);

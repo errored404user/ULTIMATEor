@@ -20,7 +20,7 @@ R.execute("broken",{}, {environment:"GENERAL"}).then((r)=>{
   check("docs generated from registry",R.docs().includes("blender_add_cylinder"));
   const manifest=JSON.parse(fs.readFileSync("manifest.json","utf8"));
   const isolated=manifest.content_scripts.filter((x)=>x.world!=="MAIN"&&x.js.includes("src/core/main.js")&&x.js.some((f)=>f.startsWith("src/providers/")));
-  check("registry loaded on every provider",isolated.length>=11&&isolated.every((x)=>x.js.includes("src/core/command_registry.js")));
+  check("registry loaded on every provider",isolated.length>=10&&isolated.every((x)=>x.js.includes("src/core/command_registry.js")));
   const bg=fs.readFileSync("background.js","utf8"), ops=fs.readFileSync("tools/blender_ops.py","utf8"), main=fs.readFileSync("src/core/main.js","utf8");
   for(const id of ["blender_export_gltf","blender_import_gltf","blender_scene_cleanup","blender_set_world","blender_set_render","blender_render_image","blender_principled_material","blender_inset","blender_add_bone","blender_normalize_weights"])
     check(`${id} registered and mapped`,bg.includes(`btool(\"${id}\"`)&&bg.includes(`${id}:`));

@@ -103,7 +103,7 @@ impl Latest {
     pub fn asset(&self, name: &str) -> Option<&Asset> { self.assets.iter().find(|a| a.name == name) }
 }
 
-/// "v2.19.0" / "2.19.0" / "2.19.0-beta" → (2, 19, 0).
+/// "v2.20.0" / "2.20.0" / "2.20.0-beta" → (2, 20, 0).
 pub fn parse_version(v: &str) -> Option<(u64, u64, u64)> {
     let v = v.trim().trim_start_matches('v');
     let core: String = v.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
@@ -663,10 +663,10 @@ mod tests {
 
     #[test]
     fn versions_compare_numerically() {
-        assert_eq!(parse_version("v2.19.0"), Some((2, 19, 0)));
-        assert_eq!(parse_version("2.19.0-beta.1"), Some((2, 19, 0)));
+        assert_eq!(parse_version("v2.20.0"), Some((2, 20, 0)));
+        assert_eq!(parse_version("2.20.0-beta.1"), Some((2, 20, 0)));
         assert_eq!(parse_version("nope"), None);
-        assert!(is_newer("2.19.0", "2.16.1"));
+        assert!(is_newer("2.20.0", "2.16.1"));
         assert!(is_newer("2.100.0", "2.99.9"));
         assert!(!is_newer("2.16.1", "2.16.1"));
         assert!(!is_newer("2.16.0", "2.16.1"));
@@ -675,15 +675,15 @@ mod tests {
 
     #[test]
     fn latest_json_parses_and_normalises() {
-        let l = Latest::parse(r#"{"version":"v2.19.0","assets":[{"name":"TotalScript-extension.tar","size":10,"sha256":"ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef0123456789","url":"https://github.com/errored404user/ULTIMATEor/releases/download/v2.19.0/TotalScript-extension.tar"},{"name":"evil","sha256":"short","url":"https://example.com/x"}]}"#).unwrap();
-        assert_eq!(l.version, "2.19.0");
-        assert_eq!(l.tag, "v2.19.0");
-        assert_eq!(l.notes_url, "https://github.com/errored404user/ULTIMATEor/releases/tag/v2.19.0");
+        let l = Latest::parse(r#"{"version":"v2.20.0","assets":[{"name":"TotalScript-extension.tar","size":10,"sha256":"ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef0123456789","url":"https://github.com/errored404user/ULTIMATEor/releases/download/v2.20.0/TotalScript-extension.tar"},{"name":"evil","sha256":"short","url":"https://example.com/x"}]}"#).unwrap();
+        assert_eq!(l.version, "2.20.0");
+        assert_eq!(l.tag, "v2.20.0");
+        assert_eq!(l.notes_url, "https://github.com/errored404user/ULTIMATEor/releases/tag/v2.20.0");
         let a = l.asset(EXTENSION_ASSET).unwrap();
         assert_eq!(a.sha256, "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789");
         let evil = l.asset("evil").unwrap();
         assert!(evil.sha256.is_empty(), "bad hash dropped");
-        assert_eq!(evil.url, "https://github.com/errored404user/ULTIMATEor/releases/download/v2.19.0/evil", "foreign url replaced by the release url");
+        assert_eq!(evil.url, "https://github.com/errored404user/ULTIMATEor/releases/download/v2.20.0/evil", "foreign url replaced by the release url");
         assert!(Latest::parse("{}").is_err());
         assert!(Latest::parse("not json").is_err());
     }
@@ -730,7 +730,7 @@ mod tests {
         let long = format!("TotalScript/{}/file.js", "d".repeat(120));
         let bytes = tar(&[
             ("TotalScript/", &b""[..], b'5'),
-            ("TotalScript/manifest.json", &br#"{"name":"TotalScript","version":"2.19.0"}"#[..], b'0'),
+            ("TotalScript/manifest.json", &br#"{"name":"TotalScript","version":"2.20.0"}"#[..], b'0'),
             (&long, &b"long"[..], b'0'),
             ("TotalScript/src/a.js", &b"console.log(1)"[..], 0),
         ]);

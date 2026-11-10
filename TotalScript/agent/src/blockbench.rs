@@ -1,4 +1,4 @@
-//! TotalScript Blockbench plugin hub (2.19.0).
+//! TotalScript Blockbench plugin hub (2.20.0).
 //!
 //! `plugin/TotalScript-Blockbench.js` runs inside the Blockbench desktop app
 //! and long-polls this bridge for jobs - the same shape as the Studio plugin

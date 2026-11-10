@@ -33,7 +33,7 @@
 // content script (window.TotalOrchestrator).
 const TotalOrchestrator = (() => {
   "use strict";
-  const VERSION = "2.19.0";
+  const VERSION = "2.20.0";
 
   // ───────────────────────── 1. task understanding ─────────────────────────
   const CATEGORY_RE = {
@@ -378,7 +378,7 @@ const TotalOrchestrator = (() => {
       tightPrompt: !!(num("sysMaxChars") && num("sysMaxChars") < 16000) || !!P.compactCommandList,
       timings: { genIdleMs: T.GEN_IDLE_MS || null, reasonIdleMs: T.REASON_IDLE_MS || null, warmupMs: T.WARMUP_MS || null, reasonNoReplyMs: T.REASON_NOREPLY_MS || null, stableMs: T.STABLE_MS || null, responseTimeoutMs: T.RESPONSE_TIMEOUT_MS || null, prestartMs: T.PRESTART_MS || null, genStopGraceMs: T.GEN_STOP_GRACE_MS || null },
       promptExtra: typeof P.promptExtra === "string" ? P.promptExtra.length : 0,
-      // 2.19.0 — creation-engine inputs (real adapter fields only):
+      // 2.20.0 — creation-engine inputs (real adapter fields only):
       //   commandFormat "plain" = the adapter cannot carry fenced-json commands
       //                 (Vani); the loop uses the bare ###LUA### protocol
       //   commandlessRetries  how many "no command in the reply" retries the

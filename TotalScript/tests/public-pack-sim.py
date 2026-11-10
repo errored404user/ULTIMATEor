@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Featured Public Skills (2.19.0) against the miniature Roblox DataModel.
+"""Featured Public Skills (2.20.0) against the miniature Roblox DataModel.
 
 tests/test-public-packs.js checks the pack statically (validation, registration, UI,
 command). This script does what a user would: installs the pack into PublicSkills in
@@ -13,7 +13,7 @@ damage, leave), the collectible server (spawn, touch -> stat, respawn queued) an
 client (spin), the boss bar (bind, drain, death), damage numbers (server fire, client
 popup) and the NPC brain (compiles; dead humanoid -> State 'dead').
 
-2.19.0: after each successful install the skill's VERIFY block (PublicSkills.buildVerify,
+2.20.0: after each successful install the skill's VERIFY block (PublicSkills.buildVerify,
 the exact program public_skill_test {dry_run:false} sends to Studio) runs in the same
 DataModel and must return ok=true; against a wrong target it must return ok=false. This
 is the mocked rehearsal of the self-test that marks an installed skill VERIFIED.

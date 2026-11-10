@@ -1,5 +1,7 @@
-// 1.19.7 — theme visual refresh: layered backgrounds for every theme, corner
-// decorations on panels + the viewport rail, gradient-pill buttons with glow.
+// 1.19.7 — theme visual refresh: layered backgrounds for every theme, designed
+// SVG ornaments, gradient-pill buttons with glow. 2.20.0: the corner details
+// (viewport rail, bracket marks, head/foot/card corner ornaments) are removed
+// and this file pins their absence.
 // Run from the TotalScript root: node tests/test-theme-visuals.js
 const fs = require("fs");
 const path = require("path");
@@ -36,18 +38,25 @@ for (const id of CLASSIC) {
   assert(sec.includes(`url(ui/swatch-${id}.jpg)`), `classic theme "${id}" must use its swatch photo as a background`);
   assert(fs.existsSync(path.join(root, "ui", `swatch-${id}.jpg`)), `ui/swatch-${id}.jpg must exist`);
 }
-assert(/html\[data-rs-theme\] #rs-menu,[\s\S]*?background:\s*var\(--totalx-marks\), var\(--totalx-fade\), var\(--totalx-wash\), var\(--totalx-img\), var\(--totalx-bg\) !important/.test(sec),
-  "#rs-menu must stack marks + fade + wash + image + base");
+assert(/html\[data-rs-theme\] #rs-menu,[\s\S]*?background:\s*var\(--totalx-fade\), var\(--totalx-wash\), var\(--totalx-img\), var\(--totalx-bg\) !important/.test(sec),
+  "#rs-menu must stack fade + wash + image + base (no corner marks)");
 assert(sec.includes("html[data-rs-theme] .rs-menu-head {"), "settings head must take the theme photo");
 assert(sec.includes('html[data-rs-theme][data-rs-glass="true"] #rs-bar'), "glass bar must get the themed background");
 
-// 2) Corner decorations — bracket marks on panels, and a designed SVG ornament
-//    per theme (no emoji, no text) painted on the rail, head, foot, cards, bar.
-assert((sec.match(/linear-gradient\(var\(--totalx-mark\), var\(--totalx-mark\)\)/g) || []).length === 8, "--totalx-marks must draw 8 bracket layers (4 corners x 2 edges)");
-for (const c of ["tl", "tr", "bl", "br"]) {
-  assert(sec.includes(`#rs-root .rs-corner-${c}::before`), `viewport rail corner ${c} must have a bracket frame`);
-  assert(sec.includes(`#rs-root .rs-corner-${c}::after`), `viewport rail corner ${c} must place the ornament`);
-}
+// 2) Corner details are gone (2.20.0): no bracket-mark layers, no viewport rail,
+//    no corner ornaments on the settings head/foot or the approve/setup cards.
+//    The designed SVG ornament per theme stays for the bar mark + badges.
+assert(!/totalx-mark/.test(css), "corner bracket marks (--totalx-mark*) must be gone from overlay.css");
+assert(!/rs-theme-corner|rs-corner-(tl|tr|bl|br)/.test(css), "viewport corner rail selectors must be gone from overlay.css");
+assert(!main.includes('className="rs-theme-corners"') && !main.includes("rs-corner-tl"), "main.js must not build the viewport corner rail");
+assert(main.includes('document.querySelector("#rs-root .rs-theme-corners"); if(staleRail) staleRail.remove();'), "main.js must drop a rail left behind by an older build");
+assert(!/html\[data-rs-hide~="corners"\]/.test(css), "the corners hide hook must be gone");
+for (const sel of [
+  "html[data-rs-theme] .rs-menu-head::before", "html[data-rs-theme] .rs-menu-head::after {",
+  "html[data-rs-theme] .rs-menu-foot::before", "html[data-rs-theme] .rs-menu-foot::after",
+  "html[data-rs-theme] .rs-approve-card::before", "html[data-rs-theme] .rs-approve-card::after",
+  "html[data-rs-theme] #rs-setup::before", "html[data-rs-theme] #rs-setup::after",
+]) assert(!css.includes(sel), `corner ornament placement must be gone: ${sel}`);
 const ornaments = {};
 for (const id of THEMES) {
   const m = sec.match(new RegExp(`html\\[data-rs-theme="${id}"\\] \\{ --totalx-orn: url\\("data:image/svg\\+xml;utf8,(<svg[^"]*</svg>)"\\); \\}`));
@@ -57,23 +66,19 @@ for (const id of THEMES) {
   assert(sec.match(new RegExp(`html\\[data-rs-theme="${id}"\\] \\{ --totalx-tile: `)), `theme "${id}" must define an inside texture (--totalx-tile)`);
 }
 for (const sel of [
-  "#rs-root .rs-theme-corner::after",
-  "html[data-rs-theme] .rs-menu-head::before", "html[data-rs-theme] .rs-menu-head::after",
-  "html[data-rs-theme] .rs-menu-foot::before", "html[data-rs-theme] .rs-menu-foot::after",
-  "html[data-rs-theme] .rs-approve-card::before", "html[data-rs-theme] #rs-setup::after",
   "html[data-rs-theme] #rs-ornament {",
   "html[data-rs-theme] .rs-sec-label::after", "html[data-rs-theme] .rs-menu-mark::before",
 ]) assert(sec.includes(sel), `ornament placement missing: ${sel}`);
-assert(/var\(--totalx-marks\), var\(--totalx-fade\), var\(--totalx-tile\), var\(--totalx-wash\), var\(--totalx-img\), var\(--totalx-bg\)/.test(sec), "panels must layer the inside texture");
+assert(/var\(--totalx-fade\), var\(--totalx-tile\), var\(--totalx-wash\), var\(--totalx-img\), var\(--totalx-bg\)/.test(sec), "panels must layer the inside texture");
 assert(sec.includes("html[data-rs-theme] #rs-bar::after { content: none !important; }"), "old emoji strip under the bar must be retired");
-// No emoji anywhere in theme data, corner rails or the popup theme cards.
+// No emoji anywhere in theme data or the popup theme cards.
 const emoji = /[\u{1F000}-\u{1FAFF}\u{1F900}-\u{1F9FF}\u{2700}-\u{27BF}\u{FE0F}]/u;
 const themeData = main.slice(main.indexOf("const TOTAL_THEMES"), main.indexOf("const totalTheme"));
 const nonEmojiSymbols = /[\u2600-\u26FF\u2700-\u27BF]/g; // ☾ ✦ ✿ ❧ ✺ are text symbols, allowed
 assert(!emoji.test(themeData.replace(nonEmojiSymbols, "")), "theme data must not contain emoji");
 assert(!main.includes("CLASSIC_THEME_DECOR") && !main.includes("th.decorations=") && !main.includes("--rs-theme-decor"), "text/emoji corner decorations must be gone");
-assert(!main.includes(".textContent=dec."), "rail must not receive text");
-assert(main.includes('rail.dataset.kind=memeIds.includes(totalTheme)?"meme":"classic";rail.hidden=memeEffects==="off";'), "rail must be CSS-drawn and honour effects=off");
+assert(!main.includes(".textContent=dec."), "no text decorations");
+assert(!main.includes("rail.dataset.kind=") && !main.includes("rail.hidden="), "the corner rail code path must be gone from main.js");
 // 1.39.1: the popup no longer carries theme cards at all.
 assert(!popup.includes('id="theme-row"') && !popup.includes("theme-art") && !popup.includes("Visual skin"), "popup theme picker must be gone");
 

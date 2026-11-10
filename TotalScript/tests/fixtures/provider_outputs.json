@@ -84,7 +84,7 @@
   },
   {
    "id": "fence-blockquote",
-   "tag": "notion",
+   "tag": "richtext",
    "text": "> ```json\n> {\"command\":\"workspace_list\",\"params\":{}}\n> ```",
    "expect": [
     {
@@ -124,7 +124,7 @@
   },
   {
    "id": "table-cell",
-   "tag": "notion",
+   "tag": "richtext",
    "text": "| step | call |\n|---|---|\n| 1 | `{\"command\":\"workspace_list\",\"params\":{}}` |",
    "expect": [
     {
@@ -264,7 +264,7 @@
   },
   {
    "id": "smart-quotes",
-   "tag": "notion",
+   "tag": "richtext",
    "text": "{“command”:“workspace_list”,“params”:{“path”:“Workspace”}}",
    "expect": [
     {
@@ -277,7 +277,7 @@
   },
   {
    "id": "nbsp",
-   "tag": "notion",
+   "tag": "richtext",
    "text": "{\"command\": \"workspace_list\", \"params\": {}}",
    "expect": [
     {
@@ -287,7 +287,7 @@
   },
   {
    "id": "zero-width",
-   "tag": "notion",
+   "tag": "richtext",
    "text": "{\"com​mand\":\"workspace_list\",\"params\":{}}",
    "expect": [
     {
@@ -683,7 +683,7 @@
   },
   {
    "id": "lua-spaced",
-   "tag": "notion",
+   "tag": "richtext",
    "text": "### LUA ###\nlocal s = 1\n### END_LUA ###",
    "expect": [
     {
@@ -735,7 +735,7 @@
   },
   {
    "id": "lua-fence-with-lang-after-marker",
-   "tag": "notion",
+   "tag": "richtext",
    "text": "###LUA###\n```lua\nprint(1)\n```\n###END_LUA###",
    "expect": [
     {

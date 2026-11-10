@@ -70,8 +70,7 @@ assert(config.includes("rig_joints_inspect lists the joint names before you pose
 // Providers.
 const chatgpt = fs.readFileSync("src/providers/chatgpt.js", "utf8");
 assert(chatgpt.includes("commandListMaxLines: 560"), "chatgpt catalogue line budget under SEND_MAX_LINES");
-const notion = fs.readFileSync("src/providers/notion.js", "utf8");
-assert(notion.includes("RSParse.parseToolCalls(reply).length > 0) return false;") && notion.includes("return grewWithin(9000);"), "notion: closed command block finalises after 3 s, prose still waits 9 s");
+assert(!fs.existsSync("src/providers/notion.js"), "notion: provider removed in 2.20.0 (adapter file must not come back)");
 const vani = fs.readFileSync("src/providers/vani.js", "utf8");
 assert(vani.includes("const CODE_CHROME_SEL ="), "vani skips code-block gutters/headers");
 assert(vani.includes("function codeText(node)"), "vani reads <pre> verbatim");

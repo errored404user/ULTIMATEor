@@ -245,7 +245,7 @@ pub struct UiShared {
     pub pair_seq: AtomicUsize,
     /// Seconds since boot when the Studio plugin last talked to the bridge (0 = never).
     pub plugin_seen: AtomicUsize,
-    /// 2.19.0 seconds since boot when the Blockbench plugin last polled (0 = never).
+    /// 2.20.0 seconds since boot when the Blockbench plugin last polled (0 = never).
     pub blockbench_seen: AtomicUsize,
     /// 2.17.0 auto-updater (GitHub Releases): last check, running job, folder.
     pub update: Arc<crate::update::Hub>,
@@ -292,7 +292,7 @@ impl UiShared {
         seen > 0 && self.boot.elapsed().as_secs() as usize + 1 - seen < 45
     }
 
-    /// 2.19.0: called by every Blockbench HTTP handler (the plugin polls every ~20 s).
+    /// 2.20.0: called by every Blockbench HTTP handler (the plugin polls every ~20 s).
     pub fn blockbench_touch(&self) {
         self.blockbench_seen.store(self.boot.elapsed().as_secs() as usize + 1, Ordering::Relaxed);
     }
@@ -1794,7 +1794,7 @@ impl App {
                     let roomy = ui.available_height() > 240.0;
                     let tight = ui.available_height() < 150.0;
                     if tight {
-                        // One line: "— BRIDGE  ● OFFLINE · up 4s · v2.19.0   «" — the nine
+                        // One line: "— BRIDGE  ● OFFLINE · up 4s · v2.20.0   «" — the nine
                         // nav items keep their blurbs at the default 1280×820 window.
                         egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, if up { alpha(t.ok, 110) } else { t.border })).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::symmetric(12.0, 8.0)).show(ui, |ui| {
                             ui.set_width(ui.available_width());
@@ -4438,7 +4438,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
             "Blender connects through the extension, not this app: press Start MCP Server in Blender (N panel → MCP for Blender), then Settings → MCP servers → Connect Blender on the TotalScript bar. The Blender work mode makes the AI plan, build, validate, render and send assets to Studio from there.",
             "Work modes (Totality, Blender, Animator), skills, templates, prompt enhancer, Paint and Video are in the extension's Settings and bar — this app does not change them.",
             "The Studio plugin: this app copies plugin/TotalScript.lua into Studio's local Plugins folder; restart Studio once, open Plugins → TotalScript and click Allow on the HTTP prompt. The plugin then long-polls this bridge for jobs.",
-            "Blockbench (2.19.0): this app keeps TotalScript-Blockbench.js next to its executable; load it once in Blockbench (File → Plugins → Load Plugin from File). It then connects to this app on every start - no port, no MCP - and the bb_* tools (cubes, groups, meshes, textures, animation, screenshot, export OBJ / glTF / bbmodel) work from the extension's Blockbench mode and from this chat.",
+            "Blockbench (2.20.0): this app keeps TotalScript-Blockbench.js next to its executable; load it once in Blockbench (File → Plugins → Load Plugin from File). It then connects to this app on every start - no port, no MCP - and the bb_* tools (cubes, groups, meshes, textures, animation, screenshot, export OBJ / glTF / bbmodel) work from the extension's Blockbench mode and from this chat.",
         ],
     },
     HelpTopic {

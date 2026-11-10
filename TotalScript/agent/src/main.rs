@@ -320,7 +320,7 @@ struct AppState {
     ui: Arc<gui::UiShared>,
     /// TotalScript Studio plugin hub (jobs, Open Cloud key, install path).
     plugin: Arc<plugin::Hub>,
-    /// 2.19.0 TotalScript Blockbench plugin hub (bb_* jobs, plugin file path).
+    /// 2.20.0 TotalScript Blockbench plugin hub (bb_* jobs, plugin file path).
     blockbench: Arc<blockbench::Hub>,
 }
 
@@ -887,7 +887,7 @@ async fn start() -> anyhow::Result<()> {
         Ok(None) => shared.log("studio plugin: auto-install skipped (no local Plugins folder on this platform or TOTAL_NO_PLUGIN_INSTALL=1) - copy plugin/TotalScript.lua into Studio's Plugins folder yourself"),
         Err(e) => shared.log(&format!("studio plugin: install failed ({e}) - copy plugin/TotalScript.lua into Studio's Plugins folder yourself")),
     }
-    // 2.19.0 Blockbench plugin: Blockbench only loads plugins the user picked
+    // 2.20.0 Blockbench plugin: Blockbench only loads plugins the user picked
     // once (File → Plugins → Load Plugin from File), so keep a current copy next
     // to the executable and show that path in the app / popup.
     match blockbench::install() {
@@ -1484,7 +1484,7 @@ async fn roblox_tools_with_plugin(state: &AppState) -> anyhow::Result<Vec<serde_
     Ok(tools)
 }
 
-/// 2.19.0: the Blockbench plugin rides the Roblox channel's server list so the
+/// 2.20.0: the Blockbench plugin rides the Roblox channel's server list so the
 /// extension's status bar / popup show it next to Studio (no socket of its own).
 async fn with_blockbench_server(state: &AppState, mut v: serde_json::Value) -> serde_json::Value {
     let connected = state.blockbench.connected().await;

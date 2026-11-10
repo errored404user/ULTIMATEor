@@ -51,7 +51,7 @@ const PROBES = [
   ["snapshot", (P) => { const s = P.snapshot(); return s && typeof s === "object"; }],
   ["streamLen", (P) => Number.isFinite(Number(P.streamLen(P.lastAssistant() || undefined) || 0))],
   ["timings", (P) => P.timings && typeof P.timings === "object" && ["WARMUP_MS", "REASON_NOREPLY_MS", "STABLE_MS", "RESPONSE_TIMEOUT_MS"].every((k) => Number.isFinite(P.timings[k]) && P.timings[k] > 0) && P.timings.RESPONSE_TIMEOUT_MS >= P.timings.WARMUP_MS],
-  // Keys the core actually reads (T.X in main.js) - a misspelt key (Notion's old PRE_START_MS) silently falls back to the default.
+  // Keys the core actually reads (T.X in main.js) - a misspelt key (an old adapter's PRE_START_MS) silently falls back to the default.
   ["timings keys spelled as the core reads them", (P) => Object.keys(P.timings).every((k) => !/PRE_START|WARM_UP|TIME_OUT|NO_REPLY|STOP_GRACE$/.test(k)) && CORE_TIMING_KEYS.length >= 6],
 ];
 const CORE_TIMING_KEYS = [...new Set([...read("src/core/main.js").matchAll(/\bT\.([A-Z_]+)\b/g)].map((m) => m[1]))];
@@ -64,7 +64,7 @@ const seenProviders = new Set();
 for (const b of bundles) {
   const providerFile = b.js.find((j) => /src\/providers\//.test(j) && !/stream-reader\.js$/.test(j));
   const host = hostOf(b.matches[0]);
-  const pathname = host === "huggingface.co" ? "/chat/" : host === "www.notion.so" ? "/ai" : "/";
+  const pathname = host === "huggingface.co" ? "/chat/" : "/";
   const win = mockWindow(host, pathname);
   const ctx = vm.createContext(win);
   let P = null, loadErr = null;
@@ -94,7 +94,7 @@ for (const b of bundles) {
   rows.push({ id, name: caps ? caps.name : "?", file: providerFile, caps, problems });
   ok(`${id}: adapter honours the read-side contract on an empty page (${PROBES.length} probes, ${REQUIRED_FNS.length} required functions)`, problems.length === 0, problems);
 }
-ok("every manifest bundle produced one adapter (" + rows.length + " distinct providers)", rows.length >= 11, rows.map((r) => r.id)); // 1.89.0: 12 bundles after the provider removal; 2.19.0: 11 (meta removed)
+ok("every manifest bundle produced one adapter (" + rows.length + " distinct providers)", rows.length >= 10, rows.map((r) => r.id)); // 1.89.0: 12 bundles after the provider removal; 2.20.0: 11 (meta removed); 2.20.0: 10 (notion removed)
 
 // ── capability table (offline) ──
 console.log("\nPROVIDER CAPABILITY REPORT — offline, mocked DOM; NOT a live-provider result");

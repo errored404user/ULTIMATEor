@@ -13,7 +13,7 @@ const SUPPORTED_HOSTS = [
   "claude.ai", "claude.com",
   "gemini.google.com", "kimi.ai", "www.kimi.ai", // 1.86.0: kimi.ai was injected (manifest) but the popup did not recognise the tab; 1.89.0: kimi.com dropped
   "chat.z.ai", "chat.qwen.ai", "arena.ai",
-  "www.notion.so", "app.notion.so", "www.notion.com", "notion.com", "c.vani.ai",
+  "c.vani.ai",
   "huggingface.co", "www.huggingface.co",
   "openrouter.ai", "www.openrouter.ai",
 ];
@@ -24,7 +24,7 @@ const isCodeCraftTab = (url) => !!(url && CODECRAFT_PAGE_URL && url.startsWith(C
 const isSupportedTab = (url) => !!url && (SUPPORTED_HOSTS.some((h) => url.includes(h)) || isCodeCraftTab(url));
 const ENGINE_KEY = "rs-engine"; // "roblox" | "local"
 const ENGINES = ["roblox", "local"];
-const WORK_MODES = ["creation", "blender", "animate", "blockbench"]; // 1.95.0: + Blender (Blender-first 3D); 1.99.4: + Animator (id "animate"); 2.19.0: + Blockbench (low-poly models → file → Studio Import 3D)
+const WORK_MODES = ["creation", "blender", "animate", "blockbench"]; // 1.95.0: + Blender (Blender-first 3D); 1.99.4: + Animator (id "animate"); 2.20.0: + Blockbench (low-poly models → file → Studio Import 3D)
 const BRAND_LOGO_RE = /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i;
 function sanitizeBrandLite(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
@@ -69,7 +69,6 @@ const SITE_NAMES = {
   "kimi.ai": "Kimi",
   "chat.z.ai": "GLM", "chat.qwen.ai": "Qwen",
   "arena.ai": "Arena",
-  "www.notion.so": "Notion", "app.notion.so": "Notion", "www.notion.com": "Notion", "notion.com": "Notion",
   "c.vani.ai": "Vani Chat",
   "huggingface.co": "HuggingChat", "openrouter.ai": "OpenRouter",
 };
@@ -82,7 +81,6 @@ const PROVIDER_SITES = [
   ["GLM", "https://chat.z.ai/", "chat.z.ai"],
   ["Qwen", "https://chat.qwen.ai/", "chat.qwen.ai"],
   ["Arena", "https://arena.ai/", "arena.ai"],
-  ["Notion AI", "https://www.notion.so/", "notion.so"],
   ["Vani Chat", "https://c.vani.ai/", "c.vani.ai"],
   ["HuggingChat", "https://huggingface.co/chat/", "huggingface.co/chat"],
   ["OpenRouter", "https://openrouter.ai/chat", "openrouter.ai"],
@@ -982,7 +980,7 @@ async function renderItem(it, stored) {
       return row;
     }
     case "blockbench": {
-      // 2.19.0: nothing to connect from here - the TotalScript plugin inside
+      // 2.20.0: nothing to connect from here - the TotalScript plugin inside
       // Blockbench dials total-core. Show the state, the plugin path (copyable)
       // and a Check again button that re-reads total-core.
       const row = rowShell(it, `<button type="button" class="ts-btn sm" id="blockbench-check"><span>Check again</span></button>`);

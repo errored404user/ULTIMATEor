@@ -37,7 +37,7 @@
     runtime: {
       id: "shot", lastError: null,
       getURL: (p) => location.href.replace(/[^/]*$/, "") + p,
-      getManifest: () => ({ version: S.version || "2.19.0" }),
+      getManifest: () => ({ version: S.version || "2.20.0" }),
       sendMessage: (m, cb) => { window.__shotCalls.push(m); const r = reply(m); if (cb) setTimeout(() => cb(r), 0); return Promise.resolve(r); },
       onMessage: { addListener() {}, removeListener() {} },
     },

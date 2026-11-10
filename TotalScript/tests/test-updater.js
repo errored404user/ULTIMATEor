@@ -58,7 +58,7 @@ const offline = d({ latest: L, checkedAt: 1, appOnline: false });
 ok("C6 available + app offline → manual fallback (download / notes / later / skip), never 'update'", offline.kind === "available" && offline.actions.join() === "download,notes,later,skip" && /not running/.test(offline.sub));
 const nofolder = d({ latest: L, checkedAt: 1, appOnline: true, extensionDir: null });
 ok("C7 available + app online but folder unknown → download path and a pointer to Settings → Updates", nofolder.actions.join() === "download,notes,later,skip" && /Settings/.test(nofolder.sub));
-ok("C8 skipped version stays quiet (unskip / check) and a NEWER one shows again", d({ latest: L, checkedAt: 1, skipped: "2.17.0", appOnline: true, extensionDir: "x" }).kind === "skipped" && d({ latest: U.parseLatest({ version: "2.19.0" }), checkedAt: 1, skipped: "2.17.0", appOnline: true, extensionDir: "x" }).kind === "available");
+ok("C8 skipped version stays quiet (unskip / check) and a NEWER one shows again", d({ latest: L, checkedAt: 1, skipped: "2.17.0", appOnline: true, extensionDir: "x" }).kind === "skipped" && d({ latest: U.parseLatest({ version: "2.20.0" }), checkedAt: 1, skipped: "2.17.0", appOnline: true, extensionDir: "x" }).kind === "available");
 const running = d({ latest: L, job: { phase: "downloading", component: "extension", message: "Downloading TotalScript-extension.tar", received: 15000000, total: 30000000, version: "2.17.0", finished: [], pending: ["app"] } });
 ok("C9 running job → progress %, no actions", running.kind === "running" && running.progress === 50 && /50%/.test(running.sub) && running.actions.length === 0);
 const doneExt = d({ latest: L, job: { phase: "done", version: "2.17.0", finished: ["extension"], pending: [] } });

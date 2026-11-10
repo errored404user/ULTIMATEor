@@ -9,7 +9,7 @@
 //     the popup's hint row is the same live checklist.
 //   * Version pins 1.40.0 everywhere.
 // Behavioural coverage (card ticks, starters paste, simple/advanced flip,
-// Help → checklist) lives in tests/notion-e2e.js (default + TASKS=1 runs).
+// Help → checklist) lives in tests/core-e2e.js (default + TASKS=1 runs).
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -60,7 +60,7 @@ ok("advanced rows (auto-fix stop, auto-debug, multi-agent, task list) + keybind 
 ok("overlay.css hides .rs-adv inside the simple view and styles the live checklist",
   css.includes("#rs-menu.rs-menu-simple .rs-adv { display: none !important; }") && css.includes("1.40.0 Beginner mode") && [".rs-step-ok .rs-step-pip", ".rs-step-now .rs-step-pip", ".rs-setup-fix", ".rs-setup-starter", "#rs-setup-progress"].every((s) => css.includes(s)));
 ok("overlay.css keeps the earlier setup-card layers intact",
-  css.includes("/* setup card 1.17.19 */") && css.includes("#rs-bar.rs-setup-open #rs-setup") && css.includes("html[data-rs-theme] #rs-setup::after"));
+  css.includes("/* setup card 1.17.19 */") && css.includes("#rs-bar.rs-setup-open #rs-setup") && css.includes("html[data-rs-theme] .rs-approve-card, html[data-rs-theme] #rs-setup { position: relative; }") && !css.includes("html[data-rs-theme] #rs-setup::after"));
 
 // ── C. Plain-language tutorial + help topic ────────────────────────────────
 const tut = main.slice(main.indexOf("const TUTORIAL_HTML = `"), main.indexOf("function buildTutorial()"));

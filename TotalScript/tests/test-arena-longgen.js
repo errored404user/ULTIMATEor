@@ -23,7 +23,7 @@ ok("arena.js: genDebug exported for diagnostics (stop / stopForMs / textLen / fr
 ok("main.js: HARD_STABLE_MS read from provider timings, defaulting to STABLE_MS (no change for other providers)", /const HARD_STABLE_MS = T\.HARD_STABLE_MS \|\| T\.STABLE_MS;/.test(main));
 ok("main.js: the wedged-stop fallback (stuckDone) uses HARD_STABLE_MS only while P.isHardGenerating() and only when the provider set a different value", /const stableNeed = \(HARD_STABLE_MS !== STABLE_MS && P\.isHardGenerating && P\.isHardGenerating\(\)\) \? HARD_STABLE_MS : STABLE_MS;\n\s*const stuckDone = started && d\.reply && Date\.now\(\) - lastChangeAt > stableNeed &&/.test(main));
 ok("main.js: PRESTART_MS still comes from provider timings (T.PRESTART_MS || 60000)", /const PRESTART_MS = T\.PRESTART_MS \|\| 60000;/.test(main));
-const others = ["chatgpt", "claude", "deepseek", "gemini", "glm", "kimi", "notion", "qwen", "vani", "multichat", "codecraft"].map((p) => read("src/providers/" + p + ".js"));
+const others = ["chatgpt", "claude", "deepseek", "gemini", "glm", "kimi", "qwen", "vani", "multichat", "codecraft"].map((p) => read("src/providers/" + p + ".js"));
 ok("no other adapter declares HARD_STABLE_MS (opt-in, Arena only)", others.every((s) => !/HARD_STABLE_MS/.test(s)));
 
 // ── jsdom: the real adapter on a scripted DOM with a fake clock ─────────────

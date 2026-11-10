@@ -29,7 +29,7 @@ ok("tray has no theme volume / effects / intensity controls", !main.includes("da
 ok("picker handlers removed", !main.includes('querySelectorAll("[data-theme-card]")') && !main.includes("previewOrTheme") && !main.includes("exitThemePreview") && !main.includes("themePreviewId") && !main.includes("function setOrTheme") && !main.includes("applyThemeVolume") && !main.includes("setMemeEffects") && !main.includes("setMemeIntensity") && !main.includes("SFX_LABELS"));
 ok("skin pinned to Aqua, rsTheme never read or written", main.includes('const totalTheme = "aqua";') && !/\brsTheme\b/.test(main) && !main.includes("changes.rsTheme"));
 ok("themes help topic removed", !/\n\s+themes:\{title:/.test(main) && !main.includes('"Themes & appearance"'));
-ok("skin engine still present (applyOrSkin, corner rail, sound packs)", main.includes("function applyOrSkin()") && main.includes('setAttribute("data-rs-theme", totalTheme)') && main.includes("rs-theme-corners") && main.includes("const THEME_SOUNDS = {") && main.includes("function playSfx(kind, themeId)") && main.includes("THEME_SOUNDS[themeId || totalTheme]"));
+ok("skin engine still present (applyOrSkin, sound packs) and the corner rail is gone (2.20.0)", main.includes("function applyOrSkin()") && main.includes('setAttribute("data-rs-theme", totalTheme)') && !main.includes('className="rs-theme-corners"') && main.includes("const THEME_SOUNDS = {") && main.includes("function playSfx(kind, themeId)") && main.includes("THEME_SOUNDS[themeId || totalTheme]"));
 ok("stored sound / effect prefs still honoured", main.includes('chrome.storage.local.get(["rsSounds", "rsThemeVolume", "rsMemeEffects", "rsMemeIntensity"]') && main.includes("changes.rsSounds"));
 
 // ── B. Themes: popup ──────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ ok("popup Sounds toggle still exists", popupHtml.includes('id="tgl-sounds"') && 
 
 // ── C. Themes: CSS ────────────────────────────────────────────────────────────
 ok("picker-only CSS removed", !css.includes(".rs-theme-card") && !css.includes(".rs-theme-tools") && !css.includes(".rs-theme-sound-list") && !css.includes(".rs-theme-sound-name") && !css.includes(".rs-theme-row") && !css.includes(".rs-theme-sec") && !css.includes(".rs-theme-art"));
-ok("night skin CSS intact", css.includes('html[data-rs-theme="night"] {') && css.includes('html[data-rs-theme="night"] { --totalx-tile:') && /html\[data-rs-theme="night"\] \{ --totalx-orn: url\("data:image\/svg\+xml;utf8,<svg/.test(css) && css.includes("#rs-root .rs-corner-tl::before"));
+ok("night skin CSS intact", css.includes('html[data-rs-theme="night"] {') && css.includes('html[data-rs-theme="night"] { --totalx-tile:') && /html\[data-rs-theme="night"\] \{ --totalx-orn: url\("data:image\/svg\+xml;utf8,<svg/.test(css) && !css.includes(".rs-corner-tl::before"));
 ok("CSS braces balanced after the block removal", css.split("{").length === css.split("}").length);
 
 // ── D. Memory: settings section + machinery gone ──────────────────────────────

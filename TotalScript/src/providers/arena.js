@@ -1121,7 +1121,7 @@ const RSProvider = (() => {
   // on the next send (wiping per-element .rs-tool-hide), so also mark the turn
   // (its identity survives - the chip is anchored at item level) with
   // .rs-cmd-mask; the overlay.css rule keeps recreated code wrappers hidden.
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.19.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.20.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
   function findToolBlockSpot(item /*, chip */) {
     const md = proseOf(item);
     if (!md && isAgentRoute()) {

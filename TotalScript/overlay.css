@@ -207,27 +207,6 @@ html.rs-light #rs-bar.rs-bar-anchored {
    simply the first row of the composer card, full card width, with a hairline
    divider. Negative-margin variants used to overlap the textarea/attach row
    (the old "bar over Ask anything" bug). */
-/* Notion AI: the bar floats just ABOVE Notion's full-page AI composer
-   (provider `barOutside`), so it carries its own rounded shell; palette
-   follows Notion's warm neutral ink + blue accent. */
-#rs-bar.rs-prov-notion {
-  --accent: #2e7cf6;
-  --accent-strong: #4b8ff8;
-  --accent-soft: rgba(46, 124, 246, 0.14);
-  --accent-inv: #ffffff;
-  font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif;
-}
-#rs-bar.rs-bar-anchored.rs-prov-notion {
-  border-radius: 12px !important;
-  border: 1px solid rgba(255, 255, 255, 0.09) !important;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
-}
-html.rs-light #rs-bar.rs-bar-anchored.rs-prov-notion {
-  border-color: rgba(55, 53, 47, 0.16) !important;
-  box-shadow: 0 6px 22px rgba(15, 15, 15, 0.12);
-}
-#rs-bar.rs-prov-notion #rs-dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
-#rs-bar.rs-prov-notion #rs-state b { color: var(--accent); }
 
 /* ── Unified subtle header for every provider (anchored + inline-above) ─────
    Ensures every rs-prov-* has both an anchored and an inline-above
@@ -3956,7 +3935,7 @@ html.rs-light .rs-blender-note { color: #7a1f12; background: rgba(190,60,45,.1);
   .rs-blender-card.on .rs-blender-mark, .rs-blender-card.on .rs-blender-pill i { animation: none; }
 }
 
-/* ── Blockbench card 2.19.0 (2.19.0: own plugin, no URL field) ─────────────────────────────────────────────
+/* ── Blockbench card 2.20.0 (2.20.0: own plugin, no URL field) ─────────────────────────────────────────────
    Same component as the Blender card (shared classes), recoloured to
    Blockbench's teal and with a small URL field; the mark is a cube outline. */
 .rs-blender-card.rs-bb-card { --bl: #1e9c86; --bl2: #5ad0ba; --bl-ink: #06201b; }
@@ -6038,7 +6017,7 @@ html[data-rs-theme="void"] .rs-template-head{background:linear-gradient(180deg,r
 .rs-work-row.rs-work-creation{grid-template-columns:minmax(0,1fr)}
 /* 1.99.5: Access has two states (Sandbox only / Full PC). */
 .rs-work-row.rs-access-row{grid-template-columns:1fr 1fr}
-/* 2.19.0 — creation quality: four profile cards, two per row (names wrap, never one glyph per line) */
+/* 2.20.0 — creation quality: four profile cards, two per row (names wrap, never one glyph per line) */
 .rs-work-row.rs-creation-row{grid-template-columns:1fr 1fr}
 .rs-creation-row .rs-work-sub{overflow-wrap:break-word}
 .rs-work-creation .rs-work-card{min-height:48px}
@@ -6253,13 +6232,13 @@ html[data-rs-theme="skillissue"] #rs-root{background-image:linear-gradient(180de
 html[data-rs-theme="pogchamp"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-pogchamp.svg");background-size:cover;background-position:center;background-attachment:fixed}
 html[data-rs-theme="glitchlord"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-glitchlord.svg");background-size:cover;background-position:center;background-attachment:fixed}
 html[data-rs-theme="npcenergy"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-npcenergy.svg");background-size:cover;background-position:center;background-attachment:fixed}
-/* Corner-safe meme decoration rails: visible over opened menus/cards, never interactive. */
-#rs-root .rs-theme-corners{position:fixed;inset:0;z-index:2147483645;pointer-events:none;overflow:hidden;display:block}#rs-root .rs-theme-corners[hidden]{display:none!important}#rs-root .rs-theme-corner{position:fixed;max-width:38vw;color:var(--rsa,#24afe2);font:900 12px/1.8 system-ui,sans-serif;letter-spacing:.12em;text-shadow:0 0 8px currentColor;opacity:.78;white-space:normal;word-spacing:.2em}#rs-root .rs-corner-tl{top:10px;left:12px;text-align:left}#rs-root .rs-corner-tr{top:10px;right:12px;text-align:right}#rs-root .rs-corner-bl{bottom:10px;left:12px;text-align:left}#rs-root .rs-corner-br{bottom:10px;right:12px;text-align:right}@media(max-width:600px){#rs-root .rs-theme-corner{font-size:9px;line-height:1.55;max-width:44vw;letter-spacing:.06em}}@media(prefers-reduced-motion:reduce){#rs-root .rs-theme-corner{transition:none!important;animation:none!important}}
+/* 2.20.0: the viewport corner rail and the panel corner bracket / ornament
+   decorations were removed ("remove the corner details"). */
 
 /* ══════════════════════════════════════════════════════════════════════════
    TotalScript 1.19.7 — theme visual refresh
    · every theme gets a layered background (photo/pattern + accent wash + fade)
-   · corner decorations: CSS bracket marks on panels + a glyph rail per theme
+   · (corner decorations removed in 2.20.0)
    · UI buttons: gradient pills with glow (primary / ghost / danger / toggle)
    One token set per theme (--totalx-*) drives all three so classic, VoidScript
    and meme themes share a single implementation. Appended last on purpose:
@@ -6275,20 +6254,6 @@ html[data-rs-theme] {
   --totalx-bg: #0f0e0d;           /* deep base behind every panel               */
   --totalx-img: none;             /* photo / pattern layer                      */
   --totalx-r: 12px;               /* pill radius                                */
-  --totalx-mark: var(--totalx-a);    /* corner bracket colour                      */
-  --totalx-mark-w: 1.5px;
-  --totalx-mark-l: 18px;
-  --totalx-mark-o: 10px;          /* inset from the panel edge                  */
-  /* Eight gradient layers draw an L-shaped bracket in each panel corner.    */
-  --totalx-marks:
-    linear-gradient(var(--totalx-mark), var(--totalx-mark)) left var(--totalx-mark-o) top var(--totalx-mark-o) / var(--totalx-mark-l) var(--totalx-mark-w) no-repeat,
-    linear-gradient(var(--totalx-mark), var(--totalx-mark)) left var(--totalx-mark-o) top var(--totalx-mark-o) / var(--totalx-mark-w) var(--totalx-mark-l) no-repeat,
-    linear-gradient(var(--totalx-mark), var(--totalx-mark)) right var(--totalx-mark-o) top var(--totalx-mark-o) / var(--totalx-mark-l) var(--totalx-mark-w) no-repeat,
-    linear-gradient(var(--totalx-mark), var(--totalx-mark)) right var(--totalx-mark-o) top var(--totalx-mark-o) / var(--totalx-mark-w) var(--totalx-mark-l) no-repeat,
-    linear-gradient(var(--totalx-mark), var(--totalx-mark)) left var(--totalx-mark-o) bottom var(--totalx-mark-o) / var(--totalx-mark-l) var(--totalx-mark-w) no-repeat,
-    linear-gradient(var(--totalx-mark), var(--totalx-mark)) left var(--totalx-mark-o) bottom var(--totalx-mark-o) / var(--totalx-mark-w) var(--totalx-mark-l) no-repeat,
-    linear-gradient(var(--totalx-mark), var(--totalx-mark)) right var(--totalx-mark-o) bottom var(--totalx-mark-o) / var(--totalx-mark-l) var(--totalx-mark-w) no-repeat,
-    linear-gradient(var(--totalx-mark), var(--totalx-mark)) right var(--totalx-mark-o) bottom var(--totalx-mark-o) / var(--totalx-mark-w) var(--totalx-mark-l) no-repeat;
   /* Accent wash + readability fade shared by every panel background.        */
   --totalx-wash:
     radial-gradient(120% 70% at 100% 0%, color-mix(in srgb, var(--totalx-a) 22%, transparent), transparent 62%),
@@ -6304,7 +6269,7 @@ html[data-rs-theme="blood-moon"] { --totalx-a:#fb7185; --totalx-b:#be123c; --tot
 html[data-rs-theme="sakura"]     { --totalx-a:#f472b6; --totalx-b:#db2777; --totalx-on:#fff;    --totalx-glow:rgba(244,114,182,.40); --totalx-bg:#190f16; --totalx-img:url(ui/swatch-sakura.jpg) center 45% / cover no-repeat; }
 html[data-rs-theme="starglaze"]  { --totalx-a:#38bdf8; --totalx-b:#818cf8; --totalx-on:#071226; --totalx-glow:rgba(103,232,249,.38); --totalx-bg:#070b18; --totalx-img:url(ui/swatch-starglaze.jpg) center 50% / cover no-repeat; }
 html[data-rs-theme="autumn"]     { --totalx-a:#fbbf24; --totalx-b:#d97706; --totalx-on:#1f1206; --totalx-glow:rgba(245,158,11,.38);  --totalx-bg:#140e08; --totalx-img:url(ui/swatch-autumn.jpg) center 55% / cover no-repeat; }
-html[data-rs-theme="pixelated"]  { --totalx-a:#58e07f; --totalx-b:#22a35a; --totalx-on:#06130b; --totalx-glow:rgba(88,224,127,.40);  --totalx-bg:#0a0f14; --totalx-r:2px; --totalx-mark-w:2px; --totalx-mark-l:14px; --totalx-img:url(ui/swatch-pixelated.jpg) center 45% / cover no-repeat; }
+html[data-rs-theme="pixelated"]  { --totalx-a:#58e07f; --totalx-b:#22a35a; --totalx-on:#06130b; --totalx-glow:rgba(88,224,127,.40);  --totalx-bg:#0a0f14; --totalx-r:2px; --totalx-img:url(ui/swatch-pixelated.jpg) center 45% / cover no-repeat; }
 html[data-rs-theme="void"]       { --totalx-a:#ff7048; --totalx-b:#d9481f; --totalx-on:#fff;    --totalx-glow:rgba(255,112,72,.40);  --totalx-bg:#07090e; --totalx-r:10px; --totalx-img:url(ui/swatch-void.jpg) center 50% / cover no-repeat; }
 /* meme — a personality pattern on top of each theme's own photo */
 html[data-rs-theme="epicface"]   { --totalx-a:#ffd84d; --totalx-b:#ff9f1a; --totalx-on:#1c1400; --totalx-glow:rgba(255,216,77,.48);  --totalx-bg:#18243a; --totalx-r:18px; --totalx-img:repeating-linear-gradient(135deg, rgba(255,216,77,.07) 0 2px, transparent 2px 22px), url(ui/swatch-epicface.jpg) center 55% / cover no-repeat; }
@@ -6323,7 +6288,7 @@ html[data-rs-theme] #rs-menu,
 html[data-rs-theme] #rs-cards-panel,
 html[data-rs-theme] #rs-setup,
 html[data-rs-theme] .rs-approve-card {
-  background: var(--totalx-marks), var(--totalx-fade), var(--totalx-wash), var(--totalx-img), var(--totalx-bg) !important;
+  background: var(--totalx-fade), var(--totalx-wash), var(--totalx-img), var(--totalx-bg) !important;
   border-color: color-mix(in srgb, var(--totalx-a) 34%, transparent) !important;
   box-shadow: 0 24px 64px rgba(0,0,0,.55), 0 0 0 1px color-mix(in srgb, var(--totalx-a) 10%, transparent) inset, 0 0 42px var(--totalx-glow) !important;
 }
@@ -6337,11 +6302,9 @@ html[data-rs-theme] .rs-menu-head {
 html[data-rs-theme] #rs-cards-panel::before {
   background: linear-gradient(180deg, transparent, var(--totalx-bg) 86%), var(--totalx-img), var(--totalx-bg) !important;
 }
-/* Glass bar: same recipe, smaller marks so they sit inside a 28–40px strip. */
+/* Glass bar: same recipe inside a 28–40px strip. */
 html[data-rs-theme][data-rs-glass="true"] #rs-bar {
-  --totalx-mark-l: 10px; --totalx-mark-o: 5px;
   background:
-    var(--totalx-marks),
     linear-gradient(180deg, color-mix(in srgb, var(--totalx-a) 14%, transparent), transparent 46%),
     var(--totalx-wash),
     color-mix(in srgb, var(--totalx-bg) 90%, #000) !important;
@@ -6352,54 +6315,10 @@ html[data-rs-theme][data-rs-glass="true"] #rs-bar {
 html[data-rs-theme="epicface"] #rs-bar, html[data-rs-theme="headooh"] #rs-bar, html[data-rs-theme="ragequit"] #rs-bar,
 html[data-rs-theme="killfeed"] #rs-bar, html[data-rs-theme="shitpost"] #rs-bar, html[data-rs-theme="skillissue"] #rs-bar,
 html[data-rs-theme="pogchamp"] #rs-bar, html[data-rs-theme="glitchlord"] #rs-bar, html[data-rs-theme="npcenergy"] #rs-bar {
-  --totalx-mark-l: 10px; --totalx-mark-o: 5px;
-  background: var(--totalx-marks), var(--totalx-wash), var(--totalx-img), var(--totalx-bg) !important;
+  background: var(--totalx-wash), var(--totalx-img), var(--totalx-bg) !important;
 }
 
-/* ── 3. Corner decorations — viewport glyph rail (all themes) ─────────────── */
-#rs-root .rs-theme-corners { display: block; }
-#rs-root .rs-theme-corner {
-  --rsa: var(--totalx-a);
-  color: var(--totalx-a);
-  padding: 14px 16px;
-  transition: opacity .3s ease;
-}
-/* Classic + VoidScript: quiet ornaments — thin brackets, airy spaced glyphs. */
-#rs-root .rs-theme-corners[data-kind="classic"] .rs-theme-corner {
-  font: 600 14px/1.9 "Inter", "Segoe UI", system-ui, sans-serif;
-  letter-spacing: .42em;
-  text-shadow: 0 0 10px var(--totalx-glow);
-  opacity: .62;
-  max-width: 30vw;
-}
-#rs-root .rs-theme-corner::before {
-  content: "";
-  position: absolute;
-  width: 26px; height: 26px;
-  border: 0 solid var(--totalx-a);
-  opacity: .85;
-  filter: drop-shadow(0 0 6px var(--totalx-glow));
-}
-#rs-root .rs-corner-tl::before { top: 0;    left: 0;  border-top-width: 1.5px;    border-left-width: 1.5px;  border-top-left-radius: 6px; }
-#rs-root .rs-corner-tr::before { top: 0;    right: 0; border-top-width: 1.5px;    border-right-width: 1.5px; border-top-right-radius: 6px; }
-#rs-root .rs-corner-bl::before { bottom: 0; left: 0;  border-bottom-width: 1.5px; border-left-width: 1.5px;  border-bottom-left-radius: 6px; }
-#rs-root .rs-corner-br::before { bottom: 0; right: 0; border-bottom-width: 1.5px; border-right-width: 1.5px; border-bottom-right-radius: 6px; }
-/* Meme themes keep their loud sticker rail, now with the bracket frame too. */
-#rs-root .rs-theme-corners[data-kind="meme"] .rs-theme-corner { opacity: .82; }
-#rs-root .rs-theme-corners[data-kind="meme"] .rs-theme-corner::before { width: 34px; height: 34px; border-width: 0; }
-#rs-root .rs-theme-corners[data-kind="meme"] .rs-corner-tl::before { border-top-width: 3px; border-left-width: 3px; }
-#rs-root .rs-theme-corners[data-kind="meme"] .rs-corner-tr::before { border-top-width: 3px; border-right-width: 3px; }
-#rs-root .rs-theme-corners[data-kind="meme"] .rs-corner-bl::before { border-bottom-width: 3px; border-left-width: 3px; }
-#rs-root .rs-theme-corners[data-kind="meme"] .rs-corner-br::before { border-bottom-width: 3px; border-right-width: 3px; }
-html[data-rs-theme="pixelated"] #rs-root .rs-theme-corner::before { border-radius: 0; border-width: 0; }
-html[data-rs-theme="pixelated"] #rs-root .rs-corner-tl::before { border-top-width: 3px; border-left-width: 3px; }
-html[data-rs-theme="pixelated"] #rs-root .rs-corner-tr::before { border-top-width: 3px; border-right-width: 3px; }
-html[data-rs-theme="pixelated"] #rs-root .rs-corner-bl::before { border-bottom-width: 3px; border-left-width: 3px; }
-html[data-rs-theme="pixelated"] #rs-root .rs-corner-br::before { border-bottom-width: 3px; border-right-width: 3px; }
-/* Night's bone-white accent vanishes on light host pages; darken just the rail. */
-html.rs-light[data-rs-theme="night"] #rs-root .rs-theme-corner { color: #26231f; --totalx-a: #26231f; --totalx-glow: rgba(0,0,0,.12); }
-html[data-meme-effects="reduced"] #rs-root .rs-theme-corner { opacity: .32; }
-@media (max-width: 760px) { #rs-root .rs-theme-corners[data-kind="classic"] .rs-theme-corner { font-size: 11px; letter-spacing: .28em; max-width: 36vw; } }
+/* ── 3. (corner rail removed in 2.20.0) ─────────────────────────────────────── */
 
 /* ── 4. Buttons — gradient pills with glow ─────────────────────────────────── */
 html[data-rs-theme] {
@@ -6546,9 +6465,8 @@ html[data-rs-theme] #rs-root { background-image: none !important; }
 
 /* ── 6. 1.19.7c — designed ornaments (no emoji) ─────────────────────────────
    One monochrome SVG motif per theme, used as a CSS mask so it is painted with
-   the theme gradient wherever it appears: viewport rail corners, settings head
-   and foot corners, approve + setup cards, the bar mark, section rules and the
-   theme-card badges. --totalx-tile is a faint accent texture inside the panels.
+   the theme gradient wherever it appears: the bar mark, the settings-head badge
+   and the theme-card badges (the corner placements were removed in 2.20.0). --totalx-tile is a faint accent texture inside the panels.
    The main motif of every ornament sits in its top-left quadrant so the small
    badges can zoom into it (mask-size 200%) and still read.
    ─────────────────────────────────────────────────────────────────────────── */
@@ -6596,38 +6514,14 @@ html[data-rs-theme] #rs-menu,
 html[data-rs-theme] #rs-cards-panel,
 html[data-rs-theme] #rs-setup,
 html[data-rs-theme] .rs-approve-card {
-  background: var(--totalx-marks), var(--totalx-fade), var(--totalx-tile), var(--totalx-wash), var(--totalx-img), var(--totalx-bg) !important;
+  background: var(--totalx-fade), var(--totalx-tile), var(--totalx-wash), var(--totalx-img), var(--totalx-bg) !important;
 }
 
-/* viewport rail — bracket (::before, defined above) + ornament (::after). No text. */
-#rs-root .rs-theme-corner { font-size: 0 !important; letter-spacing: 0 !important; width: 96px; height: 96px; padding: 0 !important; }
-#rs-root .rs-theme-corner::after {
-  content: ""; position: absolute; width: 72px; height: 72px;
-  background: var(--totalx-grad);
-  -webkit-mask: var(--totalx-orn) 0 0 / 100% 100% no-repeat; mask: var(--totalx-orn) 0 0 / 100% 100% no-repeat;
-  opacity: .78; filter: drop-shadow(0 0 8px var(--totalx-glow));
-}
-#rs-root .rs-corner-tl::after { top: 10px; left: 10px; }
-#rs-root .rs-corner-tr::after { top: 10px; right: 10px; transform: scaleX(-1); }
-#rs-root .rs-corner-bl::after { bottom: 10px; left: 10px; transform: scaleY(-1); }
-#rs-root .rs-corner-br::after { bottom: 10px; right: 10px; transform: scale(-1); }
-#rs-root .rs-theme-corners[data-kind="meme"] .rs-theme-corner::after { width: 84px; height: 84px; opacity: .9; }
-#rs-root .rs-theme-corner::before { width: 30px; height: 30px; }
-html[data-meme-effects="reduced"] #rs-root .rs-theme-corner::after { opacity: .35; filter: none; }
 /* the old emoji strip under meme bars is retired */
 html[data-rs-theme] #rs-bar::after { content: none !important; }
 
-/* settings head: ornaments in both top corners, the mark becomes a motif badge */
+/* settings head: the mark becomes a motif badge (corner ornaments removed in 2.20.0) */
 html[data-rs-theme] .rs-menu-head { position: relative; }
-html[data-rs-theme] .rs-menu-head::before,
-html[data-rs-theme] .rs-menu-head::after {
-  content: ""; position: absolute; top: 8px; width: 44px; height: 44px; left: auto; bottom: auto;
-  background: var(--totalx-grad);
-  -webkit-mask: var(--totalx-orn) 0 0 / 100% 100% no-repeat; mask: var(--totalx-orn) 0 0 / 100% 100% no-repeat;
-  opacity: .9; filter: drop-shadow(0 0 6px var(--totalx-glow)); pointer-events: none;
-}
-html[data-rs-theme] .rs-menu-head::before { left: 8px; }
-html[data-rs-theme] .rs-menu-head::after  { right: 8px; transform: scaleX(-1); }
 html[data-rs-theme] .rs-menu-mark {
   display: inline-block; width: 30px; height: 30px; flex: none; border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--totalx-a) 40%, transparent);
@@ -6639,34 +6533,15 @@ html[data-rs-theme] .rs-menu-mark::before {
   -webkit-mask: var(--totalx-orn) 0 0 / 200% 200% no-repeat; mask: var(--totalx-orn) 0 0 / 200% 200% no-repeat;
   font-size: 0;
 }
-/* settings foot: ornaments in both bottom corners */
-html[data-rs-theme] .rs-menu-foot { position: relative; padding-left: 40px !important; padding-right: 40px !important; }
-html[data-rs-theme] .rs-menu-foot::before,
-html[data-rs-theme] .rs-menu-foot::after {
-  content: ""; position: absolute; bottom: 6px; width: 26px; height: 26px;
-  background: var(--totalx-grad);
-  -webkit-mask: var(--totalx-orn) 0 0 / 100% 100% no-repeat; mask: var(--totalx-orn) 0 0 / 100% 100% no-repeat;
-  opacity: .7;
-}
-html[data-rs-theme] .rs-menu-foot::before { left: 8px; transform: scaleY(-1); }
-html[data-rs-theme] .rs-menu-foot::after  { right: 8px; transform: scale(-1); }
+/* settings foot (corner ornaments removed in 2.20.0) */
+html[data-rs-theme] .rs-menu-foot { position: relative; }
 /* section labels: accent rule that fades out — a quiet "inside" decoration */
 html[data-rs-theme] .rs-sec-label::after {
   content: ""; flex: 1; height: 1px; margin-left: 4px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--totalx-a) 45%, transparent), transparent);
 }
-/* approve + setup cards: diagonal corner pair */
+/* approve + setup cards (corner ornament pair removed in 2.20.0) */
 html[data-rs-theme] .rs-approve-card, html[data-rs-theme] #rs-setup { position: relative; }
-html[data-rs-theme] .rs-approve-card::before, html[data-rs-theme] .rs-approve-card::after,
-html[data-rs-theme] #rs-setup::before, html[data-rs-theme] #rs-setup::after {
-  content: ""; position: absolute; width: 30px; height: 30px; pointer-events: none;
-  background: var(--totalx-grad);
-  -webkit-mask: var(--totalx-orn) 0 0 / 100% 100% no-repeat; mask: var(--totalx-orn) 0 0 / 100% 100% no-repeat;
-  opacity: .8;
-}
-html[data-rs-theme] .rs-approve-card::before, html[data-rs-theme] #rs-setup::before { top: 8px; left: 8px; }
-html[data-rs-theme] .rs-approve-card::after,  html[data-rs-theme] #rs-setup::after  { bottom: 8px; right: 8px; transform: scale(-1); }
-html[data-rs-theme] #rs-setup::before, html[data-rs-theme] #rs-setup::after { width: 40px; height: 40px; }
 /* bar mark: the motif badge instead of a text glyph */
 html[data-rs-theme] #rs-ornament {
   display: inline-block; width: 16px; height: 16px; flex: none; position: relative;
@@ -6678,7 +6553,6 @@ html[data-rs-theme] #rs-ornament {
 html[data-rs-theme] #rs-ornament::before, html[data-rs-theme] #rs-ornament::after { content: none !important; }
 /* menu-head glyph (next to the brand) follows the same rule: no emoji */
 html[data-rs-theme] .rs-menu-glyph { font-size: 0 !important; width: 14px; height: 14px; display: inline-block; background: var(--totalx-grad); -webkit-mask: var(--totalx-orn) 0 0 / 200% 200% no-repeat; mask: var(--totalx-orn) 0 0 / 200% 200% no-repeat; }
-@media (prefers-reduced-motion: reduce) { #rs-root .rs-theme-corner::after { filter: none; } }
 
 /* ── 7. Trays open ABOVE the bar ───────────────────────────────────────────────
    The 1.18.x collision patch parked the settings tray / templates panel / embed /
@@ -6854,7 +6728,7 @@ html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="animate"].on .rs-wor
 .rs-public-row code{font:9px ui-monospace,SFMono-Regular,Consolas,monospace;text-transform:none;letter-spacing:0;color:#aeb7c4}
 .rs-public-kind,.rs-public-verify,.rs-public-disabled{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;font-size:8px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle;border:1px solid rgba(255,255,255,.14);color:#c5ccd6}
 .rs-public-kind-skill{color:#8fd3ff;border-color:rgba(143,211,255,.4)}
-/* 2.19.0: verification badge - VERIFIED only after a Studio self-test pass */
+/* 2.20.0: verification badge - VERIFIED only after a Studio self-test pass */
 .rs-public-verify-verified{color:#071017;background:#5ee0a0;border-color:transparent}
 .rs-public-verify-stale{color:#ffd37a;border-color:rgba(255,211,122,.45)}
 .rs-public-verify-ran,.rs-public-verify-syntax{color:#aeb7c4;border-color:rgba(255,255,255,.18)}
@@ -8121,7 +7995,6 @@ html[data-rs-btn="glass"] #rs-stop {
 html[data-rs-hide~="logo"] #rs-logo,
 html[data-rs-hide~="badge"] #rs-work-badge,
 html[data-rs-hide~="status"] #rs-status-pill,
-html[data-rs-hide~="corners"] #rs-root .rs-theme-corners { display: none !important; }
 html[data-rs-hide~="motion"] #rs-root, html[data-rs-hide~="motion"] #rs-root *,
 html[data-rs-hide~="motion"] #rs-bar, html[data-rs-hide~="motion"] #rs-bar *,
 html[data-rs-hide~="motion"] #rs-menu *, html[data-rs-hide~="motion"] #rs-cards-panel *,
@@ -8257,14 +8130,6 @@ html[data-rs-theme="aqua"] .rs-work-card.on {
   border-color: #22d3ee !important;
   box-shadow: 0 0 20px rgba(34,211,238,.35), 0 0 0 1px rgba(20,184,166,.3) inset !important;
 }
-/* corner rail: the wave ornament breathes; brackets take the cyan */
-html[data-rs-theme="aqua"] #rs-root .rs-theme-corner::before { border-color: rgba(34,211,238,.9); }
-html[data-rs-theme="aqua"] #rs-root .rs-theme-corner::after { animation: rs-aqua-breathe 6s ease-in-out infinite alternate; }
-html[data-rs-theme="aqua"] #rs-root .rs-corner-tr::after { animation-delay: 1.5s; }
-html[data-rs-theme="aqua"] #rs-root .rs-corner-bl::after { animation-delay: 3s; }
-html[data-rs-theme="aqua"] #rs-root .rs-corner-br::after { animation-delay: 4.5s; }
-/* light host pages: keep the cyan legible by deepening it on the rail */
-html.rs-light[data-rs-theme="aqua"] #rs-root .rs-theme-corner { color: #0e7490; --totalx-a: #0e7490; --totalx-glow: rgba(14,116,144,.18); }
 @keyframes rs-aqua-caustic {
   0%   { background-position: 0 0, 0 0, 0 0; opacity: .85; }
   100% { background-position: 24px -6px, -30px 8px, 160px 40px; opacity: 1; }
@@ -8282,14 +8147,9 @@ html.rs-light[data-rs-theme="aqua"] #rs-root .rs-theme-corner { color: #0e7490; 
   from { filter: drop-shadow(0 0 4px rgba(34,211,238,.25)); }
   to   { filter: drop-shadow(0 0 12px rgba(34,211,238,.6)); }
 }
-@keyframes rs-aqua-breathe {
-  from { opacity: .55; filter: drop-shadow(0 0 4px rgba(34,211,238,.3)); }
-  to   { opacity: .95; filter: drop-shadow(0 0 14px rgba(34,211,238,.7)); }
-}
 @media (prefers-reduced-motion: reduce) {
   html[data-rs-theme="aqua"] #rs-bar::before, html[data-rs-theme="aqua"] #rs-menu::after,
-  html[data-rs-theme="aqua"] #rs-ornament::before, html[data-rs-theme="aqua"] #rs-brand,
-  html[data-rs-theme="aqua"] #rs-root .rs-theme-corner::after { animation: none !important; }
+  html[data-rs-theme="aqua"] #rs-ornament::before, html[data-rs-theme="aqua"] #rs-brand { animation: none !important; }
 }
 
 /* ── 1.72.0 PROMPT ENHANCER (src/core/enhancer.js) — centred dialog above the site, bar hidden while open ── */

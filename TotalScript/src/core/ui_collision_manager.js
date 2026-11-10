@@ -22,9 +22,6 @@
     claude: ['[data-radix-popper-content-wrapper]', '[role="dialog"]'],
     qwen: ['.ant-modal', '.ant-drawer', '.ant-dropdown', '[role="dialog"]'],
     kimi: ['.n-modal', '.n-drawer', '.v-binder-follower-content', '[role="dialog"]'],
-    // Notion renders every popup inside .notion-overlay-container; the container
-    // itself is a transparent full-viewport shell and must never count.
-    notion: ['.notion-overlay-container [role="dialog"]', '.notion-overlay-container [aria-modal="true"]', '[role="dialog"]'],
   };
   const FALLBACK = '[role="dialog"],[aria-modal="true"],[role="menu"],[role="listbox"],[data-state="open"],[class*="modal" i],[class*="popover" i],[class*="drawer" i],[class*="overlay" i]';
   const MODAL_ROLE = '[role="dialog"],[aria-modal="true"]';
@@ -44,7 +41,7 @@
     return !!s && s.display !== "none" && s.visibility !== "hidden" && +s.opacity !== 0;
   };
   const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-  // Transparent, click-through shells (Notion's overlay container, portal
+  // Transparent, click-through shells (full-viewport overlay containers, portal
   // roots, "overlay" layout wrappers) draw nothing and block nothing.
   const paintsSomething = (el, s) => {
     if (!s) return true;

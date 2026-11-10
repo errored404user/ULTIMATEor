@@ -711,12 +711,12 @@ const RSProvider = (() => {
   // a command shape AND mark the assistant turn (.segment-assistant, which keeps
   // its identity) with .rs-cmd-mask so the overlay.css rule re-hides recreated
   // wrappers with zero flash. Also catch a stray bare inline command paragraph.
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.19.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.20.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
   // A block whose text STARTS with a command (optionally behind a ```json fence).
   // Used to hide a command Kimi rendered as a nested <div class="paragraph"> at
   // ANY length - the length-capped direct-children pass misses those on two
   // counts (nesting + a big inline command over the cap).
-  const STARTS_CMD = /^\s*(?:```(?:json)?\s*)?(?:\{?\s*"(?:command|tool)"\s*:|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###)/i; // 2.19.0: + ###CMD name###
+  const STARTS_CMD = /^\s*(?:```(?:json)?\s*)?(?:\{?\s*"(?:command|tool)"\s*:|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###)/i; // 2.20.0: + ###CMD name###
   function findToolBlockSpot(item /*, chip */) {
     const md = bodyEl(item);
     if (!md) return null;

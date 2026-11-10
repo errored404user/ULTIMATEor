@@ -211,7 +211,7 @@ Promise.all(pending).then(async () => {
     ok(`manifest: the ${prov} bundle loads stream-reader.js right before the adapter and every one of its hosts has the tap`, b && b.js.indexOf("src/providers/stream-reader.js") === b.js.indexOf(`src/providers/${prov}.js`) - 1 && b.matches.every((m) => tap.matches.includes(m)));
   }
   const noTap = manifest.content_scripts.filter((c) => c.world !== "MAIN" && c.js.includes("src/core/main.js") && !c.js.includes("src/providers/stream-reader.js"));
-  ok("providers with their own taps / stable DOMs (ChatGPT, Claude, Gemini, Qwen, …) are untouched by the generic tap", noTap.length >= 9 && noTap.every((b) => !b.matches.some((m) => tap.matches.includes(m))));
+  ok("providers with their own taps / stable DOMs (ChatGPT, Claude, Gemini, Qwen, …) are untouched by the generic tap", noTap.length >= 8 && noTap.every((b) => !b.matches.some((m) => tap.matches.includes(m))));
   const mainSrc = read("src/core/main.js");
   ok("core watcher polls tighter on every provider (120 ms while streaming, 140 ms pre-start, 220 ms settle)", /await sleep\(120\); \/\/ 1\.65: tighter poll/.test(mainSrc) && /await sleep\(140\); \/\/ 1\.65: catch the first token sooner/.test(mainSrc) && /Date\.now\(\) - doneSince < 220\)/.test(mainSrc));
   const readme = read("README.md");

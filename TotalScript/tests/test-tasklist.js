@@ -1,7 +1,7 @@
 // Task list (1.25.0): per-project checklist with an Enable/Disable toggle in
 // Settings. Dependency-free; run from the TotalScript root: node tests/test-tasklist.js
 // The live flow (task_next → build → task_update, pill, Tasks tab, Settings
-// toggle) is covered by `TASKS=1 node tests/notion-e2e.js` (jsdom).
+// toggle) is covered by `TASKS=1 node tests/core-e2e.js` (jsdom).
 const fs = require("fs");
 const vm = require("vm");
 const path = require("path");
@@ -73,7 +73,7 @@ ok("Settings has the Task list toggle row wired to setTaskList", main.includes('
 ok("bar has the task pill, synced on change and opening the Tasks tab", main.includes('id="rs-task-pill"') && /function syncTaskPill\(\)/.test(main) && main.includes('if (wasTasks) closeCardsWindow(); else openCardsWindow("tasks");')); // 1.73.0: the pill opens the Tasks tab in the centred Templates window
 ok("cards panel: Tasks tab only while enabled, with add/run/plan/import/export/disable", main.includes('data-tab="tasks">Tasks') && main.includes('if (cardsTab === "tasks" && !taskListOn()) cardsTab = "library";') && /function tasksHtml\(\)/.test(main) && ["data-task-run-all", "data-task-run-next", "data-task-ai-plan", "data-task-clear-done", "data-task-export", "data-task-import", "data-task-disable", "data-task-add-form", "data-task-edit"].every((a) => main.includes(a)) && ["toggle", "doing", "skip", "up", "down", "delete", "run"].every((a) => main.includes(`a==="${a}"`)));
 ok("Run prompts tell the AI to mark doing → done via task_update", /function taskRunPrompt\(t, idx\)/.test(main) && main.includes('"status":"doing"}, then do the work with real commands and verify it, then call task_update'));
-ok("config.js appends the task block to the system prompt and the Notion preferences", config.includes("TotalTaskList.promptBlock({ compact: !!(maxChars && maxChars < 16000) })") && config.includes("TASK LIST preference (my setting is on)") && config.includes("${crewPref}${publicPref}${taskPref}"));
+ok("config.js appends the task block to the system prompt (the Notion preferences variant is gone with the provider, 2.20.0)", config.includes("TotalTaskList.promptBlock({ compact: !!(maxChars && maxChars < 16000) })") && !config.includes("TASK LIST preference (my setting is on)") && !config.includes("${crewPref}${publicPref}${taskPref}"));
 ok("totalscript_help knows the tasklist topic and matches it before roadmap", /tasklist:\{title:"Task list"/.test(main) && /aliases=\{tasklist:\/task list\|tasklist\|checklist/.test(main));
 ok("overlay.css styles the pill, rows and progress bar", css.includes("#rs-task-pill") && css.includes(".rs-task-row") && css.includes(".rs-task-progress") && css.includes('#rs-task-pill[data-done="all"]'));
 

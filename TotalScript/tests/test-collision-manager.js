@@ -1,8 +1,10 @@
 // Behavioural check for src/core/ui_collision_manager.js (run: node tests/test-collision-manager.js).
-// Regression for the Notion "bar shows for a second, then vanishes" bug: a
-// transparent, click-through full-viewport shell (Notion's overlay container)
-// must never hide the TotalScript root; an opaque backdrop or a dialog drawn over
-// the bar must.
+// Regression for the "bar shows for a second, then vanishes" bug (first seen on
+// Notion, 1.21.3; that provider is gone since 2.20.0 but the rule is general): a
+// transparent, click-through full-viewport shell whose class merely CONTAINS
+// "overlay" must never hide the TotalScript root; an opaque backdrop or a dialog
+// drawn over the bar must. Runs with a provider that has no per-site rule set so
+// the generic FALLBACK selectors (which match [class*="overlay"]) are exercised.
 const fs = require("fs");
 const vm = require("vm");
 
@@ -51,7 +53,7 @@ function makeWorld() {
   root.append(bar);
   html.append(root);
   const g = {
-    innerWidth: 1200, innerHeight: 720, location: { href: "https://www.notion.so/chat" },
+    innerWidth: 1200, innerHeight: 720, location: { href: "https://chat.z.ai/c/abc" },
     document: { documentElement: html, body, hidden: false, getElementById: (id) => all(html).find((e) => e.id === id) || null,
       querySelectorAll: (sel) => all(html).filter((e) => e.matches(sel)), addEventListener() {}, removeEventListener() {} },
     getComputedStyle: (el) => el.cs,
@@ -69,7 +71,7 @@ let failed = 0;
 const ok = (name, cond, detail) => { console.log(`${cond ? "PASS" : "FAIL"}  ${name}${cond || !detail ? "" : " — " + detail}`); if (!cond) failed++; };
 const src = fs.readFileSync("src/core/ui_collision_manager.js", "utf8");
 
-function run(setup, provider = "notion") {
+function run(setup, provider = "glm") {
   const w = makeWorld();
   setup(w);
   const ctx = vm.createContext(w.g);
@@ -79,17 +81,17 @@ function run(setup, provider = "notion") {
   return { state: mgr.state, hidden: w.root.style.props.visibility === "hidden" };
 }
 
-// 1. Notion shell: transparent, pointer-events:none, full viewport, no painted content.
+// 1. App shell: transparent, pointer-events:none, full viewport, no painted content.
 {
   const r = run(({ body }) => {
-    body.append(new El("div", { className: "notion-overlay-container notion-default-overlay-container", rect: { left: 0, top: 0, width: 1200, height: 720 }, cs: { position: "fixed", pointerEvents: "none" } }));
+    body.append(new El("div", { className: "app-overlay-container app-default-overlay-container", rect: { left: 0, top: 0, width: 1200, height: 720 }, cs: { position: "fixed", pointerEvents: "none" } }));
   });
   ok("transparent full-viewport overlay container does not hide the UI", !r.hidden && r.state === "VISIBLE", r.state);
 }
 // 2. Same shell but painted (dimmed backdrop) → genuine modal backdrop over the bar.
 {
   const r = run(({ body }) => {
-    body.append(new El("div", { className: "notion-overlay-container", rect: { left: 0, top: 0, width: 1200, height: 720 }, cs: { position: "fixed", backgroundColor: "rgba(15, 15, 15, 0.6)" } }));
+    body.append(new El("div", { className: "app-overlay-container", rect: { left: 0, top: 0, width: 1200, height: 720 }, cs: { position: "fixed", backgroundColor: "rgba(15, 15, 15, 0.6)" } }));
   });
   ok("opaque backdrop covering the bar hides the UI", r.hidden && r.state === "TEMPORARILY_HIDDEN", r.state);
 }
@@ -110,7 +112,7 @@ function run(setup, provider = "notion") {
 // 5. The chat surface itself carries an "overlay" class and wraps the editor → never a modal.
 {
   const r = run(({ body, g }) => {
-    const surface = new El("div", { className: "notion-ai-overlay-surface", rect: { left: 0, top: 0, width: 1200, height: 720 }, cs: { position: "absolute", backgroundColor: "rgb(255,255,255)" } });
+    const surface = new El("div", { className: "chat-overlay-surface", rect: { left: 0, top: 0, width: 1200, height: 720 }, cs: { position: "absolute", backgroundColor: "rgb(255,255,255)" } });
     const editor = new El("div", { attrs: { contenteditable: "true" }, rect: { left: 300, top: 600, width: 600, height: 40 } });
     surface.append(editor);
     body.append(surface);
@@ -129,7 +131,7 @@ function run(setup, provider = "notion") {
 // 7. Opaque full-viewport page surface (chat view before its editor mounts) → visible.
 {
   const r = run(({ body }) => {
-    body.append(new El("div", { className: "notion-ai-fullpage-overlay", rect: { left: 0, top: 0, width: 1200, height: 720 }, cs: { position: "absolute", backgroundColor: "rgb(255, 255, 255)" } }));
+    body.append(new El("div", { className: "chat-fullpage-overlay", rect: { left: 0, top: 0, width: 1200, height: 720 }, cs: { position: "absolute", backgroundColor: "rgb(255, 255, 255)" } }));
   });
   ok("opaque page surface without a dialog role keeps the UI visible", !r.hidden && r.state !== "TEMPORARILY_HIDDEN", r.state);
 }

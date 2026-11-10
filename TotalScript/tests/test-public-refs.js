@@ -64,7 +64,7 @@ ok("D2 no candidates for a request with no domain words (empty string, nothing i
 ok("D3 generationPrompt and conversionPrompt include the candidate block and DEFINITION_DOC documents references[] / examples[] / expert", /REFERENCE CANDIDATES/.test(PS.generationPrompt("a skill that saves player coins to a datastore with autosave", "skill", {})) && /REFERENCE CANDIDATES/.test(PS.conversionPrompt("Save every player's coins to a DataStore with pcall and autosave every two minutes.", "auto", {})) && /references\[\{title, url\}\]/.test(PS.DEFINITION_DOC) && /examples\[\{title, body\}\]/.test(PS.DEFINITION_DOC) && /expert - the nearest built-in expert id \(auto-detected when omitted\)/.test(PS.DEFINITION_DOC) && /never invent URLs/.test(PS.DEFINITION_DOC));
 ok("D4 management tool public_skill_refs: WRITE, name required, add / remove / suggest documented", (() => { const t = PS.managementTools().find((x) => x.name === "public_skill_refs"); return t && t.executionMode === "WRITE" && t.inputSchema.required.join() === "name" && ["add", "remove", "suggest"].every((k) => k in t.inputSchema.properties) && /verified/.test(t.description); })());
 
-// ── E. SKILL.md round-trip (2.19.0: the canonical file) ────────────────────
+// ── E. SKILL.md round-trip (2.20.0: the canonical file) ────────────────────
 const txt = PS.exportText("save_audit");
 ok("E1 exportText = SKILL.md: references in the frontmatter (title + url) and one '## Example Title' block per example", txt === PS.toSkillMd("save_audit") && /\nreferences:\n  - title: Data stores\n    url: "https:\/\/create\.roblox\.com\/docs\/cloud-services\/data-stores"\n/.test(txt) && /\n## Example pcall wrapper\n\n```luau\nlocal ok, err = pcall\(function\(\)/.test(txt), txt);
 const back = PS.parseSkillMd(txt);

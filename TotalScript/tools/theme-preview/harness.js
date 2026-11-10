@@ -6,12 +6,9 @@
   const grab = (name) => { const m = src.match(new RegExp("const " + name + " ?= ?(\\{[\\s\\S]*?\\n  \\});")); return m ? Function("return " + m[1])() : {}; };
   const TOTAL_THEMES = grab("TOTAL_THEMES"), MEME = grab("MEME_THEME_DATA");
   for (const [id, d] of Object.entries(MEME)) Object.assign(TOTAL_THEMES[id] ||= {}, { background: d[0] + "," + d[1] });
-  const memeIds = ["epicface","headooh","ragequit","killfeed","shitpost","skillissue","pogchamp","glitchlord","npcenergy"];
   const html = document.documentElement, root = document.getElementById("rs-root");
   const picker = document.getElementById("picker"), grid = document.getElementById("pv-grid");
-  let rail = document.createElement("div"); rail.className = "rs-theme-corners";
-  rail.innerHTML = '<span class="rs-theme-corner rs-corner-tl"></span><span class="rs-theme-corner rs-corner-tr"></span><span class="rs-theme-corner rs-corner-bl"></span><span class="rs-theme-corner rs-corner-br"></span>';
-  root.appendChild(rail);
+  // 2.20.0: the corner rail no longer exists in the extension.
   const art = (id) => `ui/swatch-${id}.jpg`;
   // Real synth: evaluate the extension's playSfx + THEME_SOUNDS verbatim so the
   // harness plays exactly what the content script plays.
@@ -24,8 +21,6 @@
     document.getElementById("pv-theme-name").textContent = th?.name || id;
     document.querySelectorAll("[data-rs-brand]").forEach((b) => (b.textContent = id === "void" ? "VoidScript" : "TotalScript"));
     document.getElementById("rs-ornament").dataset.theme = id;
-    rail.dataset.kind = memeIds.includes(id) ? "meme" : "classic";
-    rail.hidden = html.dataset.memeEffects === "off";
     picker.querySelectorAll("button[data-t]").forEach((b) => b.classList.toggle("on", b.dataset.t === id));
     SFX.setTheme(id);
     soundList.innerHTML = `<span class="rs-theme-sound-name">♪ ${SFX.THEME_SOUNDS[id]?.label || ""}</span>` + SFX.SFX_KINDS.map((k) => `<button type="button" data-theme-sound-preview="${id}" data-effect="${k}">${SFX.SFX_LABELS[k]}</button>`).join("");

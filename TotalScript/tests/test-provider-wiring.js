@@ -48,7 +48,7 @@ for (const b of bundles) {
   const hosts = [...new Set(b.matches.map(hostOf))];
   for (const h of hosts) {
     const problems = [];
-    const pathname = h === "huggingface.co" ? "/chat/" : h === "www.notion.so" ? "/ai" : "/";
+    const pathname = h === "huggingface.co" ? "/chat/" : "/";
     const win = mockWindow(h, pathname);
     let P = null;
     try { vm.runInContext(read(providerFile) + "\n;window.__P = typeof RSProvider !== 'undefined' ? RSProvider : window.RSProvider;", vm.createContext(win)); P = win.__P; }

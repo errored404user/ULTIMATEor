@@ -7,7 +7,7 @@
 // Contract with content.js: every sendMessage ALWAYS gets a response object,
 // even when the bridge is offline. The agentic loop must never hang waiting.
 
-// 2.19.0: curated Blockbench bb_* table + local argument checks (pure JS, also
+// 2.20.0: curated Blockbench bb_* table + local argument checks (pure JS, also
 // required by tests/test-blockbench-mode.js). Classic worker → importScripts.
 try { importScripts("src/core/blockbench_tools.js"); } catch (e) { console.warn("[total-bg] blockbench_tools.js not loaded", e); }
 // 2.17.0: auto-updater (pure helpers shared with the popup and the node test).
@@ -91,7 +91,7 @@ chrome.storage?.onChanged.addListener((changes, area) => {
 // Chat sites where an TotalScript provider content script runs. Status pushes go
 // to every tab matching these. Add the new provider's URL pattern here (and in
 // manifest.json content_scripts + host_permissions) when integrating another AI.
-const PROVIDER_URLS = ["https://chat.deepseek.com/*", "https://deepseek.com/*", "https://chatgpt.com/*", "https://chat.openai.com/*", "https://claude.ai/*", "https://www.claude.ai/*", "https://claude.com/*", "https://www.claude.com/*", "https://gemini.google.com/*", "https://kimi.ai/*", "https://www.kimi.ai/*", "https://chat.z.ai/*", "https://chat.qwen.ai/*", "https://arena.ai/*", "https://c.vani.ai/*", "https://huggingface.co/chat/*", "https://openrouter.ai/*", "https://www.openrouter.ai/*", "https://www.notion.so/*", "https://app.notion.so/*", "https://www.notion.com/*", "https://notion.com/*", "https://*.notion.com/*"];
+const PROVIDER_URLS = ["https://chat.deepseek.com/*", "https://deepseek.com/*", "https://chatgpt.com/*", "https://chat.openai.com/*", "https://claude.ai/*", "https://www.claude.ai/*", "https://claude.com/*", "https://www.claude.com/*", "https://gemini.google.com/*", "https://kimi.ai/*", "https://www.kimi.ai/*", "https://chat.z.ai/*", "https://chat.qwen.ai/*", "https://arena.ai/*", "https://c.vani.ai/*", "https://huggingface.co/chat/*", "https://openrouter.ai/*", "https://www.openrouter.ai/*"];
 // CodeCraft API has no web chat: TotalScript hosts one at codecraft.html (an
 // extension page), which runs the same bundle and needs the same broadcasts.
 const CODECRAFT_PAGE = "codecraft.html";
@@ -198,7 +198,7 @@ let localRoot = ""; // workspace path, injected into the AI's state line
 let blenderAddon = false; // blender-mcp addon listening on TCP 9876
 let blenderError = "";
 let blenderScriptsReady = false;
-// 2.19.0 Blockbench: link state mirrored from total-core (the TotalScript
+// 2.20.0 Blockbench: link state mirrored from total-core (the TotalScript
 // Bridge plugin inside Blockbench long-polls total-core; see bbRefresh()).
 let bbConnected = false;        // total-core says the Blockbench plugin is polling
 let bbPluginFile = "";          // where total-core keeps TotalScript-Blockbench.js
@@ -369,7 +369,7 @@ const BLENDER_TOOLS = [
 for (const t of BLENDER_TOOLS) BLENDER_TOOL_NAMES.add(t.name);
 
 function blenderServers(list) {
-  // 2.19.0: total-core reports Blockbench itself ({id:"blockbench"}); keep it,
+  // 2.20.0: total-core reports Blockbench itself ({id:"blockbench"}); keep it,
   // only Blender is synthesised here.
   const rest = (Array.isArray(list) ? list : []).filter((s) => s && s.id !== "blender");
   if (blenderAddon) {
@@ -380,7 +380,7 @@ function blenderServers(list) {
   }
   return rest;
 }
-// 2.19.0: total-core lists the bb_* tools only while the plugin is connected;
+// 2.20.0: total-core lists the bb_* tools only while the plugin is connected;
 // the extension owns the same curated table, so the catalogue is identical
 // offline / online and the AI sees one description per command.
 function mergeBlenderTools(tools) {
@@ -807,7 +807,7 @@ async function refreshProcStatus() {
     const nl = j.local_ready === true;
     const nf = j.local_full === true;
     const nrRoot = typeof j.local_root === "string" ? j.local_root : localRoot;
-    // 2.19.0: Blockbench plugin link lives in total-core; mirror it here.
+    // 2.20.0: Blockbench plugin link lives in total-core; mirror it here.
     const bbBefore = bbConnected;
     if (typeof j.blockbench_connected === "boolean") bbSetConnected(j.blockbench_connected);
     if (typeof j.blockbench_plugin_file === "string") bbPluginFile = j.blockbench_plugin_file;
@@ -1208,7 +1208,7 @@ async function connectBlender() {
   return { ok: true, blender: true };
 }
 
-// ── Blockbench (2.19.0: TotalScript Bridge plugin via total-core) ──────────
+// ── Blockbench (2.20.0: TotalScript Bridge plugin via total-core) ──────────
 // plugin/TotalScript-Blockbench.js runs inside the Blockbench desktop app and
 // long-polls total-core (/api/blockbench/*) for jobs - the same shape as the
 // Studio plugin. The worker never talks to Blockbench: a bb_* call is checked
@@ -1881,7 +1881,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // Only pages we ship may be opened this way (the AI switcher on a web
         // page cannot open chrome-extension:// URLs itself).
         const page = String(msg.page || "");
-        // 2.19.0: only the CodeCraft page itself (the API-profile query went with the DeepSeek API chat)
+        // 2.20.0: only the CodeCraft page itself (the API-profile query went with the DeepSeek API chat)
         if (page !== CODECRAFT_PAGE) { sendResponse({ ok: false, error: "unknown extension page" }); break; }
         const url = chrome.runtime.getURL(CODECRAFT_PAGE);
         try {
@@ -2015,7 +2015,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if(!manualStudioDisconnect){connect();await waitForConnection(6000);await refreshStudioStatus();}sendResponse({success:connected&&robloxEditorConnected===true,state:manualStudioDisconnect||!connected?"DISCONNECTED":robloxEditorConnected===true?([...pending.values()].some(p=>p.type==="call_tool")?"BUSY":"CONNECTED"):"ERROR",bridge:connected,studio:robloxEditorConnected===true,protocolVersion:"1.0",error:connected&&robloxEditorConnected===true?null:{code:"STUDIO_BRIDGE_OFFLINE",message:"Studio MCP did not answer the health probe"}});break;
       case "call_tool": {
         const timeout = (msg.timeout || 120000) + 10000;
-        // 2.19.0: Blockbench commands go to total-core like any Roblox tool
+        // 2.20.0: Blockbench commands go to total-core like any Roblox tool
         // (total-core hands them to the Blockbench plugin). They need the
         // bridge socket but NOT Studio: check the arguments locally first,
         // then skip the Studio gate below.
@@ -2135,7 +2135,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         break;
       }
       case "blockbench_status": {
-        // 2.19.0: there is nothing to connect from here - the plugin dials
+        // 2.20.0: there is nothing to connect from here - the plugin dials
         // total-core. refresh:true re-reads total-core right now ("Check again").
         if (msg.refresh !== false) await bbRefresh();
         sendResponse(bbStatusPayload());
@@ -2234,7 +2234,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         setTimeout(() => { try { chrome.runtime.reload(); } catch {} }, 150);
         break;
       }
-      // 2.19.0: a content-script note for the Activity Center (creation report
+      // 2.20.0: a content-script note for the Activity Center (creation report
       // summary). Kind + level are whitelisted, text is a short derived summary
       // (counts and domain names - never the request or the reply).
       case "activity_note": {

@@ -1,4 +1,4 @@
-// 2.19.0 — the TotalScript Blockbench plugin (plugin/TotalScript-Blockbench.js)
+// 2.20.0 — the TotalScript Blockbench plugin (plugin/TotalScript-Blockbench.js)
 // + its total-core hub (agent/src/blockbench.rs) + the extension's command
 // table (src/core/blockbench_tools.js). MOCKED: no Blockbench, no Rust build.
 //   node tests/test-blockbench-plugin.js
@@ -35,7 +35,7 @@ const rs = read("agent/src/blockbench.rs"), mainRs = read("agent/src/main.rs"), 
 
 // ── A. tables agree ──────────────────────────────────────────────────────────
 const rustNames = [...rs.matchAll(/tool\(\s*"(bb_[a-z_]+)"/g)].map((m) => m[1]);
-ok("A1 plugin: VERSION 2.19.0, PLUGIN_ID totalscript_bridge, DEFAULT_BRIDGE 127.0.0.1:3000 (total-core, no new port), 17 capabilities", P.VERSION === "2.19.0" && P.PLUGIN_ID === "totalscript_bridge" && P.DEFAULT_BRIDGE === "http://127.0.0.1:3000" && P.CAPABILITIES.length === 17);
+ok("A1 plugin: VERSION 2.20.0, PLUGIN_ID totalscript_bridge, DEFAULT_BRIDGE 127.0.0.1:3000 (total-core, no new port), 17 capabilities", P.VERSION === "2.20.0" && P.PLUGIN_ID === "totalscript_bridge" && P.DEFAULT_BRIDGE === "http://127.0.0.1:3000" && P.CAPABILITIES.length === 17);
 ok("A2 plugin CAPABILITIES === extension COMMAND_NAMES === Rust tools() (same 17 names, same order)", JSON.stringify(P.CAPABILITIES) === JSON.stringify(T.COMMAND_NAMES) && JSON.stringify(rustNames) === JSON.stringify(P.CAPABILITIES), { plugin: P.CAPABILITIES, ext: T.COMMAND_NAMES, rust: rustNames });
 ok("A3 every capability has a JOBS implementation, an extension validate() and a Rust required[] list; isCommand / is_tool agree on bb_ prefix", P.CAPABILITIES.every((n) => typeof P.JOBS[n] === "function" && typeof T.COMMANDS[n].validate === "function") && T.isCommand("roblox/bb_cubes") && !T.isCommand("execute_luau") && /pub fn is_tool\(name: &str\) -> bool \{\n\s+name\.rsplit\('\/'\)\.next\(\)\.unwrap_or\(name\)\.starts_with\("bb_"\)/.test(rs));
 ok("A4 descriptions match between the extension table and the Rust catalogue (the AI reads one of them depending on the channel)", P.CAPABILITIES.every((n) => { const d = T.COMMANDS[n].description.replace(/"/g, '\\"'); return rs.includes('"' + d + '"'); }), P.CAPABILITIES.filter((n) => !rs.includes('"' + T.COMMANDS[n].description.replace(/"/g, '\\"') + '"')));
@@ -225,7 +225,7 @@ const run = (name, args, api) => P.runJob(name, args, api).then((r) => ({ ok: tr
       req.on("end", () => {
         const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : null;
         const send = (code, obj) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(obj)); };
-        if (req.method === "POST" && req.url === "/api/blockbench/hello") { hub.hellos.push({ body, origin: req.headers.origin || null }); return send(200, { ok: true, version: "2.19.0", client_id: body.client_id }); }
+        if (req.method === "POST" && req.url === "/api/blockbench/hello") { hub.hellos.push({ body, origin: req.headers.origin || null }); return send(200, { ok: true, version: "2.20.0", client_id: body.client_id }); }
         if (req.method === "GET" && req.url.startsWith("/api/blockbench/poll?client_id=")) { hub.polls++; const job = hub.queue.shift() || null; return setTimeout(() => send(200, { ok: true, job }), job ? 0 : 30); }
         if (req.method === "POST" && req.url === "/api/blockbench/result") { hub.results.push(body); return send(200, { ok: true }); }
         send(404, { ok: false });
@@ -247,7 +247,7 @@ const run = (name, args, api) => P.runJob(name, args, api).then((r) => ({ ok: tr
     await new Promise((r) => setTimeout(r, 60));
     srv.close();
     const h = hub.hellos[0] && hub.hellos[0].body;
-    ok("D1 hello: POST /api/blockbench/hello {client_id bb-…, version 2.19.0, blockbench_version, project, format, capabilities[17]} with NO Origin header (total-core's origin_guard would refuse a browser origin)", h && /^bb-[a-z0-9]{8}$/.test(h.client_id) && h.version === "2.19.0" && h.blockbench_version === "4.12.0" && h.project === "Fake" && h.format === "free" && JSON.stringify(h.capabilities) === JSON.stringify(P.CAPABILITIES) && hub.hellos[0].origin === null);
+    ok("D1 hello: POST /api/blockbench/hello {client_id bb-…, version 2.20.0, blockbench_version, project, format, capabilities[17]} with NO Origin header (total-core's origin_guard would refuse a browser origin)", h && /^bb-[a-z0-9]{8}$/.test(h.client_id) && h.version === "2.20.0" && h.blockbench_version === "4.12.0" && h.project === "Fake" && h.format === "free" && JSON.stringify(h.capabilities) === JSON.stringify(P.CAPABILITIES) && hub.hellos[0].origin === null);
     ok("D2 poll → job → POST /api/blockbench/result: ok job carries {id, ok:true, result:{text,…}, elapsed_ms}; the cube really landed in the stand-in Blockbench", hub.results[0] && hub.results[0].id === "bbjob-1" && hub.results[0].ok === true && /Placed 1 cube/.test(hub.results[0].result.text) && typeof hub.results[0].elapsed_ms === "number" && bapi._st.nodes.some((n) => n.name === "Box"));
     ok("D3 failing jobs answer ok:false with the ERROR-prefixed message and a code (INVALID_ARGUMENT / COMMAND_NOT_FOUND) - never an exception that stalls the loop", hub.results[1] && hub.results[1].ok === false && hub.results[1].code === "INVALID_ARGUMENT" && /^ERROR INVALID_ARGUMENT in bb_cubes/.test(hub.results[1].error) && hub.results[2] && hub.results[2].code === "COMMAND_NOT_FOUND", hub.results.slice(1));
     ok("D4 state(): connected with jobsDone 3 while running; stop() → connected false + onState fired for the change; polling kept going between jobs", s.connected === true && s.jobsDone === 3 && s.running === true && bridge.state().connected === false && states[0] === false && states.includes(true) && hub.polls >= 3);

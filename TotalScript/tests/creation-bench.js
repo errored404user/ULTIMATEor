@@ -1,5 +1,5 @@
 "use strict";
-// 2.19.0 — CREATION BENCHMARK: measures the Universal Creation Intelligence
+// 2.20.0 — CREATION BENCHMARK: measures the Universal Creation Intelligence
 // Engine (src/core/creation_engine.js) against a labelled corpus and against
 // the previous gate (the work-mode evidence gates in main.js), per provider.
 //
@@ -233,8 +233,8 @@ for (const p of providers) {
   provRows[p.id] = { tight: prof.tight, sendCharBudget: budget, rounds: prof.rounds, masterpieceRounds: master.rounds, briefMin: prof.briefMin, reviewNotes: prof.reviewNotes, brief: prof.tight ? briefTight : briefFull, nudge, fits, commandFormat: caps.commandFormat, commandlessRetries: caps.commandlessRetries, capped: prof.capped };
   console.log(`   ${p.id.padEnd(13)} ${String(prof.tight).padEnd(6)} ${String(budget || "-").padEnd(8)} ${String(prof.rounds + "/" + master.rounds).padEnd(7)} ${String(prof.briefMin).padEnd(9)} ${String(prof.reviewNotes).padEnd(6)} ${String(briefFull + "/" + briefTight).padEnd(18)} ${String(nudge).padEnd(6)} ${fits}`);
 }
-ok("providers: ≥ 12 real adapters loaded and the brief + nudge fit every declared send budget", providers.length >= 11 && Object.values(provRows).every((r) => r.fits), Object.entries(provRows).filter(([, r]) => !r.fits).map(([k]) => k));
-ok("providers: every adapter keeps its full check budget (High 1 / Masterpiece 3) - 2.19.0 removed the DeepSeek gentle-mode cap", Object.entries(provRows).every(([id, r]) => r.rounds === 1 && r.masterpieceRounds === 3), provRows);
+ok("providers: ≥ 10 real adapters loaded (2.20.0: Notion removed) and the brief + nudge fit every declared send budget", providers.length >= 10 && Object.values(provRows).every((r) => r.fits), Object.entries(provRows).filter(([, r]) => !r.fits).map(([k]) => k));
+ok("providers: every adapter keeps its full check budget (High 1 / Masterpiece 3) - 2.20.0 removed the DeepSeek gentle-mode cap", Object.entries(provRows).every(([id, r]) => r.rounds === 1 && r.masterpieceRounds === 3), provRows);
 
 const out = { version: C.VERSION, simulated: true, at: new Date().toISOString(), spec: { n: CORPUS.length, exact, precision, recall, perDomain, misses: specResults.filter((r) => !r.exact), heldOut: { n: HELD_OUT.length, exact: hoExact, misses: hoMiss } }, coverage: det, profiles: profRows, staticReview: { snippets: SNIPPETS.length, precision: pct(stp, stp + sfp), recall: pct(stp, stp + sfn), cleanFalsePositives: cleanFalse }, providers: provRows };
 try { fs.writeFileSync("/tmp/totalscript-creation-bench.json", JSON.stringify(out, null, 2)); console.log("\nreport written to /tmp/totalscript-creation-bench.json"); } catch {}

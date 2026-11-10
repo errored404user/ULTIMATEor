@@ -1,389 +1,177 @@
-// End-to-end simulation of the WHOLE TotalScript content-script bundle on a
-// Notion-AI-shaped page. Optional (needs jsdom, which the repo does not vendor):
+"use strict";
+// Whole-bundle simulation of the TotalScript CORE on a chat.z.ai-shaped page
+// (2.20.0). Optional (needs jsdom; the bridge is canned so every scenario is
+// deterministic - no lupa needed):
 //
-//   cd TotalScript && npm i --no-save jsdom && node tests/notion-e2e.js
-//   NOTION_MODE=blocks node tests/notion-e2e.js   # block-editor transcript shape
-//   CREW=1 node tests/notion-e2e.js               # Multi-Agent crew protocol (1.22.0)
-//   SHOT=1 node tests/notion-e2e.js               # screen_capture needs studio_id (1.22.0 fix)
-//   DIAG=1 ...                                    # print the [rs-diag] trace
+//   cd TotalScript && npm i --no-save jsdom && node tests/core-e2e.js
+//   ASK=1    node tests/core-e2e.js   # permission mode "ask": approvals, read-only tools never ask
+//   CREW=1   node tests/core-e2e.js   # Multi-Agent crew protocol (planner guard, builder, tester, done)
+//   HELP=1   node tests/core-e2e.js   # totalscript_help answers a "how do templates work" question
+//   PUBLIC=1 node tests/core-e2e.js   # Public Skills: create, call, refuse a custom mode, verify, Public tab
+//   SHOT=1   node tests/core-e2e.js   # total_screenshot / screen_capture resolve the studio_id
+//   STATE=1|2|3|4 node tests/core-e2e.js # big get_studio_state dump, then execute_luau in 4 envelope shapes
+//   TASKS=1  node tests/core-e2e.js   # Task list: pill, task_next / task_update, Tasks tab, Settings toggle
+//   DIAG=1 ...                        # print the [rs-diag] trace
 //
-// It builds a fake Notion /chat page (textarea composer with Notion's
-// placeholder, role=button send/stop controls with Notion's test ids, transcript
-// rows in either DOM shape the adapter knows), stubs chrome.* and the bridge
-// (list_tools / call_tool), loads every script of the Notion content_script
-// entry from manifest.json in order, clicks Start, plays a scripted model
-// (bootstrap -> list_commands -> ready -> ###LUA### -> done) and asserts the
-// full loop: bootstrap sent, bounded catalogue typed back, session started,
-// execute_luau reached the bridge exactly once with newlines intact, the result
-// was typed back, the loop ended, no page errors. This is the harness that
-// found the three 1.21.4 Notion defects (see README).
-const fs = require("fs");
-const path = require("path");
-let JSDOM;
-try { ({ JSDOM } = require("jsdom")); }
-catch { console.error("tests/notion-e2e.js needs jsdom: run `npm i --no-save jsdom` in the TotalScript folder first."); process.exit(2); }
-
-const ROOT = process.env.TOTALSCRIPT_ROOT || path.join(__dirname, "..");
-const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
-const cs = manifest.content_scripts.filter((c) => c.matches.some((m) => m.includes("notion"))).sort((a,b)=>b.js.length-a.js.length)[0];
-const scripts = cs.js;
+// History: these scenarios lived in tests/notion-e2e.js (1.21.4 → 2.20.0) and
+// ran on a Notion-AI-shaped page. The Notion provider was removed in 2.20.0, so
+// the scenarios moved here unchanged and now drive the GLM adapter instead
+// (textarea composer, #send-message-button, .chat-assistant turns - the shape
+// tests/glm-e2e.js documents). Nothing here depends on the provider: the
+// scenarios exercise the core loop, parser, permissions, crew, task list,
+// public skills, help and screenshot paths through the real content-script
+// bundle loaded from manifest.json.
+//
+// MOCKED end to end: no z.ai, no model, no Studio.
+const { createPage, makeReporter, sleep, log } = require("./lib/e2e-page.js");
 
 const VERBOSE = !!process.env.VERBOSE;
-const log = (...a) => console.log("[harness]", ...a);
+const CREW = !!process.env.CREW;
+const SHOT = !!process.env.SHOT;
+const STATE = Number(process.env.STATE || 0);
+const HELP = !!process.env.HELP;
+const PUBLIC = !!process.env.PUBLIC;
+const TASKS = !!process.env.TASKS;
+const TAG = [process.env.ASK && "ASK", CREW && "CREW", HELP && "HELP", PUBLIC && "PUBLIC", SHOT && "SHOT", STATE && "STATE=" + STATE, TASKS && "TASKS"].filter(Boolean).map((s) => " (" + s + ")").join("");
 
-// ── fake Notion page ──────────────────────────────────────────────────────
-const html = `<!doctype html><html><head><title>Notion AI</title></head><body>
-<div id="app" data-rect="0,0,1200,800">
-  <nav id="sidebar" data-rect="0,0,240,800">Workspace</nav>
-  <main role="main" data-rect="240,0,960,800">
-    <div id="transcript" data-rect="240,0,960,620"></div>
-    <div id="composer-wrap" data-rect="300,640,840,120">
-      <div id="composer" data-rect="320,650,800,80">
-        <textarea id="ta" placeholder="Ask, search, or make anything..." data-rect="330,655,700,40"></textarea>
-        <div id="controls" data-rect="330,700,780,30">
-          <div role="button" tabindex="0" aria-label="Attach files" data-rect="330,700,30,30"></div>
-          <div role="button" tabindex="0" id="send" data-testid="agent-chat-send-button" aria-label="Submit AI message" aria-disabled="true" data-rect="1080,700,30,30"><svg></svg></div>
-        </div>
-      </div>
-    </div>
+const html = `<!doctype html><html><head><title>Z.ai Chat</title></head><body>
+<div id="app" data-rect="0,0,1280,800">
+  <nav class="sidebar" data-rect="0,0,260,800"><button data-rect="10,10,200,36">New Chat</button></nav>
+  <main data-rect="260,0,1020,800">
+    <div id="messages" class="flex flex-col" data-rect="260,0,1020,640"></div>
+    <div class="messageInputContainer" data-rect="300,660,940,130">
+      <div id="composer" class="flex flex-col w-full rounded-xl border" data-rect="300,660,940,130">
+        <textarea id="chat-input" placeholder="Message GLM" rows="1" data-rect="310,670,900,60"></textarea>
+        <div class="toolbar flex" data-rect="310,740,920,40">
+          <button class="model-pill" data-rect="310,745,120,30">GLM-5.2</button>
+          <div id="actions" class="ml-auto" data-rect="1190,745,40,30">
+            <button id="send-message-button" type="submit" disabled data-rect="1190,745,36,30"><svg><path/></svg></button>
+          </div></div></div></div>
   </main>
 </div></body></html>`;
 
-const dom = new JSDOM(html, {
-  url: "https://www.notion.so/chat",
-  pretendToBeVisual: true,
-  runScripts: "dangerously",
-});
-const w = dom.window;
-const d = w.document;
-Object.defineProperty(w, "innerWidth", { value: 1200, configurable: true });
-Object.defineProperty(w, "innerHeight", { value: 800, configurable: true });
-Object.defineProperty(d, "hidden", { value: false, configurable: true });
-Object.defineProperty(d, "visibilityState", { value: "visible", configurable: true });
-
-// Geometry: nearest data-rect wins; our own extension nodes get a plausible
-// fixed-position rect so the collision manager and placeBar have numbers.
-const rectOf = (el) => {
-  let n = el;
-  while (n && n.nodeType === 1) {
-    const r = n.getAttribute && n.getAttribute("data-rect");
-    if (r) { const [x, y, wd, h] = r.split(",").map(Number); return { x, y, width: wd, height: h, left: x, top: y, right: x + wd, bottom: y + h }; }
-    n = n.parentElement;
+// ── bridge stand-in (canned, scenario-aware) ──────────────────────────────
+// Mirrors the real Studio MCP: every tool takes a studio_id, screen_capture
+// REFUSES without it, list_roblox_studios is how clients find it; the public
+// skill 'lantern_row' answers with the shape its verify block expects.
+async function onToolCall(msg) {
+  const code = String(msg.arguments && msg.arguments.code || "");
+  if (msg.name === "execute_luau" && /GetLogHistory/.test(code)) {
+    // Studio Output probes (total_debug / Automatic Debugger): a clean console.
+    return { ok: true, text: /MessageError/.test(code) ? "[]" : JSON.stringify({ errors: [], warnings: [], info: [], errorCount: 0, warningCount: 0 }) };
   }
-  // default: something visible mid-page
-  return { x: 240, y: 300, width: 960, height: 24, left: 240, top: 300, right: 1200, bottom: 324 };
-};
-w.Element.prototype.getBoundingClientRect = function () {
-  const st = this.style;
-  if (st && st.display === "none") return { x: 0, y: 0, width: 0, height: 0, left: 0, top: 0, right: 0, bottom: 0 };
-  const r = rectOf(this);
-  return { ...r, toJSON() { return r; } };
-};
-w.Element.prototype.getClientRects = function () { return [this.getBoundingClientRect()]; };
-Object.defineProperty(w.HTMLElement.prototype, "offsetWidth", { get() { return this.getBoundingClientRect().width; }, configurable: true });
-Object.defineProperty(w.HTMLElement.prototype, "offsetHeight", { get() { return this.getBoundingClientRect().height; }, configurable: true });
-Object.defineProperty(w.HTMLElement.prototype, "offsetParent", { get() { return this.style.display === "none" ? null : d.body; }, configurable: true });
-w.HTMLElement.prototype.scrollIntoView = function () {};
-w.Element.prototype.scrollTo = function () {};
-w.scrollTo = () => {};
-w.requestAnimationFrame = (fn) => setTimeout(() => fn(Date.now()), 16);
-w.cancelAnimationFrame = (id) => clearTimeout(id);
-w.matchMedia = w.matchMedia || (() => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
-w.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-w.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
-w.elementFromPoint = w.document.elementFromPoint = () => null;
-d.execCommand = () => false;
-w.HTMLCanvasElement.prototype.getContext = () => null;
-if (!w.crypto) w.crypto = require("crypto").webcrypto;
-w.Audio = class { constructor() {} play() { return Promise.resolve(); } pause() {} };
-// jsdom has no DataTransfer; a minimal one lets the attachment path run
-// (Notion's file drop is validated live, not here).
-if (typeof w.DataTransfer !== "function") {
-  w.DataTransfer = class {
-    constructor() { const files = []; this.files = files; this.items = { add(f) { files.push(f); }, get length() { return files.length; } }; this.types = []; }
-    setData() {} getData() { return ""; }
-  };
+  if (msg.name === "execute_luau" && STATE && !/StatePart|SimPart/.test(code)) msg = { name: "get_studio_state" };
+  if (msg.name === "execute_luau" && /^-- TotalScript public skill 'lantern_row' v\d+ - VERIFY/.test(code)) return { ok: true, text: JSON.stringify({ ok: true, verify: true, detail: "2 lanterns found under Workspace" }) };
+  if (msg.name === "execute_luau" && /^-- TotalScript public skill 'lantern_row'/.test(code)) return { ok: true, text: JSON.stringify({ ok: true, created: 2 }) };
+  if (msg.name === "execute_luau") return { ok: true, text: "OK: Part created (SimPart)" };
+  if (msg.name === "get_studio_state") {
+    if (STATE) {
+      // Shape of the real Studio MCP answer: a long multi-line dump with
+      // brackets, quotes and a "command"-looking line in it.
+      const lines = ["Place: Baseplate (id 0, universe 0)", "DataModel:", "  Workspace", "    Camera", "    Baseplate [Part] {\"size\":[512,20,512]}", "    SpawnLocation [SpawnLocation]"];
+      for (let i = 0; i < 400; i++) lines.push("    Part" + i + " [Part] Anchored=true Size=(4, 1, 2) CFrame=(" + i + ", 0.5, 0) Material=Plastic");
+      lines.push("  ReplicatedStorage", "    Remotes [Folder]", "  ServerScriptService", "    Main [Script] -- \"command\": \"noop\"", "Selection: []", "Run state: Edit");
+      return { ok: true, text: lines.join("\n") };
+    }
+    return { ok: true, text: "{\"place\":\"Baseplate\",\"selection\":[]}" };
+  }
+  if (msg.name === "list_roblox_studios") return { ok: true, text: JSON.stringify({ studios: [{ id: "studio-7f3a", name: "Baseplate", place_id: 123456 }] }) };
+  if (msg.name === "screen_capture") {
+    const sid = msg.arguments && msg.arguments.studio_id;
+    if (!sid) return { ok: false, kind: "execution", errorCode: "INVALID_ARGUMENT", error: "Missing required arg: studio_id" };
+    if (sid !== "studio-7f3a") return { ok: false, kind: "execution", errorCode: "TOOL_EXECUTION_ERROR", error: "Studio instance " + sid + " is not connected" };
+    return { ok: true, text: "Captured the Studio viewport", images: [{ mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" }] };
+  }
+  return null;
 }
-w.AudioContext = undefined;
-w.fetch = async () => { throw new Error("fetch disabled in harness"); };
-w.navigator.clipboard = { writeText: async () => {}, readText: async () => "" };
-Object.defineProperty(w.navigator, "userAgent", { value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", configurable: true });
-w.open = () => null;
-w.alert = () => {};
-w.confirm = () => true;
 
-// ── Notion behaviour ──────────────────────────────────────────────────────
-const ta = d.getElementById("ta");
-const send = d.getElementById("send");
-const transcript = d.getElementById("transcript");
+const page = createPage({ html, url: "https://chat.z.ai/", host: "chat.z.ai", onToolCall });
+const { w, d, storage, toolCalls, pageErrors } = page;
+if (TASKS) w.chrome.storage.local.set({ rsTaskList: { enabled: true, tasks: [{ id: "t_a1", text: "Create a part named SimPart", status: "todo" }, { id: "t_b2", text: "Add a PointLight to it", status: "todo" }] } });
+w.chrome.storage.local.set({ rsMultiAgent: CREW, ...(process.env.ASK ? { rsPermMode: "ask" } : {}) });
+
+// ── site behaviour (what src/providers/glm.js keys on) ────────────────────
+const messages = d.getElementById("messages"), ta = d.getElementById("chat-input"), sendBtn = d.getElementById("send-message-button"), actions = d.getElementById("actions");
 const userMessages = [];
-let turn = 0;
-let generating = false;
-let stopBtn = null;
+let generating = false, stopBtn = null, enableTimer = null;
 let onUserMessage = null; // set by the scenario
 ta.addEventListener("input", () => {
-  send.setAttribute("aria-disabled", ta.value.trim() ? "false" : "true");
+  sendBtn.disabled = true; clearTimeout(enableTimer);
+  enableTimer = setTimeout(() => { sendBtn.disabled = !ta.value.trim() || generating; }, 30);
 });
-const MODE = process.env.NOTION_MODE || "anchors"; // anchors | blocks
-let blockSeq = 0;
-const blockId = () => "b" + (++blockSeq).toString(16).padStart(8, "0") + "-0000-0000-0000-000000000000";
-function userRow(text) {
-  const row = d.createElement("div");
-  row.style.display = "flex"; row.style.justifyContent = "flex-end";
-  if (MODE === "anchors") {
-    row.setAttribute("data-agent-service-scroll-anchor", "user-" + (++turn));
-    const bubble = d.createElement("div");
-    bubble.textContent = text;
-    row.appendChild(bubble);
-  } else {
-    // block-editor user bubble: every line its own [data-block-id] block
-    const root = d.createElement("div");
-    root.setAttribute("data-content-editable-root", "true"); root.className = "whenContentEditable";
-    text.split("\n").forEach((line) => { const b = d.createElement("div"); b.setAttribute("data-block-id", blockId()); const inner = d.createElement("div"); inner.textContent = line; b.appendChild(inner); root.appendChild(b); });
-    row.appendChild(root);
-  }
-  transcript.appendChild(row);
-  return row;
-}
-function assistantRow() {
-  const row = d.createElement("div");
-  row.style.display = "flex"; row.style.justifyContent = "flex-start";
-  if (MODE === "anchors") {
-    row.setAttribute("data-agent-service-scroll-anchor", "assistant-" + (++turn));
-    transcript.appendChild(row);
-    return row;
-  }
-  const root = d.createElement("div");
-  root.setAttribute("data-content-editable-root", "true"); root.className = "whenContentEditable";
-  row.appendChild(root);
-  transcript.appendChild(row);
-  return root;
-}
+ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!sendBtn.disabled) doSend(); } });
+sendBtn.addEventListener("click", () => { if (!sendBtn.disabled) doSend(); });
+const hex = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+const uuid = () => `${hex(8)}-${hex(4)}-4${hex(3)}-${hex(4)}-${hex(12)}`;
 function startGenerating() {
-  generating = true;
-  stopBtn = d.createElement("div");
-  stopBtn.setAttribute("role", "button"); stopBtn.setAttribute("tabindex", "0");
-  stopBtn.setAttribute("data-testid", "agent-stop-button");
-  stopBtn.setAttribute("aria-label", "Stop generating");
-  stopBtn.setAttribute("data-rect", "1080,700,30,30");
-  send.style.display = "none";
-  d.getElementById("controls").appendChild(stopBtn);
+  generating = true; sendBtn.disabled = true; sendBtn.style.display = "none";
+  stopBtn = d.createElement("button"); stopBtn.type = "submit"; stopBtn.className = "flex items-center justify-center rounded-full bg-black text-white size-8"; stopBtn.setAttribute("data-rect", "1190,745,32,32");
+  const sq = d.createElement("span"); sq.className = "size-3 bg-white rounded-sm"; stopBtn.appendChild(sq);
+  actions.appendChild(stopBtn);
 }
 function stopGenerating() {
   generating = false;
   if (stopBtn) stopBtn.remove(); stopBtn = null;
-  send.style.display = "";
+  sendBtn.style.display = ""; sendBtn.disabled = !ta.value.trim();
 }
 function doSend() {
   const text = ta.value;
   if (!text.trim() || generating) return false;
   userMessages.push(text);
-  clearAttachmentCards();
-  ta.value = "";
-  ta.dispatchEvent(new w.Event("input", { bubbles: true }));
-  userRow(text);
-  // first message turns the landing into a thread
-  if (!/[?&]t=/.test(w.location.search)) w.history.replaceState({}, "", "/chat?t=thread" + Date.now().toString(36));
+  ta.value = ""; ta.dispatchEvent(new w.Event("input", { bubbles: true }));
+  const wrap = d.createElement("div"); wrap.className = "w-full message-" + uuid(); wrap.setAttribute("data-rect", "700,100,560,50");
+  const um = d.createElement("div"); um.className = "user-message flex justify-end";
+  const cu = d.createElement("div"); cu.className = "chat-user rounded-3xl px-5 py-2";
+  const body = d.createElement("div"); text.split("\n").forEach((line) => { const p = d.createElement("p"); p.textContent = line; body.appendChild(p); });
+  cu.appendChild(body); um.appendChild(cu); wrap.appendChild(um); messages.appendChild(wrap);
+  if (userMessages.length === 1) w.history.replaceState({}, "", "/c/" + uuid());
   if (VERBOSE) log("USER SENT:", text.slice(0, 200).replace(/\n/g, "\\n") + (text.length > 200 ? "…" : ""));
   else log("USER SENT (" + text.length + " chars):", text.slice(0, 90).replace(/\n/g, "\\n"));
   setTimeout(() => { startGenerating(); if (onUserMessage) onUserMessage(text); }, 60);
   return true;
 }
-send.addEventListener("click", () => { if (send.getAttribute("aria-disabled") !== "true") doSend(); });
-// File drop onto the composer stages an attachment card (what Notion renders
-// for a dropped image); sending clears it.
-if (typeof w.DragEvent !== "function") {
-  w.DragEvent = class extends w.MouseEvent {
-    constructor(type, init) { super(type, init); this.dataTransfer = (init && init.dataTransfer) || null; }
-  };
-}
-const composerEl = d.getElementById("composer");
-composerEl.addEventListener("drop", (e) => {
-  const files = (e.dataTransfer && e.dataTransfer.files) || [];
-  for (const f of files) {
-    const card = d.createElement("div");
-    card.setAttribute("data-testid", "attachment-card");
-    card.setAttribute("data-rect", "330,655,120,20");
-    const span = d.createElement("span"); span.textContent = f.name; card.appendChild(span);
-    composerEl.appendChild(card);
-  }
-});
-const clearAttachmentCards = () => { for (const c of [...composerEl.querySelectorAll("[data-testid='attachment-card']")]) c.remove(); };
-send.addEventListener("pointerdown", () => {});
-ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSend(); } });
-
-// Streams an assistant reply as markdown-ish DOM (code blocks in <pre><code>).
-function replyWith(text, { stream = true } = {}) {
-  const row = assistantRow();
-  const parts = text.split(/```/);
-  const render = (upto) => {
-    row.innerHTML = "";
-    const shown = text.slice(0, upto);
-    const segs = shown.split(/```/);
-    segs.forEach((seg, i) => {
-      if (MODE === "blocks") {
-        if (i % 2 === 1) {
-          const cb = d.createElement("div"); cb.setAttribute("data-block-id", blockId()); cb.className = "notion-code-block";
-          seg.replace(/^[a-z]*\n/, "").split("\n").forEach((line) => { const l = d.createElement("div"); l.textContent = line; cb.appendChild(l); });
-          row.appendChild(cb);
-        } else {
-          seg.split("\n").forEach((line) => { if (!line && i > 0) return; const b = d.createElement("div"); b.setAttribute("data-block-id", blockId()); const inner = d.createElement("div"); inner.textContent = line; b.appendChild(inner); row.appendChild(b); });
-        }
-        return;
-      }
-      if (i % 2 === 1) {
-        const pre = d.createElement("pre"); const code = d.createElement("code");
-        code.textContent = seg.replace(/^[a-z]*\n/, ""); pre.appendChild(code); row.appendChild(pre);
-      } else {
-        seg.split("\n").forEach((line) => { const p = d.createElement("p"); p.textContent = line; row.appendChild(p); });
-      }
-    });
-  };
-  return new Promise((resolve) => {
-    if (!stream) { render(text.length); stopGenerating(); resolve(row); return; }
-    let i = 0;
-    const step = () => {
-      i = Math.min(text.length, i + 40);
-      render(i);
-      if (i < text.length) setTimeout(step, 30);
-      else { setTimeout(() => { const copy = d.createElement("div"); copy.setAttribute("role", "button"); copy.setAttribute("aria-label", "Copy response"); row.appendChild(copy); stopGenerating(); resolve(row); }, 120); }
-    };
-    setTimeout(step, 100);
+function renderMarkdown(prose, text) {
+  prose.innerHTML = "";
+  text.split(/```/).forEach((seg, i) => {
+    if (i % 2 === 1) {
+      const wrap = d.createElement("div"); wrap.className = "relative my-2 flex flex-col rounded-xl border bg-gray-50";
+      const head = d.createElement("div"); head.className = "flex items-center justify-between px-4 py-2";
+      const lang = d.createElement("span"); lang.textContent = (seg.match(/^([a-z]*)\n/) || [, "text"])[1] || "text"; head.appendChild(lang);
+      const copy = d.createElement("button"); copy.className = "copy-code-button"; copy.textContent = "Copy"; head.appendChild(copy);
+      wrap.appendChild(head);
+      const pre = d.createElement("pre"); const code = d.createElement("code"); code.className = "cm-content"; code.textContent = seg.replace(/^[a-z]*\n/, ""); pre.appendChild(code); wrap.appendChild(pre);
+      prose.appendChild(wrap);
+    } else seg.split("\n").forEach((line) => { if (!line) return; const p = d.createElement("p"); p.textContent = line; prose.appendChild(p); prose.appendChild(d.createTextNode("\n")); });
+    // (the "\n" text nodes stand in for the line breaks a browser's innerText
+    //  puts between block elements - jsdom only has textContent)
   });
 }
-
-// ── chrome.* stub ─────────────────────────────────────────────────────────
-const storage = {};
-const toolCalls = [];
-const TOOLS = [
-  { name: "execute_luau", description: "Run Luau in Studio", inputSchema: { type: "object", properties: { code: { type: "string" }, datamodel_type: { type: "string" } } } },
-  { name: "get_studio_state", description: "Studio state", inputSchema: { type: "object", properties: {} } },
-  { name: "screen_capture", description: "Capture", inputSchema: { type: "object", properties: {} } },
-];
-function statusObj() {
-  return { ok: true, type: "rs-status", connected: true, mcpAlive: true, studio: true, studioApp: true, studioProc: true, robloxProc: true, roblox_connected: true, local_connected: false, local_full: false, tools: TOOLS.length, servers: [], engine: "roblox" };
+// Streams an assistant reply the way the site renders it (thinking first,
+// then markdown with rounded-xl code wrappers, action bar outside the turn).
+function replyWith(text) {
+  const wrap = d.createElement("div"); wrap.className = "w-full message-" + uuid(); wrap.setAttribute("data-rect", "300,160,900,300");
+  const turn = d.createElement("div"); turn.className = "chat-assistant markdown-prose w-full";
+  const col = d.createElement("div"); col.className = "flex flex-col w-full";
+  const think = d.createElement("div"); think.className = "thinking-chain-container rounded-lg"; const tb = d.createElement("p"); think.appendChild(tb);
+  const prose = d.createElement("div"); prose.className = "markdown-prose";
+  const spacer = d.createElement("div"); spacer.setAttribute("aria-hidden", "true"); spacer.className = "h-2";
+  col.appendChild(think); col.appendChild(prose); col.appendChild(spacer); turn.appendChild(col); wrap.appendChild(turn); messages.appendChild(wrap);
+  return (async () => {
+    const thought = "The user wants a Roblox Studio action. I will pick the matching TotalScript command and emit it.";
+    for (const ch of thought.match(/[\s\S]{1,16}/g)) { tb.textContent += ch; await sleep(15); }
+    let shown = "";
+    for (const ch of text.match(/[\s\S]{1,40}/g) || []) { shown += ch; renderMarkdown(prose, shown); await sleep(25); }
+    await sleep(120);
+    stopGenerating();
+    const bar = d.createElement("div"); bar.className = "flex gap-2 actions"; for (const l of ["Copy", "Regenerate", "Like", "Dislike"]) { const b = d.createElement("button"); b.textContent = l; bar.appendChild(b); } wrap.appendChild(bar);
+    return prose;
+  })();
 }
-function background(msg) {
-  switch (msg && msg.type) {
-    case "status": return statusObj();
-    case "studio_status": return { ok: true, studio: true, roblox_connected: true, connected: true };
-    case "list_tools": return { ok: true, tools: TOOLS, studio: true, roblox_connected: true, servers: [] };
-    case "command_catalog": return { ok: false };
-    case "call_tool": {
-      toolCalls.push({ name: msg.name, arguments: msg.arguments });
-      log("TOOL CALL:", msg.name, JSON.stringify(msg.arguments || {}).slice(0, 160));
-      if (msg.name === "execute_luau" && /GetLogHistory/.test(String(msg.arguments && msg.arguments.code || ""))) {
-        // Studio Output probes (total_debug / Automatic Debugger): a clean console.
-        return { ok: true, text: /MessageError/.test(msg.arguments.code) ? "[]" : JSON.stringify({ errors: [], warnings: [], info: [], errorCount: 0, warningCount: 0 }) };
-      }
-      if (msg.name === "execute_luau" && STATE && !/StatePart|SimPart/.test(String(msg.arguments && msg.arguments.code || ""))) msg = { name: "get_studio_state" };
-      if (msg.name === "execute_luau" && /^-- TotalScript public skill 'lantern_row' v\d+ - VERIFY/.test(String(msg.arguments && msg.arguments.code || ""))) return { ok: true, text: JSON.stringify({ ok: true, verify: true, detail: "2 lanterns found under Workspace" }) };
-      if (msg.name === "execute_luau" && /^-- TotalScript public skill 'lantern_row'/.test(String(msg.arguments && msg.arguments.code || ""))) return { ok: true, text: JSON.stringify({ ok: true, created: 2 }) };
-      if (msg.name === "execute_luau") return { ok: true, text: "OK: Part created (SimPart)" };
-      if (msg.name === "get_studio_state") {
-        if (STATE) {
-          // Shape of the real Studio MCP answer: a long multi-line dump with
-          // brackets, quotes and a "command"-looking line in it.
-          const lines = ["Place: Baseplate (id 0, universe 0)", "DataModel:", "  Workspace", "    Camera", "    Baseplate [Part] {\"size\":[512,20,512]}", "    SpawnLocation [SpawnLocation]"];
-          for (let i = 0; i < 400; i++) lines.push("    Part" + i + " [Part] Anchored=true Size=(4, 1, 2) CFrame=(" + i + ", 0.5, 0) Material=Plastic");
-          lines.push("  ReplicatedStorage", "    Remotes [Folder]", "  ServerScriptService", "    Main [Script] -- \"command\": \"noop\"", "Selection: []", "Run state: Edit");
-          return { ok: true, text: lines.join("\n") };
-        }
-        return { ok: true, text: "{\"place\":\"Baseplate\",\"selection\":[]}" };
-      }
-      // Real Studio behaviour: every tool takes a studio_id; screen_capture is
-      // the one that REFUSES the call without it, and list_roblox_studios is
-      // how clients find it.
-      if (msg.name === "list_roblox_studios") return { ok: true, text: JSON.stringify({ studios: [{ id: "studio-7f3a", name: "Baseplate", place_id: 123456 }] }) };
-      if (msg.name === "screen_capture") {
-        const sid = msg.arguments && msg.arguments.studio_id;
-        if (!sid) return { ok: false, kind: "execution", errorCode: "INVALID_ARGUMENT", error: "Missing required arg: studio_id" };
-        if (sid !== "studio-7f3a") return { ok: false, kind: "execution", errorCode: "TOOL_EXECUTION_ERROR", error: "Studio instance " + sid + " is not connected" };
-        return { ok: true, text: "Captured the Studio viewport", images: [{ mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" }] };
-      }
-      return { ok: true, text: "OK" };
-    }
-    default: return { ok: false, error: "unhandled " + (msg && msg.type) };
-  }
-}
-const listeners = [];
-const storageApi = (name) => ({
-  get(keys, cb) {
-    const out = {};
-    const ks = keys == null ? Object.keys(storage) : typeof keys === "string" ? [keys] : Array.isArray(keys) ? keys : Object.keys(keys);
-    for (const k of ks) { if (k in storage) out[k] = storage[k]; else if (keys && typeof keys === "object" && !Array.isArray(keys)) out[k] = keys[k]; }
-    if (cb) { setTimeout(() => cb(out), 0); return; }
-    return Promise.resolve(out);
-  },
-  set(obj, cb) { Object.assign(storage, obj); if (cb) setTimeout(cb, 0); return Promise.resolve(); },
-  remove(keys, cb) { for (const k of [].concat(keys)) delete storage[k]; if (cb) setTimeout(cb, 0); return Promise.resolve(); },
-});
-w.chrome = {
-  runtime: {
-    id: "harness-ext",
-    lastError: undefined,
-    getURL: (p) => "chrome-extension://harness-ext/" + p,
-    sendMessage(msg, cb) {
-      const r = background(msg);
-      if (typeof cb === "function") setTimeout(() => cb(r), 5);
-      return Promise.resolve(r);
-    },
-    onMessage: { addListener: (fn) => listeners.push(fn), removeListener() {} },
-    onConnect: { addListener() {} },
-    connect: () => ({ postMessage() {}, onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, disconnect() {} }),
-    getManifest: () => manifest,
-  },
-  storage: { local: storageApi("local"), sync: storageApi("sync"), session: storageApi("session"), onChanged: { addListener() {}, removeListener() {} } },
-  i18n: { getMessage: () => "" },
-};
-const CREW = !!process.env.CREW; // CREW=1 → Multi-Agent crew scenario (1.22.0)
-const SHOT = !!process.env.SHOT; // SHOT=1 → screenshot / studio_id scenario (1.22.0)
-// STATE=1|2|3|4 → get_studio_state (big multi-line dump) then execute_luau (1.23.0):
-//   1 = valid JSON envelope with \n escapes, 2 = JSON with RAW newlines inside the
-//   code string (what Notion's model actually writes), 3 = JSON envelope whose
-//   code is a nested ```lua fence.
-const STATE = Number(process.env.STATE || 0);
-// HELP=1 → the model answers a "how do templates work" question with totalscript_help
-// (1.23.1 regression: "Internal loop error: FEATURE_HELP_TOPICS is not defined").
-const HELP = !!process.env.HELP;
-// PUBLIC=1 → Public Skills (1.25.0): the model installs a user-made skill with
-// public_skill_create, calls it by name (runs as execute_luau, relabelled), then
-// installs a custom work mode and activates it; the Public tab lists both.
-const PUBLIC = !!process.env.PUBLIC;
-// TASKS=1 → Task list (1.25.0): enabled in Settings with two tasks; the model
-// calls task_next, builds, marks it done with task_update; pill + state line +
-// Tasks tab follow.
-const TASKS = !!process.env.TASKS;
-if (TASKS) w.chrome.storage.local.set({ rsTaskList: { enabled: true, tasks: [{ id: "t_a1", text: "Create a part named SimPart", status: "todo" }, { id: "t_b2", text: "Add a PointLight to it", status: "todo" }] } });
-w.chrome.storage.local.set({ rsAllowPlaytest: true, rsDebugDiagnostics: !!process.env.DIAG, rsMultiAgent: CREW, ...(process.env.ASK ? { rsPermMode: "ask" } : {}) });
 
-// ── load the bundle ───────────────────────────────────────────────────────
-w.addEventListener("error", (e) => { console.error("[page error]", e.message, e.error && e.error.stack); });
-const pageErrors = [];
-w.onerror = (m, s, l, c, err) => { pageErrors.push(String(m)); console.error("[window.onerror]", m, err && err.stack); };
-w.addEventListener("unhandledrejection", (e) => { pageErrors.push(String(e.reason)); console.error("[unhandledrejection]", e.reason); });
-// Node's unhandled rejections from jsdom-executed promises surface on process:
-process.on("unhandledRejection", (r) => { pageErrors.push(String(r && r.stack || r)); console.error("[unhandledRejection]", r && r.stack || r); });
-
-for (const s of scripts) {
-  const src = fs.readFileSync(path.join(ROOT, s), "utf8");
-  const el = d.createElement("script");
-  el.textContent = src + "\n//# sourceURL=" + s;
-  const before = pageErrors.length;
-  d.head.appendChild(el);
-  if (pageErrors.length > before) { console.error("[load error]", s); process.exitCode = 1; }
-}
-log("bundle loaded;", scripts.length, "scripts");
+page.loadBundle();
 
 // ── scenario ──────────────────────────────────────────────────────────────
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function waitFor(pred, ms, label) {
-  const until = Date.now() + ms;
-  while (Date.now() < until) { try { if (pred()) return true; } catch {} await sleep(50); }
-  throw new Error("timeout waiting for " + label);
-}
-const results = [];
-const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((cond ? "PASS  " : "FAIL  ") + name + (extra ? "  — " + extra : "")); if (!cond) process.exitCode = 1; };
+const { ok, waitFor, finish } = makeReporter();
 
 (async () => {
   try {
@@ -440,8 +228,8 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
           else if (STATE === 2) await replyWith("The place is a Baseplate with 400 parts. Creating the part now.\n```json\n{\"command\": \"execute_luau\", \"params\": {\"code\": \"" + lua.replace(/"/g, '\\"') + "\", \"datamodel_type\": \"Edit\"}}\n```");
           else if (STATE === 3) await replyWith("The place is a Baseplate with 400 parts. Creating the part now.\n```json\n{\"command\": \"execute_luau\", \"params\": {\"code\": \"```lua\\n" + lua.replace(/"/g, '\\"').replace(/\n/g, "\\n") + "\\n```\"}}\n```");
           // STATE=4: raw ###LUA### marker with a bled-in fence language tag on
-          // its own line (Notion's code-block chrome) - parser bug 2 in 1.23.1.
-          else await replyWith("The place is a Baseplate with 400 parts. Creating the part now.\n###LUA###\nlua\n" + lua + "\n###END_LUA###");
+          // its own line (a code-block header bled into the copy) - parser bug 2 in 1.23.1.
+          else await replyWith("The place is a Baseplate with 400 parts. Creating the part now.\n```\n###LUA###\nlua\n" + lua + "\n###END_LUA###\n```");
         }
         else await replyWith("Done — StatePart was created in Workspace.");
         return;
@@ -483,7 +271,7 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     startBtn.click();
     log("clicked Start");
     await waitFor(() => userMessages.length >= 1, 20000, "bootstrap send");
-    ok("bootstrap prompt sent to Notion", /TotalScript|ROBLOX|Roblox/i.test(userMessages[0]), userMessages[0].length + " chars");
+    ok("bootstrap prompt sent to the site", /TotalScript|ROBLOX|Roblox/i.test(userMessages[0]), userMessages[0].length + " chars");
     ok("bootstrap carries no coding-memory / session-recap block (removed 1.39.1)", !/My coding memory|Recent sessions \(auto-recorded/.test(userMessages[0]));
     await waitFor(() => userMessages.length >= 2, 30000, "catalogue reply send");
     ok("catalogue result typed back", /list_commands|commands|Output/i.test(userMessages[1]), userMessages[1].slice(0, 80).replace(/\n/g, " "));
@@ -495,7 +283,7 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       const chips = card ? [...card.querySelectorAll("[data-setup-starter]")] : [];
       ok("after Start the card is all green and offers 3 starter requests", !!card && !card.hidden && card.classList.contains("rs-setup-ready") && chips.length === 3 && /4\/4/.test(card.querySelector("#rs-setup-progress")?.textContent || ""), (card?.querySelector("#rs-setup-sub")?.textContent || "") + " chips=" + chips.length);
       if (chips[0]) {
-        const ed = w.eval("document.querySelector('textarea')") || d.querySelector("textarea");
+        const ed = ta;
         const before = ed ? ed.value : "";
         chips[0].click(); await sleep(150);
         const after = ed ? ed.value : "";
@@ -510,11 +298,14 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     await sleep(100);
     ta.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
     await sleep(100);
-    if (userMessages.length < 3) { send.click(); }
+    if (userMessages.length < 3) { sendBtn.click(); }
     await waitFor(() => userMessages.length >= 3, 5000, "user request send");
-    // Ask mode: the user answers every approval prompt ~1 s after it appears.
+    // ASK=1: the old "Ask" permission state was removed in 1.99.5 - a stored
+    // rsPermMode "ask" must read as Sandbox only, and no approval card may
+    // appear for Studio tools (they run directly; only publish ops ask).
     const approvals = [];
     if (process.env.ASK) {
+      ok("a stored rsPermMode 'ask' reads as Sandbox only (1.99.5 migration)", w.__rsPermMode && w.__rsPermMode() === "sandbox", w.__rsPermMode && w.__rsPermMode());
       setInterval(() => {
         const root = d.getElementById("rs-approve");
         if (!root || root.hidden) return;
@@ -537,14 +328,14 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       await waitFor(() => (w.__rsDiag || []).some((e) => e.event === "loop.end"), 30000, "loop.end");
       ok("agent loop ended after the final text reply", true);
       ok("exactly one StatePart execute_luau ran", toolCalls.filter((c) => c.name === "execute_luau" && /StatePart/.test(String(c.arguments.code || ""))).length === 1);
-      if (process.env.ASK) ok("execute_luau asked for approval exactly once and ran after Allow", approvals.length === 1 && /execute_luau/.test(approvals[0].op) && d.getElementById("rs-approve").parentElement === d.documentElement, JSON.stringify(approvals));
+      if (process.env.ASK) ok("execute_luau ran without an approval card (Sandbox only never asks); the card element is still mounted and hidden for publish ops", approvals.length === 0 && !!d.getElementById("rs-approve") && d.getElementById("rs-approve").hidden === true, JSON.stringify(approvals));
       ok("no TotalScript-internal flags leaked to the bridge", !toolCalls.some((c) => Object.keys(c.arguments || {}).some((k) => /^_total/.test(k))), JSON.stringify(toolCalls.map((c) => Object.keys(c.arguments || {}))));
       await sleep(1000);
       ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
       return;
     }
     if (TASKS) {
-      ok("bootstrap carries the task list preference with the open tasks", /TASK LIST preference/.test(userMessages[0]) && /1\. Create a part named SimPart/.test(userMessages[0]), userMessages[0].length + " chars");
+      ok("bootstrap carries the task list block with the open tasks", /TASK LIST \(user-enabled; 0\/2 done\)/.test(userMessages[0]) && /\[ \] #1 Create a part named SimPart/.test(userMessages[0]) && /\[ \] #2 Add a PointLight to it/.test(userMessages[0]), userMessages[0].length + " chars");
       ok("catalogue lists task_* commands while enabled", /task_next/.test(userMessages[1]) && /task_update/.test(userMessages[1]));
       const pill = d.getElementById("rs-task-pill");
       ok("bar shows the Tasks 0/2 pill", !!pill && !pill.hidden && pill.textContent === "Tasks 0/2", pill && pill.textContent);
@@ -594,7 +385,7 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       return;
     }
     if (PUBLIC) {
-      ok("bootstrap advertises Public Skills", /PUBLIC SKILLS preference/.test(userMessages[0]) && /public_skill_create/.test(userMessages[0]), userMessages[0].length + " chars");
+      ok("bootstrap advertises Public Skills", /PUBLIC SKILLS/.test(userMessages[0]) && /public_skill_create/.test(userMessages[0]), userMessages[0].length + " chars");
       await waitFor(() => userMessages.length >= 4, 40000, "public_skill_create result");
       ok("public_skill_create installed the skill", /"status": "INSTALLED"/.test(userMessages[3]) && /"name": "lantern_row"/.test(userMessages[3]) && !/Internal loop error|is not defined/.test(userMessages[3]), userMessages[3].slice(0, 160).replace(/\n/g, " "));
       ok("install modal shown to the user", !!d.querySelector(".rs-public-installed"), String(d.querySelector(".rs-public-installed") && d.querySelector(".rs-public-installed").textContent).slice(0, 80));
@@ -606,14 +397,14 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       ok("result is labelled with the public skill's name", /^Output of 'lantern_row'/.test(userMessages[4]) && !/Output of 'execute_luau'/.test(userMessages[4]), userMessages[4].slice(0, 100).replace(/\n/g, " "));
       ok("the unverified result is flagged for the model (callable, but says so)", /UNVERIFIED/.test(userMessages[4]), userMessages[4].slice(0, 200).replace(/\n/g, " "));
       await waitFor(() => userMessages.length >= 6, 40000, "mode create result");
-      ok("2.19.0: a custom work mode is REFUSED with the retirement message (nothing installed, no mode storage)", /VALIDATION_FAILED/.test(userMessages[5]) && /kind 'mode' was retired in 2\.19\.0/.test(userMessages[5]) && !/"status": "INSTALLED"/.test(userMessages[5]) && !w.PublicSkills.find("horror_builder"), userMessages[5].slice(0, 200).replace(/\n/g, " "));
+      ok("2.20.0: a custom work mode is REFUSED with the retirement message (nothing installed, no mode storage)", /VALIDATION_FAILED/.test(userMessages[5]) && /kind 'mode' was retired in 2\.20\.0/.test(userMessages[5]) && !/"status": "INSTALLED"/.test(userMessages[5]) && !w.PublicSkills.find("horror_builder"), userMessages[5].slice(0, 200).replace(/\n/g, " "));
       await waitFor(() => userMessages.length >= 7, 40000, "public_skill_test result");
       const verifyCall = toolCalls.find((c) => c.name === "execute_luau" && /^-- TotalScript public skill 'lantern_row' v\d+ - VERIFY/.test(String(c.arguments.code || "")));
       ok("public_skill_test {dry_run:false} ran the command, then the verify block as a second execute_luau with args + the command's result injected", !!verifyCall && /local args = \{\["path"\]="Workspace",\["count"\]=2\}/.test(verifyCall.arguments.code) && /local result = \{\["ok"\]=true,\["created"\]=2\}/.test(verifyCall.arguments.code) && /Lantern_/.test(verifyCall.arguments.code), verifyCall ? verifyCall.arguments.code.split("\n").slice(0, 5).join(" | ").slice(0, 240) : "no verify call");
       ok("the verify pass makes the skill VERIFIED (result says so, registry records it)", /"status": "VERIFIED"/.test(userMessages[6]) && /"verification": "verified"/.test(userMessages[6]) && /2 lanterns found/.test(userMessages[6]) && w.PublicSkills.verification("lantern_row").state === "verified", userMessages[6].slice(0, 200).replace(/\n/g, " "));
       const badge = d.getElementById("rs-work-badge");
       ok("bar badge stays on the built-in mode (no custom-mode glue left): Totality, no public mode accessor", !!badge && w.__rsWorkMode() === "creation" && badge.textContent !== "HORROR" && typeof w.__rsPublicMode !== "function", badge && badge.textContent + " / " + w.__rsWorkMode());
-      const sysPrompt = (() => { try { return w.eval("RS").buildSystemPrompt({ siteName: "Notion" }); } catch (e) { return "ERR " + e; } })();
+      const sysPrompt = (() => { try { return w.eval("RS").buildSystemPrompt({ siteName: "GLM", providerId: "glm" }); } catch (e) { return "ERR " + e; } })();
       const catBlock = w.PublicSkills.catalogueBlock({ compact: false });
       ok("system prompt keeps the static PUBLIC SKILLS section and no custom-mode section; the live catalogue block (list_commands) lists the verified skill with its signature and no UNVERIFIED tag", /PUBLIC SKILLS/.test(sysPrompt) && !/CUSTOM WORK MODE/.test(sysPrompt) && !/Custom work modes available/.test(sysPrompt) && /PUBLIC SKILLS - 1 user-made skill \(1 command\)/.test(catBlock) && /^lantern_row \{path, count\?\} - /m.test(catBlock) && !/lantern_row[^\n]*\[UNVERIFIED\]/.test(catBlock), catBlock.slice(0, 200));
       // Public tab in the cards panel lists both items.
@@ -633,7 +424,7 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       await waitFor(() => userMessages.length >= 4, 40000, "totalscript_help result");
       ok("totalscript_help answered without an Internal loop error", !/Internal loop error|is not defined|ERROR/.test(userMessages[3]) && /Output of 'totalscript_help'/.test(userMessages[3]), userMessages[3].slice(0, 160).replace(/\n/g, " "));
       ok("totalscript_help resolved the templates topic", /"topic": "templates"/.test(userMessages[3]) && /"agentStarted": false/.test(userMessages[3]), userMessages[3].slice(0, 120).replace(/\n/g, " "));
-      ok("totalscript_help executed nothing in Studio", !toolCalls.some((c) => c.name === "execute_luau" && !/GetLogHistory/.test(String(c.arguments && c.arguments.code || ""))), JSON.stringify(toolCalls.map((c) => c.name)));
+      ok("totalscript_help executed nothing in Studio (only the read-only work-mode probes ran)", !toolCalls.some((c) => c.name === "execute_luau" && !/GetLogHistory|IsRunning\(\)|TotalScript mode probe/.test(String(c.arguments && c.arguments.code || ""))), JSON.stringify(toolCalls.map((c) => c.name + ":" + String(c.arguments && c.arguments.code || "").slice(0, 30))));
       await waitFor(() => (w.__rsDiag || []).some((e) => e.event === "loop.end"), 30000, "loop.end");
       ok("agent loop ended after the final text reply", true);
       await sleep(800);
@@ -681,10 +472,10 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
       return;
     }
-    await waitFor(() => toolCalls.some((c) => c.name === "execute_luau"), 30000, "execute_luau call");
-    ok("execute_luau executed from Notion reply", true, JSON.stringify(toolCalls.find((c) => c.name === "execute_luau").arguments).slice(0, 120));
+    await waitFor(() => toolCalls.some((c) => c.name === "execute_luau" && /SimPart/.test(String(c.arguments.code || ""))), 30000, "execute_luau call");
+    ok("execute_luau executed from the model reply", toolCalls.some((c) => c.name === "execute_luau" && /SimPart/.test(String(c.arguments.code || ""))), JSON.stringify(toolCalls.find((c) => c.name === "execute_luau" && /SimPart/.test(String(c.arguments.code || ""))).arguments).slice(0, 120));
     await waitFor(() => userMessages.length >= 4, 30000, "tool feedback send");
-    ok("tool result fed back to Notion", /OK|SimPart|Output/.test(userMessages[3]), userMessages[3].slice(0, 100).replace(/\n/g, " "));
+    ok("tool result fed back to the site", /OK|SimPart|Output/.test(userMessages[3]), userMessages[3].slice(0, 100).replace(/\n/g, " "));
     await waitFor(() => (w.__rsDiag || []).some((e) => e.event === "loop.end"), 30000, "loop.end");
     const endEv = (w.__rsDiag || []).filter((e) => e.event === "loop.end").pop();
     ok("agent loop ended after the final text reply", !!endEv, JSON.stringify(endEv && endEv.data).slice(0, 160));
@@ -699,7 +490,6 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
     console.error("userMessages:", userMessages.length, "toolCalls:", toolCalls.length);
     console.error("diag tail:", (w.__rsDiagTail || []).slice(-15));
   } finally {
-    console.log("summary:", results.filter((r) => r[1]).length, "pass /", results.filter((r) => !r[1]).length, "fail");
-    setTimeout(() => process.exit(), 50);
+    finish("core-e2e" + TAG, pageErrors);
   }
 })();

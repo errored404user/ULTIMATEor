@@ -22,7 +22,7 @@ for (const f of bundle.js.filter((f) => /src\/core\/(skills\/|studio_bridge\.js|
 vm.runInThisContext(read("src/core/skill_intel.js"), { filename: "skill_intel.js" });
 vm.runInThisContext(read("src/core/public_skills.js"), { filename: "public_skills.js" });
 const SI = window.TotalSkillIntel, PS = window.PublicSkills, PACK = RobloxScriptSkills;
-ok("module exposes window.TotalSkillIntel (analyze / select / answer / rider / plan / validateEnhanced)", SI && ["analyze", "select", "answer", "rider", "plan", "validateEnhanced", "rankPublic", "expertText", "listText"].every((k) => typeof SI[k] === "function") && SI.VERSION === "2.19.0");
+ok("module exposes window.TotalSkillIntel (analyze / select / answer / rider / plan / validateEnhanced)", SI && ["analyze", "select", "answer", "rider", "plan", "validateEnhanced", "rankPublic", "expertText", "listText"].every((k) => typeof SI[k] === "function") && SI.VERSION === "2.20.0");
 ok("module is DOM-free at top level", !/^\s*(const|let|var)?\s*\w*\s*=?\s*document\./m.test(read("src/core/skill_intel.js")) && !/\bdocument\./.test(read("src/core/skill_intel.js")));
 
 // ── 1. catalogue integrity ──
@@ -98,8 +98,8 @@ ok("explain string says when nothing matched (no fake specialist)", /no expert m
 const pubItems = [
   { id: "ps_1", kind: "skill", name: "boss_arena_builder", title: "Boss Arena Builder", tags: ["arena", "boss"], triggers: ["boss arena"], description: "Builds circular boss arenas with pillars and a throne platform.", enabled: true },
   { id: "ps_2", kind: "skill", name: "lantern_row", title: "Lantern Row", description: "Places lanterns along a path.", enabled: true }, // legacy: no tags / triggers
-  { id: "ps_3", kind: "mode", name: "horror", title: "Horror", description: "Horror mode boss arena lanterns", enabled: true }, // retired kind (2.19.0): must be ignored even when its words match
-  { id: "ps_5", kind: "ability", name: "old_ability", title: "Old ability", triggers: ["boss arena"], description: "boss arena lanterns", enabled: true }, // retired kind (2.19.0)
+  { id: "ps_3", kind: "mode", name: "horror", title: "Horror", description: "Horror mode boss arena lanterns", enabled: true }, // retired kind (2.20.0): must be ignored even when its words match
+  { id: "ps_5", kind: "ability", name: "old_ability", title: "Old ability", triggers: ["boss arena"], description: "boss arena lanterns", enabled: true }, // retired kind (2.20.0)
   { id: "ps_4", kind: "skill", name: "disabled_thing", title: "Disabled", tags: ["sword"], description: "sword sword sword", enabled: false },
   null, {}, { name: 5 },
 ];

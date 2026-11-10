@@ -1,5 +1,5 @@
 "use strict";
-// 2.19.0 — shared loader for the SIMULATED benchmarks: evaluates every chat-site
+// 2.20.0 — shared loader for the SIMULATED benchmarks: evaluates every chat-site
 // provider adapter from manifest.json inside a minimal window mock and returns
 // its REAL flags (ids, budgets, command format). Copied from
 // test-provider-bench.js so both benchmarks load exactly the same adapters.
@@ -23,7 +23,7 @@ module.exports = function loadProviders(root) {
   for (const b of manifest.content_scripts.filter((c) => c.world !== "MAIN" && c.js.some((j) => j.includes("src/core/main.js")))) {
     const file = b.js.find((j) => /src\/providers\//.test(j) && !/stream-reader\.js$/.test(j));
     const host = hostOf(b.matches[0]);
-    const pathname = host === "huggingface.co" ? "/chat/" : host === "www.notion.so" ? "/ai" : "/";
+    const pathname = host === "huggingface.co" ? "/chat/" : "/";
     const win = mockWindow(host, pathname), ctx = vm.createContext(win);
     try {
       if (b.js.includes("src/providers/stream-reader.js")) vm.runInContext(read("src/providers/stream-reader.js"), ctx);
