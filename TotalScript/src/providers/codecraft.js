@@ -19,7 +19,7 @@ const RSProvider = (() => {
 
   // 1.99.0: API PROFILES. The same page + adapter can serve any OpenAI-compatible
   // API; keys and chats are stored per profile and only ever sent to that
-  // profile's host. 2.17.0: the DeepSeek API profile was removed - CodeCraft is
+  // profile's host. 2.18.0: the DeepSeek API profile was removed - CodeCraft is
   // the only profile, so the page ignores any `?api=` query.
   const PROFILES = {
     codecraft: {
@@ -435,7 +435,7 @@ const RSProvider = (() => {
   // TotalScript's own command envelopes (###LUA### … ###END_LUA###, ###MCP_TOOL###
   // … ###END_MCP_TOOL###, ###CMD name### … ###END_CMD###) are written as bare text by the model; render them as
   // code blocks so the core can mask them behind a chip like any other site.
-  const MARKER_BLOCK_RE = /(###\s*(?:lua(?:\s*[:\-_ ]\s*(?:edit|client|server))?|mcp_tool|(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*)\s*(?:###|---)[\s\S]*?(?:###\s*end[_\- ]?(?:lua|mcp_tool|cmd|command|tool)\s*###|$))/gi; // 2.17.0: + ###CMD name### … ###END_CMD###
+  const MARKER_BLOCK_RE = /(###\s*(?:lua(?:\s*[:\-_ ]\s*(?:edit|client|server))?|mcp_tool|(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*)\s*(?:###|---)[\s\S]*?(?:###\s*end[_\- ]?(?:lua|mcp_tool|cmd|command|tool)\s*###|$))/gi; // 2.18.0: + ###CMD name### … ###END_CMD###
   function fenceMarkers(src) {
     const parts = String(src || "").split(/```/);
     for (let i = 0; i < parts.length; i += 2) {
@@ -1424,7 +1424,7 @@ const RSProvider = (() => {
 
   function installSendHooks(handlers) { hooks = handlers; }
 
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.17.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.18.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
   function findToolBlockSpot(item) {
     if (!item) return null;
     let parent = null, ref = null;

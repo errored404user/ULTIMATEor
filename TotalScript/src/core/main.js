@@ -1070,14 +1070,14 @@
     templates:{title:"Templates",summary:"Reusable task recipes (name, instructions, steps, commands, variables) saved locally and run from the Templates library in the TotalScript menu.",details:["Open the TotalScript menu → Templates. New template opens the editor with Basics, Instructions, Steps, Project, Commands, Variables, Validation, AI Improvement and Versions tabs.","Templates can be imported/exported as JSON and versioned; AI Improvement asks the current provider for a structurally better draft that you approve before it is saved.","The agent can list and run them with the template_* commands (get_template, template_list, template_run_…) - nothing is mutated without your save."],howTo:["TotalScript menu → Templates → New template","Fill Basics + Instructions, optionally attach a Roblox project in the Project tab","Save, then type the template name or pick it from the library"]},
     commands:{title:"Commands / tool registry",summary:"TotalScript exposes 630+ advertised Studio commands (plus hidden legacy aliases, workspace, template and help tools) through an embedded catalogue in the system prompt (and a broad list_commands on tight providers). Since 1.37.1 the agent never searches commands: the catalogue is final and lookups are answered with the closest signatures plus an instruction to act.",details:["Since 1.33 roomy providers receive a compact command catalogue inside the system prompt (universal block + the active work mode's family as signatures, the rest as names), so the agent no longer starts every session with list_commands; tight-composer providers (Notion, ClickUp, Vani, CodeCraft, NVIDIA) still get the catalogue as the first tool result.","list_commands returns the catalogue for the active work mode: a UNIVERSAL block (42 inspection/scripting/verification commands present in every mode, including inspect_service and query_instances) followed by the mode family.","No command searching (1.37.1): search_commands / get_command / command_registry_stats / generate_command_docs are no longer advertised and list_commands {query} no longer opens a search - the agent gets at most five closest signatures and must act (or use execute_luau). A wrong parameter returns the exact schema in the error, so no lookup is ever needed.","Commands are executed through total-core (127.0.0.1:3000) - either the Studio MCP helper or the TotalScript Studio plugin when it is connected."],howTo:["Ask: 'what can you do with lights'","The agent answers from the catalogue in its instructions and runs the command directly - it does not search"]},
     studio:{title:"Roblox Studio connection",summary:"The browser extension talks to the total-core desktop agent on 127.0.0.1:3000, which bridges to Studio through the Studio MCP helper and the optional TotalScript Studio plugin.",details:["Run total-core (agent/ crate, cargo build) once; it stays in the background and auto-installs plugin/TotalScript.lua into the Studio Plugins folder.","In Studio: Plugins → TotalScript panel → enable; click Allow on the HTTP prompt. The plugin runs execute_luau with plugin-level APIs and adds csg_*, open_script, script_live_update, studio_undo/redo, screenshot_frame, gamepass_handler_create…","total_status / studio_plugin_status report the connection; total_screenshot captures the Studio window through the MCP screen_capture tool."],howTo:["Start total-core","Open the place in Studio and enable the TotalScript plugin","Check the status pill in the TotalScript bar is green, then chat"]},
-    workmode:{title:"Work mode: Totality",summary:"There is ONE built-in work mode, Totality (named Creation until 1.73): the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. Custom Public-Skill modes layer their own mandate on top of it.",details:["Totality runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → total_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Totality automatically; custom modes created on an old base keep working on Totality.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send.","Two more built-in modes sit next to Totality: Blender (1.95.0, stored id blender - Blender-first 3D asset pipeline -> Studio) and Animator (1.99.4, stored id animate - rig -> clip -> animation_preview on the actual rig -> playback code through the Animator -> play-test, on R6 and R15; its RIG and PLAYBACK gates demand a preview and a play-tested playback script). The old pre-1.39 Animator id still migrates to Totality; the new mode is a different id."],howTo:["TotalScript menu → Work mode → Totality (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
+    workmode:{title:"Work mode: Totality",summary:"There is ONE built-in work mode, Totality (named Creation until 1.73): the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. (Custom Public-Skill work modes were retired in 2.18.0 - Public Skills are skills only; their knowledge rides along when the request matches.)",details:["Totality runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → total_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Totality automatically; custom modes created on an old base keep working on Totality.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send.","Two more built-in modes sit next to Totality: Blender (1.95.0, stored id blender - Blender-first 3D asset pipeline -> Studio) and Animator (1.99.4, stored id animate - rig -> clip -> animation_preview on the actual rig -> playback code through the Animator -> play-test, on R6 and R15; its RIG and PLAYBACK gates demand a preview and a play-tested playback script). The old pre-1.39 Animator id still migrates to Totality; the new mode is a different id."],howTo:["TotalScript menu → Work mode → Totality (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
     projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .totalscript-project-reference.json you can re-import."],howTo:["TotalScript menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
     permissions:{title:"Access: Sandbox only / Full PC",summary:"Two states since 1.99.5. Sandbox only (default) = Studio + the workspace folder; commands that leave it (run_command, process_kill, delete_path, move_path, download_file, open_path, execute_blender_code, blender_export_fbx) are refused with ERROR ACCESS_SANDBOX - no approval card. Full PC = those run directly and total-core's FULL PC ACCESS is switched on with it.",details:["Sandbox only never asks and never runs anything on the PC - ideal for Studio-only work; the refusal tells you which step needs Full PC and offers a one-click switch.","Full PC is one switch in two places: Settings → Access and the Session panel's Danger zone. Picking it persists rsPermMode and pushes FULL PC ACCESS to total-core (the agent's own state is mirrored back into the Session panel).","The old Ask state (confirm every write) was removed; a stored 'ask' reads as Sandbox only.","Publishing / marketplace changes always show a confirmation card unless the 'Allow publish automation' switch is on; it auto-denies after 120 s so a hidden card cannot stall the agent."],howTo:["TotalScript menu → Access → Sandbox only / Full PC","Session panel → Danger zone → FULL PC (same switch)"]},
     providers:{title:"Chat providers",summary:"TotalScript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Arena, Notion, Vani, HuggingChat, OpenRouter Chat and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["CodeCraft API (codecraftapi.com) has no web chat, so TotalScript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","Compact composers (Notion, Vani, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the TotalScript bar appears above the composer"]},
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for a publish confirmation card (it auto-denies after 120 s). A PC command refused in Sandbox only is not a wait - the chat gets ERROR ACCESS_SANDBOX at once and a banner offers Switch to Full PC.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
-    publicskills:{title:"Public Skills",summary:"User-made skills, abilities and work modes. Three ways in: describe one in a sentence (AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (it becomes a skill as-is - with AI or instantly without), or import a .txt / .json / share code. Installed items become real commands or selectable work modes. The References section (2.2.2) is your reference library: docs links, notes and Luau / GUI snippets. Attach one to an item and the AI gets it whenever that item runs or is improved; turn on Designing and every new item is designed with it. The AI can read and add entries too (public_skill_reference).",details:["Featured by TotalScript (2.17.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with its docs references: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call (no procedures, no work modes in the pack). Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Installed items are ordinary Public Skills you can edit, improve or delete; the same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path'), pick Auto/Skill/Ability/Mode and press Create with AI - the agent calls public_skill_create and the item is installed immediately.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Turn prompt into a skill (AI)': the agent converts it faithfully (keeps every rule, picks skill/ability/mode, adds params where variables are obvious). 'Save as-is (no AI)' installs it instantly, word-for-word, as an ability (or the kind you picked); the agent can do the same with public_skill_from_prompt {prompt}.","Plain-text format (.txt): '# Title', then 'kind: skill|ability|mode', 'description: ...', optional 'params: count:number=4 \"how many\"', 'tags:', 'base:', 'badge:', 'focus:', 'commands:' lines, then sections '--- luau ---', '--- instructions ---', '--- steps ---' or '--- mandate ---'. Export .txt writes this format; Import reads it (and .md / .json / ORSKILL1: codes).","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param). Ability = reusable procedure the agent follows with real commands. Mode = mandate + focus list layered on Ultimate / Visualizer / Animator, selectable in the TotalScript menu Work mode section.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.<kind>.orskill.json, Share code copies an ORSKILL1: string; Import accepts either. There is no central marketplace.","References (1.99.7): every item can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] (short plain-Luau patterns) and expert (nearest built-in expert, auto-detected). Abilities print them when called, modes carry their own links in the mandate, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them; the card's 'Add docs references' adopts the related expert's links. .txt format: 'references:' lines or a '--- references ---' section ('Title | url'), '--- example Title ---' blocks, 'expert:'.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import. public_skill_test syntax-checks a skill's Luau in Studio before you rely on it."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Turn prompt into a skill (AI), or Save as-is (no AI)","Call the new command by name, or pick the new mode in TotalScript menu → Work mode","Public tab → Export / Share code to give it to someone; they press Import"]},
+    publicskills:{title:"Public Skills",summary:"User-made skills that behave like the built-in ones (2.18.0: skills only - custom abilities and work modes were retired). A public skill = one or more Luau commands run in Studio + triggers (when it applies) + knowledge (what the AI reads when it applies) + a verify block (a self-test that re-checks the result). Three ways in: describe one in a sentence (the AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (the AI designs a skill from it - the prompt becomes its knowledge), or import a SKILL.md / .json / share code. A skill is callable right away but flagged UNVERIFIED until 'Test in Studio' (public_skill_test {dry_run:false}) ran it and its verify block passed on your place; the badge turns VERIFIED, and goes STALE again when the code changes. The References section is your reference library: docs links, notes and Luau / GUI snippets attached to skills.",details:["Featured by TotalScript (2.2.0, knowledge + verify since 2.18.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with docs references, knowledge and a verify block: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call. Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Bundled skills arrive UNVERIFIED like everything else - Test in Studio proves them on your place. The same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path') and press Create with AI - the agent calls public_skill_create with luau + triggers + knowledge + verify, the skill is installed immediately, then it runs public_skill_test to syntax-check it.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Design a skill from it (AI)': public_skill_from_prompt {prompt} hands the agent a design brief - your prompt becomes the skill's knowledge word for word, the agent writes the Luau command(s) and the verify block. 'Save as-is (no AI)' only works when the text already contains Luau (it becomes the command, the prose the knowledge).","SKILL.md (canonical, shareable): YAML frontmatter (name, title, description, version, author, tags, triggers with optional ':weight', params as '- name: type = default \"doc\"', verify.note) + Markdown knowledge + a ```luau fenced block per command (the first is the main command, '## command <name>' headings add sub-commands) + a ```luau verify block. Export writes <name>.SKILL.md, Import reads SKILL.md, legacy .json / .txt and ORSKILL2: share codes (base64 of the SKILL.md). Readable, diff-able, pasteable.","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param; the program returns {ok=true, ...} or {ok=false, error}). Extra commands[] give the skill sub-commands (name, params, luau). Knowledge rides along with the AI's first tool result when the request matches the skill's triggers - exactly how built-in skills work.","Verify: runs after the command with args and result in scope plus find(path), attr(path, name) and check(cond, message); return {ok=true, detail} or raise. public_skill_test {name} = syntax check (SYNTAX OK); {dry_run:false} = real run + verify → VERIFIED / VERIFY_FAILED / RUN_FAILED; a skill without a verify block can only reach RAN. Verification is per device: a shared SKILL.md never carries a VERIFIED badge.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.SKILL.md (JSON available too), Share code copies an ORSKILL2: string; Import accepts SKILL.md, .json, .txt and ORSKILL1/2 codes. There is no central marketplace.","Migration (2.18.0): abilities that contained Luau were converted to skills (Luau → command, instructions → knowledge); prompt-only abilities and custom work modes were removed with a one-time notice in the Public tab that lists them and offers a .json download. Paste the old text into the composer and press Design a skill from it (AI) to rebuild one as a real skill.","References: every skill can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] and expert (nearest built-in expert). They ride with the knowledge, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import/reference. public_skill_list {verified:true} filters; every result carries verification: VERIFIED | UNVERIFIED | STALE."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Design a skill from it (AI)","Press Test in Studio (or ask: test my skill) → VERIFIED when the verify block passes","Call the new command by name - the AI also picks it by its triggers","Public tab → Export SKILL.md / Share code to give it to someone; they press Import and test it on their place"]},
   };
   try { window.__rsFeatureHelpTopics = FEATURE_HELP_TOPICS; } catch {}
   const CREATOR_TOOLS=[
@@ -2045,7 +2045,7 @@
     ],
     focus: /^(animation_|anim_player_install$|rig_|motor6d|eclipse_|sequence_|ability_sequence_|cutscene|camera_(?!shake_preset$)|tween|spring_(create|adjust)$|script_(create|read|check|edit|set_source|module)$|multi_edit$|start_stop_play$|studio_playtest$|get_console_output$|model_prefab$|sfx_|vfx_(play|library_install)$|total_screenshot$|search_game_tree$)/,
   };
-  // 2.17.0 BLOCKBENCH (id "blockbench"): low-poly modeling INSIDE Blockbench
+  // 2.18.0 BLOCKBENCH (id "blockbench"): low-poly modeling INSIDE Blockbench
   // through the jasonjgardner/blockbench-mcp-plugin (Streamable HTTP on
   // localhost, default :3000/bb-mcp). TotalScript's bb_* commands are the
   // surface (validated in src/core/blockbench_mcp.js, run by the worker); the
@@ -2084,7 +2084,7 @@
       return (A.toolList || []).filter((t) => t && t.server === "blender" && !t.hidden);
     } catch { return []; }
   }
-  // 2.17.0: same for the Blockbench family (server "blockbench") in Blockbench mode.
+  // 2.18.0: same for the Blockbench family (server "blockbench") in Blockbench mode.
   function blockbenchModeTools(requested) {
     try {
       if (requested === "blockbench") return [];
@@ -2112,10 +2112,7 @@
   function workModeFocusNames(modeId, names) {
     const mode = WORK_MODES[modeId];
     if (!mode || !mode.focus) return [];
-    // A custom (public) work mode adds its own focus names on top of its base.
-    let customFocus = new Set();
-    try { const pm = typeof window.__rsPublicMode === "function" ? window.__rsPublicMode() : null; if (pm && Array.isArray(pm.focus)) customFocus = new Set(pm.focus); } catch {}
-    return [...new Set(names.filter((n) => n && (mode.focus.test(String(n).replace(/^[^.]*\./, "")) || customFocus.has(String(n).replace(/^[^.]*\./, "")) || isUniversalCommand(n))))].sort();
+    return [...new Set(names.filter((n) => n && (mode.focus.test(String(n).replace(/^[^.]*\./, "")) || isUniversalCommand(n))))].sort();
   }
   // 1.38.0 — MODE EVIDENCE GATE. Each mode defines what "I changed something"
   // and what "I proved it" look like. When a run that mutated things ends with
@@ -2186,7 +2183,7 @@
       nudge: "PLAYBACK: AnimPlayer was installed this run but nothing proves the clips play in game - script_read the playback script, script_check it, then start_stop_play + get_console_output and confirm the track actually played before the final report." },
   ];
   MODE_GATES.animate.push(...MODE_GATES.creation.filter((g) => g.id === "scripts" || g.id === "look"));
-  // 2.17.0 BLOCKBENCH: geometry built this run must have been LOOKED at
+  // 2.18.0 BLOCKBENCH: geometry built this run must have been LOOKED at
   // (bb_screenshot) and must leave Blockbench as a file (bb_export) - the
   // import into Studio is the user's manual step, so no gate claims it.
   MODE_GATES.blockbench = [
@@ -2216,7 +2213,7 @@
         + "\nDo not acknowledge this note; do it, then give the final report with that evidence.";
     } catch { return ""; }
   }
-  // 2.17.0: CREATION TRACKER - per user message: the request → structured spec
+  // 2.18.0: CREATION TRACKER - per user message: the request → structured spec
   // (deliverables, integration checks, stages) + the run tracker that follows
   // every executed command (coverage, integration evidence, static Luau review,
   // bounded creation checks, end-of-run report). Profile = the user's creation
@@ -2703,7 +2700,7 @@
         });
       }
       for (const virtual of [...COMMAND_DISCOVERY_TOOLS, ...STUDIO_ALIAS_TOOLS, ...CREATOR_TOOLS, ...TEMPLATE_AI_TOOLS, ...RELIABILITY_TOOLS, ...PROJECT_REFERENCE_TOOLS]) if (!tools.some((t) => t && t.name === virtual.name)) tools.push(virtual);
-      // Public Skills: user-made skills/abilities become real catalogue entries
+      // Public Skills: user-made skills become real catalogue entries
       // (plus the public_skill_* management tools). Rebuilt on every change by
       // refreshPublicSkillTools below.
       try { if (typeof PublicSkills !== "undefined") for (const virtual of [...PublicSkills.managementTools(), ...PublicSkills.toolEntries()]) if (!tools.some((t) => t && t.name === virtual.name)) tools.push(virtual); } catch (e) { diag("publicSkills.injectFailed", { error: String(e) }); }
@@ -3235,7 +3232,7 @@
   // VFX, UI, animation, motion, ...). Order = catalogue order.
   const COMMAND_FAMILIES = [
     { id: "blender", label: "BLENDER (3D ASSET PIPELINE → STUDIO)", re: /^(blender_|get_scene_info$|get_object_info$|execute_blender_code$|get_viewport_screenshot$|mesh_import_verify$)/ }, // 1.95.0
-    { id: "blockbench", label: "BLOCKBENCH (LOW-POLY MODELS → FILE → STUDIO IMPORT 3D)", re: /^bb_/ }, // 2.17.0: the Blender server's tools + the Studio read-back
+    { id: "blockbench", label: "BLOCKBENCH (LOW-POLY MODELS → FILE → STUDIO IMPORT 3D)", re: /^bb_/ }, // 2.18.0: the Blender server's tools + the Studio read-back
     { id: "script", label: "SCRIPTING", re: /^(script_|multi_edit|module_scaffold|execute_luau|project_health_report|project_index_|tag_scaffold|tag_add|tag_remove|get_service|wait_for_child|log_tag|gc_run)/ },
     { id: "blueprint", label: "SYSTEM BLUEPRINTS", re: /^blueprint_/ },
     { id: "data", label: "DATA, REMOTES, NETWORK & MONETIZATION", re: /^(ds_|datastore_|get_datastore|ordered_(get|set)|session_lock_|session_analytics|remote_|remotes_list|bindable_|leaderstats_|profile_|gamepass_|developer_product|devproduct_|marketplace_|badge_|value_set|replicated_first|server_auto_restart|network_(ping|bandwidth)|premium_check)/ },
@@ -3267,10 +3264,7 @@
   // work mode's focus names get a family of their own at the very top.
   function groupByFamily(entries, modeId, focusSet) {
     const byId = new Map(COMMAND_FAMILIES.map((f) => [f.id, { id: f.id, label: f.label, entries: [] }]));
-    let custom = null;
-    try { const pm = typeof window.__rsPublicMode === "function" ? window.__rsPublicMode() : null; if (pm && Array.isArray(pm.focus) && pm.focus.length) custom = { id: "custom", label: String(pm.title || pm.name || "CUSTOM MODE").toUpperCase() + " FOCUS", entries: [], set: new Set(pm.focus) }; } catch {}
     for (const e of entries) {
-      if (custom && custom.set.has(e.name)) { custom.entries.push(e); continue; }
       byId.get(commandFamily(e.name)).entries.push(e);
     }
     const out = familyOrderFor(modeId).map((id) => byId.get(id)).filter((g) => g && g.entries.length);
@@ -3282,7 +3276,7 @@
     // primitive setters / getters - alphabetical only as the tie-break.
     const w = (e) => (focusSet && focusSet.has(e.name) ? -4 : 0) + signaturePriority(e.name);
     for (const g of out) g.entries.sort((a, b) => w(a) - w(b) || a.name.localeCompare(b.name));
-    return custom && custom.entries.length ? [custom, ...out] : out;
+    return out;
   }
   // Deterministic, explainable tiers (test-catalogue-ranking.js pins them):
   //  -3 generators / whole systems (one call does a lot of work)
@@ -4261,7 +4255,6 @@
   }
   function publicSkillUsage(item) {
     if (!item) return "";
-    if (item.kind === "mode") return `Activate it from the TotalScript menu (Work mode → ${item.title}) or with public_skill_enable {"name":"${item.name}","activate":true}.`;
     const ex = {};
     for (const p of item.params || []) ex[p.name] = p.default !== undefined ? p.default : p.enum && p.enum[0] ? p.enum[0] : p.type === "number" ? 1 : p.type === "boolean" ? true : p.type === "array" ? ["a"] : p.type === "object" ? {} : p.name;
     return `${item.name} ${JSON.stringify(ex)}`;
@@ -4270,29 +4263,94 @@
     const PS = typeof PublicSkills !== "undefined" ? PublicSkills : null;
     const item = PS && PS.find(name);
     if (!item) return `ERROR in ${name}: unknown public skill`;
-    if (item.kind === "ability") {
-      const r = PS.abilityText(item.id, args);
-      if (r.err) return r.err;
-      try { if (typeof PS.recordRun === "function") PS.recordRun(item.id, true); } catch {}
-      try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(item.name, args, true, r.text); } catch {}
-      return `Output of '${item.name}':\n${r.text}`;
-    }
-    const built = PS.buildLuau(item.id, args);
+    const verifying = !!(args && args._totalVerifying); // set by public_skill_test: the verify block decides, no trailing note
+    if (verifying) { args = Object.assign({}, args); delete args._totalVerifying; }
+    // 2.18.0: `name` may be the skill (main command) or one of its extra commands[].
+    const built = PS.buildLuau(name, args);
     if (built.err) return built.err;
-    try { if (typeof window.__rsBeforeTool === "function") window.__rsBeforeTool(item.name, args); } catch {}
+    const cmdName = built.command || item.name;
+    try { if (typeof window.__rsBeforeTool === "function") window.__rsBeforeTool(cmdName, args); } catch {}
     let res = await runTool({ tool: "execute_luau", arguments: { code: built.code, datamodel_type: "Edit", _totalInternal: true } });
     if (typeof res === "string" && res.startsWith("Output of 'execute_luau':")) res = `Output of '${item.name}':` + res.slice("Output of 'execute_luau':".length);
+    if (cmdName !== item.name && typeof res === "string") res = res.replace(/^Output of '[^']*':/, `Output of '${cmdName}':`);
     try {
       const body = String(res || "").replace(/^Output of '[^']*':\n?/, "").trim();
       if (/^\{/.test(body) && body.length < 20000) {
         const j = JSON.parse(body);
-        if (j && j.ok === false) res = `ERROR in ${item.name}: ${String(j.error && typeof j.error === "object" ? (j.error.message || j.error.code || JSON.stringify(j.error)) : (j.error || "skill failed")).slice(0, 600)}\nThis public skill ran but reported the failure above. Check the arguments (${PS.signature(item)}), the target paths, or inspect it with public_skill_get {"name":"${item.name}"}.`;
+        if (j && j.ok === false) res = `ERROR in ${cmdName}: ${String(j.error && typeof j.error === "object" ? (j.error.message || j.error.code || JSON.stringify(j.error)) : (j.error || "skill failed")).slice(0, 600)}\nThis public skill ran but reported the failure above. Check the arguments (${PS.signature(item)}), the target paths, or inspect it with public_skill_get {"name":"${item.name}"}.`;
       }
     } catch {}
     const ok = !String(res || "").startsWith("ERROR") && !String(res || "").includes("ERROR in execute_luau");
     try { if (typeof PS.recordRun === "function") PS.recordRun(item.id, ok, ok ? "" : String(res || "").replace(/^ERROR in [^:]*:\s*/, "").slice(0, 200)); } catch {}
-    try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(item.name, args, ok, res); } catch {}
+    // 2.18.0: an unverified skill is callable, but every successful result says so
+    // (trailing note - the JSON body stays first so PS.parseResult still reads it).
+    try {
+      const ver = PS.verification(item.id);
+      if (ok && typeof res === "string" && ver.state !== "verified" && !verifying) res += `\n[public skill '${item.name}' is ${ver.flag}: this output is not proven by a verify pass - say so when you report, or run public_skill_test {"name":"${item.name}","dry_run":false} to verify it]`;
+    } catch {}
+    try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(cmdName, args, ok, res); } catch {}
     return res;
+  }
+  // 2.18.0: public_skill_test - the self-test that decides the VERIFIED badge.
+  //   dry_run (default)  : compile the command + verify block in Studio → SYNTAX OK
+  //   dry_run=false      : run the command for real, then the verify block with
+  //                        the same args + the command's result table; verify
+  //                        ok=true → markTested("verified"); no verify block →
+  //                        markTested("run") and the skill stays UNVERIFIED.
+  // Nothing here is inferred: every state comes from what Studio returned.
+  async function testPublicSkill(name, args, io) {
+    const PS = PublicSkills;
+    const ref = String(args.name || args.id || "");
+    const found = PS.commandOf(ref);
+    if (!found) return io.fail("NOT_FOUND", [`no public skill or skill command named '${ref}'`]);
+    const item = found.item, cmdName = found.cmd.name;
+    const exec = (code) => runTool({ tool: "execute_luau", arguments: { code, datamodel_type: "Edit", _totalInternal: true } });
+    const isErr = (res) => typeof res !== "string" || res.startsWith("ERROR") || res.includes("ERROR in execute_luau");
+    const done = (obj) => { try { io.announce("tested", PS.get(item.id), []); } catch {} return io.out(obj); };
+    if (args.dry_run !== false) {
+      const built = PS.syntaxCheckLuau(ref, args.args || {});
+      if (built.err) return built.err;
+      const res = await exec(built.code);
+      if (isErr(res)) return typeof res === "string" ? res.replace(/^ERROR in execute_luau/, `ERROR in ${name}`) : io.fail("STUDIO_UNAVAILABLE", ["Studio did not answer - open the place with the TotalScript plugin connected"]);
+      const j = PS.parseResult(res);
+      if (j && j.ok === false) return io.fail("SYNTAX_ERROR", [String(j.error || "syntax error")], `Part: ${j.part || "command"}. Fix the Luau with public_skill_update {"name":"${item.name}","patch":{...}} and test again.`);
+      if (j && j.checked) PS.markTested(item.id, "syntax", `syntax OK (${j.parts || 1} part${j.parts === 1 ? "" : "s"})`);
+      const ver = PS.verification(item.id);
+      return done({ success: true, status: j && j.checked ? "SYNTAX_OK" : "NOT_CHECKED", command: cmdName, verification: ver.state, flag: ver.flag, studio: j || String(res).slice(0, 400), next: `public_skill_test {"name":"${cmdName}","dry_run":false,"args":{...}} runs it for real${item.verify ? " and its verify block decides VERIFIED" : " (add a verify block first: without one the skill can only reach 'ran')"}.` });
+    }
+    // real run
+    const res = await runPublicSkill(cmdName, Object.assign({}, args.args || {}, { _totalVerifying: true }));
+    const runJson = PS.parseResult(res);
+    if (isErr(res) || (runJson && runJson.ok === false)) {
+      const ver = PS.verification(item.id);
+      return io.fail("RUN_FAILED", [String(res || "").replace(/^ERROR in [^:]*:\s*/, "").split("\n")[0].slice(0, 400)], `The command did not succeed, so nothing was verified (state stays ${ver.state}). Full output:\n${String(res || "").slice(0, 3000)}`);
+    }
+    if (!found.cmd.main) {
+      return done({ success: true, status: "RAN", command: cmdName, verification: PS.verification(item.id).state, note: `'${cmdName}' is an extra command of '${item.name}'; the verify block belongs to the main command - run public_skill_test {"name":"${item.name}","dry_run":false} to verify the skill.`, output: runJson || String(res).slice(0, 2000) });
+    }
+    if (!item.verify || !item.verify.luau) {
+      PS.markTested(item.id, "run", "ran OK, no verify block");
+      const ver = PS.verification(item.id);
+      return done({ success: true, status: "RAN_UNVERIFIED", command: cmdName, verification: ver.state, flag: ver.flag, output: runJson || String(res).slice(0, 2000), next: `Add a verify block (public_skill_update {"name":"${item.name}","patch":{"verify":{"luau":"..."}}}) that checks the created instances / properties and returns {ok=true}; then test again to reach VERIFIED.` });
+    }
+    const built = PS.buildVerify(item.id, args.args || {}, runJson);
+    if (built.err) return built.err;
+    const vres = await exec(built.code);
+    const vj = PS.parseResult(vres);
+    if (isErr(vres) || !vj) {
+      PS.markTested(item.id, "run", "ran OK; verify block did not answer");
+      return io.fail("VERIFY_ERROR", [String(vres || "").replace(/^ERROR in [^:]*:\s*/, "").split("\n")[0].slice(0, 400)], `The command ran but the verify block could not be evaluated (state: ${PS.verification(item.id).state}). Command output:\n${String(res).slice(0, 1500)}`);
+    }
+    // VERIFIED needs the verify program's own answer: ok === true AND verify === true
+    // (the wrapper tags it) - anything else, including a foreign JSON, is a failure.
+    if (vj.ok !== true || vj.verify !== true) {
+      PS.markTested(item.id, "run", "verify failed: " + String(vj.error || (vj.verify !== true ? "no verify answer" : "ok was not true")).slice(0, 200));
+      const ver = PS.verification(item.id);
+      return done({ success: false, status: "VERIFY_FAILED", command: cmdName, verification: ver.state, flag: ver.flag, error: String(vj.error || "verify returned ok=false").slice(0, 600), verify: vj, output: runJson || String(res).slice(0, 1500), next: "Either the command did not do what the verify block expects, or the verify block is wrong - fix one of them with public_skill_update and test again. Report this to the user honestly: the skill ran but its result could not be proved." });
+    }
+    PS.markTested(item.id, "verified", String(vj.detail || "verify passed").slice(0, 200));
+    const ver = PS.verification(item.id);
+    return done({ success: true, status: "VERIFIED", command: cmdName, verification: ver.state, flag: ver.flag, verify: vj, output: runJson || String(res).slice(0, 1500), note: "The command ran in Studio and its verify block returned ok=true; the skill now shows VERIFIED (until its code changes)." });
   }
   // 2.2.2: public_skill_reference - the user's reference library (public_refs.js).
   // Pure data ops; nothing in an entry is ever executed. The library is also
@@ -4349,14 +4407,14 @@
       const r = PS.upsert(Object.assign({}, def, { id: undefined }), { source: "ai", reserved: reserved() });
       if (!r.ok) return fail("VALIDATION_FAILED", r.errors, "Fix the definition and call public_skill_create again. Schema reminder:\n" + PS.DEFINITION_DOC);
       refreshPublicSkillTools(); announce("created", r.item, r.warnings);
-      return out({ success: true, status: "INSTALLED", kind: r.item.kind, name: r.item.name, id: r.item.id, version: r.item.version, usage: publicSkillUsage(r.item), warnings: r.warnings, next: r.item.kind === "skill" ? `Run public_skill_test {"name":"${r.item.name}"} to syntax-check it in Studio.` : r.item.kind === "mode" ? "The mode now appears in the Work mode section of the TotalScript menu." : "The ability is callable right away." });
+      const ver = PS.verification(r.item);
+      return out({ success: true, status: "INSTALLED", kind: r.item.kind, name: r.item.name, id: r.item.id, version: r.item.version, commands: PS.signatures(r.item), verification: ver.state, usage: publicSkillUsage(r.item), warnings: r.warnings, next: `Run public_skill_test {"name":"${r.item.name}"} to syntax-check it in Studio; public_skill_test {"name":"${r.item.name}","dry_run":false,"args":{...}} runs it for real and, when the verify block passes, marks it VERIFIED${r.item.verify ? "" : " (add a verify block first - without one it stays UNVERIFIED)"}.` });
     }
     if (op === "list") {
-      const rows = PS.list(args.kind ? { kind: args.kind } : null).map((i) => ({ kind: i.kind, name: i.name, title: i.title, enabled: i.enabled, version: i.version, author: i.author, signature: i.kind === "mode" ? `pm:${i.id}` : PS.signature(i), description: i.description, references: (i.references || []).length, examples: (i.examples || []).length, runs: i.stats ? i.stats.runs : 0 }));
-      const active = PS.activeMode();
-      return out({ success: true, count: rows.length, activeMode: active ? active.name : null, items: rows, hint: rows.length ? "Call a skill/ability by its signature; modes are switched with public_skill_enable {name, activate:true}." : "Nothing installed yet - public_skill_import {data:\"featured\"} installs the bundled Featured pack (7 gameplay systems, 3 procedures, 1 work mode), or design one with public_skill_create / the Public tab." });
+      const rows = PS.list(typeof args.verified === "boolean" ? { verified: args.verified } : null).map((i) => { const v = PS.verification(i); return { name: i.name, title: i.title, enabled: i.enabled, version: i.version, author: i.author, signature: PS.signature(i), commands: PS.signatures(i), verification: v.state, verified_at: v.at || undefined, triggers: i.triggers, has_knowledge: !!i.knowledge, has_verify: !!i.verify, description: i.description, references: (i.references || []).length, examples: (i.examples || []).length, runs: i.stats ? i.stats.runs : 0 }; });
+      return out({ success: true, count: rows.length, items: rows, hint: rows.length ? "Call a skill (or one of its commands) by its signature. verification: verified = ran + verify block passed; unverified / syntax / ran / stale = still callable, say so in reports; public_skill_test {name, dry_run:false} proves it." : "Nothing installed yet - public_skill_import {data:\"featured\"} installs the bundled Featured pack (11 complete gameplay systems, each with knowledge + a verify block), or design one with public_skill_create." });
     }
-    if (op === "get") { const item = PS.get(args.name || args.id); return item ? out({ success: true, item, signature: item.kind === "mode" ? null : PS.signature(item), references: typeof PS.referencesFor === "function" ? PS.referencesFor(item.id, { maxInherited: 4, maxExamples: 0 }) : undefined }) : fail("NOT_FOUND", [`no public skill named '${args.name || args.id}'`]); }
+    if (op === "get") { const item = PS.get(args.name || args.id); return item ? out({ success: true, item, signature: PS.signature(item), commands: PS.signatures(item), verification: PS.verification(item), knowledge_block: PS.knowledgeText(item.id, { budget: 6000, references: false }), references: typeof PS.referencesFor === "function" ? PS.referencesFor(item.id, { maxInherited: 4, maxExamples: 0 }) : undefined }) : fail("NOT_FOUND", [`no public skill named '${args.name || args.id}'`]); }
     if (op === "reference") return runPublicReferenceTool(name, args, { out, fail });
     if (op === "refs") {
       const item = PS.find(args.name || args.id);
@@ -4381,27 +4439,15 @@
       const r = PS.setEnabled(args.name || args.id, on);
       if (!r.ok) return fail("NOT_FOUND", r.errors);
       refreshPublicSkillTools();
-      let activated = false;
-      if (r.item.kind === "mode" && on && args.activate) { try { if (typeof window.__rsSetWorkMode === "function") { window.__rsSetWorkMode("pm:" + r.item.id); activated = true; } } catch {} }
       announce("toggled", r.item);
-      return out({ success: true, name: r.item.name, enabled: r.item.enabled, activated });
+      return out({ success: true, name: r.item.name, enabled: r.item.enabled, commands: PS.signatures(r.item) });
     }
-    if (op === "test") {
-      const item = PS.find(args.name || args.id);
-      if (!item) return fail("NOT_FOUND", [`no public skill named '${args.name || args.id}'`]);
-      if (item.kind !== "skill") return out({ success: true, status: "NOT_APPLICABLE", note: `${item.kind}s have no Luau to test; call ${item.kind === "ability" ? PS.signature(item) : "public_skill_enable"} instead.` });
-      if (args.dry_run === false) return await runPublicSkill(item.name, args.args || {});
-      const built = PS.syntaxCheckLuau(item.id, args.args || {});
-      if (built.err) return built.err;
-      let res = await runTool({ tool: "execute_luau", arguments: { code: built.code, datamodel_type: "Edit", _totalInternal: true } });
-      if (typeof res === "string") res = res.replace(/^Output of 'execute_luau':/, `Output of '${name}':`);
-      return res;
-    }
+    if (op === "test") return await testPublicSkill(name, args, { out, fail, announce });
     if (op === "export") {
       const ref = String(args.name || args.id || "");
-      if (/^(all|\*|everything)$/i.test(ref)) { const o = PS.exportPackObject(); if (!o) return fail("NOTHING_TO_EXPORT", ["no public skills installed"]); return out({ success: true, pack: true, count: o.count, fileName: PS.packFileName(), shareCode: PS.packShareCode(), json: o, howToShare: "Give the file or the share code to another TotalScript user; they use Public tab → Import / Paste share code (or public_skill_import)." }); }
+      if (/^(all|\*|everything)$/i.test(ref)) { const o = PS.exportPackObject(); if (!o) return fail("NOTHING_TO_EXPORT", ["no public skills installed"]); return out({ success: true, pack: true, count: o.count, fileName: PS.packFileName(), skillsMd: PS.exportPackText(), shareCode: PS.packShareCode(), jsonFileName: PS.packJsonFileName(), json: o, howToShare: "Give the file or the share code to another TotalScript user; they use Public tab → Import / Paste share code (or public_skill_import)." }); }
       const o = PS.exportObject(ref); if (!o) return fail("NOT_FOUND", [`no public skill named '${ref}'`]);
-      return out({ success: true, fileName: PS.fileName(ref), shareCode: PS.shareCode(ref), json: o, howToShare: "Give the file or the share code to another TotalScript user; they use Public tab → Import / Paste share code (or public_skill_import)." });
+      return out({ success: true, fileName: PS.fileName(ref), skillMd: PS.toSkillMd(ref), shareCode: PS.shareCode(ref), jsonFileName: PS.jsonFileName(ref), json: o, verification: PS.verification(ref).state, howToShare: "SKILL.md is the canonical format: give the file (or paste its text / the ORSKILL2: share code) to another TotalScript user; they use Public tab → Import / Paste (or public_skill_import). A verification pass never travels - the receiver tests it on their own place." });
     }
     if (op === "import") {
       // 2.2.0: the bundled Featured pack installs by name - {data:"featured"} / {pack:"featured"} /
@@ -4420,18 +4466,21 @@
       const r = PS.importShared(importText, { reserved: reserved(), replace: !!args.replace });
       if (!r.ok) return fail("IMPORT_FAILED", r.errors && r.errors.length ? r.errors : [r.duplicate ? `'${r.duplicate.name}' is already installed - pass replace:true to overwrite` : "nothing imported"]);
       refreshPublicSkillTools();
-      if (r.pack) { for (const it of r.installed) announce("imported", it, []); return out({ success: true, status: "INSTALLED", pack: true, installed: r.installed.map((i) => ({ kind: i.kind, name: i.name, usage: publicSkillUsage(i) })), skipped: r.skipped, errors: r.errors, warnings: r.warnings }); }
+      if (r.pack) { for (const it of r.installed) announce("imported", it, []); return out({ success: true, status: "INSTALLED", pack: true, installed: r.installed.map((i) => ({ name: i.name, commands: PS.signatures(i), verification: PS.verification(i).state, usage: publicSkillUsage(i) })), skipped: r.skipped, errors: r.errors, warnings: r.warnings, note: "Imported skills start UNVERIFIED on this device - public_skill_test {name, dry_run:false} proves them here." }); }
       announce("imported", r.item, r.warnings);
-      return out({ success: true, status: "INSTALLED", kind: r.item.kind, name: r.item.name, usage: publicSkillUsage(r.item), warnings: r.warnings });
+      return out({ success: true, status: "INSTALLED", kind: r.item.kind, name: r.item.name, commands: PS.signatures(r.item), verification: PS.verification(r.item).state, usage: publicSkillUsage(r.item), warnings: r.warnings, next: `public_skill_test {"name":"${r.item.name}","dry_run":false} runs it here and, when its verify block passes, marks it VERIFIED on this device.` });
     }
     if (op === "from_prompt") {
-      const text = String(args.prompt || args.text || args.data || "");
-      const r = PS.installFromPrompt(text, { kind: args.kind, title: args.title, name: args.name, description: args.description, reserved: reserved(), source: "ai" });
-      if (!r.ok) return fail("CONVERSION_FAILED", r.errors, "Pass the full prompt text in {prompt}; optional kind (skill|ability|mode), title, name. Or design it yourself with public_skill_create.");
-      refreshPublicSkillTools(); announce("created", r.item, r.warnings);
-      return out({ success: true, status: "INSTALLED", kind: r.item.kind, name: r.item.name, id: r.item.id, usage: publicSkillUsage(r.item), warnings: r.warnings, note: "The prompt was stored verbatim (no redesign). Refine fields with public_skill_update {name, patch} if the user wants params, Luau or a tighter mandate." });
+      // 2.18.0: nothing is installed here - the AI gets the DESIGN BRIEF (the
+      // prompt becomes the knowledge; it must write the Luau + verify block)
+      // and installs the result with public_skill_create.
+      const text = String(args.prompt || args.text || args.data || "").trim();
+      if (text.length < 20) return fail("PROMPT_TOO_SHORT", ["pass the full prompt text in {prompt} (at least 20 characters)"]);
+      const names = (() => { try { return [...reserved()].filter((n) => /^[a-z][a-z0-9_]+$/.test(n)).slice(0, 60); } catch { return []; } })();
+      const brief = PS.conversionPrompt(text, "skill", { commandNames: names, title: args.title, name: args.name });
+      return out({ success: true, status: "DESIGN_BRIEF", installed: false, next: "Follow the brief: design the skill (knowledge = the prompt, Luau command(s), verify block, triggers), then call public_skill_create {definition}, then public_skill_test.", brief });
     }
-    if (op === "run") { const item = PS.find(args.name || args.id); if (!item) return fail("NOT_FOUND", [`no public skill named '${args.name || args.id}'`]); return await runPublicSkill(item.name, args.args || {}); }
+    if (op === "run") { const item = PS.find(args.name || args.id); if (!item) return fail("NOT_FOUND", [`no public skill named '${args.name || args.id}'`]); return await runPublicSkill(String(args.name || item.name), args.args || {}); }
     return fail("UNKNOWN_OPERATION", [`'${name}' is not a public_skill command`], "Available: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import.");
   }
 
@@ -5160,7 +5209,7 @@
       // only listed when asked for by exact name.
       const allScoped = A.toolList.filter((t) => (t.server || curEng) === requested && (!t.hidden || String(t.name || "").toLowerCase() === commandQuery));
       allScoped.push(...blenderModeTools(requested)); // 1.95.0: Blender mode lists the Blender family in the default catalogue
-      allScoped.push(...blockbenchModeTools(requested)); // 2.17.0: Blockbench mode lists the bb_* family
+      allScoped.push(...blockbenchModeTools(requested)); // 2.18.0: Blockbench mode lists the bb_* family
       const queryTerms = commandQuery.split(/\s+/).filter(Boolean);
       const queryMatches = (value) => !queryTerms.length
         || queryTerms.every((term) => String(value || "").toLowerCase().includes(term));
@@ -5438,7 +5487,7 @@
       return res;
       }
     }
-    // 2.17.0 Blockbench: bb_* never touch the Studio / AgentScript sockets. The
+    // 2.18.0 Blockbench: bb_* never touch the Studio / AgentScript sockets. The
     // worker validates the arguments (blockbench_mcp.js) and runs the plugin's
     // real tools; here we only make sure the link is up and shape the answer.
     if (/^bb_[a-z_]+$/.test(bareName)) {
@@ -6258,7 +6307,7 @@
             base = await submitAndGetBase(RS.FEEDBACK.guiBriefAct + (state ? "\n" + state : ""));
             continue;
           }
-          // 2.17.0: CREATION COVERAGE GATE - the request's deliverables (spec)
+          // 2.18.0: CREATION COVERAGE GATE - the request's deliverables (spec)
           // against the command log: an item nobody built, an item built but
           // never read back (High+), a missing integration (GUI ↔ server remote,
           // DataStore ↔ pcall, sound never played …). Bounded by the creation
@@ -6306,7 +6355,7 @@
               continue;
             }
           }
-          // 2.17.0: CREATION REPORT - one honest block per run with deliverables
+          // 2.18.0: CREATION REPORT - one honest block per run with deliverables
           // (built / read back / audited / missing), integration evidence, the
           // static-review tally and the rounds used. Shown in the Activity tab
           // + the popup Activity Center; never sent to the model.
@@ -6461,7 +6510,7 @@
           // 1.99.9: mode auto-check (read the created path back) - appended AFTER
           // compression so the fact line is never the part that gets dropped.
           try { feedback = await attachModeAutoCheck(call.tool, call.arguments, feedback); } catch {}
-          // 2.17.0: creation tracker - records the step for coverage / integration
+          // 2.18.0: creation tracker - records the step for coverage / integration
           // and appends the static Luau review of the source the model sent
           // (bounded per run by the creation profile; never on failed writes).
           try { if (A.creation) { const o = A.creation.observe(call, feedback, { ms: Date.now() - A.toolStart }); if (o && o.note) { feedback += "\n" + o.note; diag("creation.review", { tool: call.tool, findings: o.event.findings, chars: o.note.length }); } } } catch {}
@@ -6635,7 +6684,16 @@
                   else if (gui) diag("gui.briefSkipped", { chars: gui.length, cap });
                 }
               }
-              // 2.17.0: the CREATION SPEC rides last - the deliverables the request
+              // 2.18.0: PUBLIC SKILL KNOWLEDGE - when an installed public skill's
+              // triggers / name match the request, its knowledge rides along
+              // (same budget), so a user-made skill behaves like a built-in one.
+              if (rider && !A.task.explainOnly && typeof PublicSkills !== "undefined" && typeof PublicSkills.knowledgeRider === "function") {
+                let reqText = ""; try { reqText = String((window.__rsTaskText && window.__rsTaskText()) || ""); } catch {}
+                const pk = PublicSkills.knowledgeRider(reqText, { tight });
+                if (pk && toSend.length + pk.length + 2 <= cap) { toSend += "\n\n" + pk; diag("publicSkill.knowledgeSent", { chars: pk.length, tight }); }
+                else if (pk) diag("publicSkill.knowledgeSkipped", { chars: pk.length, cap });
+              }
+              // 2.18.0: the CREATION SPEC rides last - the deliverables the request
               // names, the command family that builds and the one that proves each,
               // the integration checks and the stage order. Only for requests with
               // enough deliverables (profile.briefMin), same send budget.
@@ -6854,7 +6912,7 @@
         const requested = engine === "local" ? "local" : "roblox";
         const allScoped = A.toolList.filter((t) => t && (t.server || requested) === requested && !t.hidden);
         allScoped.push(...blenderModeTools(requested)); // 1.95.0: Blender mode embeds the Blender family too
-        allScoped.push(...blockbenchModeTools(requested)); // 2.17.0: Blockbench mode embeds the bb_* family too
+        allScoped.push(...blockbenchModeTools(requested)); // 2.18.0: Blockbench mode embeds the bb_* family too
         if (!allScoped.length) return "";
         const animLines = requested === "roblox" && typeof RSAnim !== "undefined" ? RSAnim.describeCommands() : [];
         const skillLines = requested === "roblox" && typeof RobloxScriptSkills !== "undefined" ? RobloxScriptSkills.describeCommands() : [];
@@ -8636,19 +8694,21 @@
           // ── Public Skills tab ──
           if (typeof PublicSkills !== "undefined") {
             const pubCreate=e.target.closest&&e.target.closest("[data-public-create]");
-            if(pubCreate){e.stopPropagation();const ta=cardsPanel.querySelector("#rs-public-prompt");const text=String(ta&&ta.value||"").trim();publicKind=(cardsPanel.querySelector("#rs-public-kind")||{}).value||"auto";if(text.length<8){toast("Describe the skill, ability or mode in a sentence — or paste a whole prompt");try{ta&&ta.focus();}catch{}return;}const convert=publicIsConvert(text);publicDraft="";publicHow="auto";runLibraryCard({engine:"rs",icon:"P",cat:"Public Skills",title:convert?"Turn my prompt into a public skill":publicKind==="auto"?"Create a public skill":`Create public ${publicKind}`,desc:(convert?"Convert: ":"")+text.slice(0,90),prompt:publicGenerationPrompt(text,publicKind)},true);return;}
+            if(pubCreate){e.stopPropagation();const ta=cardsPanel.querySelector("#rs-public-prompt");const text=String(ta&&ta.value||"").trim();if(text.length<8){toast("Describe the skill in a sentence — or paste a whole prompt / a SKILL.md");try{ta&&ta.focus();}catch{}return;}if(PublicSkills.isSkillMd(text)){publicImportText(text,"pasted SKILL.md");publicDraft="";renderCards(cardsPanel);return;}const convert=publicIsConvert(text);publicDraft="";publicHow="auto";runLibraryCard({engine:"rs",icon:"P",cat:"Public Skills",title:convert?"Design a public skill from my prompt":"Create a public skill",desc:(convert?"From prompt: ":"")+text.slice(0,90),prompt:publicGenerationPrompt(text,publicKind)},true);return;}
             const pubHow=e.target.closest&&e.target.closest("[data-public-how]");
             if(pubHow){e.stopPropagation();publicHow=pubHow.dataset.publicHow||"auto";const ta=cardsPanel.querySelector("#rs-public-prompt");if(ta)publicDraft=ta.value;renderCards(cardsPanel);return;}
             const pubExample=e.target.closest&&e.target.closest("[data-public-example]");
             if(pubExample){e.stopPropagation();publicDraft=pubExample.dataset.publicExample||"";publicHow="auto";renderCards(cardsPanel);try{const ta=cardsPanel.querySelector("#rs-public-prompt");if(ta)ta.focus();}catch{}return;}
             const pubSaveText=e.target.closest&&e.target.closest("[data-public-save-text]");
-            if(pubSaveText){e.stopPropagation();const ta=cardsPanel.querySelector("#rs-public-prompt");const text=String(ta&&ta.value||"").trim();publicKind=(cardsPanel.querySelector("#rs-public-kind")||{}).value||"auto";if(text.length<20){toast("Paste or type the full prompt first (at least 20 characters)");try{ta&&ta.focus();}catch{}return;}if(publicSaveAsIs(text))renderCards(cardsPanel);return;}
+            if(pubSaveText){e.stopPropagation();const ta=cardsPanel.querySelector("#rs-public-prompt");const text=String(ta&&ta.value||"").trim();if(text.length<20){toast("Paste the full prompt (with its Luau) or a SKILL.md first (at least 20 characters)");try{ta&&ta.focus();}catch{}return;}if(publicSaveAsIs(text))renderCards(cardsPanel);return;}
             const pubLoadText=e.target.closest&&e.target.closest("[data-public-load-text]");
             if(pubLoadText){e.stopPropagation();publicPickFile();return;}
             const pubManual=e.target.closest&&e.target.closest("[data-public-manual]");
-            if(pubManual){e.stopPropagation();const k=(cardsPanel.querySelector("#rs-public-kind")||{}).value;openPublicEditor(null,k==="ability"||k==="mode"?k:"skill");return;}
+            if(pubManual){e.stopPropagation();openPublicEditor(null,"skill");return;}
+            const pubMig=e.target.closest&&e.target.closest("[data-public-migration]");
+            if(pubMig){e.stopPropagation();const what=pubMig.getAttribute("data-public-migration");if(what==="download"){const json=PublicSkills.migrationArchiveJson();if(!json)return toast("Nothing to download");const blob=new Blob([json],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="totalscript-retired-abilities-modes.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast("Saved the retired abilities / modes as JSON (for your records)");}else{PublicSkills.dismissMigration();renderCards(cardsPanel);}return;}
             const pubExportAll=e.target.closest&&e.target.closest("[data-public-export-all]");
-            if(pubExportAll){e.stopPropagation();const json=PublicSkills.exportPackJson();if(!json)return toast("Nothing to export");const blob=new Blob([json],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=PublicSkills.packFileName();a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(`Exported ${PublicSkills.list().length} item(s) to ${PublicSkills.packFileName()}`);return;}
+            if(pubExportAll){e.stopPropagation();const json=PublicSkills.exportPackText();if(!json)return toast("Nothing to export");const blob=new Blob([json],{type:"text/markdown"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=PublicSkills.packFileName();a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(`Exported ${PublicSkills.list().length} item(s) to ${PublicSkills.packFileName()}`);return;}
             const pubShareAll=e.target.closest&&e.target.closest("[data-public-share-all]");
             if(pubShareAll){e.stopPropagation();const code=PublicSkills.packShareCode();if(!code)return toast("Nothing to share");(async()=>{try{await navigator.clipboard.writeText(code);toast(`Share code for ${PublicSkills.list().length} item(s) copied (${code.length} chars)`);}catch{prompt("Copy this share code:",code);}})();return;}
             const featSummary=e.target.closest&&e.target.closest("[data-public-featured] > summary");
@@ -8672,7 +8732,7 @@
             const pubAction=pubRow&&e.target.closest&&e.target.closest("[data-public-action]");
             if(pubRow&&pubAction){e.stopPropagation();const item=PublicSkills.get(pubRow.dataset.publicId);if(!item)return renderCards(cardsPanel);const act=pubAction.dataset.publicAction;
               if(act==="run")publicRun(item);
-              else if(act==="activate"){const active=PublicSkills.activeMode();setWorkMode(active&&active.id===item.id?workMode:"pm:"+item.id);}
+              else if(act==="test")publicTest(item);
               else if(act==="improve")publicImprove(item);
               else if(act==="edit")openPublicEditor(item);
               else if(act==="refs"){const r=PublicSkills.adoptSuggested(item.id,4);toast(r.ok?`Added ${r.added} verified docs link${r.added===1?"":"s"} from the built-in ${r.expert} expert to '${item.name}'`:String(r.errors&&r.errors[0]||"No references to add"));}
@@ -8680,7 +8740,7 @@
               else if(act==="export")publicDownload(item.id);
               else if(act==="export-text")publicDownloadText(item.id);
               else if(act==="share")publicCopyShare(item.id);
-              else if(act==="delete"){if(confirm(`Delete public ${item.kind} “${item.title}”? Export it first if you want to keep a copy.`)){PublicSkills.remove(item.id);}}
+              else if(act==="delete"){if(confirm(`Delete public skill “${item.title}”? Export it first if you want to keep a copy.`)){PublicSkills.remove(item.id);}}
               renderCards(cardsPanel);return;}
             const pubTa=e.target.closest&&e.target.closest("#rs-public-prompt");if(pubTa){e.stopPropagation();return;}
           }
@@ -8925,7 +8985,7 @@
     // reload - they used to silently reset to these defaults on every page
     // refresh because only the setters ever touched chrome.storage.
     let autoFixEnabled = true, extraThinking = false, planMode = false, steeringMode = false, forgeMode = false, autoFixStopPlay = true, autoDebugEnabled = true, multiAgent = false, guiBriefEnabled = true;
-    // 2.17.0: creation quality profile (TotalCreation.PROFILES) - how strictly a
+    // 2.18.0: creation quality profile (TotalCreation.PROFILES) - how strictly a
     // run is checked against the request's deliverables. Persisted; shared
     // with the popup (rsCreationProfile); always capped by the provider.
     let creationProfile = "high";
@@ -9300,17 +9360,11 @@
         ? "\u{1F310} Background mode ON \u2014 the agent keeps working while you're on other sites"
         : "Background mode OFF \u2014 the agent pauses when this tab is hidden");
     }
-    // Custom (public) work modes are addressed as "pm:<id>"; they run on top of
-    // one of the built-in modes (their `base`), which stays the real workMode.
-    function publicMode(){ try { return typeof PublicSkills !== "undefined" ? PublicSkills.activeMode() : null; } catch { return null; } }
+    // 2.18.0: custom (public) work modes were retired; a stale "pm:<id>" stored
+    // before the upgrade simply normalises to the built-in default.
     function setWorkMode(id, silent){
-      let custom = null;
-      if (typeof id === "string" && id.startsWith("pm:")) {
-        try { custom = typeof PublicSkills !== "undefined" ? PublicSkills.get(id.slice(3)) : null; } catch {}
-        if (!custom || custom.kind !== "mode") { toast("That custom work mode is not installed any more"); id = workMode; }
-      }
-      workMode = normalizeWorkMode(custom ? custom.base : id);
-      try { if (typeof PublicSkills !== "undefined") PublicSkills.setActiveMode(custom ? custom.id : null); } catch {}
+      if (typeof id === "string" && id.startsWith("pm:")) { toast("Custom work modes were retired in 2.18.0 - Public Skills are skills only"); id = workMode; }
+      workMode = normalizeWorkMode(id);
       try { chrome.storage.local.set({rsWorkMode: workMode}); } catch {}
       try { window.__rsWorkMode = () => workMode; } catch {}
       syncWorkModeUi();
@@ -9320,7 +9374,7 @@
       // re-sending the whole system prompt (see withSysResend).
       try { if (A.started || A.running) { A.workModeSwitchPending = true; A.forceSysResend = true; } } catch {}
       try { updateExtraButton(); } catch {}
-      if (!silent) { try { playSfx("special"); } catch {} toast(custom ? custom.toast : WORK_MODES[workMode].toast); }
+      if (!silent) { try { playSfx("special"); } catch {} toast(WORK_MODES[workMode].toast); }
     }
     try { window.__rsSetWorkMode = (id) => setWorkMode(id); } catch {}
     try { window.__rsSetPermMode = (id) => setPermMode(id); } catch {}
@@ -9355,13 +9409,11 @@
     function syncWorkModeUi(){
       try { renderModeGates(); } catch {}
       const mode = WORK_MODES[workMode] || WORK_MODES.creation;
-      const pm = publicMode();
       try { document.documentElement.setAttribute("data-rs-work", workMode); } catch {}
-      try { document.documentElement.toggleAttribute("data-rs-public-mode", !!pm); } catch {}
       const badge = uiEl("rs-work-badge");
       if (badge) {
-        badge.textContent = pm ? pm.badge : mode.badge; badge.dataset.work = workMode; badge.hidden = !(pm ? pm.badge : mode.badge);
-        badge.title = pm ? `${pm.title} — custom work mode on ${mode.name} — ${pm.sub}` : mode.name + " work mode — " + mode.sub;
+        badge.textContent = mode.badge; badge.dataset.work = workMode; badge.hidden = !mode.badge;
+        badge.title = mode.name + " work mode — " + mode.sub;
       }
     }
     function setExtraThinking(v){ extraThinking=!!v; try{chrome.storage.local.set({rsExtraThinking: extraThinking});}catch{}; try{ window.__rsExtraThinking = () => extraThinking; }catch{}; buildMenu(); updateExtraButton(); renderBar(); toast(v ? "Think ON — it will grill every solution" : "Think off"); markModesChanged(); }
@@ -9756,7 +9808,7 @@
             </div>`;
     }
     try { window.__rsBlender = () => blenderConnected(); } catch {}
-    // 2.17.0 Blockbench MCP card (Settings → MCP servers), same visual
+    // 2.18.0 Blockbench MCP card (Settings → MCP servers), same visual
     // language as the Blender card. Offline = three steps + the URL field;
     // connected = what the link unlocks + the live plugin tool count.
     function blockbenchConnected() {
@@ -10055,7 +10107,7 @@
         try { toast("Back to the default look"); } catch {}
       });
     }
-    // 2.17.0: Creation quality section - four profiles that change what the
+    // 2.18.0: Creation quality section - four profiles that change what the
     // creation engine demands of a run (rounds, read-back, integration, audit).
     function creationSectionHtml() {
       if (typeof TotalCreation === "undefined") return "";
@@ -10217,14 +10269,13 @@
              <div class="rs-donate-foot">Thank you to everyone who already chipped in.</div>
             </section>
             <section class="rs-menu-sec">
-              <div class="rs-sec-label"><span>Work mode</span><span class="rs-sec-state">${(() => { const pm = publicMode(); return pm ? escRs(pm.title) + " · " + WORK_MODES[workMode].short : WORK_MODES[workMode].short; })()}</span></div>
+              <div class="rs-sec-label"><span>Work mode</span><span class="rs-sec-state">${WORK_MODES[workMode].short}</span></div>
               <div class="rs-work-row rs-work-creation rs-work-modes" role="radiogroup" aria-label="Work mode">
-                ${WORK_MODE_IDS.map((id) => `<button type="button" class="rs-work-card ${workMode===id&&!publicMode()?"on":""}" data-work="${id}" role="radio" aria-checked="${workMode===id&&!publicMode()?"true":"false"}"><span class="rs-work-name">${WORK_MODES[id].name}</span><span class="rs-work-sub">${WORK_MODES[id].sub}</span></button>`).join("")}
-                ${(() => { let customs = []; try { customs = typeof PublicSkills !== "undefined" ? PublicSkills.modes().filter((m) => m.enabled) : []; } catch {} const pm = publicMode(); return customs.map((m) => `<button type="button" class="rs-work-card rs-work-custom ${pm&&pm.id===m.id?"on":""}" data-work="pm:${m.id}" role="radio" aria-checked="${pm&&pm.id===m.id?"true":"false"}" title="Custom mode on ${escRs(WORK_MODES[normalizeWorkMode(m.base)].name)}"><span class="rs-work-name">${escRs(m.title)} <small>public</small></span><span class="rs-work-sub">${escRs(m.sub || m.description)}</span></button>`).join(""); })()}
+                ${WORK_MODE_IDS.map((id) => `<button type="button" class="rs-work-card ${workMode===id?"on":""}" data-work="${id}" role="radio" aria-checked="${workMode===id?"true":"false"}"><span class="rs-work-name">${WORK_MODES[id].name}</span><span class="rs-work-sub">${WORK_MODES[id].sub}</span></button>`).join("")}
               </div>
               ${(() => { const st = (WORK_MODES[workMode] && WORK_MODES[workMode].starters) || []; return st.length ? `<div class="rs-work-starters" aria-label="${WORK_MODES[workMode].name} quick starts"><span class="rs-work-starters-label">Quick starts</span>${st.map((q, i) => `<button type="button" class="rs-work-starter" data-work-starter="${i}" title="${escRs(q.prompt)}">${escRs(q.label)}</button>`).join("")}</div>` : ""; })()}
               ${(() => { try { const d = typeof TotalWorkModes !== "undefined" && TotalWorkModes.DOES[workMode]; return d ? `<div class="rs-menu-note rs-work-does"><b>What ${escRs(WORK_MODES[workMode].name)} does while it runs:</b> ${escRs(d)}</div>` : ""; } catch { return ""; } })()}
-              <div class="rs-menu-note rs-work-public-note">Make your own mode, skill or ability: open the cards panel → <b>Public</b> tab and describe it — the AI builds and installs it.</div>
+              <div class="rs-menu-note rs-work-public-note">Make your own skill (Luau command + triggers + knowledge + self-test): open the cards panel → <b>Public</b> tab and describe it — the AI builds and installs it.</div>
             </section>
             ${reasoningSectionHtml()}
             <section class="rs-menu-sec">
@@ -10510,7 +10561,7 @@
       if (blenderSite) blenderSite.addEventListener("click", () => {
         try { window.open("https://www.blender.org/", "_blank", "noopener"); } catch {}
       });
-      // ── Blockbench MCP card (2.17.0) ──
+      // ── Blockbench MCP card (2.18.0) ──
       const bbBtn = menuEl.querySelector("#rs-mcp-blockbench");
       const bbCard = menuEl.querySelector("#rs-blockbench-card");
       const bbNote = menuEl.querySelector("#rs-blockbench-note");
@@ -10822,17 +10873,15 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       return `<section class="rs-template-library" aria-label="Template library"><div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div><b>Your templates</b><span class="rs-template-count" data-template-count>${count}</span></div><p>Create, review and run reusable workflows — one click runs the whole thing with real commands.</p></div><div class="rs-template-head-actions"><button type="button" class="rs-btn-primary rs-btn-create" data-template-add>Create template</button><button type="button" class="rs-btn-secondary rs-btn-ai" data-template-ai-create>Create with AI</button></div></header><div class="rs-template-toolbar"><label class="rs-template-search"><span class="rs-sr-only">Search templates</span><input id="rs-cards-search" type="search" placeholder="Search your templates" value="${escRs(cardsQuery)}" spellcheck="false"></label><label class="rs-template-filter"><span class="rs-sr-only">Filter templates by category</span><select id="rs-template-category"><option value="All">All categories</option>${TotalTemplateRegistry.categories().map(x=>`<option ${cardsCategory===x?"selected":""}>${escRs(x)}</option>`).join("")}<option ${cardsCategory==='Archived'?"selected":""}>Archived</option></select></label><button type="button" class="rs-template-project-import" title="Analyze a .rbxl / .rbxlx locally (or load an exported reference) and review it as a Template draft" data-project-import>Roblox project</button><button type="button" class="rs-template-export-all" data-template-export-all>Export all</button><span class="rs-sr-only">Template file</span><button type="button" class="rs-template-import" data-template-import>Import template</button></div>${templateChipsHtml()}</div><div id="rs-cards-grid-wrap">${gridHtml()}</div>${ideaGeneratorHtml()}</section>`;
     }
 
-    // ── Public Skills tab (user-made skills / abilities / work modes) ──
+    // ── Public Skills tab (user-made skills: commands + triggers + knowledge + verify) ──
     function publicCount(){ try { return typeof PublicSkills !== "undefined" ? PublicSkills.list().length : 0; } catch { return 0; } }
     function publicExampleArgs(item){ const ex = {}; for (const p of item.params || []) ex[p.name] = p.default !== undefined ? p.default : p.enum && p.enum[0] ? p.enum[0] : p.type === "number" ? 1 : p.type === "boolean" ? true : p.type === "array" ? ["a"] : p.type === "object" ? {} : p.name; return ex; }
     function publicReserved(){ try { return typeof window.__rsBuiltinToolNames === "function" ? window.__rsBuiltinToolNames() : new Set(); } catch { return new Set(); } }
     function publicCommandSample(){ try { return [...publicReserved()].filter((n) => /^[a-z][a-z0-9_]+$/.test(n)).slice(0, 80); } catch { return []; } }
     const PUBLIC_SKELETONS = {
-      skill: { kind: "skill", name: "my_skill", title: "My Skill", description: "What it does and when to use it (10-600 chars).", params: [{ name: "path", type: "string", description: "Full instance path, e.g. Workspace.Model", required: true }, { name: "count", type: "number", description: "How many", default: 3 }], luau: "-- {{path}} and {{count}} are replaced with Lua literals; also available as args.path / args.count\nlocal target = game\nfor seg in string.gmatch({{path}}, '[^.]+') do\n  target = target:FindFirstChild(seg)\n  if not target then return {ok = false, error = 'path not found: ' .. {{path}}} end\nend\nlocal made = 0\nfor i = 1, {{count}} do\n  local part = Instance.new('Part')\n  part.Name = 'MySkillPart_' .. i\n  part.Anchored = true\n  part.Position = target:IsA('BasePart') and target.Position + Vector3.new(i * 5, 0, 0) or Vector3.new(i * 5, 5, 0)\n  part.Parent = target\n  made += 1\nend\nreturn {ok = true, created = made, parent = target:GetFullName()}" },
-      ability: { kind: "ability", name: "my_ability", title: "My Ability", description: "A reusable procedure the agent follows with real commands.", params: [{ name: "target", type: "string", description: "What to work on", required: true }], instructions: "Audit {{target}} and fix what you find. Work step by step and verify each change.", steps: ["Locate {{target}} with instance_find", "Inspect it with inspect_instance / script_read", "Apply the fix with the right write command", "Verify the result and report"], commands: ["instance_find", "inspect_instance", "script_read", "script_set_source"] },
-      mode: { kind: "mode", name: "my_mode", title: "My Mode", badge: "MYMODE", base: "creation", sub: "One-line tagline shown on the mode card", note: "Short blurb shown in the menu", description: "When to use this mode and what it optimises for.", mandate: "You are now a specialist in ... Priorities: 1) ... 2) ... 3) ... Pipeline: plan, build, verify with screenshots/console. Quality bar: ... Never: ...", focus: ["instance_find", "part_create", "script_create"] },
+      skill: { kind: "skill", name: "my_skill", title: "My Skill", description: "What it does and when to use it (10-600 chars).", triggers: ["my skill:3", "what the user says when this applies"], params: [{ name: "path", type: "string", description: "Full instance path, e.g. Workspace.Folder", required: true }, { name: "count", type: "number", default: 3 }], luau: "local target = {{path}}\nlocal n = {{count}}\n-- walk game by name; fail clearly\nlocal inst = game\nfor seg in string.gmatch(target, \"[^%.]+\") do inst = inst:FindFirstChild(seg) if not inst then return {ok=false, error=\"not found: \" .. target} end end\n-- do the work here (idempotent, named instances)\nreturn {ok=true, path=inst:GetFullName(), count=n}", knowledge: "## When to use\n- ...\n\n## Rules\n- Keep created instances named so a re-run updates instead of duplicating.\n\n## After running\n- Tell the user what was created and how to tweak it.", verify: { luau: "-- args = the params it ran with, result = the table the command returned\nlocal inst = find(args.path)\ncheck(inst, \"target missing: \" .. tostring(args.path))\nreturn {ok = true, detail = \"found \" .. inst:GetFullName()}", note: "What a pass proves, in one line." }, commands: [] },
     };
-    var cardsPublicFilter = "all"; // 1.41.0 — all | skill | ability | mode
+    var cardsPublicFilter = "all"; // 2.18.0 — all | verified | unverified
     // 1.99.7: references line (own links with a check mark when verified, the
     // related built-in expert) and run statistics on each Public card.
     function publicRefsHtml(i){
@@ -10927,9 +10976,8 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const pack = PP.get(PP.PACK_ID); if (!pack) return "";
       const rows = PP.status(PS, pack.id);
       const missing = rows.filter((r) => !r.installed).length;
-      const kindLabel = { skill: "skill", ability: "ability", mode: "work mode" };
-      const items = rows.map((r) => `<li class="rs-public-feat-row${r.installed ? " on" : ""}" data-public-feat-item="${escRs(r.name)}"><div class="rs-public-feat-copy"><b>${escRs(r.title)} <span class="rs-public-kind rs-public-kind-${r.kind}">${kindLabel[r.kind]}</span>${r.references ? `<span class="rs-public-kind" title="Creator Docs references bundled with this skill">${r.references} refs</span>` : ""}</b><p>${escRs(r.description)}</p></div><div class="rs-public-feat-actions">${r.installed ? `<span class="rs-public-feat-have" title="Installed as ${escRs(r.kind)} '${escRs(r.name)}'${r.modified ? " (edited by you)" : ""}">${r.modified ? "Installed · edited" : "Installed"}</span><button type="button" class="rs-btn-secondary" data-public-feat-install="${escRs(r.name)}" data-public-feat-replace="1" title="Replace your copy with the bundled version">Reinstall</button>` : `<button type="button" class="rs-btn-primary" data-public-feat-install="${escRs(r.name)}">Install</button>`}</div></li>`).join("");
-      return `<details class="rs-public-featured" data-public-featured ${publicFeaturedOpen ? "open" : ""}><summary><b>${escRs(pack.title)}</b><span class="rs-template-count">${rows.length - missing}/${rows.length}</span><em>v${escRs(pack.version)} · ready-made, install in one click</em></summary><div class="rs-public-feat-body"><p>${escRs(pack.description)} Installed items are ordinary Public Skills: edit, export, improve with AI, disable or delete them like your own. Also available to the AI as <code>public_skill_import {data:"featured"}</code> and as the file <code>public_skills/totalscript-featured.orskills.json</code>.</p><div class="rs-public-share-actions"><button type="button" class="rs-btn-primary" data-public-feat-install-all ${missing ? "" : "disabled"}>${missing ? `Install all missing (${missing})` : "Everything installed"}</button><button type="button" data-public-feat-export>Download pack .json</button><button type="button" data-public-feat-share>Copy share code</button></div><ul class="rs-public-feat-list">${items}</ul></div></details>`;
+      const items = rows.map((r) => `<li class="rs-public-feat-row${r.installed ? " on" : ""}" data-public-feat-item="${escRs(r.name)}"><div class="rs-public-feat-copy"><b>${escRs(r.title)} <span class="rs-public-kind rs-public-kind-skill">skill</span>${r.verify ? `<span class="rs-public-kind" title="Ships with a verify block: Test in Studio can prove it">verify</span>` : ""}${r.references ? `<span class="rs-public-kind" title="Creator Docs references bundled with this skill">${r.references} refs</span>` : ""}</b><p>${escRs(r.description)}</p></div><div class="rs-public-feat-actions">${r.installed ? `<span class="rs-public-feat-have" title="Installed as ${escRs(r.kind)} '${escRs(r.name)}'${r.modified ? " (edited by you)" : ""}">${r.modified ? "Installed · edited" : "Installed"}</span><button type="button" class="rs-btn-secondary" data-public-feat-install="${escRs(r.name)}" data-public-feat-replace="1" title="Replace your copy with the bundled version">Reinstall</button>` : `<button type="button" class="rs-btn-primary" data-public-feat-install="${escRs(r.name)}">Install</button>`}</div></li>`).join("");
+      return `<details class="rs-public-featured" data-public-featured ${publicFeaturedOpen ? "open" : ""}><summary><b>${escRs(pack.title)}</b><span class="rs-template-count">${rows.length - missing}/${rows.length}</span><em>v${escRs(pack.version)} · ready-made, install in one click</em></summary><div class="rs-public-feat-body"><p>${escRs(pack.description)} Installed items are ordinary Public Skills: edit, export as SKILL.md, improve with AI, test, disable or delete them like your own. Each ships with knowledge and a verify block, so <b>Test in Studio</b> can mark it VERIFIED on your place. Also available to the AI as <code>public_skill_import {data:"featured"}</code> and as the file <code>public_skills/totalscript-featured.orskills.json</code>.</p><div class="rs-public-share-actions"><button type="button" class="rs-btn-primary" data-public-feat-install-all ${missing ? "" : "disabled"}>${missing ? `Install all missing (${missing})` : "Everything installed"}</button><button type="button" data-public-feat-export>Download pack .json</button><button type="button" data-public-feat-share>Copy share code</button></div><ul class="rs-public-feat-list">${items}</ul></div></details>`;
     }
     function publicFeaturedInstall(names, replace){
       const PP = typeof TotalPublicPacks !== "undefined" ? TotalPublicPacks : null;
@@ -10944,48 +10992,56 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     function publicHtml(){
       const PS = typeof PublicSkills !== "undefined" ? PublicSkills : null;
       const allItems = PS ? PS.list() : [];
-      const items = cardsPublicFilter === "all" ? allItems : allItems.filter((i) => i.kind === cardsPublicFilter);
-      const kcount = (k) => allItems.filter((i) => i.kind === k).length;
+      const verOf = (i) => PS.verification(i);
+      const items = cardsPublicFilter === "all" ? allItems : cardsPublicFilter === "verified" ? allItems.filter((i) => verOf(i).state === "verified") : allItems.filter((i) => verOf(i).state !== "verified");
+      const nVerified = allItems.filter((i) => verOf(i).state === "verified").length;
       const pchip = (id, label, n) => `<button type="button" class="rs-act-chip${cardsPublicFilter === id ? " on" : ""}" data-public-filter="${id}" aria-pressed="${cardsPublicFilter === id}">${label}<i>${n}</i></button>`;
-      const pfilters = allItems.length ? `<div class="rs-act-filters rs-public-filters" role="group" aria-label="Filter by kind">${pchip("all", "All", allItems.length)}${pchip("skill", "Skills", kcount("skill"))}${pchip("ability", "Abilities", kcount("ability"))}${pchip("mode", "Work modes", kcount("mode"))}</div>` : "";
-      const active = PS ? PS.activeMode() : null;
-      const kindLabel = { skill: "skill", ability: "ability", mode: "work mode" };
+      const pfilters = allItems.length ? `<div class="rs-act-filters rs-public-filters" role="group" aria-label="Filter by verification">${pchip("all", "All", allItems.length)}${pchip("verified", "Verified", nVerified)}${pchip("unverified", "Unverified", allItems.length - nVerified)}</div>` : "";
       const libCount = (i) => { try { return typeof PublicReferences !== "undefined" ? PublicReferences.forItem(i.name).length : 0; } catch { return 0; } };
+      const verBadge = (i) => { const v = verOf(i); return `<span class="rs-public-verify rs-public-verify-${escRs(v.state)}" title="${escRs(v.flag)}${v.at ? " · " + new Date(v.at).toLocaleString() : ""}${v.detail ? " · " + escRs(v.detail) : ""}">${escRs(v.label)}</span>`; };
       const rows = items.map((i) => {
-        const isMode = i.kind === "mode";
-        const sig = isMode ? `base: ${escRs(i.base)} · badge ${escRs(i.badge)}` : escRs(PS.signature(i));
-        const isActive = !!(active && active.id === i.id);
-        return `<article class="rs-template-row rs-public-row${i.enabled ? "" : " rs-public-off"}" data-public-id="${escRs(i.id)}"><div class="rs-template-copy"><b>${escRs(i.title)} <span class="rs-public-kind rs-public-kind-${i.kind}">${kindLabel[i.kind]}</span>${isActive ? '<span class="rs-public-active">ACTIVE</span>' : ""}${i.enabled ? "" : '<span class="rs-public-disabled">disabled</span>'}</b><p>${escRs(i.description)}</p><span><code>${sig}</code> · v${i.version} · by ${escRs(i.author)} · ${i.source === "ai" ? "built by AI" : i.source === "import" ? "imported" : "hand-made"}${libCount(i) ? ` · ${libCount(i)} library ref${libCount(i) === 1 ? "" : "s"}` : ""}${publicStatsText(i)}</span>${publicRefsHtml(i)}</div><div class="rs-template-actions">${isMode ? `<button type="button" class="rs-template-run" data-public-action="activate">${isActive ? "Deactivate" : "Activate"}</button>` : `<button type="button" class="rs-template-run" data-public-action="run">Run…</button>`}<button type="button" class="rs-template-improve" data-public-action="improve">Improve with AI</button><details class="rs-template-more"><summary>Actions</summary><div><button type="button" data-public-action="edit">Edit JSON</button><button type="button" data-public-action="refs">Add docs references</button><button type="button" data-public-action="toggle">${i.enabled ? "Disable" : "Enable"}</button><button type="button" data-public-action="export">Export .json</button><button type="button" data-public-action="export-text">Export .txt</button><button type="button" data-public-action="share">Copy share code</button><button type="button" class="rs-template-delete" data-public-action="delete">Delete</button></div></details></div></article>`;
+        const sigs = PS.signatures(i);
+        const extra = (i.commands || []).length;
+        const meta = [`v${i.version}`, `by ${escRs(i.author)}`, i.source === "ai" ? "built by AI" : i.source === "import" ? "imported" : "hand-made", i.triggers && i.triggers.length ? `when: ${escRs(i.triggers.slice(0, 4).join(", "))}` : "", i.knowledge ? "knowledge" : "", i.verify ? "verify block" : "no verify block", libCount(i) ? `${libCount(i)} library ref${libCount(i) === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
+        return `<article class="rs-template-row rs-public-row${i.enabled ? "" : " rs-public-off"}" data-public-id="${escRs(i.id)}"><div class="rs-template-copy"><b>${escRs(i.title)} <span class="rs-public-kind rs-public-kind-skill">skill${extra ? ` · ${extra + 1} commands` : ""}</span>${verBadge(i)}${i.enabled ? "" : '<span class="rs-public-disabled">disabled</span>'}</b><p>${escRs(i.description)}</p><span><code>${escRs(sigs.join("</code> <code>"))}</code> · ${meta}${publicStatsText(i)}</span>${publicRefsHtml(i)}</div><div class="rs-template-actions"><button type="button" class="rs-template-run" data-public-action="test" title="Run it in Studio and then its verify block; marks VERIFIED on a pass">Test in Studio</button><button type="button" class="rs-template-run" data-public-action="run">Run…</button><button type="button" class="rs-template-improve" data-public-action="improve">Improve with AI</button><details class="rs-template-more"><summary>Actions</summary><div><button type="button" data-public-action="edit">Edit JSON</button><button type="button" data-public-action="refs">Add docs references</button><button type="button" data-public-action="toggle">${i.enabled ? "Disable" : "Enable"}</button><button type="button" data-public-action="export">Export SKILL.md</button><button type="button" data-public-action="export-text">Export .json</button><button type="button" data-public-action="share">Copy share code</button><button type="button" class="rs-template-delete" data-public-action="delete">Delete</button></div></details></div></article>`;
       }).join("");
-      const empty = `<div class="rs-template-empty"><div class="rs-template-empty-mark">P</div><b>No public skills yet</b><span>Describe one above, paste a full prompt, or drop a .txt / .json file here — TotalScript turns it into a real command.</span></div>`;
-      const isPrompt = !!(PS && PS.looksLikeFullPrompt(publicDraft));
+      const empty = `<div class="rs-template-empty"><div class="rs-template-empty-mark">P</div><b>No public skills yet</b><span>Describe one above, paste a full prompt or a SKILL.md, or drop a file here — TotalScript turns it into real commands with knowledge and a self-test.</span></div>`;
+      const isMd = !!(PS && PS.isSkillMd(publicDraft));
+      const isPrompt = !isMd && !!(PS && PS.looksLikeFullPrompt(publicDraft));
       const designRefs = typeof PublicReferences !== "undefined" ? PublicReferences.designEntries() : [];
-      const how = (publicHow || "auto") === "auto" ? (isPrompt ? "convert" : "design") : publicHow;
-      const createLabel = how === "convert" ? "Turn prompt into a skill (AI)" : "Create with AI";
-      const hint = !publicDraft.trim() ? "" : how === "convert"
-        ? `<div class="rs-public-hint rs-public-hint-convert">Looks like a full prompt → the AI will convert it faithfully (nothing dropped, nothing invented).${publicHow === "auto" ? ' <button type="button" data-public-how="design">Design a new one from it instead</button>' : ' <button type="button" data-public-how="auto">Auto</button>'}</div>`
-        : `<div class="rs-public-hint">Short description → the AI designs the ${publicKind === "auto" ? "skill / ability / mode" : publicKind} for you.${publicHow === "auto" ? ' <button type="button" data-public-how="convert">Treat it as a full prompt instead</button>' : ' <button type="button" data-public-how="auto">Auto</button>'}</div>`;
-      const examples = [["skill", "A skill that places N street lamps with warm PointLights along the selected path"], ["ability", "An ability that audits every script for deprecated APIs and fixes them"], ["mode", "A 'Horror builder' work mode focused on fog, flickering lights and sound"]];
-      return `<section class="rs-template-library rs-public" aria-label="Public skills"><div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div><b>Public Skills</b><span class="rs-template-count">${allItems.length}</span></div><p>Your own commands, procedures and work modes — no coding needed.</p></div><div class="rs-template-head-actions"><button type="button" class="rs-btn-secondary" data-public-import>Import file / code…</button><button type="button" class="rs-btn-secondary" data-public-manual>New by hand</button></div></header><div class="rs-public-grid"><div class="rs-public-side"><ol class="rs-public-ways"><li><b>Describe it</b><span>one sentence → the AI designs and installs it</span></li><li><b>Paste a full prompt</b><span>or drop a .txt → it becomes a skill as-is</span></li><li><b>Import</b><span>a .txt / .json file or share code from a friend</span></li></ol><div class="rs-public-sharebox"><b>Share</b><span>Give friends a .txt / .json file or a code; they press Import. Nothing is uploaded — files and codes are the only channel.</span><div class="rs-public-share-actions"><button type="button" data-public-import>Import file / code…</button><button type="button" data-public-paste>Paste share code</button><button type="button" data-public-export-all ${allItems.length ? "" : "disabled"}>Export all (${allItems.length})</button><button type="button" data-public-share-all ${allItems.length ? "" : "disabled"}>Copy share code for all</button></div></div>${publicLibraryHtml(PS)}</div><div class="rs-public-compose" data-public-drop><div class="rs-public-compose-head"><b>Create one</b><span>Describe it, paste a prompt, or drop a file${designRefs.length ? ` · <em class="rs-public-compose-lib" title="${escRs(designRefs.map((e) => e.title).join(", "))}">${designRefs.length} reference${designRefs.length === 1 ? " goes" : "s go"} with every new design</em>` : ""}</span></div><div class="rs-public-examples">Try: ${examples.map(([k, t]) => `<button type="button" data-public-example="${escRs(t)}" class="rs-public-kind rs-public-kind-${k}">${k}</button>`).join("")}</div><textarea id="rs-public-prompt" rows="${isPrompt ? 7 : 3}" spellcheck="false" placeholder="Describe what you want in a sentence — or paste a whole prompt you already wrote (any length). You can also drop a .txt file here.">${escRs(publicDraft)}</textarea>${hint}<div class="rs-public-compose-row"><select id="rs-public-kind" aria-label="Kind"><option value="auto"${publicKind === "auto" ? " selected" : ""}>Auto — AI decides</option><option value="skill"${publicKind === "skill" ? " selected" : ""}>Skill — Luau command with params</option><option value="ability"${publicKind === "ability" ? " selected" : ""}>Ability — reusable procedure</option><option value="mode"${publicKind === "mode" ? " selected" : ""}>Work mode — mandate + focus</option></select><button type="button" class="rs-btn-primary rs-btn-ai" data-public-create>${createLabel}</button></div><div class="rs-public-compose-row rs-public-compose-alt"><button type="button" data-public-load-text>Load .txt / .json…</button><button type="button" data-public-save-text ${publicDraft.trim().length >= 20 ? "" : "disabled"} title="Install the text above right now, without AI: kept word-for-word as an ability (or a work mode / skill if you picked that kind)">Save as-is (no AI)</button><span class="rs-public-drop-note">or drop a file on this box</span></div><small>Installed on this device only (chrome.storage). Share with Export / Share code; others press Import. Skills run only when called — nothing touches your place until then.</small></div></div>${publicFeaturedHtml(PS)}${pfilters}</div><div class="rs-template-list rs-public-list">${rows || (allItems.length ? `<div class="rs-template-empty rs-act-none"><div class="rs-template-empty-mark">P</div><b>Nothing of this kind yet</b><span>Switch to All, or create one above.</span></div>` : empty)}</div></section>`;
+      const how = isMd ? "import" : (publicHow || "auto") === "auto" ? (isPrompt ? "convert" : "design") : publicHow;
+      const createLabel = how === "import" ? "Import SKILL.md" : how === "convert" ? "Design a skill from it (AI)" : "Create with AI";
+      const hint = !publicDraft.trim() ? "" : how === "import"
+        ? `<div class="rs-public-hint">This is a SKILL.md → Import installs it as-is. </div>`
+        : how === "convert"
+        ? `<div class="rs-public-hint rs-public-hint-convert">Looks like a full prompt → the AI designs a skill from it: the prompt becomes its knowledge, the AI writes the Luau command(s) + a verify block.${publicHow === "auto" ? ' <button type="button" data-public-how="design">Treat it as a short description instead</button>' : ' <button type="button" data-public-how="auto">Auto</button>'}</div>`
+        : `<div class="rs-public-hint">Short description → the AI designs the skill for you (command, triggers, knowledge, verify block).${publicHow === "auto" ? ' <button type="button" data-public-how="convert">Treat it as a full prompt instead</button>' : ' <button type="button" data-public-how="auto">Auto</button>'}</div>`;
+      const examples = [["skill", "A skill that places N street lamps with warm PointLights along the selected path"], ["skill", "A skill that audits every script for deprecated APIs and rewrites wait/spawn/delay"], ["skill", "A horror ambience skill: fog, flickering lights and a sound layer for a chosen area"]];
+      const mig = PS && typeof PS.migrationNotice === "function" ? PS.migrationNotice() : null;
+      const migHtml = mig ? `<div class="rs-public-migration" role="status"><b>Public Skills are skills only since 2.18.0.</b> ${mig.converted.length ? `Converted to skills (their Luau is the command, the instructions became knowledge): ${mig.converted.map((c) => `<code>${escRs(c.name)}</code>`).join(", ")}. ` : ""}${mig.dropped.length ? `Removed (${mig.dropped.length}): ${mig.dropped.map((d) => `<code>${escRs(d.name)}</code> <small>(${escRs(d.kind)} — ${escRs(d.reason)})</small>`).join(", ")}. ` : ""}Paste the removed text into the box above and press <em>Design a skill from it (AI)</em> if you still need it.<div class="rs-public-share-actions">${mig.archived ? `<button type="button" data-public-migration="download">Download removed items (.json)</button>` : ""}<button type="button" data-public-migration="dismiss">Dismiss</button></div></div>` : "";
+      return `<section class="rs-template-library rs-public" aria-label="Public skills"><div class="rs-template-controls"><header class="rs-template-head"><div class="rs-template-head-copy"><div><b>Public Skills</b><span class="rs-template-count">${allItems.length}</span></div><p>Your own skills: Luau commands + triggers + knowledge + a self-test — like the built-in ones, no coding needed.</p></div><div class="rs-template-head-actions"><button type="button" class="rs-btn-secondary" data-public-import>Import file / code…</button><button type="button" class="rs-btn-secondary" data-public-manual>New by hand</button></div></header><div class="rs-public-grid"><div class="rs-public-side"><ol class="rs-public-ways"><li><b>Describe it</b><span>one sentence → the AI designs and installs it</span></li><li><b>Paste a full prompt</b><span>or drop a .txt → the AI makes it a skill (prompt = knowledge)</span></li><li><b>Import</b><span>a SKILL.md / .json file or share code from a friend</span></li></ol><div class="rs-public-sharebox"><b>Share</b><span>Give friends a SKILL.md file or a code; they press Import. Nothing is uploaded — files and codes are the only channel. A VERIFIED badge never travels: everyone tests on their own place.</span><div class="rs-public-share-actions"><button type="button" data-public-import>Import file / code…</button><button type="button" data-public-paste>Paste share code</button><button type="button" data-public-export-all ${allItems.length ? "" : "disabled"}>Export all (${allItems.length})</button><button type="button" data-public-share-all ${allItems.length ? "" : "disabled"}>Copy share code for all</button></div></div>${publicLibraryHtml(PS)}</div><div class="rs-public-compose" data-public-drop><div class="rs-public-compose-head"><b>Create one</b><span>Describe it, paste a prompt or a SKILL.md, or drop a file${designRefs.length ? ` · <em class="rs-public-compose-lib" title="${escRs(designRefs.map((e) => e.title).join(", "))}">${designRefs.length} reference${designRefs.length === 1 ? " goes" : "s go"} with every new design</em>` : ""}</span></div><div class="rs-public-examples">Try: ${examples.map(([k, t]) => `<button type="button" data-public-example="${escRs(t)}" class="rs-public-kind rs-public-kind-${k}">${t.length > 44 ? t.slice(0, 42) + "…" : t}</button>`).join("")}</div><textarea id="rs-public-prompt" rows="${isPrompt || isMd ? 7 : 3}" spellcheck="false" placeholder="Describe what you want in a sentence — or paste a whole prompt you already wrote, or a SKILL.md. You can also drop a file here.">${escRs(publicDraft)}</textarea>${hint}<div class="rs-public-compose-row"><span class="rs-public-compose-note">Every skill = Luau command(s) + triggers + knowledge + verify block</span><button type="button" class="rs-btn-primary rs-btn-ai" data-public-create>${createLabel}</button>${how === "convert" ? `<button type="button" class="rs-btn-secondary" data-public-save-text title="Only when the prompt already contains the Luau: it becomes the command, the rest the knowledge">Save as-is (no AI)</button>` : ""}<button type="button" class="rs-btn-secondary" data-public-load-text>Load file…</button></div></div></div>${migHtml}${publicFeaturedHtml(PS)}${pfilters}</div><div class="rs-template-list rs-public-list">${rows || empty}</div></section>`;
     }
-    var publicDraft = "", publicKind = "auto";
+    var publicDraft = "", publicKind = "skill";
     var publicHow = "auto"; // "auto" | "design" | "convert" - how the Create button treats the text
     // One entry point for the Create button: a short description is DESIGNED
     // by the AI; a full prompt (long / multi-line, or the user said so) is
-    // CONVERTED faithfully into a skill, ability or mode.
+    // turned into a skill whose knowledge is that prompt (the AI writes the
+    // Luau + verify block); a pasted SKILL.md is imported as-is.
     function publicGenerationPrompt(text, kind){
       const how = publicHow === "auto" ? (PublicSkills.looksLikeFullPrompt(text) ? "convert" : "design") : publicHow;
       if (how === "convert") return PublicSkills.conversionPrompt(text, kind, { commandNames: publicCommandSample() });
       return PublicSkills.generationPrompt(text, kind, { commandNames: publicCommandSample() });
     }
     function publicIsConvert(text){ return publicHow === "convert" || (publicHow === "auto" && PublicSkills.looksLikeFullPrompt(text)); }
-    // No-AI path: keep the pasted prompt word-for-word as an ability (or the chosen kind).
+    // No-AI path: only when the text already contains Luau (it becomes the
+    // command, the prose the knowledge); a SKILL.md imports directly.
     function publicSaveAsIs(text){
-      const r = PublicSkills.installFromPrompt(text, { kind: publicKind === "auto" ? undefined : publicKind, reserved: publicReserved(), source: "manual" });
-      if (!r.ok) { toast(`Could not save: ${r.errors.join("; ")}`); return false; }
+      if (PublicSkills.isSkillMd(text)) { publicImportText(text, "pasted SKILL.md"); publicDraft = ""; return true; }
+      const r = PublicSkills.installFromPrompt(text, { reserved: publicReserved(), source: "manual" });
+      if (!r.ok) { toast(r.needsAi ? "No Luau in that text — press “Design a skill from it (AI)” so the AI writes the command + verify block (the prompt becomes the knowledge)" : `Could not save: ${r.errors.join("; ")}`); return false; }
       publicDraft = ""; publicHow = "auto";
       try { window.dispatchEvent(new CustomEvent("total-public-skill-result", { detail: { kind: "created", item: r.item, warnings: r.warnings || [] } })); } catch {}
-      toast(`Saved ${r.item.kind} '${r.item.name}' from your prompt${r.warnings && r.warnings.length ? " (" + r.warnings.length + " note" + (r.warnings.length === 1 ? "" : "s") + ")" : ""} — use Improve with AI any time`);
+      toast(`Saved skill '${r.item.name}' from your prompt (UNVERIFIED until Test in Studio passes)${r.warnings && r.warnings.length ? " · " + r.warnings.length + " note" + (r.warnings.length === 1 ? "" : "s") : ""} — use Improve with AI any time`);
       return true;
     }
     // A file (picked or dropped) or pasted text: structured → install; prose → load into the composer.
@@ -10998,24 +11054,28 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       if (!publicDraft.length) return;
       renderCards(cardsPanel);
       try { const ta = cardsPanel.querySelector("#rs-public-prompt"); if (ta) { ta.focus(); ta.scrollTop = 0; } } catch {}
-      toast(`Loaded the prompt${fileName ? " from " + fileName : ""} — press “Turn prompt into a skill (AI)” or “Save as-is (no AI)”`);
+      toast(`Loaded the prompt${fileName ? " from " + fileName : ""} — press “Design a skill from it (AI)” (or “Save as-is” when it already contains the Luau)`);
     }
     function publicReadFile(file){ return new Promise((resolve, reject) => { try { if (file && typeof file.text === "function") return resolve(file.text()); const fr = new FileReader(); fr.onload = () => resolve(String(fr.result || "")); fr.onerror = () => reject(fr.error || new Error("read failed")); fr.readAsText(file); } catch (e) { reject(e); } }); }
-    function publicPickFile(){ const input = document.createElement("input"); input.type = "file"; input.accept = ".json,.orskill.json,.orskills.json,.txt,.md,text/plain,application/json"; input.onchange = async () => { const file = input.files && input.files[0]; if (!file) return; publicLoadText(await publicReadFile(file), file.name); }; input.click(); }
-    function publicDownloadText(id){ const PS = PublicSkills; const txt = PS.exportText(id); if (!txt) return toast("Nothing to export"); const blob = new Blob([txt], { type: "text/plain" }), a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = PS.textFileName(id); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); toast(`Exported ${PS.textFileName(id)} — a plain .txt anyone can read or edit`); }
-    function publicDownload(id){ const PS = PublicSkills; const json = PS.exportJson(id); if (!json) return toast("Nothing to export"); const blob = new Blob([json], { type: "application/json" }), a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = PS.fileName(id); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); toast(`Exported ${PS.fileName(id)}`); }
-    async function publicCopyShare(id){ const code = PublicSkills.shareCode(id); if (!code) return toast("Nothing to share"); try { await navigator.clipboard.writeText(code); toast(`Share code copied (${code.length} chars) — paste it into another TotalScript's Public tab`); } catch { prompt("Copy this share code:", code); } }
+    function publicPickFile(){ const input = document.createElement("input"); input.type = "file"; input.accept = ".md,.SKILL.md,.SKILLS.md,.json,.orskill.json,.orskills.json,.txt,text/plain,text/markdown,application/json"; input.onchange = async () => { const file = input.files && input.files[0]; if (!file) return; publicLoadText(await publicReadFile(file), file.name); }; input.click(); }
+    // 2.18.0: SKILL.md is the canonical export; JSON stays available as the legacy form.
+    function publicDownload(id){ const PS = PublicSkills; const txt = PS.toSkillMd(id); if (!txt) return toast("Nothing to export"); const blob = new Blob([txt], { type: "text/markdown" }), a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = PS.fileName(id); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); toast(`Exported ${PS.fileName(id)} — readable, diff-able, importable anywhere TotalScript runs`); }
+    function publicDownloadText(id){ const PS = PublicSkills; const json = PS.exportJson(id); if (!json) return toast("Nothing to export"); const blob = new Blob([json], { type: "application/json" }), a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = PS.jsonFileName(id); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); toast(`Exported ${PS.jsonFileName(id)} (legacy JSON)`); }
+    async function publicCopyShare(id){ const code = PublicSkills.shareCode(id); if (!code) return toast("Nothing to share"); try { await navigator.clipboard.writeText(code); toast(`Share code copied (${code.length} chars; it is the SKILL.md, base64) — paste it into another TotalScript's Public tab`); } catch { prompt("Copy this share code:", code); } }
     function publicImportText(text, fileName){ if (!text) return; if (typeof PublicReferences !== "undefined" && PublicReferences.isLibraryJson(text)) { const r = PublicReferences.importJson(text); toast(r.added ? `Imported ${r.added} reference${r.added === 1 ? "" : "s"} into the library${r.skipped ? ` · ${r.skipped} already here` : ""}` : (r.errors[0] || "Nothing imported")); publicRefsOpen = true; renderCards(cardsPanel); return; } const r = PublicSkills.importShared(text, { reserved: publicReserved(), replace: false });
-      if (!r.ok && r.prompt) { publicDraft = String(r.text || text).trim(); publicHow = "convert"; renderCards(cardsPanel); try { const ta = cardsPanel.querySelector("#rs-public-prompt"); if (ta) ta.focus(); } catch {} toast(`${fileName ? fileName + " is" : "That is"} a prompt, not a skill file — loaded it into the box: press “Turn prompt into a skill (AI)” or “Save as-is (no AI)”`); return; }
+      if (!r.ok && r.prompt) { publicDraft = String(r.text || text).trim(); publicHow = "convert"; renderCards(cardsPanel); try { const ta = cardsPanel.querySelector("#rs-public-prompt"); if (ta) ta.focus(); } catch {} toast(`${fileName ? fileName + " is" : "That is"} a prompt, not a skill file — loaded it into the box: press “Design a skill from it (AI)”`); return; }
       if (r.pack) { let msg = r.installed.length ? `Installed ${r.installed.length} item${r.installed.length === 1 ? "" : "s"}: ${r.installed.map((i) => i.name).join(", ")}` : "Nothing new installed"; if (r.skipped.length) msg += ` · already had: ${r.skipped.join(", ")}`; if (r.errors.length) msg += ` · failed: ${r.errors.length}`; toast(msg); if (r.skipped.length && confirm(`${r.skipped.length} item(s) already exist (${r.skipped.join(", ")}). Replace them with the imported versions?`)) { const r2 = PublicSkills.importShared(text, { reserved: publicReserved(), replace: true }); toast(r2.ok ? `Replaced/installed ${r2.installed.length} item(s)` : "Replace failed"); } return; }
-      if (!r.ok && r.duplicate) { if (confirm(`'${r.duplicate.name}' is already installed. Replace it with the imported version?`)) { const r2 = PublicSkills.importShared(text, { reserved: publicReserved(), replace: true }); toast(r2.ok ? `Replaced ${r2.item.kind} '${r2.item.name}'` : `IMPORT_FAILED: ${r2.errors.join("; ")}`); } return; } toast(r.ok ? `Installed ${r.item.kind} '${r.item.name}'${r.warnings.length ? " (" + r.warnings.length + " warning" + (r.warnings.length === 1 ? "" : "s") + ")" : ""}` : `IMPORT_FAILED: ${r.errors.join("; ")}`); }
-    function publicRun(item){ if (item.kind === "mode") return setWorkMode("pm:" + item.id); let args = {}; if ((item.params || []).length) { const raw = prompt(`Arguments for ${PublicSkills.signature(item)} (JSON):`, JSON.stringify(publicExampleArgs(item))); if (raw == null) return; try { args = JSON.parse(raw || "{}"); } catch { return toast("Arguments must be valid JSON"); } } runLibraryCard({ engine: "rs", icon: "P", cat: "Public Skills", title: `Run ${item.name}`, desc: item.description.slice(0, 90), prompt: `Run my public ${item.kind} now: call ${item.name} ${JSON.stringify(args)} and report the result. If it reports an error, fix the arguments or improve the ${item.kind} with public_skill_update (read it first with public_skill_get {"name":"${item.name}"}).` }, true); }
-    function publicImprove(item){ const req = prompt(`What should change in '${item.title}'?`, ""); if (req == null) return; runLibraryCard({ engine: "rs", icon: "P", cat: "Public Skills", title: `Improve ${item.name}`, desc: req.slice(0, 90) || "AI review", prompt: `Improve my public ${item.kind} '${item.name}'. Request: ${req.trim() || "review it for correctness, robustness and clarity and improve it"}. First call public_skill_get {"name":"${item.name}"} to read the current definition, then submit the improved version with public_skill_update {"name":"${item.name}","patch":{...}} (keep the same name and kind; include every field you change in full)${item.kind === "skill" ? ", then run public_skill_test {\"name\":\"" + item.name + "\"} and fix any syntax error" : ""}. Finish with a one-paragraph summary of what changed.` }, true); }
+      if (!r.ok && r.duplicate) { if (confirm(`'${r.duplicate.name}' is already installed. Replace it with the imported version?`)) { const r2 = PublicSkills.importShared(text, { reserved: publicReserved(), replace: true }); toast(r2.ok ? `Replaced skill '${r2.item.name}' (UNVERIFIED here until tested)` : `IMPORT_FAILED: ${r2.errors.join("; ")}`); } return; } toast(r.ok ? `Installed skill '${r.item.name}' — UNVERIFIED on this device until Test in Studio passes${r.warnings.length ? " (" + r.warnings.length + " warning" + (r.warnings.length === 1 ? "" : "s") + ")" : ""}` : `IMPORT_FAILED: ${r.errors.join("; ")}`); }
+    function publicRun(item){ let args = {}; if ((item.params || []).length) { const raw = prompt(`Arguments for ${PublicSkills.signature(item)} (JSON):`, JSON.stringify(publicExampleArgs(item))); if (raw == null) return; try { args = JSON.parse(raw || "{}"); } catch { return toast("Arguments must be valid JSON"); } } runLibraryCard({ engine: "rs", icon: "P", cat: "Public Skills", title: `Run ${item.name}`, desc: item.description.slice(0, 90), prompt: `Run my public skill now: call ${item.name} ${JSON.stringify(args)} and report the result. If it reports an error, fix the arguments or improve the skill with public_skill_update (read it first with public_skill_get {"name":"${item.name}"}).` }, true); }
+    // 2.18.0: the self-test. The agent runs public_skill_test {dry_run:false}: the
+    // command runs in Studio, then the verify block; VERIFIED only on a real pass.
+    function publicTest(item){ let args = {}; if ((item.params || []).some((p) => p.required && p.default === undefined)) { const raw = prompt(`Test arguments for ${PublicSkills.signature(item)} (JSON) — the command really runs in the open place:`, JSON.stringify(publicExampleArgs(item))); if (raw == null) return; try { args = JSON.parse(raw || "{}"); } catch { return toast("Arguments must be valid JSON"); } } runLibraryCard({ engine: "rs", icon: "P", cat: "Public Skills", title: `Test ${item.name}`, desc: item.verify ? "run + verify block" : "run (no verify block yet)", prompt: `Test my public skill '${item.name}' for real: call public_skill_test {"name":"${item.name}","dry_run":false,"args":${JSON.stringify(args)}}. ${item.verify ? "It runs the command in Studio and then the skill's verify block; report the exact status it returns (VERIFIED, VERIFY_FAILED or RUN_FAILED) and what the verify block found." : "The skill has no verify block yet, so it can only reach 'ran': after the run, read it with public_skill_get and add a verify block with public_skill_update {\"name\":\"" + item.name + "\",\"patch\":{\"verify\":{\"luau\":\"...\"}}} that checks the created instances, then run public_skill_test {dry_run:false} again."} Never claim VERIFIED unless the tool said so.` }, true); }
+    function publicImprove(item){ const req = prompt(`What should change in '${item.title}'?`, ""); if (req == null) return; runLibraryCard({ engine: "rs", icon: "P", cat: "Public Skills", title: `Improve ${item.name}`, desc: req.slice(0, 90) || "AI review", prompt: `Improve my public skill '${item.name}'. Request: ${req.trim() || "review it for correctness, robustness and clarity and improve it; make sure it has triggers, knowledge and a verify block that proves the result"}. First call public_skill_get {"name":"${item.name}"} to read the current definition, then submit the improved version with public_skill_update {"name":"${item.name}","patch":{...}} (keep the same name; include every field you change in full), then run public_skill_test {"name":"${item.name}"} and fix any syntax error. A code change makes an earlier VERIFIED pass stale - say so, and offer to run public_skill_test {dry_run:false} to verify again. Finish with a one-paragraph summary of what changed.` }, true); }
     function openPublicEditor(item, kind){
       const PS = PublicSkills; closePublicEditor();
       const def = item ? (() => { const d = JSON.parse(JSON.stringify(item)); delete d.createdAt; delete d.updatedAt; delete d.source; return d; })() : JSON.parse(JSON.stringify(PUBLIC_SKELETONS[kind] || PUBLIC_SKELETONS.skill));
       const modal = document.createElement("div"); modal.className = "rs-template-modal rs-public-modal"; modal.setAttribute("data-rs-owned", "1");
-      modal.innerHTML = `<div class="rs-template-editor rs-public-editor" role="dialog" aria-modal="true" aria-label="Public skill editor"><header><div><b>${item ? "Edit " + escRs(item.title) : "New public " + escRs(kind || "skill") + " (by hand)"}</b><span>${item ? escRs(item.kind) + " · v" + item.version + " · id " + escRs(item.id) : "Fill the JSON and press Install. Params become {{placeholders}} in Luau."}</span></div><div class="rs-template-head-actions"><button type="button" data-public-editor-doc>Field guide</button><button type="button" data-public-editor-close>Close</button></div></header><textarea class="rs-public-json" spellcheck="false">${escRs(JSON.stringify(def, null, 2))}</textarea><pre class="rs-public-doc" hidden>${escRs(PS.DEFINITION_DOC)}</pre><footer><span data-public-editor-status></span><button type="button" data-public-editor-validate>Validate</button><button type="button" data-apply data-public-editor-save>${item ? "Save" : "Install"}</button></footer></div>`;
+      modal.innerHTML = `<div class="rs-template-editor rs-public-editor" role="dialog" aria-modal="true" aria-label="Public skill editor"><header><div><b>${item ? "Edit " + escRs(item.title) : "New public skill (by hand)"}</b><span>${item ? "skill · v" + item.version + " · " + escRs(PublicSkills.verification(item).label) + " · id " + escRs(item.id) : "Fill the JSON and press Install. Params become {{placeholders}} in Luau; knowledge is what the AI reads when the skill applies; verify proves the result in Studio."}</span></div><div class="rs-template-head-actions"><button type="button" data-public-editor-doc>Field guide</button><button type="button" data-public-editor-close>Close</button></div></header><textarea class="rs-public-json" spellcheck="false">${escRs(JSON.stringify(def, null, 2))}</textarea><pre class="rs-public-doc" hidden>${escRs(PS.DEFINITION_DOC)}</pre><footer><span data-public-editor-status></span><button type="button" data-public-editor-validate>Validate</button><button type="button" data-apply data-public-editor-save>${item ? "Save" : "Install"}</button></footer></div>`;
       document.body.appendChild(modal); publicEditorEl = modal;
       const ta = modal.querySelector(".rs-public-json"), status = modal.querySelector("[data-public-editor-status]"), doc = modal.querySelector(".rs-public-doc");
       const parse = () => { try { return { def: JSON.parse(ta.value) }; } catch (e) { return { err: "JSON: " + String(e.message || e) }; } };
@@ -11034,13 +11094,14 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const warnings = Array.isArray(detail.warnings) ? detail.warnings : [];
       const verb = detail.kind === "updated" ? "updated" : detail.kind === "imported" ? "imported" : "installed";
       const modal = document.createElement("div"); modal.className = "rs-template-modal rs-public-modal"; modal.setAttribute("data-rs-owned", "1");
-      const usage = item.kind === "mode" ? `Pick it in the TotalScript menu → Work mode, or press Activate below.` : `Call it as <code>${escRs(PublicSkills.signature(item))}</code> — or press Try it.`;
-      modal.innerHTML = `<div class="rs-template-editor rs-public-editor rs-public-installed" role="dialog" aria-modal="true" aria-label="Public skill installed"><header><div><b>Public ${escRs(item.kind)} ${verb}: ${escRs(item.title)}</b><span>v${item.version} · by ${escRs(item.author)} · stored on this device</span></div><div class="rs-template-head-actions"><button type="button" data-public-editor-close>Close</button></div></header><div class="rs-public-installed-body"><p>${escRs(item.description)}</p><p class="rs-public-usage">${usage}</p>${(item.params || []).length ? `<p><b>Params:</b> ${item.params.map((p) => `<code>${escRs(p.name)}${p.required ? "" : "?"}</code> <small>${escRs(p.type)}${p.description ? " — " + escRs(p.description) : ""}</small>`).join("<br>")}</p>` : ""}${warnings.length ? `<p class="rs-public-warn"><b>Warnings:</b><br>${warnings.map(escRs).join("<br>")}</p>` : ""}<p class="rs-public-share">Share it: Public tab → Export file / Copy share code.</p></div><footer><span></span>${item.kind === "mode" ? `<button type="button" data-apply data-public-installed-activate>Activate mode</button>` : `<button type="button" data-apply data-public-installed-try>Try it</button>`}<button type="button" data-public-installed-open>Open Public tab</button></footer></div>`;
+      const ver = PublicSkills.verification(item);
+      const usage = `Call it as <code>${escRs(PublicSkills.signatures(item).join("</code>, <code>"))}</code> — or press Try it. <span class="rs-public-verify rs-public-verify-${escRs(ver.state)}" title="${escRs(ver.flag)}">${escRs(ver.label)}</span>${ver.state === "verified" ? "" : " — press <b>Test in Studio</b> to run it and its verify block; it is marked VERIFIED only after that passes."}`;
+      modal.innerHTML = `<div class="rs-template-editor rs-public-editor rs-public-installed" role="dialog" aria-modal="true" aria-label="Public skill installed"><header><div><b>Public skill ${verb}: ${escRs(item.title)}</b><span>v${item.version} · by ${escRs(item.author)} · stored on this device</span></div><div class="rs-template-head-actions"><button type="button" data-public-editor-close>Close</button></div></header><div class="rs-public-installed-body"><p>${escRs(item.description)}</p><p class="rs-public-usage">${usage}</p>${(item.params || []).length ? `<p><b>Params:</b> ${item.params.map((p) => `<code>${escRs(p.name)}${p.required ? "" : "?"}</code> <small>${escRs(p.type)}${p.description ? " — " + escRs(p.description) : ""}</small>`).join("<br>")}</p>` : ""}${warnings.length ? `<p class="rs-public-warn"><b>Warnings:</b><br>${warnings.map(escRs).join("<br>")}</p>` : ""}<p class="rs-public-share">Share it: Public tab → Export SKILL.md / Copy share code.</p></div><footer><span></span><button type="button" data-apply data-public-installed-test>Test in Studio</button><button type="button" data-public-installed-try>Try it</button><button type="button" data-public-installed-open>Open Public tab</button></footer></div>`;
       document.body.appendChild(modal); publicEditorEl = modal;
       modal.querySelector("[data-public-editor-close]").onclick = closePublicEditor;
       modal.addEventListener("click", (e) => { if (e.target === modal) closePublicEditor(); });
       const tryBtn = modal.querySelector("[data-public-installed-try]"); if (tryBtn) tryBtn.onclick = () => { closePublicEditor(); publicRun(item); };
-      const actBtn = modal.querySelector("[data-public-installed-activate]"); if (actBtn) actBtn.onclick = () => { closePublicEditor(); setWorkMode("pm:" + item.id); };
+      const testBtn = modal.querySelector("[data-public-installed-test]"); if (testBtn) testBtn.onclick = () => { closePublicEditor(); publicTest(item); };
       modal.querySelector("[data-public-installed-open]").onclick = () => { closePublicEditor(); cardsTab = "public"; try { if (openCardsPanel) openCardsPanel(true); else { cardsPanel.hidden = false; renderCards(cardsPanel); } } catch {} };
     }
     window.addEventListener("total-public-skill-result", (e) => { try { const d = e.detail || {}; if (d.kind === "removed") { toast(`Public ${d.item && d.item.kind || "skill"} '${d.item && d.item.name}' deleted`); return; } if (d.kind === "toggled") return; showPublicInstalled(d); } catch (err) { try { diag("publicSkills.resultUi", { error: String(err) }); } catch {} } });
@@ -11314,19 +11375,18 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
           try {
             const PS = PublicSkills; const text = pubPrompt.value.trim();
             const convert = publicIsConvert(text);
-            const b = panel.querySelector("[data-public-create]"); if (b) b.textContent = convert ? "Turn prompt into a skill (AI)" : "Create with AI";
+            const b = panel.querySelector("[data-public-create]"); if (b) b.textContent = PS.isSkillMd(text) ? "Import SKILL.md" : convert ? "Design a skill from it (AI)" : "Create with AI";
             const save = panel.querySelector("[data-public-save-text]"); if (save) save.disabled = text.length < 20;
             const hint = panel.querySelector(".rs-public-hint"); const hadHint = !!hint;
-            if (text && !hadHint) { renderCards(panel); const ta = panel.querySelector("#rs-public-prompt"); if (ta) { ta.focus(); try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch {} } }
-            else if (hint) { hint.classList.toggle("rs-public-hint-convert", convert); const strong = convert ? "Looks like a full prompt → the AI will convert it faithfully (nothing dropped, nothing invented)." : `Short description → the AI designs the ${publicKind === "auto" ? "skill / ability / mode" : publicKind} for you.`; if (hint.firstChild && hint.firstChild.nodeType === 3) hint.firstChild.nodeValue = strong + " "; }
+            // Save as-is only exists in convert mode: re-render when the mode flips so the button appears / disappears with it.
+            if (text && (!hadHint || (!!save !== (convert && !PS.isSkillMd(text))))) { renderCards(panel); const ta = panel.querySelector("#rs-public-prompt"); if (ta) { ta.focus(); try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch {} } }
+            else if (hint) { hint.classList.toggle("rs-public-hint-convert", convert); const strong = PS.isSkillMd(text) ? "This is a SKILL.md → Import installs it as-is." : convert ? "Looks like a full prompt → the AI designs a skill from it: the prompt becomes its knowledge, the AI writes the Luau command(s) + a verify block." : "Short description → the AI designs the skill for you (command, triggers, knowledge, verify block)."; if (hint.firstChild && hint.firstChild.nodeType === 3) hint.firstChild.nodeValue = strong + " "; }
             void PS;
           } catch {}
         });
         pubPrompt.addEventListener("paste", () => { setTimeout(() => { try { pubPrompt.dispatchEvent(new Event("input", { bubbles: true })); } catch {} }, 0); });
         pubPrompt.addEventListener("keydown", (e) => { e.stopPropagation(); if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); const b = panel.querySelector("[data-public-create]"); if (b) b.click(); } });
       }
-      const pubKind = panel.querySelector("#rs-public-kind");
-      if (pubKind) pubKind.addEventListener("change", () => { publicKind = pubKind.value; });
       // 2.2.2 — References: the form commits on submit (Enter in a one-line
       // field or the button); the kind select swaps url / body fields live.
       const pubRefs = panel.querySelector("[data-public-refs]");

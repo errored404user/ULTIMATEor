@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Featured Public Skills (2.17.0) against the miniature Roblox DataModel.
+"""Featured Public Skills (2.18.0) against the miniature Roblox DataModel.
 
 tests/test-public-packs.js checks the pack statically (validation, registration, UI,
 command). This script does what a user would: installs the pack into PublicSkills in
@@ -12,6 +12,11 @@ ignored) and client (panel, typewriter, branching), the zone server (one tick: e
 damage, leave), the collectible server (spawn, touch -> stat, respawn queued) and
 client (spin), the boss bar (bind, drain, death), damage numbers (server fire, client
 popup) and the NPC brain (compiles; dead humanoid -> State 'dead').
+
+2.18.0: after each successful install the skill's VERIFY block (PublicSkills.buildVerify,
+the exact program public_skill_test {dry_run:false} sends to Studio) runs in the same
+DataModel and must return ok=true; against a wrong target it must return ok=false. This
+is the mocked rehearsal of the self-test that marks an installed skill VERIFIED.
 
 Everything here is a MOCK of Roblox; a real Studio run is still the final word.
 
@@ -46,7 +51,8 @@ const reserved=new Set(S.SKILL_COMMANDS.map(c=>c.name).concat(PS.managementTools
 const inst=PP.install(PS, PP.PACK_ID, {reserved});
 const want=JSON.parse(process.argv[1]);
 const out={installed:inst.installed.map(i=>i.name), errors:inst.errors, warnings:inst.warnings, programs:{}};
-for(const [key,[name,args]] of Object.entries(want)){ const r=PS.buildLuau(name,args); out.programs[key]=r.code||("--ERR "+r.err); }
+out.verifies={};
+for(const [key,[name,args]] of Object.entries(want)){ const r=PS.buildLuau(name,args); out.programs[key]=r.code||("--ERR "+r.err); const v=PS.buildVerify(name,args,null); out.verifies[key]=v.code||("--ERR "+v.err); }
 process.stdout.write(JSON.stringify(out));
 """
 
@@ -77,6 +83,7 @@ if gen.returncode != 0:
     sys.exit(1)
 data = json.loads(gen.stdout)
 programs = data["programs"]
+verifies = data["verifies"]
 
 passed = failed = 0
 def ok(name, cond, detail=""):
@@ -146,6 +153,20 @@ local bad = Instance.new("LocalScript") bad.Name = "Bad" bad.Source = "local ds 
 def runp(key):
     return run(key, programs[key])
 
+def runv(key):
+    """Run the skill's verify block (built with result=nil) in the current DataModel."""
+    return run("verify:" + key, verifies[key])
+
+def verify_ok(key, label):
+    v = runv(key)
+    ok("  VERIFY " + label + " passes after the install (" + key + ")", v.get("ok") is True and v.get("verify") is True, v)
+    return v
+
+def verify_fails(key, label):
+    v = runv(key)
+    ok("  VERIFY " + label + " fails honestly when the target is wrong (" + key + ")", v.get("ok") is False and v.get("verify") is True and bool(v.get("error")), v)
+    return v
+
 def compile_sources(container_names=None):
     """Compile every LuaSourceContainer in the DataModel; returns (count, failures)."""
     res = lua(r"""
@@ -164,6 +185,7 @@ def compile_sources(container_names=None):
 # ── 1. damage numbers ────────────────────────────────────────────────────────
 r = runp("damage")
 ok("damage_numbers_pro installs folder + remote + server + client", r.get("ok") and len(r.get("installed", [])) == 3 and r.get("crit_threshold") == 25, r)
+verify_ok("damage", "damage_numbers_pro")
 ok("  settings as attributes on ReplicatedStorage.DamageNumbers", lua('local f = game.ReplicatedStorage.DamageNumbers return f:GetAttribute("Font") == "FredokaOne" and f:GetAttribute("ShowHeal") == true and f:FindFirstChild("Show").ClassName == "RemoteEvent"'))
 lua(r"""M.runScript(game.ServerScriptService.DamageNumbersServer)""")
 before = len(list(M.fired.values()))
@@ -180,14 +202,17 @@ ok("  client: -30 pops as a CRIT ('-30!'), +12 as a heal, in the chosen font, in
 # ── 2. NPC brain ─────────────────────────────────────────────────────────────
 r = runp("npc")
 ok("npc_patrol_chase writes the brain + attributes, keeps the waypoint folder path", r.get("ok") and r.get("brain") == "Workspace.Guard.NPCBrain" and r.get("waypoints") == "Workspace.GuardPath" and lua('return _G.Guard:GetAttribute("DetectRange") == 30 and _G.Guard:GetAttribute("Damage") == 10 and _G.Guard.PrimaryPart.Name == "HumanoidRootPart"'), r)
+verify_ok("npc", "npc_patrol_chase")
 r = runp("npc_missing")
 ok("  missing NPC -> honest error, nothing written", not r.get("ok") and "not found" in r.get("error", ""), r)
+verify_fails("npc_missing", "npc_patrol_chase")
 lua(r"""local hum = _G.Guard:FindFirstChildOfClass("Humanoid") hum.Health = 0 M.runScript(_G.Guard.NPCBrain)""")
 ok("  brain compiles and runs; a dead NPC parks with State 'dead' instead of looping", lua('return _G.Guard:GetAttribute("State")') == "dead")
 
 # ── 3. doors ─────────────────────────────────────────────────────────────────
 r = runp("door")
 ok("keycard_door_system on a Part: prompt + controller + attributes (slide along x by its own width)", r.get("ok") and r.get("axis") == "x" and r.get("distance") == 6 and "Keycard" in r.get("key", "") and lua('return _G.LabDoor:FindFirstChild("DoorPrompt") ~= nil and _G.LabDoor:FindFirstChild("DoorController") ~= nil and _G.LabDoor:GetAttribute("Open") == false'), r)
+verify_ok("door", "keycard_door_system")
 r2 = runp("gate")
 ok("  on a Model: largest part becomes PrimaryPart, every part anchored, swing motion", r2.get("ok") and r2.get("motion") == "swing" and r2.get("parts") == 2 and lua('return workspace.Gate.PrimaryPart ~= nil and workspace.Gate.Left.Anchored == true'), r2)
 lua(r"""M.runScript(_G.LabDoor.DoorController)""")
@@ -207,6 +232,7 @@ r = runp("dialogue_bad")
 ok("dialogue_tree_system rejects a tree whose start node is missing", not r.get("ok") and "nodes[start]" in r.get("error", ""), r)
 r = runp("dialogue")
 ok("  demo tree installs: module + prompt + server + client, 5 nodes, no warnings", r.get("ok") and r.get("nodes") == 5 and r.get("tree") == "ReplicatedStorage.Dialogue.Trees.Merchant" and r.get("warnings") == [] and lua('return _G.Merchant.HumanoidRootPart:FindFirstChild("DialoguePrompt"):GetAttribute("DialogueTree") == "Merchant"'), r)
+verify_ok("dialogue", "dialogue_tree_system")
 tree_ok = lua(r"""local t = require(game.ReplicatedStorage.Dialogue.Trees.Merchant) return type(t) == "table" and t.start == "greet" and #t.nodes.greet.choices == 3 and t.nodes.bridge.choices[1].action == "accept_quest_planks" """)
 ok("  the tree ModuleScript requires back into the same table (JSON round-trip)", tree_ok)
 lua(r"""M.runScript(game.ServerScriptService.DialogueServer)
@@ -237,6 +263,7 @@ ok("  client: choosing 'What happened to the bridge?' branches to a node with 2 
 # ── 5. collectibles ──────────────────────────────────────────────────────────
 r = runp("coins")
 ok("collectible_spawner installs template (coin cylinder, sparkle, empty SoundId), folder attributes, server + client", r.get("ok") and r.get("stat") == "Coins" and r.get("count") == 6 and lua('local t = game.ServerStorage.Collectibles.CoinTemplate return t.Shape == Enum.PartType.Cylinder and t.Sparkle.ClassName == "ParticleEmitter" and t.Pickup.SoundId == "" and workspace.Collectibles:GetAttribute("AreaPath") == "Workspace.CoinZone"'), r)
+verify_ok("coins", "collectible_spawner")
 lua(r"""M.runScript(game.ServerScriptService.CollectibleServer)""")
 spawned = lua(r"""local n, tagged, inside = 0, 0, 0 for _, c in ipairs(workspace.Collectibles:GetChildren()) do n = n + 1 if c:HasTag("Collectible") then tagged = tagged + 1 end local p = c.Position if math.abs(p.X - 50) <= 20 and math.abs(p.Z - 50) <= 20 then inside = inside + 1 end end return n, tagged, inside""")
 ok("  server: 6 tagged pieces spawned inside the CoinZone footprint; leaderstat Coins exists", spawned[0] == 6 and spawned[1] == 6 and spawned[2] == 6 and lua('return M.fakePlayer.leaderstats:FindFirstChild("Coins") ~= nil'), spawned)
@@ -251,6 +278,7 @@ ok("  client: one Heartbeat spins / bobs a piece (client-side CFrame only)", spi
 # ── 6. zones ─────────────────────────────────────────────────────────────────
 r = runp("zone")
 ok("zone_system tags the lava part with kind/amount/message and installs the shared scripts", r.get("ok") and r.get("parts") == 1 and r.get("amount") == 20 and lua('return _G.Lava:HasTag("Zone") and _G.Lava:GetAttribute("ZoneKind") == "damage" and game.ServerScriptService.ZoneServer:GetAttribute("Tick") == 0.5'), r)
+verify_ok("zone", "zone_system")
 r2 = runp("zone_safe")
 ok("  a Folder of parts -> every part becomes a safe zone; earlier lava tags survive", r2.get("ok") and r2.get("parts") == 2 and r2.get("amount") == 0 and lua('return workspace.Lobby.SafeA:GetAttribute("ZoneKind") == "safe" and _G.Lava:GetAttribute("ZoneKind") == "damage"'), r2)
 lua(r"""
@@ -275,8 +303,10 @@ ok("  client: the banner slides in with the message", banner[0] == True and bann
 # ── 7. boss bar ──────────────────────────────────────────────────────────────
 r = runp("boss_bad")
 ok("boss_health_bar refuses a non-Model target", not r.get("ok") and "Model" in r.get("error", ""), r)
+verify_fails("boss_bad", "boss_health_bar")
 r = runp("boss")
 ok("  tags the Dragon with BossBar + attributes, installs the shared client", r.get("ok") and r.get("phases") == 3 and r.get("health") == 2000 and lua('return _G.Dragon:HasTag("BossBar") and _G.Dragon:GetAttribute("BossTitle") == "Ancient Dragon"'), r)
+verify_ok("boss", "boss_health_bar")
 lua(r"""local hum = _G.Dragon:FindFirstChildOfClass("Humanoid") hum.Health = 2000 M.runScript(game.StarterPlayer.StarterPlayerScripts.BossBarClient, true)""")
 bar = lua(r"""local g = M.playerGui:FindFirstChild("BossBar") if not g then return "no gui" end
 local title for _, d in ipairs(g:GetDescendants()) do if d:IsA("TextLabel") and d.TextSize == 20 then title = d end end
@@ -293,8 +323,10 @@ ok("  death -> hide scheduled (task.delay queued), fill at 0", lua("return _G.fi
 # ── 8. checkpoints ────────────────────────────────────────────────────────────
 r = runp("cp_bad")
 ok("checkpoint_system: missing holder -> honest error", not r.get("ok") and "not found" in r.get("error", ""), r)
+verify_fails("cp_bad", "checkpoint_system")
 r = runp("cp")
 ok("  3 parts ordered by the number in their name (Checkpoint1 first, 3 last), tags + Stage attributes, server inside the folder, client shared", r.get("ok") and r.get("stages") == 3 and r.get("order") == "name" and r.get("first") == "Checkpoint1" and r.get("last") == "Checkpoint3" and lua('return _G.CP1:GetAttribute("Stage") == 1 and _G.CP3:GetAttribute("Stage") == 3 and _G.CP2:HasTag("Checkpoint") and workspace.Checkpoints:HasTag("CheckpointSet") and workspace.Checkpoints:FindFirstChild("CheckpointServer") ~= nil and game.StarterPlayer.StarterPlayerScripts:FindFirstChild("CheckpointClient") ~= nil'), r)
+verify_ok("cp", "checkpoint_system")
 lua(r"""M.runScript(workspace.Checkpoints.CheckpointServer)""")
 ok("  server: leaderstat Stage = 0 created for the present player", lua('return M.fakePlayer.leaderstats.Stage.Value') == 0)
 lua(r"""_G.CP1.Touched:Fire(_G.CharRoot)""")
@@ -318,8 +350,10 @@ ok("  client: banner 'Checkpoint 2 / 3' shown, reached parts green, next one yel
 # ── 9. gui polish kit ─────────────────────────────────────────────────────────
 r = runp("gui_bad")
 ok("gui_polish_kit refuses a Part", not r.get("ok") and "not a ScreenGui" in r.get("error", ""), r)
+verify_fails("gui_bad", "gui_polish_kit")
 r = runp("gui")
 ok("  cartoon style on StarterGui.HUD: 3 panels, 2 texts, 1 button, padding on the crowded frame, FredokaOne, 16px corners, 3px stroke", r.get("ok") and r.get("panels") == 3 and r.get("texts") == 2 and r.get("buttons") == 1 and r.get("paddings") == 1 and r.get("font") == "FredokaOne" and r.get("corner") == 16 and r.get("stroke") == 3, r)
+verify_ok("gui", "gui_polish_kit")
 added = lua(r"""local p = _G.HUD.Panel
 return p.TS_Corner.CornerRadius.Offset, p.TS_Stroke.Thickness, p.TS_Padding.PaddingLeft.Offset, _G.HUD.Panel.Title.TextScaled, _G.HUD.Panel.Title.TS_TextSize.MaxTextSize, tostring(_G.HUD.Panel.Title.Font), _G.PlayBtn.AutoButtonColor, _G.PlayBtn:GetAttribute("TS_Hover"), _G.HUD.TS_Scale ~= nil, _G.HUD.TS_PolishClient ~= nil""")
 ok("  TS_* elements: corner 16, stroke 3, padding 10, TextScaled + max 36, Font FredokaOne, button AutoButtonColor off + TS_Hover, UIScale + client in the ScreenGui", added[0] == 16 and added[1] == 3 and added[2] == 10 and added[3] == True and added[4] == 36 and added[5] == "Enum.Font.FredokaOne" and added[6] == False and added[7] == True and added[8] == True and added[9] == True, added)
@@ -332,6 +366,7 @@ ok("  client: hover grows the button to 124.8 px, press shrinks to 115.2, leave 
 # ── 10. game feel kit ─────────────────────────────────────────────────────────
 r = runp("feel")
 ok("game_feel_kit installs folder + remote + Client / Server modules + runner, heavy dose 1.6", r.get("ok") and r.get("dose") == 1.6 and r.get("demo") == True and lua('local f = game.ReplicatedStorage.GameFeel return f.Feel:IsA("RemoteEvent") and f.Client:IsA("ModuleScript") and f.Server:IsA("ModuleScript") and game.StarterPlayer.StarterPlayerScripts.GameFeelClient ~= nil and f:GetAttribute("Intensity") == "heavy"'), r)
+verify_ok("feel", "game_feel_kit")
 lua(r"""M.runScript(game.StarterPlayer.StarterPlayerScripts.GameFeelClient, true)""")
 shook = lua(r"""local Feel = M.runModule(game.ReplicatedStorage.GameFeel.Client)
 local cam = workspace.CurrentCamera local before = cam.CFrame.Position
@@ -366,6 +401,8 @@ old_src = lua('return game.ServerScriptService.Old.Source')
 ok("  fix_deprecated rewrote wait/spawn to task.* in exactly 1 script, left BodyVelocity / :Remove reported only", r.get("fixed") == 1 and old_src.startswith("task.wait(1)\ntask.spawn(") and "BodyVelocity" in old_src and ":Remove()" in old_src, old_src)
 ok("  score / verdict honest (errors -> blocked), report ModuleScript written to ServerStorage and it requires back", r.get("errors") >= 1 and r.get("verdict").startswith("blocked") and r.get("score") < 100 and r.get("report") == "ServerStorage.TotalScriptAuditReport" and lua('local rep = M.runModule(game.ServerStorage.TotalScriptAuditReport) return type(rep) == "table" and rep.score and #rep.findings') == r.get("total"), r)
 ok("  the unanchored character root is NOT flagged (character models are skipped)", not any(c.endswith("HumanoidRootPart") for c in checks))
+verify_ok("audit", "place_audit_report")
+ok("  every one of the 11 verify programs is plain Lua the sim could compile (no --ERR, no `continue`)", all(not v.startswith("--ERR") and "continue" not in v for v in verifies.values()), [k for k, v in verifies.items() if v.startswith("--ERR")])
 
 # ── compile every embedded script ────────────────────────────────────────────
 n, bad = compile_sources()

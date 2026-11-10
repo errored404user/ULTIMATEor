@@ -18,7 +18,7 @@
 // DOM-free at top level (loaded in node by the tests).
 (function (root) {
   "use strict";
-  const VERSION = "2.17.0";
+  const VERSION = "2.18.0";
 
   // ───────────────────────── expert library ─────────────────────────
   // Fields: id, title, env (roblox | blender | general), summary (one line
@@ -609,11 +609,14 @@
     const toks = new Set(t.split(" ").filter((w) => w.length > 2).map(stem));
     const out = [];
     for (const it of items || []) {
-      if (!it || it.enabled === false || it.kind === "mode") continue;
+      if (!it || it.enabled === false || (it.kind && it.kind !== "skill")) continue; // 2.18.0: skills only
       let score = 0; const why = [];
+      // 2.18.0: weighted triggers ("arena:4") count `weight` times - the same
+      // idea the built-in skills use, so a public skill can win a request.
+      const wOf = (w) => Math.max(1, Math.min(9, Number(it.weights && it.weights[w]) || 1));
       const fields = [].concat(String(it.name || "").split("_"), it.tags || [], it.triggers || [], String(it.title || "").toLowerCase().split(/\W+/));
-      for (const f of fields) { const w = String(f || "").toLowerCase().trim(); if (w.length > 2 && toks.has(stem(w))) { score += 3; if (!why.includes(w)) why.push(w); } }
-      for (const tr of it.triggers || []) { const p = String(tr || "").toLowerCase().trim(); if (p.includes(" ") && t.includes(" " + p + " ")) { score += 4; why.push(p); } }
+      for (const f of fields) { const w = String(f || "").toLowerCase().trim(); if (w.length > 2 && toks.has(stem(w))) { score += 3 * wOf(w); if (!why.includes(w)) why.push(w); } }
+      for (const tr of it.triggers || []) { const p = String(tr || "").toLowerCase().trim(); if (p.includes(" ") && t.includes(" " + p + " ")) { score += 4 * wOf(p); why.push(p); } }
       const desc = norm(it.description || "").split(" ");
       let dh = 0; for (const w of desc) if (w.length > 4 && toks.has(stem(w))) dh++;
       score += Math.min(4, dh);

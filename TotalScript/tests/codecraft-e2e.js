@@ -6,7 +6,7 @@
 //   cd TotalScript && npm i --no-save jsdom && node tests/codecraft-e2e.js
 //   NOKEY=1 node tests/codecraft-e2e.js   # no API key saved: bar warns, Start refuses, nothing is fetched
 //   ERR402=1 node tests/codecraft-e2e.js  # the API answers 402 (out of tokens): visible error, no loop hang
-//   CMD=1 node tests/codecraft-e2e.js     # 2.17.0: the model writes the PLAIN ###CMD name### envelope as bare text
+//   CMD=1 node tests/codecraft-e2e.js     # 2.18.0: the model writes the PLAIN ###CMD name### envelope as bare text
 //                                         # (no fence) - CodeCraft's own renderer must fence it and the adapter mask it
 //   DIAG=1 ...                            # print the [rs-diag] trace
 const fs = require("fs");
@@ -20,7 +20,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "u
 const pageHtml = fs.readFileSync(path.join(ROOT, "codecraft.html"), "utf8");
 const scripts = [...pageHtml.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]);
 const NOKEY = !!process.env.NOKEY;
-const API = "codecraft"; // 2.17.0: the DeepSeek API profile was removed - one profile
+const API = "codecraft"; // 2.18.0: the DeepSeek API profile was removed - one profile
 const PROF = { query: "", name: "CodeCraft API", base: "https://codecraftapi.com/v1/", hostRe: /^https:\/\/codecraftapi\.com\/v1\//, keyRe: /^Bearer cc_[A-Za-z0-9]{20,}$/, key: "cc_" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4", storeKey: "rsCodeCraft", models: ["claude-opus-4.8", "kimi-k3", "gpt-5.6-terra", "deepseek-v4-pro-max"], model: "kimi-k3", fallback: 10, prefix: "cc_", keysHint: /API Keys/ };
 const ERR402 = !!process.env.ERR402;
 const CMD = !!process.env.CMD;
@@ -298,7 +298,7 @@ const assistantRows = () => [...d.querySelectorAll("#cc-log article.cc-msg[data-
     if (process.env.DUMP) for (const r of assistantRows()) console.log("ROW:", r.className, r.innerHTML.replace(/\s+/g, " ").slice(0, 400));
     ok("command blocks are hidden behind TotalScript chips", assistantRows().some((r) => r.querySelector("pre.rs-tool-hide")));
     if (CMD) {
-      // 2.17.0: both bare ###CMD envelopes were fenced by CodeCraft's renderer AND masked by the adapter - no command text left visible.
+      // 2.18.0: both bare ###CMD envelopes were fenced by CodeCraft's renderer AND masked by the adapter - no command text left visible.
       const pres = assistantRows().flatMap((r) => [...r.querySelectorAll("pre")]).filter((pre) => /###\s*CMD\s/i.test(pre.textContent || ""));
       ok("CMD: both bare ###CMD name### envelopes were fenced into <pre> and masked (list_commands + execute_luau)", pres.length === 2 && pres.every((pre) => pre.classList.contains("rs-tool-hide")), pres.length + " pres, " + pres.filter((pre) => pre.classList.contains("rs-tool-hide")).length + " hidden");
       ok("CMD: no visible ###CMD text outside a masked <pre>", !assistantRows().some((r) => [...r.querySelectorAll(".cc-body > :not(pre):not(.rs-chip)")].some((el) => /###\s*CMD\s/i.test(el.textContent || ""))));

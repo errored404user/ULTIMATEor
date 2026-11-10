@@ -11,7 +11,7 @@
 //   * The desktop app (total-core) checks latest.json once a day (Settings →
 //     Updates, opt-out) and the extension asks the app (POST /api/update/check)
 //     - or, when the app is not running, reads the same latest.json itself.
-//   * Nothing installs by itself: the popup shows "2.17.0 available" with
+//   * Nothing installs by itself: the popup shows "2.18.0 available" with
 //     Update / Later / Skip. Update asks the APP to do the work (POST
 //     /api/update/apply): it downloads the tar, verifies the sha256, stages it,
 //     copies the files over the unpacked extension folder, then replaces its
@@ -24,7 +24,7 @@
 // or storage lives in background.js / popup.js and passes plain data in here.
 const TotalUpdater = (() => {
   "use strict";
-  const VERSION = "2.17.0";
+  const VERSION = "2.18.0";
   const REPO = "errored404user/ULTIMATEor";
   const RELEASES_URL = `https://github.com/${REPO}/releases`;
   // "latest/download/<asset>" redirects to the newest release's asset - no API,
@@ -44,7 +44,7 @@ const TotalUpdater = (() => {
   const COMPONENTS = Object.freeze(["extension", "app"]);
   const PHASES = Object.freeze(["idle", "downloading", "verifying", "staging", "applying", "restarting", "done", "failed"]);
 
-  // "v2.17.0" / "2.17.0" / "2.17.0-beta.1" → [2, 17, 0] (pre-release suffix ignored, but see isPrerelease)
+  // "v2.18.0" / "2.18.0" / "2.18.0-beta.1" → [2, 18, 0] (pre-release suffix ignored, but see isPrerelease)
   function parseVersion(v) {
     const m = /^\s*v?(\d+)\.(\d+)\.(\d+)/.exec(String(v == null ? "" : v));
     return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;

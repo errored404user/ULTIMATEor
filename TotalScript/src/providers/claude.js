@@ -63,7 +63,7 @@ const RSProvider = (() => {
   // <pre> was never camouflaged - the raw block stayed visible and the core's
   // ensureOwnedChip saw "raw command visible" on every sweep and rebuilt the
   // chip forever (the rebuild storm the Arena notes describe).
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*cmd\s|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.17.0: + the full ###CMD name### / ###COMMAND name### / ###TOOL name### opener (RSParse.CMD_START_RE)
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*cmd\s|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.18.0: + the full ###CMD name### / ###COMMAND name### / ###TOOL name### opener (RSParse.CMD_START_RE)
 
   const RE = {
     contextLimit: /conversation.{0,20}(too long|limit)|too many (tokens|characters)|maximum.{0,16}(length|context)|context window/i,

@@ -1,11 +1,11 @@
-// src/core/public_refs.js — Public Skills → References (2.17.0)
+// src/core/public_refs.js — Public Skills → References (2.18.0)
 //
 // A reference LIBRARY the user curates on this device: official docs links,
 // plain notes, pasted Luau / GUI snippets and text files. Entries are attached
 // to specific Public Skills (by name) and/or flagged "design" (handed to the AI
 // whenever it designs or converts a NEW item). The skills engine appends the
-// attached entries to an ability call, a mode's mandate and public_skill_refs
-// through PublicSkills.referencesText - this module never talks to the AI
+// attached entries to a skill's knowledge rider and public_skill_refs through
+// PublicSkills.referencesText - this module never talks to the AI
 // itself and never executes anything from an entry.
 //
 // Storage: chrome.storage.local rsPublicRefs (one array). Dependency-free,
@@ -14,7 +14,7 @@
 (function () {
   "use strict";
   const root = typeof window !== "undefined" ? window : globalThis;
-  const VERSION = "2.17.0";
+  const VERSION = "2.18.0";
   const KEY = "rsPublicRefs";
   const KINDS = Object.freeze(["link", "note", "snippet"]);
   const LANGS = Object.freeze(["luau", "text", "json", "markdown"]);

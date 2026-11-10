@@ -94,7 +94,7 @@ for (const b of bundles) {
   rows.push({ id, name: caps ? caps.name : "?", file: providerFile, caps, problems });
   ok(`${id}: adapter honours the read-side contract on an empty page (${PROBES.length} probes, ${REQUIRED_FNS.length} required functions)`, problems.length === 0, problems);
 }
-ok("every manifest bundle produced one adapter (" + rows.length + " distinct providers)", rows.length >= 11, rows.map((r) => r.id)); // 1.89.0: 12 bundles after the provider removal; 2.17.0: 11 (meta removed)
+ok("every manifest bundle produced one adapter (" + rows.length + " distinct providers)", rows.length >= 11, rows.map((r) => r.id)); // 1.89.0: 12 bundles after the provider removal; 2.18.0: 11 (meta removed)
 
 // ── capability table (offline) ──
 console.log("\nPROVIDER CAPABILITY REPORT — offline, mocked DOM; NOT a live-provider result");

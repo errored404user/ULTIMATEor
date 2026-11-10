@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/providers/multichat.js — adaptive provider for HuggingChat and OpenRouter Chat (2.17.0: Overchat + FeatherRBLX removed).
+// src/providers/multichat.js — adaptive provider for HuggingChat and OpenRouter Chat (2.18.0: Overchat + FeatherRBLX removed).
 // Each host is isolated to its plain text chat surface. DOM assumptions are semantic and fail visibly when the composer is unavailable.
 // eslint-disable-next-line no-unused-vars
 const RSProvider = (() => {
@@ -529,7 +529,7 @@ const RSProvider = (() => {
     }, true);
   }
 
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.17.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.18.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
   function findToolBlockSpot(item) {
     if (!item) return null;
     let parent = null, ref = null;

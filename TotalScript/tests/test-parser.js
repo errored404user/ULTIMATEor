@@ -86,6 +86,15 @@ ok("DeepSeek native-token tool call", tokenNative.length === 1 && tokenNative[0]
 ok("native tool syntax is a command signature", RSParse.hasToolSignature('<tool_call>list_commands</tool_call>') && RSParse.hasCommandShape('<｜DSML｜invoke name="list_commands"></｜DSML｜invoke>'));
 const brokenNative = '<tool_call>{"name":"inspect_instance","arguments":{"path":}</tool_call>';
 ok("malformed native call is detectable but never executable", RSParse.hasToolSignature(brokenNative) && RSParse.parseAlternateToolCalls(brokenNative).length === 0);
+{
+  // 2.18.0: a {name, args} object that is the params of a proper {command, params}
+  // block is NOT a native envelope (public_skill_test {name, dry_run, args} is the
+  // everyday case) - the requested format wins and the outer command runs.
+  const nested = "Proving it.\n```json\n" + JSON.stringify({ command: "public_skill_test", params: { name: "lantern_row", dry_run: false, args: { path: "Workspace", count: 2 } } }) + "\n```";
+  const nestedCalls = RSParse.parseToolCalls(nested);
+  ok("{name, args} nested inside a {command, params} block is not an alternate envelope; the outer command parses with its full params", RSParse.parseAlternateToolCalls(nested).length === 0 && nestedCalls.length === 1 && nestedCalls[0].tool === "public_skill_test" && nestedCalls[0].arguments.name === "lantern_row" && nestedCalls[0].arguments.args.count === 2);
+  ok("a bare native {name, args} object (no command wrapper) is still accepted as an alternate envelope", RSParse.parseAlternateToolCalls('{"name":"get_studio_state","args":{}}').length === 1 && RSParse.parseAlternateToolCalls('<tool_call>{"name":"list_commands","arguments":{}}</tool_call>')[0].tool === "list_commands");
+}
 
 ok("open lua block detected", RSParse.hasOpenToolBlock("###LUA###\nlocal x=1") === true);
 ok("closed lua block not open", RSParse.hasOpenToolBlock("###LUA###\nreturn 1\n###END_LUA###") === false);

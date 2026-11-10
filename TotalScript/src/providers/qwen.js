@@ -834,7 +834,7 @@ const RSProvider = (() => {
   // markdown subtree on stream updates, so mark the assistant turn with
   // .rs-cmd-mask and let the CSS rule (overlay.css) re-hide recreated pre
   // elements with no flash.
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.17.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.18.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
   function findToolBlockSpot(item) {
     const bd = bodyEl(item);
     if (!bd) return null;

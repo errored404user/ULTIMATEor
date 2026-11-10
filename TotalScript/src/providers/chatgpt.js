@@ -265,7 +265,7 @@ const RSProvider = (() => {
   // Non-reasoning reply text only: join the .markdown container(s). Reasoning
   // renders outside .markdown, so this never sees tool blocks the model merely
   // drafts while thinking.
-  const COMMANDISH_TEXT = /"(?:command|tool)"\s*:\s*"|###\s*(?:lua|mcp_tool)|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)/i; // 2.17.0: + ###CMD name###
+  const COMMANDISH_TEXT = /"(?:command|tool)"\s*:\s*"|###\s*(?:lua|mcp_tool)|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)/i; // 2.18.0: + ###CMD name###
 
   const replyNodes = (item) => {
     if (!item) return [];
@@ -1253,10 +1253,10 @@ const RSProvider = (() => {
   // catches a stray inline one). React re-creates these nodes on every token, so
   // - like Gemini - we also mark the .markdown container with .rs-cmd-mask; the
   // overlay.css rule keeps every recreated <pre> hidden with no flash.
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.17.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.18.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
   // Marker pair, for the UNFENCED case below. Kept separate from CMD_SHAPE so the
   // opener test can't also match the closer.
-  const CMD_OPEN = /###\s*(?:LUA|MCP_TOOL|(?:CMD|COMMAND|TOOL)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*)\s*###/i; // 2.17.0: + ###CMD name###
+  const CMD_OPEN = /###\s*(?:LUA|MCP_TOOL|(?:CMD|COMMAND|TOOL)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*)\s*###/i; // 2.18.0: + ###CMD name###
   const CMD_CLOSE = /###\s*END[_\- ]?(?:LUA|MCP_TOOL|CMD|COMMAND|TOOL)\s*###/i;
 
   function findToolBlockSpot(item /*, chip */) {

@@ -277,6 +277,8 @@ function background(msg) {
         return { ok: true, text: /MessageError/.test(msg.arguments.code) ? "[]" : JSON.stringify({ errors: [], warnings: [], info: [], errorCount: 0, warningCount: 0 }) };
       }
       if (msg.name === "execute_luau" && STATE && !/StatePart|SimPart/.test(String(msg.arguments && msg.arguments.code || ""))) msg = { name: "get_studio_state" };
+      if (msg.name === "execute_luau" && /^-- TotalScript public skill 'lantern_row' v\d+ - VERIFY/.test(String(msg.arguments && msg.arguments.code || ""))) return { ok: true, text: JSON.stringify({ ok: true, verify: true, detail: "2 lanterns found under Workspace" }) };
+      if (msg.name === "execute_luau" && /^-- TotalScript public skill 'lantern_row'/.test(String(msg.arguments && msg.arguments.code || ""))) return { ok: true, text: JSON.stringify({ ok: true, created: 2 }) };
       if (msg.name === "execute_luau") return { ok: true, text: "OK: Part created (SimPart)" };
       if (msg.name === "get_studio_state") {
         if (STATE) {
@@ -412,11 +414,11 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
         return;
       }
       if (PUBLIC && phase >= 3) {
-        if (phase === 3) await replyWith("I'll build that as a public skill.\n" + cmd("public_skill_create", { definition: { kind: "skill", name: "lantern_row", title: "Lantern Row", description: "Places a row of anchored lantern parts with PointLights next to a target instance.", params: [{ name: "path", type: "string", description: "Full path of the parent", required: true }, { name: "count", type: "number", description: "How many lanterns", default: 3 }], luau: "local target = game\nfor seg in string.gmatch({{path}}, '[^.]+') do target = target:FindFirstChild(seg) if not target then return {ok=false, error='missing ' .. seg} end end\nlocal made = 0\nfor i = 1, {{count}} do local p = Instance.new('Part') p.Name = 'Lantern_' .. i p.Anchored = true p.Parent = target made += 1 end\nreturn {ok=true, created=made}" } }));
+        if (phase === 3) await replyWith("I'll build that as a public skill.\n" + cmd("public_skill_create", { definition: { kind: "skill", name: "lantern_row", title: "Lantern Row", description: "Places a row of anchored lantern parts with PointLights next to a target instance.", params: [{ name: "path", type: "string", description: "Full path of the parent", required: true }, { name: "count", type: "number", description: "How many lanterns", default: 3 }], luau: "local target = game\nfor seg in string.gmatch({{path}}, '[^.]+') do target = target:FindFirstChild(seg) if not target then return {ok=false, error='missing ' .. seg} end end\nlocal made = 0\nfor i = 1, {{count}} do local p = Instance.new('Part') p.Name = 'Lantern_' .. i p.Anchored = true p.Parent = target made += 1 end\nreturn {ok=true, created=made}", triggers: ["lantern", "lamp row"], knowledge: "## When to use\nThe user wants a row of lanterns / lamps along something.\n## After running\nReport the created count; the verify block counts Lantern_* children.", verify: { luau: "local n = 0\nfor _, c in ipairs(find(args.path):GetChildren()) do if c.Name:match('^Lantern_') then n += 1 end end\ncheck(n >= args.count, 'expected ' .. args.count .. ' lanterns, found ' .. n)\nreturn {ok = true, detail = n .. ' lanterns found'}", note: "counts Lantern_* parts under the target" } } }));
         else if (phase === 4) await replyWith("Installed. Let me try it.\n" + cmd("lantern_row", { path: "Workspace", count: 2 }));
         else if (phase === 5) await replyWith("Now the work mode.\n" + cmd("public_skill_create", { definition: { kind: "mode", title: "Horror Builder", badge: "HORROR", base: "visualizer", description: "Builds dread: fog, flicker, low light and sound layers.", mandate: "You are a horror ambience specialist. Every scene must have Atmosphere fog, low ambient light, at least one flickering light source and a sound layer; verify with a screenshot after each pass and never leave a scene fully lit.", focus: ["execute_luau", "get_studio_state"] } }));
-        else if (phase === 6) await replyWith("Switching to it.\n" + cmd("public_skill_enable", { name: "horror_builder", activate: true }));
-        else await replyWith("Done — Lantern Row is installed and Horror Builder is active.");
+        else if (phase === 6) await replyWith("Understood - modes are gone. Proving the skill instead.\n" + cmd("public_skill_test", { name: "lantern_row", dry_run: false, args: { path: "Workspace", count: 2 } }));
+        else await replyWith("Done — Lantern Row is installed and VERIFIED.");
         return;
       }
       if (HELP && phase >= 3) {
@@ -602,21 +604,25 @@ const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((c
       ok("no TotalScript-internal flags leaked to the bridge", !Object.keys(ex.arguments).some((k) => /^_total/.test(k)), JSON.stringify(Object.keys(ex.arguments)));
       await waitFor(() => userMessages.length >= 5, 40000, "lantern_row result");
       ok("result is labelled with the public skill's name", /^Output of 'lantern_row'/.test(userMessages[4]) && !/Output of 'execute_luau'/.test(userMessages[4]), userMessages[4].slice(0, 100).replace(/\n/g, " "));
+      ok("the unverified result is flagged for the model (callable, but says so)", /UNVERIFIED/.test(userMessages[4]), userMessages[4].slice(0, 200).replace(/\n/g, " "));
       await waitFor(() => userMessages.length >= 6, 40000, "mode create result");
-      ok("custom work mode installed", /"status": "INSTALLED"/.test(userMessages[5]) && /"kind": "mode"/.test(userMessages[5]) && /"name": "horror_builder"/.test(userMessages[5]), userMessages[5].slice(0, 160).replace(/\n/g, " "));
-      await waitFor(() => userMessages.length >= 7, 40000, "mode enable result");
-      ok("public_skill_enable activated the mode", /"activated": true/.test(userMessages[6]), userMessages[6].slice(0, 120).replace(/\n/g, " "));
+      ok("2.18.0: a custom work mode is REFUSED with the retirement message (nothing installed, no mode storage)", /VALIDATION_FAILED/.test(userMessages[5]) && /kind 'mode' was retired in 2\.18\.0/.test(userMessages[5]) && !/"status": "INSTALLED"/.test(userMessages[5]) && !w.PublicSkills.find("horror_builder"), userMessages[5].slice(0, 200).replace(/\n/g, " "));
+      await waitFor(() => userMessages.length >= 7, 40000, "public_skill_test result");
+      const verifyCall = toolCalls.find((c) => c.name === "execute_luau" && /^-- TotalScript public skill 'lantern_row' v\d+ - VERIFY/.test(String(c.arguments.code || "")));
+      ok("public_skill_test {dry_run:false} ran the command, then the verify block as a second execute_luau with args + the command's result injected", !!verifyCall && /local args = \{\["path"\]="Workspace",\["count"\]=2\}/.test(verifyCall.arguments.code) && /local result = \{\["ok"\]=true,\["created"\]=2\}/.test(verifyCall.arguments.code) && /Lantern_/.test(verifyCall.arguments.code), verifyCall ? verifyCall.arguments.code.split("\n").slice(0, 5).join(" | ").slice(0, 240) : "no verify call");
+      ok("the verify pass makes the skill VERIFIED (result says so, registry records it)", /"status": "VERIFIED"/.test(userMessages[6]) && /"verification": "verified"/.test(userMessages[6]) && /2 lanterns found/.test(userMessages[6]) && w.PublicSkills.verification("lantern_row").state === "verified", userMessages[6].slice(0, 200).replace(/\n/g, " "));
       const badge = d.getElementById("rs-work-badge");
-      ok("bar badge shows the custom mode on its Creation base (legacy visualizer base migrated)", !!badge && badge.textContent === "HORROR" && w.__rsWorkMode() === "creation" && w.__rsPublicMode() && w.__rsPublicMode().name === "horror_builder", badge && badge.textContent + " / " + w.__rsWorkMode());
+      ok("bar badge stays on the built-in mode (no custom-mode glue left): Totality, no public mode accessor", !!badge && w.__rsWorkMode() === "creation" && badge.textContent !== "HORROR" && typeof w.__rsPublicMode !== "function", badge && badge.textContent + " / " + w.__rsWorkMode());
       const sysPrompt = (() => { try { return w.eval("RS").buildSystemPrompt({ siteName: "Notion" }); } catch (e) { return "ERR " + e; } })();
-      ok("system prompt now carries the custom mandate", /CUSTOM WORK MODE: HORROR BUILDER/.test(sysPrompt) && /layered on TOTALITY/.test(sysPrompt) && /Custom work modes available: Horror Builder/.test(sysPrompt), sysPrompt.slice(0, 60));
+      const catBlock = w.PublicSkills.catalogueBlock({ compact: false });
+      ok("system prompt keeps the static PUBLIC SKILLS section and no custom-mode section; the live catalogue block (list_commands) lists the verified skill with its signature and no UNVERIFIED tag", /PUBLIC SKILLS/.test(sysPrompt) && !/CUSTOM WORK MODE/.test(sysPrompt) && !/Custom work modes available/.test(sysPrompt) && /PUBLIC SKILLS - 1 user-made skill \(1 command\)/.test(catBlock) && /^lantern_row \{path, count\?\} - /m.test(catBlock) && !/lantern_row[^\n]*\[UNVERIFIED\]/.test(catBlock), catBlock.slice(0, 200));
       // Public tab in the cards panel lists both items.
       const cardsBtn = d.getElementById("rs-cards-btn") || [...d.querySelectorAll("#rs-bar button")].find((b) => /cards|library|templates/i.test(b.getAttribute("aria-label") || b.title || b.textContent || ""));
       if (cardsBtn) { cardsBtn.click(); await sleep(200); const tab = d.querySelector('.rs-cards-tab[data-tab="public"]'); if (tab) { tab.click(); await sleep(200); } }
       const rows = [...d.querySelectorAll(".rs-public-row")];
-      ok("Public tab lists the skill and the mode", rows.length === 2 && rows.some((r) => /Lantern Row/.test(r.textContent)) && rows.some((r) => /Horror Builder/.test(r.textContent) && /ACTIVE/.test(r.textContent)), rows.map((r) => r.textContent.replace(/\s+/g, " ").slice(0, 60)).join(" || ") || "cardsBtn=" + !!cardsBtn);
+      ok("Public tab lists the one skill with the VERIFIED badge (no mode card)", rows.length === 1 && /Lantern Row/.test(rows[0].textContent) && !!rows[0].querySelector(".rs-public-verify-verified") && !rows.some((r) => /Horror Builder/.test(r.textContent)), rows.map((r) => r.textContent.replace(/\s+/g, " ").slice(0, 60)).join(" || ") || "cardsBtn=" + !!cardsBtn);
       ok("Public tab has the prompt composer", !!d.getElementById("rs-public-prompt") && !!d.querySelector("[data-public-create]"));
-      ok("registry stored the items and the active mode", Array.isArray(storage.rsPublicSkills) && storage.rsPublicSkills.length === 2 && typeof storage.rsPublicMode === "string");
+      ok("registry stored the skill (with its tested record) and no mode key", Array.isArray(storage.rsPublicSkills) && storage.rsPublicSkills.length === 1 && storage.rsPublicSkills[0].tested && storage.rsPublicSkills[0].tested.level === "verified" && /2 lanterns found/.test(storage.rsPublicSkills[0].tested.detail) && storage.rsPublicMode === undefined);
       await waitFor(() => (w.__rsDiag || []).some((e) => e.event === "loop.end"), 30000, "loop.end");
       ok("agent loop ended after the final text reply", true);
       await sleep(800);

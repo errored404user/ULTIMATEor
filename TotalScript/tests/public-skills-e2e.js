@@ -60,7 +60,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(pred, ms, label) { const until = Date.now() + ms; while (Date.now() < until) { try { const v = pred(); if (v) return v; } catch {} await sleep(40); } throw new Error("timeout waiting for " + label); }
 const results = []; const ok = (name, cond, extra) => { results.push([name, !!cond]); console.log((cond ? "PASS  " : "FAIL  ") + name + (extra ? "  — " + extra : "")); if (!cond) process.exitCode = 1; };
 const PROMPT = "# Boss Arena Builder\nYou build circular boss arenas in Roblox Studio.\n\n1. Create a 120-stud circular floor with a neon ring.\n2. Add four pillars and a raised throne platform.\n3. Place spawn locations at the four compass points.\n4. Verify the part count and report it.\nAlways use create_part for geometry and set_lighting for mood.";
+const PROMPT_LUAU = PROMPT + "\n\nRun this for the floor:\n```luau\nlocal floor = Instance.new(\"Part\")\nfloor.Name = \"ArenaFloor\"\nfloor.Size = Vector3.new(120, 1, 120)\nfloor.Anchored = true\nfloor.Parent = workspace\nreturn {ok = true, path = floor:GetFullName()}\n```";
 const TXT = "# Lantern Line\nkind: skill\ndescription: Places N lanterns with warm PointLights along the selected path.\nparams: count:number=4 \"how many\"\n--- luau ---\nlocal n = {{count}}\nfor i = 1, n do local p = Instance.new('Part') p.Parent = workspace end\nprint('placed', n)\n";
+const SKILL_MD = "---\nname: lantern_md\ndescription: Places lanterns from a pasted SKILL.md (2.18.0 canonical format).\ntriggers:\n  - lantern\nparams:\n  - count:number=3\n---\n## Knowledge\nPlace lanterns 8 studs apart.\n## Command lantern_md\n```luau\nlocal n = {{count}}\nreturn {ok = true, count = n}\n```\n## Verify\n```luau\nreturn {ok = result.count == args.count, detail = 'count matches'}\n```\n";
 function dropFiles(target, files) {
   const dt = { files, types: ["Files"], items: files.map((f) => ({ kind: "file", getAsFile: () => f })) };
   for (const type of ["dragenter", "dragover", "drop"]) { const ev = new w.Event(type, { bubbles: true, cancelable: true }); Object.defineProperty(ev, "dataTransfer", { value: dt }); target.dispatchEvent(ev); }
@@ -68,6 +70,8 @@ function dropFiles(target, files) {
 (async () => {
   try {
     await waitFor(() => d.getElementById("rs-bar"), 8000, "#rs-bar");
+    // toasts are .rs-toast nodes (data-msg) appended to the notify host - collect them as they appear
+    new w.MutationObserver((muts) => { for (const m of muts) for (const n of m.addedNodes) { if (n.nodeType !== 1) continue; for (const t of (n.matches && n.matches(".rs-toast") ? [n] : [...(n.querySelectorAll ? n.querySelectorAll(".rs-toast") : [])])) toasts.push(t.dataset.msg || t.textContent); } }).observe(d.documentElement, { childList: true, subtree: true });
     await sleep(800);
     const cardsBtn = await waitFor(() => d.getElementById("rs-cards-btn"), 4000, "cards button");
     cardsBtn.click(); await sleep(150);
@@ -75,30 +79,33 @@ function dropFiles(target, files) {
     ok("cards panel opens", panel && !panel.hidden);
     panel.querySelector('[data-tab="public"]').click(); await sleep(150);
     const sec = () => panel.querySelector(".rs-public");
-    ok("Public tab shows the 3 ways in + composer + Save as-is + Load .txt", sec() && sec().querySelectorAll(".rs-public-ways li").length === 3 && sec().querySelector("#rs-public-prompt") && sec().querySelector("[data-public-save-text]") && sec().querySelector("[data-public-load-text]") && sec().querySelector("[data-public-drop]"));
-    ok("Create button starts as 'Create with AI'; Save as-is disabled while empty", /Create with AI/.test(sec().querySelector("[data-public-create]").textContent) && sec().querySelector("[data-public-save-text]").disabled);
+    ok("Public tab shows the 3 ways in + composer + Load file + drop zone (2.18.0: Save as-is only appears for a full prompt)", sec() && sec().querySelectorAll(".rs-public-ways li").length === 3 && sec().querySelector("#rs-public-prompt") && !sec().querySelector("[data-public-save-text]") && sec().querySelector("[data-public-load-text]") && sec().querySelector("[data-public-drop]"));
+    ok("Create button starts as 'Create with AI'; the compose note states the skill anatomy", /Create with AI/.test(sec().querySelector("[data-public-create]").textContent) && /Luau command\(s\) \+ triggers \+ knowledge \+ verify block/.test(sec().querySelector(".rs-public-compose-note").textContent));
     // Example chip fills the box
     sec().querySelector("[data-public-example]").click(); await sleep(80);
     ok("example chip fills the composer and shows the design hint", /street lamps/.test(panel.querySelector("#rs-public-prompt").value) && /designs the/.test((panel.querySelector(".rs-public-hint") || {}).textContent || ""));
     // Paste a full prompt: label flips, hint flips
     let ta = panel.querySelector("#rs-public-prompt");
     ta.value = PROMPT; ta.dispatchEvent(new w.Event("input", { bubbles: true })); await sleep(80);
-    ok("full prompt → Create button becomes 'Turn prompt into a skill (AI)' and the hint says convert", /Turn prompt into a skill/.test(panel.querySelector("[data-public-create]").textContent) && panel.querySelector(".rs-public-hint-convert"), panel.querySelector("[data-public-create]").textContent);
-    ok("Save as-is enabled once there is a prompt", !panel.querySelector("[data-public-save-text]").disabled);
+    ok("full prompt → Create button becomes 'Design a skill from it (AI)' and the hint says the prompt becomes the knowledge", /Design a skill from it \(AI\)/.test(panel.querySelector("[data-public-create]").textContent) && panel.querySelector(".rs-public-hint-convert") && /prompt becomes its knowledge/.test(panel.querySelector(".rs-public-hint-convert").textContent), panel.querySelector("[data-public-create]").textContent);
+    ok("Save as-is appears (enabled) once there is a full prompt", panel.querySelector("[data-public-save-text]") && !panel.querySelector("[data-public-save-text]").disabled);
     // Convert with AI → the message composed for the model is the conversion prompt
     const PS = w.PublicSkills;
     const sent = [];
     const Prov = w.RSProvider; const origSend = Prov.typeAndSend; Prov.typeAndSend = async (t) => { sent.push(t); return true; };
     panel.querySelector("[data-public-create]").click(); await sleep(300);
-    ok("AI path sends the faithful conversion prompt with the verbatim prompt + create instructions", sent.length === 1 && /CONVERT it; do not redesign it/.test(sent[0]) && sent[0].includes("<<<PROMPT\n" + PROMPT + "\nPROMPT>>>") && /public_skill_create/.test(sent[0]) && !/Production brief/.test(sent[0]), (sent[0] || "").slice(0, 200));
+    ok("AI path sends the design brief: verbatim prompt, 'KNOWLEDGE = the prompt itself', Luau command + verify required, create instructions", sent.length === 1 && /PROMPT → PUBLIC SKILL \(DESIGN BRIEF\)/.test(sent[0]) && /KNOWLEDGE = the prompt itself/.test(sent[0]) && sent[0].includes("<<<PROMPT\n" + PROMPT + "\nPROMPT>>>") && /public_skill_create/.test(sent[0]) && /verify/.test(sent[0]) && !/Production brief/.test(sent[0]), (sent[0] || "").slice(0, 200));
     Prov.typeAndSend = origSend;
     // Save as-is (no AI)
     panel.querySelector('[data-tab="public"]').click(); await sleep(100);
     ta = panel.querySelector("#rs-public-prompt"); ta.value = PROMPT; ta.dispatchEvent(new w.Event("input", { bubbles: true })); await sleep(80);
     panel.querySelector("[data-public-save-text]").click(); await sleep(250);
+    ok("Save as-is on a prompt WITHOUT Luau installs nothing (2.18.0: no prompt-only abilities) and points at the AI designer", !PS.find("boss_arena_builder") && PS.list().length === 0 && toasts.some((t) => /No Luau in that text/.test(t) && /Design a skill from it \(AI\)/.test(t)), JSON.stringify(toasts.slice(-2)));
+    ta = panel.querySelector("#rs-public-prompt"); ta.value = PROMPT_LUAU; ta.dispatchEvent(new w.Event("input", { bubbles: true })); await sleep(80);
+    panel.querySelector("[data-public-save-text]").click(); await sleep(250);
     const inst = PS.find("boss_arena_builder");
-    ok("Save as-is installs an ability instantly, verbatim, with steps and referenced commands", inst && inst.kind === "ability" && inst.instructions === PROMPT && inst.steps.length === 4 && inst.commands.includes("create_part"), JSON.stringify(inst && { kind: inst.kind, steps: inst.steps.length, commands: inst.commands }));
-    ok("installed row rendered with Export .txt action", !!panel.querySelector('[data-public-id="' + inst.id + '"] [data-public-action="export-text"]'));
+    ok("Save as-is on a prompt WITH Luau installs a skill instantly: the fenced Luau is the command, the prose is the knowledge, no verify → UNVERIFIED", inst && inst.kind === "skill" && /floor\.Name = "ArenaFloor"/.test(inst.luau) && /circular boss arenas/.test(inst.knowledge) && /throne platform/.test(inst.knowledge) && !inst.verify && PS.verification(inst).state === "unverified", JSON.stringify(inst && { kind: inst.kind, luau: inst.luau.slice(0, 40), knowledge: (inst.knowledge || "").slice(0, 40) }));
+    ok("installed row rendered with the UNVERIFIED badge + Export actions (.json and SKILL.md)", !!panel.querySelector('[data-public-id="' + inst.id + '"] .rs-public-verify-unverified') && /Export SKILL\.md/.test(panel.querySelector('[data-public-id="' + inst.id + '"] [data-public-action="export"]').textContent) && /Export \.json/.test(panel.querySelector('[data-public-id="' + inst.id + '"] [data-public-action="export-text"]').textContent));
     ok("review modal opened for the install", !!d.querySelector(".rs-public-editor, .rs-public-installed, [data-public-installed]") || true);
     // Drop a .txt skill file → installs
     const f1 = new w.File([TXT], "lantern_line.skill.orskill.txt", { type: "text/plain" });
@@ -109,15 +116,17 @@ function dropFiles(target, files) {
     const f2 = new w.File(["You are a senior horror-map specialist.\nPrioritise dread, fog and flickering lights over detail.\nNever add bright colours.\nVerify with a screenshot every time."], "horror.txt", { type: "text/plain" });
     dropFiles(sec(), [f2]); await sleep(300);
     ta = panel.querySelector("#rs-public-prompt");
-    ok("dropping a prose .txt loads it into the composer in convert mode", /horror-map specialist/.test(ta.value) && /Turn prompt into a skill/.test(panel.querySelector("[data-public-create]").textContent) && !!panel.querySelector(".rs-public-hint-convert"));
-    // Kind=mode + Save as-is → custom work mode
-    panel.querySelector("#rs-public-kind").value = "mode"; panel.querySelector("#rs-public-kind").dispatchEvent(new w.Event("change", { bubbles: true }));
-    panel.querySelector("[data-public-save-text]").click(); await sleep(250);
-    const modes = PS.list({ kind: "mode" });
-    ok("Save as-is with kind=mode installs a custom work mode (mandate verbatim, creation base)", modes.length === 1 && modes[0].base === "creation" && /horror-map specialist/.test(modes[0].mandate), JSON.stringify(modes.map((m) => [m.name, m.base])));
-    // Export .txt round-trips
+    ok("dropping a prose .txt loads it into the composer in convert mode", /horror-map specialist/.test(ta.value) && /Design a skill from it \(AI\)/.test(panel.querySelector("[data-public-create]").textContent) && !!panel.querySelector(".rs-public-hint-convert") && toasts.some((t) => /Loaded the prompt from horror\.txt/.test(t)));
+    // 2.18.0: no kind picker any more (skills only); pasting a SKILL.md flips the button to Import and installs as-is
+    ok("no kind picker in the composer (skills only)", !panel.querySelector("#rs-public-kind"));
+    ta = panel.querySelector("#rs-public-prompt"); ta.value = SKILL_MD; ta.dispatchEvent(new w.Event("input", { bubbles: true })); await sleep(120);
+    ok("pasted SKILL.md → Create button reads 'Import SKILL.md' and the hint says it installs as-is", /Import SKILL\.md/.test(panel.querySelector("[data-public-create]").textContent) && /This is a SKILL\.md/.test((panel.querySelector(".rs-public-hint") || {}).textContent || ""), panel.querySelector("[data-public-create]").textContent);
+    panel.querySelector("[data-public-create]").click(); await sleep(300);
+    const md = PS.find("lantern_md");
+    ok("Import SKILL.md installs it: trigger, param shorthand, knowledge, command Luau and verify block all kept; still UNVERIFIED until a Studio test", md && md.triggers.join() === "lantern" && md.params.length === 1 && md.params[0].default === 3 && /8 studs apart/.test(md.knowledge) && /result\.count == args\.count/.test(md.verify.luau) && PS.verification(md).state === "unverified", JSON.stringify(md && { t: md.triggers, p: md.params, v: !!md.verify }));
+    // Export = SKILL.md and it round-trips
     const txt = PS.exportText("lantern_line");
-    ok("Export .txt round-trips through parseText", PS.parseText(txt).ok && PS.parseText(txt).def.name === "lantern_line");
+    ok("Export (SKILL.md) round-trips through parseSkillMd with the param default intact", PS.isSkillMd(txt) && PS.parseSkillMd(txt).ok && PS.parseSkillMd(txt).def.name === "lantern_line" && PS.validate(PS.parseSkillMd(txt).def, { allowDuplicateId: true }).item.params[0].default === 4);
     ok("no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" || ").slice(0, 300));
   } catch (e) { console.error(e); process.exitCode = 1; }
   const failed = results.filter((r) => !r[1]).length;

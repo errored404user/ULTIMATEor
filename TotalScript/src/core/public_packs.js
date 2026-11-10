@@ -1,4 +1,4 @@
-// TotalScript — Featured Public Skill packs (2.17.0)
+// TotalScript — Featured Public Skill packs (2.18.0)
 //
 // Ready-made, high-quality Public Skills that ship WITH the extension so anyone
 // can install them in one click (cards panel → Public → "Featured by
@@ -23,12 +23,16 @@
 //   • settings live as Attributes on the installed instances so people tweak
 //     them in the Properties panel without touching code;
 //   • the embedded scripts are plain Luau that also parses as Lua 5.x so the
-//     mocked Roblox sim (tests/public-pack-sim.py) can compile every one.
+//     mocked Roblox sim (tests/public-pack-sim.py) can compile every one;
+//   • 2.18.0: every item carries `knowledge` (when / before / after - what the
+//     AI reads when the skill's triggers match) and a `verify` block (runs after
+//     the command with args/result in scope; a pass is what makes the installed
+//     copy VERIFIED on the user's place - bundling never pre-verifies anything).
 //
 // This file is DOM-free at top level (node loads it for the tests).
 (function (root) {
   "use strict";
-  const VERSION = "2.17.0";
+  const VERSION = "2.18.0";
   const PACK_ID = "totalscript_featured";
   const AUTHOR = "TotalScript";
   const DOCS = "https://create.roblox.com/docs/";
@@ -113,6 +117,25 @@ end)()
       { name: "heal_color", type: "string", required: false, default: "#4ADE80", description: "Hex colour for heals" },
     ],
     references: [ref("BillboardGui", "reference/engine/classes/BillboardGui"), ref("TweenService", "reference/engine/classes/TweenService"), ref("Humanoid", "reference/engine/classes/Humanoid"), ref("Remote events", "scripting/events/remote")],
+    knowledge: String.raw`## When to use
+- The user wants hit / heal / CRIT numbers floating over characters or NPCs - combat feedback, "damage popups", "floating text".
+
+## Before running
+- Nothing to prepare: it watches every Humanoid (scope: all / players / npcs). Run it once; a re-run only updates the settings.
+
+## After running
+- Tell the user the settings are Attributes on ReplicatedStorage.DamageNumbers (CritThreshold, colours, Scale, Font) - tweak them in Properties, no code.
+- Other scripts can fire ReplicatedStorage.DamageNumbers.Show (player, position, amount, kind) for custom numbers.
+- Sounds are not included (no invented asset ids): offer to add a hit SFX hook if asked.`,
+    verify: { note: "folder + RemoteEvent + server/client scripts exist with settings attributes", luau: String.raw`local folder = find("ReplicatedStorage.DamageNumbers")
+check(folder, "ReplicatedStorage.DamageNumbers missing")
+check(folder:FindFirstChild("Show") and folder.Show:IsA("RemoteEvent"), "Show RemoteEvent missing")
+check(folder:GetAttribute("CritThreshold") ~= nil, "CritThreshold attribute missing")
+local server = find("ServerScriptService.DamageNumbersServer")
+check(server and server:IsA("Script") and #server.Source > 200, "DamageNumbersServer script missing or empty")
+local client = find("StarterPlayer.StarterPlayerScripts.DamageNumbersClient")
+check(client and client:IsA("LocalScript") and #client.Source > 200, "DamageNumbersClient missing or empty")
+return { ok = true, detail = "folder + RemoteEvent + server + client present; CritThreshold=" .. tostring(folder:GetAttribute("CritThreshold")) }` },
     luau: PRELUDE + String.raw`
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -126,7 +149,7 @@ folder:SetAttribute("Font", tostring(args.font or "GothamBold"))
 folder:SetAttribute("DamageColor", hexColor(args.damage_color, Color3.fromRGB(255, 90, 90)))
 folder:SetAttribute("CritColor", hexColor(args.crit_color, Color3.fromRGB(255, 200, 61)))
 folder:SetAttribute("HealColor", hexColor(args.heal_color, Color3.fromRGB(74, 222, 128)))
-folder:SetAttribute("Version", "2.17.0")
+folder:SetAttribute("Version", "2.18.0")
 
 setSource(ServerScriptService, "Script", "DamageNumbersServer", [==[
 -- Damage Numbers Pro (TotalScript featured skill) - server side.
@@ -278,6 +301,23 @@ return {
       { name: "attack_cooldown", type: "number", required: false, default: 1.2 },
     ],
     references: [ref("Character pathfinding", "characters/pathfinding"), ref("PathfindingService", "reference/engine/classes/PathfindingService"), ref("Humanoid", "reference/engine/classes/Humanoid"), ref("Humanoid.MoveTo", "reference/engine/classes/Humanoid#MoveTo"), ref("Attributes", "scripting/attributes")],
+    knowledge: String.raw`## When to use
+- An NPC / enemy / guard / zombie model should patrol and chase players - "enemy AI", "make the zombie follow me".
+
+## Before running
+- The model needs a Humanoid and a HumanoidRootPart (R6/R15 rigs or rig_generate output). Use search_game_tree to get its exact path.
+- Waypoints are optional: a Folder of Parts walked in name order; without it the NPC wanders within patrol_radius of home.
+
+## After running
+- Every tuning value is an Attribute on the model (DetectRange, LoseRange, WalkSpeed, ChaseSpeed, AttackRange, Damage, AttackCooldown); State shows idle / patrol / chase / attack / dead live.
+- damage 0 makes a follower that never attacks. Suggest a Playtest to see it move; the brain only runs in Play.`,
+    verify: { note: "the NPC has a Humanoid, the NPCBrain script and its tuning attributes", luau: String.raw`local npc = find(args.npc)
+check(npc, "NPC not found at " .. tostring(args.npc))
+check(npc:FindFirstChildOfClass("Humanoid"), "no Humanoid in " .. npc:GetFullName())
+local brain = npc:FindFirstChild("NPCBrain")
+check(brain and brain:IsA("Script") and #brain.Source > 500, "NPCBrain script missing or empty")
+check(npc:GetAttribute("DetectRange") ~= nil and npc:GetAttribute("State") ~= nil, "DetectRange / State attributes missing")
+return { ok = true, detail = npc:GetFullName() .. " has NPCBrain, DetectRange=" .. tostring(npc:GetAttribute("DetectRange")) }` },
     luau: PRELUDE + String.raw`
 local npc = resolve(args.npc)
 if not npc then return { ok = false, error = "NPC not found at '" .. tostring(args.npc) .. "' - give the full path, e.g. Workspace.Zombie" } end
@@ -503,6 +543,24 @@ return {
       { name: "locked_text", type: "string", required: false, default: "Locked - keycard required" },
     ],
     references: [ref("Proximity prompts", "ui/proximity-prompts"), ref("ProximityPrompt", "reference/engine/classes/ProximityPrompt"), ref("TweenService", "reference/engine/classes/TweenService"), ref("Tools", "players/tools")],
+    knowledge: String.raw`## When to use
+- A door / gate should open from a ProximityPrompt, optionally locked behind a keycard Tool or a player attribute.
+
+## Before running
+- The door is a Part or a Model (every BasePart inside moves together). Get its path with search_game_tree; do not guess.
+- motion: slide (default, along the widest side), swing (90 degrees on its edge) or fade (walk-through).
+
+## After running
+- Settings are Attributes on the door (Motion, Axis, Distance, OpenTime, AutoClose, KeyTool, KeyAttribute, PromptText, LockedText). Open is the live state.
+- Other scripts: door:SetAttribute("RequestOpen", true). Give the player the key Tool (players/tools) if key was set.`,
+    verify: { note: "door has DoorController, a DoorPrompt and Motion/Open attributes", luau: String.raw`local door = find(args.door)
+check(door, "door not found at " .. tostring(args.door))
+local ctl = door:FindFirstChild("DoorController")
+check(ctl and ctl:IsA("Script") and #ctl.Source > 300, "DoorController script missing")
+local prompt = door:FindFirstChild("DoorPrompt", true)
+check(prompt and prompt:IsA("ProximityPrompt"), "DoorPrompt ProximityPrompt missing")
+check(door:GetAttribute("Motion") ~= nil and door:GetAttribute("Open") ~= nil, "Motion / Open attributes missing")
+return { ok = true, detail = door:GetFullName() .. " motion=" .. tostring(door:GetAttribute("Motion")) .. " key=" .. tostring(door:GetAttribute("KeyTool")) }` },
     luau: PRELUDE + String.raw`
 local door = resolve(args.door)
 if not door then return { ok = false, error = "door not found at '" .. tostring(args.door) .. "'" } end
@@ -683,6 +741,27 @@ return {
       { name: "prompt_text", type: "string", required: false, default: "Talk" },
     ],
     references: [ref("Proximity prompts", "ui/proximity-prompts"), ref("Rich text", "ui/rich-text"), ref("Remote events", "scripting/events/remote"), ref("UI animation", "ui/animation")],
+    knowledge: String.raw`## When to use
+- NPC conversations, quest givers, branching dialogue with choices - "talk to the NPC", "dialog tree".
+
+## Before running
+- Needs the NPC path (Model or Part). Without a tree param a demo tree is installed so the user can see the UI immediately.
+- A real tree is {start, nodes:{id:{speaker?, text, choices:[{text, next, action?}]}}}; keep ids short, end a branch with next = null.
+
+## After running
+- Trees live as ModuleScripts under ReplicatedStorage.Dialogue.Trees (one per NPC) - editable in Studio. Accent and TypewriterSpeed are Attributes on the folder.
+- Choice actions reach the server through ReplicatedStorage.Dialogue.Action and ServerScriptService.DialogueServer's OnAction BindableEvent - wire quests there.`,
+    verify: { note: "Dialogue folder/remote/tree module + server/client, NPC prompt wired", luau: String.raw`local folder = find("ReplicatedStorage.Dialogue")
+check(folder, "ReplicatedStorage.Dialogue missing")
+check(folder:FindFirstChild("Action") and folder.Action:IsA("RemoteEvent"), "Action RemoteEvent missing")
+local trees = folder:FindFirstChild("Trees")
+check(trees and trees:FindFirstChildOfClass("ModuleScript"), "no tree ModuleScript under Dialogue.Trees")
+check(find("ServerScriptService.DialogueServer"), "DialogueServer missing")
+check(find("StarterPlayer.StarterPlayerScripts.DialogueClient"), "DialogueClient missing")
+local npc = find(args.npc)
+check(npc and npc:GetAttribute("DialogueTree") ~= nil, "NPC has no DialogueTree attribute")
+check(npc:FindFirstChild("DialoguePrompt", true), "DialoguePrompt missing on the NPC")
+return { ok = true, detail = "tree " .. tostring(npc:GetAttribute("DialogueTree")) .. " wired to " .. npc:GetFullName() }` },
     luau: PRELUDE + String.raw`
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -734,7 +813,7 @@ ensure(folder, "RemoteEvent", "Action")
 local trees = ensure(folder, "Folder", "Trees")
 folder:SetAttribute("Accent", hexColor(args.accent, Color3.fromRGB(34, 211, 238)))
 folder:SetAttribute("TypewriterSpeed", num(args.typewriter_speed, 40, 0, 400))
-folder:SetAttribute("Version", "2.17.0")
+folder:SetAttribute("Version", "2.18.0")
 local json = HttpService:JSONEncode(tree)
 local mod = setSource(trees, "ModuleScript", treeName, "-- Dialogue tree for " .. title .. " (edit freely; choices: {text, next = node id or nil to end, action = optional string sent to the server})\nlocal HttpService = game:GetService(\"HttpService\")\nreturn HttpService:JSONDecode([=====[" .. json .. "]=====])\n")
 mod:SetAttribute("NPC", npc:GetFullName())
@@ -1025,6 +1104,24 @@ return {
       { name: "color", type: "string", required: false, default: "#FFC83D", description: "Hex colour" },
     ],
     references: [ref("Leaderboards", "players/leaderboards"), ref("CollectionService", "reference/engine/classes/CollectionService"), ref("Particle emitters", "effects/particle-emitters"), ref("Raycasting", "workspace/raycasting")],
+    knowledge: String.raw`## When to use
+- Coins / gems / orbs scattered in an area that add to a leaderstat and respawn - "spawn 20 coins", "collectibles".
+
+## Before running
+- area (a Part footprint) gives the best placement; otherwise a circle around center / the first SpawnLocation. Pieces are raycast onto whatever is under them.
+- count 1-200. The leaderstat (stat) is created if missing.
+
+## After running
+- Workspace.Collectibles holds the live pieces (Attributes Count / Respawn / Stat / Radius); ServerStorage.Collectibles keeps the template - restyle it and re-run.
+- Tell the user to Playtest: touching a piece increments the stat, respawn after \`respawn\` seconds (0 = never).`,
+    verify: { note: "template, Workspace.Collectibles with Count/Stat, server + client", luau: String.raw`local store = find("ServerStorage.Collectibles")
+check(store and store:FindFirstChildWhichIsA("BasePart", true), "template missing under ServerStorage.Collectibles")
+local folder = find("Workspace.Collectibles")
+check(folder, "Workspace.Collectibles missing")
+check(folder:GetAttribute("Count") ~= nil and folder:GetAttribute("Stat") ~= nil, "Count / Stat attributes missing")
+check(find("ServerScriptService.CollectibleServer"), "CollectibleServer missing")
+check(find("StarterPlayer.StarterPlayerScripts.CollectibleClient"), "CollectibleClient missing")
+return { ok = true, detail = tostring(folder:GetAttribute("Count")) .. " x " .. tostring(folder:GetAttribute("Template")) .. " -> leaderstat " .. tostring(folder:GetAttribute("Stat")) }` },
     luau: PRELUDE + String.raw`
 local ServerStorage = game:GetService("ServerStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -1099,7 +1196,7 @@ folder:SetAttribute("Stat", stat)
 folder:SetAttribute("Radius", num(args.radius, 40, 2, 2000))
 folder:SetAttribute("AreaPath", area and area:GetFullName() or "")
 folder:SetAttribute("CenterPath", center and center:GetFullName() or "")
-folder:SetAttribute("Version", "2.17.0")
+folder:SetAttribute("Version", "2.18.0")
 
 setSource(ServerScriptService, "Script", "CollectibleServer", [==[
 -- Collectible Spawner (TotalScript featured skill) - server side.
@@ -1255,6 +1352,26 @@ return {
       { name: "invisible", type: "boolean", required: false, default: false, description: "Make the zone parts fully transparent + non-colliding" },
     ],
     references: [ref("Attributes", "scripting/attributes"), ref("CollectionService", "reference/engine/classes/CollectionService"), ref("Humanoid", "reference/engine/classes/Humanoid"), ref("Remote events", "scripting/events/remote")],
+    knowledge: String.raw`## When to use
+- Safe zones, lava / kill bricks, heal pads, speed or jump areas, "show a banner when entering the arena".
+
+## Before running
+- zone is a Part, or a Folder / Model whose Parts all become zones. kind decides the effect; amount is per second for damage / heal, WalkSpeed for speed, JumpPower for jump.
+- invisible:true hides and uncollides the zone parts (good for trigger volumes).
+
+## After running
+- Each zone Part carries ZoneKind / ZoneAmount / ZoneMessage Attributes + the tag Zone - change them live. ServerScriptService.ZoneServer.Tick is the check interval.
+- Players expose Zone / InSafeZone Attributes while inside - other scripts (PvP toggles, shops) can read them.`,
+    verify: { note: "Zones remote, server + client, and at least one tagged Zone part under the target", luau: String.raw`local CollectionService = game:GetService("CollectionService")
+check(find("ReplicatedStorage.Zones.Message"), "ReplicatedStorage.Zones.Message missing")
+check(find("ServerScriptService.ZoneServer"), "ZoneServer missing")
+check(find("StarterPlayer.StarterPlayerScripts.ZoneClient"), "ZoneClient missing")
+local target = find(args.zone)
+check(target, "zone not found at " .. tostring(args.zone))
+local tagged = 0
+for _, p in ipairs(CollectionService:GetTagged("Zone")) do if p == target or p:IsDescendantOf(target) then tagged = tagged + 1 end end
+check(tagged > 0, "no Part under " .. target:GetFullName() .. " carries the Zone tag")
+return { ok = true, detail = tostring(tagged) .. " zone part(s) tagged, kind=" .. tostring(args.kind) }` },
     luau: PRELUDE + String.raw`
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1283,7 +1400,7 @@ end
 
 local folder = ensure(ReplicatedStorage, "Folder", "Zones")
 ensure(folder, "RemoteEvent", "Message")
-folder:SetAttribute("Version", "2.17.0")
+folder:SetAttribute("Version", "2.18.0")
 local server = setSource(ServerScriptService, "Script", "ZoneServer", [==[
 -- Zone System (TotalScript featured skill) - server side.
 -- Every Part tagged "Zone" with attributes ZoneKind / ZoneAmount / ZoneMessage is checked each tick.
@@ -1489,6 +1606,24 @@ return {
       { name: "hide_on_death", type: "boolean", required: false, default: true },
     ],
     references: [ref("Humanoid", "reference/engine/classes/Humanoid"), ref("UI animation", "ui/animation"), ref("CollectionService", "reference/engine/classes/CollectionService"), ref("Position and size", "ui/position-and-size")],
+    knowledge: String.raw`## When to use
+- A big top-of-screen health bar with phase segments for a boss / elite enemy.
+
+## Before running
+- The boss Model needs a Humanoid. phases 1-10 draws segments; show_range hides the bar until the player is near.
+
+## After running
+- The model is tagged BossBar with BossTitle / BossPhases / BossAccent / BossShowRange / BossHideOnDeath Attributes; one StarterPlayerScripts.BossBarClient serves every tagged boss - tag more models for more bosses.
+- Pair it with npc_patrol_chase for a boss that fights back; damage_numbers_pro for hit feedback.`,
+    verify: { note: "boss tagged BossBar with title/phases, BossBarClient present", luau: String.raw`local CollectionService = game:GetService("CollectionService")
+local boss = find(args.boss)
+check(boss, "boss not found at " .. tostring(args.boss))
+check(boss:FindFirstChildOfClass("Humanoid"), "boss has no Humanoid")
+check(CollectionService:HasTag(boss, "BossBar"), "BossBar tag missing on " .. boss:GetFullName())
+check(boss:GetAttribute("BossTitle") ~= nil and boss:GetAttribute("BossPhases") ~= nil, "BossTitle / BossPhases attributes missing")
+local client = find("StarterPlayer.StarterPlayerScripts.BossBarClient")
+check(client and client:IsA("LocalScript"), "BossBarClient missing")
+return { ok = true, detail = tostring(boss:GetAttribute("BossTitle")) .. " / " .. tostring(boss:GetAttribute("BossPhases")) .. " phases" }` },
     luau: PRELUDE + String.raw`
 local CollectionService = game:GetService("CollectionService")
 local boss = resolve(args.boss)
@@ -1705,6 +1840,27 @@ return {
       { name: "celebrate", type: "boolean", required: false, default: true, description: "Sparkle burst + banner when a new checkpoint is reached" },
     ],
     references: [ref("Leaderboards", "players/leaderboards"), ref("CollectionService", "reference/engine/classes/CollectionService"), ref("Attributes", "scripting/attributes"), ref("BasePart.Touched", "reference/engine/classes/BasePart#Touched"), ref("Player.CharacterAdded", "reference/engine/classes/Player#CharacterAdded")],
+    knowledge: String.raw`## When to use
+- Obby / race stages: touch a checkpoint, respawn there, leaderstat Stage, celebration on reaching a new one.
+
+## Before running
+- checkpoints is a Folder / Model holding the stage parts; numbered names (1, 2, 3 or Stage1...) define the order, otherwise folder order.
+
+## After running
+- Every part gets the tag Checkpoint + a Stage attribute; the holder gets CheckpointSet + StatName / RespawnOffset / DoneColor / NextColor / Celebrate / Total; the server script lives inside the holder, the client in StarterPlayerScripts.
+- Other scripts: fire holder.SetStage (BindableEvent) with (player, stage); listen to holder.CheckpointReached.`,
+    verify: { note: "holder tagged CheckpointSet with server script, events and staged parts; client present", luau: String.raw`local CollectionService = game:GetService("CollectionService")
+local holder = find(args.checkpoints)
+check(holder, "holder not found at " .. tostring(args.checkpoints))
+check(CollectionService:HasTag(holder, "CheckpointSet"), "CheckpointSet tag missing on the holder")
+local server = holder:FindFirstChild("CheckpointServer")
+check(server and server:IsA("Script"), "CheckpointServer script missing inside the holder")
+check(holder:FindFirstChild("CheckpointReached") and holder:FindFirstChild("SetStage"), "CheckpointReached / SetStage events missing")
+local staged = 0
+for _, p in ipairs(holder:GetDescendants()) do if p:IsA("BasePart") and p:GetAttribute("Stage") ~= nil then staged = staged + 1 end end
+check(staged > 0, "no part under the holder has a Stage attribute")
+check(find("StarterPlayer.StarterPlayerScripts.CheckpointClient"), "CheckpointClient missing")
+return { ok = true, detail = tostring(staged) .. " stage(s) in " .. holder:GetFullName() }` },
     luau: PRELUDE + String.raw`
 local CollectionService = game:GetService("CollectionService")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -1981,6 +2137,24 @@ return {
       { name: "text_scale", type: "boolean", required: false, default: true, description: "TextScaled + UITextSizeConstraint (10-36 px) on every text" },
     ],
     references: [ref("Appearance modifiers", "ui/appearance-modifiers"), ref("UICorner", "reference/engine/classes/UICorner"), ref("UIStroke", "reference/engine/classes/UIStroke"), ref("UIPadding", "reference/engine/classes/UIPadding"), ref("UITextSizeConstraint", "reference/engine/classes/UITextSizeConstraint"), ref("UI animation", "ui/animation")],
+    knowledge: String.raw`## When to use
+- An existing ScreenGui looks flat / inconsistent: rounded corners, strokes, padding, text-size constraints, hover tweens and a UIScale in one pass.
+
+## Before running
+- screen is the ScreenGui (or a Frame inside one) path - StarterGui.HUD style. Style names: sleek / cartoon / minimal / glass. It never changes layout or positions, only adds TS_* UI children.
+
+## After running
+- Everything it added is named TS_Corner / TS_Stroke / TS_Padding / TS_TextSize / TS_Scale, so a re-run updates them and they are easy to remove. Hover tweens come from rootGui.TS_PolishClient.
+- Follow with total_screenshot and judge the result like an art director; adjust accent / corner and re-run.`,
+    verify: { note: "TS_* polish instances exist under the target and TS_PolishClient in the ScreenGui", luau: String.raw`local target = find(args.screen)
+check(target, "screen not found at " .. tostring(args.screen))
+local rootGui = target:IsA("LayerCollector") and target or (target:FindFirstAncestorWhichIsA("LayerCollector") or target)
+local added = 0
+for _, d in ipairs(target:GetDescendants()) do if string.sub(d.Name, 1, 3) == "TS_" then added = added + 1 end end
+check(added > 0, "no TS_* polish instances under " .. target:GetFullName() .. " (empty GUI?)")
+local client = rootGui:FindFirstChild("TS_PolishClient")
+check(client and client:IsA("LocalScript"), "TS_PolishClient missing in " .. rootGui:GetFullName())
+return { ok = true, detail = tostring(added) .. " TS_* instances + TS_PolishClient in " .. rootGui:GetFullName() }` },
     luau: PRELUDE + String.raw`
 local target = resolve(args.screen)
 if not target then return { ok = false, error = "nothing at '" .. tostring(args.screen) .. "' - give a ScreenGui path such as StarterGui.HUD" } end
@@ -2151,6 +2325,23 @@ return {
       { name: "demo", type: "boolean", required: false, default: false, description: "Shake + red flash when the local character loses health (remove later or keep as hit feedback)" },
     ],
     references: [ref("Camera", "workspace/camera"), ref("RunService.RenderStepped", "reference/engine/classes/RunService#RenderStepped"), ref("TweenService", "reference/engine/classes/TweenService"), ref("Remote events", "scripting/events/remote"), ref("Highlighting", "effects/highlighting")],
+    knowledge: String.raw`## When to use
+- Juice: camera shake, screen flash, hit-stop / FOV kick that any script can call - "make hits feel heavy", "game feel".
+
+## Before running
+- Nothing to prepare. intensity subtle / medium / heavy sets the global dose; demo:true wires shake + red flash to the local character losing health (remove later).
+
+## After running
+- API: require(ReplicatedStorage.GameFeel.Client).Shake / Flash / Kick on the client; require(ReplicatedStorage.GameFeel.Server).Impact(position, strength) on the server (replicated through the Feel RemoteEvent, limited by MaxDistance).
+- Attributes on ReplicatedStorage.GameFeel: Intensity / Dose / FlashColor / MaxDistance / Demo.`,
+    verify: { note: "GameFeel folder with Feel remote, Client/Server modules, attributes, client script", luau: String.raw`local folder = find("ReplicatedStorage.GameFeel")
+check(folder, "ReplicatedStorage.GameFeel missing")
+check(folder:FindFirstChild("Feel") and folder.Feel:IsA("RemoteEvent"), "Feel RemoteEvent missing")
+check(folder:FindFirstChild("Client") and folder.Client:IsA("ModuleScript"), "Client ModuleScript missing")
+check(folder:FindFirstChild("Server") and folder.Server:IsA("ModuleScript"), "Server ModuleScript missing")
+check(folder:GetAttribute("Intensity") ~= nil, "Intensity attribute missing")
+check(find("StarterPlayer.StarterPlayerScripts.GameFeelClient"), "GameFeelClient missing")
+return { ok = true, detail = "GameFeel " .. tostring(folder:GetAttribute("Intensity")) .. " (Client + Server modules, Feel remote)" }` },
     luau: PRELUDE + String.raw`
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DOSES = { subtle = 0.6, medium = 1, heavy = 1.6 }
@@ -2397,6 +2588,20 @@ return {
       { name: "far_distance", type: "number", required: false, default: 5000, description: "Studs from the origin beyond which a part is flagged (physics precision)" },
     ],
     references: [ref("task library", "reference/engine/libraries/task"), ref("Streaming", "workspace/streaming"), ref("Improve performance", "performance-optimization/improve"), ref("Client-server boundary", "scripting/security/client-server-boundary"), ref("SpawnLocation", "reference/engine/classes/SpawnLocation")],
+    knowledge: String.raw`## When to use
+- "Audit my place", "what is wrong with my game", before publishing, after importing a model - a read-mostly health report.
+
+## Before running
+- scope empty = whole place; a path limits it. fix_deprecated:true is the ONLY mutation (wait/spawn/delay -> task.*); everything else is reported.
+
+## After running
+- The report is ServerStorage.TotalScriptAuditReport (ModuleScript) - open it in Studio. Summarise verdict + top findings; each row names the instance.
+- Offer the next step per finding (e.g. anchor loose parts, delete empty scripts), but do not fix silently.`,
+    verify: { note: "the audit report ModuleScript exists and the result carried a verdict", luau: String.raw`local report = find("ServerStorage.TotalScriptAuditReport")
+check(report and report:IsA("ModuleScript"), "ServerStorage.TotalScriptAuditReport missing")
+check(#report.Source > 50, "report is empty")
+check(result == nil or result.verdict ~= nil, "command result has no verdict")
+return { ok = true, detail = "report " .. tostring(#report.Source) .. " chars" .. (result and result.verdict and (", verdict " .. tostring(result.verdict)) or "") }` },
     luau: PRELUDE + String.raw`
 local ServerStorage = game:GetService("ServerStorage")
 local Lighting = game:GetService("Lighting")
@@ -2605,7 +2810,7 @@ return {
     return p.items.map((it) => {
       const inst = PS && typeof PS.find === "function" ? PS.find(it.name) : null;
       const have = inst && inst.kind === it.kind ? inst : null;
-      return { kind: it.kind, name: it.name, title: it.title, description: it.description, version: it.version, references: Array.isArray(it.references) ? it.references.length : 0, installed: !!have, installedVersion: have ? have.version : 0, modified: !!(have && Array.isArray(have.history) && have.history.length), upToDate: !!(have && have.version >= it.version) };
+      return { kind: it.kind, name: it.name, title: it.title, description: it.description, version: it.version, references: Array.isArray(it.references) ? it.references.length : 0, verify: !!(it.verify && it.verify.luau), knowledge: !!it.knowledge, installed: !!have, installedVersion: have ? have.version : 0, modified: !!(have && Array.isArray(have.history) && have.history.length), upToDate: !!(have && have.version >= it.version) };
     });
   }
   // Install (or update) items through the normal import path. names: optional subset.

@@ -621,7 +621,7 @@ const RSProvider = (() => {
   // a code-block, so hiding the wrapper then fails. The core anchors the chip at
   // the turn level (chipAtItemLevel), so the returned position is unused; this
   // function's real job is applying the .rs-tool-hide classes correctly.
-  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.17.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
+  const CMD_SHAPE = /"(?:command|tool)"\s*:\s*"|###\s*lua|###\s*(?:cmd|command|tool)\s*[:\s]\s*[A-Za-z_][A-Za-z0-9_.\/-]*\s*(?:###|---)|###mcp_tool###/i; // 2.18.0: + the plain ###CMD name### opener (same shape as RSParse.CMD_START_RE)
   function findToolBlockSpot(item /*, chip */) {
     const replies = [...item.querySelectorAll(S.reply)].filter((m) => !m.closest(S.thinking));
     let hidAny = null;

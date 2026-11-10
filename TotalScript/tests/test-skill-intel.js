@@ -22,7 +22,7 @@ for (const f of bundle.js.filter((f) => /src\/core\/(skills\/|studio_bridge\.js|
 vm.runInThisContext(read("src/core/skill_intel.js"), { filename: "skill_intel.js" });
 vm.runInThisContext(read("src/core/public_skills.js"), { filename: "public_skills.js" });
 const SI = window.TotalSkillIntel, PS = window.PublicSkills, PACK = RobloxScriptSkills;
-ok("module exposes window.TotalSkillIntel (analyze / select / answer / rider / plan / validateEnhanced)", SI && ["analyze", "select", "answer", "rider", "plan", "validateEnhanced", "rankPublic", "expertText", "listText"].every((k) => typeof SI[k] === "function") && SI.VERSION === "2.17.0");
+ok("module exposes window.TotalSkillIntel (analyze / select / answer / rider / plan / validateEnhanced)", SI && ["analyze", "select", "answer", "rider", "plan", "validateEnhanced", "rankPublic", "expertText", "listText"].every((k) => typeof SI[k] === "function") && SI.VERSION === "2.18.0");
 ok("module is DOM-free at top level", !/^\s*(const|let|var)?\s*\w*\s*=?\s*document\./m.test(read("src/core/skill_intel.js")) && !/\bdocument\./.test(read("src/core/skill_intel.js")));
 
 // ── 1. catalogue integrity ──
@@ -96,14 +96,15 @@ ok("conflict: 'debug' only when the intent is a fix / review / inspect ('build a
 ok("explain string says when nothing matched (no fake specialist)", /no expert matched clearly/.test(sel("hello there").explain));
 // installed public skills in the same ranking
 const pubItems = [
-  { id: "ps_1", kind: "ability", name: "boss_arena_builder", title: "Boss Arena Builder", tags: ["arena", "boss"], triggers: ["boss arena"], description: "Builds circular boss arenas with pillars and a throne platform.", enabled: true },
+  { id: "ps_1", kind: "skill", name: "boss_arena_builder", title: "Boss Arena Builder", tags: ["arena", "boss"], triggers: ["boss arena"], description: "Builds circular boss arenas with pillars and a throne platform.", enabled: true },
   { id: "ps_2", kind: "skill", name: "lantern_row", title: "Lantern Row", description: "Places lanterns along a path.", enabled: true }, // legacy: no tags / triggers
-  { id: "ps_3", kind: "mode", name: "horror", title: "Horror", description: "Horror mode", enabled: true },
-  { id: "ps_4", kind: "ability", name: "disabled_thing", title: "Disabled", tags: ["sword"], description: "sword sword sword", enabled: false },
+  { id: "ps_3", kind: "mode", name: "horror", title: "Horror", description: "Horror mode boss arena lanterns", enabled: true }, // retired kind (2.18.0): must be ignored even when its words match
+  { id: "ps_5", kind: "ability", name: "old_ability", title: "Old ability", triggers: ["boss arena"], description: "boss arena lanterns", enabled: true }, // retired kind (2.18.0)
+  { id: "ps_4", kind: "skill", name: "disabled_thing", title: "Disabled", tags: ["sword"], description: "sword sword sword", enabled: false },
   null, {}, { name: 5 },
 ];
 const pr = SI.rankPublic(SI.analyze("build a boss arena with lanterns around it"), pubItems, 2);
-ok("installed public skills ranked by name / tags / triggers / description; modes, disabled and malformed items ignored; legacy items without tags still rank", pr.length === 2 && pr[0].name === "boss_arena_builder" && pr[0].why.includes("boss arena") && pr[1].name === "lantern_row" && !pr.some((p) => p.name === "disabled_thing"), JSON.stringify(pr));
+ok("installed public skills ranked by name / tags / triggers / description; retired kinds (mode / ability), disabled and malformed items ignored; legacy items without tags still rank", pr.length === 2 && pr[0].name === "boss_arena_builder" && pr[0].why.includes("boss arena") && pr[1].name === "lantern_row" && !pr.some((p) => p.name === "disabled_thing" || p.name === "horror" || p.name === "old_ability"), JSON.stringify(pr));
 ok("select() carries the public matches (max 2) next to the experts", sel("build a boss arena with lanterns", { publicItems: pubItems }).publicItems.map((p) => p.name).join(",") === "boss_arena_builder,lantern_row");
 
 // ── 4. `skill` command answers + rider ──
@@ -170,20 +171,20 @@ ok("enhancer.js: Re-enhance keeps the previous result (S.prev) and never writes 
 ok("overlay.css styles the new enhancer pieces", [".rse-mode-hint", ".rse-insight", ".rse-checks", ".rse-check-list li[data-severity=\"warn\"]", ".rse-repair"].every((s) => read("overlay.css").includes(s)));
 
 // ── 8. public skills: triggers, legacy compat, relevance-capped catalogue ──
-const legacy = PS.validate({ kind: "ability", name: "old_one", description: "An ability saved before triggers existed.", instructions: "Do the old thing carefully and report." });
+const legacy = PS.validate({ kind: "skill", name: "old_one", description: "A skill saved before triggers existed.", luau: "return {ok = true} -- do the old thing carefully" });
 ok("legacy item (no triggers / tags) validates; triggers default to [] - missing metadata never crashes loading", legacy.ok && Array.isArray(legacy.item.triggers) && legacy.item.triggers.length === 0);
-const withTr = PS.validate({ kind: "ability", name: "boss_arena_builder", description: "Builds circular boss arenas.", instructions: "Build the arena with pillars and a throne platform.", triggers: ["Boss Arena", "arena", "ARENA", "throne room"] });
-ok("triggers normalised (lower-case, de-duplicated, max 12) and `when:` accepted as an alias", withTr.ok && withTr.item.triggers.join(",") === "boss arena,arena,throne room" && PS.validate({ kind: "ability", name: "x_alias", description: "alias field for triggers test.", instructions: "Do the aliased thing now please.", when: "a, b" }).item.triggers.join(",") === "a,b");
+const withTr = PS.validate({ kind: "skill", name: "boss_arena_builder", description: "Builds circular boss arenas.", luau: "return {ok = true} -- build the arena with pillars and a throne platform", triggers: ["Boss Arena", "arena", "ARENA", "throne room"] });
+ok("triggers normalised (lower-case, de-duplicated, max 12) and `when:` accepted as an alias", withTr.ok && withTr.item.triggers.join(",") === "boss arena,arena,throne room" && PS.validate({ kind: "skill", name: "x_alias", description: "alias field for triggers test.", luau: "return {ok = true} -- do the aliased thing now", when: "a, b" }).item.triggers.join(",") === "a,b");
 PS.replaceAll([]);
-const many = []; for (let i = 0; i < 15; i++) many.push({ kind: "ability", name: "proc_" + String.fromCharCode(97 + i) + "_thing", description: `Procedure number ${i} for generic tasks nobody asked about.`, instructions: "Do steps one two three and report what happened.", tags: i === 14 ? ["arena"] : [] });
+const many = []; for (let i = 0; i < 15; i++) many.push({ kind: "skill", name: "proc_" + String.fromCharCode(97 + i) + "_thing", description: `Procedure number ${i} for generic tasks nobody asked about.`, luau: "return {ok = true, step = 1} -- do steps one two three", tags: i === 14 ? ["arena"] : [] });
 many[7].triggers = ["boss arena"]; many[7].description = "Builds a circular boss arena with pillars.";
 for (const d of many) PS.upsert(d);
 const blockAll = PS.catalogueBlock({ compact: true, task: "build a boss arena please" });
-ok("catalogueBlock: with 15 installed only 12 are listed, the ones relevant to the task first, the rest counted with a pointer to public_skill_list", /PUBLIC SKILLS - 15 user-made commands/.test(blockAll) && (blockAll.match(/^proc_[a-z]_thing \{\}/gm) || []).length === 12 && blockAll.indexOf("proc_h_thing") < blockAll.indexOf("proc_a_thing") && /…and 3 more installed - public_skill_list \{\} shows all of them/.test(blockAll), blockAll.slice(0, 300));
+ok("catalogueBlock: with 15 installed only 12 are listed, the ones relevant to the task first, the rest counted with a pointer to public_skill_list", /PUBLIC SKILLS - 15 user-made skills \(15 commands\)/.test(blockAll) && /\[UNVERIFIED\] = no test pass yet: still callable/.test(blockAll) && (blockAll.match(/^proc_[a-z]_thing \{\}/gm) || []).length === 12 && (blockAll.match(/\[UNVERIFIED\]$/gm) || []).length === 12 && blockAll.indexOf("proc_h_thing") < blockAll.indexOf("proc_a_thing") && /…and 3 more installed - public_skill_list \{\} shows all of them/.test(blockAll), blockAll.slice(0, 300));
 ok("catalogueBlock: at or under the cap every command is listed exactly as before (no 'more' line)", (() => { PS.replaceAll(many.slice(0, 12)); const b = PS.catalogueBlock({ compact: true }); return (b.match(/^proc_[a-z]_thing \{\}/gm) || []).length === 12 && !/more installed/.test(b); })());
 PS.replaceAll(many);
 ok("relevant(): a trigger phrase qualifies, a lone tag hit stays under the noise floor; deterministic; empty text → []", PS.relevant("build a boss arena please", 3).map((r) => r.name).join(",") === "proc_h_thing" && PS.relevant("", 3).length === 0 && JSON.stringify(PS.relevant("boss arena", 3)) === JSON.stringify(PS.relevant("boss arena", 3)));
-ok("exportText carries triggers and parseText reads them back", (() => { PS.replaceAll([]); PS.upsert(withTr.item); const t = PS.exportText("boss_arena_builder"); const p = PS.parseText(t); PS.replaceAll([]); const v2 = PS.validate(p.ok ? p.def : {}); return /^triggers: boss arena, arena, throne room$/m.test(t) && p.ok && v2.ok && v2.item.triggers.join(",") === "boss arena,arena,throne room"; })());
-ok("DEFINITION_DOC tells the model about triggers[] (optional, ranking only)", /triggers\[\] \(optional: words \/ short phrases that say WHEN to use it - used for ranking\)/.test(PS.DEFINITION_DOC));
+ok("exportText (SKILL.md) carries triggers in the frontmatter and parseSkillMd reads them back; the legacy .txt form still parses too", (() => { PS.replaceAll([]); PS.upsert(withTr.item); const t = PS.exportText("boss_arena_builder"); const p = PS.parseSkillMd(t); const legacyTxt = PS.parseText("# Boss\nkind: skill\ntriggers: boss arena, arena, throne room\ndescription: Builds circular boss arenas.\n--- luau ---\nreturn {ok = true} -- arena body here\n"); PS.replaceAll([]); const v2 = PS.validate(p.ok ? p.def : {}); const v3 = PS.validate(legacyTxt.ok ? legacyTxt.def : {}); return /^triggers:\n  - boss arena\n  - arena\n  - throne room$/m.test(t) && p.ok && v2.ok && v2.item.triggers.join(",") === "boss arena,arena,throne room" && v3.ok && v3.item.triggers.join(",") === "boss arena,arena,throne room"; })());
+ok("DEFINITION_DOC tells the model about triggers[] (WHEN the skill applies - auto-selection + knowledge injection, weights allowed)", /triggers\[\] \(words \/ short phrases that say WHEN the skill applies; weight with 'phrase:3' - used for auto-selection and for injecting the knowledge\)/.test(PS.DEFINITION_DOC));
 
 console.log(`\n${fail ? "FAIL" : "OK"}    test-skill-intel: ${pass} passed, ${fail} failed`);

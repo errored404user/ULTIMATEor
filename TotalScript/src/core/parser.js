@@ -682,6 +682,18 @@ const RSParse = (() => {
     return { tool: name.trim(), arguments: args };
   }
 
+  function insideCommandBlock(text, start, end) {
+    let outer = start;
+    for (let depth = 0; depth < 3; depth++) {
+      outer = text.lastIndexOf("{", outer - 1);
+      if (outer === -1) return false;
+      const close = matchBrace(text, outer);
+      if (close === -1 || close < end) continue;
+      try { const o = parseLoose(text.slice(outer, close + 1)); if (o && typeof o === "object" && typeof o.command === "string") return true; } catch {}
+    }
+    return false;
+  }
+
   function parseAlternateToolCalls(text) {
     text = unescapeDsml(normalizeTypography(text));
     const out = [];
@@ -782,7 +794,10 @@ const RSParse = (() => {
         if (start === -1) { pos = at + key.length; continue; }
         const end = matchBrace(text, start);
         if (end === -1) { pos = at + key.length; continue; }
-        try { add(normalizeAlternateCall(parseLoose(text.slice(start, end + 1)), false)); } catch {}
+        // A {"name","args"} object NESTED in a proper {"command","params"} block is
+        // that command's parameters (public_skill_test {name, args} is the usual
+        // case), not a native envelope - the requested format wins.
+        if (!insideCommandBlock(text, start, end)) { try { add(normalizeAlternateCall(parseLoose(text.slice(start, end + 1)), false)); } catch {} }
         pos = Math.max(at + key.length, end + 1);
       }
     }
