@@ -1,6 +1,6 @@
 // TotalScript — Public Skills
 //
-// User-made SKILLS. Since 2.20.0 a public skill is the same thing a built-in
+// User-made SKILLS. Since 2.21.0 a public skill is the same thing a built-in
 // skill is - a package the agent can be handed:
 //
 //   * one or more COMMANDS   - parameterised Luau programs that run in Studio
@@ -19,7 +19,7 @@
 //                               button) ran the command AND the verify block.
 //
 // Abilities (prompt-only procedures) and custom work modes were retired in
-// 2.20.0: only skills can be created. Stored abilities that contained Luau are
+// 2.21.0: only skills can be created. Stored abilities that contained Luau are
 // converted to skills on load (their instructions become the knowledge);
 // prompt-only abilities and modes are dropped once with a notice that offers
 // their JSON for download (migrationNotice / migrationArchiveJson).
@@ -35,12 +35,12 @@
 (function (root) {
   "use strict";
   const KEY = "rsPublicSkills";
-  const MODE_KEY = "rsPublicMode"; // retired in 2.20.0 - removed from storage on load
+  const MODE_KEY = "rsPublicMode"; // retired in 2.21.0 - removed from storage on load
   const MIGRATION_KEY = "rsPublicSkillsMigration";
   const FORMAT = "totalscript-public-skill";
   const PACK_FORMAT = "totalscript-public-skill-pack";
   const FORMAT_VERSION = 2;
-  const VERSION = "2.20.0";
+  const VERSION = "2.21.0";
   const KINDS = ["skill"];
   const LEGACY_KINDS = ["ability", "mode"];
   // Kept for packs written before 1.39.0 (they named a base mode); every base maps to Creation.
@@ -93,7 +93,7 @@
     } catch {}
   }
 
-  // ── Load / persist (+ 2.20.0 migration) ─────────────────────────────────
+  // ── Load / persist (+ 2.21.0 migration) ─────────────────────────────────
   // migrateStored(rawItems) → { items, converted[], dropped[], archive[] }
   // Skills validate as before. Abilities whose instructions / steps / examples
   // contain Luau become skills (that Luau is the command, the prose becomes
@@ -127,7 +127,7 @@
       id: it.id, kind: "skill", name: it.name, title: it.title, description: it.description, version: it.version, author: it.author, tags: it.tags, triggers: it.triggers,
       enabled: it.enabled, source: it.source, createdAt: it.createdAt, references: it.references, examples: it.examples, expert: it.expert, stats: it.stats,
       params, luau: lua.slice(0, LIMITS.luau), knowledge: prose.slice(0, LIMITS.knowledge),
-      history: (it.history || []).concat([{ v: (parseInt(it.version, 10) || 1), at: Date.now(), note: "converted from an ability (2.20.0): its Luau is the command, the instructions are the knowledge" }]),
+      history: (it.history || []).concat([{ v: (parseInt(it.version, 10) || 1), at: Date.now(), note: "converted from an ability (2.21.0): its Luau is the command, the instructions are the knowledge" }]),
     };
   }
   function load() {
@@ -143,7 +143,7 @@
             items = m.items;
             migration = r && r[MIGRATION_KEY] && typeof r[MIGRATION_KEY] === "object" ? r[MIGRATION_KEY] : null;
             if (m.converted.length || m.dropped.length) {
-              migration = { at: Date.now(), version: "2.20.0", converted: m.converted, dropped: m.dropped, archive: m.archive };
+              migration = { at: Date.now(), version: "2.21.0", converted: m.converted, dropped: m.dropped, archive: m.archive };
               try { st.set({ [KEY]: clone(items), [MIGRATION_KEY]: migration }); } catch {}
             }
             if (r && r[MODE_KEY] !== undefined) { try { st.remove(MODE_KEY); } catch {} }
@@ -161,11 +161,11 @@
     if (!st) return;
     try { st.set({ [KEY]: clone(items) }); } catch {}
   }
-  // migrationNotice() → the one-time 2.20.0 record (converted + dropped) until
+  // migrationNotice() → the one-time 2.21.0 record (converted + dropped) until
   // dismissMigration(); migrationArchiveJson() → the dropped items' original JSON.
   const migrationNotice = () => (migration ? { at: migration.at, version: migration.version, converted: clone(migration.converted || []), dropped: clone(migration.dropped || []), archived: (migration.archive || []).length } : null);
   function dismissMigration() { migration = null; const st = storage(); try { if (st) st.remove(MIGRATION_KEY); } catch {} emit("migration", null); return true; }
-  function migrationArchiveJson() { if (!migration || !(migration.archive || []).length) return null; return JSON.stringify({ format: "totalscript-public-skill-archive", formatVersion: 1, app: "TotalScript", note: "Abilities and work modes retired in 2.20.0 - kept here for your records; they cannot be imported again.", exportedAt: new Date().toISOString(), items: migration.archive }, null, 2); }
+  function migrationArchiveJson() { if (!migration || !(migration.archive || []).length) return null; return JSON.stringify({ format: "totalscript-public-skill-archive", formatVersion: 1, app: "TotalScript", note: "Abilities and work modes retired in 2.21.0 - kept here for your records; they cannot be imported again.", exportedAt: new Date().toISOString(), items: migration.archive }, null, 2); }
 
   // ── Validation ──────────────────────────────────────────────────────────
   function inferKind(def) {
@@ -341,7 +341,7 @@
     const kind = inferKind(def);
     if (kind !== "skill") {
       errors.push(LEGACY_KINDS.includes(kind)
-        ? `kind '${kind}' was retired in 2.20.0 - only skills exist now. Put the procedure / rules into \`knowledge\` and write the work as Luau in \`luau\` (plus a \`verify\` block)`
+        ? `kind '${kind}' was retired in 2.21.0 - only skills exist now. Put the procedure / rules into \`knowledge\` and write the work as Luau in \`luau\` (plus a \`verify\` block)`
         : "a skill needs `luau` (the main command's Luau program; params become {{placeholders}} / args.*)");
       return { ok: false, errors, warnings, item: null };
     }
@@ -387,7 +387,7 @@
     const rawCmds = Array.isArray(def.commands) ? def.commands : [];
     if (rawCmds.length > LIMITS.commands) warnings.push(`only the first ${LIMITS.commands} extra commands are kept`);
     for (const c of rawCmds.slice(0, LIMITS.commands)) {
-      if (!c || typeof c !== "object") { if (typeof c === "string") warnings.push(`commands[] entry '${c}' ignored - since 2.20.0 commands[] holds {name, description, params, luau} objects (built-in command names belong in knowledge)`); continue; }
+      if (!c || typeof c !== "object") { if (typeof c === "string") warnings.push(`commands[] entry '${c}' ignored - since 2.21.0 commands[] holds {name, description, params, luau} objects (built-in command names belong in knowledge)`); continue; }
       const cname = snake(c.name || c.command || c.title);
       const where = `command '${cname || "?"}'`;
       if (!NAME_RE.test(cname)) { errors.push(`${where}: name must be snake_case, 3-41 chars`); continue; }
@@ -891,7 +891,7 @@
   }
 
   const DEFINITION_DOC = [
-    "DEFINITION OBJECT (JSON) - a public SKILL (the only kind since 2.20.0): name (snake_case, unique, 3-41 chars - also the main command's name), title, description (10-600 chars: what it does, when to use it), version (int), author, tags[], triggers[] (words / short phrases that say WHEN the skill applies; weight with 'phrase:3' - used for auto-selection and for injecting the knowledge), usage (one example call).",
+    "DEFINITION OBJECT (JSON) - a public SKILL (the only kind since 2.21.0): name (snake_case, unique, 3-41 chars - also the main command's name), title, description (10-600 chars: what it does, when to use it), version (int), author, tags[], triggers[] (words / short phrases that say WHEN the skill applies; weight with 'phrase:3' - used for auto-selection and for injecting the knowledge), usage (one example call).",
     "MAIN COMMAND: params[{name, type: string|number|boolean|array|object, description, required, default?, enum?}] and luau (the program; max 24000 chars). Every param is available in Luau BOTH as the Lua literal {{param}} and as args.param. The program runs in Studio through execute_luau in the Edit DataModel (plugin-level API, no `plugin` global, no yields over 5 s). Resolve instance paths first (walk game by name, fail with a clear error), wrap risky work in pcall, keep work idempotent, name created instances, record ChangeHistoryService waypoints for big edits, and RETURN A TABLE such as {ok=true, created=3, path='Workspace.X'} (it is JSON-encoded for the agent). Use `return {ok=false, error='...'}` for failures.",
     "EXTRA COMMANDS (optional): commands[{name, description, params[], luau, executionMode?}] - up to 6 more commands that belong to the same skill (e.g. zone_remove next to zone_system). Names share one namespace with every other command.",
     "KNOWLEDGE (optional, strongly recommended): knowledge - markdown the agent reads whenever the skill matches a request: rules, pitfalls, the order of operations, how to tweak the result, what to tell the user. This is where a procedure or prompt belongs (abilities and work modes no longer exist).",
@@ -932,7 +932,7 @@
     { name: "public_skill_from_prompt", description: "Design a Public Skill from a full prompt the user wrote: returns a DESIGN BRIEF in which the prompt becomes the skill's knowledge (kept complete) and you must write the Luau command(s) + a verify block, then install it with public_skill_create. Nothing is installed by this call.", inputSchema: { type: "object", required: ["prompt"], properties: { prompt: { type: "string", description: "The full prompt text" }, title: { type: "string" }, name: { type: "string", description: "snake_case skill name" } } } },
   ].map((t) => Object.assign(t, { server: "totalscript", executionMode: /create|update|delete|import|enable|test|refs|reference/.test(t.name) ? "WRITE" : "READ", environment: "GENERAL", category: "Public Skills" }));
 
-  // ── SKILL.md (canonical format, 2.20.0) ─────────────────────────────────
+  // ── SKILL.md (canonical format, 2.21.0) ─────────────────────────────────
   // YAML subset reader: mappings, block lists (scalars or mappings), flow
   // lists, quoted / bare scalars, `>` folded and `|` literal blocks.
   function parseYamlLite(src) {
@@ -1238,7 +1238,7 @@
     const kind = inferKind(def);
     if (LEGACY_KINDS.includes(kind)) {
       const conv = convertLegacy(Object.assign({}, def, { id: undefined }));
-      if (!conv) return { ok: false, errors: [kind === "mode" ? `'${def.name || def.title}' is a work mode - modes were retired in 2.20.0 (only skills can be installed)` : `'${def.name || def.title}' is a prompt-only ability without Luau - abilities were retired in 2.20.0; design a skill from its text instead`], warnings: [], item: null };
+      if (!conv) return { ok: false, errors: [kind === "mode" ? `'${def.name || def.title}' is a work mode - modes were retired in 2.21.0 (only skills can be installed)` : `'${def.name || def.title}' is a prompt-only ability without Luau - abilities were retired in 2.21.0; design a skill from its text instead`], warnings: [], item: null };
       def = conv; delete def.id;
     }
     const dup = items.find((i) => i.name === snake(def.name || def.title));

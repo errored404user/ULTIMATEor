@@ -47,7 +47,7 @@ pub(super) const NOTICE_CAP: usize = 100;
 /// How long a fresh notice also shows as a toast.
 const TOAST_SECS: f32 = 3.2;
 const TOAST_MAX: usize = 3;
-/// 2.20.0 anti-spam. A repeat of the same notice (same kind, same text once
+/// 2.21.0 anti-spam. A repeat of the same notice (same kind, same text once
 /// numbers / ids / timings are blanked) inside this window folds into the
 /// existing one: the counter grows, the bell badge counts it, but no new
 /// toast pops. Errors fold for longer because the same failing probe or

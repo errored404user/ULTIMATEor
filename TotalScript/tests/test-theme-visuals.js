@@ -1,5 +1,5 @@
 // 1.19.7 — theme visual refresh: layered backgrounds for every theme, designed
-// SVG ornaments, gradient-pill buttons with glow. 2.20.0: the corner details
+// SVG ornaments, gradient-pill buttons with glow. 2.21.0: the corner details
 // (viewport rail, bracket marks, head/foot/card corner ornaments) are removed
 // and this file pins their absence.
 // Run from the TotalScript root: node tests/test-theme-visuals.js
@@ -43,7 +43,7 @@ assert(/html\[data-rs-theme\] #rs-menu,[\s\S]*?background:\s*var\(--totalx-fade\
 assert(sec.includes("html[data-rs-theme] .rs-menu-head {"), "settings head must take the theme photo");
 assert(sec.includes('html[data-rs-theme][data-rs-glass="true"] #rs-bar'), "glass bar must get the themed background");
 
-// 2) Corner details are gone (2.20.0): no bracket-mark layers, no viewport rail,
+// 2) Corner details are gone (2.21.0): no bracket-mark layers, no viewport rail,
 //    no corner ornaments on the settings head/foot or the approve/setup cards.
 //    The designed SVG ornament per theme stays for the bar mark + badges.
 assert(!/totalx-mark/.test(css), "corner bracket marks (--totalx-mark*) must be gone from overlay.css");

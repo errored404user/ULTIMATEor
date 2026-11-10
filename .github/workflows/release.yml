@@ -1,13 +1,10 @@
 name: TotalScript Release
 
-# 2.17.0 auto-updater source. Push a tag `vX.Y.Z` (matching manifest.json and
-# agent/Cargo.toml) and this publishes a GitHub Release with everything the
-# in-app updater (agent/src/update.rs) and the extension (src/core/updater.js)
-# read:
-#   latest.json                 version, tag, notes_url, assets[{name,size,sha256,url}]
-#   TotalScript-extension.tar   the unpacked extension folder (ustar, prefix TotalScript/,
-#                               fresh binaries in bin/) - what the app installs
-#   TotalScript.zip             the same folder for humans (chrome://extensions → Load unpacked)
+# Push a tag `vX.Y.Z` (matching manifest.json and agent/Cargo.toml) and this
+# publishes a GitHub Release for humans to download (the in-app auto-updater
+# was removed in 2.21.0 - nothing reads these files automatically):
+#   TotalScript.zip             the unpacked extension folder with fresh binaries in bin/
+#                               (chrome://extensions → Load unpacked)
 #   total-core-windows-x64.exe  the desktop app (self-update asset)
 #   total-core-macos-arm64      same for Apple Silicon (Intel: built when a runner exists)
 #   SHA256SUMS.txt
@@ -48,7 +45,7 @@ jobs:
         run: |
           set -o pipefail
           (cargo build --release --locked --message-format=short 2>&1 || cargo build --release --message-format=short 2>&1) | tee build.log
-      - name: "Unit tests (includes the updater: sha256 vectors, tar reader, folder swap)"
+      - name: Unit tests
         run: |
           set -o pipefail
           cargo test --release --locked --message-format=short 2>&1 | tee test.log
@@ -138,10 +135,9 @@ jobs:
           VER="${TAG#v}"
           MANIFEST=$(python3 -c 'import json;print(json.load(open("TotalScript/manifest.json"))["version"])')
           CARGO=$(grep -m1 -E '^version *= *"' TotalScript/agent/Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
-          UPDJS=$(grep -m1 -E 'const VERSION = "' TotalScript/src/core/updater.js | sed -E 's/.*"([^"]+)".*/\1/')
-          echo "tag=$TAG manifest=$MANIFEST cargo=$CARGO updater.js=$UPDJS"
-          if [ "$VER" != "$MANIFEST" ] || [ "$VER" != "$CARGO" ] || [ "$VER" != "$UPDJS" ]; then
-            echo "::error::version mismatch: tag $VER, manifest.json $MANIFEST, Cargo.toml $CARGO, updater.js $UPDJS - bump them together before tagging"
+          echo "tag=$TAG manifest=$MANIFEST cargo=$CARGO"
+          if [ "$VER" != "$MANIFEST" ] || [ "$VER" != "$CARGO" ]; then
+            echo "::error::version mismatch: tag $VER, manifest.json $MANIFEST, Cargo.toml $CARGO - bump them together before tagging"
             exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -178,55 +174,30 @@ jobs:
           cp bins/win/total-core.exe out/total-core-windows-x64.exe
           cp bins/mac-arm64/total-core-macos-arm64 out/total-core-macos-arm64
           [ -f bins/mac-x64/total-core-macos-x64 ] && cp bins/mac-x64/total-core-macos-x64 out/total-core-macos-x64 || true
-          # Plain ustar: the in-app reader (agent/src/update.rs) understands exactly this.
-          # GNU tar fails loudly on any name ustar cannot store, which is the gate we want.
-          ( cd stage && tar --format=ustar --owner=0 --group=0 --numeric-owner --mtime='2000-01-01 00:00Z' -cf ../out/TotalScript-extension.tar TotalScript )
           ( cd stage && zip -qrD ../out/TotalScript.zip TotalScript )
           ls -la out
 
-      - name: Verify the tar is what the app expects
+      - name: Verify the zip
         run: |
           set -e
-          tar -tf out/TotalScript-extension.tar | head -3
-          tar -tf out/TotalScript-extension.tar | grep -qx 'TotalScript/manifest.json'
-          tar -tf out/TotalScript-extension.tar | grep -qx 'TotalScript/bin/total-core.exe'
-          tar -tf out/TotalScript-extension.tar | grep -qx 'TotalScript/popup.html'
-          ! tar -tf out/TotalScript-extension.tar | grep -q '^TotalScript/agent/target/'
+          unzip -l out/TotalScript.zip | grep -q ' TotalScript/manifest.json$'
+          unzip -l out/TotalScript.zip | grep -q ' TotalScript/bin/total-core.exe$'
+          unzip -l out/TotalScript.zip | grep -q ' TotalScript/popup.html$'
+          ! unzip -l out/TotalScript.zip | grep -q ' TotalScript/agent/target/'
           python3 - <<'PY'
-          import tarfile, json
-          t = tarfile.open("out/TotalScript-extension.tar")
-          members = t.getmembers()
-          assert all(m.name == "TotalScript" or m.name.startswith("TotalScript/") for m in members), "every entry under TotalScript/"
-          assert all(m.isfile() or m.isdir() for m in members), "only files and directories"
-          m = json.load(t.extractfile("TotalScript/manifest.json"))
+          import zipfile, json
+          z = zipfile.ZipFile("out/TotalScript.zip")
+          assert all(n == "TotalScript/" or n.startswith("TotalScript/") for n in z.namelist()), "every entry under TotalScript/"
+          m = json.loads(z.read("TotalScript/manifest.json"))
           print("archive manifest version", m["version"])
           PY
 
-      - name: SHA256SUMS.txt + latest.json
-        env:
-          TAG: ${{ steps.ver.outputs.tag }}
-          VERSION: ${{ steps.ver.outputs.version }}
+      - name: SHA256SUMS.txt
         run: |
           set -e
           cd out
-          sha256sum TotalScript-extension.tar TotalScript.zip total-core-* > SHA256SUMS.txt
+          sha256sum TotalScript.zip total-core-* > SHA256SUMS.txt
           cat SHA256SUMS.txt
-          python3 - <<'PY'
-          import json, os, hashlib, datetime
-          tag = os.environ["TAG"]; ver = os.environ["VERSION"]; repo = os.environ["REPO_SLUG"]
-          assets = []
-          for name in sorted(os.listdir(".")):
-              if name in ("SHA256SUMS.txt", "latest.json"): continue
-              data = open(name, "rb").read()
-              assets.append({"name": name, "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
-                             "url": f"https://github.com/{repo}/releases/download/{tag}/{name}"})
-          latest = {"version": ver, "tag": tag,
-                    "published_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "notes_url": f"https://github.com/{repo}/releases/tag/{tag}",
-                    "assets": assets}
-          json.dump(latest, open("latest.json", "w"), indent=2)
-          print(json.dumps(latest, indent=2))
-          PY
 
       - name: Release notes from the README version block
         env:
@@ -243,9 +214,9 @@ jobs:
               f.write(f"## TotalScript {ver}\n\n")
               f.write(body + "\n\n" if body else "")
               f.write("### Install / update\n")
-              f.write("- Already on 2.17.0 or newer: the desktop app or the extension popup offers this version - press **Update**.\n")
-              f.write("- Fresh install: download `TotalScript.zip`, unzip, `chrome://extensions` → Load unpacked → the `TotalScript` folder, then run `bin/total-core.exe` (Windows) or `bin/total-core-macos-arm64` (Apple Silicon).\n")
-              f.write("- Every asset is listed with its sha256 in `latest.json` / `SHA256SUMS.txt`.\n")
+              f.write("- Download `TotalScript.zip`, unzip, `chrome://extensions` → Load unpacked → the `TotalScript` folder (or Reload if it is already loaded), then run `bin/total-core.exe` (Windows) or `bin/total-core-macos-arm64` (Apple Silicon).\n")
+              f.write("- Updating an existing install is the same by hand: replace the folder contents and reload the extension; quit the old total-core first. Nothing updates itself.\n")
+              f.write("- Every asset is listed with its sha256 in `SHA256SUMS.txt`.\n")
           PY
           cat notes.md
 
@@ -263,4 +234,3 @@ jobs:
           fi
           gh release upload "$TAG" --repo "$REPO_SLUG" --clobber out/*
           echo "published https://github.com/$REPO_SLUG/releases/tag/$TAG"
-          echo "latest.json → https://github.com/$REPO_SLUG/releases/latest/download/latest.json"

@@ -245,10 +245,8 @@ pub struct UiShared {
     pub pair_seq: AtomicUsize,
     /// Seconds since boot when the Studio plugin last talked to the bridge (0 = never).
     pub plugin_seen: AtomicUsize,
-    /// 2.20.0 seconds since boot when the Blockbench plugin last polled (0 = never).
+    /// 2.21.0 seconds since boot when the Blockbench plugin last polled (0 = never).
     pub blockbench_seen: AtomicUsize,
-    /// 2.17.0 auto-updater (GitHub Releases): last check, running job, folder.
-    pub update: Arc<crate::update::Hub>,
 }
 
 impl UiShared {
@@ -277,7 +275,6 @@ impl UiShared {
             pair_seq: AtomicUsize::new(0),
             plugin_seen: AtomicUsize::new(0),
             blockbench_seen: AtomicUsize::new(0),
-            update: Arc::new(crate::update::Hub::new()),
         }
     }
 
@@ -292,7 +289,7 @@ impl UiShared {
         seen > 0 && self.boot.elapsed().as_secs() as usize + 1 - seen < 45
     }
 
-    /// 2.20.0: called by every Blockbench HTTP handler (the plugin polls every ~20 s).
+    /// 2.21.0: called by every Blockbench HTTP handler (the plugin polls every ~20 s).
     pub fn blockbench_touch(&self) {
         self.blockbench_seen.store(self.boot.elapsed().as_secs() as usize + 1, Ordering::Relaxed);
     }
@@ -465,10 +462,6 @@ pub enum UiCommand {
     ChatTurn { request: crate::chat::TurnRequest, events: Sender<crate::chat::ChatEvent>, cancel: Arc<AtomicBool> },
     /// `GET {base_url}/models` for the chat model picker.
     ChatModels { base_url: String, api_key: String, reply: Sender<Result<Vec<String>, String>> },
-    /// 2.17.0 updater: fetch latest.json now (`force` skips the 6 h cache).
-    UpdateCheck { force: bool },
-    /// 2.17.0 updater: download + install `components` ⊆ {extension, app}. Only ever sent after a click.
-    UpdateApply { components: Vec<String> },
 }
 
 // ───────────────────────────── settings ─────────────────────────────
@@ -542,11 +535,6 @@ pub struct Settings {
     /// Workspace Manager: folders applied before, newest first (max 8), and starred ones.
     pub recent_workspaces: Vec<String>,
     pub favorite_workspaces: Vec<String>,
-    // ── 2.17.0 updates ──
-    /// Fetch latest.json from GitHub Releases once a day (never installs by itself).
-    pub update_check_daily: bool,
-    /// Unpacked extension folder the updater writes into; empty = detect from the exe location.
-    pub update_extension_dir: String,
 }
 
 impl Default for Settings {
@@ -591,8 +579,6 @@ impl Default for Settings {
             recent_commands: Vec::new(),
             recent_workspaces: Vec::new(),
             favorite_workspaces: Vec::new(),
-            update_check_daily: true,
-            update_extension_dir: String::new(),
         }
     }
 }
@@ -1050,8 +1036,6 @@ pub struct App {
     settings_query: String,
     reset_armed: Option<Instant>,
     import_path: String,
-    /// 2.17.0 Settings → Updates: folder text box.
-    update_folder_input: String,
     // 2.11.0 activity center
     activity_filter: ActFilter,
     activity_query: String,
@@ -1178,7 +1162,6 @@ impl App {
             settings_query: String::new(),
             reset_armed: None,
             import_path: String::new(),
-            update_folder_input: String::new(),
             activity_filter: ActFilter::All,
             activity_query: String::new(),
             seen_activity,
@@ -1794,7 +1777,7 @@ impl App {
                     let roomy = ui.available_height() > 240.0;
                     let tight = ui.available_height() < 150.0;
                     if tight {
-                        // One line: "— BRIDGE  ● OFFLINE · up 4s · v2.20.0   «" — the nine
+                        // One line: "— BRIDGE  ● OFFLINE · up 4s · v2.21.0   «" — the nine
                         // nav items keep their blurbs at the default 1280×820 window.
                         egui::Frame::none().fill(t.panel).stroke(Stroke::new(1.0_f32, if up { alpha(t.ok, 110) } else { t.border })).rounding(Rounding::same(t.r_card + 2.0)).inner_margin(Margin::symmetric(12.0, 8.0)).show(ui, |ui| {
                             ui.set_width(ui.available_width());
@@ -3002,18 +2985,15 @@ impl App {
             if self.settings_visible(SettingsCat::Advanced, "Advanced", "paths export import reset defaults quit settings.json log data folder") {
                 section_card(ui, t, "12", "Advanced", "Paths, export / import and reset.", |ui| { let (s2, r2) = self.advanced_section(ui); if s2 { save = true; } if r2 { retheme = true; } });
             }
-            if self.settings_visible(SettingsCat::About, "Updates", "update updater release github version download install daily check extension folder") {
-                section_card(ui, t, "13", "Updates", "GitHub Releases - checked daily, installed only when you press Update.", |ui| { if self.updates_section(ui) { save = true; } });
-            }
             if self.settings_visible(SettingsCat::About, "Donate", "donate robux game pass thanks support") {
-            section_card(ui, t, "14", "Donate", "Free tool — a Robux game pass says thanks.", |ui| {
+            section_card(ui, t, "13", "Donate", "Free tool — a Robux game pass says thanks.", |ui| {
                 ui.label(RichText::new("TotalScript is free. If it saves you time, a Robux game-pass donation keeps it going — each button opens the pass on roblox.com.").color(t.muted));
                 ui.add_space(6.0);
                 donation_row(ui, t);
             });
             }
             if self.settings_visible(SettingsCat::About, "About", "version build repository github rebuild cargo keyboard") {
-            section_card(ui, t, "15", "About", "Version, repository and rebuild notes.", |ui| {
+            section_card(ui, t, "14", "About", "Version, repository and rebuild notes.", |ui| {
             ui.horizontal(|ui| {
                 self.logo_mark(ui, 40.0);
                 ui.vertical(|ui| {
@@ -3026,10 +3006,9 @@ impl App {
             ui.label(RichText::new("Rebuild: cd TotalScript\\agent && cargo build --release  ->  target\\release\\total-core.exe").monospace().small().color(t.muted));
             ui.label(RichText::new("Keyboard: Ctrl+K command palette · Ctrl+1…9 pages · F1 help · Ctrl+J chat panel · Ctrl+R restart MCP helper · F5 probe Studio + refresh · Ctrl+Shift+S capture Studio viewport · Ctrl+Shift+N notifications · Ctrl+S save file · Ctrl+Enter run Luau — full list in Settings › Shortcuts").small().color(t.muted));
             ui.horizontal_wrapped(|ui| {
-                if pill(ui, t, "Open repository", false).clicked() { open_external(&format!("https://github.com/{REPO}")); }
-                if pill(ui, t, "Releases", false).on_hover_text("Opens the GitHub releases page. The Updates section above checks and installs from the same releases.").clicked() { open_external(&format!("https://github.com/{REPO}/releases")); }
+                if pill(ui, t, "Open repository", false).on_hover_text("Opens the GitHub repository in the browser. Updating is manual: download the repository's TotalScript.zip, replace this executable and the unpacked extension folder, then reload the extension.").clicked() { open_external(&format!("https://github.com/{REPO}")); }
             });
-            ui.label(RichText::new("Updates: one latest.json request to GitHub per day when enabled (Updates section) - nothing else is phoned home. Rebuilding from source still works.").small().color(t.muted));
+            ui.label(RichText::new("No auto-updater: this app never contacts GitHub by itself (removed in 2.21.0). New versions are installed by hand from the repository's TotalScript.zip or by rebuilding from source.").small().color(t.muted));
         });
             }
             if searching && (ui.cursor().top() - before).abs() < 1.0 {
@@ -3058,12 +3037,6 @@ impl App {
     /// One UI frame. Separate from `eframe::App::update` so the headless
     /// snapshot test (`gui::snapshot`) can drive the same code.
     fn frame(&mut self, ctx: &egui::Context) {
-        {
-            // The extension can set the update folder through the bridge; mirror
-            // it here so a later Settings save never writes a stale value back.
-            let dir = self.shared.update.configured_dir().map(|p| p.display().to_string()).unwrap_or_default();
-            if self.settings.update_extension_dir != dir { self.settings.update_extension_dir = dir; }
-        }
         if self.first_frame {
             self.first_frame = false;
             if self.start_hidden {
@@ -4438,7 +4411,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
             "Blender connects through the extension, not this app: press Start MCP Server in Blender (N panel → MCP for Blender), then Settings → MCP servers → Connect Blender on the TotalScript bar. The Blender work mode makes the AI plan, build, validate, render and send assets to Studio from there.",
             "Work modes (Totality, Blender, Animator), skills, templates, prompt enhancer, Paint and Video are in the extension's Settings and bar — this app does not change them.",
             "The Studio plugin: this app copies plugin/TotalScript.lua into Studio's local Plugins folder; restart Studio once, open Plugins → TotalScript and click Allow on the HTTP prompt. The plugin then long-polls this bridge for jobs.",
-            "Blockbench (2.20.0): this app keeps TotalScript-Blockbench.js next to its executable; load it once in Blockbench (File → Plugins → Load Plugin from File). It then connects to this app on every start - no port, no MCP - and the bb_* tools (cubes, groups, meshes, textures, animation, screenshot, export OBJ / glTF / bbmodel) work from the extension's Blockbench mode and from this chat.",
+            "Blockbench (2.21.0): this app keeps TotalScript-Blockbench.js next to its executable; load it once in Blockbench (File → Plugins → Load Plugin from File). It then connects to this app on every start - no port, no MCP - and the bb_* tools (cubes, groups, meshes, textures, animation, screenshot, export OBJ / glTF / bbmodel) work from the extension's Blockbench mode and from this chat.",
         ],
     },
     HelpTopic {

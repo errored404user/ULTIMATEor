@@ -8,7 +8,7 @@
   for (const [id, d] of Object.entries(MEME)) Object.assign(TOTAL_THEMES[id] ||= {}, { background: d[0] + "," + d[1] });
   const html = document.documentElement, root = document.getElementById("rs-root");
   const picker = document.getElementById("picker"), grid = document.getElementById("pv-grid");
-  // 2.20.0: the corner rail no longer exists in the extension.
+  // 2.21.0: the corner rail no longer exists in the extension.
   const art = (id) => `ui/swatch-${id}.jpg`;
   // Real synth: evaluate the extension's playSfx + THEME_SOUNDS verbatim so the
   // harness plays exactly what the content script plays.

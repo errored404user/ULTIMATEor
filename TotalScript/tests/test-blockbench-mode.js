@@ -1,4 +1,4 @@
-// 2.20.0 — BLOCKBENCH work mode + extension routing. MOCKED: no Blockbench,
+// 2.21.0 — BLOCKBENCH work mode + extension routing. MOCKED: no Blockbench,
 // no Studio, no AI site, no total-core. A fake total-core WebSocket (in-vm)
 // stands in for the desktop app; the real command table
 // (src/core/blockbench_tools.js) and the real background.js code path run
@@ -222,7 +222,7 @@ const PLUGIN_FILE = "C:\\Users\\me\\AppData\\Local\\TotalScript\\TotalScript-Blo
   ok("G4 popup badge: Studio card badge says Blockbench linked / Blender + Blockbench linked from the status", popup.includes('s.blender && s.blockbench ? "Blender + Blockbench linked" : s.blockbench ? "Blockbench linked" : "Blender linked"'));
 
   // ── H. README ─────────────────────────────────────────────────────────────
-  ok("H1 README: 2.20.0 block names the TotalScript Blockbench plugin (Load Plugin from File, total-core, bb_* build + export + mesh commands, manual Import 3D, MCP client removed) and both Blockbench tests are listed under Testing", /2\.20\.0/.test(readme) && /TotalScript-Blockbench\.js/.test(readme) && /Load Plugin from File/.test(readme) && /Import 3D/.test(readme) && /bb_mesh_primitive/.test(readme) && /test-blockbench-mode\.js/.test(readme) && /test-blockbench-plugin\.js/.test(readme) && (() => { const i = readme.indexOf("2.20.0"); const block = readme.slice(i, i + 3000); return /MCP/.test(block) && /removed|replaces|no longer/i.test(block); })());
+  ok("H1 README: 2.21.0 block names the TotalScript Blockbench plugin (Load Plugin from File, total-core, bb_* build + export + mesh commands, manual Import 3D, MCP client removed) and both Blockbench tests are listed under Testing", /2\.21\.0/.test(readme) && /TotalScript-Blockbench\.js/.test(readme) && /Load Plugin from File/.test(readme) && /Import 3D/.test(readme) && /bb_mesh_primitive/.test(readme) && /test-blockbench-mode\.js/.test(readme) && /test-blockbench-plugin\.js/.test(readme) && (() => { const i = readme.indexOf("2.21.0"); const block = readme.slice(i, i + 3000); return /MCP/.test(block) && /removed|replaces|no longer/i.test(block); })());
 
   console.log(failed ? `\n${failed} FAILED` : "\nALL OK");
   process.exit(failed ? 1 : 0);

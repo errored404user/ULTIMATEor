@@ -1,6 +1,6 @@
 // Behavioural check for src/core/ui_collision_manager.js (run: node tests/test-collision-manager.js).
 // Regression for the "bar shows for a second, then vanishes" bug (first seen on
-// Notion, 1.21.3; that provider is gone since 2.20.0 but the rule is general): a
+// Notion, 1.21.3; that provider is gone since 2.21.0 but the rule is general): a
 // transparent, click-through full-viewport shell whose class merely CONTAINS
 // "overlay" must never hide the TotalScript root; an opaque backdrop or a dialog
 // drawn over the bar must. Runs with a provider that has no per-site rule set so

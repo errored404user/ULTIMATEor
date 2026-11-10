@@ -109,16 +109,6 @@ html[data-rs-glass="true"] #rs-bar {
 html[data-rs-glass="true"][data-rs-engine="roblox"] #rs-bar { border-color: rgba(96,178,255,0.16); }
 html[data-rs-glass="true"][data-rs-engine="local"] #rs-bar { border-color: rgba(45,212,175,0.16); }
 html[data-rs-glass="true"][data-rs-engine="anim"] #rs-bar { border-color: rgba(255,110,170,0.18); }
-html.rs-light[data-rs-glass="true"] #rs-bar {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.45) 38%),
-    rgba(248, 249, 252, 0.78);
-  border-color: rgba(15, 23, 42, 0.10);
-  box-shadow:
-    0 12px 34px rgba(15, 23, 42, 0.14),
-    0 2px 6px rgba(15, 23, 42, 0.08),
-    0 1px 0 rgba(255,255,255,0.85) inset;
-}
 
 /* In-flow mode: the bar is a real, full-width node in the composer layout that
    pushes content down instead of floating. Two looks:
@@ -152,10 +142,6 @@ html.rs-light[data-rs-glass="true"] #rs-bar {
       up with the input and the right-side buttons clear the rounded corner. */
    padding: 12px 16px;
 }
-html.rs-light #rs-bar.rs-bar-inline.rs-bar-inside {
-  background: transparent;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-}
 
 /* Anchored mode: the bar keeps position:fixed (it must NOT enter the site's
    framework-managed composer DOM, e.g. Kimi's Vue subtree) but the core sizes
@@ -173,10 +159,6 @@ html.rs-light #rs-bar.rs-bar-inline.rs-bar-inside {
      (matches the roomier DeepSeek inline look). The reserved strip in placeBar
      (bar height + gap) tracks this automatically. */
   padding: 12px 16px;
-}
-html.rs-light #rs-bar.rs-bar-anchored {
-  background: transparent;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 /* Per-site tuning — make it feel like it shipped with the site */
@@ -249,6 +231,7 @@ html.rs-light #rs-bar.rs-bar-anchored {
      placeBar measures the real height every frame, so nothing breaks. */
   padding: 9px 16px 13px;
 }
+/* per-provider light-page variant (kept: the aqua skin paints the bar itself, so these only soften the host border) */
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-deepseek,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-chatgpt,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-claude,
@@ -272,6 +255,10 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-qwen,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-vani,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-huggingchat,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-openrouter {
+  background: transparent;
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+html.rs-light #rs-bar.rs-bar-inline.rs-prov-codecraft {
   background: transparent;
   border-bottom-color: rgba(0, 0, 0, 0.08);
 }
@@ -300,10 +287,6 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-openrouter {
   border-color: rgba(255,232,204,0.18) !important;
   box-shadow: 0 18px 40px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.10) inset !important;
 }
-html.rs-light #rs-bar.rs-bar-float {
-  background: rgba(255,255,255,0.97) !important;
-  border-color: rgba(0,0,0,0.10) !important;
-}
 /* Inline-inside mounts inherit the host card's own background (transparent)
    so the bar never paints a foreign-coloured slab over the chatbox. */
 #rs-bar.rs-bar-inline.rs-bar-inside,
@@ -314,10 +297,6 @@ html[data-rs-engine] #rs-bar.rs-bar-inline.rs-bar-inside {
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-}
-html.rs-light #rs-bar.rs-bar-inline.rs-bar-inside,
-html.rs-light[data-rs-engine] #rs-bar.rs-bar-inline.rs-bar-inside {
-  border-bottom-color: rgba(0,0,0,0.08) !important;
 }
 html[data-rs-engine="roblox"] #rs-brand { color: #7dd3fc; }
 html[data-rs-engine="roblox"] .rs-free { color: rgba(125,211,252,0.6); }
@@ -367,10 +346,6 @@ html[data-rs-engine="local"] .rs-free { color: rgba(110,231,183,0.62); }
     color 0.3s ease;
 }
 #rs-unstable-inline[hidden] { display: none !important; }
-html.rs-light #rs-unstable-inline {
-  color: #8f2f2f; background: rgba(184, 58, 58, 0.10);
-  border-color: rgba(184, 58, 58, 0.24);
-}
 
 /* Dynamic Status Pill — inline, inside header row */
 #rs-status-pill {
@@ -520,7 +495,6 @@ html.rs-light #rs-unstable-inline {
 
 #rs-extra { display: none !important; }
 #rs-switch-ver { font-size: 8.5px; font-weight: 650; letter-spacing: 0.4px; color: #9aa0a8; margin-left: 4px; text-transform: uppercase; opacity: 0.9; }
-html.rs-light #rs-switch-ver { color: #6b7280; }
 #rs-extra[hidden] { display:none !important; }
 
 /* ── the "more" menu — glassy, premium ────────────────────── */
@@ -547,8 +521,6 @@ html.rs-light #rs-switch-ver { color: #6b7280; }
   border: 2px solid transparent; background-clip: padding-box;
 }
 #rs-menu::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.30); background-clip: padding-box; }
-html.rs-light #rs-menu { scrollbar-color: rgba(0,0,0,0.25) transparent; }
-html.rs-light #rs-menu::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); background-clip: padding-box; }
 /* header strip: quiet product line, no coloured chips */
 .rs-menu-head {
   display: flex; align-items: baseline; gap: 8px;
@@ -561,7 +533,6 @@ html.rs-light #rs-menu::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); b
 .rs-menu-sec { padding: 12px 14px; }
 .rs-menu-sec + .rs-menu-sec { border-top: 1px solid rgba(255, 255, 255, 0.06); }
 .rs-menu-foot { padding: 10px 14px; font-size: 10px; color: #6b7280; text-align: center; border-top: 1px solid rgba(255,255,255,0.06); letter-spacing: 0.2px; }
-html.rs-light .rs-menu-foot { color: #9ca3af; border-top-color: rgba(0,0,0,0.06); }
 
 /* section label: small neutral caption, no colour */
 .rs-sec-label { margin-bottom: 8px; }
@@ -660,21 +631,11 @@ failed"] html.rs-light html.rs-light html.rs-light html.rs-light html.rs-light /
   background: rgba(175,82,222,0.20); color: #d8b4fe;
   border-color: rgba(175,82,222,0.45);
 }
-html.rs-light .rs-lvl-btn { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.12); color: #374151; }
-html.rs-light .rs-lvl-btn:hover { background: rgba(0,0,0,0.08); }
-html.rs-light .rs-lvl-btn.on {
-  background: color-mix(in srgb, var(--rsa, #6366f1) 12%, transparent);
-  color: color-mix(in srgb, var(--rsa, #6366f1) 80%, #000000);
-}
 #rs-perf { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; height: 22px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.2px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: #c8c8d1; }
 #rs-perf[hidden] { display: none !important; }
 #rs-perf[data-lvl="low"] { border-color: rgba(52,211,153,0.30); color: #a7f3d0; background: rgba(52,211,153,0.10); }
 #rs-perf[data-lvl="mid"] { border-color: rgba(251,191,36,0.35); color: #fde68a; background: rgba(251,191,36,0.12); }
 #rs-perf[data-lvl="high"] { border-color: rgba(239,68,68,0.40); color: #fecaca; background: rgba(239,68,68,0.12); }
-html.rs-light #rs-perf { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.10); color: #374151; }
-html.rs-light #rs-perf[data-lvl="low"] { color: #065f46; background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.30); }
-html.rs-light #rs-perf[data-lvl="mid"] { color: #92400e; background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.35); }
-html.rs-light #rs-perf[data-lvl="high"] { color: #991b1b; background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.35); }
 /* 1.99.9 work-mode GATE STRIP (src/core/work_modes.js): one pill per mode gate -
    "–" nothing of that family ran, "◌" changed without proof, "✓" proof command ran. */
 #rs-mode-gates { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; height: 22px; border-radius: 999px; font-size: 10px; font-weight: 600; letter-spacing: 0.2px; border: 1px solid rgba(34,211,238,0.22); background: rgba(34,211,238,0.07); color: #c8c8d1; white-space: nowrap; }
@@ -685,11 +646,7 @@ html.rs-light #rs-perf[data-lvl="high"] { color: #991b1b; background: rgba(239,6
 #rs-mode-gates .rs-gate-proved { color: #a7f3d0; border-color: rgba(52,211,153,0.30); background: rgba(52,211,153,0.10); }
 #rs-mode-gates[data-level="open"] { border-color: rgba(251,191,36,0.35); }
 #rs-mode-gates[data-level="proved"] { border-color: rgba(52,211,153,0.30); }
-html.rs-light #rs-mode-gates { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.10); color: #374151; }
-html.rs-light #rs-mode-gates b { color: #0e7490; }
-html.rs-light #rs-mode-gates .rs-gate { color: #6b7280; }
-html.rs-light #rs-mode-gates .rs-gate-pending { color: #92400e; background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.35); }
-html.rs-light #rs-mode-gates .rs-gate-proved { color: #065f46; background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.30); }
+html.rs-light #rs-mode-gates { color: inherit; /* 2.21.0: the aqua bar stays dark on light host pages */ }
 .rs-work-does { margin: 6px 0 4px; padding: 7px 9px; border-radius: 8px; border: 1px dashed rgba(34,211,238,0.28); background: rgba(34,211,238,0.05); }
 .rs-work-does b { color: #22d3ee; }
 .rs-checkpoint-list { display: grid; gap: 6px; }
@@ -698,7 +655,6 @@ html.rs-light #rs-mode-gates .rs-gate-proved { color: #065f46; background: rgba(
 .rs-checkpoint-time { font-size: 10px; color: #9aa0a8; }
 .rs-checkpoint-undo { margin-left: auto; padding: 4px 8px; font-size: 10px; font-weight: 600; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: #e6e6ec; cursor: pointer; }
 .rs-checkpoint-undo:hover { background: rgba(255,255,255,0.10); }
-html.rs-light .rs-checkpoint-item { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.08); }
 html.rs-light .rs-checkpoint-op { color: #1f2430; }
 
 /* ── custom MCP servers list (add-your-own, same shell as Custom prompt) ── */
@@ -1183,16 +1139,6 @@ ol.flex-col-reverse > div.w-full:not(.mx-auto) > .rs-chip {
   transition: filter 0.14s ease;
 }
 #rs-tut-gotit:hover { filter: brightness(1.1); }
-html.rs-light #rs-tutorial { background: rgba(30, 41, 59, 0.45); }
-html.rs-light #rs-tut-card {
-  background: linear-gradient(180deg, rgba(255,255,255,0.99), rgba(247,248,250,0.99));
-  box-shadow: 0 34px 80px -24px rgba(15,23,42,0.35);
-}
-html.rs-light #rs-tut-logo { color: #17181b; }
-html.rs-light #rs-tut-body { color: #33383f; }
-html.rs-light #rs-tut-body h3 { color: #17181b; }
-html.rs-light #rs-tut-body code { background: rgba(15,23,42,0.06); color: #26303c; }
-html.rs-light #rs-tut-gotit { color: #fff; }
 
 /* ── capture preview: compact control inside the reserved status strip ───
    The former fixed 300px card sat over sidebar/message text. Full-size captures
@@ -1229,9 +1175,6 @@ html.rs-light #rs-tut-gotit { color: #fff; }
 }
 .rs-shot-open:hover { filter: brightness(1.12); }
 .rs-shot-chip-x:hover { background: rgba(255,255,255,0.10); color: #fff; }
-html.rs-light .rs-shot-chip { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.13); }
-html.rs-light .rs-shot-chip-x { color: #4b5563; }
-html.rs-light .rs-shot-chip-x:hover { background: rgba(0,0,0,0.08); color: #111; }
 
 /* ══════════════════════════════════════════════════════════════
    LIGHT MODE
@@ -1264,96 +1207,8 @@ html.rs-light .rs-chip.run {
 html.rs-light .rs-spin { border-color: rgba(0, 0, 0, 0.15); border-top-color: #6b6b73; }
 
 /* status bar + menu + setup card */
-html.rs-light #rs-bar {
-  background: rgba(255, 255, 255, 0.97);
-  color: #1f2430;
-  border-color: rgba(99, 102, 241, 0.32);
-  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.16);
-}
-html.rs-light #rs-brand { color: #1f2430; }
-html.rs-light .rs-free { color: rgba(31, 36, 48, 0.5); }
-html.rs-light #rs-state { color: #4b5563; }
-html.rs-light #rs-state b { color: #4f46e5; }
-html.rs-light #rs-state.rs-state-warn { color: #b91c1c; }
-html.rs-light #rs-bar.tone-active #rs-state b { color: #059669; }
-html.rs-light #rs-discord,
-html.rs-light #rs-support,
-html.rs-light #rs-switch {
-  background: rgba(0, 0, 0, 0.05); color: #4b5563;
-  border-color: rgba(0, 0, 0, 0.12);
-}
-html.rs-light #rs-discord:hover,
-html.rs-light #rs-support:hover,
-html.rs-light #rs-switch:hover { background: rgba(0, 0, 0, 0.09); color: #1f2430; }
-html.rs-light #rs-action:disabled {
-  background: rgba(0, 0, 0, 0.05); color: rgba(0, 0, 0, 0.35); border-color: rgba(0, 0, 0, 0.08);
-}
-html.rs-light #rs-action[data-kind="restart"] {
-  background: rgba(99, 102, 241, 0.10); color: #4f46e5;
-  border-color: rgba(99, 102, 241, 0.35);
-}
-html.rs-light #rs-action[data-kind="restart"]:hover {
-  background: rgba(99, 102, 241, 0.18); color: #4338ca;
-  border-color: rgba(99, 102, 241, 0.5);
-}
-html.rs-light #rs-action[data-kind="restart"]:active { background: rgba(99, 102, 241, 0.26); }
-
-html.rs-light #rs-menu,
-html.rs-light #rs-setup {
-  background: rgba(249, 250, 253, 0.99);
-  color: #1f2430;
-  border-color: rgba(99, 102, 241, 0.30);
-  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
-}
-html.rs-light .rs-menu-head,
-html.rs-light #rs-setup-head { border-bottom-color: rgba(0, 0, 0, 0.08); }
-html.rs-light .rs-menu-logo,
-html.rs-light #rs-setup-logo { color: #1f2430; }
-html.rs-light .rs-menu-tag,
-html.rs-light #rs-setup-tag { color: #8a8a92; }
-html.rs-light .rs-menu-sec + .rs-menu-sec { border-top-color: rgba(0, 0, 0, 0.07); }
-html.rs-light .rs-sec-label span { color: #6b6b73; }
-html.rs-light .rs-menu-note { color: #6b7280; }
-html.rs-light #rs-set-text,
-html.rs-light .rs-mcp-field {
-  background: #ffffff; color: #1f2430; border-color: rgba(0, 0, 0, 0.14);
-}
-html.rs-light .rs-mcp-item { background: #ffffff; border-color: rgba(0, 0, 0, 0.1); }
-html.rs-light .rs-mcp-name { color: #1f2430; }
-html.rs-light .rs-mcp-url { color: #6b7280; }
-html.rs-light .rs-mcp-remove { color: #8a8a92; }
-html.rs-light .rs-mcp-remove:hover { background: rgba(0, 0, 0, 0.06); color: #1f2430; }
-html.rs-light .rs-mcp-sep { background: rgba(0, 0, 0, 0.08); }
-html.rs-light .rs-mcp-spin { border-color: rgba(0, 0, 0, 0.15); border-top-color: #4b5563; }
-html.rs-light #rs-setup-sub { color: #4b5563; }
-html.rs-light #rs-setup-steps li { color: #374151; }
-html.rs-light #rs-setup-steps li + li { border-top-color: rgba(0, 0, 0, 0.06); }
-html.rs-light #rs-setup-steps li::before { color: #8a8a92; }
-html.rs-light #rs-setup-steps code { background: rgba(0, 0, 0, 0.06); }
-html.rs-light #rs-setup-dismiss { border-color: rgba(0, 0, 0, 0.12); color: #4b5563; }
-html.rs-light #rs-setup-dismiss:hover { background: rgba(0, 0, 0, 0.05); }
 
 /* Menu contents in light theme: neutral grays, subtle surfaces on hover */
-html.rs-light .rs-site-opt { color: #4b5563; }
-html.rs-light .rs-site-name > span:first-child { color: #1f2430; }
-html.rs-light .rs-site-host { color: #9ca3af; }
-html.rs-light button.rs-site-opt:hover { background: rgba(0, 0, 0, 0.05); }
-html.rs-light .rs-site-badge { color: #6b7280; border-color: rgba(0, 0, 0, 0.14); }
-html.rs-light .rs-site-go { color: #9ca3af; }
-html.rs-light #rs-set-save,
-html.rs-light #rs-mcp-add,
-html.rs-light .rs-tip-opt {
-  background: rgba(0, 0, 0, 0.05); color: #1f2430; border-color: rgba(0, 0, 0, 0.12);
-}
-html.rs-light #rs-set-save:hover,
-html.rs-light #rs-mcp-add:hover,
-html.rs-light .rs-tip-opt:hover { background: rgba(0, 0, 0, 0.09); }
-html.rs-light #rs-set-status,
-html.rs-light #rs-mcp-status,
-html.rs-light .rs-tip-sub,
-html.rs-light .rs-rbx-cur,
-html.rs-light .rs-tip-sep { color: #6b7280; }
-html.rs-light .rs-tip-rbx { color: #374151; }
 
 /* ══════════════════════════════════════════════════════════════
    PREMIUM FINISH PASS
@@ -1483,31 +1338,12 @@ html[data-rs-engine="roblox"] .rs-free {
 }
 
 /* light theme counterparts */
-html.rs-light .rs-free {
-  color: #6b7280; background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.13);
-}
-html.rs-light[data-rs-engine="roblox"] .rs-free {
-  color: #0369a1; background: rgba(14, 165, 233, 0.08); border-color: rgba(14, 165, 233, 0.3);
-}
-html.rs-light[data-rs-engine="gone"] .rs-free {
-  color: #b91c1c; background: rgba(239, 68, 68, 0.07); border-color: rgba(239, 68, 68, 0.28);
-}
-html.rs-light #rs-menu, html.rs-light #rs-setup, html.rs-light .rs-shot,
-html.rs-light .rs-toast, html.rs-light .rs-banner {
+html.rs-light .rs-shot, html.rs-light .rs-toast, html.rs-light .rs-banner {
   --rs-shadow-card:
     0 1px 2px rgba(15, 23, 42, 0.06),
     0 8px 24px rgba(15, 23, 42, 0.09),
     0 24px 64px rgba(15, 23, 42, 0.12),
     0 1px 0 rgba(255, 255, 255, 0.8) inset;
-}
-html.rs-light #rs-menu::before {
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent);
-}
-html.rs-light #rs-action:focus-visible, html.rs-light #rs-stop:focus-visible,
-html.rs-light #rs-discord:focus-visible, html.rs-light #rs-support:focus-visible,
-html.rs-light #rs-engine:focus-visible, html.rs-light #rs-switch:focus-visible,
-html.rs-light #rs-extra:focus-visible {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 0 4px rgba(99, 102, 241, 0.55) !important;
 }
 
 /* respect users who opt out of motion */
@@ -1587,16 +1423,11 @@ html.rs-light .rs-spin {
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.9px;
   text-transform: uppercase; color: #74747d;
 }
-html.rs-light .rs-sec-label span { color: #6b7280; }
 
 /* fields: accent focus ring, calm caret */
 #rs-set-text:focus, .rs-mcp-field:focus {
   border-color: rgba(99, 102, 241, 0.55);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16);
-}
-html.rs-light #rs-set-text:focus, html.rs-light .rs-mcp-field:focus {
-  border-color: rgba(79, 70, 229, 0.5);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.13);
 }
 
 /* primary menu buttons get a whisper of the accent */
@@ -1612,10 +1443,6 @@ html.rs-light #rs-set-text:focus, html.rs-light .rs-mcp-field:focus {
   transform: translateY(-0.5px);
 }
 #rs-set-save:active, #rs-mcp-add:active { transform: translateY(0) scale(0.97); }
-html.rs-light #rs-set-save, html.rs-light #rs-mcp-add {
-  background: rgba(79, 70, 229, 0.1); border-color: rgba(79, 70, 229, 0.3); color: #3730a3;
-}
-html.rs-light #rs-set-save:hover, html.rs-light #rs-mcp-add:hover { background: rgba(79, 70, 229, 0.16); }
 
 /* ── setup steps: circled numbers ── */
 #rs-setup-steps li::before {
@@ -1625,10 +1452,6 @@ html.rs-light #rs-set-save:hover, html.rs-light #rs-mcp-add:hover { background: 
   border: 1px solid rgba(129, 140, 248, 0.4);
   background: rgba(99, 102, 241, 0.1);
   color: #c7d2fe; font-size: 9.5px; font-weight: 700;
-}
-html.rs-light #rs-setup-steps li::before {
-  border-color: rgba(79, 70, 229, 0.35);
-  background: rgba(79, 70, 229, 0.07); color: #4338ca;
 }
 
 /* ── unstable pill: glassy, rounded ── */
@@ -1714,15 +1537,6 @@ html { --rsa: #ffffff; }
   border-color: color-mix(in srgb, var(--rsa) 50%, transparent);
   color: color-mix(in srgb, var(--rsa) 72%, #ffffff);
 }
-html.rs-light #rs-action[data-kind="restart"] {
-  background: color-mix(in srgb, var(--rsa) 10%, transparent);
-  color: color-mix(in srgb, var(--rsa) 72%, #000000);
-  border-color: color-mix(in srgb, var(--rsa) 32%, transparent);
-}
-html.rs-light #rs-action[data-kind="restart"]:hover {
-  background: color-mix(in srgb, var(--rsa) 18%, transparent);
-  border-color: color-mix(in srgb, var(--rsa) 48%, transparent);
-}
 
 /* Extra Thinking active state joins the palette */
 #rs-extra[data-on="1"] {
@@ -1736,15 +1550,6 @@ html.rs-light #rs-action[data-kind="restart"]:hover {
   background: color-mix(in srgb, var(--rsa) 26%, transparent);
   border-color: color-mix(in srgb, var(--rsa) 40%, transparent);
 }
-html.rs-light #rs-extra[data-on="1"] {
-  background: color-mix(in srgb, var(--rsa) 12%, transparent);
-  color: color-mix(in srgb, var(--rsa) 68%, #000000);
-  border-color: color-mix(in srgb, var(--rsa) 28%, transparent);
-}
-html.rs-light #rs-extra[data-on="1"]:hover {
-  background: color-mix(in srgb, var(--rsa) 18%, transparent);
-  border-color: color-mix(in srgb, var(--rsa) 42%, transparent);
-}
 
 /* focus rings everywhere pick up the site accent */
 #rs-action:focus-visible, #rs-stop:focus-visible,
@@ -1753,13 +1558,6 @@ html.rs-light #rs-extra[data-on="1"]:hover {
   outline: none;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55),
               0 0 0 4px color-mix(in srgb, var(--rsa) 65%, transparent) !important;
-}
-html.rs-light #rs-action:focus-visible, html.rs-light #rs-stop:focus-visible,
-html.rs-light #rs-discord:focus-visible, html.rs-light #rs-support:focus-visible,
-html.rs-light #rs-engine:focus-visible, html.rs-light #rs-switch:focus-visible,
-html.rs-light #rs-extra:focus-visible {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9),
-              0 0 0 4px color-mix(in srgb, var(--rsa) 55%, transparent) !important;
 }
 
 /* menu fields + buttons */
@@ -1780,29 +1578,12 @@ html.rs-light #rs-extra:focus-visible {
     color-mix(in srgb, var(--rsa) 20%, transparent));
   border-color: color-mix(in srgb, var(--rsa) 50%, transparent);
 }
-html.rs-light #rs-set-text:focus, html.rs-light .rs-mcp-field:focus {
-  border-color: color-mix(in srgb, var(--rsa) 50%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rsa) 13%, transparent);
-}
-html.rs-light #rs-set-save, html.rs-light #rs-mcp-add {
-  background: color-mix(in srgb, var(--rsa) 10%, transparent);
-  border-color: color-mix(in srgb, var(--rsa) 30%, transparent);
-  color: color-mix(in srgb, var(--rsa) 80%, #000000);
-}
-html.rs-light #rs-set-save:hover, html.rs-light #rs-mcp-add:hover {
-  background: color-mix(in srgb, var(--rsa) 16%, transparent);
-}
 
 /* setup step circles */
 #rs-setup-steps li::before {
   border-color: color-mix(in srgb, var(--rsa) 40%, transparent);
   background: color-mix(in srgb, var(--rsa) 10%, transparent);
   color: color-mix(in srgb, var(--rsa) 50%, #ffffff);
-}
-html.rs-light #rs-setup-steps li::before {
-  border-color: color-mix(in srgb, var(--rsa) 35%, transparent);
-  background: color-mix(in srgb, var(--rsa) 7%, transparent);
-  color: color-mix(in srgb, var(--rsa) 75%, #000000);
 }
 
 /* banner primary action */
@@ -1825,7 +1606,6 @@ html.rs-light #rs-setup-steps li::before {
 /* default state emphasis takes a whisper of the accent (live-green still wins
    once the agent is running via .tone-active) */
 #rs-state b { color: color-mix(in srgb, var(--rsa) 52%, #ffffff); }
-html.rs-light #rs-state b { color: color-mix(in srgb, var(--rsa) 70%, #000000); }
 
 /* neutral chip stripes take the faintest site tint (done/err stay semantic) */
 .rs-chip.result, .rs-chip.sys, .rs-chip.idle {
@@ -2095,15 +1875,6 @@ html.rs-light #rs-state b { color: color-mix(in srgb, var(--rsa) 70%, #000000); 
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 0 12px rgba(239,83,80,0.28);
 }
 .rs-dz-note { margin-top: 7px; font-size: 9.5px; color: #7d838e; line-height: 1.4; }
-html.rs-light .rs-danger-zone { border-color: rgba(211,47,47,0.30);
-  background: linear-gradient(180deg, rgba(239,68,68,0.05), rgba(239,68,68,0.02)); }
-html.rs-light .rs-dz-head { color: #b3261e; }
-html.rs-light .rs-dz-text b { color: #1f2430; }
-html.rs-light .rs-dz-text span { color: #5c6470; }
-html.rs-light #rs-full-toggle { color: #5c6470; background: rgba(15,23,42,0.04); border-color: rgba(15,23,42,0.14); }
-html.rs-light #rs-full-toggle.on { color: #fff; border-color: rgba(211,47,47,0.60);
-  background: linear-gradient(180deg, rgba(239,83,80,0.85), rgba(183,28,28,0.90)); }
-html.rs-light .rs-dz-note { color: #8b93a0; }
 
 /* Session Summary (AgentScript) stat chips */
 .rs-sum-stats { display: flex; gap: 6px; padding: 2px 2px 8px; flex-wrap: wrap; }
@@ -2119,11 +1890,6 @@ html.rs-light .rs-dz-note { color: #8b93a0; }
 .rs-sum-chip.rd  { color: #a5b4fc; background: rgba(99,102,241,0.10); border-color: rgba(99,102,241,0.25); }
 .rs-sum-chip.er  { color: #fca5a5; background: rgba(248,113,113,0.09); border-color: rgba(248,113,113,0.28); }
 .rs-sum-chip.zero { opacity: 0.45; }
-html.rs-light .rs-sum-chip { color: #2a3038; background: rgba(15,23,42,0.05); border-color: rgba(15,23,42,0.10); }
-html.rs-light .rs-sum-chip.ed { color: #1d4ed8; background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.30); }
-html.rs-light .rs-sum-chip.run { color: #92400e; background: rgba(251,191,36,0.14); border-color: rgba(180,83,9,0.30); }
-html.rs-light .rs-sum-chip.rd { color: #4338ca; background: rgba(99,102,241,0.10); border-color: rgba(99,102,241,0.30); }
-html.rs-light .rs-sum-chip.er { color: #b91c1c; background: rgba(239,68,68,0.10); border-color: rgba(220,38,38,0.32); }
 /* ── Cards dropup — lemonade.gg design language ─────────────────────────
    Dark glass surface, hairline ring, deep soft shadows, pill status chips,
    staggered blur-rise entrance. Accent follows the site's --rsa variable. */
@@ -2232,20 +1998,6 @@ html.rs-light .rs-sum-chip.er { color: #b91c1c; background: rgba(239,68,68,0.10)
 .rs-cards-empty span { font-size: 10px; color: #6b7078; }
 .rs-cards-empty-glyph { font-size: 20px; margin-bottom: 2px; color: var(--rsa, #24AFE2); }
 
-html.rs-light #rs-cards-panel {
-  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,249,250,0.98));
-  box-shadow:
-    0 28px 60px -18px rgba(15,23,42,0.28),
-    0 10px 30px -12px rgba(15,23,42,0.18),
-    inset 0 1px 0 rgba(255,255,255,0.9),
-    inset 0 0 0 1px rgba(15,23,42,0.06);
-}
-html.rs-light .rs-card { background: rgba(15,23,42,0.03); border-color: rgba(15,23,42,0.07); }
-html.rs-light .rs-card:hover { background: rgba(15,23,42,0.055); border-color: rgba(15,23,42,0.13); }
-html.rs-light .rs-card-title { color: #1f2430; }
-html.rs-light .rs-card-detail { color: #5c6470; }
-html.rs-light .rs-cards-title { color: #69707c; }
-html.rs-light .rs-card-time { color: #8b93a0; }
 
 /* ── Cards: Library tab (lemonade mechanic inventory) ─────────────────── */
 .rs-cards-tabs {
@@ -2312,15 +2064,6 @@ html.rs-light .rs-card-time { color: #8b93a0; }
   transition: opacity 0.18s cubic-bezier(0.16,1,0.3,1), transform 0.18s cubic-bezier(0.16,1,0.3,1);
 }
 .rs-lib-card:hover .rs-lib-run { opacity: 1; transform: none; }
-html.rs-light .rs-cards-tabs { background: rgba(15,23,42,0.04); box-shadow: inset 0 0 0 1px rgba(15,23,42,0.05); }
-html.rs-light .rs-cards-tab { color: #69707c; }
-html.rs-light .rs-cards-tab.on { color: #17181b; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,0.12); }
-html.rs-light .rs-lib-card { background: rgba(15,23,42,0.03); border-color: rgba(15,23,42,0.07); }
-html.rs-light .rs-lib-card:hover { background: rgba(15,23,42,0.055); }
-html.rs-light .rs-lib-title { color: #1f2430; }
-html.rs-light .rs-lib-desc { color: #5c6470; }
-html.rs-light .rs-cards-hint { color: #8b93a0; }
-html.rs-light .rs-card-detail { color: #6b7280; }
 
 /* -- Cards inventory search ------------------------------------------- */
 .rs-cards-searchrow { display: flex; align-items: center; gap: 8px; padding: 10px 12px 2px; }
@@ -2334,10 +2077,6 @@ html.rs-light .rs-card-detail { color: #6b7280; }
 #rs-cards-search::placeholder { color: #8b93a0; }
 #rs-cards-search:focus { border-color: rgba(0,162,255,0.55); background: rgba(255,255,255,0.09); }
 .rs-cards-count-info { flex: none; font: 650 10px/1 -apple-system, "Segoe UI", Roboto, sans-serif; color: #9aa0a8; letter-spacing: 0.3px; }
-html.rs-light #rs-cards-search { color: #1f2430; background: rgba(15,23,42,0.04); border-color: rgba(15,23,42,0.12); }
-html.rs-light #rs-cards-search::placeholder { color: #8b93a0; }
-html.rs-light #rs-cards-search:focus { border-color: rgba(0,110,190,0.55); background: #fff; }
-html.rs-light .rs-cards-count-info { color: #69707c; }
 
 /* ── Card send-embed (floating confirmation of the picked card) ────────── */
 #rs-card-embed {
@@ -2396,14 +2135,6 @@ html.rs-light .rs-cards-count-info { color: #69707c; }
 #rs-card-embed[data-mode="ok"] .rs-ce-status { color: #6ee7a0; }
 #rs-card-embed[data-mode="paste"] .rs-ce-status { color: #93c5fd; }
 #rs-card-embed[data-mode="err"] .rs-ce-status { color: #fca5a5; }
-html.rs-light #rs-card-embed {
-  background: linear-gradient(180deg, rgba(255,255,255,0.99), rgba(248,249,250,0.99));
-  border-color: color-mix(in srgb, var(--rsa, #24AFE2) 35%, rgba(15,23,42,0.10));
-  box-shadow: 0 24px 54px -16px rgba(15,23,42,0.28), inset 0 1px 0 rgba(255,255,255,0.9);
-}
-html.rs-light .rs-ce-title { color: #1f2430; }
-html.rs-light .rs-ce-desc { color: #5c6470; }
-html.rs-light .rs-ce-chip.dim { color: #69707c; background: rgba(15,23,42,0.05); border-color: rgba(15,23,42,0.10); }
 @media (prefers-reduced-motion: reduce) {
   #rs-card-embed, .rs-ce-dot { animation: none !important; }
 }
@@ -2542,12 +2273,6 @@ html[data-rs-engine="anim"] #rs-dot.on { color: rgba(255,94,158,0.7); }
   cursor: help;
   white-space: nowrap;
 }
-html.rs-light #rs-persona {
-  color: #5b21b6;
-  background: linear-gradient(180deg, rgba(139,92,246,0.14), rgba(139,92,246,0.10));
-  border-color: rgba(139,92,246,0.30);
-  text-shadow: none;
-}
 
 /* ── Menu: agent-mode switch rows ── */
 .rs-tgl-row {
@@ -2561,13 +2286,10 @@ html.rs-light #rs-persona {
   transition: background 0.15s ease;
 }
 .rs-tgl-row:hover { background: rgba(255,255,255,0.05); }
-html.rs-light .rs-tgl-row:hover { background: rgba(15,23,42,0.05); }
 .rs-tgl-sub-row { margin-left: 14px; padding-top: 4px; padding-bottom: 4px; opacity: 0.92; }
 .rs-tgl-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .rs-tgl-name { font-size: 11.5px; font-weight: 600; color: #dfe2e8; }
-html.rs-light .rs-tgl-name { color: #1e293b; }
 .rs-tgl-sub { font-size: 10px; color: #8b909c; line-height: 1.35; }
-html.rs-light .rs-tgl-sub { color: #64748b; }
 /* The switch itself */
 .rs-tgl {
   flex: none;
@@ -2699,34 +2421,8 @@ html.rs-light .rs-tgl-sub { color: #64748b; }
 .rs-effort-preview { margin-top: 7px; }
 .rs-effort-preview summary { cursor: pointer; font-size: 10.5px; color: #9aa0ad; }
 .rs-effort-pre { margin: 6px 0 0; max-height: 180px; overflow: auto; padding: 8px 9px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.35); font: 10px/1.45 ui-monospace, Consolas, monospace; color: #c8ccd4; white-space: pre-wrap; word-break: break-word; }
-html.rs-light .rs-effort-chip.boost { color: #0f172a; background: rgba(34,197,94,0.14); border-color: rgba(34,197,94,0.45); }
-html.rs-light .rs-effort-lenses { border-color: rgba(15,23,42,0.12); background: rgba(15,23,42,0.03); }
-html.rs-light .rs-effort-lens { color: #475569; border-color: rgba(15,23,42,0.18); background: #fff; }
-html.rs-light .rs-effort-rule-in { background: #fff; color: #0f172a; border-color: rgba(15,23,42,0.18); }
-html.rs-light .rs-effort-pre { background: rgba(15,23,42,0.05); color: #334155; border-color: rgba(15,23,42,0.12); }
-html.rs-light .rs-effort-rail { background: rgba(15,23,42,0.12); }
-html.rs-light .rs-effort-dot { background: #fff; border-color: rgba(15,23,42,0.3); }
-html.rs-light .rs-effort-stop { color: #64748b; }
-html.rs-light .rs-effort-stop.on, html.rs-light .rs-effort-profile-head { color: #0f172a; }
-html.rs-light .rs-effort-profile { border-color: rgba(15,23,42,0.12); background: linear-gradient(180deg, rgba(111,147,255,0.12), rgba(15,23,42,0.02)); }
-html.rs-light .rs-effort-profile-sub, html.rs-light .rs-effort-profile-head span { color: #334155; }
-html.rs-light .rs-effort-chip { background: rgba(15,23,42,0.05); border-color: rgba(15,23,42,0.1); color: #94a3b8; }
-html.rs-light .rs-effort-chip.on { color: #0f172a; background: rgba(111,147,255,0.16); }
-html.rs-light .rs-effort-site { border-color: rgba(15,23,42,0.12); background: rgba(15,23,42,0.03); color: #475569; }
-html.rs-light .rs-effort-site-name { color: #0f172a; }
 .rs-work-sub { font-size: 9.5px; color: #8b909c; line-height: 1.3; font-weight: 500; }
 .rs-work-card.on .rs-work-sub { color: #c5c8d0; }
-html.rs-light .rs-work-card {
-  border-color: rgba(15,23,42,0.12);
-  background: rgba(15,23,42,0.04);
-  color: #334155;
-}
-html.rs-light .rs-work-card.on {
-  color: #0f172a;
-  background: #fff;
-  border-color: rgba(15,23,42,0.22);
-  box-shadow: 0 6px 16px rgba(15,23,42,0.08);
-}
 
 .rs-persona-row { flex-wrap: wrap; gap: 5px; }
 .rs-persona-btn {
@@ -2752,8 +2448,6 @@ html.rs-light .rs-work-card.on {
   box-shadow: 0 0 12px rgba(139,92,246,0.25), inset 0 1px 0 rgba(255,255,255,0.08);
 }
 .rs-persona-ic { font-size: 12px; line-height: 1; }
-html.rs-light .rs-persona-btn { border-color: rgba(15,23,42,0.12); background: rgba(15,23,42,0.04); color: #475569; }
-html.rs-light .rs-persona-btn.on { color: #5b21b6; background: rgba(139,92,246,0.14); border-color: rgba(139,92,246,0.4); }
 
 /* ── Menu: generic small action button (Image→Model row) ── */
 #rs-i2m-btn, .rs-set-row button {
@@ -2813,7 +2507,6 @@ html.rs-light .rs-persona-btn.on { color: #5b21b6; background: rgba(139,92,246,0
 .rs-lib-card { position: relative; }
 .rs-lib-card:hover .rs-lib-copy { display: inline-flex; }
 .rs-lib-copy:hover { color: #fff; border-color: rgba(139, 92, 246, 0.5); background: rgba(76, 29, 149, 0.55); }
-html.rs-light .rs-lib-copy { background: rgba(255, 255, 255, 0.92); color: #475569; border-color: rgba(15, 23, 42, 0.15); }
 /* Stagger entrance for grid cards (harmless if reduced-motion kills it) */
 .rs-cards-grid .rs-lib-card { animation: rs-card-in 0.28s ease backwards; }
 .rs-cards-grid .rs-lib-card:nth-child(-n+12) { animation-delay: calc(var(--i, 0) * 0ms); }
@@ -2830,7 +2523,6 @@ html.rs-light .rs-lib-copy { background: rgba(255, 255, 255, 0.92); color: #4755
 }
 #rs-mcp-repair:hover { background: linear-gradient(180deg, rgba(56,189,248,0.24), rgba(12,74,110,0.38)); }
 #rs-mcp-repair:disabled { opacity: 0.5; cursor: default; }
-html.rs-light #rs-mcp-repair { background: rgba(14,165,233,0.10); color: #0369a1; border-color: rgba(14,165,233,0.35); }
 .rs-set-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
 /* ══════════════════════════════════════════════════════════════
@@ -2850,10 +2542,6 @@ html.rs-light { --rsa: #000000; --total-line: #000000; --total-ink: #000000; --t
   text-shadow: none !important;
   text-transform: uppercase;
 }
-html.rs-light #rs-brand {
-  -webkit-text-stroke: 1.45px #000000;
-  text-shadow: none !important;
-}
 html[data-rs-engine="roblox"] #rs-brand,
 html[data-rs-engine="local"] #rs-brand,
 html[data-rs-engine="anim"] #rs-brand { text-shadow: none !important; }
@@ -2866,30 +2554,20 @@ html[data-rs-glass="true"] #rs-bar {
   box-shadow: none !important;
   border-radius: 0 !important;
 }
-html.rs-light[data-rs-glass="true"] #rs-bar {
-  background: #f7f7f7 !important;
-  border: 1px solid #000000 !important;
-  box-shadow: none !important;
-}
 html[data-rs-glass="true"][data-rs-engine="roblox"] #rs-bar,
 html[data-rs-glass="true"][data-rs-engine="local"] #rs-bar,
 html[data-rs-glass="true"][data-rs-engine="anim"] #rs-bar { border-color: #ffffff !important; }
-html.rs-light[data-rs-glass="true"][data-rs-engine="roblox"] #rs-bar,
-html.rs-light[data-rs-glass="true"][data-rs-engine="local"] #rs-bar,
-html.rs-light[data-rs-glass="true"][data-rs-engine="anim"] #rs-bar { border-color: #000000 !important; }
 
 #rs-engine {
   border: 1px solid #ffffff !important;
   background: transparent !important;
   box-shadow: none !important;
 }
-html.rs-light #rs-engine { border-color: #000000 !important; }
 #rs-engine-thumb {
   background: transparent !important;
   border: 1px solid #ffffff !important;
   box-shadow: none !important;
 }
-html.rs-light #rs-engine-thumb { border-color: #000000 !important; }
 #rs-engine[data-engine="roblox"] #rs-engine-thumb,
 #rs-engine[data-engine="local"] #rs-engine-thumb,
 #rs-engine[data-engine="anim"] #rs-engine-thumb {
@@ -2897,9 +2575,6 @@ html.rs-light #rs-engine-thumb { border-color: #000000 !important; }
   box-shadow: none !important;
   border: 1px solid #ffffff !important;
 }
-html.rs-light #rs-engine[data-engine="roblox"] #rs-engine-thumb,
-html.rs-light #rs-engine[data-engine="local"] #rs-engine-thumb,
-html.rs-light #rs-engine[data-engine="anim"] #rs-engine-thumb { border-color: #000000 !important; }
 .rs-mode-btn { color: rgba(255,255,255,0.45) !important; text-shadow: none !important; }
 .rs-mode-btn:hover { color: #ffffff !important; }
 .rs-mode-btn.on[data-mode="roblox"],
@@ -2908,11 +2583,6 @@ html.rs-light #rs-engine[data-engine="anim"] #rs-engine-thumb { border-color: #0
   color: #ffffff !important;
   text-shadow: none !important;
 }
-html.rs-light .rs-mode-btn { color: rgba(0,0,0,0.4) !important; }
-html.rs-light .rs-mode-btn:hover { color: #000000 !important; }
-html.rs-light .rs-mode-btn.on[data-mode="roblox"],
-html.rs-light .rs-mode-btn.on[data-mode="local"],
-html.rs-light .rs-mode-btn.on[data-mode="anim"] { color: #000000 !important; }
 
 #rs-action, #rs-stop, #rs-extra, :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn), #rs-cards-btn,
 button.act, .rs-tgl-row, .rs-cards-tab {
@@ -2923,10 +2593,6 @@ button.act, .rs-tgl-row, .rs-cards-tab {
   border: 1px solid #ffffff !important;
   color: #ffffff !important;
   border-radius: 0 !important;
-}
-html.rs-light #rs-action, html.rs-light #rs-stop, html.rs-light #rs-extra, html.rs-light :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn) {
-  border-color: #000000 !important;
-  color: #000000 !important;
 }
 #rs-action[data-kind="start"], #rs-action[data-kind="start"]:hover,
 #rs-action[data-kind="restart"], #rs-stop, #rs-stop:hover {
@@ -2942,27 +2608,18 @@ html.rs-light #rs-action, html.rs-light #rs-stop, html.rs-light #rs-extra, html.
   box-shadow: none !important;
   border-radius: 0 !important;
 }
-html.rs-light #rs-menu, html.rs-light #rs-cards-panel, html.rs-light #rs-setup,
-html.rs-light #rs-tut-card, html.rs-light .rs-shot, html.rs-light .rs-toast, html.rs-light .rs-banner {
+html.rs-light .rs-shot, html.rs-light .rs-toast, html.rs-light .rs-banner {
   background: #f7f7f7 !important;
   border-color: #000000 !important;
 }
 html[data-rs-engine="roblox"] #rs-dot.on,
 html[data-rs-engine="local"] #rs-dot.on,
 html[data-rs-engine="anim"] #rs-dot.on { color: #ffffff; }
-html.rs-light[data-rs-engine="roblox"] #rs-dot.on,
-html.rs-light[data-rs-engine="local"] #rs-dot.on,
-html.rs-light[data-rs-engine="anim"] #rs-dot.on { color: #000000; }
 #rs-persona {
   color: #ffffff !important;
   background: transparent !important;
   border: 1px solid #ffffff !important;
   text-shadow: none !important;
-}
-html.rs-light #rs-persona {
-  color: #000000 !important;
-  border-color: #000000 !important;
-  background: transparent !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -2992,7 +2649,6 @@ html.rs-light {
   text-shadow: none !important;
   text-transform: uppercase;
 }
-html.rs-light #rs-brand { color: #111111 !important; }
 
 html[data-rs-glass="true"] #rs-bar {
   background: var(--total-fill) !important;
@@ -3001,11 +2657,6 @@ html[data-rs-glass="true"] #rs-bar {
   border: 1px solid var(--total-line) !important;
   box-shadow: 0 10px 32px rgba(0,0,0,0.28), 0 1px 0 rgba(255,255,255,0.06) inset !important;
   border-radius: var(--total-radius) !important;
-}
-html.rs-light[data-rs-glass="true"] #rs-bar {
-  background: var(--total-fill) !important;
-  border-color: var(--total-line) !important;
-  box-shadow: 0 10px 28px rgba(15,23,42,0.10), 0 1px 0 rgba(255,255,255,0.8) inset !important;
 }
 html[data-rs-glass="true"][data-rs-engine="roblox"] #rs-bar,
 html[data-rs-glass="true"][data-rs-engine="local"] #rs-bar,
@@ -3024,7 +2675,6 @@ html[data-rs-glass="true"][data-rs-engine="anim"] #rs-bar { border-color: var(--
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.25) !important;
   border-radius: 999px !important;
 }
-html.rs-light #rs-engine { background: rgba(0,0,0,0.04) !important; }
 #rs-engine-thumb,
 #rs-engine[data-engine="roblox"] #rs-engine-thumb,
 #rs-engine[data-engine="local"] #rs-engine-thumb,
@@ -3034,23 +2684,11 @@ html.rs-light #rs-engine { background: rgba(0,0,0,0.04) !important; }
   box-shadow: 0 2px 8px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.18) !important;
   border-radius: 999px !important;
 }
-html.rs-light #rs-engine-thumb,
-html.rs-light #rs-engine[data-engine="roblox"] #rs-engine-thumb,
-html.rs-light #rs-engine[data-engine="local"] #rs-engine-thumb,
-html.rs-light #rs-engine[data-engine="anim"] #rs-engine-thumb {
-  background: rgba(0,0,0,0.08) !important;
-  border-color: rgba(0,0,0,0.18) !important;
-}
 .rs-mode-btn { color: rgba(255,255,255,0.42) !important; text-shadow: none !important; transition: color 0.2s var(--total-ease) !important; }
 .rs-mode-btn:hover { color: rgba(255,255,255,0.88) !important; }
 .rs-mode-btn.on[data-mode="roblox"],
 .rs-mode-btn.on[data-mode="local"],
 .rs-mode-btn.on[data-mode="anim"] { color: #ffffff !important; text-shadow: none !important; }
-html.rs-light .rs-mode-btn { color: rgba(0,0,0,0.38) !important; }
-html.rs-light .rs-mode-btn:hover { color: rgba(0,0,0,0.78) !important; }
-html.rs-light .rs-mode-btn.on[data-mode="roblox"],
-html.rs-light .rs-mode-btn.on[data-mode="local"],
-html.rs-light .rs-mode-btn.on[data-mode="anim"] { color: #111111 !important; }
 
 #rs-action, #rs-stop, #rs-extra, :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn), #rs-cards-btn,
 #rs-discord, #rs-support, #rs-switch {
@@ -3065,13 +2703,6 @@ html.rs-light .rs-mode-btn.on[data-mode="anim"] { color: #111111 !important; }
 #rs-cards-btn:hover, #rs-discord:hover, #rs-support:hover, #rs-switch:hover {
   background: rgba(255,255,255,0.11) !important;
   transform: translateY(-0.5px);
-}
-html.rs-light #rs-action, html.rs-light #rs-stop, html.rs-light #rs-extra,
-html.rs-light :is(:is(:is(#rs-settings-btn, #rs-enhance-btn), #rs-video-btn), #rs-images-btn), html.rs-light #rs-cards-btn,
-html.rs-light #rs-discord, html.rs-light #rs-support, html.rs-light #rs-switch {
-  background: rgba(0,0,0,0.04) !important;
-  border-color: var(--total-line) !important;
-  color: #111111 !important;
 }
 #rs-action[data-kind="start"], #rs-action[data-kind="start"]:hover,
 #rs-action[data-kind="restart"], #rs-stop, #rs-stop:hover {
@@ -3088,8 +2719,7 @@ html.rs-light #rs-discord, html.rs-light #rs-support, html.rs-light #rs-switch {
   box-shadow: 0 18px 48px rgba(0,0,0,0.38), 0 1px 0 rgba(255,255,255,0.06) inset !important;
   border-radius: 16px !important;
 }
-html.rs-light #rs-menu, html.rs-light #rs-cards-panel, html.rs-light #rs-setup,
-html.rs-light #rs-tut-card, html.rs-light .rs-shot, html.rs-light .rs-toast, html.rs-light .rs-banner {
+html.rs-light .rs-shot, html.rs-light .rs-toast, html.rs-light .rs-banner {
   background: var(--total-fill) !important;
   border-color: var(--total-line) !important;
   box-shadow: 0 18px 44px rgba(15,23,42,0.12) !important;
@@ -3102,7 +2732,6 @@ html.rs-light #rs-tut-card, html.rs-light .rs-shot, html.rs-light .rs-toast, htm
   text-shadow: none !important;
   border-radius: 999px !important;
 }
-html.rs-light #rs-persona { color: #111111 !important; background: rgba(0,0,0,0.04) !important; }
 
 .rs-chip { border-radius: 14px !important; }
 .rs-tgl, .rs-persona-btn, .rs-lvl-btn { border-radius: 999px !important; }
@@ -3935,7 +3564,7 @@ html.rs-light .rs-blender-note { color: #7a1f12; background: rgba(190,60,45,.1);
   .rs-blender-card.on .rs-blender-mark, .rs-blender-card.on .rs-blender-pill i { animation: none; }
 }
 
-/* ── Blockbench card 2.20.0 (2.20.0: own plugin, no URL field) ─────────────────────────────────────────────
+/* ── Blockbench card 2.21.0 (2.21.0: own plugin, no URL field) ─────────────────────────────────────────────
    Same component as the Blender card (shared classes), recoloured to
    Blockbench's teal and with a small URL field; the mark is a cube outline. */
 .rs-blender-card.rs-bb-card { --bl: #1e9c86; --bl2: #5ad0ba; --bl-ink: #06201b; }
@@ -4111,7 +3740,7 @@ html[data-rs-theme="autumn"] .rs-menu-head { background-image: linear-gradient(1
 }
 .rs-menu-mark {
   width: 36px !important; height: 36px !important; border-radius: 12px !important;
-  background: #000 url(icon.png) center / cover no-repeat !important;
+  background-color: #000 !important; /* 2.21.0: the tile image comes from main.js (brandLogoUrl); icon.png never existed at the root */
   border: 1px solid rgba(255,232,204,.35) !important;
   box-shadow: 0 0 16px var(--total-glow, rgba(232,213,181,.35)) !important;
 }
@@ -5924,7 +5553,6 @@ html.rs-light #rs-steering-input { background: rgba(255,255,255,.72); border-col
   #rs-steering-input { flex-basis: 130px; }
 }
 
-
 /* Host UI collision manager owns this temporary displacement; never out-rank native dialogs. */
 #rs-root[data-rs-collision-state="REPOSITIONING"] #rs-bar { transform: translateY(calc(-1 * var(--rs-collision-offset,72px))); }
 #rs-root[data-rs-collision-state="RESTORING"] #rs-bar { transition: transform .14s ease; }
@@ -5933,8 +5561,6 @@ html.rs-light #rs-steering-input { background: rgba(255,255,255,.72); border-col
 .rs-lib-ops { display:flex; align-items:center; gap:4px; }
 .rs-lib-ops button, #rs-template-create { border:1px solid rgba(255,255,255,.09); border-radius:6px; background:rgba(255,255,255,.045); color:#aeb4bd; font:600 9px/1.2 inherit; padding:4px 6px; cursor:pointer; }
 .rs-lib-ops button:hover, #rs-template-create:hover { color:#fff; border-color:color-mix(in srgb,var(--rsa,#24AFE2) 45%,transparent); }
-html.rs-light .rs-template-commands { color:#737b88; }
-html.rs-light .rs-lib-ops button, html.rs-light #rs-template-create { color:#505866; border-color:rgba(15,23,42,.1); background:rgba(15,23,42,.035); }
 
 /* User-owned Templates v2 */
 .rs-template-head{display:flex;align-items:center;gap:7px;padding:10px 12px 2px}.rs-template-head>div{display:flex;flex-direction:column;margin-right:auto}.rs-template-head b{font-size:13px;color:#f1f3f5}.rs-template-head span{font-size:9px;color:#79818d}.rs-template-head button,.rs-template-empty button,.rs-template-actions button{border:1px solid rgba(255,255,255,.1);background:#222730;color:#c9ced6;border-radius:5px;padding:5px 7px;font-size:9px;cursor:pointer}.rs-template-head button:first-of-type,.rs-template-empty button:first-child{background:var(--rsa,#24afe2);border-color:transparent;color:#071017;font-weight:750}.rs-template-empty{display:flex;min-height:210px;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:9px;color:#e5e8ec}.rs-template-empty b{font-size:14px}.rs-template-empty span{color:#858e9b;font-size:10px;line-height:1.5}.rs-template-empty>div{display:flex;gap:7px}.rs-template-list{padding:7px 10px 14px;display:flex;flex-direction:column;gap:6px}.rs-template-row{display:flex;align-items:center;gap:12px;padding:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);border-radius:7px}.rs-template-row>div:first-child{min-width:0;flex:1}.rs-template-row b{font-size:11px;color:#edf0f3}.rs-template-row p{margin:3px 0;color:#9aa2ad;font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rs-template-row span{font-size:8px;color:#6f7885;text-transform:uppercase;letter-spacing:.04em}.rs-template-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;max-width:260px}.rs-template-actions button:nth-child(2){color:var(--rsa,#24afe2)}
@@ -6008,7 +5634,6 @@ html[data-rs-theme="void"] #rs-toast,html[data-rs-theme="void"] .rs-toast{border
 .rs-template-editor{overflow:hidden;border-color:rgba(255,255,255,.14);border-radius:12px;background:linear-gradient(145deg,#151921,#101319 70%);box-shadow:0 28px 90px rgba(0,0,0,.58),inset 0 1px rgba(255,255,255,.025)}.rs-template-editor header{min-height:42px;padding:11px 14px;background:rgba(255,255,255,.018)}.rs-template-editor header b{font-size:14px;letter-spacing:-.015em}.rs-template-editor nav{padding:10px 8px;background:rgba(5,8,12,.25)}.rs-template-editor nav button{position:relative;min-height:31px;padding:7px 9px;border-radius:6px;color:#8993a1;transition:background-color .14s ease,color .14s ease}.rs-template-editor nav button:hover{background:rgba(255,255,255,.045);color:#d8dde5}.rs-template-editor nav button.on{background:linear-gradient(90deg,color-mix(in srgb,var(--rsa,#24afe2) 13%,transparent),rgba(255,255,255,.035));border-color:color-mix(in srgb,var(--rsa,#24afe2) 25%,transparent);color:#fff;box-shadow:inset 2px 0 var(--rsa,#24afe2)}.rs-template-editor main{padding:18px 20px;background:radial-gradient(circle at 100% 0,rgba(255,255,255,.025),transparent 30%)}.rs-template-editor section{max-width:730px}.rs-template-editor label{margin-bottom:13px;color:#a8b0bc;letter-spacing:.055em}.rs-template-editor input,.rs-template-editor textarea,.rs-template-editor select{min-height:34px;padding:8px 10px;border-color:rgba(255,255,255,.11);border-radius:7px;background:#0a0d12;box-shadow:inset 0 1px 3px rgba(0,0,0,.22);transition:border-color .14s ease,box-shadow .14s ease}.rs-template-editor input:hover,.rs-template-editor textarea:hover,.rs-template-editor select:hover{border-color:rgba(255,255,255,.18)}.rs-template-editor input:focus,.rs-template-editor textarea:focus,.rs-template-editor select:focus{border-color:color-mix(in srgb,var(--rsa,#24afe2) 58%,white);box-shadow:0 0 0 3px color-mix(in srgb,var(--rsa,#24afe2) 11%,transparent);outline:0}.rs-template-editor footer{min-height:43px;padding:9px 13px;background:rgba(5,8,12,.28)}
 .rs-template-guide{gap:8px;padding:9px 14px;background:linear-gradient(90deg,color-mix(in srgb,var(--rsa,#24afe2) 8%,transparent),rgba(255,255,255,.018))}.rs-template-guide span{border-color:rgba(255,255,255,.09);background:rgba(0,0,0,.14)}.rs-template-help{padding:9px 10px;border-left:2px solid color-mix(in srgb,var(--rsa,#24afe2) 55%,transparent);border-radius:0 6px 6px 0;background:color-mix(in srgb,var(--rsa,#24afe2) 5%,transparent)}
 .rs-project-reference{padding:11px!important}.rs-project-drop{border-style:dashed!important;border-radius:8px!important;background:rgba(0,0,0,.12)!important;transition:border-color .14s ease,background-color .14s ease}.rs-project-drop:hover{border-color:color-mix(in srgb,var(--rsa,#24afe2) 45%,transparent)!important;background:color-mix(in srgb,var(--rsa,#24afe2) 5%,transparent)!important}
-html.rs-light .rs-template-head{background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(248,249,251,.94));border-color:rgba(15,23,42,.08)}html.rs-light .rs-template-row{background:linear-gradient(135deg,#fff,#fafbfc);border-color:rgba(15,23,42,.09);box-shadow:0 3px 12px rgba(15,23,42,.045)}html.rs-light .rs-template-row b{color:#172033}html.rs-light .rs-template-row p{color:#657083}html.rs-light .rs-template-editor{background:#fff;border-color:rgba(15,23,42,.13);color:#263044}html.rs-light .rs-template-editor nav{background:#f6f7f9}html.rs-light .rs-template-editor main{background:#fff}html.rs-light .rs-template-editor input,html.rs-light .rs-template-editor textarea,html.rs-light .rs-template-editor select{background:#fbfcfd;border-color:rgba(15,23,42,.13);color:#172033}
 html[data-rs-theme="void"] .rs-template-head{background:linear-gradient(180deg,rgba(14,19,28,.98),rgba(8,12,18,.94))}html[data-rs-theme="void"] .rs-template-row::before{background:linear-gradient(var(--void-accent),rgba(255,112,72,.15))}html[data-rs-theme="void"] .rs-template-empty{background:radial-gradient(circle at 50% 18%,rgba(255,112,72,.08),transparent 43%),rgba(5,8,13,.28);border-color:var(--void-line)}
 @media(max-width:720px){.rs-template-row{align-items:flex-start;flex-direction:column}.rs-template-actions{justify-content:flex-start;max-width:none;width:100%}.rs-template-editor main{padding:14px}.rs-template-head{position:relative}}
 @media(prefers-reduced-motion:reduce){.rs-template-row,.rs-template-actions button,.rs-template-head button{transition:none!important}.rs-template-row:hover,.rs-template-actions button:hover,.rs-template-head button:hover{transform:none!important}}
@@ -6017,7 +5642,7 @@ html[data-rs-theme="void"] .rs-template-head{background:linear-gradient(180deg,r
 .rs-work-row.rs-work-creation{grid-template-columns:minmax(0,1fr)}
 /* 1.99.5: Access has two states (Sandbox only / Full PC). */
 .rs-work-row.rs-access-row{grid-template-columns:1fr 1fr}
-/* 2.20.0 — creation quality: four profile cards, two per row (names wrap, never one glyph per line) */
+/* 2.21.0 — creation quality: four profile cards, two per row (names wrap, never one glyph per line) */
 .rs-work-row.rs-creation-row{grid-template-columns:1fr 1fr}
 .rs-creation-row .rs-work-sub{overflow-wrap:break-word}
 .rs-work-creation .rs-work-card{min-height:48px}
@@ -6099,7 +5724,6 @@ html[data-rs-theme="void"] .rs-template-head{background:linear-gradient(180deg,r
 .rs-template-empty{margin:10px 16px 16px!important;min-height:205px!important;border:1px dashed rgba(255,255,255,.12)!important;border-radius:7px!important;background:#10141a!important;gap:8px!important}
 .rs-template-empty-mark{display:grid;place-items:center;width:34px;height:34px;border:1px solid color-mix(in srgb,var(--rsa,#59b8dd) 35%,transparent);border-radius:7px;background:color-mix(in srgb,var(--rsa,#59b8dd) 9%,transparent);color:var(--rsa,#59b8dd);font-size:13px;font-weight:800}
 .rs-template-empty b{font-size:13px!important}.rs-template-empty span{max-width:330px;color:#7d8793!important;font-size:9.5px!important}.rs-template-empty>div{margin-top:4px}
-html.rs-light .rs-template-library,html.rs-light #rs-cards-panel:has(.rs-template-library) .rs-cards-body{background:#f6f7f9!important}html.rs-light .rs-template-library .rs-template-head{background:#fff!important}html.rs-light .rs-template-head-copy b,html.rs-light .rs-template-copy>b{color:#18202d!important}html.rs-light .rs-template-toolbar{background:#f6f7f9;border-color:rgba(15,23,42,.08)}html.rs-light .rs-template-toolbar #rs-cards-search,html.rs-light .rs-template-toolbar select{background:#fff!important;color:#1d2634!important;border-color:rgba(15,23,42,.13)!important}html.rs-light .rs-template-row{background:#fff!important;border-color:rgba(15,23,42,.09)!important}html.rs-light .rs-template-actions>button,html.rs-light .rs-template-more>summary{background:#f7f8fa!important;color:#465163!important;border-color:rgba(15,23,42,.11)!important}
 @media(max-width:700px){.rs-template-library .rs-template-head{align-items:flex-start!important;flex-direction:column!important}.rs-template-head .rs-template-head-actions{width:100%}.rs-template-head .rs-template-head-actions button{flex:1}.rs-template-toolbar{grid-template-columns:1fr 1fr}.rs-template-toolbar .rs-template-search{grid-column:1/-1}.rs-template-row{align-items:flex-start!important;flex-direction:column!important}.rs-template-actions{width:100%;justify-content:flex-start!important;flex-wrap:wrap!important}.rs-template-more{margin-left:auto}}
 
 /* Template button correction — equal-height controls and explicit hierarchy. */
@@ -6127,8 +5751,6 @@ html.rs-light .rs-template-library,html.rs-light #rs-cards-panel:has(.rs-templat
 .rs-template-controls #rs-cards-search,.rs-template-controls select,.rs-template-controls .rs-template-import{height:34px!important}
 .rs-template-controls .rs-template-import{background:#191f28!important}
 .rs-template-library #rs-cards-grid-wrap{position:relative;z-index:1;background:#0d1015}
-html.rs-light .rs-template-controls{background:#fff;border-color:rgba(15,23,42,.08);box-shadow:0 8px 20px rgba(15,23,42,.07)}
-html.rs-light .rs-template-library #rs-cards-grid-wrap{background:#f6f7f9}
 html[data-rs-theme="void"] .rs-template-controls{background:linear-gradient(180deg,rgba(13,18,26,.99),rgba(9,13,20,.99));border-color:var(--void-line)}
 @media(max-width:700px){.rs-template-controls{position:sticky!important}.rs-template-controls .rs-template-head-actions{display:grid!important;grid-template-columns:1fr 1fr!important}.rs-template-controls .rs-btn-create,.rs-template-controls .rs-btn-ai{min-width:0!important;width:100%!important}}
 
@@ -6156,7 +5778,6 @@ html[data-rs-theme="void"] .rs-template-controls{background:linear-gradient(180d
 
 /* Export every user-owned template as one portable collection. */
 .rs-template-export-all{display:inline-flex!important;align-items:center!important;justify-content:center!important;width:108px!important;height:34px!important;padding:0 9px!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:5px!important;background:#171c23!important;color:#cdd2d9!important;font-size:9.5px!important;font-weight:700!important;white-space:nowrap!important;cursor:pointer!important}.rs-template-export-all:hover{background:#222832!important;border-color:rgba(255,255,255,.22)!important;color:#fff!important}
-html.rs-light .rs-template-export-all{background:#fff!important;border-color:rgba(15,23,42,.14)!important;color:#253044!important}html.rs-light .rs-template-export-all:hover{background:#f1f4f8!important;border-color:rgba(15,23,42,.24)!important}
 
    in TotalScript's fixed root so host frameworks cannot swallow clicks. */
 
@@ -6232,13 +5853,13 @@ html[data-rs-theme="skillissue"] #rs-root{background-image:linear-gradient(180de
 html[data-rs-theme="pogchamp"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-pogchamp.svg");background-size:cover;background-position:center;background-attachment:fixed}
 html[data-rs-theme="glitchlord"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-glitchlord.svg");background-size:cover;background-position:center;background-attachment:fixed}
 html[data-rs-theme="npcenergy"] #rs-root{background-image:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,.48)),url("ui/theme-npcenergy.svg");background-size:cover;background-position:center;background-attachment:fixed}
-/* 2.20.0: the viewport corner rail and the panel corner bracket / ornament
+/* 2.21.0: the viewport corner rail and the panel corner bracket / ornament
    decorations were removed ("remove the corner details"). */
 
 /* ══════════════════════════════════════════════════════════════════════════
    TotalScript 1.19.7 — theme visual refresh
    · every theme gets a layered background (photo/pattern + accent wash + fade)
-   · (corner decorations removed in 2.20.0)
+   · (corner decorations removed in 2.21.0)
    · UI buttons: gradient pills with glow (primary / ghost / danger / toggle)
    One token set per theme (--totalx-*) drives all three so classic, VoidScript
    and meme themes share a single implementation. Appended last on purpose:
@@ -6318,7 +5939,7 @@ html[data-rs-theme="pogchamp"] #rs-bar, html[data-rs-theme="glitchlord"] #rs-bar
   background: var(--totalx-wash), var(--totalx-img), var(--totalx-bg) !important;
 }
 
-/* ── 3. (corner rail removed in 2.20.0) ─────────────────────────────────────── */
+/* ── 3. (corner rail removed in 2.21.0) ─────────────────────────────────────── */
 
 /* ── 4. Buttons — gradient pills with glow ─────────────────────────────────── */
 html[data-rs-theme] {
@@ -6466,7 +6087,7 @@ html[data-rs-theme] #rs-root { background-image: none !important; }
 /* ── 6. 1.19.7c — designed ornaments (no emoji) ─────────────────────────────
    One monochrome SVG motif per theme, used as a CSS mask so it is painted with
    the theme gradient wherever it appears: the bar mark, the settings-head badge
-   and the theme-card badges (the corner placements were removed in 2.20.0). --totalx-tile is a faint accent texture inside the panels.
+   and the theme-card badges (the corner placements were removed in 2.21.0). --totalx-tile is a faint accent texture inside the panels.
    The main motif of every ornament sits in its top-left quadrant so the small
    badges can zoom into it (mask-size 200%) and still read.
    ─────────────────────────────────────────────────────────────────────────── */
@@ -6520,7 +6141,7 @@ html[data-rs-theme] .rs-approve-card {
 /* the old emoji strip under meme bars is retired */
 html[data-rs-theme] #rs-bar::after { content: none !important; }
 
-/* settings head: the mark becomes a motif badge (corner ornaments removed in 2.20.0) */
+/* settings head: the mark becomes a motif badge (corner ornaments removed in 2.21.0) */
 html[data-rs-theme] .rs-menu-head { position: relative; }
 html[data-rs-theme] .rs-menu-mark {
   display: inline-block; width: 30px; height: 30px; flex: none; border-radius: 8px;
@@ -6533,14 +6154,14 @@ html[data-rs-theme] .rs-menu-mark::before {
   -webkit-mask: var(--totalx-orn) 0 0 / 200% 200% no-repeat; mask: var(--totalx-orn) 0 0 / 200% 200% no-repeat;
   font-size: 0;
 }
-/* settings foot (corner ornaments removed in 2.20.0) */
+/* settings foot (corner ornaments removed in 2.21.0) */
 html[data-rs-theme] .rs-menu-foot { position: relative; }
 /* section labels: accent rule that fades out — a quiet "inside" decoration */
 html[data-rs-theme] .rs-sec-label::after {
   content: ""; flex: 1; height: 1px; margin-left: 4px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--totalx-a) 45%, transparent), transparent);
 }
-/* approve + setup cards (corner ornament pair removed in 2.20.0) */
+/* approve + setup cards (corner ornament pair removed in 2.21.0) */
 html[data-rs-theme] .rs-approve-card, html[data-rs-theme] #rs-setup { position: relative; }
 /* bar mark: the motif badge instead of a text glyph */
 html[data-rs-theme] #rs-ornament {
@@ -6696,8 +6317,6 @@ html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="animate"].on {
 }
 html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="animate"].on .rs-work-sub { color: rgba(255,255,255,.82) !important; }
 
-
-
 /* ── Public Skills (user-made skills / abilities / work modes) ─────────── */
 .rs-public-compose{display:flex;flex-direction:column;gap:6px;margin:8px 10px 4px;padding:10px;border:1px solid rgba(255,255,255,.09);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.015))}
 .rs-public-compose textarea{box-sizing:border-box;width:100%;min-height:58px;resize:vertical;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.28);color:#e7eaef;border-radius:6px;padding:8px 9px;font:10.5px/1.45 inherit;outline:none}
@@ -6728,7 +6347,7 @@ html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="animate"].on .rs-wor
 .rs-public-row code{font:9px ui-monospace,SFMono-Regular,Consolas,monospace;text-transform:none;letter-spacing:0;color:#aeb7c4}
 .rs-public-kind,.rs-public-verify,.rs-public-disabled{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;font-size:8px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle;border:1px solid rgba(255,255,255,.14);color:#c5ccd6}
 .rs-public-kind-skill{color:#8fd3ff;border-color:rgba(143,211,255,.4)}
-/* 2.20.0: verification badge - VERIFIED only after a Studio self-test pass */
+/* 2.21.0: verification badge - VERIFIED only after a Studio self-test pass */
 .rs-public-verify-verified{color:#071017;background:#5ee0a0;border-color:transparent}
 .rs-public-verify-stale{color:#ffd37a;border-color:rgba(255,211,122,.45)}
 .rs-public-verify-ran,.rs-public-verify-syntax{color:#aeb7c4;border-color:rgba(255,255,255,.18)}
@@ -7045,12 +6664,7 @@ html[data-rs-theme] .rs-cards-tab:focus-visible {
   --cp-r: 14px; --cp-r-ctl: 999px; --cp-x: 18px;
   --cp-ok: #4ade80; --cp-err: #f87171; --cp-run: #fbbf24;
 }
-html.rs-light #rs-cards-panel {
-  --cp-row: #ffffff; --cp-row-hi: #f3f5f8; --cp-well: #f6f7f9;
-  --cp-line: rgba(15,23,42,.1); --cp-line-hi: rgba(15,23,42,.2);
-  --cp-fg: #18202d; --cp-fg-2: #55606f; --cp-fg-3: #7a8494;
-  --cp-ok: #16a34a; --cp-err: #dc2626; --cp-run: #d97706;
-}
+html.rs-light #rs-cards-panel { color-scheme: dark; /* 2.21.0: the aqua window stays dark on light host pages; native controls follow */ }
 /* the header never shrinks back when a non-Library tab is open */
 #rs-cards-panel .rs-cards-top { padding: 14px var(--cp-x) 10px !important; }
 #rs-cards-panel .rs-cards-heading { font-size: 18px !important; }
@@ -7265,8 +6879,6 @@ html[data-rs-theme] #rs-cards-panel .rs-template-library .rs-template-delete:hov
 #rs-cards-panel .rs-idea-result button + button { margin-left: 0 !important; }
 
 /* light themes keep the same geometry, just the light tokens above */
-html.rs-light #rs-cards-panel .rs-template-head-copy b, html.rs-light #rs-cards-panel .rs-template-copy > b { color: var(--cp-fg) !important; }
-html.rs-light #rs-cards-panel .rs-public-kind-skill { color: #0369a1 !important; }
 
 @media (max-width: 720px) {
   #rs-cards-panel { --cp-x: 12px; }
@@ -7319,7 +6931,6 @@ html[data-rs-theme] #rs-cards-panel .rs-template-library .rs-template-chips butt
   box-shadow: 0 1px 0 rgba(255,255,255,.22) inset, 0 4px 14px var(--totalx-glow) !important;
 }
 #rs-cards-panel .rs-template-chips button.on i { background: rgba(0,0,0,.16); opacity: 1; }
-html.rs-light #rs-cards-panel .rs-template-chips button i { background: rgba(15,23,42,.08); }
 
 /* gallery grid: 2 columns on the 860px panel, 1 column when narrow */
 #rs-cards-panel .rs-template-gallery { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)) !important; gap: 12px !important; padding: 14px var(--cp-x) 6px !important; align-items: stretch; }
@@ -7362,7 +6973,6 @@ html.rs-light #rs-cards-panel .rs-template-chips button i { background: rgba(15,
 #rs-cards-panel .rs-tag-env { color: var(--totalx-ghost-fg, var(--cp-fg)); }
 #rs-cards-panel .rs-tag-ref { color: var(--cp-ok); border-color: color-mix(in srgb, var(--cp-ok) 40%, transparent); background: color-mix(in srgb, var(--cp-ok) 9%, transparent); }
 #rs-cards-panel .rs-template-card .rs-template-copy > span time { font-size: 11px; color: var(--cp-fg-3); margin-left: 2px; }
-html.rs-light #rs-cards-panel .rs-tag { background: rgba(15,23,42,.05); }
 
 /* card footer: Run fills, Edit ghost, ⋯ round menu */
 #rs-cards-panel .rs-template-card .rs-template-actions {
@@ -7540,8 +7150,6 @@ html.rs-light #rs-cards-panel .rs-tag { background: rgba(15,23,42,.05); }
 /* Simple Settings view: advanced rows / sections collapse until the switch is on. */
 #rs-menu.rs-menu-simple .rs-adv { display: none !important; }
 .rs-adv-row { margin-top: 6px; }
-html.rs-light .rs-step-hint { color: #4b5563; }
-html.rs-light .rs-setup-starter { color: #1f2937; background: rgba(0,0,0,.04); border-color: rgba(0,0,0,.12); }
 
 /* ══════════════════════════════════════════════════════════════════════════
    §15 · 1.41.0 Workspace panel — the Templates tray becomes a two-column
@@ -7825,8 +7433,6 @@ html.rs-light .rs-setup-starter { color: #1f2937; background: rgba(0,0,0,.04); b
   #rs-cards-panel[data-cards-tab] .rs-activity-row.rs-card-run::after { animation: none; }
   #rs-cards-panel[data-cards-tab] .rs-template-card:hover { transform: none; }
 }
-html.rs-light #rs-cards-panel[data-cards-tab] .rs-cards-tab.on { box-shadow: inset 3px 0 0 var(--totalx-a, #b08a4a), 0 4px 14px rgba(15,23,42,.08) !important; }
-html.rs-light #rs-cards-panel[data-cards-tab] .rs-template-card:hover { box-shadow: 0 12px 30px rgba(15,23,42,.12) !important; }
 
 /* ── 16. 1.43.0 — Customize: the user's own look ──────────────────────────────
    Settings → Customize stores name / logo / colours / button style on this
@@ -8037,7 +7643,6 @@ select.rs-brand-select option { background: #15130f; color: #f6f3ee; }
 }
 .rs-brand-bg-preview.on { border-style: solid; box-shadow: 0 0 0 1px rgba(255,255,255,.2), 0 0 10px rgba(255,255,255,.1); }
 @media (max-width: 520px) { .rs-brand-field-row { grid-template-columns: 1fr; } }
-
 
 /* ══════════════════════════════════════════════════════════════════════════
    AQUA — TotalScript's default theme (1.71.0). Deep-water glass: teal depths,
@@ -8382,8 +7987,6 @@ html.rs-cards-window-open #rs-root { visibility: hidden !important; }
 #rs-bar .rs-donate-head { display: flex; flex-direction: column; gap: 3px; margin: 0 0 10px; }
 #rs-bar .rs-donate-title { font-size: 13px; font-weight: 800; letter-spacing: -.1px; color: var(--total-fg, #e6fffb); }
 #rs-bar .rs-donate-text { font-size: 10.5px; line-height: 1.5; color: #8d9aa0; }
-html.rs-light #rs-bar .rs-donate-title { color: #1f2430; }
-html.rs-light #rs-bar .rs-donate-text { color: #6b7280; }
 #rs-bar .rs-donate-grid .rs-tip-rbx { --dono-glow: 0; position: relative; margin: 0 !important; gap: 10px !important;
   background: linear-gradient(135deg, rgba(34,211,238,calc(.05 + var(--dono-glow) * .10)), rgba(20,184,166,calc(.02 + var(--dono-glow) * .06))), rgba(255,255,255,.04) !important;
   border: 1px solid rgba(34,211,238,calc(.16 + var(--dono-glow) * .34)) !important;
@@ -8396,14 +7999,12 @@ html.rs-light #rs-bar .rs-donate-text { color: #6b7280; }
 #rs-bar .rs-donate-grid .rs-rbx-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 #rs-bar .rs-donate-grid .rs-rbx-name { font-weight: 800; font-size: 12.5px; }
 #rs-bar .rs-donate-grid .rs-rbx-sub { font-size: 10px; font-weight: 500; color: #8d9aa0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-html.rs-light #rs-bar .rs-donate-grid .rs-rbx-sub { color: #6b7280; }
 #rs-bar .rs-donate-grid .rs-rbx-price { padding: 4px 8px; border-radius: 999px; background: rgba(34,211,238,.10); border: 1px solid rgba(34,211,238,.28); flex: none; }
 #rs-bar .rs-donate-grid .rs-dono-4 .rs-rbx-price { color: #06222a !important; background: linear-gradient(135deg, #9ff3ff, #22d3ee); border-color: transparent; }
 #rs-bar .rs-donate-grid .rs-tip-rbx:hover { border-color: rgba(34,211,238,.6) !important; }
 #rs-bar .rs-donate-grid .rs-tip-rbx:active { transform: translateY(0) scale(.99); }
 #rs-bar .rs-donate-grid .rs-tip-rbx:focus-visible { outline: 2px solid var(--total-accent, #22d3ee); outline-offset: 2px; }
 #rs-bar .rs-donate-foot { margin: 9px 0 0; font-size: 10px; color: #7a8a90; text-align: center; }
-html.rs-light #rs-bar .rs-donate-foot { color: #6b7280; }
 
 /* ── 1.79.0 — VIDEO STUDIO (src/core/videostudio.js) ─────────────────────────── */
 #rs-video { position: fixed; inset: 0; z-index: 2147483600; display: none; background: rgba(6,6,9,.78); backdrop-filter: blur(8px) saturate(1.1); -webkit-backdrop-filter: blur(8px) saturate(1.1); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #e6edf3; }
@@ -8457,12 +8058,7 @@ html.rs-video-open #rs-root { visibility: hidden !important; }
 #rs-video .rsv-primary { background: linear-gradient(135deg, #22d3ee, #0ea5e9); color: #04121a; border-color: transparent; box-shadow: 0 6px 18px rgba(34,211,238,.35); }
 #rs-video .rsv-primary:not(:disabled):hover { filter: brightness(1.08); }
 #rs-video .rsv-status { color: #9fb4c4; font-size: 12px; }
-html.rs-light #rs-video .rsv-shell { background: linear-gradient(180deg, #f7fafc, #eef2f6); color: #1f2933; border-color: rgba(14,165,233,.3); }
-html.rs-light #rs-video .rsv-sub, html.rs-light #rs-video .rsv-muted, html.rs-light #rs-video .rsv-meta, html.rs-light #rs-video .rsv-shot span { color: #52606d; }
-html.rs-light #rs-video .rsv-sec { background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.08); }
-html.rs-light #rs-video select, html.rs-light #rs-video textarea { background: #fff; color: #1f2933; border-color: rgba(0,0,0,.15); }
-html.rs-light #rs-video .rsv-chk { color: #1f2933; }
-html.rs-light #rs-video .rsv-btn { color: #1f2933; background: rgba(0,0,0,.05); border-color: rgba(0,0,0,.12); }
+html.rs-light #rs-video .rsv-shell { color-scheme: dark; /* 2.21.0: dark on light host pages too */ }
 @media (max-width: 860px) { #rs-video .rsv-body { grid-template-columns: 1fr; } }
 /* 1.99.0 gentle-mode notice (account-protection explanation, shown once) */
 .rs-banner.info { border-left: 2px solid rgba(34, 211, 238, 0.55); }
@@ -8511,9 +8107,7 @@ html.rs-light #rs-video .rsv-btn { color: #1f2933; background: rgba(0,0,0,.05); 
 .rs-ex-props td{padding:4px 6px;border-top:1px solid rgba(255,255,255,.06);font-family:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;word-break:break-word}
 .rs-ex-swatch{display:inline-block;width:11px;height:11px;border-radius:3px;border:1px solid rgba(255,255,255,.3);vertical-align:-1px;margin-left:4px}
 @media (max-width:760px){.rs-ex-split{grid-template-columns:1fr}.rs-ex-tree,.rs-ex-inspector{max-height:40vh}}
-html.rs-light .rs-ex-tree,html.rs-light .rs-ex-inspector{background:rgba(0,0,0,.03);border-color:rgba(0,0,0,.1)}
-html.rs-light .rs-ex-search,html.rs-light .rs-ex-btn{border-color:rgba(0,0,0,.14);background:rgba(0,0,0,.04)}
-html.rs-light .rs-ex-props th,html.rs-light .rs-ex-props td{border-top-color:rgba(0,0,0,.07)}
+html.rs-light .rs-ex-tree { color-scheme: dark; }
 
 /* 2.1.0 Image Studio (src/core/imagegen.js) - thumbnails, icons, GUI art -> Studio.
    Own dialog (data-rs-owned) at the Video Studio scale; aqua accents from the brand tokens. */
@@ -8558,12 +8152,7 @@ html.rs-light .rs-ex-props th,html.rs-light .rs-ex-props td{border-top-color:rgb
 #rs-images .rs-ig-status { padding: 8px 16px; border-top: 1px solid rgba(255,255,255,.08); color: #93a4b8; font-size: 12px; min-height: 18px; }
 #rs-images .rs-ig-status[data-kind="warn"] { color: #fbbf24; }
 #rs-images .rs-ig-status[data-kind="busy"] { color: #22d3ee; }
-html.rs-light #rs-images { background: linear-gradient(180deg, #ffffff, #f3f6fa); color: #0f172a; border-color: rgba(14,165,233,.28); }
-html.rs-light #rs-images .rs-ig-sub, html.rs-light #rs-images .rs-ig-field, html.rs-light #rs-images .rs-ig-note, html.rs-light #rs-images .rs-ig-meta, html.rs-light #rs-images .rs-ig-status, html.rs-light #rs-images .rs-ig-drop, html.rs-light #rs-images .rs-ig-check { color: #475569; }
-html.rs-light #rs-images textarea, html.rs-light #rs-images input:not([type=checkbox]):not([type=file]), html.rs-light #rs-images select { background: #fff; color: #0f172a; border-color: rgba(0,0,0,.14); }
-html.rs-light #rs-images .rs-ig-btn { background: rgba(0,0,0,.05); color: #0f172a; border-color: rgba(0,0,0,.12); }
-html.rs-light #rs-images .rs-ig-close { background: rgba(0,0,0,.06); color: #0f172a; }
-html.rs-light #rs-images .rs-ig-item { color: #334155; border-color: rgba(0,0,0,.1); background: rgba(0,0,0,.03); }
+html.rs-light #rs-images { color-scheme: dark; /* 2.21.0: dark on light host pages too */ }
 @media (max-width: 760px) { #rs-images .rs-ig-body { grid-template-columns: 1fr; } }
 
 /* 2.2.0 Featured Public Skills shelf (src/core/public_packs.js) - the bundled
@@ -8587,10 +8176,7 @@ html.rs-light #rs-images .rs-ig-item { color: #334155; border-color: rgba(0,0,0,
 .rs-public-feat-actions .rs-btn-primary,.rs-public-feat-actions .rs-btn-secondary{padding:4px 9px;font-size:9px}
 .rs-public-feat-have{font-size:8.5px;color:#8ee9c2;font-weight:650;margin-right:auto}
 .rs-public-share-actions button[disabled]{opacity:.55;cursor:default}
-html.rs-light .rs-public-featured{background:linear-gradient(180deg,rgba(14,165,233,.08),rgba(0,0,0,.02));border-color:rgba(14,165,233,.3)}
-html.rs-light .rs-public-featured>summary,html.rs-light .rs-public-feat-copy b{color:#0f172a}
-html.rs-light .rs-public-feat-row{background:rgba(0,0,0,.03);border-color:rgba(0,0,0,.1)}
-html.rs-light .rs-public-feat-body>p,html.rs-light .rs-public-feat-copy p{color:#475569}
+html.rs-light .rs-public-featured{color-scheme:dark}
 /* legible cards-panel scale (the window variant of the Public tab) */
 #rs-cards-panel[data-cards-tab] .rs-public-featured { margin: 0 var(--cp-x) 12px !important; border-radius: var(--cp-r) !important; border-color: color-mix(in srgb, var(--rsa, #22d3ee) 35%, var(--cp-line)) !important; }
 #rs-cards-panel[data-cards-tab] .rs-public-featured > summary { padding: 12px 16px !important; gap: 10px !important; font-size: 13px !important; color: var(--cp-fg) !important; }
@@ -8635,28 +8221,131 @@ html.rs-light .rs-toast-n { background: rgba(0,0,0,0.08); color: #0f172a; }
 #rs-status-pill.rs-status-reconnecting .rs-status-dot { animation: rs-dot-pulse 1.1s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { #rs-status-pill.rs-status-reconnecting .rs-status-dot { animation: none; } }
 
+/* ═══ 2.21.0 — overlay polish (rendered + audited in headless Chromium) ═══════
+   1. Light host pages. The aqua skin paints every TotalScript surface dark, so
+      the old "light page → dark text" rules for the bar / tray / setup card were
+      removed above (they produced black-on-black on ChatGPT / Claude light).
+      The surfaces also keep the dark accent tokens: --rsa / --total-* are
+      re-declared on each dark root so a light page only re-tints the parts
+      that really sit on the page (in-conversation chips, toasts, banners). */
+html.rs-light :is(#rs-bar, #rs-menu, #rs-setup, #rs-card-embed, #rs-tutorial, #rs-cards-panel, #rs-cards-window, #rs-enhance, #rs-images, #rs-video, #rs-approve) {
+  --rsa: #ffffff; --total-line: rgba(255,255,255,0.16); --total-ink: #f4f4f6; --total-fill: rgba(14,14,16,0.94);
+  color-scheme: dark; /* native selects / checkboxes / scrollbars match the dark surface */
+}
+
+/* 2. Settings head: the mark is the brand tile (inline background-image set by
+      main.js). The 1.19 rule painted `#000 url(icon.png)` — a file that does not
+      exist at the extension root — so the head showed a black square. */
+.rs-menu-mark.rs-menu-mark-logo, html[data-rs-theme] .rs-menu-mark.rs-menu-mark-logo {
+  background-color: #03161c !important; background-size: cover !important; background-position: center !important; background-repeat: no-repeat !important;
+}
+
+/* 3. Templates window: the Explorer tab had no icon (the mask fell back to a
+      filled square). Same 24px stroke family as the other tabs. */
+#rs-cards-panel[data-cards-tab] .rs-cards-tab[data-tab="explorer"] { --tab-ico: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/><path d='M3 11h18'/></svg>"); }
+
+/* 4. Bar glyphs: the voice button and the "unstable" pill used emoji / dingbat
+      characters (🎙 ⚠) that render as colour emoji on Windows and as tofu on
+      systems without an emoji font. Both now draw a stroke icon that matches
+      the Discord / enhancer / video / images buttons. */
+#rs-voice { display: inline-flex; align-items: center; gap: 5px; }
+#rs-voice::before {
+  content: ""; flex: none; width: 13px; height: 13px; background: currentColor; opacity: .9;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><rect x='9' y='3' width='6' height='11' rx='3'/><path d='M5 11a7 7 0 0 0 14 0'/><path d='M12 18v3'/></svg>") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><rect x='9' y='3' width='6' height='11' rx='3'/><path d='M5 11a7 7 0 0 0 14 0'/><path d='M12 18v3'/></svg>") center / contain no-repeat;
+}
+#rs-voice.rs-voice-on::before { -webkit-mask: none; mask: none; width: 8px; height: 8px; border-radius: 50%; background: #f87171; box-shadow: 0 0 8px rgba(248,113,113,.8); }
+#rs-unstable-inline {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px !important; font-weight: 700; letter-spacing: .02em;
+  color: #fcd34d !important; background: rgba(251,191,36,.10) !important; border: 1px solid rgba(251,191,36,.32) !important;
+}
+#rs-unstable-inline::before {
+  content: ""; flex: none; width: 11px; height: 11px; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3 2.5 20h19z'/><path d='M12 9v5'/><path d='M12 17.5h.01'/></svg>") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3 2.5 20h19z'/><path d='M12 9v5'/><path d='M12 17.5h.01'/></svg>") center / contain no-repeat;
+}
+
+/* 5. Bar surface: the diagonal hatch in the caustic layer read as a cheap
+      stripe pattern at bar size; the two soft radial glows stay (and keep the
+      slow drift). */
+html[data-rs-theme="aqua"] #rs-bar::before {
+  background:
+    radial-gradient(240px 90px at 16% 0%, rgba(34,211,238,.26), transparent 70%),
+    radial-gradient(280px 120px at 80% 20%, rgba(20,184,166,.22), transparent 70%);
+  background-size: auto, auto;
+}
+/* The bar ornament ("≋" in a system font, a different squiggle on every OS)
+   is retired: the brand tile right next to it is the mark. The tray keeps its
+   larger masked wave mark. */
+html[data-rs-theme="aqua"] #rs-ornament { display: none !important; }
+
+/* 6. Legibility floor: nothing in the bar or tray renders under 10px. */
+#rs-work-badge { font-size: 9.5px; }
+.rs-mode-btn { font-size: 10px !important; }
+.rs-site-badge, .rs-menu-tag { font-size: 10px; }
+
+/* 7. Settings tray (horizontal strip above the bar): the navigation becomes a
+      real sidebar list instead of wrapped pills with a stretched gap, the
+      search field no longer clips its placeholder, columns snap into place
+      when a nav item scrolls them in, and the strip shows its scrollbar so a
+      half-visible column reads as "scrolls" rather than "cut off". */
+#rs-menu.rs-menu-top { scroll-snap-type: x proximity; scroll-padding-left: 0; scrollbar-width: thin; scrollbar-color: rgba(34,211,238,.45) transparent; }
+#rs-menu.rs-menu-top::-webkit-scrollbar { height: 8px; }
+#rs-menu.rs-menu-top::-webkit-scrollbar-thumb { background: rgba(34,211,238,.38); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+#rs-menu.rs-menu-top::-webkit-scrollbar-thumb:hover { background: rgba(34,211,238,.6); background-clip: padding-box; }
+#rs-menu.rs-menu-top .rs-menu-sec { scroll-snap-align: start; }
+#rs-menu.rs-menu-top .rs-menu-head { flex-basis: 124px; align-items: flex-start; justify-content: flex-start; gap: 10px; padding: 14px 12px 12px !important; }
+#rs-menu.rs-menu-top .rs-menu-head { align-items: flex-start !important; text-align: left; }
+#rs-menu.rs-menu-top .rs-menu-head .rs-menu-mark, #rs-menu.rs-menu-top .rs-menu-head .rs-menu-head-txt { margin: 0 !important; align-self: flex-start !important; }
+#rs-menu.rs-menu-top .rs-menu-head .rs-menu-close { margin-top: auto; margin-left: 0; align-self: flex-start; }
+#rs-menu.rs-menu-top .rs-menu-nav {
+  flex: 0 0 172px; position: sticky; left: 0; z-index: 3; align-content: start; gap: 10px;
+  padding: 10px 10px 10px 12px; overflow-y: auto; overflow-x: hidden; border-bottom: 0; border-right: 1px solid rgba(255,255,255,0.07);
+  scroll-snap-align: none;
+}
+#rs-menu.rs-menu-top .rs-menu-search input { height: 30px; padding-left: 28px; font-size: 12px; }
+#rs-menu.rs-menu-top .rs-menu-search input::placeholder { color: #8a929d; }
+#rs-menu.rs-menu-top .rs-menu-chips { flex-direction: column; align-items: stretch; gap: 2px; }
+#rs-menu.rs-menu-top .rs-menu-chip {
+  height: 26px; padding: 0 9px; border-radius: 7px; border-color: transparent; text-align: left;
+  font-size: 11px; color: #b4bcc6; overflow: hidden; text-overflow: ellipsis;
+}
+#rs-menu.rs-menu-top .rs-menu-chip:hover { background: rgba(255,255,255,0.06); color: #f3f6f8; }
+#rs-menu.rs-menu-top .rs-menu-chip.on { background: rgba(34,211,238,0.12); border-color: rgba(34,211,238,0.28); color: #bff6ff; box-shadow: inset 2px 0 0 #22d3ee; }
+
+/* 8. Reduced motion, as a blanket for every TotalScript surface (the same
+      switch the Customize → "Animations" toggle flips). Durations go to ~0
+      instead of `none` so keyframes still land on their end state. */
+@media (prefers-reduced-motion: reduce) {
+  #rs-root, #rs-root *, #rs-root *::before, #rs-root *::after,
+  #rs-bar *, #rs-bar *::before, #rs-bar *::after, #rs-menu *, #rs-cards-panel *, #rs-cards-window *, #rs-approve *,
+  #rs-enhance *, #rs-images *, #rs-video *, #rs-tutorial * {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important;
+  }
+}
+
+/* 9. `hidden` always wins inside the studio windows: the Video Studio progress
+      row is `display:flex` and was visible ("Reading frames…") before a file
+      was even chosen. */
+#rs-video [hidden], #rs-images [hidden], #rs-enhance [hidden] { display: none !important; }
+
 /* ═══ 2.12.0 — settings tray navigation + rendering normalisation ═══════════
    Appended last on purpose: these rules win over the older per-section
    styling above without rewriting it. Tokens mirror ui/tokens.css (the
    content script cannot link a second stylesheet). */
 #rs-menu { --rs-ui-font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, "Noto Sans", sans-serif; --rs-ui-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; --rs-ui-focus: 0 0 0 2px rgba(16,15,14,1), 0 0 0 4px #22d3ee; font-family: var(--rs-ui-font); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; font-variant-ligatures: none; }
-html.rs-light #rs-menu { --rs-ui-focus: 0 0 0 2px #fff, 0 0 0 4px #0891b2; }
 /* search + section chips (built by decorateMenu) */
 .rs-menu-nav { position: sticky; top: 0; z-index: 2; display: grid; gap: 8px; padding: 10px 14px; background: rgba(16,15,14,0.97); backdrop-filter: blur(22px) saturate(1.08); -webkit-backdrop-filter: blur(22px) saturate(1.08); border-bottom: 1px solid rgba(255,255,255,0.07); }
-html.rs-light .rs-menu-nav { background: rgba(255,255,255,0.96); border-bottom-color: rgba(0,0,0,0.08); }
 .rs-menu-search { display: block; margin: 0; }
 .rs-menu-search input { width: 100%; box-sizing: border-box; height: 32px; padding: 0 10px 0 30px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa1b1' stroke-width='2' stroke-linecap='round'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>") no-repeat 9px center / 14px 14px; color: #f3f1ee; font: 12.5px var(--rs-ui-font); outline: none; }
 .rs-menu-search input::placeholder { color: #7a7a82; }
 .rs-menu-search input:focus-visible { box-shadow: var(--rs-ui-focus); border-color: transparent; }
-html.rs-light .rs-menu-search input { background-color: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.12); color: #0f172a; }
 .rs-menu-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .rs-menu-chip { height: 22px; padding: 0 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: #a9a9b2; font: 600 10.5px/1 var(--rs-ui-font); cursor: pointer; white-space: nowrap; transition: background .13s ease, color .13s ease; }
 .rs-menu-chip:hover { background: rgba(255,255,255,0.07); color: #f3f1ee; }
 .rs-menu-chip.on { background: rgba(34,211,238,0.14); border-color: rgba(34,211,238,0.4); color: #9ff3ff; }
 .rs-menu-chip:focus-visible { outline: none; box-shadow: var(--rs-ui-focus); }
-html.rs-light .rs-menu-chip { border-color: rgba(0,0,0,0.12); color: #475569; }
-html.rs-light .rs-menu-chip:hover { background: rgba(0,0,0,0.05); color: #0f172a; }
-html.rs-light .rs-menu-chip.on { background: rgba(8,145,178,0.12); border-color: rgba(8,145,178,0.4); color: #0e7490; }
 #rs-menu.rs-menu-simple .rs-menu-chip.rs-adv { display: none; }
 #rs-menu [data-rs-filtered] { display: none !important; }
 .rs-menu-empty { padding: 22px 14px; text-align: center; color: #82828b; font-size: 12px; }

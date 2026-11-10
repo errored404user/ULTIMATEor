@@ -300,68 +300,6 @@ impl App {
         save
     }
 
-    /// 2.17.0 Updates: what the last check found, the running job, the
-    /// daily switch and the extension folder. Returns true when settings changed.
-    pub(super) fn updates_section(&mut self, ui: &mut egui::Ui) -> bool {
-        use crate::update::{self, Phase};
-        let t = self.theme;
-        let mut save = false;
-        let hub = self.shared.update.clone();
-        let info = hub.check_info();
-        let job = hub.job();
-        let current = env!("CARGO_PKG_VERSION");
-        let latest = info.latest.as_ref();
-        let newer = latest.map(|l| update::is_newer(&l.version, current)).unwrap_or(false);
-        let running = matches!(job.phase, Phase::Downloading | Phase::Verifying | Phase::Staging | Phase::Applying | Phase::Restarting);
-        kv(ui, t, "This app", current);
-        kv(ui, t, "Latest release", &match latest { Some(l) => format!("{}{}", l.version, if newer { "  (new)" } else if l.version == current { "  (you are up to date)" } else { "" }), None => "not checked yet".into() });
-        kv(ui, t, "Last check", &if info.at == 0 { "never".to_string() } else { let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0).saturating_sub(info.at); if secs < 90 { "just now".into() } else if secs < 5400 { format!("{} min ago", secs / 60) } else if secs < 172_800 { format!("{} h ago", secs / 3600) } else { format!("{} days ago", secs / 86_400) } });
-        if let Some(e) = info.error.as_deref() { ui.label(RichText::new(format!("Last check failed: {e}")).small().color(t.warn)); }
-        let ext = hub.extension_dir();
-        kv(ui, t, "Extension folder", &match &ext { Some((p, how)) => format!("{} ({how}{})", p.display(), update::manifest_version(p).map(|v| format!(", v{v}")).unwrap_or_default()), None => "not found - type it below (the folder you loaded unpacked in chrome://extensions)".into() });
-        kv(ui, t, "Studio plugin", "comes with the app - rewritten in Studio's Plugins folder on the next start");
-        kv(ui, t, "Blockbench plugin", "comes with the app - TotalScript-Blockbench.js next to the executable; load it once in Blockbench (File → Plugins → Load Plugin from File)");
-        ui.add_space(6.0);
-        match job.phase {
-            Phase::Idle => {}
-            Phase::Done => { ui.label(RichText::new(format!("Updated to {} - extension: press Reload in the TotalScript popup (or chrome://extensions → reload).", job.version)).small().color(t.ok)); }
-            Phase::Failed => { ui.label(RichText::new(format!("Update failed: {}", job.error.clone().unwrap_or_default())).small().color(t.warn)); }
-            _ => {
-                let pct = if job.total > 0 { Some((job.received as f32 / job.total as f32).clamp(0.0, 1.0)) } else { None };
-                ui.label(RichText::new(format!("{} ({})…", job.message, job.component)).small().color(t.text));
-                match pct { Some(p) => { ui.add(egui::ProgressBar::new(p).desired_width(360.0).show_percentage()); } None => { ui.add(egui::ProgressBar::new(0.0).desired_width(360.0).animate(true)); } }
-                ui.ctx().request_repaint_after(Duration::from_millis(250));
-            }
-        }
-        ui.horizontal_wrapped(|ui| {
-            if busy_button(ui, t, "Check now", "Checking…", running, Btn::Secondary).clicked() { let _ = self.cmd_tx.send(UiCommand::UpdateCheck { force: true }); self.toast("Checking GitHub Releases…", true); }
-            if newer {
-                let v = latest.map(|l| l.version.clone()).unwrap_or_default();
-                if busy_button(ui, t, &format!("Update to {v} (app + extension)"), "Updating…", running, Btn::Primary).on_hover_text("Downloads the release from GitHub, verifies sha256, writes the extension files, swaps this binary and relaunches. Nothing happens until you click.").clicked() {
-                    let _ = self.cmd_tx.send(UiCommand::UpdateApply { components: vec!["extension".into(), "app".into()] });
-                    self.toast(format!("Updating to {v}…"), true);
-                }
-                if ghost(ui, t, "Only the extension files").on_hover_text("Writes the new extension into the folder above and leaves this app alone").clicked() { let _ = self.cmd_tx.send(UiCommand::UpdateApply { components: vec!["extension".into()] }); }
-                if ghost(ui, t, "What's new").clicked() { open_external(latest.map(|l| l.notes_url.as_str()).unwrap_or(update::RELEASES_URL)); }
-            } else if ghost(ui, t, "Releases page").clicked() { open_external(update::RELEASES_URL); }
-        });
-        ui.add_space(6.0);
-        if toggle(ui, t, &mut self.settings.update_check_daily, "Check for updates daily - one small latest.json request to GitHub; never installs by itself") { hub.set_daily(self.settings.update_check_daily); save = true; }
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Extension folder").color(t.muted));
-            if self.update_folder_input.is_empty() { if let Some(d) = hub.configured_dir() { self.update_folder_input = d.display().to_string(); } }
-            ui.add(egui::TextEdit::singleline(&mut self.update_folder_input).hint_text("leave empty to detect from where total-core runs").desired_width(360.0).font(TextStyle::Monospace));
-            if pill(ui, t, "Apply", false).clicked() {
-                let p = self.update_folder_input.trim().to_string();
-                if p.is_empty() { hub.set_configured_dir(None); self.settings.update_extension_dir.clear(); save = true; self.toast("Folder cleared - auto-detection is back on", true); }
-                else if update::manifest_version(std::path::Path::new(&p)).is_some() { hub.set_configured_dir(Some(std::path::PathBuf::from(&p))); self.settings.update_extension_dir = p; save = true; self.toast("Extension folder saved", true); }
-                else { self.toast("That folder has no TotalScript manifest.json", false); }
-            }
-        });
-        ui.label(RichText::new("Integrity: every file is checked against the sha256 in the release's latest.json. Overwritten extension files are kept in a backup folder under the system temp dir (see the log).").small().color(t.muted));
-        save
-    }
-
     /// Advanced: paths, import / export, reset.
     pub(super) fn advanced_section(&mut self, ui: &mut egui::Ui) -> (bool, bool) {
         let t = self.theme;

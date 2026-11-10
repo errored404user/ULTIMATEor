@@ -73,7 +73,7 @@ ok("token attributes / post-FX cleanup accept both prefixes (places built before
 const css = read("overlay.css"), popup = read("popup.html");
 ok("extension skin pinned to aqua", main.includes('const totalTheme = "aqua";') && main.includes('|| THEME_SOUNDS.aqua') && main.includes('totalTheme || "aqua"'));
 ok("aqua theme entry + sound pack", /aqua:\s*\{ name: "Aqua"/.test(main) && /aqua: \{ label: "Water drops/.test(main));
-ok("aqua CSS: corner rail retired (2.20.0)", !css.includes(".rs-theme-corner") && !css.includes("rs-aqua-breathe"));
+ok("aqua CSS: corner rail retired (2.21.0)", !css.includes(".rs-theme-corner") && !css.includes("rs-aqua-breathe"));
 ok("aqua CSS: tokens, swatch, ornament, tile, menu head, cards, work cards, reduced motion", ['html[data-rs-theme="aqua"] {', "--totalx-img:url(ui/swatch-aqua.jpg)", 'html[data-rs-theme="aqua"] { --totalx-orn: url("data:image/svg+xml;utf8,<svg', 'html[data-rs-theme="aqua"] { --totalx-tile:', 'html[data-rs-theme="aqua"] .rs-menu-head {', 'html[data-rs-theme="aqua"] #rs-cards-panel::before', 'html[data-rs-theme="aqua"] .rs-work-card.on', "@keyframes rs-aqua-caustic", "@media (prefers-reduced-motion: reduce) {\n  html[data-rs-theme=\"aqua\"] #rs-bar::before"].every((t) => css.includes(t)));
 ok("aqua block is appended last (wins the cascade) and has no dead #rs-bar::after rule", css.lastIndexOf('html[data-rs-theme="aqua"]') > css.lastIndexOf('html[data-rs-theme="night"]') && !css.slice(css.indexOf("AQUA — TotalScript")).includes("#rs-bar::after"));
 ok("swatch photo shipped", exists("ui/swatch-aqua.jpg") && fs.statSync(path.join(root, "ui/swatch-aqua.jpg")).size > 20000);
@@ -85,7 +85,7 @@ ok("night skin still exists as a selectable style", css.includes('html[data-rs-t
 // ── 5. release pins ───────────────────────────────────────────────────────────
 const readme = read("README.md");
 ok("README 1.71.0 entry + title", /\*\*1\.71\.0 — TotalScript: the rename, and Aqua as the default skin\.\*\*/.test(readme) && readme.startsWith("# TotalScript — "));
-ok("version pins 2.20.0", manifest.version === "2.20.0" && /^version = "2\.20\.0"/m.test(cargo) && lua.includes('local VERSION = "2.20.0"') && lock.includes('name = "total-agent"\nversion = "2.20.0"'));
+ok("version pins 2.21.0", manifest.version === "2.21.0" && /^version = "2\.21\.0"/m.test(cargo) && lua.includes('local VERSION = "2.21.0"') && lock.includes('name = "total-agent"\nversion = "2.21.0"'));
 
 console.log((failed ? "FAIL  " : "OK    ") + "test-rebrand: " + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

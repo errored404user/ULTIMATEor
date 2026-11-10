@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript Bridge - a plugin for Blockbench (desktop) · 2.20.0
+// TotalScript Bridge - a plugin for Blockbench (desktop) · 2.21.0
 //
 // Install once: Blockbench → File → Plugins → Load Plugin from File → this
 // file (total-core also writes a copy next to its executable and the popup /
@@ -26,7 +26,7 @@
 // by the AI; every job is a fixed, validated operation.
 (function () {
   "use strict";
-  const VERSION = "2.20.0";
+  const VERSION = "2.21.0";
   const PLUGIN_ID = "totalscript_bridge";
   const DEFAULT_BRIDGE = "http://127.0.0.1:3000";
   const HELLO_EVERY_MS = 25000;

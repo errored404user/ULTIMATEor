@@ -87,7 +87,7 @@ ok("native tool syntax is a command signature", RSParse.hasToolSignature('<tool_
 const brokenNative = '<tool_call>{"name":"inspect_instance","arguments":{"path":}</tool_call>';
 ok("malformed native call is detectable but never executable", RSParse.hasToolSignature(brokenNative) && RSParse.parseAlternateToolCalls(brokenNative).length === 0);
 {
-  // 2.20.0: a {name, args} object that is the params of a proper {command, params}
+  // 2.21.0: a {name, args} object that is the params of a proper {command, params}
   // block is NOT a native envelope (public_skill_test {name, dry_run, args} is the
   // everyday case) - the requested format wins and the outer command runs.
   const nested = "Proving it.\n```json\n" + JSON.stringify({ command: "public_skill_test", params: { name: "lantern_row", dry_run: false, args: { path: "Workspace", count: 2 } } }) + "\n```";

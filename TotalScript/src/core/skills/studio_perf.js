@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript perf pack (2.20.0) - a place-wide performance audit with a score
+// TotalScript perf pack (2.21.0) - a place-wide performance audit with a score
 // and the mechanical fixes it recommends, both one call each.
 //
 //   perf_audit {path?, limit?}
@@ -44,7 +44,7 @@
 // the mocked DataModel in tests/perf-sim.py can run it.
 (function () {
   if (typeof RobloxScriptSkills === "undefined") return;
-  const VERSION = "2.20.0";
+  const VERSION = "2.21.0";
   const FIX_OPS = ["anchor_free", "shadows_small", "mesh_collision", "emitter_caps", "light_shadows", "empty_containers", "streaming"];
   const DEFAULT_OPS = ["anchor_free", "shadows_small", "mesh_collision", "emitter_caps", "light_shadows", "empty_containers"];
   const MAX_WALK = 60000;

@@ -1,4 +1,4 @@
-//! TotalScript Blockbench plugin hub (2.20.0).
+//! TotalScript Blockbench plugin hub (2.21.0).
 //!
 //! `plugin/TotalScript-Blockbench.js` runs inside the Blockbench desktop app
 //! and long-polls this bridge for jobs - the same shape as the Studio plugin
@@ -298,6 +298,8 @@ pub fn tools(connected: bool) -> Vec<Value> {
     v
 }
 
+/// Names of the catalogue entries (test helper: the plugin / extension tables are pinned against it).
+#[cfg(test)]
 pub fn tool_names(connected: bool) -> Vec<String> {
     tools(connected).into_iter().filter_map(|t| t.get("name").and_then(|n| n.as_str()).map(|s| s.to_string())).collect()
 }

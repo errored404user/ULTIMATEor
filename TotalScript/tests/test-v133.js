@@ -110,7 +110,7 @@ assert(tightNo.includes("Your FIRST action: list_commands {}") && !tightNo.inclu
 const local = RSX.buildSystemPrompt({ siteName: "Gemini", providerId: "gemini", engine: "local", catalogue: cat });
 assert(local.includes("COMMAND CATALOGUE at the end of this message IS the list_commands result") && local.trim().endsWith("━━━ END COMMAND CATALOGUE ━━━"), "AgentScript prompt embeds the catalogue");
 assert(RSX.buildSystemPrompt({ siteName: "Gemini", providerId: "gemini", engine: "local" }).includes("Your very first action is to write `list_commands`"), "AgentScript prompt keeps list-first without a catalogue");
-// 2.20.0: no provider gets a private bootstrap any more - an unknown providerId
+// 2.21.0: no provider gets a private bootstrap any more - an unknown providerId
 // takes the same prompt as everyone else (the Notion preferences flow is gone).
 assert(RSX.buildSystemPrompt({ siteName: "Notion", providerId: "notion", engine: "roblox", catalogue: cat }).includes("━━━ COMMAND CATALOGUE"), "no provider-private bootstrap left");
 // Reminder skips hidden tools.

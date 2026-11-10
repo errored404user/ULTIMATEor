@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/core/blockbench_tools.js - 2.20.0 Blockbench command table (pure JS).
+// src/core/blockbench_tools.js - 2.21.0 Blockbench command table (pure JS).
 //
 // Blockbench is driven by OUR plugin (plugin/TotalScript-Blockbench.js) which
 // runs inside the Blockbench desktop app and long-polls total-core for jobs -
@@ -20,7 +20,7 @@
   root.TotalBlockbench = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
-  const VERSION = "2.20.0";
+  const VERSION = "2.21.0";
   const PLUGIN_FILE = "TotalScript-Blockbench.js";
   const EXPORT_DIR = "blockbench_exports";
   const PRIMITIVES = Object.freeze(["cylinder", "cone", "pyramid", "plane", "sphere", "torus"]);

@@ -172,12 +172,3 @@ main { position: relative; overflow: hidden; min-height: 0; }
 
 /* ── error viewer ── */
 .err-steps { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
-
-/* 2.17.0 auto-updater card (Home) + the Updates row in Settings */
-.upd-bar { height: 4px; border-radius: var(--ts-r-pill); background: var(--ts-surface-2); overflow: hidden; margin-top: 6px; }
-.upd-bar > i { display: block; height: 100%; width: 0; background: var(--ts-accent); transition: width var(--ts-dur-2) var(--ts-ease); }
-.upd-bar[data-indeterminate] > i { width: 35%; animation: upd-slide 1.2s var(--ts-ease) infinite; }
-@keyframes upd-slide { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
-html[data-motion="off"] .upd-bar[data-indeterminate] > i { animation: none; width: 100%; opacity: .5; }
-@media (prefers-reduced-motion: reduce) { .upd-bar[data-indeterminate] > i { animation: none; width: 100%; opacity: .5; } }
-.upd-steps { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--ts-text-2); font-size: calc(var(--ts-fs-sm) * var(--ts-scale)); }

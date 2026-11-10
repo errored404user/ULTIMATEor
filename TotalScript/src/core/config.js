@@ -522,7 +522,7 @@ PROVE: animation_preview after every pass (judge timing, arcs, weight, seam) →
 REPORT: rig type, clips (length / priority / loop), what the preview and play-test showed, published ids only if returned, what is unverified.
 NEVER: done without a preview; wrong rig type; Humanoid:LoadAnimation; leaked tracks; invented asset ids; Action clips without priorities.`,
     },
-    // 2.20.0 BLOCKBENCH: low-poly modeling inside Blockbench through
+    // 2.21.0 BLOCKBENCH: low-poly modeling inside Blockbench through
     // TotalScript's own Blockbench plugin (bb_* commands, table in
     // src/core/blockbench_tools.js, executed by plugin/TotalScript-Blockbench.js
     // via total-core); the finished piece is EXPORTED to a file and the user
@@ -811,7 +811,7 @@ ANIMATION TOOLS: the animation_* tools build REAL Roblox animation data - Keyfra
 When the user asks how a TotalScript feature works, call totalscript_help {question, topic?} before answering so the explanation matches the installed build. Covers Templates, commands, Studio/MCP, Steering, project uploads, skins, permissions, providers and troubleshooting. Feature-help is informational: do not start a task, run Studio commands or mutate anything merely to answer.\n\nNO COMMAND SEARCHING (hard rule): the command catalogue you were given is complete and final. Never call list_commands {"query"}, search_commands, get_command, command_registry_stats or generate_command_docs, and never "look for" a command - decide from the catalogue and act. A command shown by name only is callable; if a parameter is wrong the ERROR returns the exact schema, so fix that call - do not go searching. A name that is not in the catalogue does not exist: use execute_luau {code} (any Studio API) instead of hunting for an alias. If project_index_build, blueprint_list or any other opener fails (Studio offline, timeout), say so in one line and continue the task without it - never retry it in a loop and never search for a substitute. Environments are ROBLOX_STUDIO, BLENDER, WEB, and GENERAL. Never run a BLENDER command against Studio or a ROBLOX_STUDIO command against Blender. If the target is ambiguous, inspect status or ask instead of guessing. A command result is successful only when its real executor returns success.`;
 
     // Public Skills (all providers): user-made skills - Luau command(s) +
-    // triggers + knowledge + a verify block (2.20.0: skills only).
+    // triggers + knowledge + a verify block (2.21.0: skills only).
     try {
       const PS = typeof PublicSkills !== "undefined" ? PublicSkills : null;
       const installed = PS ? PS.list({ enabled: true }) : [];

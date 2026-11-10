@@ -1,6 +1,6 @@
 "use strict";
 // Whole-bundle simulation of the TotalScript CORE on a chat.z.ai-shaped page
-// (2.20.0). Optional (needs jsdom; the bridge is canned so every scenario is
+// (2.21.0). Optional (needs jsdom; the bridge is canned so every scenario is
 // deterministic - no lupa needed):
 //
 //   cd TotalScript && npm i --no-save jsdom && node tests/core-e2e.js
@@ -13,8 +13,8 @@
 //   TASKS=1  node tests/core-e2e.js   # Task list: pill, task_next / task_update, Tasks tab, Settings toggle
 //   DIAG=1 ...                        # print the [rs-diag] trace
 //
-// History: these scenarios lived in tests/notion-e2e.js (1.21.4 → 2.20.0) and
-// ran on a Notion-AI-shaped page. The Notion provider was removed in 2.20.0, so
+// History: these scenarios lived in tests/notion-e2e.js (1.21.4 → 2.21.0) and
+// ran on a Notion-AI-shaped page. The Notion provider was removed in 2.21.0, so
 // the scenarios moved here unchanged and now drive the GLM adapter instead
 // (textarea composer, #send-message-button, .chat-assistant turns - the shape
 // tests/glm-e2e.js documents). Nothing here depends on the provider: the
@@ -397,7 +397,7 @@ const { ok, waitFor, finish } = makeReporter();
       ok("result is labelled with the public skill's name", /^Output of 'lantern_row'/.test(userMessages[4]) && !/Output of 'execute_luau'/.test(userMessages[4]), userMessages[4].slice(0, 100).replace(/\n/g, " "));
       ok("the unverified result is flagged for the model (callable, but says so)", /UNVERIFIED/.test(userMessages[4]), userMessages[4].slice(0, 200).replace(/\n/g, " "));
       await waitFor(() => userMessages.length >= 6, 40000, "mode create result");
-      ok("2.20.0: a custom work mode is REFUSED with the retirement message (nothing installed, no mode storage)", /VALIDATION_FAILED/.test(userMessages[5]) && /kind 'mode' was retired in 2\.20\.0/.test(userMessages[5]) && !/"status": "INSTALLED"/.test(userMessages[5]) && !w.PublicSkills.find("horror_builder"), userMessages[5].slice(0, 200).replace(/\n/g, " "));
+      ok("2.21.0: a custom work mode is REFUSED with the retirement message (nothing installed, no mode storage)", /VALIDATION_FAILED/.test(userMessages[5]) && /kind 'mode' was retired in 2\.21\.0/.test(userMessages[5]) && !/"status": "INSTALLED"/.test(userMessages[5]) && !w.PublicSkills.find("horror_builder"), userMessages[5].slice(0, 200).replace(/\n/g, " "));
       await waitFor(() => userMessages.length >= 7, 40000, "public_skill_test result");
       const verifyCall = toolCalls.find((c) => c.name === "execute_luau" && /^-- TotalScript public skill 'lantern_row' v\d+ - VERIFY/.test(String(c.arguments.code || "")));
       ok("public_skill_test {dry_run:false} ran the command, then the verify block as a second execute_luau with args + the command's result injected", !!verifyCall && /local args = \{\["path"\]="Workspace",\["count"\]=2\}/.test(verifyCall.arguments.code) && /local result = \{\["ok"\]=true,\["created"\]=2\}/.test(verifyCall.arguments.code) && /Lantern_/.test(verifyCall.arguments.code), verifyCall ? verifyCall.arguments.code.split("\n").slice(0, 5).join(" | ").slice(0, 240) : "no verify call");

@@ -24,7 +24,7 @@ const isCodeCraftTab = (url) => !!(url && CODECRAFT_PAGE_URL && url.startsWith(C
 const isSupportedTab = (url) => !!url && (SUPPORTED_HOSTS.some((h) => url.includes(h)) || isCodeCraftTab(url));
 const ENGINE_KEY = "rs-engine"; // "roblox" | "local"
 const ENGINES = ["roblox", "local"];
-const WORK_MODES = ["creation", "blender", "animate", "blockbench"]; // 1.95.0: + Blender (Blender-first 3D); 1.99.4: + Animator (id "animate"); 2.20.0: + Blockbench (low-poly models → file → Studio Import 3D)
+const WORK_MODES = ["creation", "blender", "animate", "blockbench"]; // 1.95.0: + Blender (Blender-first 3D); 1.99.4: + Animator (id "animate"); 2.21.0: + Blockbench (low-poly models → file → Studio Import 3D)
 const BRAND_LOGO_RE = /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i;
 function sanitizeBrandLite(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
@@ -370,79 +370,6 @@ async function setFlag(key, field, v) {
   renderSettings();
   try { await chrome.storage.local.set({ [key]: settings[field] }); } catch {}
 }
-
-// ── 2.17.0 auto-updater (Home card + Settings row) ─────────────────────────
-// All decisions come from TotalUpdater.decide (src/core/updater.js); the popup
-// only draws them and forwards the clicks to background.js, which talks to the
-// desktop app. The app does every file operation; the extension reloads itself
-// only after the app reported the extension files are in place AND the user
-// pressed Reload (or the Update button that started it is still on screen).
-let updLast = null, updPoll = null;
-function updButton(label, kind, fn) { const b = h(`<button type="button" class="ts-btn sm ${kind || "secondary"}"><span></span></button>`); b.firstElementChild.textContent = label; b.addEventListener("click", () => busy(b, fn)); return b; }
-async function updAct(action, st) {
-  const d = st && st.decision || {};
-  const latestV = st && st.state && st.state.latest ? st.state.latest.version : "";
-  switch (action) {
-    case "update": {
-      const okGo = await confirmDialog(`Update to ${latestV}?`, "The desktop app downloads the release from GitHub, verifies it, writes the new files into the extension folder, then replaces itself and relaunches. The extension reloads afterwards; Roblox Studio needs one restart for the plugin.", "Update now");
-      if (!okGo) return false;
-      const r = await bg({ type: "update_apply", components: ["extension", "app"] });
-      if (!r || !r.ok) { toast(String((r && r.error) || "Could not start the update"), "danger"); return false; }
-      toast("Update started - the desktop app is downloading", "ok");
-      updStartPolling();
-      return true;
-    }
-    case "retry": return updAct("update", st);
-    case "reload": { await bg({ type: "update_reload" }); return true; }
-    case "check": { const r = await bg({ type: "update_check", force: true }); paintUpdate(r); if (r && r.error && r.decision && r.decision.kind !== "available") { toast(r.error, "warn"); return false; } return true; }
-    case "later": { $("update-card").hidden = true; return true; }
-    case "dismiss": { $("update-card").hidden = true; return true; }
-    case "skip": { await bg({ type: "update_skip", version: latestV }); toast(`${latestV} skipped`, "ok"); refreshUpdate(); return true; }
-    case "unskip": { await bg({ type: "update_skip", unskip: true }); refreshUpdate(); return true; }
-    case "notes": openUrl(d.notesUrl || (st && st.releasesUrl) || "https://github.com/errored404user/ULTIMATEor/releases"); return true;
-    case "download": {
-      const steps = (st && st.manualSteps || []).map((x) => `<li>${esc(x)}</li>`).join("");
-      const go = await dialog({ title: `Install ${latestV || "the update"} by hand`, body: `<ol class="upd-steps">${steps}</ol>`, actions: [{ label: "Close", value: null }, { label: "Download zip", value: true, kind: "primary" }] });
-      if (go) openUrl(st && st.downloadUrl || "https://github.com/errored404user/ULTIMATEor/releases/latest");
-      return true;
-    }
-  }
-  return false;
-}
-const UPD_LABELS = { update: ["Update", "primary"], retry: ["Retry", "primary"], reload: ["Reload extension", "primary"], check: ["Check now", "secondary"], later: ["Later", "ghost"], dismiss: ["Dismiss", "ghost"], skip: ["Skip this version", "ghost"], unskip: ["Show again", "secondary"], notes: ["What's new", "secondary"], download: ["Download zip", "secondary"] };
-function paintUpdate(st) {
-  if (!st || !st.ok || !st.decision) return;
-  updLast = st;
-  const d = st.decision;
-  const card = $("update-card");
-  if (card) {
-    const show = ["available", "running", "done", "failed"].includes(d.kind);
-    card.hidden = !show;
-    if (show) {
-      $("update-title").textContent = d.title;
-      $("update-sub").textContent = d.sub || "";
-      const badge = $("update-badge"); badge.className = "ts-badge " + (d.kind === "failed" ? "danger" : d.kind === "done" ? "ok" : "accent"); badge.firstElementChild.textContent = d.kind === "running" ? "Updating" : d.kind === "done" ? "Updated" : d.kind === "failed" ? "Failed" : "Update";
-      const bar = $("update-bar"); bar.hidden = d.kind !== "running";
-      if (d.kind === "running") { if (d.progress == null) bar.setAttribute("data-indeterminate", ""); else { bar.removeAttribute("data-indeterminate"); bar.firstElementChild.style.width = d.progress + "%"; } }
-      const acts = $("update-actions"); acts.innerHTML = "";
-      for (const a of d.actions) { const [label, kind] = UPD_LABELS[a] || [a, "secondary"]; acts.appendChild(updButton(label, kind, () => updAct(a, st))); }
-    }
-  }
-  const line = $("upd-line");
-  if (line) {
-    const when = st.state && st.state.checkedAt ? TotalUpdater.ago(st.state.checkedAt) : "never";
-    const appV = st.app && st.app.appVersion ? ` · desktop app ${st.app.appVersion}` : (st.app ? "" : " · desktop app offline");
-    const folder = st.app ? (st.app.extensionDir ? ` · extension folder: ${st.app.extensionDir}${st.app.extensionDetected ? ` (${st.app.extensionDetected})` : ""}` : " · extension folder: not found - set it below") : "";
-    line.textContent = `${d.title}${d.sub ? " - " + d.sub : ""} · checked ${when}${appV}${folder}`;
-    const acts = $("upd-row-actions"); acts.innerHTML = "";
-    for (const a of d.actions.filter((x) => x !== "check" && x !== "later" && x !== "dismiss")) { const [label, kind] = UPD_LABELS[a] || [a, "secondary"]; acts.appendChild(updButton(label, kind, () => updAct(a, st))); }
-    const f = $("upd-folder"); if (f && st.app && st.app.extensionDir && !f.value && st.app.extensionDetected === "configured") f.value = st.app.extensionDir;
-  }
-  if (d.kind === "running") updStartPolling(); else updStopPolling();
-}
-async function refreshUpdate() { paintUpdate(await bg({ type: "update_status" })); }
-function updStartPolling() { if (updPoll) return; updPoll = setInterval(refreshUpdate, 1500); }
-function updStopPolling() { if (updPoll) { clearInterval(updPoll); updPoll = null; } }
 
 // ── status: connection monitor ─────────────────────────────────────────────
 let lastStatus = null;
@@ -842,13 +769,12 @@ const CATEGORIES = [
   ] },
   { id: "support", title: "Support & about", sub: `Version ${VERSION}, updates, Discord, donate`, icon: "heart", items: [
     { id: "about", type: "about", label: "About" },
-    { id: "updates", type: "updates", label: "Updates", sub: "Releases come from GitHub (errored404user/ULTIMATEor). Checked once a day; nothing installs until you press Update." },
-    { id: "updcheck", key: "rsUpdateCheck", type: "toggle", default: true, label: "Check for updates daily", sub: "One small request to GitHub Releases per day (latest.json). Off = only the Check now button. Applies to the next scheduled check." },
+    { id: "releases", type: "action", label: "Updates", sub: "New versions are installed by hand: download the repository's TotalScript.zip, replace the desktop app and the unpacked extension folder, reload it. Nothing checks GitHub for you.", button: "Open GitHub", run: () => openUrl("https://github.com/errored404user/ULTIMATEor") },
     { id: "discord", type: "action", label: "Discord", sub: "Questions, bug reports, show what you built.", button: "Join", run: () => $("discord").click() },
     { id: "donate", type: "donate", label: "Donate" },
   ] },
 ];
-const RS_KEYS_ALL = ["rsUpdateCheck", "rsWorkMode", "rsPermMode", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsAutoFixStopPlay", "rsAutoDebug", "rsBgMode", "rsSounds", VOLUME_KEY, "rsSettingsAdvanced", "rsThinkingLevel", "rsReasoningModes", "rsEffortExtras", "rsPlanMode", "rsCreationProfile", "rsGuiBrief", "rsMultiAgent", "rsCustomPrompt", "rsKeybinds", "rsBrand", "rsDebugDiagnostics", "rsAllowPublishAutomation", "rsImageTools", "rs-engine", PREF_KEY];
+const RS_KEYS_ALL = ["rsWorkMode", "rsPermMode", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsAutoFixStopPlay", "rsAutoDebug", "rsBgMode", "rsSounds", VOLUME_KEY, "rsSettingsAdvanced", "rsThinkingLevel", "rsReasoningModes", "rsEffortExtras", "rsPlanMode", "rsCreationProfile", "rsGuiBrief", "rsMultiAgent", "rsCustomPrompt", "rsKeybinds", "rsBrand", "rsDebugDiagnostics", "rsAllowPublishAutomation", "rsImageTools", "rs-engine", PREF_KEY];
 const EXPORT_KEYS = RS_KEYS_ALL.filter((k) => k !== "rsImageTools");
 let currentCat = null;
 const catById = (id) => CATEGORIES.find((c) => c.id === id);
@@ -980,7 +906,7 @@ async function renderItem(it, stored) {
       return row;
     }
     case "blockbench": {
-      // 2.20.0: nothing to connect from here - the TotalScript plugin inside
+      // 2.21.0: nothing to connect from here - the TotalScript plugin inside
       // Blockbench dials total-core. Show the state, the plugin path (copyable)
       // and a Check again button that re-reads total-core.
       const row = rowShell(it, `<button type="button" class="ts-btn sm" id="blockbench-check"><span>Check again</span></button>`);
@@ -1055,25 +981,6 @@ async function renderItem(it, stored) {
       const b = row.querySelector("button"), f = row.querySelector("input");
       b.addEventListener("click", () => f.click());
       f.addEventListener("change", async () => { const file = f.files && f.files[0]; if (!file) return; try { const data = JSON.parse(await file.text()); const n = await importSettings(data); toast(n ? `Imported ${n} setting(s)` : "No known TotalScript settings in that file", n ? "ok" : "warn"); if (n) { await loadSettings(); await renderPanel(currentCat); } } catch (e) { toast("Not a valid JSON file", "danger"); } f.value = ""; });
-      return row;
-    }
-    case "updates": {
-      // 2.17.0: the same state machine as the Home card (TotalUpdater.decide), rendered as a settings row.
-      const row = rowShell(it, `<button type="button" class="ts-btn sm" id="upd-check"><span>Check now</span></button>`);
-      const main = row.querySelector(".ts-row-main");
-      const box = h(`<div class="ts-stack" style="gap:6px;margin-top:6px"><span class="ts-row-sub ts-wrap" id="upd-line">Loading…</span><div class="ts-inline" id="upd-row-actions" style="flex-wrap:wrap;gap:6px"></div><div class="ts-inline" style="gap:6px;flex-wrap:wrap"><input id="upd-folder" class="ts-input" type="text" spellcheck="false" placeholder="Extension folder used by the desktop app (auto-detected when total-core sits in bin/ or agent/)" aria-label="Extension folder" style="flex:1;min-width:180px"><button type="button" class="ts-btn sm ghost" id="upd-folder-save"><span>Set folder</span></button></div></div>`);
-      main.appendChild(box);
-      const check = row.querySelector("#upd-check");
-      check.addEventListener("click", () => busy(check, async () => { const r = await bg({ type: "update_check", force: true }); paintUpdate(r); if (r && r.error && !(r.decision && r.decision.kind === "available")) { toast(r.error, "warn"); return false; } return true; }));
-      box.querySelector("#upd-folder-save").addEventListener("click", (e) => busy(e.currentTarget, async () => {
-        const path = String(box.querySelector("#upd-folder").value || "").trim();
-        const r = await bg({ type: "update_set_folder", path });
-        if (!r || !r.ok) { toast(String((r && r.error) || "The desktop app did not accept that folder"), "warn"); return false; }
-        toast(r.detected === "configured" ? "Extension folder saved in the desktop app" : "Folder cleared - auto-detection is back on", "ok");
-        refreshUpdate();
-        return true;
-      }));
-      refreshUpdate();
       return row;
     }
     case "about": {
@@ -1326,7 +1233,6 @@ chrome.runtime.onMessage.addListener((msg) => {
   getEngine().then(renderEngine);
   await loadSettings();
   refresh(); refreshProvider(); loadActivity();
-  refreshUpdate();
   showView(prefs.startView || "home");
   // Status is pushed (rs-status) on every change and every bridge heartbeat;
   // the slow poll below only covers a worker that was asleep when we opened.

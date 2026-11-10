@@ -15,7 +15,7 @@ const main = read("src/core/main.js"), css = read("overlay.css"), manifest = JSO
 // ── A. the module and every reference to it are gone ──
 ok("A1 src/core/paint.js no longer exists", !exists("src/core/paint.js"));
 const lists = manifest.content_scripts.map((c) => c.js).filter((js) => js.includes("src/core/main.js"));
-ok("A2 no manifest bundle loads paint.js (10 bundles; 2.20.0: Notion removed)", lists.length === 10 && lists.every((js) => !js.some((f) => /paint\.js/.test(f))));
+ok("A2 no manifest bundle loads paint.js (10 bundles; 2.21.0: Notion removed)", lists.length === 10 && lists.every((js) => !js.some((f) => /paint\.js/.test(f))));
 ok("A3 codecraft.html does not load it", !/paint\.js/.test(html));
 ok("A4 load order still holds without it: project_analyzer → reasoning → … → videostudio → main", lists.every((js) => { const i = (f) => js.indexOf("src/core/" + f); return i("project_analyzer.js") >= 0 && i("reasoning.js") === i("project_analyzer.js") + 1 && i("videostudio.js") > i("reasoning.js") && i("main.js") === i("videostudio.js") + 1; }));
 ok("A5 main.js: no TotalPaint / __rsOpenPaint / openPaint / paintCaptureStudio / #rs-paint-btn / Ctrl+Shift+P", !/TotalPaint|__rsOpenPaint|openPaint\b|paintCaptureStudio|rs-paint-btn|Shift\+P\b/.test(main));
@@ -39,7 +39,7 @@ ok("B4 hand-off diagnostics are no longer labelled paint.*", !/diag\("paint\./.t
 ok("B5 screen_capture helpers kept for their other callers", /function studioCaptureTool\(\)/.test(main) && (main.match(/studioCaptureTool\(\)/g) || []).length >= 2 && /async function screenCaptureArgs\(/.test(main) && (main.match(/screenCaptureArgs\(/g) || []).length >= 2);
 
 // ── C. Customize hide toggles ──
-ok("C1 BRAND_HIDEABLE has seven entries and no 'paint' (and no 'corners' since 2.20.0)", main.includes('const BRAND_HIDEABLE = ["think", "voice", "discord", "logo", "badge", "status", "motion"];') && !/paint: "Paint"/.test(main) && !/corners: "Corner marks"/.test(main));
+ok("C1 BRAND_HIDEABLE has seven entries and no 'paint' (and no 'corners' since 2.21.0)", main.includes('const BRAND_HIDEABLE = ["think", "voice", "discord", "logo", "badge", "status", "motion"];') && !/paint: "Paint"/.test(main) && !/corners: "Corner marks"/.test(main));
 ok("C2 overlay.css §16 hide rules have no paint rule", !/data-rs-hide~="paint"/.test(css) && /html\[data-rs-hide~="discord"\] #rs-discord \{ display: none !important; \}/.test(css));
 ok("C3 sanitiser keeps filtering by BRAND_HIDEABLE (old presets with 'paint' lose only that entry)", /out\.hide = BRAND_HIDEABLE\.filter\(\(k\) => hide\.includes\(k\)\);/.test(main));
 

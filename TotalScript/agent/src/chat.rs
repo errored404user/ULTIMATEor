@@ -280,7 +280,7 @@ struct Catalogue {
     tools: Vec<ToolDef>,
     studio_linked: bool,
     plugin_connected: bool,
-    /// 2.20.0: the TotalScript Blockbench plugin is polling (bb_* tools live).
+    /// 2.21.0: the TotalScript Blockbench plugin is polling (bb_* tools live).
     blockbench_connected: bool,
     note: String,
 }
