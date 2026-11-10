@@ -1,5 +1,5 @@
 "use strict";
-// 2.18.0 — ###CMD name### parity across EVERY chat-site adapter.
+// 2.19.0 — ###CMD name### parity across EVERY chat-site adapter.
 //
 // The shared parser (src/core/parser.js) has executed the plain-text command
 // envelope `###CMD name### … ###END_CMD###` (also ###COMMAND / ###TOOL, and

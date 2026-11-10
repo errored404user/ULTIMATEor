@@ -77,7 +77,7 @@ function loadAdapter(id) {
 const SEND_PATH_FNS = ["getEditor", "typeAndSend", "ensureComposerReady", "enforceComposer", "installSendHooks", "readAssistant", "lastAssistant", "isGenerating", "isHardGenerating", "isBusyNow", "userCount", "assistantCount", "allItems", "chatIsEmpty", "conversationKey", "scanError", "findToolBlockSpot", "classifyText", "snapshot", "stopGeneration", "isTooLongMsg", "findContinueBtn", "clickContinueBtn", "editorText"];
 const base = loadAdapter("gemini").P;
 const table = [];
-const REPAIRED = ["vani", "arena", "multichat"]; // 1.89.0: mimo / clickup / oxalpha providers removed; 2.18.0: meta removed
+const REPAIRED = ["vani", "arena", "multichat"]; // 1.89.0: mimo / clickup / oxalpha providers removed; 2.19.0: meta removed
 for (const id of REPAIRED) {
   const { P } = loadAdapter(id);
   const missing = SEND_PATH_FNS.filter((f) => typeof base[f] === "function" && typeof P[f] !== "function");

@@ -98,6 +98,7 @@ fn init_file_logger(ui: Option<Arc<gui::UiShared>>) {
     }
 }
 
+mod blockbench;
 mod chat;
 mod easter;
 mod gui;
@@ -319,6 +320,8 @@ struct AppState {
     ui: Arc<gui::UiShared>,
     /// TotalScript Studio plugin hub (jobs, Open Cloud key, install path).
     plugin: Arc<plugin::Hub>,
+    /// 2.19.0 TotalScript Blockbench plugin hub (bb_* jobs, plugin file path).
+    blockbench: Arc<blockbench::Hub>,
 }
 
 impl AppState {
@@ -335,6 +338,7 @@ impl AppState {
             roblox_editor_connected: Arc::new(AtomicBool::new(false)),
             ui,
             plugin: Arc::new(plugin::Hub::new()),
+            blockbench: Arc::new(blockbench::Hub::new()),
         }
     }
 }
@@ -883,6 +887,17 @@ async fn start() -> anyhow::Result<()> {
         Ok(None) => shared.log("studio plugin: auto-install skipped (no local Plugins folder on this platform or TOTAL_NO_PLUGIN_INSTALL=1) - copy plugin/TotalScript.lua into Studio's Plugins folder yourself"),
         Err(e) => shared.log(&format!("studio plugin: install failed ({e}) - copy plugin/TotalScript.lua into Studio's Plugins folder yourself")),
     }
+    // 2.19.0 Blockbench plugin: Blockbench only loads plugins the user picked
+    // once (File → Plugins → Load Plugin from File), so keep a current copy next
+    // to the executable and show that path in the app / popup.
+    match blockbench::install() {
+        Ok(Some((path, changed))) => {
+            shared.log(&format!("blockbench plugin: {}{}", path.display(), if changed { " (written - load it once in Blockbench: File → Plugins → Load Plugin from File)" } else { "" }));
+            state.blockbench.set_installed(Some(path.display().to_string())).await;
+        }
+        Ok(None) => shared.log("blockbench plugin: copy skipped (TOTAL_NO_PLUGIN_INSTALL=1) - load plugin/TotalScript-Blockbench.js from the extension folder in Blockbench"),
+        Err(e) => shared.log(&format!("blockbench plugin: copy failed ({e}) - load plugin/TotalScript-Blockbench.js from the extension folder in Blockbench")),
+    }
     let (cmd_tx, cmd_rx) = tokio::sync::mpsc::unbounded_channel::<gui::UiCommand>();
     tokio::spawn(ui_command_loop(state.clone(), cmd_rx));
     let ui_for_server = shared.clone();
@@ -1241,6 +1256,10 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
         .route("/api/plugin/status", get(plugin::status_handler))
         .route("/api/plugin/config", post(plugin::config_handler))
         .route("/api/plugin/event", post(plugin::event_handler))
+        .route("/api/blockbench/hello", post(blockbench::hello_handler))
+        .route("/api/blockbench/poll", get(blockbench::poll_handler))
+        .route("/api/blockbench/result", post(blockbench::result_handler))
+        .route("/api/blockbench/status", get(blockbench::status_handler))
         .route("/api/update/status", get(update_status_handler))
         .route("/api/update/check", post(update_check_handler))
         .route("/api/update/apply", post(update_apply_handler))
@@ -1409,6 +1428,8 @@ async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {   
         "roblox_proc": state.roblox_proc.load(Ordering::Relaxed),
         "mcp_busy": state.mcp_in_flight.load(Ordering::Relaxed) > 0,
         "plugin_connected": state.plugin.connected().await,
+        "blockbench_connected": state.blockbench.connected().await,
+        "blockbench_plugin_file": state.blockbench.installed().await,
     }))
 }
 async fn ws_handler(ws: axum::extract::ws::WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
@@ -1459,7 +1480,23 @@ async fn roblox_tools(state: &AppState) -> anyhow::Result<Vec<serde_json::Value>
 async fn roblox_tools_with_plugin(state: &AppState) -> anyhow::Result<Vec<serde_json::Value>> {
     let mut tools = roblox_tools(state).await?;
     tools.extend(plugin::tools(state.plugin.connected().await, state.plugin.key().await.is_some()));
+    tools.extend(blockbench::tools(state.blockbench.connected().await));
     Ok(tools)
+}
+
+/// 2.19.0: the Blockbench plugin rides the Roblox channel's server list so the
+/// extension's status bar / popup show it next to Studio (no socket of its own).
+async fn with_blockbench_server(state: &AppState, mut v: serde_json::Value) -> serde_json::Value {
+    let connected = state.blockbench.connected().await;
+    let entry = serde_json::json!({"id":"blockbench","name":"Blockbench","alive":connected,"tools":if connected { blockbench::tools(true).len() } else { 0 }});
+    match v.get_mut("servers").and_then(|s| s.as_array_mut()) {
+        Some(arr) => arr.push(entry),
+        None => { if let Some(obj) = v.as_object_mut() { obj.insert("servers".into(), serde_json::json!([entry])); } }
+    }
+    if !v.get("tools").map(|t| t.is_array()).unwrap_or(false) {
+        if let Some(obj) = v.as_object_mut() { obj.insert("tools".into(), serde_json::json!(blockbench::tools(connected))); }
+    }
+    v
 }
 
 async fn roblox_tool(state: &AppState, name: &str, args: serde_json::Value) -> anyhow::Result<McpToolOutput> {
@@ -1591,9 +1628,9 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                         mcp.probe_studio().await.is_ok()
                     };
                     set_editor(&state, studio);
-                    serde_json::json!({"type":"connected","id":0,"ok":studio,"mcp_alive":true,"studio":studio,"tools":tools,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":studio,"tools":if studio { tools.len() } else { 0 }}]})
+                    with_blockbench_server(&state, serde_json::json!({"type":"connected","id":0,"ok":studio,"mcp_alive":true,"studio":studio,"tools":tools,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":studio,"tools":if studio { tools.len() } else { 0 }}]})).await
                 },
-                Err(_) => serde_json::json!({"type":"connected","id":0,"ok":false,"mcp_alive":false,"studio":false,"tools":[],"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":false,"tools":0}]}),
+                Err(_) => with_blockbench_server(&state, serde_json::json!({"type":"connected","id":0,"ok":false,"mcp_alive":false,"studio":false,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":false,"tools":0}]})).await,
             }
         }
     })
@@ -1624,9 +1661,9 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                                         mcp.probe_studio().await.is_ok()
                                     };
                                     set_editor(&state, studio);
-                                    serde_json::json!({"type":"tools","id":id,"ok":studio,"mcp_alive":true,"studio":studio,"tools":tools,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":studio,"tools":if studio { tools.len() } else { 0 }}]})
+                                    with_blockbench_server(&state, serde_json::json!({"type":"tools","id":id,"ok":studio,"mcp_alive":true,"studio":studio,"tools":tools,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":studio,"tools":if studio { tools.len() } else { 0 }}]})).await
                                 },
-                                Err(error) => serde_json::json!({"type":"tools","id":id,"ok":false,"mcp_alive":false,"studio":false,"tools":[],"error":error.to_string()}),
+                                Err(error) => with_blockbench_server(&state, serde_json::json!({"type":"tools","id":id,"ok":false,"mcp_alive":false,"studio":false,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":false,"tools":0}],"error":error.to_string()})).await,
                             }
                         };
                         send_json(&out_tx, response);
@@ -1700,7 +1737,7 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                                 "local" => workspace::dispatch(&state2.workspace, &name, args).await
                                     .map(|text| McpToolOutput { text, images: Vec::new() })
                                     .map_err(anyhow::Error::msg),
-                                "roblox" => if plugin::is_plugin_tool(&name) { plugin::call(&state2, &name, args).await } else { roblox_tool(&state2, &name, args).await },
+                                "roblox" => if blockbench::is_tool(&name) { blockbench::call(&state2, &name, args).await } else if plugin::is_plugin_tool(&name) { plugin::call(&state2, &name, args).await } else { roblox_tool(&state2, &name, args).await },
                                 _ => Err(anyhow::anyhow!("unknown engine")),
                             };
                             match &outcome {
@@ -1717,6 +1754,7 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                                     let lower = detail.to_lowercase();
                                     let error_code = if lower.contains("not found") || lower.contains("unknown command") { "COMMAND_NOT_FOUND" }
                                         else if lower.contains("required") || lower.contains("invalid") || lower.contains("missing") { "INVALID_ARGUMENT" }
+                                        else if lower.contains("blockbench is not connected") { "BLOCKBENCH_OFFLINE" }
                                         else if lower.contains("offline") || lower.contains("not connected") || lower.contains("connection") { "STUDIO_BRIDGE_OFFLINE" }
                                         else { "TOOL_EXECUTION_ERROR" };
                                     serde_json::json!({"type":"tool_result","id":id,"ok":false,"kind":"execution","errorCode":error_code,"error":detail})

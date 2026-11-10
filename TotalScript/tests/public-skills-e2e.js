@@ -62,7 +62,7 @@ const results = []; const ok = (name, cond, extra) => { results.push([name, !!co
 const PROMPT = "# Boss Arena Builder\nYou build circular boss arenas in Roblox Studio.\n\n1. Create a 120-stud circular floor with a neon ring.\n2. Add four pillars and a raised throne platform.\n3. Place spawn locations at the four compass points.\n4. Verify the part count and report it.\nAlways use create_part for geometry and set_lighting for mood.";
 const PROMPT_LUAU = PROMPT + "\n\nRun this for the floor:\n```luau\nlocal floor = Instance.new(\"Part\")\nfloor.Name = \"ArenaFloor\"\nfloor.Size = Vector3.new(120, 1, 120)\nfloor.Anchored = true\nfloor.Parent = workspace\nreturn {ok = true, path = floor:GetFullName()}\n```";
 const TXT = "# Lantern Line\nkind: skill\ndescription: Places N lanterns with warm PointLights along the selected path.\nparams: count:number=4 \"how many\"\n--- luau ---\nlocal n = {{count}}\nfor i = 1, n do local p = Instance.new('Part') p.Parent = workspace end\nprint('placed', n)\n";
-const SKILL_MD = "---\nname: lantern_md\ndescription: Places lanterns from a pasted SKILL.md (2.18.0 canonical format).\ntriggers:\n  - lantern\nparams:\n  - count:number=3\n---\n## Knowledge\nPlace lanterns 8 studs apart.\n## Command lantern_md\n```luau\nlocal n = {{count}}\nreturn {ok = true, count = n}\n```\n## Verify\n```luau\nreturn {ok = result.count == args.count, detail = 'count matches'}\n```\n";
+const SKILL_MD = "---\nname: lantern_md\ndescription: Places lanterns from a pasted SKILL.md (2.19.0 canonical format).\ntriggers:\n  - lantern\nparams:\n  - count:number=3\n---\n## Knowledge\nPlace lanterns 8 studs apart.\n## Command lantern_md\n```luau\nlocal n = {{count}}\nreturn {ok = true, count = n}\n```\n## Verify\n```luau\nreturn {ok = result.count == args.count, detail = 'count matches'}\n```\n";
 function dropFiles(target, files) {
   const dt = { files, types: ["Files"], items: files.map((f) => ({ kind: "file", getAsFile: () => f })) };
   for (const type of ["dragenter", "dragover", "drop"]) { const ev = new w.Event(type, { bubbles: true, cancelable: true }); Object.defineProperty(ev, "dataTransfer", { value: dt }); target.dispatchEvent(ev); }
@@ -79,7 +79,7 @@ function dropFiles(target, files) {
     ok("cards panel opens", panel && !panel.hidden);
     panel.querySelector('[data-tab="public"]').click(); await sleep(150);
     const sec = () => panel.querySelector(".rs-public");
-    ok("Public tab shows the 3 ways in + composer + Load file + drop zone (2.18.0: Save as-is only appears for a full prompt)", sec() && sec().querySelectorAll(".rs-public-ways li").length === 3 && sec().querySelector("#rs-public-prompt") && !sec().querySelector("[data-public-save-text]") && sec().querySelector("[data-public-load-text]") && sec().querySelector("[data-public-drop]"));
+    ok("Public tab shows the 3 ways in + composer + Load file + drop zone (2.19.0: Save as-is only appears for a full prompt)", sec() && sec().querySelectorAll(".rs-public-ways li").length === 3 && sec().querySelector("#rs-public-prompt") && !sec().querySelector("[data-public-save-text]") && sec().querySelector("[data-public-load-text]") && sec().querySelector("[data-public-drop]"));
     ok("Create button starts as 'Create with AI'; the compose note states the skill anatomy", /Create with AI/.test(sec().querySelector("[data-public-create]").textContent) && /Luau command\(s\) \+ triggers \+ knowledge \+ verify block/.test(sec().querySelector(".rs-public-compose-note").textContent));
     // Example chip fills the box
     sec().querySelector("[data-public-example]").click(); await sleep(80);
@@ -100,7 +100,7 @@ function dropFiles(target, files) {
     panel.querySelector('[data-tab="public"]').click(); await sleep(100);
     ta = panel.querySelector("#rs-public-prompt"); ta.value = PROMPT; ta.dispatchEvent(new w.Event("input", { bubbles: true })); await sleep(80);
     panel.querySelector("[data-public-save-text]").click(); await sleep(250);
-    ok("Save as-is on a prompt WITHOUT Luau installs nothing (2.18.0: no prompt-only abilities) and points at the AI designer", !PS.find("boss_arena_builder") && PS.list().length === 0 && toasts.some((t) => /No Luau in that text/.test(t) && /Design a skill from it \(AI\)/.test(t)), JSON.stringify(toasts.slice(-2)));
+    ok("Save as-is on a prompt WITHOUT Luau installs nothing (2.19.0: no prompt-only abilities) and points at the AI designer", !PS.find("boss_arena_builder") && PS.list().length === 0 && toasts.some((t) => /No Luau in that text/.test(t) && /Design a skill from it \(AI\)/.test(t)), JSON.stringify(toasts.slice(-2)));
     ta = panel.querySelector("#rs-public-prompt"); ta.value = PROMPT_LUAU; ta.dispatchEvent(new w.Event("input", { bubbles: true })); await sleep(80);
     panel.querySelector("[data-public-save-text]").click(); await sleep(250);
     const inst = PS.find("boss_arena_builder");
@@ -117,7 +117,7 @@ function dropFiles(target, files) {
     dropFiles(sec(), [f2]); await sleep(300);
     ta = panel.querySelector("#rs-public-prompt");
     ok("dropping a prose .txt loads it into the composer in convert mode", /horror-map specialist/.test(ta.value) && /Design a skill from it \(AI\)/.test(panel.querySelector("[data-public-create]").textContent) && !!panel.querySelector(".rs-public-hint-convert") && toasts.some((t) => /Loaded the prompt from horror\.txt/.test(t)));
-    // 2.18.0: no kind picker any more (skills only); pasting a SKILL.md flips the button to Import and installs as-is
+    // 2.19.0: no kind picker any more (skills only); pasting a SKILL.md flips the button to Import and installs as-is
     ok("no kind picker in the composer (skills only)", !panel.querySelector("#rs-public-kind"));
     ta = panel.querySelector("#rs-public-prompt"); ta.value = SKILL_MD; ta.dispatchEvent(new w.Event("input", { bubbles: true })); await sleep(120);
     ok("pasted SKILL.md → Create button reads 'Import SKILL.md' and the hint says it installs as-is", /Import SKILL\.md/.test(panel.querySelector("[data-public-create]").textContent) && /This is a SKILL\.md/.test((panel.querySelector(".rs-public-hint") || {}).textContent || ""), panel.querySelector("[data-public-create]").textContent);

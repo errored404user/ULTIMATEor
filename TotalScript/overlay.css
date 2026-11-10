@@ -3956,7 +3956,7 @@ html.rs-light .rs-blender-note { color: #7a1f12; background: rgba(190,60,45,.1);
   .rs-blender-card.on .rs-blender-mark, .rs-blender-card.on .rs-blender-pill i { animation: none; }
 }
 
-/* ── Blockbench MCP card 2.18.0 ─────────────────────────────────────────────
+/* ── Blockbench card 2.19.0 (2.19.0: own plugin, no URL field) ─────────────────────────────────────────────
    Same component as the Blender card (shared classes), recoloured to
    Blockbench's teal and with a small URL field; the mark is a cube outline. */
 .rs-blender-card.rs-bb-card { --bl: #1e9c86; --bl2: #5ad0ba; --bl-ink: #06201b; }
@@ -3972,10 +3972,7 @@ html.rs-light .rs-blender-note { color: #7a1f12; background: rgba(190,60,45,.1);
   0%, 100% { box-shadow: 0 2px 10px rgba(30,156,134,.35), inset 0 1px 0 rgba(255,255,255,.35); }
   50% { box-shadow: 0 2px 18px rgba(30,156,134,.6), inset 0 1px 0 rgba(255,255,255,.35); }
 }
-.rs-bb-url { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 2px 0 6px; font-size: 11px; color: var(--rs-muted, #9aa4b2); }
-.rs-bb-url > span { flex: none; letter-spacing: .04em; text-transform: uppercase; font-size: 10px; }
-.rs-bb-url > input { flex: 1; min-width: 0; margin: 0; font-size: 12px; }
-.rs-bb-url > input[readonly] { opacity: .7; cursor: default; }
+.rs-bb-path { display: inline-block; max-width: 100%; user-select: all; }
 .rs-blender-steps code { font-size: 10.5px; word-break: break-all; opacity: .9; }
 @media (prefers-reduced-motion: reduce) {
   .rs-blender-card.rs-bb-card.on .rs-blender-mark { animation: none; }
@@ -6041,7 +6038,7 @@ html[data-rs-theme="void"] .rs-template-head{background:linear-gradient(180deg,r
 .rs-work-row.rs-work-creation{grid-template-columns:minmax(0,1fr)}
 /* 1.99.5: Access has two states (Sandbox only / Full PC). */
 .rs-work-row.rs-access-row{grid-template-columns:1fr 1fr}
-/* 2.18.0 — creation quality: four profile cards, two per row (names wrap, never one glyph per line) */
+/* 2.19.0 — creation quality: four profile cards, two per row (names wrap, never one glyph per line) */
 .rs-work-row.rs-creation-row{grid-template-columns:1fr 1fr}
 .rs-creation-row .rs-work-sub{overflow-wrap:break-word}
 .rs-work-creation .rs-work-card{min-height:48px}
@@ -6857,7 +6854,7 @@ html[data-rs-theme] .rs-work-modes .rs-work-card[data-work="animate"].on .rs-wor
 .rs-public-row code{font:9px ui-monospace,SFMono-Regular,Consolas,monospace;text-transform:none;letter-spacing:0;color:#aeb7c4}
 .rs-public-kind,.rs-public-verify,.rs-public-disabled{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;font-size:8px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle;border:1px solid rgba(255,255,255,.14);color:#c5ccd6}
 .rs-public-kind-skill{color:#8fd3ff;border-color:rgba(143,211,255,.4)}
-/* 2.18.0: verification badge - VERIFIED only after a Studio self-test pass */
+/* 2.19.0: verification badge - VERIFIED only after a Studio self-test pass */
 .rs-public-verify-verified{color:#071017;background:#5ee0a0;border-color:transparent}
 .rs-public-verify-stale{color:#ffd37a;border-color:rgba(255,211,122,.45)}
 .rs-public-verify-ran,.rs-public-verify-syntax{color:#aeb7c4;border-color:rgba(255,255,255,.18)}

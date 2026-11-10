@@ -16,7 +16,7 @@ const store = {};
 global.chrome = { storage: { local: { get(keys, cb) { const out = {}; for (const k of [].concat(keys)) if (k in store) out[k] = store[k]; setTimeout(() => cb(out), 0); }, set(obj) { Object.assign(store, JSON.parse(JSON.stringify(obj))); } } } };
 delete require.cache[require.resolve("../src/core/public_refs.js")];
 const L = require("../src/core/public_refs.js");
-ok("A1 PublicReferences exposes version 2.18.0, kinds link|note|snippet, limits, frozen API", L.VERSION === "2.18.0" && JSON.stringify(L.KINDS) === JSON.stringify(["link", "note", "snippet"]) && L.LIMITS.items === 80 && L.LIMITS.body === 16000 && Object.isFrozen(L) && L.KEY === "rsPublicRefs");
+ok("A1 PublicReferences exposes version 2.19.0, kinds link|note|snippet, limits, frozen API", L.VERSION === "2.19.0" && JSON.stringify(L.KINDS) === JSON.stringify(["link", "note", "snippet"]) && L.LIMITS.items === 80 && L.LIMITS.body === 16000 && Object.isFrozen(L) && L.KEY === "rsPublicRefs");
 let r = L.add({ kind: "link", url: "/docs/reference/engine/classes/TweenService", tags: "Tween, UI" });
 ok("A2 link: '/docs/...' resolves to create.roblox.com, title derived from the URL, tags normalised", r.ok && r.entry.url === "https://create.roblox.com/docs/reference/engine/classes/TweenService" && /TweenService/.test(r.entry.title) && JSON.stringify(r.entry.tags) === JSON.stringify(["tween", "ui"]) && r.entry.kind === "link");
 const linkId = r.entry.id;
@@ -80,7 +80,7 @@ ok("B4 referencesText appends the USER REFERENCES block (attached snippet quoted
 const knowledgeText = PS.knowledgeText("lamp_row") || "";
 ok("B5 the skill's knowledge text (what the AI gets with public_skill_get / the knowledge rider source) includes the attached snippet", /USER REFERENCES/.test(knowledgeText) && /Enum\.Material\.Neon/.test(knowledgeText) && /KNOWLEDGE:\n## Steps/.test(knowledgeText));
 r = PS.upsert({ kind: "mode", name: "lamp_mode", title: "Lamp mode", badge: "LAMP", base: "creation", description: "A mode that lights everything with warm lamps and keeps it tidy.", mandate: "Light every place with warm lamps. Keep hierarchies tidy and names PascalCase. Verify lighting after each change and report it." }, { source: "manual" });
-ok("B6 2.18.0: a custom work mode is refused with the retirement message (nothing stored, nothing to attach to) and attach() to it fails", !r.ok && /kind 'mode' was retired in 2\.18\.0/.test(r.errors.join(" ")) && PS.find("lamp_mode") === null);
+ok("B6 2.19.0: a custom work mode is refused with the retirement message (nothing stored, nothing to attach to) and attach() to it fails", !r.ok && /kind 'mode' was retired in 2\.19\.0/.test(r.errors.join(" ")) && PS.find("lamp_mode") === null);
 const gp = PS.generationPrompt("a skill that places street lamps", "skill", { commandNames: ["script_read"] });
 ok("B7 generationPrompt includes the design-flagged entries under USER REFERENCE LIBRARY (and not the merely-attached ones)", /USER REFERENCE LIBRARY \(the user marked these for every new design/.test(gp) && /Naming rules/.test(gp) && !/--- \[luau snippet\] Lamp ---/.test(gp) && /run public_skill_test \{"name"\} once \(syntax check in Studio\)/.test(gp) && /so the verify block proves it and the skill becomes VERIFIED/.test(gp) && !/their preference/.test(gp));
 const cp = PS.conversionPrompt("You are a lamp expert.\n".repeat(20), "auto", {});

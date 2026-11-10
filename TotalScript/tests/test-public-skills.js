@@ -1,4 +1,4 @@
-// Public Skills (2.18.0): user-made SKILLS only - Luau command(s) + triggers +
+// Public Skills (2.19.0): user-made SKILLS only - Luau command(s) + triggers +
 // knowledge + a verify block, SKILL.md as the canonical shareable format.
 // Dependency-free: loads src/core/public_skills.js in a vm with a chrome stub and
 // pins the main.js / config.js / manifest / css wiring. Run from the TotalScript root:
@@ -75,7 +75,7 @@ ok("validation rejects reserved public_skill_ prefix and short descriptions", !P
 ok("duplicate names are rejected on create", !PS.validate({ kind: "skill", name: "lantern_row", description: "another one with the same name", luau: "return {ok=true} -- long enough" }).ok);
 ok("a definition without Luau is rejected (no kind guessing any more)", !PS.validate({ name: "mystery", description: "no luau, no mandate, no steps here" }).ok);
 const abil = PS.validate({ kind: "ability", name: "script_audit", description: "Audit every script for deprecated APIs and fix them.", instructions: "Audit carefully.", steps: ["List scripts", "Fix"] });
-ok("kind ability / mode are rejected with a retirement message that says what to do instead", !abil.ok && abil.errors.some((e) => /retired in 2\.18\.0/.test(e) && /knowledge/.test(e) && /verify/.test(e)) && !PS.validate({ kind: "mode", title: "Horror", mandate: "x".repeat(80) }).ok, JSON.stringify(abil.errors));
+ok("kind ability / mode are rejected with a retirement message that says what to do instead", !abil.ok && abil.errors.some((e) => /retired in 2\.19\.0/.test(e) && /knowledge/.test(e) && /verify/.test(e)) && !PS.validate({ kind: "mode", title: "Horror", mandate: "x".repeat(80) }).ok, JSON.stringify(abil.errors));
 ok("missing verify block is a WARNING (installs, stays UNVERIFIED) - not an error", (() => { const v = PS.validate({ kind: "skill", name: "warn_only", description: "a skill that forgot its verify block entirely.", luau: "return {ok=true} -- long enough body" }); return v.ok && v.warnings.some((w) => /no verify block/.test(w) && /UNVERIFIED/.test(w)); })());
 ok("verify must be Luau that returns / raises (a bare string is rejected)", !PS.validate({ kind: "skill", name: "bad_verify", description: "verify given as something that is not a program.", luau: "return {ok=true} -- body", verify: { luau: "yes it works" } }).ok);
 
@@ -170,10 +170,10 @@ return {ok = true}
   ok("legacy .txt skills still import (and warn that there is no verify block)", t.ok && t.item.name === "lantern_line" && t.item.params[0].default === 4 && t.warnings.some((w) => /verify/.test(w)), JSON.stringify(t.errors));
   PS.remove("lantern_line");
   const legacyAbility = PS.importShared("# Tidy Up\nkind: ability\ndescription: Cleans the workspace before publishing a place.\n--- steps ---\n1. Delete stray parts\n2. Group props\n");
-  ok("legacy .txt ability without Luau is refused with the retirement message", !legacyAbility.ok && legacyAbility.errors.some((e) => /retired in 2\.18\.0/.test(e)), JSON.stringify(legacyAbility.errors));
+  ok("legacy .txt ability without Luau is refused with the retirement message", !legacyAbility.ok && legacyAbility.errors.some((e) => /retired in 2\.19\.0/.test(e)), JSON.stringify(legacyAbility.errors));
 }
 
-// ── prompt → skill (2.18.0: the AI designs it; prompt = knowledge) ────────
+// ── prompt → skill (2.19.0: the AI designs it; prompt = knowledge) ────────
 {
   const PROMPT = "# Boss Arena Builder\nYou build circular boss arenas in Roblox Studio.\n\n1. Create a 120-stud circular floor with a neon ring.\n2. Add four pillars and a raised throne platform.\n3. Place spawn locations at the four compass points.\n4. Verify with a screenshot.";
   ok("looksLikeFullPrompt: long/multi-line yes, short description no", PS.looksLikeFullPrompt(PROMPT) && !PS.looksLikeFullPrompt("a skill that adds lanterns"));
@@ -214,7 +214,7 @@ ok("importing a pack over existing items reports them as skipped", imp.pack && i
 ok("pack import with replace reinstalls everything", PS.importShared(packCode, { replace: true }).installed.length === pack.count && PS.list().length === pack.count);
 ok("SKILLS.md text, a JSON pack and a bare array all import into an empty registry", (() => { const saved = PS.list(); let good = true; for (const t of [packText, JSON.stringify(pack), JSON.stringify(pack.items)]) { PS.replaceAll([]); const r = PS.importShared(t); good = good && r.pack && r.installed.length === pack.count && PS.list().length === pack.count; } PS.replaceAll(saved); return good; })());
 
-// ── migration (2.18.0) ─────────────────────────────────────────────────────
+// ── migration (2.19.0) ─────────────────────────────────────────────────────
 {
   const legacy = [
     { id: "a1", kind: "skill", name: "keep_me", description: "an ordinary skill that must survive migration.", luau: "return {ok=true} -- survive", version: 2 },
@@ -238,7 +238,7 @@ ok("SKILLS.md text, a JSON pack and a bare array all import into an empty regist
   const PS2 = ctx.PublicSkills;
   await PS2.load();
   const notice = PS2.migrationNotice();
-  ok("load() migrates stored legacy items once, records the notice (converted + dropped) and removes rsPublicMode", PS2.list().length === 2 && notice && notice.version === "2.18.0" && notice.converted.length === 1 && notice.dropped.length === 2 && notice.archived === 2 && store.rsPublicMode === undefined && store.rsPublicSkillsMigration && store.rsPublicSkillsMigration.archive.length === 2, JSON.stringify(notice));
+  ok("load() migrates stored legacy items once, records the notice (converted + dropped) and removes rsPublicMode", PS2.list().length === 2 && notice && notice.version === "2.19.0" && notice.converted.length === 1 && notice.dropped.length === 2 && notice.archived === 2 && store.rsPublicMode === undefined && store.rsPublicSkillsMigration && store.rsPublicSkillsMigration.archive.length === 2, JSON.stringify(notice));
   ok("migrationArchiveJson is a downloadable document with the dropped originals", (() => { const a = JSON.parse(PS2.migrationArchiveJson()); return a.format === "totalscript-public-skill-archive" && a.items.length === 2 && a.items.some((i) => i.kind === "mode"); })());
   PS2.dismissMigration();
   ok("dismissMigration hides the notice and clears the stored record (one-time notice)", PS2.migrationNotice() === null && store.rsPublicSkillsMigration === undefined && PS2.migrationArchiveJson() === null);
@@ -268,7 +268,7 @@ ok("SKILLS.md text, a JSON pack and a bare array all import into an empty regist
   ok("catalogue injects management tools + user commands and refreshes on change", main.includes("[...PublicSkills.managementTools(), ...PublicSkills.toolEntries()]") && /function refreshPublicSkillTools\(\)/.test(main));
   ok("buildCatalogue appends the PUBLIC SKILLS block to the universal tier (pinned return untouched)", main.includes("const pub = PublicSkills.catalogueBlock({ compact });") && main.includes("universalBlock += pub;"));
   ok("knowledge rider: a matching public skill's knowledge rides on the first tool result (budgeted, diag'd)", /PublicSkills\.knowledgeRider\(reqText, \{ tight \}\)/.test(main) && /diag\("publicSkill\.knowledgeSent"/.test(main) && /diag\("publicSkill\.knowledgeSkipped"/.test(main));
-  ok("custom work modes are gone from main.js: no pm:<id> layering, no custom cards, stale pm: ids fall back with a toast", !main.includes("workMode = normalizeWorkMode(custom ? custom.base : id);") && !main.includes("rs-work-card rs-work-custom") && !main.includes('data-work="pm:${m.id}"') && !/customFocus\.has\(/.test(main) && /id\.startsWith\("pm:"\)\) \{ toast\("Custom work modes were retired in 2\.18\.0/.test(main) && !/__rsPublicMode/.test(main) && !/PublicSkills\.(activeMode|setActiveMode|modePrompt|abilityText|modes)\(/.test(main));
+  ok("custom work modes are gone from main.js: no pm:<id> layering, no custom cards, stale pm: ids fall back with a toast", !main.includes("workMode = normalizeWorkMode(custom ? custom.base : id);") && !main.includes("rs-work-card rs-work-custom") && !main.includes('data-work="pm:${m.id}"') && !/customFocus\.has\(/.test(main) && /id\.startsWith\("pm:"\)\) \{ toast\("Custom work modes were retired in 2\.19\.0/.test(main) && !/__rsPublicMode/.test(main) && !/PublicSkills\.(activeMode|setActiveMode|modePrompt|abilityText|modes)\(/.test(main));
   ok("Public tab: verification filter chips (All / Verified / Unverified), verify badge per row, Test in Studio + Run + Improve actions, SKILL.md export", /pchip\("verified", "Verified"/.test(main) && /pchip\("unverified", "Unverified"/.test(main) && /rs-public-verify rs-public-verify-\$\{escRs\(v\.state\)\}/.test(main) && main.includes('data-public-action="test" title="Run it in Studio and then its verify block; marks VERIFIED on a pass">Test in Studio</button>') && main.includes('data-public-action="run">Run…</button>') && main.includes('data-public-action="export">Export SKILL.md</button>') && !/data-public-filter="(skill|ability|mode)"/.test(main) && !/id="rs-public-kind"/.test(main));
   ok("Public tab card actions: test → publicTest (public_skill_test dry_run:false through runLibraryCard), no activate", /function publicTest\(item\)/.test(main) && /publicTest[\s\S]{0,900}public_skill_test \{"name":"\$\{item\.name\}","dry_run":false/.test(main) && main.includes('else if(act==="test")publicTest(item);') && !/act==="activate"/.test(main));
   ok("migration banner: rendered from PublicSkills.migrationNotice() with download / dismiss handlers", /PS\.migrationNotice\(\) : null/.test(main) && main.includes('data-public-migration="download"') && main.includes('data-public-migration="dismiss"') && main.includes("PublicSkills.migrationArchiveJson()") && main.includes("PublicSkills.dismissMigration()"));
@@ -281,14 +281,14 @@ ok("SKILLS.md text, a JSON pack and a bare array all import into an empty regist
   ok("hand-made editor exists with a single skill skeleton carrying triggers / knowledge / verify", /function openPublicEditor\(item, kind\)/.test(main) && /PUBLIC_SKELETONS = \{\s*skill:/.test(main) && !/ability: \{ kind: "ability"/.test(main) && !/mode: \{ kind: "mode"/.test(main) && /PUBLIC_SKELETONS[\s\S]{0,1600}verify: \{ luau:/.test(main));
   ok("ui-closure vars used by early init are hoisted (no TDZ)", main.includes("var publicEditorEl = null, openCardsPanel = null, openTrayFn = null, closeCardsWindowFn = null;") && main.includes('var publicDraft = "", publicKind = "skill";'));
   ok("import: prose files load into the composer; file picker accepts .md / SKILL.md first", main.includes("if (!r.ok && r.prompt) {") && main.includes('input.accept = ".md,.SKILL.md,.SKILLS.md,.json,.orskill.json,.orskills.json,.txt,text/plain,text/markdown,application/json"'));
-  ok("totalscript_help publicskills topic explains skills-only, SKILL.md, verify states and the migration", /publicskills:\{title:"Public Skills"/.test(main) && /2\.18\.0: skills only/.test(main) && /SKILL\.md \(canonical, shareable\)/.test(main) && /VERIFIED \/ VERIFY_FAILED \/ RUN_FAILED/.test(main) && /Migration \(2\.18\.0\)/.test(main) && !/Plain-text format \(\.txt\)/.test(main));
+  ok("totalscript_help publicskills topic explains skills-only, SKILL.md, verify states and the migration", /publicskills:\{title:"Public Skills"/.test(main) && /2\.19\.0: skills only/.test(main) && /SKILL\.md \(canonical, shareable\)/.test(main) && /VERIFIED \/ VERIFY_FAILED \/ RUN_FAILED/.test(main) && /Migration \(2\.19\.0\)/.test(main) && !/Plain-text format \(\.txt\)/.test(main));
   ok("config.js: PUBLIC SKILLS block (tight + full) teaches luau/triggers/knowledge/verify + VERIFIED semantics; no mode mandate, no ability", config.includes("━━━ PUBLIC SKILLS (ALL PROVIDERS) ━━━") && config.includes("━━━ PUBLIC SKILLS ━━━") && /`verify` = \{luau\}/.test(config) && /flagged UNVERIFIED/.test(config) && /DESIGN BRIEF/.test(config) && !config.includes("PublicSkills.modePrompt") && !config.includes("__rsPublicMode") && !/kind=ability|kind=mode|Custom work modes available/.test(config));
   ok("config.js installed list tags each public skill [VERIFIED] / [UNVERIFIED]", /PS\.verification\(i\)[\s\S]{0,120}\[VERIFIED\]" : " \[UNVERIFIED\]"/.test(config));
   ok("Notion preferences bootstrap mentions public skills with the verify flow", config.includes("PUBLIC SKILLS preference:") && config.includes("${crewPref}${publicPref}") && /public_skill_test \{dry_run:false\} so it becomes VERIFIED/.test(config));
   ok("skill_intel ranks public skills with trigger weights and skips anything that is not a skill", /it\.kind && it\.kind !== "skill"\)\) continue/.test(intel) && /score \+= 3 \* wOf\(w\)/.test(intel) && /score \+= 4 \* wOf\(p\)/.test(intel));
   ok("overlay.css styles the Public tab, verify badges (verified / stale / ran / syntax / unverified) and the migration banner; kind-mode / ability / active-mode styles removed", css.includes(".rs-public-compose") && css.includes(".rs-public-verify-verified") && css.includes(".rs-public-verify-stale") && css.includes(".rs-public-verify-unverified") && css.includes(".rs-public-migration") && css.includes(".rs-public-editor") && !css.includes(".rs-public-kind-mode") && !css.includes(".rs-public-kind-ability") && !css.includes(".rs-public-active") && !css.includes(".rs-work-card.rs-work-custom") && !/--cp-ability|--cp-mode/.test(css));
   ok("popup work-mode literal untouched by public skills (built-in ids only)", read("popup.js").includes('const WORK_MODES = ["creation", "blender", "animate", "blockbench"]'));
-  ok("module version is 2.18.0 and documents the shape in its header", PS.VERSION === "2.18.0" && /SKILL\.md/.test(SRC.slice(0, 4000)) && /VERIFY/.test(SRC.slice(0, 4000)));
+  ok("module version is 2.19.0 and documents the shape in its header", PS.VERSION === "2.19.0" && /SKILL\.md/.test(SRC.slice(0, 4000)) && /VERIFY/.test(SRC.slice(0, 4000)));
 
   console.log(`\n${pass} passed, ${fail} failed`);
 })();

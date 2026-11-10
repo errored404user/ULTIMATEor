@@ -118,7 +118,7 @@ ok("A12 describe(): CHANGE text carries %, scale words, bbox and regions; >= 60%
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const until = Date.now() + 10000; while (Date.now() < until && !d.getElementById("rs-bar")) await sleep(50);
   await sleep(600);
-  ok("D1 page boots with screenshot_diff.js loaded (window.TotalScreenshotDiff) and no script errors", !!d.getElementById("rs-bar") && w.TotalScreenshotDiff && w.TotalScreenshotDiff.VERSION === "2.18.0" && errs.length === 0, errs.slice(0, 3));
+  ok("D1 page boots with screenshot_diff.js loaded (window.TotalScreenshotDiff) and no script errors", !!d.getElementById("rs-bar") && w.TotalScreenshotDiff && w.TotalScreenshotDiff.VERSION === "2.19.0" && errs.length === 0, errs.slice(0, 3));
   w.TotalScreenshotDiff.setDecoder(async (mime, data) => frames[Buffer.from(data, "base64").toString()]);
   const run = (tool, args) => w.__rsRunTool({ tool, arguments: args || {} });
   let out = await run("screenshot_compare", {});

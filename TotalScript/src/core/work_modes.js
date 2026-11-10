@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// src/core/work_modes.js — TotalWorkModes (2.18.0)
+// src/core/work_modes.js — TotalWorkModes (2.19.0)
 //
 // What a WORK MODE actually DOES at run time. Before 1.99.9 the three built-in
 // modes (creation = Totality, blender, animate = Animator) only shaped the
@@ -24,8 +24,8 @@
 //   PRECONDITION precondition(mode, ctx) → { ok } | { ok:false, title, message, brief }
 const TotalWorkModes = (() => {
   "use strict";
-  const VERSION = "2.18.0";
-  const IDS = ["creation", "blender", "animate", "blockbench"]; // 2.18.0: + Blockbench (low-poly models through the Blockbench MCP plugin)
+  const VERSION = "2.19.0";
+  const IDS = ["creation", "blender", "animate", "blockbench"]; // 2.19.0: + Blockbench (low-poly models; 2.19.0 through TotalScript's own Blockbench plugin)
   const BADGE = { creation: "TOTALITY", blender: "BLENDER", animate: "ANIMATOR", blockbench: "BLOCKBENCH" };
   const BRIEF_MAX = 1200;
   const AUTO_MAX = 600;
@@ -42,7 +42,7 @@ const TotalWorkModes = (() => {
     creation: "Preflight reads the place (parts, scripts, GUIs, remotes, lighting, selection) before the first command; live gate strip SCRIPTS / LOOK / MOTION / QUALITY / SYSTEMS; every build command is read back automatically; up to 2 verification rounds; verdict card at the end.",
     blender: "Checks the Blender bridge BEFORE the model acts (not connected = hard stop note + banner); preflight reads the Blender scene; gate strip ASSET / IMPORT / SCRIPTS / LOOK; every blender_* build is read back with get_object_info; verdict card at the end.",
     animate: "Preflight lists the rigs (RigType, Animator, Motor6D count), existing clips and whether AnimPlayer is installed; gate strip RIG / PLAYBACK / SCRIPTS / LOOK; clips and rigs are read back after every authoring command; verdict card at the end.",
-    blockbench: "Checks the Blockbench MCP plugin BEFORE the model acts (not connected = hard stop note + banner); preflight reads the open Blockbench project (format, element counts, groups); gate strip MODEL / EXPORT / SCRIPTS / LOOK; every bb_* build is read back with bb_status; the export path is reported for Studio's Import 3D (manual) - nothing is uploaded; verdict card at the end.",
+    blockbench: "Checks the Blockbench link (TotalScript plugin inside Blockbench → total-core) BEFORE the model acts (not connected = hard stop note + banner); preflight reads the open Blockbench project (format, element counts, groups); gate strip MODEL / EXPORT / SCRIPTS / LOOK; every bb_* build is read back with bb_status; the export path is reported for Studio's Import 3D (manual) - nothing is uploaded; verdict card at the end.",
   };
 
   function normalize(mode) {
@@ -182,7 +182,7 @@ const TotalWorkModes = (() => {
       const txt = String(data == null ? "" : (typeof data === "string" ? data : JSON.stringify(data))).trim();
       if (!txt) lines.push("Blockbench project could not be read (bb_status returned nothing - no project open, or the plugin answered an error). Run bb_status yourself; if there is no project, bb_project {name, format:\"free\"} first.");
       else lines.push("Blockbench project (bb_status, read before your first command): " + clip(txt.replace(/\s+/g, " "), 700));
-      lines.push("Rules this mode enforces: build with bb_cubes / bb_group / bb_texture / bb_animate (or bb_call) → bb_screenshot and LOOK at it (MODEL gate) → bb_export {format:\"obj\"|\"gltf\"|\"glb\"} and tell the user the file path + Studio → Home → Import 3D (EXPORT gate). Every bb_* build is read back automatically with bb_status. Never claim the model is in Studio: the import is the user's manual step.");
+      lines.push("Rules this mode enforces: build with bb_cubes / bb_group / bb_mesh / bb_mesh_primitive / bb_texture / bb_animate → bb_screenshot and LOOK at it (MODEL gate) → bb_export {format:\"obj\"|\"gltf\"|\"glb\"} and tell the user the file path + Studio → Home → Import 3D (EXPORT gate). Every bb_* build is read back automatically with bb_status. Never claim the model is in Studio: the import is the user's manual step.");
     } else if (!data || typeof data !== "object") {
       lines.push("The place could not be read before this request (the preflight probe failed or timed out). Do not assume it is empty: inspect with get_studio_state / inspect_service / ui_list_tree before creating anything.");
     } else if (mode === "animate") {
@@ -280,7 +280,7 @@ const TotalWorkModes = (() => {
   const CREATE_RE = {
     creation: /^(part_|model_|generate_procedural_model|ui_|gui_|script_(create|set_source|module|new)|module_scaffold|remote_scaffold|blueprint_install|design_kit_install|fx_|vfx_|lighting|atmosphere|terrain_|prop_|building_|furniture_|vehicle_|weapon_|npc_|spawn_|door_|platform_|mesh_import|blender_send_to_studio|create_instance|insert_model)/,
     blender: /^(blender_(?!asset_(validate|inspect)|render|turntable|status|connect|send_to_studio$)[a-z_]+|execute_blender_code$)/,
-    blockbench: /^bb_(project|cubes|cube_edit|group|remove|texture|animate|undo|call)$/,
+    blockbench: /^bb_(project|cubes|cube_edit|group|remove|mesh|mesh_primitive|mesh_edit|texture|animate|undo|redo)$/,
     animate: /^(animation_(build|generate|create|set_pose|add_keyframe|update_keyframe|motion_preset|stagger_parts|polish|refine|import|layer|loop_set|export)|dummy_spawn$|target_dummy_spawn$|motor6d_set$|anim_player_install$|sequence_create$|cutscene_create$)/,
   };
   function extractPath(args, feedback) {
@@ -327,9 +327,8 @@ const TotalWorkModes = (() => {
     if (/^ERROR/i.test(String(feedback || "").trim())) return null;
     if (mode === "blockbench") {
       if (!CREATE_RE.blockbench.test(name)) return null;
-      if (name === "bb_texture" && !/^(create|apply)$/.test(String(args && args.action || ""))) return null;
-      if (name === "bb_call" && /^(get_|list_|capture_|find_|inspect_)/.test(String(args && args.tool || ""))) return null;
-      const label = (args && (args.name || args.id || args.tool)) ? String(args.name || args.id || args.tool) : name;
+      if (name === "bb_texture" && !/^(create|import|apply)$/.test(String(args && args.action || ""))) return null;
+      const label = (args && (args.name || args.shape)) ? String(args.name || args.shape) : name;
       return { kind: "blockbench", tool: "bb_status", args: { max_depth: 3 }, label, timeoutMs: PROBE_TIMEOUT_MS, mode };
     }
     if (mode === "blender" && CREATE_RE.blender.test(name)) {
@@ -395,8 +394,8 @@ const TotalWorkModes = (() => {
       return {
         ok: false,
         title: "Blockbench mode — Blockbench is not connected",
-        message: "Blockbench work mode needs the Blockbench MCP plugin (Blockbench → File → Plugins → Load Plugin from URL → https://jasonjgardner.github.io/blockbench-mcp-plugin/mcp.js; it serves http://localhost:3000/bb-mcp) and Settings → Blockbench MCP → Connect. Until then every bb_* command fails.",
-        brief: header("blockbench", "PREFLIGHT") + "\nBLOCKBENCH NOT CONNECTED. Every bb_* command will fail right now. Do NOT emulate Blockbench with execute_luau or claim a Blockbench result. Tell the user in one sentence to open Blockbench with the MCP plugin enabled and press Connect under Settings → Blockbench MCP (default URL http://localhost:3000/bb-mcp; if the TotalScript desktop agent uses port 3000, change the plugin port in Blockbench settings). Studio-side work (scripts, parts, the Import 3D of an existing file by the user) still works.",
+        message: "Blockbench work mode needs the TotalScript plugin inside Blockbench: start the TotalScript desktop app (total-core), then in Blockbench once File → Plugins → Load Plugin from File → TotalScript-Blockbench.js (Settings → Blockbench in the bar shows the file path and a Check again button). The plugin connects to total-core by itself. Until then every bb_* command fails.",
+        brief: header("blockbench", "PREFLIGHT") + "\nBLOCKBENCH NOT CONNECTED. Every bb_* command will fail right now. Do NOT emulate Blockbench with execute_luau or claim a Blockbench result. Tell the user in one sentence: start the TotalScript desktop app and load TotalScript-Blockbench.js once in Blockbench (File → Plugins → Load Plugin from File); the plugin then connects by itself and Tools → TotalScript in Blockbench shows the state. Studio-side work (scripts, parts, the Import 3D of an existing file by the user) still works.",
       };
     }
     return { ok: true };

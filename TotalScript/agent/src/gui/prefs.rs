@@ -211,6 +211,7 @@ impl App {
             ("Studio MCP helper", s.mcp_alive.load(Ordering::Relaxed), mcp_launcher_display(), Some(Action::RestartMcp)),
             ("Studio place link", s.studio_connected.load(Ordering::Relaxed), if s.studio_connected.load(Ordering::Relaxed) { "linked".into() } else if s.studio_running.load(Ordering::Relaxed) { "Studio open, not linked — enable Studio as MCP server, then probe".into() } else { "Studio not running".into() }, Some(Action::ProbeStudio)),
             ("Studio plugin (TotalScript.lua)", s.plugin_seen.load(Ordering::Relaxed) > 0, if s.plugin_seen.load(Ordering::Relaxed) > 0 { format!("last seen {} ago", human_duration(Duration::from_secs(s.boot.elapsed().as_secs().saturating_sub(s.plugin_seen.load(Ordering::Relaxed) as u64)))) } else { "not seen this run — install plugin/TotalScript.lua in Studio for pair mode and plugin tools".into() }, None),
+            ("Blockbench plugin (TotalScript-Blockbench.js)", s.blockbench_connected(), if s.blockbench_seen.load(Ordering::Relaxed) > 0 { format!("last seen {} ago", human_duration(Duration::from_secs(s.boot.elapsed().as_secs().saturating_sub(s.blockbench_seen.load(Ordering::Relaxed) as u64)))) } else { "not connected - load the plugin once in Blockbench (File → Plugins → Load Plugin from File)".into() }, None),
             ("Pair mode", s.pair_enabled.load(Ordering::Relaxed), format!("{} event(s) kept this run", s.pair_events.load(Ordering::Relaxed)), None),
             ("AI chat provider", self.chat_ready(), format!("{} · {}", self.chat_provider().name, if self.chat_model().is_empty() { "no model".to_string() } else { self.chat_model() }), Some(Action::Settings(SettingsCat::Ai))),
         ];
@@ -319,6 +320,7 @@ impl App {
         let ext = hub.extension_dir();
         kv(ui, t, "Extension folder", &match &ext { Some((p, how)) => format!("{} ({how}{})", p.display(), update::manifest_version(p).map(|v| format!(", v{v}")).unwrap_or_default()), None => "not found - type it below (the folder you loaded unpacked in chrome://extensions)".into() });
         kv(ui, t, "Studio plugin", "comes with the app - rewritten in Studio's Plugins folder on the next start");
+        kv(ui, t, "Blockbench plugin", "comes with the app - TotalScript-Blockbench.js next to the executable; load it once in Blockbench (File → Plugins → Load Plugin from File)");
         ui.add_space(6.0);
         match job.phase {
             Phase::Idle => {}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/core/creation_engine.js — TotalCreation (2.18.0): the shared creation
+// src/core/creation_engine.js — TotalCreation (2.19.0): the shared creation
 // intelligence layer that every provider's agent loop runs through.
 //
 // What it adds on top of TotalOrchestrator.classifyTask (intent / category)
@@ -54,7 +54,7 @@
 // WHEN things are sent; this module only decides WHAT is true about the run.
 const TotalCreation = (() => {
   "use strict";
-  const VERSION = "2.18.0";
+  const VERSION = "2.19.0";
 
   // ───────────────────────── domains ─────────────────────────
   // did   = command families that BUILD the deliverable

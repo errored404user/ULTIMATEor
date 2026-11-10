@@ -216,6 +216,9 @@ impl App {
         let seen = s.plugin_seen.load(Ordering::Relaxed);
         v.push(if seen == 0 { Check { title: "Studio plugin", state: CheckState::Info, detail: "has not talked to the bridge this run (optional — needed for pair mode and plugin tools)".into(), fix: None } }
             else { let ago = s.boot.elapsed().as_secs().saturating_sub(seen as u64); Check { title: "Studio plugin", state: if ago < 30 { CheckState::Ok } else { CheckState::Warn }, detail: format!("last seen {} ago", human_duration(Duration::from_secs(ago))), fix: None } });
+        let bb_seen = s.blockbench_seen.load(Ordering::Relaxed);
+        v.push(if bb_seen == 0 { Check { title: "Blockbench plugin", state: CheckState::Info, detail: "not connected this run (optional — load TotalScript-Blockbench.js once in Blockbench: File → Plugins → Load Plugin from File)".into(), fix: None } }
+            else { let ago = s.boot.elapsed().as_secs().saturating_sub(bb_seen as u64); Check { title: "Blockbench plugin", state: if ago < 45 { CheckState::Ok } else { CheckState::Warn }, detail: format!("last seen {} ago", human_duration(Duration::from_secs(ago))), fix: None } });
         let root = s.root();
         let ready = s.workspace_ready.load(Ordering::Relaxed);
         let root_path = PathBuf::from(&root);

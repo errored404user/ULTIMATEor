@@ -155,7 +155,7 @@ fn inspect_text(shapes: &[egui::epaint::ClippedShape], report: &mut TextReport) 
 }
 
 fn seed(app: &mut App, shared: &Arc<UiShared>) {
-    shared.log("INFO TotalScript Desktop 2.18.0 — bridge listening on 127.0.0.1:3000");
+    shared.log("INFO TotalScript Desktop 2.19.0 — bridge listening on 127.0.0.1:3000");
     shared.log("INFO workspace: C:\\Users\\Gürkan\\Belgeler\\İş Projeleri\\TotalWorkspace (Türkçe karakter testi: ç ğ ı İ ö ş ü Ç Ğ Ö Ş Ü)");
     shared.log("WARN Studio open, MCP not linked yet → enable 'Studio as MCP server' and probe");
     shared.log("ERROR execute_luau failed: Workspace.Oyuncu.Karakter is not a valid member of Model \"Oyuncu\" (stack: ServerScriptService.Başlat:12)");

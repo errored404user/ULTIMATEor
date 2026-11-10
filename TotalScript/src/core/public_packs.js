@@ -1,4 +1,4 @@
-// TotalScript — Featured Public Skill packs (2.18.0)
+// TotalScript — Featured Public Skill packs (2.19.0)
 //
 // Ready-made, high-quality Public Skills that ship WITH the extension so anyone
 // can install them in one click (cards panel → Public → "Featured by
@@ -24,7 +24,7 @@
 //     them in the Properties panel without touching code;
 //   • the embedded scripts are plain Luau that also parses as Lua 5.x so the
 //     mocked Roblox sim (tests/public-pack-sim.py) can compile every one;
-//   • 2.18.0: every item carries `knowledge` (when / before / after - what the
+//   • 2.19.0: every item carries `knowledge` (when / before / after - what the
 //     AI reads when the skill's triggers match) and a `verify` block (runs after
 //     the command with args/result in scope; a pass is what makes the installed
 //     copy VERIFIED on the user's place - bundling never pre-verifies anything).
@@ -32,7 +32,7 @@
 // This file is DOM-free at top level (node loads it for the tests).
 (function (root) {
   "use strict";
-  const VERSION = "2.18.0";
+  const VERSION = "2.19.0";
   const PACK_ID = "totalscript_featured";
   const AUTHOR = "TotalScript";
   const DOCS = "https://create.roblox.com/docs/";
@@ -149,7 +149,7 @@ folder:SetAttribute("Font", tostring(args.font or "GothamBold"))
 folder:SetAttribute("DamageColor", hexColor(args.damage_color, Color3.fromRGB(255, 90, 90)))
 folder:SetAttribute("CritColor", hexColor(args.crit_color, Color3.fromRGB(255, 200, 61)))
 folder:SetAttribute("HealColor", hexColor(args.heal_color, Color3.fromRGB(74, 222, 128)))
-folder:SetAttribute("Version", "2.18.0")
+folder:SetAttribute("Version", "2.19.0")
 
 setSource(ServerScriptService, "Script", "DamageNumbersServer", [==[
 -- Damage Numbers Pro (TotalScript featured skill) - server side.
@@ -813,7 +813,7 @@ ensure(folder, "RemoteEvent", "Action")
 local trees = ensure(folder, "Folder", "Trees")
 folder:SetAttribute("Accent", hexColor(args.accent, Color3.fromRGB(34, 211, 238)))
 folder:SetAttribute("TypewriterSpeed", num(args.typewriter_speed, 40, 0, 400))
-folder:SetAttribute("Version", "2.18.0")
+folder:SetAttribute("Version", "2.19.0")
 local json = HttpService:JSONEncode(tree)
 local mod = setSource(trees, "ModuleScript", treeName, "-- Dialogue tree for " .. title .. " (edit freely; choices: {text, next = node id or nil to end, action = optional string sent to the server})\nlocal HttpService = game:GetService(\"HttpService\")\nreturn HttpService:JSONDecode([=====[" .. json .. "]=====])\n")
 mod:SetAttribute("NPC", npc:GetFullName())
@@ -1196,7 +1196,7 @@ folder:SetAttribute("Stat", stat)
 folder:SetAttribute("Radius", num(args.radius, 40, 2, 2000))
 folder:SetAttribute("AreaPath", area and area:GetFullName() or "")
 folder:SetAttribute("CenterPath", center and center:GetFullName() or "")
-folder:SetAttribute("Version", "2.18.0")
+folder:SetAttribute("Version", "2.19.0")
 
 setSource(ServerScriptService, "Script", "CollectibleServer", [==[
 -- Collectible Spawner (TotalScript featured skill) - server side.
@@ -1400,7 +1400,7 @@ end
 
 local folder = ensure(ReplicatedStorage, "Folder", "Zones")
 ensure(folder, "RemoteEvent", "Message")
-folder:SetAttribute("Version", "2.18.0")
+folder:SetAttribute("Version", "2.19.0")
 local server = setSource(ServerScriptService, "Script", "ZoneServer", [==[
 -- Zone System (TotalScript featured skill) - server side.
 -- Every Part tagged "Zone" with attributes ZoneKind / ZoneAmount / ZoneMessage is checked each tick.

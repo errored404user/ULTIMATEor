@@ -1070,14 +1070,14 @@
     templates:{title:"Templates",summary:"Reusable task recipes (name, instructions, steps, commands, variables) saved locally and run from the Templates library in the TotalScript menu.",details:["Open the TotalScript menu → Templates. New template opens the editor with Basics, Instructions, Steps, Project, Commands, Variables, Validation, AI Improvement and Versions tabs.","Templates can be imported/exported as JSON and versioned; AI Improvement asks the current provider for a structurally better draft that you approve before it is saved.","The agent can list and run them with the template_* commands (get_template, template_list, template_run_…) - nothing is mutated without your save."],howTo:["TotalScript menu → Templates → New template","Fill Basics + Instructions, optionally attach a Roblox project in the Project tab","Save, then type the template name or pick it from the library"]},
     commands:{title:"Commands / tool registry",summary:"TotalScript exposes 630+ advertised Studio commands (plus hidden legacy aliases, workspace, template and help tools) through an embedded catalogue in the system prompt (and a broad list_commands on tight providers). Since 1.37.1 the agent never searches commands: the catalogue is final and lookups are answered with the closest signatures plus an instruction to act.",details:["Since 1.33 roomy providers receive a compact command catalogue inside the system prompt (universal block + the active work mode's family as signatures, the rest as names), so the agent no longer starts every session with list_commands; tight-composer providers (Notion, ClickUp, Vani, CodeCraft, NVIDIA) still get the catalogue as the first tool result.","list_commands returns the catalogue for the active work mode: a UNIVERSAL block (42 inspection/scripting/verification commands present in every mode, including inspect_service and query_instances) followed by the mode family.","No command searching (1.37.1): search_commands / get_command / command_registry_stats / generate_command_docs are no longer advertised and list_commands {query} no longer opens a search - the agent gets at most five closest signatures and must act (or use execute_luau). A wrong parameter returns the exact schema in the error, so no lookup is ever needed.","Commands are executed through total-core (127.0.0.1:3000) - either the Studio MCP helper or the TotalScript Studio plugin when it is connected."],howTo:["Ask: 'what can you do with lights'","The agent answers from the catalogue in its instructions and runs the command directly - it does not search"]},
     studio:{title:"Roblox Studio connection",summary:"The browser extension talks to the total-core desktop agent on 127.0.0.1:3000, which bridges to Studio through the Studio MCP helper and the optional TotalScript Studio plugin.",details:["Run total-core (agent/ crate, cargo build) once; it stays in the background and auto-installs plugin/TotalScript.lua into the Studio Plugins folder.","In Studio: Plugins → TotalScript panel → enable; click Allow on the HTTP prompt. The plugin runs execute_luau with plugin-level APIs and adds csg_*, open_script, script_live_update, studio_undo/redo, screenshot_frame, gamepass_handler_create…","total_status / studio_plugin_status report the connection; total_screenshot captures the Studio window through the MCP screen_capture tool."],howTo:["Start total-core","Open the place in Studio and enable the TotalScript plugin","Check the status pill in the TotalScript bar is green, then chat"]},
-    workmode:{title:"Work mode: Totality",summary:"There is ONE built-in work mode, Totality (named Creation until 1.73): the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. (Custom Public-Skill work modes were retired in 2.18.0 - Public Skills are skills only; their knowledge rides along when the request matches.)",details:["Totality runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → total_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Totality automatically; custom modes created on an old base keep working on Totality.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send.","Two more built-in modes sit next to Totality: Blender (1.95.0, stored id blender - Blender-first 3D asset pipeline -> Studio) and Animator (1.99.4, stored id animate - rig -> clip -> animation_preview on the actual rig -> playback code through the Animator -> play-test, on R6 and R15; its RIG and PLAYBACK gates demand a preview and a play-tested playback script). The old pre-1.39 Animator id still migrates to Totality; the new mode is a different id."],howTo:["TotalScript menu → Work mode → Totality (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
+    workmode:{title:"Work mode: Totality",summary:"There is ONE built-in work mode, Totality (named Creation until 1.73): the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. (Custom Public-Skill work modes were retired in 2.19.0 - Public Skills are skills only; their knowledge rides along when the request matches.)",details:["Totality runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → total_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Totality automatically; custom modes created on an old base keep working on Totality.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send.","Two more built-in modes sit next to Totality: Blender (1.95.0, stored id blender - Blender-first 3D asset pipeline -> Studio) and Animator (1.99.4, stored id animate - rig -> clip -> animation_preview on the actual rig -> playback code through the Animator -> play-test, on R6 and R15; its RIG and PLAYBACK gates demand a preview and a play-tested playback script). The old pre-1.39 Animator id still migrates to Totality; the new mode is a different id."],howTo:["TotalScript menu → Work mode → Totality (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
     projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .totalscript-project-reference.json you can re-import."],howTo:["TotalScript menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
     permissions:{title:"Access: Sandbox only / Full PC",summary:"Two states since 1.99.5. Sandbox only (default) = Studio + the workspace folder; commands that leave it (run_command, process_kill, delete_path, move_path, download_file, open_path, execute_blender_code, blender_export_fbx) are refused with ERROR ACCESS_SANDBOX - no approval card. Full PC = those run directly and total-core's FULL PC ACCESS is switched on with it.",details:["Sandbox only never asks and never runs anything on the PC - ideal for Studio-only work; the refusal tells you which step needs Full PC and offers a one-click switch.","Full PC is one switch in two places: Settings → Access and the Session panel's Danger zone. Picking it persists rsPermMode and pushes FULL PC ACCESS to total-core (the agent's own state is mirrored back into the Session panel).","The old Ask state (confirm every write) was removed; a stored 'ask' reads as Sandbox only.","Publishing / marketplace changes always show a confirmation card unless the 'Allow publish automation' switch is on; it auto-denies after 120 s so a hidden card cannot stall the agent."],howTo:["TotalScript menu → Access → Sandbox only / Full PC","Session panel → Danger zone → FULL PC (same switch)"]},
     providers:{title:"Chat providers",summary:"TotalScript runs inside ChatGPT, Claude, Gemini, DeepSeek, Qwen, Kimi, GLM, Arena, Notion, Vani, HuggingChat, OpenRouter Chat and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["CodeCraft API (codecraftapi.com) has no web chat, so TotalScript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","Compact composers (Notion, Vani, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Notion and Vani guest mode are text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the TotalScript bar appears above the composer"]},
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for a publish confirmation card (it auto-denies after 120 s). A PC command refused in Sandbox only is not a wait - the chat gets ERROR ACCESS_SANDBOX at once and a banner offers Switch to Full PC.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
-    publicskills:{title:"Public Skills",summary:"User-made skills that behave like the built-in ones (2.18.0: skills only - custom abilities and work modes were retired). A public skill = one or more Luau commands run in Studio + triggers (when it applies) + knowledge (what the AI reads when it applies) + a verify block (a self-test that re-checks the result). Three ways in: describe one in a sentence (the AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (the AI designs a skill from it - the prompt becomes its knowledge), or import a SKILL.md / .json / share code. A skill is callable right away but flagged UNVERIFIED until 'Test in Studio' (public_skill_test {dry_run:false}) ran it and its verify block passed on your place; the badge turns VERIFIED, and goes STALE again when the code changes. The References section is your reference library: docs links, notes and Luau / GUI snippets attached to skills.",details:["Featured by TotalScript (2.2.0, knowledge + verify since 2.18.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with docs references, knowledge and a verify block: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call. Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Bundled skills arrive UNVERIFIED like everything else - Test in Studio proves them on your place. The same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path') and press Create with AI - the agent calls public_skill_create with luau + triggers + knowledge + verify, the skill is installed immediately, then it runs public_skill_test to syntax-check it.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Design a skill from it (AI)': public_skill_from_prompt {prompt} hands the agent a design brief - your prompt becomes the skill's knowledge word for word, the agent writes the Luau command(s) and the verify block. 'Save as-is (no AI)' only works when the text already contains Luau (it becomes the command, the prose the knowledge).","SKILL.md (canonical, shareable): YAML frontmatter (name, title, description, version, author, tags, triggers with optional ':weight', params as '- name: type = default \"doc\"', verify.note) + Markdown knowledge + a ```luau fenced block per command (the first is the main command, '## command <name>' headings add sub-commands) + a ```luau verify block. Export writes <name>.SKILL.md, Import reads SKILL.md, legacy .json / .txt and ORSKILL2: share codes (base64 of the SKILL.md). Readable, diff-able, pasteable.","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param; the program returns {ok=true, ...} or {ok=false, error}). Extra commands[] give the skill sub-commands (name, params, luau). Knowledge rides along with the AI's first tool result when the request matches the skill's triggers - exactly how built-in skills work.","Verify: runs after the command with args and result in scope plus find(path), attr(path, name) and check(cond, message); return {ok=true, detail} or raise. public_skill_test {name} = syntax check (SYNTAX OK); {dry_run:false} = real run + verify → VERIFIED / VERIFY_FAILED / RUN_FAILED; a skill without a verify block can only reach RAN. Verification is per device: a shared SKILL.md never carries a VERIFIED badge.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.SKILL.md (JSON available too), Share code copies an ORSKILL2: string; Import accepts SKILL.md, .json, .txt and ORSKILL1/2 codes. There is no central marketplace.","Migration (2.18.0): abilities that contained Luau were converted to skills (Luau → command, instructions → knowledge); prompt-only abilities and custom work modes were removed with a one-time notice in the Public tab that lists them and offers a .json download. Paste the old text into the composer and press Design a skill from it (AI) to rebuild one as a real skill.","References: every skill can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] and expert (nearest built-in expert). They ride with the knowledge, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import/reference. public_skill_list {verified:true} filters; every result carries verification: VERIFIED | UNVERIFIED | STALE."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Design a skill from it (AI)","Press Test in Studio (or ask: test my skill) → VERIFIED when the verify block passes","Call the new command by name - the AI also picks it by its triggers","Public tab → Export SKILL.md / Share code to give it to someone; they press Import and test it on their place"]},
+    publicskills:{title:"Public Skills",summary:"User-made skills that behave like the built-in ones (2.19.0: skills only - custom abilities and work modes were retired). A public skill = one or more Luau commands run in Studio + triggers (when it applies) + knowledge (what the AI reads when it applies) + a verify block (a self-test that re-checks the result). Three ways in: describe one in a sentence (the AI designs it), paste a FULL PROMPT you already wrote or drop a .txt (the AI designs a skill from it - the prompt becomes its knowledge), or import a SKILL.md / .json / share code. A skill is callable right away but flagged UNVERIFIED until 'Test in Studio' (public_skill_test {dry_run:false}) ran it and its verify block passed on your place; the badge turns VERIFIED, and goes STALE again when the code changes. The References section is your reference library: docs links, notes and Luau / GUI snippets attached to skills.",details:["Featured by TotalScript (2.2.0, knowledge + verify since 2.19.0): a ready-made pack at the top of the Public tab - 11 complete skills, each with docs references, knowledge and a verify block: damage numbers, NPC patrol/chase, keycard doors, dialogue trees, collectibles, zones, boss bars, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one is real Luau that installs a working system in one call. Install one or all in a click, or tell the AI: public_skill_import {data:\"featured\"}. Bundled skills arrive UNVERIFIED like everything else - Test in Studio proves them on your place. The same pack ships as public_skills/totalscript-featured.orskills.json.","Open the cards panel → Public tab. Type what you want (for example 'a skill that places N lanterns along a path') and press Create with AI - the agent calls public_skill_create with luau + triggers + knowledge + verify, the skill is installed immediately, then it runs public_skill_test to syntax-check it.","Prompt → skill: paste a whole prompt (any length) or drop a .txt on the tab. The button turns into 'Design a skill from it (AI)': public_skill_from_prompt {prompt} hands the agent a design brief - your prompt becomes the skill's knowledge word for word, the agent writes the Luau command(s) and the verify block. 'Save as-is (no AI)' only works when the text already contains Luau (it becomes the command, the prose the knowledge).","SKILL.md (canonical, shareable): YAML frontmatter (name, title, description, version, author, tags, triggers with optional ':weight', params as '- name: type = default \"doc\"', verify.note) + Markdown knowledge + a ```luau fenced block per command (the first is the main command, '## command <name>' headings add sub-commands) + a ```luau verify block. Export writes <name>.SKILL.md, Import reads SKILL.md, legacy .json / .txt and ORSKILL2: share codes (base64 of the SKILL.md). Readable, diff-able, pasteable.","Skill = parameterised Luau program executed in Studio through execute_luau (params are injected as Lua literals via {{param}} and as args.param; the program returns {ok=true, ...} or {ok=false, error}). Extra commands[] give the skill sub-commands (name, params, luau). Knowledge rides along with the AI's first tool result when the request matches the skill's triggers - exactly how built-in skills work.","Verify: runs after the command with args and result in scope plus find(path), attr(path, name) and check(cond, message); return {ok=true, detail} or raise. public_skill_test {name} = syntax check (SYNTAX OK); {dry_run:false} = real run + verify → VERIFIED / VERIFY_FAILED / RUN_FAILED; a skill without a verify block can only reach RAN. Verification is per device: a shared SKILL.md never carries a VERIFIED badge.","Everything stays on this device (chrome.storage.local, key rsPublicSkills). Sharing is file/code based: Export downloads <name>.SKILL.md (JSON available too), Share code copies an ORSKILL2: string; Import accepts SKILL.md, .json, .txt and ORSKILL1/2 codes. There is no central marketplace.","Migration (2.19.0): abilities that contained Luau were converted to skills (Luau → command, instructions → knowledge); prompt-only abilities and custom work modes were removed with a one-time notice in the Public tab that lists them and offers a .json download. Paste the old text into the composer and press Design a skill from it (AI) to rebuild one as a real skill.","References: every skill can carry references[] (official docs links - 'verified' when the page is one the built-in references were checked against), examples[] and expert (nearest built-in expert). They ride with the knowledge, the card shows them with a check mark, and the AI designing a skill is handed verified candidate pages so it never invents a URL. public_skill_refs {name, add, remove, suggest} manages them.","Agent commands: public_skill_create/from_prompt/list/get/refs/update/delete/enable/test/export/import/reference. public_skill_list {verified:true} filters; every result carries verification: VERIFIED | UNVERIFIED | STALE."],howTo:["Cards panel → Public → describe → Create with AI","Paste a full prompt or drop a .txt → Design a skill from it (AI)","Press Test in Studio (or ask: test my skill) → VERIFIED when the verify block passes","Call the new command by name - the AI also picks it by its triggers","Public tab → Export SKILL.md / Share code to give it to someone; they press Import and test it on their place"]},
   };
   try { window.__rsFeatureHelpTopics = FEATURE_HELP_TOPICS; } catch {}
   const CREATOR_TOOLS=[
@@ -2045,10 +2045,11 @@
     ],
     focus: /^(animation_|anim_player_install$|rig_|motor6d|eclipse_|sequence_|ability_sequence_|cutscene|camera_(?!shake_preset$)|tween|spring_(create|adjust)$|script_(create|read|check|edit|set_source|module)$|multi_edit$|start_stop_play$|studio_playtest$|get_console_output$|model_prefab$|sfx_|vfx_(play|library_install)$|total_screenshot$|search_game_tree$)/,
   };
-  // 2.18.0 BLOCKBENCH (id "blockbench"): low-poly modeling INSIDE Blockbench
-  // through the jasonjgardner/blockbench-mcp-plugin (Streamable HTTP on
-  // localhost, default :3000/bb-mcp). TotalScript's bb_* commands are the
-  // surface (validated in src/core/blockbench_mcp.js, run by the worker); the
+  // 2.19.0 BLOCKBENCH (id "blockbench"): low-poly modeling INSIDE Blockbench
+  // through TotalScript's own Blockbench plugin (plugin/TotalScript-Blockbench.js
+  // long-polls total-core, like the Studio plugin - no port, no MCP). The bb_*
+  // commands are the surface (table + argument checks in
+  // src/core/blockbench_tools.js, executed by the plugin via total-core); the
   // finished piece is EXPORTED to a file (OBJ / glTF / GLB / bbmodel) in the
   // agent workspace and the user imports it with Studio's Import 3D - nothing
   // is uploaded or inserted silently. The profile lives in config.js
@@ -2057,7 +2058,7 @@
   WORK_MODES.blockbench = {
     name: "Blockbench", badge: "BLOCKBENCH", short: "Blockbench",
     sub: "Low-poly models in Blockbench: project → groups → cubes → texture → animate → screenshot → export file → Studio Import 3D (manual)",
-    note: "Blockbench is the editor, a FILE is the hand-off. Build with bb_project → bb_group → bb_cubes → bb_texture → bb_animate, look at bb_screenshot after every pass, then bb_export {format:\"obj\"|\"gltf\"|\"glb\"} and tell the user the path + Studio → Home → Import 3D. Needs the Blockbench MCP plugin connected (Settings → Blockbench MCP); without it the mode stops with a note instead of pretending.",
+    note: "Blockbench is the editor, a FILE is the hand-off. Build with bb_project → bb_group → bb_cubes → bb_texture → bb_animate, look at bb_screenshot after every pass, then bb_export {format:\"obj\"|\"gltf\"|\"glb\"} and tell the user the path + Studio → Home → Import 3D. Meshes too: bb_mesh_primitive (cylinder, cone, pyramid, plane, sphere, torus) and bb_mesh for free shapes. Needs the TotalScript plugin loaded in Blockbench (it connects to total-core by itself; Settings → Blockbench shows the steps); without it the mode stops with a note instead of pretending.",
     toast: "Blockbench Work Mode — model in Blockbench, screenshot every pass, export a file for Studio's Import 3D",
     starters: [
       { label: "Blocky sword", prompt: "In Blockbench, build a low-poly fantasy sword about 40 units long: blade with a fuller, crossguard, wrapped grip, pommel - each as its own group with the pivot at the grip. Flat-colour textures per material, screenshot front and iso and fix what you see, then export it as OBJ and tell me the exact Import 3D steps and scale for Studio." },
@@ -2067,7 +2068,7 @@
       { label: "Crate + barrel", prompt: "Make a wooden crate (16 units) and a barrel (12 × 16) in Blockbench with bevel-looking inset cubes and flat wood / iron colours. Screenshot both, export each as OBJ into the workspace and give me the Import 3D steps." },
       { label: "Fix my model", prompt: "Read the project that is open in Blockbench (bb_status + screenshot), tell me what looks wrong (proportions, gaps, z-fighting, pivots), fix it with the smallest edits, screenshot again and export it as OBJ." },
       { label: "Texture it", prompt: "Take the model open in Blockbench and give every group a flat-colour texture that reads at a distance (3-4 colours max, darker underside), apply them, screenshot and export as glTF so the colours travel with the mesh." },
-      { label: "Raw tool", prompt: "List the raw tools of the Blockbench MCP plugin that deal with meshes and UVs (bb_tools), then explain in two lines which of them you would use to turn the selected cube into a sloped roof, and do it with bb_call after I confirm." },
+      { label: "Mesh roof", prompt: "In Blockbench, turn the top of the open model into a proper sloped roof using MESHES: a bb_mesh_primitive pyramid (or a bb_mesh wedge with 3-4 index faces) sized to the walls, plus a bb_mesh_primitive cylinder chimney. Keep everything in one Roof group with the pivot at the ridge, screenshot iso and front, then export as glTF." },
     ],
     focus: /^(bb_|total_screenshot$|model_report$|meshpart_create$|instance_(move|clone)$|rotate_model$|scale_model$|set_property$|script_(create|read|check)$|search_game_tree$)/,
   };
@@ -2084,7 +2085,7 @@
       return (A.toolList || []).filter((t) => t && t.server === "blender" && !t.hidden);
     } catch { return []; }
   }
-  // 2.18.0: same for the Blockbench family (server "blockbench") in Blockbench mode.
+  // 2.19.0: same for the Blockbench family (server "blockbench") in Blockbench mode.
   function blockbenchModeTools(requested) {
     try {
       if (requested === "blockbench") return [];
@@ -2183,16 +2184,16 @@
       nudge: "PLAYBACK: AnimPlayer was installed this run but nothing proves the clips play in game - script_read the playback script, script_check it, then start_stop_play + get_console_output and confirm the track actually played before the final report." },
   ];
   MODE_GATES.animate.push(...MODE_GATES.creation.filter((g) => g.id === "scripts" || g.id === "look"));
-  // 2.18.0 BLOCKBENCH: geometry built this run must have been LOOKED at
+  // 2.19.0 BLOCKBENCH: geometry built this run must have been LOOKED at
   // (bb_screenshot) and must leave Blockbench as a file (bb_export) - the
   // import into Studio is the user's manual step, so no gate claims it.
   MODE_GATES.blockbench = [
     { id: "model",
-      did: /^bb_(project|cubes|cube_edit|group|remove|texture|animate|call)$/,
+      did: /^bb_(project|cubes|cube_edit|group|remove|mesh|mesh_primitive|mesh_edit|texture|animate)$/,
       proof: /^bb_(screenshot|status)$/,
       nudge: "MODEL: you built or changed geometry in Blockbench this run but never looked at it - run bb_screenshot {} now, judge the render (silhouette, gaps, z-fighting, pivots), then bb_status to compare counts with your plan; fix what you see before the final report." },
     { id: "export",
-      did: /^bb_(project|cubes|cube_edit|group|texture|animate)$/,
+      did: /^bb_(project|cubes|cube_edit|group|mesh|mesh_primitive|mesh_edit|texture|animate)$/,
       proof: /^bb_export$/,
       nudge: "EXPORT: the Blockbench model never left Blockbench - run bb_export {format:\"obj\"} (or gltf / glb) and give the user the file path plus the Studio steps (Home → Import 3D → file → scale → Import). Do not claim it is in Studio." },
   ];
@@ -2213,7 +2214,7 @@
         + "\nDo not acknowledge this note; do it, then give the final report with that evidence.";
     } catch { return ""; }
   }
-  // 2.18.0: CREATION TRACKER - per user message: the request → structured spec
+  // 2.19.0: CREATION TRACKER - per user message: the request → structured spec
   // (deliverables, integration checks, stages) + the run tracker that follows
   // every executed command (coverage, integration evidence, static Luau review,
   // bounded creation checks, end-of-run report). Profile = the user's creation
@@ -3232,7 +3233,7 @@
   // VFX, UI, animation, motion, ...). Order = catalogue order.
   const COMMAND_FAMILIES = [
     { id: "blender", label: "BLENDER (3D ASSET PIPELINE → STUDIO)", re: /^(blender_|get_scene_info$|get_object_info$|execute_blender_code$|get_viewport_screenshot$|mesh_import_verify$)/ }, // 1.95.0
-    { id: "blockbench", label: "BLOCKBENCH (LOW-POLY MODELS → FILE → STUDIO IMPORT 3D)", re: /^bb_/ }, // 2.18.0: the Blender server's tools + the Studio read-back
+    { id: "blockbench", label: "BLOCKBENCH (LOW-POLY MODELS → FILE → STUDIO IMPORT 3D)", re: /^bb_/ }, // 2.19.0: the Blender server's tools + the Studio read-back
     { id: "script", label: "SCRIPTING", re: /^(script_|multi_edit|module_scaffold|execute_luau|project_health_report|project_index_|tag_scaffold|tag_add|tag_remove|get_service|wait_for_child|log_tag|gc_run)/ },
     { id: "blueprint", label: "SYSTEM BLUEPRINTS", re: /^blueprint_/ },
     { id: "data", label: "DATA, REMOTES, NETWORK & MONETIZATION", re: /^(ds_|datastore_|get_datastore|ordered_(get|set)|session_lock_|session_analytics|remote_|remotes_list|bindable_|leaderstats_|profile_|gamepass_|developer_product|devproduct_|marketplace_|badge_|value_set|replicated_first|server_auto_restart|network_(ping|bandwidth)|premium_check)/ },
@@ -3605,14 +3606,13 @@
     } catch {}
     return false;
   }
-  // Blockbench link for the precondition: live flag first, then status → connect
-  // (the worker re-dials the plugin once per worker life when it was linked).
+  // Blockbench link for the precondition: live flag first, then a fresh look at
+  // total-core (2.19.0: the plugin dials in by itself; nothing to connect here).
   async function blockbenchReady() {
     try { if (A.bridge && A.bridge.blockbench === true) return true; } catch {}
     try { if (window.__rsBlockbench && window.__rsBlockbench()) return true; } catch {}
     try {
-      let st = await bg({ type: "blockbench_status" });
-      if (!(st && st.blockbench)) st = await bg({ type: "blockbench_connect" });
+      const st = await bg({ type: "blockbench_status", refresh: true });
       if (st && st.blockbench) { A.bridge = A.bridge || {}; A.bridge.blockbench = true; return true; }
     } catch {}
     return false;
@@ -4265,7 +4265,7 @@
     if (!item) return `ERROR in ${name}: unknown public skill`;
     const verifying = !!(args && args._totalVerifying); // set by public_skill_test: the verify block decides, no trailing note
     if (verifying) { args = Object.assign({}, args); delete args._totalVerifying; }
-    // 2.18.0: `name` may be the skill (main command) or one of its extra commands[].
+    // 2.19.0: `name` may be the skill (main command) or one of its extra commands[].
     const built = PS.buildLuau(name, args);
     if (built.err) return built.err;
     const cmdName = built.command || item.name;
@@ -4282,7 +4282,7 @@
     } catch {}
     const ok = !String(res || "").startsWith("ERROR") && !String(res || "").includes("ERROR in execute_luau");
     try { if (typeof PS.recordRun === "function") PS.recordRun(item.id, ok, ok ? "" : String(res || "").replace(/^ERROR in [^:]*:\s*/, "").slice(0, 200)); } catch {}
-    // 2.18.0: an unverified skill is callable, but every successful result says so
+    // 2.19.0: an unverified skill is callable, but every successful result says so
     // (trailing note - the JSON body stays first so PS.parseResult still reads it).
     try {
       const ver = PS.verification(item.id);
@@ -4291,7 +4291,7 @@
     try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(cmdName, args, ok, res); } catch {}
     return res;
   }
-  // 2.18.0: public_skill_test - the self-test that decides the VERIFIED badge.
+  // 2.19.0: public_skill_test - the self-test that decides the VERIFIED badge.
   //   dry_run (default)  : compile the command + verify block in Studio → SYNTAX OK
   //   dry_run=false      : run the command for real, then the verify block with
   //                        the same args + the command's result table; verify
@@ -4471,7 +4471,7 @@
       return out({ success: true, status: "INSTALLED", kind: r.item.kind, name: r.item.name, commands: PS.signatures(r.item), verification: PS.verification(r.item).state, usage: publicSkillUsage(r.item), warnings: r.warnings, next: `public_skill_test {"name":"${r.item.name}","dry_run":false} runs it here and, when its verify block passes, marks it VERIFIED on this device.` });
     }
     if (op === "from_prompt") {
-      // 2.18.0: nothing is installed here - the AI gets the DESIGN BRIEF (the
+      // 2.19.0: nothing is installed here - the AI gets the DESIGN BRIEF (the
       // prompt becomes the knowledge; it must write the Luau + verify block)
       // and installs the result with public_skill_create.
       const text = String(args.prompt || args.text || args.data || "").trim();
@@ -5209,7 +5209,7 @@
       // only listed when asked for by exact name.
       const allScoped = A.toolList.filter((t) => (t.server || curEng) === requested && (!t.hidden || String(t.name || "").toLowerCase() === commandQuery));
       allScoped.push(...blenderModeTools(requested)); // 1.95.0: Blender mode lists the Blender family in the default catalogue
-      allScoped.push(...blockbenchModeTools(requested)); // 2.18.0: Blockbench mode lists the bb_* family
+      allScoped.push(...blockbenchModeTools(requested)); // 2.19.0: Blockbench mode lists the bb_* family
       const queryTerms = commandQuery.split(/\s+/).filter(Boolean);
       const queryMatches = (value) => !queryTerms.length
         || queryTerms.every((term) => String(value || "").toLowerCase().includes(term));
@@ -5487,17 +5487,19 @@
       return res;
       }
     }
-    // 2.18.0 Blockbench: bb_* never touch the Studio / AgentScript sockets. The
-    // worker validates the arguments (blockbench_mcp.js) and runs the plugin's
-    // real tools; here we only make sure the link is up and shape the answer.
+    // 2.19.0 Blockbench: bb_* ride the Roblox bridge to total-core, which hands
+    // them to TotalScript's Blockbench plugin (no Studio needed). The worker
+    // checks the arguments (blockbench_tools.js) and the link; here we only
+    // avoid a doomed round-trip and shape the answer.
     if (/^bb_[a-z_]+$/.test(bareName)) {
       if (!(A.bridge && A.bridge.blockbench)) {
-        let st = await bg({ type: "blockbench_status" });
-        if (!(st && st.blockbench)) st = await bg({ type: "blockbench_connect" });
+        const st = await bg({ type: "blockbench_status", refresh: true });
+        if (st && st.plugin_file) { A.blockbenchPluginFile = st.plugin_file; }
         if (st && st.blockbench) { A.bridge = A.bridge || {}; A.bridge.blockbench = true; }
-      }
-      if (!(A.bridge && A.bridge.blockbench)) {
-        return "ERROR BLOCKBENCH_OFFLINE calling '" + name + "': Blockbench is not connected. The user must open Blockbench with the MCP plugin (File → Plugins → Load Plugin from URL → https://jasonjgardner.github.io/blockbench-mcp-plugin/mcp.js) and press Connect under Settings → Blockbench MCP. Do not emulate the result.";
+        else if (bareName !== "bb_status") {
+          const steps = st && Array.isArray(st.steps) && st.steps.length ? " Steps for the user: " + st.steps.map((x, i) => (i + 1) + ") " + x).join(" ") : "";
+          return "ERROR BLOCKBENCH_OFFLINE calling '" + name + "': Blockbench is not connected to total-core (the TotalScript Bridge plugin inside Blockbench is not polling)." + steps + " Ask the user to load the plugin / open Blockbench, then run bb_status once - do not emulate the result and do not retry blindly.";
+        }
       }
       const timeout = bareName === "bb_export" || bareName === "bb_screenshot" ? 90000 : 60000;
       const hardCap = new Promise((res) => setTimeout(() => res({ ok: false, kind: "timeout", error: "no response from Blockbench" }), timeout + 15000));
@@ -6307,7 +6309,7 @@
             base = await submitAndGetBase(RS.FEEDBACK.guiBriefAct + (state ? "\n" + state : ""));
             continue;
           }
-          // 2.18.0: CREATION COVERAGE GATE - the request's deliverables (spec)
+          // 2.19.0: CREATION COVERAGE GATE - the request's deliverables (spec)
           // against the command log: an item nobody built, an item built but
           // never read back (High+), a missing integration (GUI ↔ server remote,
           // DataStore ↔ pcall, sound never played …). Bounded by the creation
@@ -6355,7 +6357,7 @@
               continue;
             }
           }
-          // 2.18.0: CREATION REPORT - one honest block per run with deliverables
+          // 2.19.0: CREATION REPORT - one honest block per run with deliverables
           // (built / read back / audited / missing), integration evidence, the
           // static-review tally and the rounds used. Shown in the Activity tab
           // + the popup Activity Center; never sent to the model.
@@ -6510,7 +6512,7 @@
           // 1.99.9: mode auto-check (read the created path back) - appended AFTER
           // compression so the fact line is never the part that gets dropped.
           try { feedback = await attachModeAutoCheck(call.tool, call.arguments, feedback); } catch {}
-          // 2.18.0: creation tracker - records the step for coverage / integration
+          // 2.19.0: creation tracker - records the step for coverage / integration
           // and appends the static Luau review of the source the model sent
           // (bounded per run by the creation profile; never on failed writes).
           try { if (A.creation) { const o = A.creation.observe(call, feedback, { ms: Date.now() - A.toolStart }); if (o && o.note) { feedback += "\n" + o.note; diag("creation.review", { tool: call.tool, findings: o.event.findings, chars: o.note.length }); } } } catch {}
@@ -6684,7 +6686,7 @@
                   else if (gui) diag("gui.briefSkipped", { chars: gui.length, cap });
                 }
               }
-              // 2.18.0: PUBLIC SKILL KNOWLEDGE - when an installed public skill's
+              // 2.19.0: PUBLIC SKILL KNOWLEDGE - when an installed public skill's
               // triggers / name match the request, its knowledge rides along
               // (same budget), so a user-made skill behaves like a built-in one.
               if (rider && !A.task.explainOnly && typeof PublicSkills !== "undefined" && typeof PublicSkills.knowledgeRider === "function") {
@@ -6693,7 +6695,7 @@
                 if (pk && toSend.length + pk.length + 2 <= cap) { toSend += "\n\n" + pk; diag("publicSkill.knowledgeSent", { chars: pk.length, tight }); }
                 else if (pk) diag("publicSkill.knowledgeSkipped", { chars: pk.length, cap });
               }
-              // 2.18.0: the CREATION SPEC rides last - the deliverables the request
+              // 2.19.0: the CREATION SPEC rides last - the deliverables the request
               // names, the command family that builds and the one that proves each,
               // the integration checks and the stage order. Only for requests with
               // enough deliverables (profile.briefMin), same send budget.
@@ -6912,7 +6914,7 @@
         const requested = engine === "local" ? "local" : "roblox";
         const allScoped = A.toolList.filter((t) => t && (t.server || requested) === requested && !t.hidden);
         allScoped.push(...blenderModeTools(requested)); // 1.95.0: Blender mode embeds the Blender family too
-        allScoped.push(...blockbenchModeTools(requested)); // 2.18.0: Blockbench mode embeds the bb_* family too
+        allScoped.push(...blockbenchModeTools(requested)); // 2.19.0: Blockbench mode embeds the bb_* family too
         if (!allScoped.length) return "";
         const animLines = requested === "roblox" && typeof RSAnim !== "undefined" ? RSAnim.describeCommands() : [];
         const skillLines = requested === "roblox" && typeof RobloxScriptSkills !== "undefined" ? RobloxScriptSkills.describeCommands() : [];
@@ -8985,7 +8987,7 @@
     // reload - they used to silently reset to these defaults on every page
     // refresh because only the setters ever touched chrome.storage.
     let autoFixEnabled = true, extraThinking = false, planMode = false, steeringMode = false, forgeMode = false, autoFixStopPlay = true, autoDebugEnabled = true, multiAgent = false, guiBriefEnabled = true;
-    // 2.18.0: creation quality profile (TotalCreation.PROFILES) - how strictly a
+    // 2.19.0: creation quality profile (TotalCreation.PROFILES) - how strictly a
     // run is checked against the request's deliverables. Persisted; shared
     // with the popup (rsCreationProfile); always capped by the provider.
     let creationProfile = "high";
@@ -9360,10 +9362,10 @@
         ? "\u{1F310} Background mode ON \u2014 the agent keeps working while you're on other sites"
         : "Background mode OFF \u2014 the agent pauses when this tab is hidden");
     }
-    // 2.18.0: custom (public) work modes were retired; a stale "pm:<id>" stored
+    // 2.19.0: custom (public) work modes were retired; a stale "pm:<id>" stored
     // before the upgrade simply normalises to the built-in default.
     function setWorkMode(id, silent){
-      if (typeof id === "string" && id.startsWith("pm:")) { toast("Custom work modes were retired in 2.18.0 - Public Skills are skills only"); id = workMode; }
+      if (typeof id === "string" && id.startsWith("pm:")) { toast("Custom work modes were retired in 2.19.0 - Public Skills are skills only"); id = workMode; }
       workMode = normalizeWorkMode(id);
       try { chrome.storage.local.set({rsWorkMode: workMode}); } catch {}
       try { window.__rsWorkMode = () => workMode; } catch {}
@@ -9808,9 +9810,11 @@
             </div>`;
     }
     try { window.__rsBlender = () => blenderConnected(); } catch {}
-    // 2.18.0 Blockbench MCP card (Settings → MCP servers), same visual
-    // language as the Blender card. Offline = three steps + the URL field;
-    // connected = what the link unlocks + the live plugin tool count.
+    // 2.19.0 Blockbench card (Settings → MCP servers), same visual language as
+    // the Blender card. Nothing to connect from the page: TotalScript's own
+    // Blockbench plugin dials total-core by itself. Offline = the four real
+    // steps (+ Copy the plugin path once total-core told us where it is) and
+    // Check again; connected = what the link unlocks.
     function blockbenchConnected() {
       if (A.bridge && A.bridge.blockbench === true) return true;
       const live = ((A.bridge && A.bridge.servers) || []);
@@ -9818,35 +9822,35 @@
     }
     function blockbenchCardHtml() {
       const on = blockbenchConnected();
-      const live = ((A.bridge && A.bridge.servers) || []).find((s) => s && s.id === "blockbench") || null;
-      const url = String((A.bridge && A.bridge.blockbench_url) || (live && live.url) || (A.blockbenchUrl || "")).trim();
+      const pluginFile = String((A.bridge && A.bridge.blockbench_plugin_file) || A.blockbenchPluginFile || "").trim();
+      const core = !!(A.bridge && (A.bridge.connected || A.bridge.bridge || A.bridge.mcp_alive));
       const pill = `<span class="rs-blender-pill" role="status"><i aria-hidden="true"></i>${on ? "Connected" : "Offline"}</span>`;
       const body = on
         ? `<div class="rs-blender-caps" aria-label="Available through Blockbench">
              <span class="rs-blender-cap"><b>Cubes &amp; groups</b> bb_cubes / bb_group</span>
+             <span class="rs-blender-cap"><b>Meshes</b> bb_mesh / bb_mesh_primitive</span>
              <span class="rs-blender-cap"><b>Textures &amp; clips</b> bb_texture / bb_animate</span>
              <span class="rs-blender-cap"><b>Export</b> OBJ · glTF · GLB → Studio Import 3D</span>
-             ${live && live.raw_tools ? `<span class="rs-blender-cap rs-blender-cap-n">${live.raw_tools} plugin tools</span>` : ""}
            </div>`
         : `<ol class="rs-blender-steps" aria-label="How to connect Blockbench">
-             <li><b>1</b><span>In Blockbench: <em>File → Plugins → Load Plugin from URL</em> → <code>https://jasonjgardner.github.io/blockbench-mcp-plugin/mcp.js</code></span></li>
-             <li><b>2</b><span>The plugin serves <em>http://localhost:3000/bb-mcp</em>. If the TotalScript desktop agent already uses port 3000, change the port in Blockbench → Settings → General → MCP Server Port and type the new URL below.</span></li>
-             <li><b>3</b><span>Press <em>Connect Blockbench</em>. The finished model is exported as a file; you import it with Studio → Home → Import 3D.</span></li>
+             <li><b>1</b><span>Start the TotalScript desktop app (total-core). It keeps the plugin file current${pluginFile ? `: <code class="rs-bb-path">${escRs(pluginFile)}</code>` : " (<code>TotalScript-Blockbench.js</code> next to total-core; also in the extension folder under <code>plugin/</code>)"}.</span></li>
+             <li><b>2</b><span>In Blockbench (desktop 4.8+): <em>File → Plugins → Load Plugin from File</em> → pick <code>TotalScript-Blockbench.js</code>. Once - Blockbench loads it on every start.</span></li>
+             <li><b>3</b><span><em>Tools → TotalScript</em> in Blockbench shows "connected" as soon as the plugin reaches total-core (it dials 127.0.0.1:3000 by itself).</span></li>
+             <li><b>4</b><span>Press <em>Check again</em>. Models are exported as files; import them with Studio → Home → Import 3D.</span></li>
            </ol>`;
       return `<div class="rs-blender-card rs-bb-card ${on ? "on" : ""}" id="rs-blockbench-card" data-state="${on ? "on" : "off"}">
               <div class="rs-blender-head">
                 <span class="rs-blender-mark rs-bb-mark" aria-hidden="true"></span>
                 <div class="rs-blender-copy">
-                  <div class="rs-blender-title"><span class="rs-blender-name">Blockbench MCP</span>${pill}</div>
-                  <span class="rs-blender-sub">${on ? `Plugin live at ${escRs(url || "localhost")} — the AI models in Blockbench and exports files for Studio.` : "Talks to the Blockbench MCP plugin over HTTP on this computer. Nothing is uploaded; exports land in the agent workspace."}</span>
+                  <div class="rs-blender-title"><span class="rs-blender-name">Blockbench</span>${pill}</div>
+                  <span class="rs-blender-sub">${on ? "TotalScript's Blockbench plugin is live through total-core — the AI models in Blockbench and exports files for Studio." : core ? "total-core is up; waiting for the TotalScript plugin inside Blockbench. Nothing is uploaded — exports are files on this computer." : "Needs the TotalScript desktop app (total-core) and the TotalScript plugin inside Blockbench. Nothing is uploaded — exports are files on this computer."}</span>
                 </div>
               </div>
               ${body}
-              <label class="rs-bb-url"><span>URL</span><input id="rs-blockbench-url" class="rs-mcp-field" type="url" spellcheck="false" placeholder="http://localhost:3000/bb-mcp" value="${escRs(url)}" ${on ? "readonly" : ""}></label>
               <div class="rs-blender-note" id="rs-blockbench-note" hidden></div>
               <div class="rs-blender-actions">
-                <button type="button" id="rs-mcp-blockbench" class="rs-blender-primary">${on ? "Reconnect" : "Connect Blockbench"}</button>
-                ${on ? '<button type="button" class="rs-blender-off" id="rs-mcp-blockbench-off">Disconnect</button>' : ""}
+                <button type="button" id="rs-mcp-blockbench" class="rs-blender-primary">Check again</button>
+                ${pluginFile ? '<button type="button" class="rs-blender-off" id="rs-blockbench-copy" title="Copy the plugin file path for the Load Plugin from File dialog">Copy plugin path</button>' : ""}
                 <button type="button" class="rs-blender-link" id="rs-blockbench-site" title="Open blockbench.net in a new tab">blockbench.net</button>
               </div>
             </div>`;
@@ -10107,7 +10111,7 @@
         try { toast("Back to the default look"); } catch {}
       });
     }
-    // 2.18.0: Creation quality section - four profiles that change what the
+    // 2.19.0: Creation quality section - four profiles that change what the
     // creation engine demands of a run (rounds, read-back, integration, audit).
     function creationSectionHtml() {
       if (typeof TotalCreation === "undefined") return "";
@@ -10344,7 +10348,7 @@
           </section>
           <section class="rs-menu-sec rs-adv">
             <div class="rs-sec-label"><span>MCP servers</span></div>
-            <div class="rs-menu-note">Roblox Studio is primary. Blender connects to the addon running in Blender on port 9876; Blockbench connects to its MCP plugin over localhost HTTP.</div>
+            <div class="rs-menu-note">Roblox Studio is primary. Blender connects to the addon running in Blender on port 9876; Blockbench connects through the TotalScript plugin inside Blockbench, which dials total-core by itself.</div>
             ${blenderCardHtml()}
             ${blockbenchCardHtml()}
            ${mcpList}
@@ -10561,16 +10565,15 @@
       if (blenderSite) blenderSite.addEventListener("click", () => {
         try { window.open("https://www.blender.org/", "_blank", "noopener"); } catch {}
       });
-      // ── Blockbench MCP card (2.18.0) ──
+      // ── Blockbench card (2.19.0) ──
       const bbBtn = menuEl.querySelector("#rs-mcp-blockbench");
       const bbCard = menuEl.querySelector("#rs-blockbench-card");
       const bbNote = menuEl.querySelector("#rs-blockbench-note");
-      const bbUrlField = menuEl.querySelector("#rs-blockbench-url");
       function setBbBusy(on, label) {
         if (bbCard) bbCard.classList.toggle("busy", !!on);
         if (!bbBtn) return;
         bbBtn.disabled = !!on;
-        if (on) { bbBtn.dataset.label = bbBtn.textContent; bbBtn.innerHTML = `<span class="rs-mcp-spin"></span>${label || "Connecting…"}`; }
+        if (on) { bbBtn.dataset.label = bbBtn.textContent; bbBtn.innerHTML = `<span class="rs-mcp-spin"></span>${label || "Checking…"}`; }
         else if (bbBtn.dataset.label) bbBtn.textContent = bbBtn.dataset.label;
       }
       function showBbNote(text, kind) {
@@ -10579,56 +10582,46 @@
         bbNote.dataset.kind = kind || "error";
         bbNote.hidden = !text;
       }
-      if (bbUrlField && !bbUrlField.readOnly) bbUrlField.addEventListener("change", async () => {
-        const url = String(bbUrlField.value || "").trim();
-        A.blockbenchUrl = url;
-        if (!url) { try { await bg({ type: "blockbench_set_url", url: "http://localhost:3000/bb-mcp" }); } catch {} return; }
-        const r = await bg({ type: "blockbench_set_url", url });
-        if (!r || !r.ok) showBbNote(String((r && r.error) || "That URL is not accepted (localhost / 127.0.0.1 only)."), "error");
-        else showBbNote("", "info");
-      });
       if (bbBtn) bbBtn.addEventListener("click", async () => {
         if (mcpBusy) return;
         showBbNote("");
-        setBbBusy(true, "Connecting…");
-        setMcpBusy(true, "Checking the Blockbench MCP plugin…");
-        const url = bbUrlField && !bbUrlField.readOnly ? String(bbUrlField.value || "").trim() : "";
-        const r = await bg(url ? { type: "blockbench_connect", url } : { type: "blockbench_connect" });
+        setBbBusy(true, "Checking…");
+        setMcpBusy(true, "Asking total-core about the Blockbench plugin…");
+        const r = await bg({ type: "blockbench_status", refresh: true });
         setMcpBusy(false);
-        if (!r || !r.ok) {
+        A.bridge = A.bridge || {};
+        if (r && typeof r.plugin_file === "string" && r.plugin_file) { A.bridge.blockbench_plugin_file = r.plugin_file; A.blockbenchPluginFile = r.plugin_file; }
+        if (!r || !r.blockbench) {
           setBbBusy(false);
-          showBbNote(String((r && r.error) || "Blockbench did not answer. Open Blockbench with the MCP plugin enabled and try again.").slice(0, 400), "error");
-          try { toast("Couldn't reach Blockbench"); playSfx("error"); } catch {}
+          A.bridge.blockbench = false;
+          const why = !r ? "The extension worker did not answer." : r.core === false ? "total-core is not running - start the TotalScript desktop app first." : "total-core is up but the TotalScript plugin inside Blockbench is not polling yet (load it once: File → Plugins → Load Plugin from File, then check Tools → TotalScript).";
+          showBbNote(why, "error");
+          try { toast("Blockbench is not connected yet"); playSfx("error"); } catch {}
           syncBlenderFlag();
+          if (r && r.plugin_file) buildMenu();
           return;
         }
-        A.bridge = A.bridge || {}; A.bridge.blockbench = true; A.bridge.blockbench_url = r.url || url;
+        A.bridge.blockbench = true;
         try { A.toolsAt = 0; } catch {}
         try { await ensureTools(true); } catch {}
         syncBlenderFlag();
-        try { toast(`Blockbench connected — ${r.tools || 0} plugin tools behind the bb_* commands`); playSfx("ok"); } catch {}
+        try { toast(`Blockbench connected — ${r.tools || 0} bb_* commands ready`); playSfx("ok"); } catch {}
         buildMenu();
       });
-      const bbOff = menuEl.querySelector("#rs-mcp-blockbench-off");
-      if (bbOff) bbOff.addEventListener("click", async () => {
-        if (mcpBusy) return;
-        bbOff.disabled = true;
-        if (bbCard) bbCard.classList.add("busy");
-        setMcpBusy(true, "Disconnecting Blockbench…");
-        await bg({ type: "blockbench_disconnect" });
-        setMcpBusy(false);
-        try { if (A.bridge) A.bridge.blockbench = false; } catch {}
-        try { A.toolsAt = 0; } catch {}
-        try { await ensureTools(true); } catch {}
-        syncBlenderFlag();
-        try { toast("Blockbench disconnected"); playSfx("ok"); } catch {}
-        buildMenu();
+      const bbCopy = menuEl.querySelector("#rs-blockbench-copy");
+      if (bbCopy) bbCopy.addEventListener("click", async () => {
+        const path = String((A.bridge && A.bridge.blockbench_plugin_file) || A.blockbenchPluginFile || "").trim();
+        if (!path) return;
+        let ok = false;
+        try { await navigator.clipboard.writeText(path); ok = true; } catch {}
+        if (!ok) { try { const ta = document.createElement("textarea"); ta.value = path; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); ok = document.execCommand("copy"); ta.remove(); } catch {} }
+        showBbNote(ok ? "Plugin path copied - paste it into Blockbench's Load Plugin from File dialog." : "Could not copy; the path is shown in step 1.", ok ? "info" : "error");
+        try { toast(ok ? "Plugin path copied" : "Copy failed"); playSfx(ok ? "ok" : "error"); } catch {}
       });
       const bbSite = menuEl.querySelector("#rs-blockbench-site");
       if (bbSite) bbSite.addEventListener("click", () => {
         try { window.open("https://www.blockbench.net/", "_blank", "noopener"); } catch {}
       });
-
       // ── Work mode cards ──
       menuEl.querySelectorAll("[data-work-starter]").forEach(btn=>{
         btn.addEventListener("click", () => {
@@ -10881,7 +10874,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     const PUBLIC_SKELETONS = {
       skill: { kind: "skill", name: "my_skill", title: "My Skill", description: "What it does and when to use it (10-600 chars).", triggers: ["my skill:3", "what the user says when this applies"], params: [{ name: "path", type: "string", description: "Full instance path, e.g. Workspace.Folder", required: true }, { name: "count", type: "number", default: 3 }], luau: "local target = {{path}}\nlocal n = {{count}}\n-- walk game by name; fail clearly\nlocal inst = game\nfor seg in string.gmatch(target, \"[^%.]+\") do inst = inst:FindFirstChild(seg) if not inst then return {ok=false, error=\"not found: \" .. target} end end\n-- do the work here (idempotent, named instances)\nreturn {ok=true, path=inst:GetFullName(), count=n}", knowledge: "## When to use\n- ...\n\n## Rules\n- Keep created instances named so a re-run updates instead of duplicating.\n\n## After running\n- Tell the user what was created and how to tweak it.", verify: { luau: "-- args = the params it ran with, result = the table the command returned\nlocal inst = find(args.path)\ncheck(inst, \"target missing: \" .. tostring(args.path))\nreturn {ok = true, detail = \"found \" .. inst:GetFullName()}", note: "What a pass proves, in one line." }, commands: [] },
     };
-    var cardsPublicFilter = "all"; // 2.18.0 — all | verified | unverified
+    var cardsPublicFilter = "all"; // 2.19.0 — all | verified | unverified
     // 1.99.7: references line (own links with a check mark when verified, the
     // related built-in expert) and run statistics on each Public card.
     function publicRefsHtml(i){
@@ -11058,7 +11051,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     }
     function publicReadFile(file){ return new Promise((resolve, reject) => { try { if (file && typeof file.text === "function") return resolve(file.text()); const fr = new FileReader(); fr.onload = () => resolve(String(fr.result || "")); fr.onerror = () => reject(fr.error || new Error("read failed")); fr.readAsText(file); } catch (e) { reject(e); } }); }
     function publicPickFile(){ const input = document.createElement("input"); input.type = "file"; input.accept = ".md,.SKILL.md,.SKILLS.md,.json,.orskill.json,.orskills.json,.txt,text/plain,text/markdown,application/json"; input.onchange = async () => { const file = input.files && input.files[0]; if (!file) return; publicLoadText(await publicReadFile(file), file.name); }; input.click(); }
-    // 2.18.0: SKILL.md is the canonical export; JSON stays available as the legacy form.
+    // 2.19.0: SKILL.md is the canonical export; JSON stays available as the legacy form.
     function publicDownload(id){ const PS = PublicSkills; const txt = PS.toSkillMd(id); if (!txt) return toast("Nothing to export"); const blob = new Blob([txt], { type: "text/markdown" }), a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = PS.fileName(id); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); toast(`Exported ${PS.fileName(id)} — readable, diff-able, importable anywhere TotalScript runs`); }
     function publicDownloadText(id){ const PS = PublicSkills; const json = PS.exportJson(id); if (!json) return toast("Nothing to export"); const blob = new Blob([json], { type: "application/json" }), a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = PS.jsonFileName(id); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); toast(`Exported ${PS.jsonFileName(id)} (legacy JSON)`); }
     async function publicCopyShare(id){ const code = PublicSkills.shareCode(id); if (!code) return toast("Nothing to share"); try { await navigator.clipboard.writeText(code); toast(`Share code copied (${code.length} chars; it is the SKILL.md, base64) — paste it into another TotalScript's Public tab`); } catch { prompt("Copy this share code:", code); } }
@@ -11067,7 +11060,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       if (r.pack) { let msg = r.installed.length ? `Installed ${r.installed.length} item${r.installed.length === 1 ? "" : "s"}: ${r.installed.map((i) => i.name).join(", ")}` : "Nothing new installed"; if (r.skipped.length) msg += ` · already had: ${r.skipped.join(", ")}`; if (r.errors.length) msg += ` · failed: ${r.errors.length}`; toast(msg); if (r.skipped.length && confirm(`${r.skipped.length} item(s) already exist (${r.skipped.join(", ")}). Replace them with the imported versions?`)) { const r2 = PublicSkills.importShared(text, { reserved: publicReserved(), replace: true }); toast(r2.ok ? `Replaced/installed ${r2.installed.length} item(s)` : "Replace failed"); } return; }
       if (!r.ok && r.duplicate) { if (confirm(`'${r.duplicate.name}' is already installed. Replace it with the imported version?`)) { const r2 = PublicSkills.importShared(text, { reserved: publicReserved(), replace: true }); toast(r2.ok ? `Replaced skill '${r2.item.name}' (UNVERIFIED here until tested)` : `IMPORT_FAILED: ${r2.errors.join("; ")}`); } return; } toast(r.ok ? `Installed skill '${r.item.name}' — UNVERIFIED on this device until Test in Studio passes${r.warnings.length ? " (" + r.warnings.length + " warning" + (r.warnings.length === 1 ? "" : "s") + ")" : ""}` : `IMPORT_FAILED: ${r.errors.join("; ")}`); }
     function publicRun(item){ let args = {}; if ((item.params || []).length) { const raw = prompt(`Arguments for ${PublicSkills.signature(item)} (JSON):`, JSON.stringify(publicExampleArgs(item))); if (raw == null) return; try { args = JSON.parse(raw || "{}"); } catch { return toast("Arguments must be valid JSON"); } } runLibraryCard({ engine: "rs", icon: "P", cat: "Public Skills", title: `Run ${item.name}`, desc: item.description.slice(0, 90), prompt: `Run my public skill now: call ${item.name} ${JSON.stringify(args)} and report the result. If it reports an error, fix the arguments or improve the skill with public_skill_update (read it first with public_skill_get {"name":"${item.name}"}).` }, true); }
-    // 2.18.0: the self-test. The agent runs public_skill_test {dry_run:false}: the
+    // 2.19.0: the self-test. The agent runs public_skill_test {dry_run:false}: the
     // command runs in Studio, then the verify block; VERIFIED only on a real pass.
     function publicTest(item){ let args = {}; if ((item.params || []).some((p) => p.required && p.default === undefined)) { const raw = prompt(`Test arguments for ${PublicSkills.signature(item)} (JSON) — the command really runs in the open place:`, JSON.stringify(publicExampleArgs(item))); if (raw == null) return; try { args = JSON.parse(raw || "{}"); } catch { return toast("Arguments must be valid JSON"); } } runLibraryCard({ engine: "rs", icon: "P", cat: "Public Skills", title: `Test ${item.name}`, desc: item.verify ? "run + verify block" : "run (no verify block yet)", prompt: `Test my public skill '${item.name}' for real: call public_skill_test {"name":"${item.name}","dry_run":false,"args":${JSON.stringify(args)}}. ${item.verify ? "It runs the command in Studio and then the skill's verify block; report the exact status it returns (VERIFIED, VERIFY_FAILED or RUN_FAILED) and what the verify block found." : "The skill has no verify block yet, so it can only reach 'ran': after the run, read it with public_skill_get and add a verify block with public_skill_update {\"name\":\"" + item.name + "\",\"patch\":{\"verify\":{\"luau\":\"...\"}}} that checks the created instances, then run public_skill_test {dry_run:false} again."} Never claim VERIFIED unless the tool said so.` }, true); }
     function publicImprove(item){ const req = prompt(`What should change in '${item.title}'?`, ""); if (req == null) return; runLibraryCard({ engine: "rs", icon: "P", cat: "Public Skills", title: `Improve ${item.name}`, desc: req.slice(0, 90) || "AI review", prompt: `Improve my public skill '${item.name}'. Request: ${req.trim() || "review it for correctness, robustness and clarity and improve it; make sure it has triggers, knowledge and a verify block that proves the result"}. First call public_skill_get {"name":"${item.name}"} to read the current definition, then submit the improved version with public_skill_update {"name":"${item.name}","patch":{...}} (keep the same name; include every field you change in full), then run public_skill_test {"name":"${item.name}"} and fix any syntax error. A code change makes an earlier VERIFIED pass stale - say so, and offer to run public_skill_test {dry_run:false} to verify again. Finish with a one-paragraph summary of what changed.` }, true); }

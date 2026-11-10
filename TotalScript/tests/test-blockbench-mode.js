@@ -1,265 +1,182 @@
-// 2.18.0 — BLOCKBENCH MCP + work mode. MOCKED: no Blockbench, no Studio, no AI
-// site. A fake MCP "Streamable HTTP" server (node http) stands in for the
-// jasonjgardner/blockbench-mcp-plugin; the real client, the real curated
-// command table and the real background.js code path run against it.
-//   NODE_PATH=/path/to/node_modules node tests/test-blockbench-mode.js
+// 2.19.0 — BLOCKBENCH work mode + extension routing. MOCKED: no Blockbench,
+// no Studio, no AI site, no total-core. A fake total-core WebSocket (in-vm)
+// stands in for the desktop app; the real command table
+// (src/core/blockbench_tools.js) and the real background.js code path run
+// against it. The plugin itself is covered by tests/test-blockbench-plugin.js.
+//   node tests/test-blockbench-mode.js
 //
 // What this proves:
-//   A. src/core/blockbench_mcp.js: loopback-only URL normalisation, SSE + JSON
-//      body parsing, every bb_* command validates and maps onto the plugin's
-//      REAL tool / parameter names (place_cube elements[], add_group, …),
-//      bb_export paths land in <workspace>/blockbench_exports, render() quotes
-//      the plugin and never invents a Studio import.
-//   B. The client against the fake server: initialize → initialized →
-//      tools/list (paged) → tools/call; Mcp-Session-Id round-trips; a 404
-//      "session not found" re-initialises once; images come back as
-//      {mimeType, data}; 403 "Origin not allowed" and a dead port are
-//      explained; DELETE closes the session.
-//   C. background.js in a vm: importScripts, connectBlockbench + blockbenchCall
-//      end-to-end (status, invalid args, export path, screenshot, bb_tools,
-//      bb_call guard), the declarativeNetRequest Origin session rule is added
-//      on connect and removed on disconnect, call_tool routes bb_* before the
-//      Blender / Studio paths, status + servers carry the link; manifest holds
-//      the permission.
+//   A. src/core/blockbench_tools.js: the 17 bb_* commands, validate() refuses
+//      what the plugin would refuse (nothing bad crosses the bridge), the
+//      tool list the AI reads, connect steps + offline message.
+//   B. background.js in a vm against a fake total-core socket: a bb_* call_tool
+//      is validated locally, needs total-core but NOT Studio, is refused with
+//      BLOCKBENCH_OFFLINE + steps while total-core says the plugin is away,
+//      travels as the plain {command, args, requestId} frame when connected,
+//      images come back untouched, a late "not connected" answer flips the
+//      link flag, servers[{id:"blockbench", alive}] drive the flag, the
+//      blockbench_status / add_server messages answer the same payload; the
+//      MCP client, the declarativeNetRequest rule and the URL key are gone.
 //   D. work_modes.js: 4th id, preflight / precondition / brief / auto-check.
 //   E. main.js: WORK_MODES.blockbench, MODE_GATES.blockbench (model + export),
-//      bb_ branch in runTool, families, settings card + handlers.
+//      bb_ branch in runTool, families, settings card (plugin file, Check
+//      again, Copy plugin path) + handlers.
 //   F. config.js profile + budgets; G. popup card / row / palette; H. README.
 "use strict";
-const fs = require("fs"), path = require("path"), vm = require("vm"), http = require("http"), os = require("os");
+const fs = require("fs"), path = require("path"), vm = require("vm");
 const ROOT = path.join(__dirname, "..");
 const read = (f) => fs.readFileSync(path.join(ROOT, f), "utf8");
 let failed = 0;
 const ok = (name, cond, extra) => { if (cond) console.log("ok   " + name); else { failed++; console.log("FAIL " + name + (extra !== undefined ? " — " + (typeof extra === "string" ? extra : JSON.stringify(extra)).slice(0, 400) : "")); } };
 
-const BB = require(path.join(ROOT, "src/core/blockbench_mcp.js"));
+const BB = require(path.join(ROOT, "src/core/blockbench_tools.js"));
 const main = read("src/core/main.js"), config = read("src/core/config.js"), css = read("overlay.css"), popup = read("popup.js"), popupHtml = read("popup.html"), bg = read("background.js"), readme = read("README.md"), manifest = JSON.parse(read("manifest.json"));
 const WM = require(path.join(ROOT, "src/core/work_modes.js"));
-
-// ── fake Streamable HTTP MCP server ─────────────────────────────────────────
-const RAW_TOOLS = [
-  { name: "get_project_info", description: "Returns read-only project orientation.", inputSchema: { type: "object", properties: {} } },
-  { name: "list_outline", description: "Outliner tree.", inputSchema: { type: "object", properties: { max_depth: { type: "integer" }, include_cubes: { type: "boolean" }, include_meshes: { type: "boolean" } } } },
-  { name: "create_project", description: "Creates a project.", inputSchema: { type: "object", properties: { name: { type: "string" }, format: { type: "string" } }, required: ["name"] } },
-  { name: "place_cube", description: "Creates cubes.", inputSchema: { type: "object", properties: { elements: { type: "array" }, texture: { type: "string" }, group: { type: "string" }, faces: {} }, required: ["elements"] } },
-  { name: "modify_cube", description: "Modifies a cube.", inputSchema: { type: "object", properties: { id: { type: "string" } } } },
-  { name: "add_group", description: "Adds a group.", inputSchema: { type: "object", properties: { name: { type: "string" }, origin: {}, rotation: {}, parent: { type: "string" } }, required: ["name"] } },
-  { name: "remove_element", description: "Removes.", inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } },
-  { name: "create_texture", description: "Creates a texture.", inputSchema: { type: "object", properties: { name: { type: "string" }, width: {}, height: {}, fill_color: {}, data: {} }, required: ["name"] } },
-  { name: "apply_texture", description: "Applies a texture.", inputSchema: { type: "object", properties: { id: {}, texture: {}, applyTo: {} }, required: ["id", "texture"] } },
-  { name: "list_textures", description: "Lists textures.", inputSchema: { type: "object", properties: {} } },
-  { name: "create_animation", description: "Creates an animation.", inputSchema: { type: "object", properties: { name: {}, loop: {}, animation_length: {}, bones: {} }, required: ["name"] } },
-  { name: "set_camera_angle", description: "Camera.", inputSchema: { type: "object", properties: { position: {}, target: {}, projection: {} }, required: ["position", "projection"] } },
-  { name: "capture_screenshot", description: "Viewport PNG.", inputSchema: { type: "object", properties: { max_size: {} } } },
-  { name: "list_export_formats", description: "Codecs.", inputSchema: { type: "object", properties: {} } },
-  { name: "export_model", description: "Exports.", inputSchema: { type: "object", properties: { codec_id: {}, options: {}, path: {}, overwrite: {}, max_content_length: {}, result_format: {} } } },
-  { name: "undo", description: "Undo.", inputSchema: { type: "object", properties: {} } },
-  { name: "redo", description: "Redo.", inputSchema: { type: "object", properties: {} } },
-  { name: "paint_fill_tool", description: "Fills.", inputSchema: { type: "object", properties: { texture: {}, color: {} } } },
-  { name: "boom", description: "Always fails (isError).", inputSchema: { type: "object", properties: {} } },
-];
 const PNG_B64 = Buffer.from("\x89PNG\r\n\x1a\n" + "x".repeat(200)).toString("base64");
-function makeServer(opts) {
-  const o = opts || {};
-  const state = { sessions: new Set(), initCount: 0, calls: [], requests: [], sseOnce: !!o.sseOnce, rejectOrigin: !!o.rejectOrigin, dropNext: false };
-  const server = http.createServer((req, res) => {
-    let body = "";
-    req.on("data", (c) => { body += c; });
-    req.on("end", () => {
-      state.requests.push({ method: req.method, url: req.url, headers: req.headers });
-      const json = (status, obj, extra) => { res.writeHead(status, Object.assign({ "content-type": "application/json" }, extra || {})); res.end(JSON.stringify(obj)); };
-      if (req.url !== "/bb-mcp") { res.writeHead(404, { "content-type": "text/plain" }); res.end("Not Found"); return; }
-      if (state.rejectOrigin && req.headers.origin && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(req.headers.origin)) { json(403, { jsonrpc: "2.0", error: { code: -32000, message: "Forbidden: Origin not allowed: " + req.headers.origin }, id: null }); return; }
-      const sid = req.headers["mcp-session-id"];
-      if (req.method === "DELETE") { state.sessions.delete(sid); res.writeHead(204); res.end(); return; }
-      if (req.method !== "POST") { json(405, { error: "method" }); return; }
-      const accept = String(req.headers.accept || "");
-      if (!accept.includes("application/json") || !accept.includes("text/event-stream")) { json(406, { jsonrpc: "2.0", error: { code: -32000, message: "Not Acceptable: Client must accept both application/json and text/event-stream" }, id: null }); return; }
-      let msg; try { msg = JSON.parse(body); } catch { json(400, { error: "bad json" }); return; }
-      const isInit = msg.method === "initialize";
-      if (sid && !state.sessions.has(sid)) { json(404, { jsonrpc: "2.0", error: { code: -32001, message: "Session not found. Please reinitialize." }, id: null }); return; }
-      if (!sid && !isInit) { json(400, { jsonrpc: "2.0", error: { code: -32000, message: "Bad Request: Mcp-Session-Id header is required" }, id: null }); return; }
-      if (isInit) {
-        const id = "sess-" + (++state.initCount) + "-" + Math.random().toString(36).slice(2, 8);
-        state.sessions.add(id);
-        json(200, { jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "fake-blockbench-mcp", version: "1.10.1" }, instructions: "fake" } }, { "mcp-session-id": id });
-        return;
-      }
-      if (msg.method === "notifications/initialized") { res.writeHead(202); res.end(); return; }
-      if (msg.method === "tools/list") {
-        const cursor = msg.params && msg.params.cursor;
-        const page = cursor === "p2" ? RAW_TOOLS.slice(10) : RAW_TOOLS.slice(0, 10);
-        const result = { tools: page }; if (!cursor) result.nextCursor = "p2";
-        json(200, { jsonrpc: "2.0", id: msg.id, result }); return;
-      }
-      if (msg.method === "tools/call") {
-        const name = msg.params && msg.params.name, args = (msg.params && msg.params.arguments) || {};
-        state.calls.push({ name, args });
-        if (state.dropNext) { state.dropNext = false; state.sessions.delete(sid); json(404, { jsonrpc: "2.0", error: { code: -32001, message: "Session not found. Please reinitialize." }, id: null }); return; }
-        let result;
-        if (name === "get_project_info") result = { content: [{ type: "text", text: JSON.stringify({ format: "free", name: "FakeProject", texture_width: 16, texture_height: 16, elements: { cubes: 3, groups: 2 } }) }] };
-        else if (name === "list_outline") result = { content: [{ type: "text", text: "Root\n  Body (group)\n    Torso (cube)\n  Head (group)" }] };
-        else if (name === "capture_screenshot") result = { content: [{ type: "image", data: PNG_B64, mimeType: "image/png" }] };
-        else if (name === "export_model") result = { content: [{ type: "text", text: JSON.stringify({ codec: args.codec_id, written: args.path || null, content: args.path ? null : "o cube\nv 0 0 0\nv 1 0 0\nv 1 1 0\nf 1 2 3" }) }] };
-        else if (name === "place_cube") result = { content: [{ type: "text", text: "Placed " + (args.elements || []).length + " cube(s)" + (args.group ? " in " + args.group : "") }] };
-        else if (name === "boom") result = { isError: true, content: [{ type: "text", text: "Tool boom exploded" }] };
-        else if (!RAW_TOOLS.some((t) => t.name === name)) { json(200, { jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: "Tool " + name + " not found" } }); return; }
-        else result = { content: [{ type: "text", text: name + " ok " + JSON.stringify(args) }] };
-        if (state.sseOnce) {
-          state.sseOnce = false;
-          res.writeHead(200, { "content-type": "text/event-stream" });
-          res.end("event: message\ndata: " + JSON.stringify({ jsonrpc: "2.0", id: msg.id, result }) + "\n\n");
-          return;
-        }
-        json(200, { jsonrpc: "2.0", id: msg.id, result }); return;
-      }
-      json(200, { jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "Method not found" } });
-    });
-  });
-  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, state, port: server.address().port, url: "http://127.0.0.1:" + server.address().port + "/bb-mcp" })));
-}
+const PLUGIN_FILE = "C:\\Users\\me\\AppData\\Local\\TotalScript\\TotalScript-Blockbench.js";
 
 (async () => {
-  // ── A. pure module ────────────────────────────────────────────────────────
-  ok("A1 module: VERSION 2.18.0, default URL localhost:3000/bb-mcp, 14 curated commands all bb_*, toolList tags server blockbench", BB.VERSION === "2.18.0" && BB.DEFAULT_URL === "http://localhost:3000/bb-mcp" && BB.COMMAND_NAMES.length === 14 && BB.COMMAND_NAMES.every((n) => /^bb_[a-z_]+$/.test(n)) && BB.toolList().every((t) => t.server === "blockbench" && t.inputSchema && t.description));
-  const n1 = BB.normalizeUrl(""), n2 = BB.normalizeUrl("localhost:3100/bb-mcp/"), n3 = BB.normalizeUrl("http://evil.example.com:3000/bb-mcp"), n4 = BB.normalizeUrl("http://127.0.0.1:3000/bb-mcp?x=1"), n5 = BB.normalizeUrl("http://[::1]:3000/custom");
-  ok("A2 normalizeUrl: empty → default; bare host:port gets http + trailing slash trimmed; remote host, query string rejected; ::1 allowed", n1.ok && n1.url === BB.DEFAULT_URL && n1.port === 3000 && n1.origin === "http://localhost:3000" && n2.ok && n2.url === "http://localhost:3100/bb-mcp" && n2.port === 3100 && !n3.ok && /this computer/.test(n3.error) && !n4.ok && n5.ok && n5.url === "http://[::1]:3000/custom", { n1, n2, n3, n4, n5 });
-  const sse = BB.parseSse("event: message\ndata: {\"a\":1}\n\n: keepalive\n\ndata: {\"b\":\ndata: 2}\n\n");
-  ok("A3 parseSse: two events, comment lines ignored, multi-line data joined; parseBody picks JSON vs SSE by content-type", sse.length === 2 && sse[0].a === 1 && sse[1].b === 2 && BB.parseBody("application/json", "{\"x\":1}")[0].x === 1 && BB.parseBody("text/event-stream", "data: {\"y\":2}\n\n")[0].y === 2);
-  const p1 = BB.plan("bb_cubes", { cubes: [{ name: "Torso", from: [-4, 0, -2], to: [4, 12, 2], origin: [0, 0, 0] }, { name: "Head", from: [-4, 12, -4], to: [4, 20, 4], inflate: 0.5 }], group: "Body", texture: "skin" });
-  ok("A4 bb_cubes → place_cube {elements:[{name,from,to,…}], group, texture} (the plugin's real parameter names)", p1.ok && p1.steps.length === 1 && p1.steps[0].tool === "place_cube" && p1.steps[0].args.elements.length === 2 && p1.steps[0].args.elements[1].inflate === 0.5 && p1.steps[0].args.group === "Body" && p1.steps[0].args.texture === "skin" && !("cubes" in p1.steps[0].args), p1);
+  // ── A. the command table ──────────────────────────────────────────────────
+  const NAMES = ["bb_status", "bb_project", "bb_cubes", "bb_cube_edit", "bb_group", "bb_remove", "bb_mesh", "bb_mesh_primitive", "bb_mesh_edit", "bb_texture", "bb_animate", "bb_camera", "bb_screenshot", "bb_export", "bb_undo", "bb_redo", "bb_tools"];
+  ok("A1 TotalBlockbench: 17 curated commands (build + export + mesh), every one with description / inputSchema / validate; isCommand only for the table (not any bb_ prefix, not blender_)", JSON.stringify(BB.COMMAND_NAMES) === JSON.stringify(NAMES) && NAMES.every((n) => BB.COMMANDS[n] && typeof BB.COMMANDS[n].description === "string" && BB.COMMANDS[n].inputSchema && BB.COMMANDS[n].inputSchema.type === "object" && typeof BB.COMMANDS[n].validate === "function") && BB.isCommand("bb_cubes") && !BB.isCommand("bb_call") && !BB.isCommand("blender_add_cube"));
   const bad = [
-    BB.plan("bb_cubes", { cubes: [] }), BB.plan("bb_cubes", { cubes: [{ name: "x", from: [0, 0], to: [1, 1, 1] }] }), BB.plan("bb_cubes", { cubes: [{ from: [0, 0, 0], to: [1, 1, 1] }] }),
-    BB.plan("bb_group", {}), BB.plan("bb_texture", { action: "create" }), BB.plan("bb_texture", { action: "create", name: "t", width: 8 }), BB.plan("bb_texture", { action: "paint" }),
-    BB.plan("bb_animate", { name: "idle", bones: {} }), BB.plan("bb_animate", { name: "idle", bones: { Head: [{ time: 0 }] } }), BB.plan("bb_camera", { position: [1, 2] }), BB.plan("bb_camera", { position: [1, 2, 3], projection: "perspective", locked_angle: "top" }),
-    BB.plan("bb_export", { format: "fbx2" }), BB.plan("bb_screenshot", { max_size: 10 }), BB.plan("bb_undo", { action: "twice" }), BB.plan("bb_call", {}), BB.plan("bb_cube_edit", { id: "Torso" }), BB.plan("bb_remove", {}), BB.plan("bb_project", {}), BB.plan("nope", {}),
+    ["bb_project", {}, /name/],
+    ["bb_cubes", {}, /cubes/],
+    ["bb_cubes", { cubes: [{ name: "a", from: [0, 0, 0], to: [-1, 1, 1] }] }, /from must be <= to/],
+    ["bb_cubes", { cubes: [{ name: "a", from: [0, 0], to: [1, 1, 1] }] }, /\[x,y,z\]/],
+    ["bb_group", {}, /name/],
+    ["bb_remove", { names: [] }, /names/],
+    ["bb_mesh", { name: "w", vertices: [[0, 0, 0], [1, 0, 0]], faces: [[0, 1, 1]] }, /vert/i],
+    ["bb_mesh", { name: "w", vertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [2, 2, 0]], faces: [[0, 1, 2, 3, 4]] }, /3 or 4/],
+    ["bb_mesh_primitive", { shape: "blob" }, /cylinder/],
+    ["bb_mesh_edit", { name: "m" }, /nothing to change|move|scale/i],
+    ["bb_mesh_edit", { name: "m", scale: 0 }, /scale/],
+    ["bb_texture", { action: "paint" }, /list\|create\|import\|apply|action/],
+    ["bb_texture", { action: "create", name: "t", fill_color: "red" }, /#/],
+    ["bb_texture", { action: "create", name: "t", width: 4096 }, /2048|size|width/i],
+    ["bb_texture", { action: "apply", texture: "t" }, /targets/],
+    ["bb_animate", { name: "idle", bones: {} }, /bones/],
+    ["bb_camera", {}, /view|position|focus/],
+    ["bb_export", { format: "fbx" }, /obj/],
+    ["bb_undo", { steps: 0 }, /steps/],
+    ["nope", {}, /unknown|not a Blockbench/i],
   ];
-  ok("A5 validation: 19 bad calls all refused with ERROR … before any MCP call (empty cubes, 2-vector, missing name, bad action, size < 16, empty bones, keyframe without channel, locked_angle + perspective, unknown format, tiny screenshot, unknown command)", bad.every((b) => b && b.ok === false && /^ERROR (INVALID_ARGUMENT|UNKNOWN_COMMAND)/.test(b.error)), bad.map((b) => b.error));
-  const p2 = BB.plan("bb_group", { name: "ArmL", origin: [4, 20, 0], parent: "Body" }), p3 = BB.plan("bb_texture", { action: "create", name: "wood", width: 32, height: 32, fill_color: "#8b5a2b" }), p4 = BB.plan("bb_texture", { action: "apply", id: "Torso", texture: "wood", applyTo: "all" });
-  const p5 = BB.plan("bb_animate", { name: "walk", loop: true, length: 1, bones: { ArmL: [{ time: 0, rotation: [20, 0, 0] }, { time: 0.5, rotation: [-20, 0, 0] }], LegL: [{ time: 0, rotation: [-20, 0, 0] }] } });
-  const p6 = BB.plan("bb_camera", { position: [40, 30, 40], target: [0, 10, 0], projection: "perspective", fov: 50 }), p7 = BB.plan("bb_undo", {}), p8 = BB.plan("bb_status", {}), p9 = BB.plan("bb_project", { name: "Sword" }), p10 = BB.plan("bb_cube_edit", { id: "Torso", to: [4, 14, 2], name: "Chest" });
-  ok("A6 mappings: add_group {name, origin, parent} · create_texture {name,width,height,fill_color} · apply_texture {id,texture,applyTo} · create_animation {name,loop,animation_length,bones} · set_camera_angle {position,target,projection,fov} · undo · get_project_info + optional list_outline · create_project format free · modify_cube {id,to,name}",
-    p2.ok && p2.steps[0].tool === "add_group" && p2.steps[0].args.parent === "Body" && p2.steps[0].args.origin[1] === 20
-    && p3.ok && p3.steps[0].tool === "create_texture" && p3.steps[0].args.width === 32 && p3.steps[0].args.fill_color === "#8b5a2b"
-    && p4.ok && p4.steps[0].tool === "apply_texture" && p4.steps[0].args.applyTo === "all"
-    && p5.ok && p5.steps[0].tool === "create_animation" && p5.steps[0].args.loop === true && p5.steps[0].args.animation_length === 1 && Object.keys(p5.steps[0].args.bones).join() === "ArmL,LegL" && !("length" in p5.steps[0].args)
-    && p6.ok && p6.steps[0].tool === "set_camera_angle" && p6.steps[0].args.projection === "perspective" && p6.steps[0].args.fov === 50
-    && p7.ok && p7.steps[0].tool === "undo" && p8.ok && p8.steps[0].tool === "get_project_info" && p8.steps[1].tool === "list_outline" && p8.steps[1].optional === true
-    && p9.ok && p9.steps[0].tool === "create_project" && p9.steps[0].args.format === "free" && p10.ok && p10.steps[0].tool === "modify_cube" && p10.steps[0].args.name === "Chest" && p10.steps[0].args.to[1] === 14, { p2, p3, p4, p5, p6 });
-  const toolsSet = new Set(RAW_TOOLS.map((t) => t.name));
-  const e1 = BB.plan("bb_export", { format: "obj", name: "Hero Sword!" }, { tools: toolsSet, exportRoot: "C:\\Users\\me\\TotalScript" }), e2 = BB.plan("bb_export", { format: "glb", scale: 2 }, { tools: toolsSet, exportRoot: "/home/me/ws/" }), e3 = BB.plan("bb_export", { format: "gltf" }, { tools: toolsSet, exportRoot: "" }), e4 = BB.plan("bb_export", { format: "obj" }, { tools: new Set(["place_cube"]), exportRoot: "/x" }), e5 = BB.plan("bb_export", { format: "bbmodel", overwrite: true }, { tools: toolsSet, exportRoot: "/x" });
-  ok("A7 bb_export: export_model {codec_id obj|gltf|project, options.encoding for glb, path <root>/blockbench_exports/<safe name>.<ext>, overwrite false unless asked, max_content_length 0 when a path is written, 2 000 000 inline otherwise}; plugin without export_model → honest error",
-    e1.ok && e1.steps[0].tool === "export_model" && e1.steps[0].args.codec_id === "obj" && e1.steps[0].args.path === "C:\\Users\\me\\TotalScript\\blockbench_exports\\Hero_Sword.obj" && e1.steps[0].args.overwrite === false && e1.steps[0].args.max_content_length === 0 && e1.steps[0].args.result_format === "text"
-    && e2.ok && e2.steps[0].args.codec_id === "gltf" && e2.steps[0].args.options.encoding === "binary" && e2.steps[0].args.options.scale === 2 && /^\/home\/me\/ws\/blockbench_exports\/TotalScript_\d{14}\.glb$/.test(e2.steps[0].args.path)
-    && e3.ok && !("path" in e3.steps[0].args) && e3.steps[0].args.max_content_length === 2000000 && e3.steps[0].args.options.encoding === "ascii"
-    && !e4.ok && /does not offer export_model/.test(e4.error) && e5.ok && e5.steps[0].args.codec_id === "project" && e5.steps[0].args.overwrite === true && e5.meta.ext === "bbmodel", { e1: e1.steps && e1.steps[0].args, e2: e2.steps && e2.steps[0].args, e4: e4.error });
-  const c1 = BB.plan("bb_call", { tool: "paint_fill_tool", args: { texture: "wood", color: "#fff" } }, { tools: toolsSet }), c2 = BB.plan("bb_call", { tool: "paint_fill", args: {} }, { tools: toolsSet }), c3 = BB.plan("bb_call", { tool: "bb_cubes" }, { tools: toolsSet });
-  ok("A8 bb_call: exact plugin tool passes its own args through; an unknown name is refused with near matches; bb_* names are redirected", c1.ok && c1.steps[0].tool === "paint_fill_tool" && c1.steps[0].args.color === "#fff" && !c2.ok && /no tool named 'paint_fill'/.test(c2.error) && /paint_fill_tool/.test(c2.error) && !c3.ok && /TotalScript command/.test(c3.error));
-  const r1 = BB.render("bb_export", e1, [{ tool: "export_model", result: { content: [{ type: "text", text: "{\"written\":true}" }] } }], {});
-  const r2 = BB.render("bb_export", e3, [{ tool: "export_model", result: { content: [{ type: "text", text: "o cube" }] } }], {});
-  const r3 = BB.render("bb_status", p8, [{ tool: "get_project_info", result: { content: [{ type: "text", text: "{\"format\":\"free\"}" }] } }, { tool: "list_outline", error: "no project", optional: true }], {});
-  const r4 = BB.render("bb_cubes", p1, [{ tool: "place_cube", result: { isError: true, content: [{ type: "text", text: "Group Body not found" }] } }], {});
-  const r5 = BB.render("bb_screenshot", null, [{ tool: "capture_screenshot", result: { content: [{ type: "image", data: PNG_B64, mimeType: "image/png" }] } }], {});
-  ok("A9 render: export quotes the plugin + the path + the MANUAL Import 3D steps (never 'imported'); inline export says save it yourself; optional step failure is a note, not an error; isError → ERROR in bb_cubes (place_cube); screenshot → images[]",
-    /File: C:\\Users\\me\\TotalScript\\blockbench_exports\\Hero_Sword\.obj/.test(r1.text) && /Import 3D/.test(r1.text) && /does not upload/.test(r1.text) && !/imported into Studio|is now in Studio/i.test(r1.text) && !r1.error
-    && /Save it as <name>\.gltf yourself/.test(r2.text) && /\[get_project_info\]/.test(r3.text) && /list_outline skipped: no project/.test(r3.text) && !r3.error
-    && r4.error === "ERROR in bb_cubes (place_cube): Group Body not found" && r5.images.length === 1 && r5.images[0].mimeType === "image/png" && r5.images[0].data === PNG_B64, { r1: r1.text, r2: r2.text, r3: r3.text, r4 });
-  ok("A10 describeTools: name + {params, optional?} + clipped description; filter narrows; isCommand recognises bb_* only", /^19 raw tool\(s\)/.test(BB.describeTools(RAW_TOOLS)) && /- place_cube \{elements, texture\?, group\?, faces\?\}/.test(BB.describeTools(RAW_TOOLS)) && /^1 raw tool/.test(BB.describeTools(RAW_TOOLS, "paint")) && BB.isCommand("bb_cubes") && BB.isCommand("blockbench/bb_export") && !BB.isCommand("place_cube") && !BB.isCommand("blender_add_cube"));
+  const badFails = bad.filter(([n, a, re]) => { const v = BB.validate(n, a); return v.ok || !re.test(String(v.error)); }).map(([n, a]) => n + " " + JSON.stringify(a) + " → " + JSON.stringify(BB.validate(n, a)));
+  ok("A2 validate() refuses the plugin's obvious refusals up front (missing name, from > to, 2-vectors, degenerate meshes, 5-gons, unknown shape, empty mesh edit, scale 0, bad action / hex / 4096 px / no targets, empty bones, empty camera, fbx, steps 0, unknown command) with a reason", badFails.length === 0, badFails);
+  const good = [
+    ["bb_status", {}], ["bb_status", { max_depth: 2 }], ["bb_project", { name: "Sword", format: "free" }],
+    ["bb_cubes", { cubes: [{ name: "Edge", from: [-1, 0, -0.5], to: [1, 24, 0.5], color: 3 }], group: "Blade" }],
+    ["bb_cube_edit", { name: "Edge", to: [1, 26, 0.5] }], ["bb_group", { name: "Blade", origin: [0, 8, 0] }], ["bb_remove", { names: ["Edge"] }],
+    ["bb_mesh", { name: "Wedge", vertices: [[0, 0, 0], [4, 0, 0], [4, 0, 4], [0, 0, 4], [0, 4, 0], [4, 4, 0]], faces: [[0, 3, 2, 1], [0, 1, 5, 4], [1, 2, 5], [2, 3, 4, 5], [3, 0, 4]] }],
+    ["bb_mesh_primitive", { shape: "cylinder", name: "Pommel", diameter: 4, height: 2, sides: 8, position: [0, -2, 0] }],
+    ["bb_mesh_edit", { name: "Pommel", scale: 2, rotate: [0, 45, 0] }],
+    ["bb_texture", { action: "list" }], ["bb_texture", { action: "create", name: "steel", width: 32, height: 32, fill_color: "#9aa3ad" }], ["bb_texture", { action: "apply", texture: "steel", targets: "all" }],
+    ["bb_animate", { name: "idle", loop: true, length: 2, bones: { Blade: [{ time: 0, rotation: [0, 0, 0] }, { time: 1, rotation: [0, 0, 5] }] } }],
+    ["bb_camera", { view: "isometric_right" }], ["bb_screenshot", {}], ["bb_screenshot", { view: "front", max_size: 800 }],
+    ["bb_export", { format: "obj", name: "sword" }], ["bb_export", { format: "glb" }], ["bb_undo", {}], ["bb_redo", { steps: 3 }], ["bb_tools", {}],
+  ];
+  const goodFails = good.filter(([n, a]) => !BB.validate(n, a).ok).map(([n, a]) => n + " " + JSON.stringify(a) + " → " + BB.validate(n, a).error);
+  ok("A3 validate() passes every well-formed call the Blockbench profile teaches (status, project, cubes, cube_edit, group, remove, mesh, primitives, mesh_edit, texture list/create/apply, animate, camera, screenshot, export obj/glb, undo/redo, tools) and returns the canonical name", goodFails.length === 0 && BB.validate("bb_cubes", good[3][1]).name === "bb_cubes", goodFails);
+  const tl = BB.toolList();
+  ok("A4 toolList(): 17 entries {name, description, inputSchema, server:'blockbench'} in table order - what the extension merges into the AI's catalogue while the plugin is connected", tl.length === 17 && tl.every((t, i) => t.name === NAMES[i] && t.server === "blockbench" && typeof t.description === "string" && t.description.length > 20 && t.inputSchema && t.inputSchema.type === "object"));
+  const steps = BB.connectSteps(PLUGIN_FILE), stepsNoFile = BB.connectSteps("");
+  ok("A5 connectSteps(file): desktop app first, then Blockbench File → Plugins → Load Plugin from File → the actual plugin path, then Tools → TotalScript shows the link; without a known path it still names TotalScript-Blockbench.js; offlineMessage = 'ERROR BLOCKBENCH_OFFLINE: …' + the numbered steps (what the AI reads verbatim)", steps.length >= 3 && /desktop app|total-core/i.test(steps[0]) && steps[0].includes(PLUGIN_FILE) && steps.some((s) => /File → Plugins → Load Plugin from File → pick TotalScript-Blockbench\.js/.test(s)) && steps.some((s) => /Tools → TotalScript/.test(s) && /127\.0\.0\.1:3000/.test(s)) && stepsNoFile.some((s) => /TotalScript-Blockbench\.js/.test(s)) && BB.offlineMessage(PLUGIN_FILE).startsWith("ERROR BLOCKBENCH_OFFLINE: Blockbench is not connected to total-core. 1) ") && BB.offlineMessage(PLUGIN_FILE).includes(PLUGIN_FILE), { steps });
 
-  // ── B. client vs fake server ──────────────────────────────────────────────
-  const srv = await makeServer({ sseOnce: true });
-  const client = BB.createClient({ url: srv.url, fetch, timeoutMs: 5000 });
-  const conn = await client.connect();
-  const initReq = srv.state.requests.find((r) => r.method === "POST");
-  ok("B1 connect: initialize (Accept json+sse, protocolVersion 2025-06-18, clientInfo TotalScript) → session id captured → notifications/initialized carried the Mcp-Session-Id → tools/list paged through nextCursor (19 tools)", conn.ok && /^sess-1-/.test(conn.sessionId) && conn.serverInfo.name === "fake-blockbench-mcp" && client.tools.length === 19 && /application\/json/.test(initReq.headers.accept) && /text\/event-stream/.test(initReq.headers.accept) && srv.state.requests.filter((r) => r.method === "POST").slice(1).every((r) => r.headers["mcp-session-id"] === conn.sessionId && r.headers["mcp-protocol-version"] === "2025-06-18"), conn);
-  const t1 = await client.callTool("get_project_info", {}, 5000);
-  ok("B2 tools/call over an SSE body (first call) parses the event stream and returns the result", /FakeProject/.test(BB.resultText(t1)));
-  const t2 = await client.callTool("capture_screenshot", { max_size: 512 }, 5000);
-  ok("B3 image content → resultImages [{mimeType, data}]", BB.resultImages(t2).length === 1 && BB.resultImages(t2)[0].data === PNG_B64 && srv.state.calls.at(-1).args.max_size === 512);
-  srv.state.dropNext = true;
-  const t3 = await client.callTool("list_textures", {}, 5000);
-  ok("B4 session lost (404 'Session not found') → one transparent re-initialize + retry; the second call succeeded on a NEW session", /list_textures ok/.test(BB.resultText(t3)) && srv.state.initCount === 2 && /^sess-2-/.test(client.sessionId));
-  let rpcErr = null; try { await client.callTool("no_such_tool", {}, 5000); } catch (e) { rpcErr = e; }
-  ok("B5 JSON-RPC error → McpError RPC_ERROR with the server's message", rpcErr && rpcErr.code === "RPC_ERROR" && /Tool no_such_tool not found/.test(rpcErr.message));
-  await client.close();
-  ok("B6 close(): DELETE with the session header; server forgot the session; sessionId cleared", srv.state.requests.at(-1).method === "DELETE" && srv.state.sessions.size === 0 && client.sessionId === "");
-  const srvO = await makeServer({ rejectOrigin: true });
-  const cO = BB.createClient({ url: srvO.url, fetch: (u, init) => fetch(u, Object.assign({}, init, { headers: Object.assign({}, init.headers, { Origin: "chrome-extension://abcdefgh" }) })), timeoutMs: 5000 });
-  let oErr = null; try { await cO.connect(); } catch (e) { oErr = e; }
-  ok("B7 a chrome-extension:// Origin is refused by the plugin's guard → McpError ORIGIN_REJECTED naming the declarativeNetRequest rule (why the worker rewrites Origin)", oErr && oErr.code === "ORIGIN_REJECTED" && oErr.status === 403 && /declarativeNetRequest/.test(oErr.message));
-  srvO.server.close();
-  const dead = BB.createClient({ url: "http://127.0.0.1:1/bb-mcp", fetch, timeoutMs: 3000 });
-  let dErr = null; try { await dead.connect(); } catch (e) { dErr = e; }
-  ok("B8 nothing listening → UNREACHABLE with the URL in the message", dErr && dErr.code === "UNREACHABLE" && /127\.0\.0\.1:1\/bb-mcp/.test(dErr.message));
-  let badUrl = null; try { BB.createClient({ url: "http://example.com/bb-mcp", fetch }); } catch (e) { badUrl = e; }
-  ok("B9 createClient refuses a non-loopback URL (BAD_URL)", badUrl && badUrl.code === "BAD_URL");
-
-  // ── C. background.js in a vm against the fake server ──────────────────────
+  // ── B. background.js in a vm against a fake total-core socket ────────────
   {
-    const rules = [];
     const stored = {};
-    function stub(name) { const f = function () { return stub(name + "()"); }; return new Proxy(f, { get(t, k) { if (k === "then") return undefined; if (typeof k === "symbol") return undefined; return stub(name + "." + String(k)); }, apply() { return stub(name + "()"); } }); }
-    const ctx = { chrome: stub("chrome"), console: { log() {}, warn() {}, error() {} }, setTimeout, clearTimeout, setInterval, clearInterval, fetch: (u, init) => fetch(u, init), AbortController, WebSocket: class { constructor() {} close() {} send() {} }, URL, URLSearchParams, TextEncoder, TextDecoder, atob, btoa, Blob, FormData, crypto, performance, Headers };
+    const hub = { connected: false, frames: [], sockets: [], replyHook: null };
+    class FakeSocket {
+      static get OPEN() { return 1; } static get CONNECTING() { return 0; } static get CLOSED() { return 3; }
+      constructor(url) {
+        this.url = url; this.readyState = 0; hub.sockets.push(this);
+        setTimeout(() => { if (this.readyState !== 0) return; this.readyState = 1; this.onopen && this.onopen(); this.deliver({ type: "connected", mcp_alive: true, studio: false, servers: [{ id: "roblox", alive: true }, { id: "blockbench", alive: hub.connected }] }); }, 2);
+      }
+      deliver(obj) { setTimeout(() => { this.onmessage && this.onmessage({ data: JSON.stringify(obj) }); }, 1); }
+      send(data) {
+        const f = JSON.parse(data); hub.frames.push(f);
+        if (f.type === "ping") return this.deliver({ type: "pong", id: f.id });
+        if (f.type === "list_tools") return this.deliver({ type: "tools", id: f.id, tools: [{ name: "get_studio_state", description: "x", inputSchema: { type: "object" } }], servers: [{ id: "roblox", alive: true }, { id: "blockbench", alive: hub.connected }], mcp_alive: true, studio: false });
+        if (f.type === "studio_status") return this.deliver({ type: "studio_status", id: f.id, studio: false });
+        if (f.type === "call_tool" && /^bb_/.test(f.command)) {
+          if (hub.replyHook) { const r = hub.replyHook(f); if (r) return this.deliver(Object.assign({ type: "tool_result", id: f.id, requestId: f.requestId }, r)); }
+          if (!hub.connected) return this.deliver({ type: "tool_result", id: f.id, requestId: f.requestId, ok: false, error: "ERROR BLOCKBENCH_OFFLINE: Blockbench is not connected to total-core. 1) start the app", errorCode: "BLOCKBENCH_OFFLINE" });
+          if (f.command === "bb_screenshot") return this.deliver({ type: "tool_result", id: f.id, requestId: f.requestId, ok: true, text: "Screenshot of 'Sword' (free): 2 cube(s), 1 mesh(es).", images: [{ mimeType: "image/png", data: PNG_B64 }] });
+          return this.deliver({ type: "tool_result", id: f.id, requestId: f.requestId, ok: true, text: "Placed " + ((f.args && f.args.cubes) || []).length + " cube(s) in group '" + (f.args && f.args.group) + "'." });
+        }
+        return this.deliver({ type: "tool_result", id: f.id, requestId: f.requestId, ok: false, error: "fake hub: unexpected " + f.command, errorCode: "BRIDGE_COMMAND_FAILED" });
+      }
+      close() { if (this.readyState === 3) return; this.readyState = 3; setTimeout(() => this.onclose && this.onclose({ code: 1000 }), 1); }
+    }
+    const fetchLog = [];
+    const fakeFetch = async (u) => {
+      const url = String(u); fetchLog.push(url);
+      const json = (obj, status) => ({ ok: (status || 200) < 300, status: status || 200, json: async () => obj, text: async () => JSON.stringify(obj) });
+      if (url.endsWith("/api/blockbench/status")) return json({ connected: hub.connected, plugin_file: PLUGIN_FILE, tools: 17 });
+      if (url.endsWith("/api/status")) return json({ roblox_proc: true, local_ready: false, local_full: false, blockbench_connected: hub.connected, blockbench_plugin_file: PLUGIN_FILE });
+      return json({ error: "not found" }, 404);
+    };
+    let onMessage = null;
+    function stub(name) { const f = function () { return stub(name + "()"); }; return new Proxy(f, { get(t, k) { if (k === "then") return undefined; if (typeof k === "symbol") return undefined; if (k === "addListener" && /onMessage$/.test(name)) return (fn) => { onMessage = fn; }; return stub(name + "." + String(k)); }, apply() { return stub(name + "()"); } }); }
+    const ctx = { chrome: stub("chrome"), console: { log() {}, warn() {}, error() {} }, setTimeout, clearTimeout, setInterval, clearInterval, fetch: fakeFetch, AbortController, WebSocket: FakeSocket, URL, URLSearchParams, TextEncoder, TextDecoder, atob, btoa, Blob, FormData, crypto, performance, Headers };
     ctx.self = ctx; ctx.globalThis = ctx;
     ctx.importScripts = (p) => vm.runInContext(read(p), ctx, { filename: p });
     vm.createContext(ctx);
     vm.runInContext(bg, ctx, { filename: "background.js" });
-    ok("C1 background.js importScripts src/core/blockbench_mcp.js (classic worker) and the module is visible to it", /importScripts\("src\/core\/blockbench_mcp\.js"\)/.test(bg) && vm.runInContext("typeof TotalBlockbenchMcp", ctx) === "object");
+    ok("B1 background.js importScripts src/core/blockbench_tools.js (classic worker), TotalBlockbench is visible to it, and the 2.18 MCP client is gone (no TotalBlockbenchMcp / blockbench_mcp.js / declarativeNetRequest / rsBlockbenchUrl / bb-mcp / blockbench_connect|disconnect|set_url)", /importScripts\("src\/core\/blockbench_tools\.js"\)/.test(bg) && vm.runInContext("typeof TotalBlockbench", ctx) === "object" && !/TotalBlockbenchMcp|blockbench_mcp\.js|declarativeNetRequest|rsBlockbenchUrl|bb-mcp|blockbench_(connect|disconnect|set_url)\b/.test(bg) && typeof onMessage === "function");
     ctx.chrome = {
-      runtime: { getPlatformInfo: async () => ({ os: "linux" }), getURL: (n) => n, sendMessage: async () => {} },
+      runtime: { getPlatformInfo: async () => ({ os: "linux" }), getURL: (n) => n, sendMessage: async () => {}, onMessage: { addListener() {} }, lastError: null },
       tabs: { query: async () => [], sendMessage: async () => {} },
       storage: { local: { get: (k, cb) => { const out = {}; for (const key of Array.isArray(k) ? k : [k]) if (key in stored) out[key] = stored[key]; return cb ? cb(out) : Promise.resolve(out); }, set: async (o) => { Object.assign(stored, o); } } },
-      declarativeNetRequest: { updateSessionRules: async (o) => { rules.push(o); } },
+      alarms: { create() {}, onAlarm: { addListener() {} } },
     };
-    ctx.agentWorkspaceRoot = async () => "/tmp/total_ws";
-    const srvB = await makeServer({});
-    const cr = await ctx.connectBlockbench(srvB.url);
-    const st = await new Promise((res) => vm.runInContext("statusObj", ctx) && res(vm.runInContext("statusObj()", ctx)));
-    ok("C2 connectBlockbench(url): ok, 19 plugin tools, status carries blockbench:true + url; servers list gains {id:'blockbench', alive, tools 14, raw_tools 19}; curated bb_* merged into list_tools", cr && cr.ok && cr.blockbench && cr.tools === 19 && st.blockbench === true && st.blockbench_url === srvB.url && vm.runInContext("blenderServers([])", ctx).some((s) => s.id === "blockbench" && s.alive && s.tools === 14 && s.raw_tools === 19) && vm.runInContext("mergeBlenderTools([])", ctx).filter((t) => t.server === "blockbench").length === 14 && stored["rs-blockbench-on"] === true, { cr, st });
-    const rule = rules.at(-1) && rules.at(-1).addRules && rules.at(-1).addRules[0];
-    ok("C3 connect installed ONE declarativeNetRequest session rule: modifyHeaders set Origin → the plugin's own origin, scoped to that exact URL (urlFilter |url), xmlhttprequest, post/get/delete; the id is removed first (idempotent)", rule && rule.id === 215001 && rule.action.type === "modifyHeaders" && rule.action.requestHeaders[0].header === "Origin" && rule.action.requestHeaders[0].operation === "set" && rule.action.requestHeaders[0].value === "http://127.0.0.1:" + srvB.port && rule.condition.urlFilter === "|" + srvB.url && rule.condition.resourceTypes.join() === "xmlhttprequest" && rules.at(-1).removeRuleIds.join() === "215001", rules.at(-1));
-    const s1 = await ctx.blockbenchCall("bb_status", {}, 20000);
-    ok("C4 blockbenchCall bb_status → get_project_info + list_outline quoted under [tool] headings", s1 && s1.ok && /\[get_project_info\] .*FakeProject/.test(s1.text) && /\[list_outline\] Root/.test(s1.text), s1);
-    const s2 = await ctx.blockbenchCall("bb_cubes", { cubes: [{ name: "x", from: [0, 0, 0], to: [1, 1] }] }, 20000);
-    const callsBefore = srvB.state.calls.length;
-    ok("C5 invalid args are refused in the worker (kind validation, INVALID_ARGUMENT) and NOTHING is sent to Blockbench", s2 && s2.ok === false && s2.kind === "validation" && /^ERROR INVALID_ARGUMENT in bb_cubes/.test(s2.error) && srvB.state.calls.length === callsBefore);
-    const s3 = await ctx.blockbenchCall("bb_cubes", { cubes: [{ name: "Torso", from: [-4, 0, -2], to: [4, 12, 2] }], group: "Body" }, 20000);
-    ok("C6 bb_cubes end-to-end: place_cube received elements[] + group; the plugin's own text is returned", s3 && s3.ok && /Placed 1 cube\(s\) in Body/.test(s3.text) && srvB.state.calls.at(-1).name === "place_cube" && srvB.state.calls.at(-1).args.elements[0].name === "Torso");
-    const s4 = await ctx.blockbenchCall("bb_export", { format: "obj", name: "sword" }, 20000);
-    ok("C7 bb_export: path = <agent workspace>/blockbench_exports/sword.obj passed to export_model (max_content_length 0, overwrite false); result reports the path + manual Import 3D; response carries .path", s4 && s4.ok && s4.path === "/tmp/total_ws/blockbench_exports/sword.obj" && srvB.state.calls.at(-1).name === "export_model" && srvB.state.calls.at(-1).args.path === s4.path && srvB.state.calls.at(-1).args.max_content_length === 0 && srvB.state.calls.at(-1).args.overwrite === false && /Import 3D/.test(s4.text) && /does not upload/.test(s4.text), s4);
-    ctx.agentWorkspaceRoot = async () => "";
-    const s4b = await ctx.blockbenchCall("bb_export", { format: "gltf" }, 20000);
-    ok("C8 bb_export without an agent workspace: no path, inline content requested (2 000 000) and the user is told to save it", s4b && s4b.ok && !s4b.path && !("path" in srvB.state.calls.at(-1).args) && srvB.state.calls.at(-1).args.max_content_length === 2000000 && /Save it as <name>\.gltf yourself/.test(s4b.text));
-    const s5 = await ctx.blockbenchCall("bb_screenshot", {}, 20000);
-    ok("C9 bb_screenshot → images [{mimeType image/png, data}] in the extension's screenshot shape (max_size 1024 default)", s5 && s5.ok && s5.images.length === 1 && s5.images[0].mimeType === "image/png" && srvB.state.calls.at(-1).args.max_size === 1024);
-    const s6 = await ctx.blockbenchCall("bb_tools", { filter: "texture" }, 20000);
-    const s7 = await ctx.blockbenchCall("bb_call", { tool: "nonexistent_tool", args: {} }, 20000);
-    const s8 = await ctx.blockbenchCall("bb_call", { tool: "paint_fill_tool", args: { texture: "t", color: "#f00" } }, 20000);
-    ok("C10 bb_tools lists the discovered raw tools (no MCP call); bb_call refuses unknown names and passes known ones through verbatim", s6 && s6.ok && /raw tool\(s\)/.test(s6.text) && /create_texture/.test(s6.text) && /apply_texture/.test(s6.text) && s7 && s7.ok === false && /no tool named 'nonexistent_tool'/.test(s7.error) && s8 && s8.ok && srvB.state.calls.at(-1).name === "paint_fill_tool" && srvB.state.calls.at(-1).args.color === "#f00");
-    const s9 = await ctx.blockbenchCall("bb_call", { tool: "boom" }, 20000);
-    ok("C11 a tool result with isError:true becomes ok:false kind execution 'ERROR in bb_call (boom): …'", s9 && s9.ok === false && s9.kind === "execution" && s9.error === "ERROR in bb_call (boom): Tool boom exploded", s9);
-    await ctx.disconnectBlockbench();
-    const after = vm.runInContext("statusObj()", ctx);
-    ok("C12 disconnect: session DELETEd, status blockbench:false, DNR rule removed (removeRuleIds only), servers list no longer has blockbench, flag persisted false", srvB.state.requests.at(-1).method === "DELETE" && after.blockbench === false && rules.at(-1).removeRuleIds.join() === "215001" && rules.at(-1).addRules.length === 0 && !vm.runInContext("blenderServers([])", ctx).some((s) => s.id === "blockbench") && stored["rs-blockbench-on"] === false);
-    const s10 = await ctx.blockbenchCall("bb_status", {}, 20000);
-    ok("C13 after disconnect a bb_* call answers kind disconnected / BLOCKBENCH_OFFLINE with the connect steps (the flag is off, so no silent auto-reconnect)", s10 && s10.ok === false && s10.kind === "disconnected" && s10.errorCode === "BLOCKBENCH_OFFLINE" && /Connect/.test(s10.error));
-    srvB.server.close();
-    srv.server.close();
+    const ask = (msg) => new Promise((res) => { const t = setTimeout(() => res({ ok: false, kind: "test-timeout" }), 15000); onMessage(msg, {}, (r) => { clearTimeout(t); res(r); }); });
+    const bbFrames = () => hub.frames.filter((f) => /^bb_/.test(String(f.command)));
+    const r1 = await ask({ type: "call_tool", name: "bb_cubes", arguments: { cubes: [{ name: "x", from: [0, 0, 0], to: [1, 1] }] } });
+    ok("B2 call_tool bb_cubes with a 2-vector → kind validation / INVALID_ARGUMENT from the worker's own table; NOTHING is sent to total-core", r1 && r1.ok === false && r1.kind === "validation" && r1.errorCode === "INVALID_ARGUMENT" && /\[x,y,z\]/.test(r1.error) && bbFrames().length === 0, r1);
+    const st0 = await ask({ type: "blockbench_status", refresh: true });
+    ok("B3 blockbench_status {refresh:true} re-reads total-core's /api/blockbench/status: off → {ok false, blockbench false, plugin_file (from total-core), core, tools 0, steps[] naming the file}", st0 && st0.ok === false && st0.blockbench === false && st0.plugin_file === PLUGIN_FILE && st0.tools === 0 && Array.isArray(st0.steps) && st0.steps.some((s) => s.includes(PLUGIN_FILE)) && fetchLog.some((u) => u.endsWith("/api/blockbench/status")), st0);
+    const r2 = await ask({ type: "call_tool", name: "bb_cubes", arguments: { cubes: [{ name: "Torso", from: [-4, 0, -2], to: [4, 12, 2] }], group: "Body" } });
+    ok("B4 a valid bb_* call while total-core says the plugin is away → kind disconnected / BLOCKBENCH_OFFLINE, error = offlineMessage (ERROR BLOCKBENCH_OFFLINE: … 1) …), steps[] attached, nothing sent over the socket (no Studio gate involved: studio is false throughout)", r2 && r2.ok === false && r2.kind === "disconnected" && r2.errorCode === "BLOCKBENCH_OFFLINE" && /^ERROR BLOCKBENCH_OFFLINE: Blockbench is not connected to total-core\. 1\) /.test(r2.error) && Array.isArray(r2.steps) && r2.steps.length >= 3 && bbFrames().length === 0 && vm.runInContext("robloxEditorConnected", ctx) !== true, r2);
+    hub.connected = true;
+    const st1 = await ask({ type: "blockbench_status", refresh: true });
+    const statusNow = vm.runInContext("statusObj()", ctx);
+    ok("B5 plugin up (total-core reports connected) → blockbench_status {ok true, blockbench true, core true, tools 17}; statusObj carries blockbench + blockbench_plugin_file; mergeBlenderTools(toolsCache) folds the 17 bb_* tools (server 'blockbench') into the catalogue", st1 && st1.ok === true && st1.blockbench === true && st1.core === true && st1.tools === 17 && statusNow.blockbench === true && statusNow.blockbench_plugin_file === PLUGIN_FILE && (() => { const tools = vm.runInContext("mergeBlenderTools(toolsCache)", ctx); return NAMES.every((n) => tools.some((t) => t.name === n && t.server === "blockbench")); })(), { st1, keys: Object.keys(statusNow) });
+    const r3 = await ask({ type: "call_tool", name: "bb_cubes", arguments: { cubes: [{ name: "Torso", from: [-4, 0, -2], to: [4, 12, 2] }], group: "Body" }, requestId: "req-bb-1" });
+    const f3 = bbFrames().at(-1);
+    ok("B6 connected: the call travels as the plain total-core frame {type call_tool, command bb_cubes, args, requestId, version 1.0, id} and the plugin's own text comes back (ok, text) - no MCP, no second socket", r3 && r3.ok === true && /Placed 1 cube\(s\) in group 'Body'/.test(r3.text) && f3 && f3.type === "call_tool" && f3.command === "bb_cubes" && f3.name === "bb_cubes" && f3.args.group === "Body" && f3.args.cubes[0].name === "Torso" && f3.requestId === "req-bb-1" && f3.version === "1.0" && typeof f3.id === "number" && hub.sockets.length >= 1 && hub.sockets.every((s) => s.url === "ws://127.0.0.1:17613"), { r3, f3 });
+    const r4 = await ask({ type: "call_tool", name: "bb_screenshot", arguments: {} });
+    ok("B7 bb_screenshot: images [{mimeType image/png, data}] pass through untouched in the extension's capture shape", r4 && r4.ok === true && Array.isArray(r4.images) && r4.images.length === 1 && r4.images[0].mimeType === "image/png" && r4.images[0].data === PNG_B64 && /Screenshot of 'Sword'/.test(r4.text), r4);
+    hub.connected = false; // Blockbench closed between two calls; the worker still believes it is up
+    const r5 = await ask({ type: "call_tool", name: "bb_undo", arguments: {} });
+    const st2 = await ask({ type: "blockbench_status", refresh: false });
+    ok("B8 total-core answers 'Blockbench is not connected' mid-session → the worker flips its flag (status without refresh now says off), re-codes the answer BLOCKBENCH_OFFLINE and attaches the steps", r5 && r5.ok === false && r5.errorCode === "BLOCKBENCH_OFFLINE" && Array.isArray(r5.steps) && r5.steps.length >= 3 && st2 && st2.blockbench === false && bbFrames().at(-1).command === "bb_undo", { r5, st2 });
+    hub.sockets.at(-1).deliver({ type: "tools", ok: false, mcp_alive: true, studio: false, tools: [], servers: [{ id: "roblox", alive: true }, { id: "blockbench", alive: true }] });
+    await new Promise((r) => setTimeout(r, 20));
+    const st3 = await ask({ type: "blockbench_status", refresh: false });
+    const srv = await ask({ type: "add_server", server_id: "blockbench" });
+    ok("B9 a tools frame from total-core (with_blockbench_server adds {id:'blockbench', alive:true} to connected / tools frames) turns the flag on without a fetch; add_server 'blockbench' (legacy popup path) answers the same status payload instead of trying to spawn an MCP server", st3 && st3.blockbench === true && srv && typeof srv.blockbench === "boolean" && Array.isArray(srv.steps) && !hub.frames.some((f) => f.type === "add_server"), { st3, srv });
+    vm.runInContext('engine = "local"', ctx);
+    const r6 = await ask({ type: "call_tool", name: "bb_status", arguments: {} });
+    vm.runInContext('engine = "roblox"', ctx);
+    ok("B10 on the local engine a bb_* call is refused with ENGINE_MISMATCH (the plugin link lives in total-core on ws 17613) before anything is sent", r6 && r6.ok === false && r6.errorCode === "ENGINE_MISMATCH" && r6.workerEngine === "local" && bbFrames().at(-1).command === "bb_undo", r6);
+    ok("B11 background source: the bb_* branch sits BEFORE the Blender and Studio paths inside call_tool, has no robloxEditorConnected gate, routes through the plain send(); the status broadcast carries blockbench + blockbench_plugin_file; noteBlockbenchServers reads {id:'blockbench', alive}", (() => { const i = bg.indexOf("const isBb = typeof TotalBlockbench !== \"undefined\" && TotalBlockbench.isCommand(msg.name);"); const j = bg.indexOf("if (blenderAddon && isBlenderToolName(msg.name)) {"); const k = bg.indexOf("if (!connected || robloxEditorConnected !== true) await refreshStudioStatus();"); const branch = bg.slice(i, j); return i > 0 && i < j && j < k && !/robloxEditorConnected/.test(branch) && /await send\(\{ type: "call_tool", name: v\.name, arguments: msg\.arguments \|\| \{\}, timeout: msg\.timeout, requestId: msg\.requestId \}, timeout\)/.test(branch) && /blockbench: bbConnected, blockbench_plugin_file: bbPluginFile \|\| undefined,/.test(bg) && /const bb = list\.find\(\(s\) => s && s\.id === "blockbench"\);\n  if \(bb\) bbSetConnected\(bb\.alive === true\);/.test(bg); })());
+    ok("B12 manifest: no declarativeNetRequest* permission any more (only the MCP client needed the Origin rewrite); storage / alarms kept; loopback host permission for total-core kept", !manifest.permissions.some((p) => /declarativeNetRequest/.test(p)) && !(manifest.optional_permissions || []).some((p) => /declarativeNetRequest/.test(p)) && manifest.permissions.includes("storage") && manifest.permissions.includes("alarms") && manifest.host_permissions.some((h) => /127\.0\.0\.1|localhost|http:\/\/\*\/\*/.test(h)));
+    for (const s of hub.sockets) s.close();
+    vm.runInContext("try { stopHeartbeat(); } catch {} try { clearTimeout(reconnectTimer); } catch {} manualStudioDisconnect = true;", ctx);
   }
-  ok("C14 background: call_tool routes TotalBlockbenchMcp.isCommand(msg.name) BEFORE the Blender and engine paths; messages blockbench_connect / status / disconnect / set_url; add_server 'blockbench' → connectBlockbench; storage key rsBlockbenchUrl",
-    bg.indexOf('TotalBlockbenchMcp.isCommand(msg.name)') > 0 && bg.indexOf('TotalBlockbenchMcp.isCommand(msg.name)') < bg.indexOf('if (blenderAddon && isBlenderToolName(msg.name)) {') && ["blockbench_connect", "blockbench_status", "blockbench_disconnect", "blockbench_set_url"].every((m) => bg.includes(`case "${m}": {`)) && bg.includes('String(msg.server_id || "").toLowerCase() === "blockbench"') && bg.includes('const BB_URL_KEY = "rsBlockbenchUrl";'));
-  ok("C15 background explains the port-3000 clash with the desktop agent (bbPortConflict) and the Origin guard; manifest grants declarativeNetRequestWithHostAccess (no new host permission) and keeps localhost + 127.0.0.1", /Port 3000 is taken by the TotalScript desktop agent/.test(bg) && /async function bbPortConflict/.test(bg) && /Origin: chrome-extension:/.test(bg) && manifest.permissions.includes("declarativeNetRequestWithHostAccess") && manifest.host_permissions.includes("http://localhost/*") && manifest.host_permissions.includes("http://127.0.0.1/*") && !manifest.permissions.includes("declarativeNetRequest"));
+
 
   // ── D. work_modes.js ──────────────────────────────────────────────────────
   ok("D1 TotalWorkModes: ids creation/blender/animate/blockbench, badge BLOCKBENCH, DOES text names the manual Import 3D, GATE_LABEL has model + export", JSON.stringify(WM.IDS) === JSON.stringify(["creation", "blender", "animate", "blockbench"]) && WM.BADGE.blockbench === "BLOCKBENCH" && /Import 3D/.test(WM.DOES.blockbench) && WM.GATE_LABEL.model === "MODEL" && WM.GATE_LABEL.export === "EXPORT" && WM.normalize("blockbench") === "blockbench");
   const pre = WM.precondition("blockbench", { blockbenchConnected: false }), preOk = WM.precondition("blockbench", { blockbenchConnected: true });
-  ok("D2 precondition: not connected → hard stop (title, message with the plugin URL + Connect, brief forbids emulating Blockbench); connected → ok", !pre.ok && /not connected/.test(pre.title) && /jasonjgardner\.github\.io/.test(pre.message) && /Do NOT emulate Blockbench/.test(pre.brief) && pre.brief.startsWith("━━━ BLOCKBENCH PREFLIGHT") && preOk.ok === true);
+  ok("D2 precondition: not connected → hard stop (title, message names the desktop app + File → Plugins → Load Plugin from File → TotalScript-Blockbench.js, brief forbids emulating Blockbench); connected → ok", !pre.ok && /not connected/.test(pre.title) && /Load Plugin from File/.test(pre.message) && /TotalScript-Blockbench\.js/.test(pre.message) && /total-core|desktop app/.test(pre.message) && !/jasonjgardner|mcp\.js|bb-mcp/i.test(pre.message + pre.brief) && /Do NOT emulate Blockbench/.test(pre.brief) && pre.brief.startsWith("━━━ BLOCKBENCH PREFLIGHT") && preOk.ok === true);
   const pf = WM.preflight("blockbench", { engine: "roblox", blockbenchConnected: true });
   ok("D3 preflight probe = {kind blockbench, tool bb_status}; none when disconnected or on the local engine", pf && pf.kind === "blockbench" && pf.tool === "bb_status" && WM.preflight("blockbench", { engine: "roblox", blockbenchConnected: false }) === null && WM.preflight("blockbench", { engine: "local", blockbenchConnected: true }) === null);
   const brief = WM.renderBrief("blockbench", "[get_project_info] {\"format\":\"free\",\"elements\":{\"cubes\":3}}", {}), briefNone = WM.renderBrief("blockbench", null, {});
   ok("D4 renderBrief quotes the project read, states the MODEL / EXPORT rules and 'facts read from Blockbench'; null data → 'could not be read' + bb_project hint; ≤ BRIEF_MAX", /Blockbench project \(bb_status/.test(brief) && /cubes/.test(brief) && /EXPORT gate/.test(brief) && /facts read from Blockbench/.test(brief) && brief.length <= WM.BRIEF_MAX && /could not be read/.test(briefNone) && /bb_project/.test(briefNone) && WM.briefSummary("blockbench", "x") === "Blockbench project read");
-  const ac1 = WM.autoCheck("blockbench", "bb_cubes", { cubes: [{ name: "Torso" }] }, "Output of 'bb_cubes':\nPlaced 1"), ac2 = WM.autoCheck("blockbench", "bb_screenshot", {}, "ok"), ac3 = WM.autoCheck("blockbench", "bb_texture", { action: "list" }, "ok"), ac4 = WM.autoCheck("blockbench", "bb_cubes", {}, "ERROR INVALID_ARGUMENT"), ac5 = WM.autoCheck("blockbench", "bb_call", { tool: "get_selection" }, "ok"), ac6 = WM.autoCheck("blockbench", "bb_call", { tool: "place_mesh" }, "ok");
-  ok("D5 autoCheck: builds (bb_cubes, bb_call with a mutating tool) → bb_status read-back; read-only (bb_screenshot, bb_texture list, bb_call get_*) and errors → none", ac1 && ac1.kind === "blockbench" && ac1.tool === "bb_status" && ac2 === null && ac3 === null && ac4 === null && ac5 === null && ac6 && ac6.label === "place_mesh");
+  const ac1 = WM.autoCheck("blockbench", "bb_cubes", { cubes: [{ name: "Torso" }] }, "Output of 'bb_cubes':\nPlaced 1"), ac2 = WM.autoCheck("blockbench", "bb_screenshot", {}, "ok"), ac3 = WM.autoCheck("blockbench", "bb_texture", { action: "list" }, "ok"), ac4 = WM.autoCheck("blockbench", "bb_cubes", {}, "ERROR INVALID_ARGUMENT"), ac5 = WM.autoCheck("blockbench", "bb_camera", { view: "front" }, "ok"), ac6 = WM.autoCheck("blockbench", "bb_mesh_primitive", { shape: "cylinder", name: "Wheel" }, "ok"), ac7 = WM.autoCheck("blockbench", "bb_export", { format: "obj" }, "ok"), ac8 = WM.autoCheck("blockbench", "bb_undo", {}, "Undid 1 step(s).");
+  ok("D5 autoCheck: builds (bb_cubes, bb_mesh_primitive, bb_undo) → bb_status read-back labelled with the element; read-only (bb_screenshot, bb_texture list, bb_camera, bb_export) and errors → none", ac1 && ac1.kind === "blockbench" && ac1.tool === "bb_status" && ac2 === null && ac3 === null && ac4 === null && ac5 === null && ac6 && ac6.tool === "bb_status" && ac6.label === "Wheel" && ac7 === null && ac8 && ac8.tool === "bb_status");
   ok("D6 renderAutoCheck: '[MODE AUTO-CHECK bb_status after bb_cubes] …' clipped to AUTO_MAX; empty raw → ''", /^\[MODE AUTO-CHECK bb_status after bb_cubes\] \[get_project_info\]/.test(WM.renderAutoCheck(ac1, "[get_project_info] {\"cubes\":4}")) && WM.renderAutoCheck(ac1, "").length === 0 && WM.renderAutoCheck(ac1, "x".repeat(2000)).length <= WM.AUTO_MAX);
 
   // ── E. main.js ────────────────────────────────────────────────────────────
@@ -268,16 +185,16 @@ function makeServer(opts) {
     const m = main.match(/MODE_GATES\.blockbench = \[([\s\S]*?)\n  \];/);
     const gates = m ? eval("[" + m[1] + "]") : [];
     const model = gates.find((g) => g.id === "model"), exp = gates.find((g) => g.id === "export");
-    ok("E2 MODE_GATES.blockbench: MODEL (did bb_cubes/group/texture/animate/call → proof bb_screenshot|bb_status) + EXPORT (did builds → proof bb_export); scripts + look pushed from creation; nudges say Import 3D is manual", model && exp && model.did.test("bb_cubes") && model.did.test("bb_call") && !model.did.test("bb_screenshot") && model.proof.test("bb_screenshot") && model.proof.test("bb_status") && !model.proof.test("bb_export") && exp.did.test("bb_group") && !exp.did.test("bb_remove") && exp.proof.test("bb_export") && !exp.proof.test("bb_status") && /Do not claim it is in Studio/.test(exp.nudge) && main.includes('MODE_GATES.blockbench.push(...MODE_GATES.creation.filter((g) => g.id === "scripts" || g.id === "look"));'));
+    ok("E2 MODE_GATES.blockbench: MODEL (did bb_cubes/group/mesh/mesh_primitive/mesh_edit/texture/animate → proof bb_screenshot|bb_status) + EXPORT (did builds → proof bb_export); scripts + look pushed from creation; nudges say Import 3D is manual", model && exp && model.did.test("bb_cubes") && model.did.test("bb_mesh_primitive") && model.did.test("bb_mesh_edit") && !model.did.test("bb_tools") && !model.did.test("bb_screenshot") && model.proof.test("bb_screenshot") && model.proof.test("bb_status") && !model.proof.test("bb_export") && exp.did.test("bb_group") && !exp.did.test("bb_remove") && exp.proof.test("bb_export") && !exp.proof.test("bb_status") && /Do not claim it is in Studio/.test(exp.nudge) && main.includes('MODE_GATES.blockbench.push(...MODE_GATES.creation.filter((g) => g.id === "scripts" || g.id === "look"));'));
   }
-  ok("E3 runTool: bb_* branch BEFORE the Blender branch — status → connect once, offline → ERROR BLOCKBENCH_OFFLINE with the plugin URL (no emulation), images attached like other captures, worker errors passed through; probes of kind blockbench run through call_tool; preflight/auto-check wired with blockbenchConnected", main.indexOf('if (/^bb_[a-z_]+$/.test(bareName)) {') > 0 && main.indexOf('if (/^bb_[a-z_]+$/.test(bareName)) {') < main.indexOf('const BLENDER_OPS = new Set(') && main.includes('"ERROR BLOCKBENCH_OFFLINE calling \'" + name + "\': Blockbench is not connected.') && main.includes('probe.kind === "blender" || probe.kind === "blockbench"') && main.includes("const blockbenchUp = mode === \"blockbench\" ? await blockbenchReady() : false;") && main.includes("blenderConnected: blenderUp, blockbenchConnected: blockbenchUp") && main.includes('if (probe.kind === "blockbench" && !(A.bridge && A.bridge.blockbench === true)) return feedback;') && main.includes("async function blockbenchReady()"));
+  ok("E3 runTool: bb_* branch BEFORE the Blender branch — not linked → one blockbench_status {refresh:true} probe (plugin file remembered), still offline → ERROR BLOCKBENCH_OFFLINE naming the plugin + the user steps (no emulation, no MCP left in main.js), images attached like other captures, worker errors passed through; probes of kind blockbench run through call_tool; preflight/auto-check wired with blockbenchConnected", main.indexOf('if (/^bb_[a-z_]+$/.test(bareName)) {') > 0 && main.indexOf('if (/^bb_[a-z_]+$/.test(bareName)) {') < main.indexOf('const BLENDER_OPS = new Set(') && main.includes('"ERROR BLOCKBENCH_OFFLINE calling \'" + name + "\': Blockbench is not connected to total-core (the TotalScript Bridge plugin inside Blockbench is not polling)."') && main.includes('const st = await bg({ type: "blockbench_status", refresh: true });') && main.includes("if (st && st.plugin_file) { A.blockbenchPluginFile = st.plugin_file; }") && !/blockbench_(connect|disconnect|set_url)\b|jasonjgardner|bb-mcp/.test(main) && main.includes('probe.kind === "blender" || probe.kind === "blockbench"') && main.includes("const blockbenchUp = mode === \"blockbench\" ? await blockbenchReady() : false;") && main.includes("blenderConnected: blenderUp, blockbenchConnected: blockbenchUp") && main.includes('if (probe.kind === "blockbench" && !(A.bridge && A.bridge.blockbench === true)) return feedback;') && main.includes("async function blockbenchReady()"));
   {
     const famBlock = main.slice(main.indexOf("const COMMAND_FAMILIES = ["), main.indexOf("function familyOrderFor"));
     const c = {}; vm.runInNewContext(famBlock + "\nthis.F=COMMAND_FAMILIES;this.O=FAMILY_ORDER;", c);
     ok("E4 COMMAND_FAMILIES: blockbench family (re /^bb_/) second after blender, OTHER last; FAMILY_ORDER has a blockbench order (blockbench first) and every mode order holds every family exactly once", c.F[0].id === "blender" && c.F[1].id === "blockbench" && c.F[1].re.test("bb_cubes") && !c.F[1].re.test("blender_add_cube") && c.F.at(-1).id === "other" && c.O.blockbench[0] === "blockbench" && ["creation", "blender", "animate", "blockbench"].every((m) => new Set(c.O[m]).size === c.F.length && c.F.every((f) => c.O[m].includes(f.id))) && c.O.creation.slice(0, 3).join() === "script,blueprint,data" && c.O.blender[0] === "blender" && c.O.animate.slice(0, 3).join() === "animation,motion,script");
   }
-  ok("E5 blockbenchModeTools folds server:'blockbench' tools into the default catalogue only in Blockbench mode (both list sites), __rsBlockbench flag from status + menu, settings card (steps incl. plugin URL, port-3000 note, URL field, Connect / Disconnect / blockbench.net) with handlers", main.includes("function blockbenchModeTools(requested)") && (main.match(/allScoped\.push\(\.\.\.blockbenchModeTools\(requested\)\)/g) || []).length === 2 && main.includes("window.__rsBlockbench = () => !!(s && s.blockbench)") && main.includes("function blockbenchCardHtml()") && main.includes('id="rs-blockbench-card"') && main.includes('id="rs-blockbench-url"') && main.includes("jasonjgardner.github.io/blockbench-mcp-plugin/mcp.js") && /already uses port 3000/.test(main) && main.includes('menuEl.querySelector("#rs-mcp-blockbench")') && main.includes('bg({ type: "blockbench_disconnect" })') && main.includes('{ type: "blockbench_set_url", url }') && main.includes("https://www.blockbench.net/") && main.includes("${blockbenchCardHtml()}"));
-  ok("E6 overlay.css: Blockbench card recolour + mark + URL field, reduced-motion honoured", /\.rs-blender-card\.rs-bb-card \{ --bl: #1e9c86;/.test(css) && /\.rs-bb-mark::before/.test(css) && /\.rs-bb-url > input/.test(css) && /\.rs-blender-card\.rs-bb-card\.on \.rs-blender-mark \{ animation: none; \}/.test(css));
+  ok("E5 blockbenchModeTools folds server:'blockbench' tools into the default catalogue only in Blockbench mode (both list sites), __rsBlockbench flag from status + menu, settings card (numbered steps with the real plugin path, Check again → blockbench_status refresh, Copy plugin path, blockbench.net; no URL field / Connect button - the plugin dials out) with handlers", main.includes("function blockbenchModeTools(requested)") && (main.match(/allScoped\.push\(\.\.\.blockbenchModeTools\(requested\)\)/g) || []).length === 2 && main.includes("window.__rsBlockbench = () => !!(s && s.blockbench)") && main.includes("function blockbenchCardHtml()") && main.includes('id="rs-blockbench-card"') && main.includes('<code class="rs-bb-path">${escRs(pluginFile)}</code>') && main.includes("<em>File → Plugins → Load Plugin from File</em> → pick <code>TotalScript-Blockbench.js</code>") && main.includes('<button type="button" id="rs-mcp-blockbench" class="rs-blender-primary">Check again</button>') && main.includes('id="rs-blockbench-copy"') && main.includes('id="rs-blockbench-site"') && main.includes('menuEl.querySelector("#rs-mcp-blockbench")') && main.includes('menuEl.querySelector("#rs-blockbench-copy")') && main.includes('const r = await bg({ type: "blockbench_status", refresh: true });') && /total-core is not running - start the TotalScript desktop app first\./.test(main) && main.includes("https://www.blockbench.net/") && main.includes("${blockbenchCardHtml()}") && !main.includes('id="rs-blockbench-url"'));
+  ok("E6 overlay.css: Blockbench card recolour + mark + selectable plugin path, reduced-motion honoured", /\.rs-blender-card\.rs-bb-card \{ --bl: #1e9c86;/.test(css) && /\.rs-bb-mark::before/.test(css) && /\.rs-bb-path \{ display: inline-block; max-width: 100%; user-select: all; \}/.test(css) && !/\.rs-bb-url/.test(css) && /\.rs-blender-card\.rs-bb-card\.on \.rs-blender-mark \{ animation: none; \}/.test(css));
 
   // ── F. config.js ──────────────────────────────────────────────────────────
   {
@@ -288,15 +205,15 @@ function makeServer(opts) {
     const full = RS.workModePrompt("blockbench"), tight = RS.workModePrompt("blockbench", { tight: true });
     ok("F1 WORK_MODE_PROMPTS keys creation,blender,animate,blockbench; label Blockbench; checklist; playbooks appended to full only", Object.keys(RS.WORK_MODE_PROMPTS).join() === "creation,blender,animate,blockbench" && RS.workModeLabel("blockbench") === "Blockbench" && /^BLOCKBENCH CHECK: bb_status first/.test(RS.workModeChecklist("blockbench")) && /PLAYBOOKS \(Blockbench mode/.test(full) && !/PLAYBOOKS/.test(tight));
     ok(`F2 budgets: full ${full.length} in (8000, 12000) (below the Animator profile), tight ${tight.length} in (1800, 2600)`, full.length > 8000 && full.length < 12000 && tight.length > 1800 && tight.length < 2600 && full.length < RS.workModePrompt("animate").length);
-    ok("F3 profile teaches: FIRST MOVE bb_status; units 16 = one block; groups with pivots; bb_screenshot after every pass; bb_export + Import 3D is the USER's click; never claim an import / asset id; bb_tools / bb_call for raw tools", /FIRST MOVE: bb_status \{\}/.test(full) && /16 = one block/.test(full) && /pivot/.test(full) && /bb_screenshot \{\} after EVERY build pass/.test(full) && /TotalScript does NOT upload or insert the file; the import is the user's click/.test(full) && /NEVER: build without a screenshot; claim an import, an asset id or a Studio placement/.test(full) && /bb_tools \/ bb_call/.test(full) && /FIRST MOVE: bb_status/.test(tight) && /never uploads or inserts/.test(tight));
+    ok("F3 profile teaches: FIRST MOVE bb_status; how to connect (Load Plugin from File); units 16 = one block; groups with pivots; meshes via bb_mesh_primitive / bb_mesh; bb_animate on groups; bb_screenshot after every pass; bb_export + Import 3D is the USER's click; bbmodel is for the user; never claim an import / asset id or invent names; no MCP wording left", /FIRST MOVE: bb_status \{\}/.test(full) && /16 = one block/.test(full) && /pivot/.test(full) && /bb_screenshot \{\} after EVERY build pass/.test(full) && /TotalScript does NOT upload or insert the file; the import is the user's click/.test(full) && /NEVER: build without a screenshot; claim an import, an asset id or a Studio placement; invent command names \(bb_tools lists them\)/.test(full) && /Load Plugin from File/.test(full) && /bb_mesh_primitive \{shape:"cylinder"\|"cone"\|"pyramid"\|"plane"\|"sphere"\|"torus"/.test(full) && /bb_mesh \{name, vertices, faces\}/.test(full) && /bb_animate \{name, loop, length, bones/.test(full) && /format:"bbmodel"/.test(full) && !/bb_call|MCP|jasonjgardner/.test(full + tight) && /FIRST MOVE: bb_status/.test(tight) && /Load Plugin from File/.test(tight) && /never uploads or inserts/.test(tight));
     const cited = new Set((full + tight + RS.workModeChecklist("blockbench")).match(/\bbb_[a-z_]+/g));
     ok("F4 every bb_* command the profile cites exists in the curated table (" + [...cited].join(", ") + ")", [...cited].every((n) => BB.COMMAND_NAMES.includes(n)), [...cited].filter((n) => !BB.COMMAND_NAMES.includes(n)));
-    ok("F5 BLOCKBENCH MCP IS CONNECTED block rides on window.__rsBlockbench and lists the whole family with signatures; the Totality / Blender / Animator prompts are untouched (budget pins in test-work-modes hold)", config.includes("const isBlockbench = window.__rsBlockbench && window.__rsBlockbench();") && config.includes("if (isBlockbench) modeExtra += `\\n\\n━━━ BLOCKBENCH MCP IS CONNECTED ━━━") && (() => { const m = config.match(/━━━ BLOCKBENCH MCP IS CONNECTED ━━━[\s\S]*?`;/)[0]; return BB.COMMAND_NAMES.every((n) => m.includes(n)) && /never uploads/.test(m); })() && !/Blockbench|bb_/.test(RS.workModePrompt("creation")) && !/Blockbench|bb_/.test(RS.workModePrompt("blender")));
+    ok("F5 BLOCKBENCH IS CONNECTED block rides on window.__rsBlockbench, names the plugin (no MCP, no port) and lists the whole family with signatures; the Totality / Blender / Animator prompts are untouched (budget pins in test-work-modes hold)", config.includes("const isBlockbench = window.__rsBlockbench && window.__rsBlockbench();") && config.includes("if (isBlockbench) modeExtra += `\\n\\n━━━ BLOCKBENCH IS CONNECTED ━━━") && !config.includes("BLOCKBENCH MCP IS CONNECTED") && (() => { const m = config.match(/━━━ BLOCKBENCH IS CONNECTED ━━━[\s\S]*?`;/)[0]; if (!/own Blockbench plugin/.test(m) || !/no MCP, no port to configure/.test(m)) return false; return BB.COMMAND_NAMES.every((n) => m.includes(n)) && /never uploads/.test(m); })() && !/Blockbench|bb_/.test(RS.workModePrompt("creation")) && !/Blockbench|bb_/.test(RS.workModePrompt("blender")));
   }
 
   // ── G. popup ──────────────────────────────────────────────────────────────
-  ok("G1 popup.js: WORK_MODES literal gains blockbench (4th), preset, SERVER_LABEL + classifier (bb_ → blockbench) + SERVER_ORDER, Studio category row {id blockbench, type blockbench} with URL field + Connect/Disconnect via blockbench_* messages, palette 'Blockbench mode', hidden launcher", popup.includes('const WORK_MODES = ["creation", "blender", "animate", "blockbench"];') && /blockbench: \{ thinking: "max", extra: false \}/.test(popup) && /blockbench: "Blockbench" \}/.test(popup) && popup.includes('if (/^bb_/.test(n)) return "blockbench";') && popup.includes('["roblox", "studio", "local", "agent", "blender", "blockbench"]') && popup.includes('{ id: "blockbench", type: "blockbench", label: "Blockbench MCP"') && popup.includes('case "blockbench": {') && popup.includes('id="blockbench-url"') && popup.includes('{ type: "blockbench_set_url", url: url || "http://localhost:3000/bb-mcp" }') && popup.includes('{ type: "blockbench_disconnect" }') && popup.includes('{ type: "blockbench_connect", url }') && popup.includes('add({ id: "mode:blockbench", group: "Work mode", title: "Blockbench mode"') && popup.includes('$("blockbench")?.addEventListener("click"'));
-  ok("G2 popup.html: four work cards in a 2 × 2 grid, Blockbench card (teal selected style) names the manual Import 3D, hidden #blockbench launcher; the three older cards unchanged", (popupHtml.match(/class="work-card" data-work="/g) || []).length === 4 && popupHtml.includes('<button type="button" class="work-card" data-work="blockbench" id="work-blockbench">') && popupHtml.includes(".work.work-modes{grid-template-columns:1fr 1fr}") && /#work-blockbench\.on\{background:linear-gradient\(135deg,#bff3e8/.test(popupHtml) && /Studio Import 3D<\/span>/.test(popupHtml) && popupHtml.includes('<button type="button" id="blockbench">Blockbench MCP — open menu</button>') && popupHtml.includes('data-work="creation" id="work-creation"') && popupHtml.includes('data-work="blender" id="work-blender"') && popupHtml.includes('data-work="animate" id="work-animate"'));
+  ok("G1 popup.js: WORK_MODES literal gains blockbench (4th), preset, SERVER_LABEL + classifier (bb_ → blockbench) + SERVER_ORDER, Studio category row {id blockbench, type blockbench} with state line + plugin path + Check again via blockbench_status (no URL field, no Connect), palette 'Blockbench mode', hidden launcher", popup.includes('const WORK_MODES = ["creation", "blender", "animate", "blockbench"];') && /blockbench: \{ thinking: "max", extra: false \}/.test(popup) && /blockbench: "Blockbench" \}/.test(popup) && popup.includes('if (/^bb_/.test(n)) return "blockbench";') && popup.includes('["roblox", "studio", "local", "agent", "blender", "blockbench"]') && popup.includes('{ id: "blockbench", type: "blockbench", label: "Blockbench"') && popup.includes('case "blockbench": {') && popup.includes('id="blockbench-check"') && popup.includes('id="blockbench-state"') && popup.includes('id="blockbench-path"') && popup.includes('bg({ type: "blockbench_status", refresh: false }).then(paint);') && popup.includes('const r = await bg({ type: "blockbench_status", refresh: true });') && !/blockbench_(connect|disconnect|set_url)\b|blockbench-url|bb-mcp/.test(popup) && popup.includes('add({ id: "mode:blockbench", group: "Work mode", title: "Blockbench mode"') && popup.includes('$("blockbench")?.addEventListener("click"'));
+  ok("G2 popup.html: four work cards in a 2 × 2 grid, Blockbench card (teal selected style) names the manual Import 3D, hidden #blockbench launcher; the three older cards unchanged", (popupHtml.match(/class="work-card" data-work="/g) || []).length === 4 && popupHtml.includes('<button type="button" class="work-card" data-work="blockbench" id="work-blockbench">') && popupHtml.includes(".work.work-modes{grid-template-columns:1fr 1fr}") && /#work-blockbench\.on\{background:linear-gradient\(135deg,#bff3e8/.test(popupHtml) && /Studio Import 3D<\/span>/.test(popupHtml) && popupHtml.includes('<button type="button" id="blockbench">Blockbench — open menu</button>') && popupHtml.includes("Low-poly models in Blockbench through the TotalScript plugin: groups → cubes → meshes → texture") && !/Blockbench[^<"]*MCP|MCP plugin/.test(popupHtml) && popupHtml.includes('data-work="creation" id="work-creation"') && popupHtml.includes('data-work="blender" id="work-blender"') && popupHtml.includes('data-work="animate" id="work-animate"'));
   {
     const pctx = { window: {}, console }; vm.createContext(pctx);
     vm.runInContext(popup.slice(popup.indexOf("const WORK_MODES = ["), popup.indexOf("const WORK_PRESETS")) + "\nthis.normalizeWorkMode = normalizeWorkMode;", pctx);
@@ -305,7 +222,7 @@ function makeServer(opts) {
   ok("G4 popup badge: Studio card badge says Blockbench linked / Blender + Blockbench linked from the status", popup.includes('s.blender && s.blockbench ? "Blender + Blockbench linked" : s.blockbench ? "Blockbench linked" : "Blender linked"'));
 
   // ── H. README ─────────────────────────────────────────────────────────────
-  ok("H1 README: 2.18.0 block names Blockbench MCP (Streamable HTTP plugin, bb_* commands, export + manual Import 3D, Origin rule, port 3000 note) and the test is listed under Testing", /2\.18\.0/.test(readme) && /Blockbench/.test(readme) && /bb-mcp/.test(readme) && /Import 3D/.test(readme) && /declarativeNetRequest/.test(readme) && /test-blockbench-mode\.js/.test(readme));
+  ok("H1 README: 2.19.0 block names the TotalScript Blockbench plugin (Load Plugin from File, total-core, bb_* build + export + mesh commands, manual Import 3D, MCP client removed) and both Blockbench tests are listed under Testing", /2\.19\.0/.test(readme) && /TotalScript-Blockbench\.js/.test(readme) && /Load Plugin from File/.test(readme) && /Import 3D/.test(readme) && /bb_mesh_primitive/.test(readme) && /test-blockbench-mode\.js/.test(readme) && /test-blockbench-plugin\.js/.test(readme) && (() => { const i = readme.indexOf("2.19.0"); const block = readme.slice(i, i + 3000); return /MCP/.test(block) && /removed|replaces|no longer/i.test(block); })());
 
   console.log(failed ? `\n${failed} FAILED` : "\nALL OK");
   process.exit(failed ? 1 : 0);

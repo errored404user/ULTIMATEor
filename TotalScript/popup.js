@@ -24,7 +24,7 @@ const isCodeCraftTab = (url) => !!(url && CODECRAFT_PAGE_URL && url.startsWith(C
 const isSupportedTab = (url) => !!url && (SUPPORTED_HOSTS.some((h) => url.includes(h)) || isCodeCraftTab(url));
 const ENGINE_KEY = "rs-engine"; // "roblox" | "local"
 const ENGINES = ["roblox", "local"];
-const WORK_MODES = ["creation", "blender", "animate", "blockbench"]; // 1.95.0: + Blender (Blender-first 3D); 1.99.4: + Animator (id "animate"); 2.18.0: + Blockbench (MCP plugin, low-poly models → file → Studio Import 3D)
+const WORK_MODES = ["creation", "blender", "animate", "blockbench"]; // 1.95.0: + Blender (Blender-first 3D); 1.99.4: + Animator (id "animate"); 2.19.0: + Blockbench (low-poly models → file → Studio Import 3D)
 const BRAND_LOGO_RE = /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i;
 function sanitizeBrandLite(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
@@ -820,7 +820,7 @@ const CATEGORIES = [
     { id: "repair", type: "action", label: "Repair the Studio link", sub: "Restarts the Studio MCP helper inside the agent app — fixes “connected but every command fails” after a Studio update or sleep / resume.", button: "Restart server", run: (btn) => QUICK_ACTIONS.find((q) => q.id === "restart").run(btn) },
     { id: "reconnect", type: "action", label: "Reconnect the bridge", sub: `Re-dial ${RUN_CMD} on port 3000 / 17613 / 17615.`, button: "Reconnect", run: (btn) => QUICK_ACTIONS.find((q) => q.id === "reconnect").run(btn) },
     { id: "blender", type: "blender", label: "Blender MCP", sub: "Connects to the TotalScript addon running inside Blender on port 9876." },
-    { id: "blockbench", type: "blockbench", label: "Blockbench MCP", sub: "Connects to the Blockbench MCP plugin over localhost HTTP (default http://localhost:3000/bb-mcp — change the port in Blockbench settings if the desktop agent already uses 3000). Models are exported as files for Studio's Import 3D." },
+    { id: "blockbench", type: "blockbench", label: "Blockbench", sub: "TotalScript's own Blockbench plugin (TotalScript-Blockbench.js) runs inside Blockbench and connects to the desktop app by itself — load it once via File → Plugins → Load Plugin from File. Models are exported as files for Studio's Import 3D." },
     { id: "publish", key: "rsAllowPublishAutomation", type: "toggle", default: false, label: "Allow confirmed publishing without a per-operation prompt", sub: "Off by default. Roblox authentication, ownership, moderation and rate limits always apply." },
     { id: "diag", type: "action", label: "Diagnostics", sub: "Copy the bridge status, health check and your non-secret settings as JSON for a bug report.", button: "Copy diagnostics", run: (btn) => busy(btn, copyDiagnostics) },
   ] },
@@ -982,26 +982,40 @@ async function renderItem(it, stored) {
       return row;
     }
     case "blockbench": {
-      const row = rowShell(it, `<button type="button" class="ts-btn sm" id="blockbench-toggle"><span>…</span></button>`);
+      // 2.19.0: nothing to connect from here - the TotalScript plugin inside
+      // Blockbench dials total-core. Show the state, the plugin path (copyable)
+      // and a Check again button that re-reads total-core.
+      const row = rowShell(it, `<button type="button" class="ts-btn sm" id="blockbench-check"><span>Check again</span></button>`);
       const main = row.querySelector(".ts-row-main");
-      const field = h(`<input id="blockbench-url" class="ts-input" type="url" spellcheck="false" placeholder="http://localhost:3000/bb-mcp" aria-label="Blockbench MCP URL" style="margin-top:6px;width:100%;box-sizing:border-box">`);
-      main.appendChild(field);
-      const b = row.querySelector("button");
-      const paint = (on, url) => { b.firstElementChild.textContent = on ? "Disconnect" : "Connect"; b.classList.toggle("danger", on); b.dataset.on = on ? "1" : ""; field.readOnly = on; if (url && !field.value) field.value = url; };
-      bg({ type: "blockbench_status", auto: false }).then((r) => paint(!!(r && r.blockbench), r && r.url));
-      field.addEventListener("change", async () => {
-        const url = String(field.value || "").trim();
-        const r = await bg({ type: "blockbench_set_url", url: url || "http://localhost:3000/bb-mcp" });
-        if (!r || !r.ok) toast(String((r && r.error) || "URL must point at localhost"), "warn");
+      const state = h(`<span class="ts-row-sub" id="blockbench-state" style="margin-top:6px;display:block"></span>`);
+      main.appendChild(state);
+      const pathRow = h(`<div id="blockbench-path" style="display:none;margin-top:6px;gap:6px;align-items:center"><input class="ts-input" type="text" readonly spellcheck="false" aria-label="Blockbench plugin file" style="flex:1;min-width:0;box-sizing:border-box;font-size:11px"><button type="button" class="ts-btn sm"><span>Copy path</span></button></div>`);
+      main.appendChild(pathRow);
+      const pathField = pathRow.querySelector("input");
+      const copyBtn = pathRow.querySelector("button");
+      const b = row.querySelector("#blockbench-check");
+      const paint = (r) => {
+        const on = !!(r && r.blockbench);
+        const core = !!(r && r.core);
+        state.textContent = on ? `Connected — ${r.tools || 0} bb_* commands ready (via total-core).` : core ? "total-core is up; waiting for the TotalScript plugin inside Blockbench (File → Plugins → Load Plugin from File → TotalScript-Blockbench.js, once)." : "total-core is not running — start the TotalScript desktop app first; it keeps the plugin file next to its executable.";
+        state.style.color = on ? "var(--ok, #4caf50)" : "";
+        b.classList.toggle("primary", !on);
+        if (r && r.plugin_file) { pathField.value = r.plugin_file; pathRow.style.display = "flex"; } else pathRow.style.display = "none";
+      };
+      bg({ type: "blockbench_status", refresh: false }).then(paint);
+      copyBtn.addEventListener("click", async () => {
+        const v = pathField.value;
+        if (!v) { toast("Plugin path unknown yet — start the TotalScript desktop app, then Check again", "warn"); return; }
+        let ok = false;
+        try { await navigator.clipboard.writeText(v); ok = true; } catch {}
+        if (!ok) { try { pathField.select(); ok = document.execCommand("copy"); } catch {} }
+        toast(ok ? "Plugin path copied — paste it into Blockbench's Load Plugin from File dialog" : "Could not copy", ok ? "ok" : "warn");
       });
       b.addEventListener("click", () => busy(b, async () => {
-        const on = b.dataset.on === "1";
-        const url = String(field.value || "").trim();
-        const r = await bg(on ? { type: "blockbench_disconnect" } : (url ? { type: "blockbench_connect", url } : { type: "blockbench_connect" }));
-        const now = !!(r && r.blockbench);
-        paint(now, r && r.url);
-        if (!on && !now) { toast(r && r.error ? String(r.error).slice(0, 220) : "Blockbench did not answer — open Blockbench with the MCP plugin enabled.", "warn"); return false; }
-        if (!on && now) toast(`Blockbench linked — ${r.tools || 0} plugin tools`, "ok");
+        const r = await bg({ type: "blockbench_status", refresh: true });
+        paint(r);
+        if (!(r && r.blockbench)) { toast(r && r.core ? "Blockbench plugin not connected yet — load TotalScript-Blockbench.js in Blockbench (File → Plugins → Load Plugin from File)." : "Start the TotalScript desktop app first.", "warn"); return false; }
+        toast(`Blockbench connected — ${r.tools || 0} bb_* commands`, "ok");
         refresh();
         return true;
       }));
