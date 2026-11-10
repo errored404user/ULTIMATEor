@@ -286,6 +286,7 @@ mod tests {
     #[test]
     fn fold_key_blanks_numbers_and_case() {
         assert_eq!(fold_key("Tool X failed: timed out after 25 s"), fold_key("tool x failed: timed out after 26 s"));
+        assert_eq!(fold_key("tool_1 failed"), fold_key("tool_2 failed"), "digit-only differences fold");
         assert_ne!(fold_key("get_studio_state (roblox) failed"), fold_key("bb_status (roblox) failed"));
         assert_eq!(fold_key("bbjob-17 done in 1234 ms"), "bbjob-# done in # ms");
     }
@@ -324,8 +325,9 @@ mod tests {
     fn error_bursts_go_quiet_after_three_with_one_warning() {
         let mut c = NoticeCenter::default();
         let t0 = Instant::now();
-        for i in 0..6 {
-            c.push_at(NoticeKind::Err, format!("tool_{i} (roblox) failed: boom"), "error", secs(t0, i as f32));
+        // distinct tools (letters, not digits: digit runs are blanked by the fold key on purpose)
+        for (i, name) in ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"].iter().enumerate() {
+            c.push_at(NoticeKind::Err, format!("tool_{name} (roblox) failed: boom"), "error", secs(t0, i as f32));
         }
         let errs: Vec<&Notice> = c.items.iter().filter(|n| n.kind == NoticeKind::Err).collect();
         assert_eq!(errs.len(), 6, "every error is listed in the center");
@@ -344,9 +346,15 @@ mod tests {
     fn quiet_notices_never_toast() {
         let mut c = NoticeCenter::default();
         let t0 = Instant::now();
-        for i in 0..5 { c.push_at(NoticeKind::Err, format!("tool_{i} (roblox) failed: boom"), "error", t0); }
+        for name in ["alpha", "bravo", "charlie", "delta", "echo"] { c.push_at(NoticeKind::Err, format!("tool_{name} (roblox) failed: boom"), "error", t0); }
+        assert_eq!(c.items.iter().filter(|n| n.quiet).count(), 2, "the 4th and 5th error are quiet");
         let toasts = c.toasts();
         assert!(toasts.iter().all(|n| !n.quiet));
-        assert!(toasts.len() <= TOAST_MAX);
+        // newest first: the burst warning, then the newest non-quiet errors, capped by TOAST_MAX
+        assert_eq!(toasts.len(), TOAST_MAX);
+        assert_eq!(toasts[0].kind, NoticeKind::Warn, "the burst explanation is the newest toast");
+        assert_eq!(toasts.iter().filter(|n| n.kind == NoticeKind::Err).count(), TOAST_MAX - 1);
+        assert!(toasts.iter().all(|n| ["bravo", "charlie"].iter().any(|k| n.text.contains(k)) || n.kind == NoticeKind::Warn), "delta / echo never toast");
+        assert_eq!(c.unread(), 6, "quiet notices still count as unread in the bell");
     }
 }
