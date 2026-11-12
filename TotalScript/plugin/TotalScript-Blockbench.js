@@ -6,7 +6,7 @@
 // desktop app show the path). Blockbench remembers it; it loads on every start.
 //
 // What it does: the plugin DIALS OUT to the TotalScript desktop app
-// (total-core, http://127.0.0.1:3000) with Node's http module - the same
+// (total-core, http://127.0.0.1:3000) with Node's approved net module - the same
 // hello / long-poll / result loop the Studio plugin uses:
 //   POST /api/blockbench/hello    {client_id, version, blockbench_version, project, format, capabilities}
 //   GET  /api/blockbench/poll?client_id=…   → {ok, job:{id,name,args}|null}   (long poll, ~20 s)
@@ -800,11 +800,11 @@
     return [r3(x), r3(y), r3(z)];
   }
 
-  // ── bridge loop (hello / poll / result over Node http) ─────────────────────
+  // ── bridge loop (hello / poll / result over raw Node TCP) ───────────────────
   // createBridge({request, api, url, log, onState}) → {start, stop, state()}.
   // `request(method, path, body, timeoutMs)` → Promise<{status, json}>; the
-  // plugin passes a Node-http implementation, the test passes a fetch to its
-  // fake total-core.
+  // plugin uses Blockbench-approved `net` access so requests have no Origin
+  // header, the test uses a real loopback HTTP server.
   function createBridge(opts) {
     const request = opts.request, api = opts.api, log = opts.log || (() => {}), onState = opts.onState || (() => {});
     let url = String(opts.url || DEFAULT_BRIDGE).replace(/\/+$/, "");
@@ -909,19 +909,79 @@
     };
   }
 
-  function nodeRequest(http) {
+  function nodeRequest(net) {
+    function decodeChunked(buffer) {
+      const crlf = Buffer.from("\r\n");
+      const parts = [];
+      let offset = 0;
+      while (offset < buffer.length) {
+        const lineEnd = buffer.indexOf(crlf, offset);
+        if (lineEnd < 0) throw new Error("incomplete HTTP chunk header");
+        const sizeText = buffer.subarray(offset, lineEnd).toString("ascii").split(";")[0].trim();
+        const size = Number.parseInt(sizeText, 16);
+        if (!Number.isFinite(size) || size < 0) throw new Error("invalid HTTP chunk size");
+        offset = lineEnd + 2;
+        if (size === 0) return Buffer.concat(parts);
+        if (offset + size + 2 > buffer.length) throw new Error("incomplete HTTP chunk body");
+        parts.push(buffer.subarray(offset, offset + size));
+        offset += size;
+        if (buffer[offset] !== 13 || buffer[offset + 1] !== 10) throw new Error("invalid HTTP chunk terminator");
+        offset += 2;
+      }
+      throw new Error("incomplete chunked HTTP response");
+    }
     return (method, urlStr, body, timeoutMs) => new Promise((resolve, reject) => {
-      const u = new URL(urlStr);
-      const data = body == null ? null : JSON.stringify(body);
-      const req = http.request({ host: u.hostname, port: u.port || 80, path: u.pathname + u.search, method, headers: Object.assign({ "accept": "application/json" }, data ? { "content-type": "application/json", "content-length": Buffer.byteLength(data) } : {}) }, (res) => {
+      let socket, settled = false;
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        reject(error instanceof Error ? error : new Error(String(error)));
+      };
+      try {
+        const u = new URL(urlStr);
+        if (u.protocol !== "http:") throw new Error("Blockbench bridge URL must use http://");
+        const data = body == null ? null : Buffer.from(JSON.stringify(body), "utf8");
+        const headers = ["Host: " + u.host, "Accept: application/json", "Connection: close"];
+        if (data) headers.push("Content-Type: application/json", "Content-Length: " + data.length);
+        const target = (u.pathname || "/") + u.search;
+        const head = Buffer.from(method + " " + target + " HTTP/1.1\r\n" + headers.join("\r\n") + "\r\n\r\n", "ascii");
+        const packet = data ? Buffer.concat([head, data]) : head;
+        const timeout = timeoutMs || 10000;
         const chunks = [];
-        res.on("data", (c) => chunks.push(c));
-        res.on("end", () => { const text = Buffer.concat(chunks).toString("utf8"); let json = null; try { json = JSON.parse(text); } catch {} resolve({ status: res.statusCode, json, text }); });
-      });
-      req.setTimeout(timeoutMs || 10000, () => { req.destroy(new Error("timeout after " + timeoutMs + " ms")); });
-      req.on("error", reject);
-      if (data) req.write(data);
-      req.end();
+        socket = net.createConnection({ host: u.hostname, port: Number(u.port || 80) });
+        socket.setTimeout(timeout, () => socket.destroy(new Error("timeout after " + timeout + " ms")));
+        socket.once("connect", () => socket.write(packet));
+        socket.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        socket.once("error", fail);
+        socket.once("end", () => {
+          if (settled) return;
+          try {
+            const response = Buffer.concat(chunks);
+            const separator = response.indexOf(Buffer.from("\r\n\r\n"));
+            if (separator < 0) throw new Error("invalid HTTP response: missing headers");
+            const lines = response.subarray(0, separator).toString("latin1").split("\r\n");
+            const status = lines[0].match(/^HTTP\/\d(?:\.\d)?\s+(\d{3})(?:\s|$)/);
+            if (!status) throw new Error("invalid HTTP response status");
+            const responseHeaders = Object.create(null);
+            for (const line of lines.slice(1)) {
+              const colon = line.indexOf(":");
+              if (colon > 0) responseHeaders[line.slice(0, colon).trim().toLowerCase()] = line.slice(colon + 1).trim();
+            }
+            let payload = response.subarray(separator + 4);
+            if (/\bchunked\b/i.test(responseHeaders["transfer-encoding"] || "")) payload = decodeChunked(payload);
+            else if (Number.isFinite(Number(responseHeaders["content-length"]))) {
+              const length = Number(responseHeaders["content-length"]);
+              if (payload.length < length) throw new Error("incomplete HTTP response body");
+              payload = payload.subarray(0, length);
+            }
+            const text = payload.toString("utf8");
+            let json = null;
+            try { json = JSON.parse(text); } catch {}
+            settled = true;
+            resolve({ status: Number(status[1]), json, text });
+          } catch (error) { fail(error); }
+        });
+      } catch (error) { fail(error); }
     });
   }
 
@@ -945,11 +1005,13 @@
       min_version: "4.8.0",
       tags: ["Roblox", "TotalScript", "Bridge"],
       onload() {
-        if (typeof isApp === "undefined" || !isApp || typeof require !== "function") { Blockbench.showMessageBox({ title: "TotalScript Bridge", message: "This plugin needs the Blockbench desktop app (it uses Node's http module)." }); return; }
-        nodeMods = { http: require("http"), fs: require("fs"), path: require("path"), os: require("os") };
+        if (typeof isApp === "undefined" || !isApp || typeof require !== "function") { Blockbench.showMessageBox({ title: "TotalScript Bridge", message: "This plugin needs the Blockbench desktop app (it uses Blockbench's permitted Node net module)." }); return; }
+        const net = require("net");
+        if (!net || typeof net.createConnection !== "function") { Blockbench.showMessageBox({ title: "TotalScript Bridge", message: "Allow TotalScript Bridge's Network access permission in Blockbench, then reload the plugin." }); return; }
+        nodeMods = { net, fs: require("fs"), path: require("path"), os: require("os") };
         const api = makeBlockbenchApi(nodeMods.fs, nodeMods.path, nodeMods.os);
         setting = new Setting("totalscript_bridge_url", { name: "TotalScript bridge URL", description: "Where the TotalScript desktop app listens (default http://127.0.0.1:3000).", category: "general", type: "text", value: DEFAULT_BRIDGE, onChange(v) { if (bridge) bridge.setUrl(v); } });
-        bridge = createBridge({ request: nodeRequest(nodeMods.http), api, url: (settings.totalscript_bridge_url && settings.totalscript_bridge_url.value) || DEFAULT_BRIDGE, log, onState(s) { if (actionStatus) actionStatus.name = "TotalScript: " + (s.connected ? "connected · " + s.jobsDone + " job(s)" : (s.running ? "waiting for the desktop app…" : "off")); } });
+        bridge = createBridge({ request: nodeRequest(nodeMods.net), api, url: (settings.totalscript_bridge_url && settings.totalscript_bridge_url.value) || DEFAULT_BRIDGE, log, onState(s) { if (actionStatus) actionStatus.name = "TotalScript: " + (s.connected ? "connected · " + s.jobsDone + " job(s)" : (s.running ? "waiting for the desktop app…" : "off")); } });
         actionStatus = new Action("totalscript_bridge_status", { name: "TotalScript: waiting for the desktop app…", description: "Link state between Blockbench and the TotalScript desktop app", icon: "hub", category: "tools", click() { const s = bridge.state(); Blockbench.showMessageBox({ title: "TotalScript Bridge " + VERSION, message: (s.connected ? "Connected to " + s.url + " (" + s.jobsDone + " job(s) run this session)." : "Not connected to " + s.url + (s.lastError ? " - " + s.lastError : "") + ". Start the TotalScript desktop app (total-core); the link comes up by itself.") + "\n\nCommands the AI can run here: " + CAPABILITIES.join(", ") + "." }); } });
         actionToggle = new Action("totalscript_bridge_toggle", { name: "TotalScript: pause / resume the link", description: "Stop accepting commands from the TotalScript app (resume any time)", icon: "pause_circle", category: "tools", click() { const s = bridge.state(); if (s.running) { bridge.stop(); Blockbench.showQuickMessage("TotalScript link paused", 2000); } else { bridge.start(); Blockbench.showQuickMessage("TotalScript link resumed", 2000); } } });
         MenuBar.addAction(actionStatus, "tools");
