@@ -1,0 +1,65 @@
+// 1.96.0 — TotalScript Desktop: in-app Help page (Page::Help, F1 / Ctrl+7).
+// SOURCE PINS ONLY: cargo is not available here; CI (.github/workflows/desktop.yml)
+// compiles the crate. This test proves the page is wired into every registry
+// the app keeps for pages (enum, ALL, title, subtitle, shortcut, sidebar group,
+// central match, nav icon, Esc handling, Home quick access), that the help
+// topics are complete and plain text, and that every fact they state about the
+// app is cross-checked against the code that implements it.
+"use strict";
+const fs = require("fs"), path = require("path");
+const ROOT = path.join(__dirname, "..");
+const read = (f) => fs.readFileSync(path.join(ROOT, f), "utf8");
+let failed = 0;
+const ok = (name, cond, extra) => { if (cond) console.log("ok   " + name); else { failed++; console.log("FAIL " + name + (extra !== undefined ? " — " + (typeof extra === "string" ? extra : JSON.stringify(extra)) : "")); } };
+
+const gui = read("agent/src/gui.rs"), mainRs = read("agent/src/main.rs"), mainJs = read("src/core/main.js"), readme = read("README.md");
+// 2.11.0: the window is split into gui.rs + gui/*.rs sub-modules; `guiAll` is everything.
+const guiAll = gui + "\n" + fs.readdirSync(path.join(ROOT, "agent/src/gui")).filter((f) => f.endsWith(".rs")).sort().map((f) => read("agent/src/gui/" + f)).join("\n");
+
+// ── A. page registry ──────────────────────────────────────────────────────
+const variants = (gui.match(/enum Page \{ ([^}]+) \}/) || [, ""])[1].split(",").map((s) => s.trim()).filter(Boolean);
+ok("A1 Page order: workspace pages, then the 2.11.0 SYSTEM group Activity, Diagnostics, Help, Settings", variants.join() === "Home,Chat,Explorer,Servers,Terminal,Activity,Diagnostics,Help,Settings");
+ok("A2 Page::ALL lists all 9 in the same order (Tools page removed in 2.6.0; Activity + Diagnostics added in 2.11.0)", gui.includes("const ALL: [Page; 9] = [Page::Home, Page::Chat, Page::Explorer, Page::Servers, Page::Terminal, Page::Activity, Page::Diagnostics, Page::Help, Page::Settings];") && !gui.includes("Page::Tools") && gui.includes('egui::ScrollArea::vertical().id_salt("tool-catalogue")'));
+ok("A3 title / subtitle / shortcut arms (Help = Ctrl+6, Settings = Ctrl+7)", gui.includes('Page::Help => "Help",') && /Page::Help => "What every page, button and shortcut does[^"]*\(F1\)",/.test(gui) && gui.includes("Page::Help => egui::Key::Num6,") && gui.includes("Page::Settings => egui::Key::Num7,"));
+ok("A4 sidebar: SYSTEM group label starts at Activity (2.11.0); central panel dispatches page_help; nav icon arm present", gui.includes('if page == Page::Activity {') && gui.includes('section_label(ui, t, "SYSTEM")') && gui.includes("Page::Help => self.page_help(ui),") && /Page::Help => \{\s*\/\/ circle with a question mark/.test(gui) && gui.indexOf("Page::Help => self.page_help(ui),") < gui.indexOf("Page::Settings => self.page_settings(ui),"));
+ok("A5 F1 opens Help from anywhere; Esc clears the help search", gui.includes("if i.key_pressed(egui::Key::F1) { nav = Some(Page::Help); }") && gui.includes("Page::Help => { self.help_query.clear(); }"));
+ok("A6 help_query state declared + initialised", gui.includes("    help_query: String,\n") && gui.includes("            help_query: String::new(),\n"));
+ok("A7 Home quick actions grid (2.11.0): 8 real actions incl. Activity, Diagnostics, Settings and the copy actions; Help stays one click away via the sidebar / F1", gui.includes("let items: [(&str, &str, Icon, Action); 8] = [") && /\("Diagnostics", "Live checks with fix buttons", Icon::Pulse, Action::Go\(Page::Diagnostics\)\),/.test(gui) && /Action::Go\(Page::Activity\)\),/.test(gui) && gui.includes('("Settings", "Theme, folders, provider, shortcuts", Icon::Gear, Action::Go(Page::Settings)),') && gui.includes('Action::CopyDiagnostics),') && gui.includes('Action::CopyReport),'));
+ok("A8 Settings → About keyboard line updated (Ctrl+K, 1…9 pages, F1, Ctrl+J, Ctrl+Shift+N)", gui.includes('"Keyboard: Ctrl+K command palette · Ctrl+1…9 pages · F1 help · Ctrl+J chat panel · Ctrl+R restart MCP helper · F5 probe Studio + refresh · Ctrl+Shift+S capture Studio viewport · Ctrl+Shift+N notifications · Ctrl+S save file · Ctrl+Enter run Luau — full list in Settings › Shortcuts"'));
+// every exhaustive match over Page has a Help arm (no `_ =>` hides a missing page)
+{
+  const matchArms = (fnName) => { const i = gui.indexOf(fnName); const j = gui.indexOf("\n    }\n", i); return gui.slice(i, j); };
+  ok("A9 every exhaustive Page match names Help (title, subtitle, shortcut_key, nav_icon)", ["fn title(self)", "fn subtitle(self)", "fn shortcut_key(self)"].every((f) => matchArms(f).includes("Page::Help =>")) && gui.slice(gui.indexOf("fn nav_icon(")).includes("Page::Help => {"));
+}
+
+// ── B. page_help ──────────────────────────────────────────────────────────
+const pageHelp = gui.slice(gui.indexOf("    fn page_help(&mut self, ui: &mut egui::Ui) {"), gui.indexOf("    fn page_settings(&mut self, ui: &mut egui::Ui) {"));
+ok("B1 page_help: search box filters title + summary + steps, case-insensitive, with an empty-state line", pageHelp.includes("egui::TextEdit::singleline(&mut self.help_query)") && pageHelp.includes("h.title.to_lowercase().contains(&q) || h.summary.to_lowercase().contains(&q) || h.steps.iter().any(|st| st.to_lowercase().contains(&q))") && pageHelp.includes("if shown.is_empty() {") && pageHelp.includes("Nothing matches"));
+ok("B2 page_help: topics render through the existing settings_section card, bullets use the theme accent, 'Open <page>' navigates after the frame (no borrow of self inside the closure)", pageHelp.includes("settings_section(ui, t, h.title, |ui| {") && pageHelp.includes('RichText::new("•").color(t.accent)') && pageHelp.includes('pill(ui, t, &format!("Open {}", p.title()), false)') && pageHelp.includes("goto = Some(p);") && pageHelp.includes("if let Some(p) = goto { self.go(p); }") && !pageHelp.slice(pageHelp.indexOf("settings_section(ui, t, h.title"), pageHelp.indexOf("if let Some(p) = goto")).includes("self."));
+ok("B3 page_help + sidebar: Ctrl+n hints come from Page::shortcut_label, and every label matches the Key::NumN in shortcut_key", (() => {
+  const keys = Object.fromEntries([...gui.matchAll(/Page::(\w+) => egui::Key::Num(\d),/g)].map((m) => [m[1], m[2]]));
+  const labels = Object.fromEntries([...gui.matchAll(/Page::(\w+) => "Ctrl\+(\d)",/g)].map((m) => [m[1], m[2]]));
+  return pageHelp.includes("on_hover_text(p.shortcut_label())") && gui.includes("page.shortcut_label(), page.blurb()") && variants.length === 9 && variants.every((v) => keys[v] && labels[v] === keys[v]) && new Set(Object.values(keys)).size === 9;
+})());
+
+// ── C. topics ─────────────────────────────────────────────────────────────
+const topicsSrc = gui.slice(gui.indexOf("const HELP_TOPICS: &[HelpTopic] = &["), gui.indexOf("];", gui.indexOf("const HELP_TOPICS: &[HelpTopic] = &[")) + 2);
+const topics = [...topicsSrc.matchAll(/HelpTopic \{\s*title: "([^"]+)",\s*page: (None|Some\(Page::(\w+)\)),\s*summary: "((?:[^"\\]|\\.)*)",\s*steps: &\[([\s\S]*?)\n\s*\],\s*\}/g)].map((m) => ({ title: m[1], page: m[3] || null, summary: m[4], steps: [...m[5].matchAll(/"((?:[^"\\]|\\.)*)",/g)].map((x) => x[1]) }));
+ok(`C1 struct HelpTopic + ${topics.length} topics parsed (≥ 12), every topic has a summary and ≥ 3 steps`, gui.includes("struct HelpTopic { title: &'static str, page: Option<Page>, summary: &'static str, steps: &'static [&'static str] }") && topics.length >= 12 && topics.every((t) => t.summary.length > 30 && t.steps.length >= 3), topics.map((t) => [t.title, t.steps.length]));
+ok("C2 one topic per page (Home, AI Chat, Explorer, MCP Servers, Terminal, Settings) + start-here, troubleshooting, access, Blender / plugin / extension, shortcuts, rebuild", ["Start here: what this app is", "Home", "AI Chat", "Explorer", "MCP Servers", "Terminal", "Settings", "Studio will not link — fix it in order", "Access, safety and what stays on this PC", "Blender, Studio plugin and the browser extension", "Keyboard shortcuts", "Updating and rebuilding"].every((n) => topics.some((t) => t.title === n)));
+ok("C3 every page: Some(Page::X) names a real variant, and every page except Help is reachable from at least one topic", topics.every((t) => !t.page || variants.includes(t.page)) && variants.filter((v) => v !== "Help").every((v) => topics.some((t) => t.page === v)));
+ok("C4 plain text only (no markdown, no emoji, no HTML) and no secrets / external hosts", topics.every((t) => [t.title, t.summary, ...t.steps].every((s) => !/\*\*|^#+ |<[a-z]+>|https?:\/\/(?!127\.0\.0\.1)/.test(s) && !/[\u{1F300}-\u{1FAFF}]/u.test(s))));
+// facts cross-checked with the implementation
+const text = topics.flatMap((t) => [t.title, t.summary, ...t.steps]).join("\n");
+ok("C5 ports match main.rs / gui.rs (127.0.0.1:3000, ws 17613 roblox, 17615 local)", text.includes("127.0.0.1:3000") && text.includes("17613") && text.includes("17615") && mainRs.includes("([127, 0, 0, 1], 3000)") && gui.includes('"WS 17613 roblox"') && gui.includes('"WS 17615 local"'));
+ok("C6 shortcuts topic matches handle_shortcuts + page hints (Ctrl+K, Ctrl+1…9, F1, Ctrl+J, Ctrl+R, F5, Ctrl+Shift+S, Ctrl+Shift+N, Ctrl+S, Ctrl+Enter, Esc)", (() => { const sc = topics.find((t) => t.title === "Keyboard shortcuts"); const all = [sc.summary, ...sc.steps].join(" "); return gui.includes("if i.key_pressed(egui::Key::K) || i.key_pressed(egui::Key::P) { palette = true; }") && gui.includes("if i.modifiers.shift && i.key_pressed(egui::Key::N) { notices = true; }") && ["Ctrl+K", "Ctrl+1 … Ctrl+9", "Ctrl+Shift+N", "F1", "Ctrl+J", "Ctrl+R", "F5", "Ctrl+Shift+S", "Ctrl+S", "Ctrl+Enter", "Esc"].every((k) => all.includes(k)) && gui.includes("if i.key_pressed(egui::Key::R) { restart = true; }") && gui.includes("if i.key_pressed(egui::Key::J) { chat = true; }") && gui.includes("if i.modifiers.shift && i.key_pressed(egui::Key::S) { capture = true; }") && gui.includes("if i.key_pressed(egui::Key::F5) { refresh = true; }") && gui.includes('on_hover_text("Ctrl+S")') && /Ctrl\+Enter/.test(gui.slice(0, gui.indexOf("const HELP_TOPICS"))); })());
+ok("C7 themes, Explorer 2 MB limit, delete arming, providers and workspace env names match Settings / Explorer / chat code", text.includes("16 palettes (TotalScript Aqua by default, Gold, Emerald, Graphite") && (() => { const ids = [...gui.matchAll(/Palette \{ id: "([a-z]+)", name: "([^"]+)"/g)]; return ids.length === 16 && ids[0][1] === "aqua" && ids[0][2] === "TotalScript Aqua" && ["gold", "emerald", "graphite", "paper", "snow", "sage"].every((id) => ids.some((m) => m[1] === id)) && new Set(ids.map((m) => m[1])).size === 16; })() && text.includes("Text files up to 2 MB open inline") && gui.includes("Text files up to 2 MB open inline; Ctrl+S saves.") && text.includes("Delete is armed on the first click") && gui.includes("delete_armed") && text.includes("CodeCraft, OpenAI, OpenRouter, Groq, DeepSeek, Gemini, xAI, Mistral, Together, a local Ollama / LM Studio or any OpenAI-compatible endpoint") && gui.includes("Bring your own API key: CodeCraft, OpenAI, OpenRouter, Groq, DeepSeek, Gemini, xAI, Mistral, Together, a local Ollama / LM Studio or any OpenAI-compatible endpoint") && text.includes("TOTAL_WORKSPACE_ROOT") && gui.includes("TOTAL_WORKSPACE_ROOT") && text.includes("TOTAL_MCP_COMMAND") && gui.includes("TOTAL_MCP_COMMAND"));
+ok("C8 Studio setup wording matches the app and the extension (Assistant → ⋯ → Manage MCP Servers → Studio as MCP server; plugin Allow prompt; Start MCP Server / Connect Blender)", /Assistant → [⋯…] → Manage MCP Servers/.test(text) && /Roblox Studio → Assistant → [⋯…] → Manage MCP Servers → Enable Studio as MCP server/.test(gui) /* 2.11.0: the window ships Inter, which has no ⋯ (U+22EF); it draws the menu as … */ && text.includes("open Plugins → TotalScript and click Allow on the HTTP prompt") && mainJs.includes("open Plugins → TotalScript and click Allow on the HTTP prompt") && text.includes("Start MCP Server in Blender (N panel → MCP for Blender)") && text.includes("Connect Blender") && mainJs.includes("Connect Blender"));
+ok("C9 FULL PC ACCESS, Kill Studio two-click confirm and single-instance claims match the code", text.includes("FULL PC ACCESS") && gui.includes('"FULL PC ACCESS (absolute paths, process_kill, cd anywhere) — applies immediately and on next start"') && text.includes("two-click confirm") && gui.includes('"Confirm: kill Studio"') && text.includes("Only one bridge can run at a time") && /a live bridge on 3000 that answers \/api\/window is ours/.test(mainRs));
+ok("C10 honest about Blender: it connects through the extension, this app has no Blender code", text.includes("Blender connects through the extension, not this app") && !/blender/i.test(gui.slice(0, gui.indexOf("const HELP_TOPICS"))) && !/blender/i.test(mainRs));
+
+// ── D. docs ────────────────────────────────────────────────────────────────
+ok("D1 README documents 1.96.0 and lists this test", /\*\*1\.96\.0 — Desktop Help page/.test(readme) && readme.includes("test-desktop-help.js"));
+
+console.log(failed ? `\n${failed} FAILED` : "\nALL OK");
+process.exit(failed ? 1 : 0);

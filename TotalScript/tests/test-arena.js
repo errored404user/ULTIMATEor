@@ -1,0 +1,1 @@
+const fs=require("fs"),assert=require("assert");const s=fs.readFileSync("src/providers/arena.js","utf8");assert(s.includes("function isAgentRoute()"));assert(s.includes("agentTurns()"));assert(s.includes("isAgentRoute() ? textWithout"));assert(!s.includes("Agent mode is not supported"));console.log("Arena Agent mode provider checks passed");

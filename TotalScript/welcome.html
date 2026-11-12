@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en" data-ts-theme="dark" data-accent="aqua">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hello from TotalScript</title>
+  <link rel="icon" href="assets/icon32.png" />
+  <link rel="stylesheet" href="ui/tokens.css" />
+  <link rel="stylesheet" href="ui/components.css" />
+  <style>
+    /* TotalScript hello page — shown ONCE, right after the extension is installed
+       (background.js → onInstalled reason "install", flag rsHelloShown).
+       2.12.0: built on ui/tokens.css + ui/components.css (same identity as the popup). */
+    html,body{margin:0; min-height:100%}
+    body{display:flex; align-items:center; justify-content:center; padding:32px 16px; background:var(--ts-bg)}
+    .card{width:min(720px, 100%); background:var(--ts-surface); border:1px solid var(--ts-line-strong); border-radius:var(--ts-r-xl); padding:30px 32px 26px; box-shadow:var(--ts-shadow-3); animation:ts-rise var(--ts-dur-4) var(--ts-ease)}
+    .brand{display:flex; align-items:center; gap:14px}
+    .brand img{width:52px; height:52px; border-radius:14px; border:1px solid var(--ts-line-strong); background:#000}
+    .brand small{display:block; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ts-text-3); font-weight:700}
+    .brand b{font-size:20px; letter-spacing:-.2px; color:var(--ts-text)}
+    h1{margin:22px 0 8px; font-size:28px; letter-spacing:-.4px; color:var(--ts-text); line-height:1.15}
+    h1 span{color:var(--ts-accent)}
+    p.lead{margin:0 0 20px; color:var(--ts-text-2); font-size:15px; line-height:1.55}
+    ol{margin:0; padding:0; list-style:none; display:grid; gap:10px}
+    ol li{display:grid; grid-template-columns:30px 1fr; gap:12px; align-items:start; padding:12px 14px; border-radius:var(--ts-r-lg); background:var(--ts-surface-2); border:1px solid var(--ts-line)}
+    ol li i{font-style:normal; width:30px; height:30px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; color:var(--ts-accent-ink); background:var(--ts-accent)}
+    ol li b{display:block; font-size:14px; margin-bottom:2px; color:var(--ts-text)}
+    ol li span{color:var(--ts-text-2); font-size:13px; line-height:1.45; overflow-wrap:break-word}
+    ol li span b{display:inline; font-size:inherit; margin:0}
+    .acts{display:flex; flex-wrap:wrap; gap:10px; margin-top:22px}
+    .acts button{height:40px; padding:0 18px; font-size:14px}
+    .foot{margin-top:18px; color:var(--ts-text-3); font-size:12px; line-height:1.5}
+  </style>
+</head>
+<body class="ts-page">
+  <main class="card" role="dialog" aria-labelledby="hello-title">
+    <div class="brand">
+      <img src="assets/icon128.png" alt="" />
+      <div><small>TotalScript</small><b>Roblox Studio, driven from your AI chat</b></div>
+    </div>
+    <h1 id="hello-title">Hello! <span>TotalScript is installed.</span></h1>
+    <p class="lead">Thanks for installing. You describe what you want in plain words on any supported AI site, and TotalScript builds, scripts, tests and screenshots it inside Roblox Studio. Four quick steps and you are building:</p>
+    <ol>
+      <li><i>1</i><div><b>Run the agent app</b><span>In your TotalScript folder, start <code id="run-cmd">bin/total-core.exe</code> and leave it open. It links the chat to Studio and keeps running in the background.</span></div></li>
+      <li><i>2</i><div><b>Link Roblox Studio</b><span>In Studio open the <b>Assistant</b> panel → <b>⋯</b> → <b>Manage MCP Servers</b> → turn on <b>Studio as MCP server</b>. Once per Studio install.</span></div></li>
+      <li><i>3</i><div><b>Open a place</b><span>Any place works — <b>File → New → Baseplate</b> is fine for a first try.</span></div></li>
+      <li><i>4</i><div><b>Open an AI chat and press Start Agent</b><span>The TotalScript bar sits above the chat box. Settings → Help has the full tutorial and a live setup checklist any time.</span></div></li>
+    </ol>
+    <div class="acts">
+      <button type="button" class="ts-btn primary" id="open-ai">Open an AI chat</button>
+      <button type="button" class="ts-btn secondary" id="open-discord">Join the Discord</button>
+      <button type="button" class="ts-btn ghost" id="close">Close</button>
+    </div>
+    <p class="foot">This hello page is shown once, right after installation. You can always find the same steps under the extension icon and in the bar's Settings → Help.</p>
+  </main>
+  <script src="welcome.js"></script>
+</body>
+</html>
