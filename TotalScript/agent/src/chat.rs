@@ -281,7 +281,6 @@ struct Catalogue {
     studio_linked: bool,
     plugin_connected: bool,
     /// 2.21.0: current dedicated Hub status; stale / never-seen is unknown.
-    blockbench_connected: bool,
     blockbench_status: &'static str,
     note: String,
 }
@@ -311,7 +310,7 @@ async fn catalogue(state: &AppState) -> Catalogue {
     to_defs(&bb_tools, "roblox", &mut tools, &mut seen);
     let local = workspace::catalog();
     to_defs(&local, "local", &mut tools, &mut seen);
-    Catalogue { tools, studio_linked: studio, plugin_connected, blockbench_connected, blockbench_status: bb_status.state, note }
+    Catalogue { tools, studio_linked: studio, plugin_connected, blockbench_status: bb_status.state, note }
 }
 
 fn system_prompt(state: &AppState, cat: &Catalogue, instructions: &str, tools_enabled: bool, pair: &str) -> String {
@@ -717,7 +716,7 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
     let _ = events.send(ChatEvent::Status("collecting bridge tools".into()));
     let cat = if req.tools { catalogue(&state).await } else {
         let blockbench = state.blockbench.status().await;
-        Catalogue { tools: Vec::new(), studio_linked: state.ui.studio_connected.load(Ordering::Relaxed), plugin_connected: state.plugin.connected().await, blockbench_connected: blockbench.connected, blockbench_status: blockbench.state, note: String::new() }
+        Catalogue { tools: Vec::new(), studio_linked: state.ui.studio_connected.load(Ordering::Relaxed), plugin_connected: state.plugin.connected().await, blockbench_status: blockbench.state, note: String::new() }
     };
     let pair = state.plugin.pair_prompt_block().await;
     let system = system_prompt(&state, &cat, &req.instructions, req.tools && !cat.tools.is_empty(), &pair);
