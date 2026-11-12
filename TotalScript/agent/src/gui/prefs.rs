@@ -206,12 +206,21 @@ impl App {
     pub(super) fn integrations_section(&mut self, ui: &mut egui::Ui) {
         let t = self.theme;
         let s = self.shared.clone();
+        let bb_status = s.blockbench_status();
+        let bb_seen = s.blockbench_seen.load(Ordering::Relaxed);
+        let bb_ago = if bb_seen > 0 { s.boot.elapsed().as_secs().saturating_sub(bb_seen as u64) } else { 0 };
+        let bb_detail = match bb_status {
+            "connected" => format!("verified live · last seen {} ago", human_duration(Duration::from_secs(bb_ago))),
+            "disconnected" => "plugin explicitly paused or unloaded — resume it in Blockbench (Tools → TotalScript)".into(),
+            _ if bb_seen == 0 => "unknown — no plugin heartbeat verified this run; load TotalScript-Blockbench.js in Blockbench and check again".into(),
+            _ => format!("unknown — last heartbeat {} ago; stale status is not treated as disconnected", human_duration(Duration::from_secs(bb_ago))),
+        };
         let rows: Vec<(&str, bool, String, Option<Action>)> = vec![
             ("Browser extension", s.roblox_clients.load(Ordering::Relaxed) + s.local_clients.load(Ordering::Relaxed) > 0, format!("{} roblox · {} local channel(s) · ws 17613 / 17615", s.roblox_clients.load(Ordering::Relaxed), s.local_clients.load(Ordering::Relaxed)), Some(Action::OpenRepo)),
             ("Studio MCP helper", s.mcp_alive.load(Ordering::Relaxed), mcp_launcher_display(), Some(Action::RestartMcp)),
             ("Studio place link", s.studio_connected.load(Ordering::Relaxed), if s.studio_connected.load(Ordering::Relaxed) { "linked".into() } else if s.studio_running.load(Ordering::Relaxed) { "Studio open, not linked — enable Studio as MCP server, then probe".into() } else { "Studio not running".into() }, Some(Action::ProbeStudio)),
             ("Studio plugin (TotalScript.lua)", s.plugin_seen.load(Ordering::Relaxed) > 0, if s.plugin_seen.load(Ordering::Relaxed) > 0 { format!("last seen {} ago", human_duration(Duration::from_secs(s.boot.elapsed().as_secs().saturating_sub(s.plugin_seen.load(Ordering::Relaxed) as u64)))) } else { "not seen this run — install plugin/TotalScript.lua in Studio for pair mode and plugin tools".into() }, None),
-            ("Blockbench plugin (TotalScript-Blockbench.js)", s.blockbench_connected(), if s.blockbench_seen.load(Ordering::Relaxed) > 0 { format!("last seen {} ago", human_duration(Duration::from_secs(s.boot.elapsed().as_secs().saturating_sub(s.blockbench_seen.load(Ordering::Relaxed) as u64)))) } else { "not connected - load the plugin once in Blockbench (File → Plugins → Load Plugin from File)".into() }, None),
+            ("Blockbench plugin (TotalScript-Blockbench.js)", bb_status == "connected", bb_detail, None),
             ("Pair mode", s.pair_enabled.load(Ordering::Relaxed), format!("{} event(s) kept this run", s.pair_events.load(Ordering::Relaxed)), None),
             ("AI chat provider", self.chat_ready(), format!("{} · {}", self.chat_provider().name, if self.chat_model().is_empty() { "no model".to_string() } else { self.chat_model() }), Some(Action::Settings(SettingsCat::Ai))),
         ];

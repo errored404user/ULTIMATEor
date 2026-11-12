@@ -44,6 +44,18 @@ const WORK_PRESETS = {
   animate: { thinking: "max", extra: false },
   blockbench: { thinking: "max", extra: false },
 };
+const BLOCKBENCH_STATUS_MAX_AGE_MS = 12000;
+function blockbenchStatusState(s, workerSnapshot) {
+  if (!s || typeof s !== "object") return "unknown";
+  const status = workerSnapshot ? s.blockbench_status : s.status;
+  const verified = workerSnapshot ? s.blockbench_verified : s.verified;
+  const checkedAt = Number(workerSnapshot ? s.blockbench_checked_at : s.checked_at);
+  const age = Date.now() - checkedAt;
+  const connected = s.blockbench;
+  const consistent = (status === "connected" && connected === true) || (status === "disconnected" && connected === false);
+  if ((workerSnapshot ? s.blockbench_call_mismatch : s.call_mismatch) || verified !== true || !consistent || !Number.isFinite(checkedAt) || checkedAt <= 0 || age < -1000 || age > BLOCKBENCH_STATUS_MAX_AGE_MS) return "unknown";
+  return status;
+}
 
 // Sound volume (0-100) read by the content script at load. The key predates
 // the sound system's rename and is spelled in two parts here only because the
@@ -420,7 +432,8 @@ function render(s) {
       sd.className = "ts-dot " + (editorOk && mcpOk ? "ok live" : (mcpOk && (app || proc)) ? "warn" : "");
       ss.textContent = !mcpOk ? "Waiting for the bridge…" : editorOk ? "MCP linked to an open place" : app ? "Studio MCP is on — open a place" : proc ? "Studio is open — switch on its MCP server" : "Not running";
       ss.className = "conn-state" + (editorOk && mcpOk ? " ok" : mcpOk && (app || proc) ? " warn" : "");
-      if (sb) { sb.hidden = !(mcpOk && (s.blender || s.blockbench)); sb.className = "ts-badge accent"; sb.firstElementChild.textContent = s.blender && s.blockbench ? "Blender + Blockbench linked" : s.blockbench ? "Blockbench linked" : "Blender linked"; }
+      const bbUp = blockbenchStatusState(s, true) === "connected";
+      if (sb) { sb.hidden = !(mcpOk && (s.blender || bbUp)); sb.className = "ts-badge accent"; sb.firstElementChild.textContent = s.blender && bbUp ? "Blender + Blockbench linked" : bbUp ? "Blockbench linked" : "Blender linked"; }
     }
   }
   // 1.40.0 Beginner mode: the hint row is a live checklist. It stays visible
@@ -918,15 +931,34 @@ async function renderItem(it, stored) {
       const pathField = pathRow.querySelector("input");
       const copyBtn = pathRow.querySelector("button");
       const b = row.querySelector("#blockbench-check");
+      let expiryTimer = null;
       const paint = (r) => {
-        const on = !!(r && r.blockbench);
-        const core = !!(r && r.core);
-        state.textContent = on ? `Connected — ${r.tools || 0} bb_* commands ready (via total-core).` : core ? "total-core is up; waiting for the TotalScript plugin inside Blockbench (File → Plugins → Load Plugin from File → TotalScript-Blockbench.js, once)." : "total-core is not running — start the TotalScript desktop app first; it keeps the plugin file next to its executable.";
+        const bbState = blockbenchStatusState(r, false);
+        const verified = bbState !== "unknown";
+        const on = bbState === "connected";
+        if (expiryTimer) { clearTimeout(expiryTimer); expiryTimer = null; }
+        const diagnostics = [r && r.server_list_mismatch, r && r.call_mismatch].filter(Boolean);
+        if (on) state.textContent = `Connected — ${r.tools || 0} bb_* commands ready (verified by total-core).`;
+        else if (verified) state.textContent = r.core
+          ? "total-core confirms the Blockbench plugin is disconnected (File → Plugins → Load Plugin from File → TotalScript-Blockbench.js, once)."
+          : "total-core confirms the plugin is disconnected, but its API is not currently reachable — start the TotalScript desktop app and check again.";
+        else state.textContent = r && r.core
+          ? `Connection unknown — total-core did not provide a fresh Blockbench status${r.status_error ? ": " + r.status_error : ". Check again before sending commands."}`
+          : `Connection unknown — could not verify total-core or the Blockbench plugin${r && r.status_error ? ": " + r.status_error : ". Start the TotalScript desktop app, then check again."}`;
+        if (diagnostics.length) state.textContent += ` Status diagnostic: ${diagnostics.join(" ")}`;
         state.style.color = on ? "var(--ok, #4caf50)" : "";
         b.classList.toggle("primary", !on);
         if (r && r.plugin_file) { pathField.value = r.plugin_file; pathRow.style.display = "flex"; } else pathRow.style.display = "none";
+        if (verified) {
+          const checkedAt = Number(r.checked_at);
+          const untilExpiry = Math.max(1, BLOCKBENCH_STATUS_MAX_AGE_MS - (Date.now() - checkedAt) + 1);
+          expiryTimer = setTimeout(() => {
+            if (!row.isConnected) return;
+            bg({ type: "blockbench_status", refresh: true }).then(paint).catch(() => paint(null));
+          }, untilExpiry);
+        }
       };
-      bg({ type: "blockbench_status", refresh: false }).then(paint);
+      bg({ type: "blockbench_status", refresh: false }).then(paint).catch(() => paint(null));
       copyBtn.addEventListener("click", async () => {
         const v = pathField.value;
         if (!v) { toast("Plugin path unknown yet — start the TotalScript desktop app, then Check again", "warn"); return; }
@@ -938,7 +970,12 @@ async function renderItem(it, stored) {
       b.addEventListener("click", () => busy(b, async () => {
         const r = await bg({ type: "blockbench_status", refresh: true });
         paint(r);
-        if (!(r && r.blockbench)) { toast(r && r.core ? "Blockbench plugin not connected yet — load TotalScript-Blockbench.js in Blockbench (File → Plugins → Load Plugin from File)." : "Start the TotalScript desktop app first.", "warn"); return false; }
+        const bbState = blockbenchStatusState(r, false);
+        if (bbState !== "connected") {
+          const unknown = bbState === "unknown";
+          toast(unknown ? `Could not verify the Blockbench connection${r && r.status_error ? ": " + r.status_error : ". Check total-core and retry."}` : r && r.core ? "Blockbench plugin is not connected yet — load TotalScript-Blockbench.js in Blockbench (File → Plugins → Load Plugin from File)." : "Start the TotalScript desktop app first.", "warn");
+          return false;
+        }
         toast(`Blockbench connected — ${r.tools || 0} bb_* commands`, "ok");
         refresh();
         return true;

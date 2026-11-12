@@ -31,6 +31,7 @@
   const isNum = (v) => typeof v === "number" && Number.isFinite(v);
   const vec3 = (v) => Array.isArray(v) && v.length === 3 && v.every(isNum);
   const str = (v) => typeof v === "string" && v.trim().length > 0;
+  const textureTargetsValid = (targets) => targets === "all" || (Array.isArray(targets) && targets.length > 0 && targets.every(str) && (!targets.some((target) => target.trim() === "all") || (targets.length === 1 && targets[0] === "all")));
   const fail = (cmd, why) => ({ ok: false, error: "ERROR INVALID_ARGUMENT in " + cmd + ": " + why });
   const okay = () => ({ ok: true });
 
@@ -51,7 +52,7 @@
     bb_cubes: {
       description: "Blockbench: place 1-200 cubes in one undoable edit. cubes = [{name, from:[x,y,z], to:[x,y,z], origin?, rotation?, inflate?, color?}] in Blockbench units (16 = one block); group? = parent group; texture? = texture to apply.",
       inputSchema: { type: "object", properties: {
-        cubes: { type: "array", description: "1-200 cubes: {name, from:[x,y,z], to:[x,y,z], origin?:[x,y,z], rotation?:[x,y,z] degrees, inflate?:number, color?:0-7}" },
+        cubes: { type: "array", description: "1-200 cubes: {name, from:[x,y,z], to:[x,y,z], origin?:[x,y,z], rotation?:[x,y,z] degrees, inflate?:number, color?:0-9}" },
         group: { type: "string", description: "Parent group name (default root)." },
         texture: { type: "string", description: "Texture name to apply to every face." },
       }, required: ["cubes"] },
@@ -67,6 +68,7 @@
           if (c.origin !== undefined && !vec3(c.origin)) return fail("bb_cubes", "cubes[" + i + "].origin must be [x,y,z]");
           if (c.rotation !== undefined && !vec3(c.rotation)) return fail("bb_cubes", "cubes[" + i + "].rotation must be [x,y,z] degrees");
           if (c.inflate !== undefined && !isNum(c.inflate)) return fail("bb_cubes", "cubes[" + i + "].inflate must be a number");
+          if (c.color !== undefined && (!Number.isInteger(c.color) || c.color < 0 || c.color > 9)) return fail("bb_cubes", "cubes[" + i + "].color must be a marker colour index 0-9");
         }
         return okay();
       },
@@ -81,6 +83,35 @@
         return okay();
       },
     },
+    bb_cube_uv: {
+      description: "Blockbench: set UV rectangles on one or more faces of a cube. faces maps north / south / east / west / up / down to [u1,v1,u2,v2] in texture pixels.",
+      inputSchema: { type: "object", properties: { name: { type: "string" }, faces: { type: "object", description: "One or more cube sides mapped to [u1,v1,u2,v2] UV coordinates in texture pixels." } }, required: ["name", "faces"] },
+      validate(a) {
+        if (!str(a && a.name)) return fail("bb_cube_uv", "name (string) is required");
+        if (!a.faces || typeof a.faces !== "object" || Array.isArray(a.faces) || !Object.keys(a.faces).length) return fail("bb_cube_uv", "faces must map one or more cube sides to [u1,v1,u2,v2]");
+        const sides = ["north", "south", "east", "west", "up", "down"];
+        for (const [side, uv] of Object.entries(a.faces)) {
+          if (!sides.includes(side)) return fail("bb_cube_uv", "unknown cube face '" + side + "'; use " + sides.join(", "));
+          if (!Array.isArray(uv) || uv.length !== 4 || !uv.every(isNum)) return fail("bb_cube_uv", "faces." + side + " must be [u1,v1,u2,v2] numbers");
+        }
+        return okay();
+      },
+    },
+    bb_duplicate: {
+      description: "Blockbench: duplicate up to 200 cubes, meshes, locators or groups in one undoable edit. Group copies include their descendants; Blockbench assigns unique names.",
+      inputSchema: { type: "object", properties: { names: { type: "array", items: { type: "string" } } }, required: ["names"] },
+      validate(a) { if (!Array.isArray(a && a.names) || !a.names.length || a.names.length > 200 || !a.names.every(str)) return fail("bb_duplicate", "names must be a non-empty array of up to 200 non-empty element / group names or UUIDs"); return okay(); },
+    },
+    bb_select: {
+      description: "Blockbench: select outliner elements / groups by name or UUID. additive=true preserves the current selection and adds these nodes.",
+      inputSchema: { type: "object", properties: { names: { type: "array", items: { type: "string" } }, additive: { type: "boolean" } }, required: ["names"] },
+      validate(a) { if (!Array.isArray(a && a.names) || !a.names.length || a.names.length > 200 || !a.names.every(str)) return fail("bb_select", "names must be a non-empty array of up to 200 non-empty names or UUIDs"); if (a.additive !== undefined && typeof a.additive !== "boolean") return fail("bb_select", "additive must be true or false"); return okay(); },
+    },
+    bb_visibility: {
+      description: "Blockbench: set one or more cubes, meshes, locators or groups visible or hidden in the outliner / viewport.",
+      inputSchema: { type: "object", properties: { names: { type: "array", items: { type: "string" } }, visible: { type: "boolean" } }, required: ["names", "visible"] },
+      validate(a) { if (!Array.isArray(a && a.names) || !a.names.length || a.names.length > 200 || !a.names.every(str)) return fail("bb_visibility", "names must be a non-empty array of up to 200 non-empty names or UUIDs"); if (typeof a.visible !== "boolean") return fail("bb_visibility", "visible must be true or false"); return okay(); },
+    },
     bb_group: {
       description: "Blockbench: create (or update) a group = bone. origin = pivot [x,y,z]; parent? = parent group; move? = names of cubes / meshes / groups to move inside.",
       inputSchema: { type: "object", properties: { name: { type: "string" }, parent: { type: "string" }, origin: { type: "array" }, rotation: { type: "array" }, move: { type: "array" } }, required: ["name"] },
@@ -91,6 +122,11 @@
         if (a.move !== undefined && !Array.isArray(a.move)) return fail("bb_group", "move must be an array of names");
         return okay();
       },
+    },
+    bb_locator: {
+      description: "Blockbench: create a native locator node at position [x,y,z], with optional rotation and parent group. Whether locators export depends on the selected format.",
+      inputSchema: { type: "object", properties: { name: { type: "string" }, position: { type: "array" }, rotation: { type: "array" }, group: { type: "string" } }, required: ["name"] },
+      validate(a) { if (!str(a && a.name)) return fail("bb_locator", "name (string) is required"); if (a.position !== undefined && !vec3(a.position)) return fail("bb_locator", "position must be [x,y,z]"); if (a.rotation !== undefined && !vec3(a.rotation)) return fail("bb_locator", "rotation must be [x,y,z] degrees"); if (a.group !== undefined && !str(a.group)) return fail("bb_locator", "group must be a non-empty string"); return okay(); },
     },
     bb_remove: {
       description: "Blockbench: delete cubes, meshes or groups by name (one undo step).",
@@ -146,8 +182,8 @@
       },
     },
     bb_texture: {
-      description: "Blockbench: action=list | create {name, width, height, fill_color '#rrggbb', apply_to?} | import {path, name?, apply_to?} | apply {texture, targets:[cube / mesh / group names] or 'all'}.",
-      inputSchema: { type: "object", properties: { action: { type: "string" }, name: { type: "string" }, width: { type: "integer" }, height: { type: "integer" }, fill_color: { type: "string" }, path: { type: "string" }, texture: { type: "string" }, targets: { type: "array" }, apply_to: { type: "array" } }, required: ["action"] },
+      description: "Blockbench: action=list | create {name, width, height, fill_color '#rrggbb', apply_to?} | import {path, name?, apply_to?} | apply {texture, targets:[cube / mesh / group names] or 'all'}. A target array may not mix 'all' with named targets.",
+      inputSchema: { type: "object", properties: { action: { type: "string" }, name: { type: "string" }, width: { type: "integer" }, height: { type: "integer" }, fill_color: { type: "string" }, path: { type: "string" }, texture: { type: "string" }, targets: { oneOf: [{ type: "array", items: { type: "string" } }, { type: "string", enum: ["all"] }] }, apply_to: { oneOf: [{ type: "array", items: { type: "string" } }, { type: "string", enum: ["all"] }] } }, required: ["action"] },
       validate(a) {
         const action = String((a && a.action) || "").toLowerCase();
         if (!TEXTURE_ACTIONS.includes(action)) return fail("bb_texture", "action must be one of " + TEXTURE_ACTIONS.join(", "));
@@ -155,11 +191,15 @@
           if (!str(a.name)) return fail("bb_texture", "create needs name");
           for (const k of ["width", "height"]) if (a[k] !== undefined && !(isNum(a[k]) && a[k] >= 1 && a[k] <= 1024)) return fail("bb_texture", k + " must be 1-1024");
           if (a.fill_color !== undefined && !/^#?[0-9a-fA-F]{6}$/.test(String(a.fill_color))) return fail("bb_texture", "fill_color must be #rrggbb");
+          if (a.apply_to !== undefined && !textureTargetsValid(a.apply_to)) return fail("bb_texture", "apply_to must be 'all' or a non-empty array of target names; do not mix 'all' with named targets");
         }
-        if (action === "import" && !str(a.path)) return fail("bb_texture", "import needs path (a PNG on this computer)");
+        if (action === "import") {
+          if (!str(a.path)) return fail("bb_texture", "import needs path (a PNG on this computer)");
+          if (a.apply_to !== undefined && !textureTargetsValid(a.apply_to)) return fail("bb_texture", "apply_to must be 'all' or a non-empty array of target names; do not mix 'all' with named targets");
+        }
         if (action === "apply") {
           if (!str(a.texture)) return fail("bb_texture", "apply needs texture (name)");
-          if (!(a.targets === "all" || (Array.isArray(a.targets) && a.targets.length))) return fail("bb_texture", "apply needs targets (array of names) or 'all'");
+          if (!textureTargetsValid(a.targets)) return fail("bb_texture", "apply needs targets ('all' or a non-empty array of target names); do not mix 'all' with named targets");
         }
         return okay();
       },
@@ -182,6 +222,31 @@
         if (a.length !== undefined && !(isNum(a.length) && a.length > 0)) return fail("bb_animate", "length must be a positive number of seconds");
         return okay();
       },
+    },
+    bb_animation_list: {
+      description: "Blockbench: list the open project's animations, lengths, loop modes, group tracks and keyframe counts.",
+      inputSchema: { type: "object", properties: {} },
+      validate() { return okay(); },
+    },
+    bb_animation_edit: {
+      description: "Blockbench: edit one animation's name, duration (seconds) and loop mode (once | loop | hold).",
+      inputSchema: { type: "object", properties: { name: { type: "string" }, rename: { type: "string" }, length: { type: "number" }, loop: { type: "string", enum: ["once", "loop", "hold"] } }, required: ["name"] },
+      validate(a) { if (!str(a && a.name)) return fail("bb_animation_edit", "name (or uuid) is required"); if (a.rename !== undefined && !str(a.rename)) return fail("bb_animation_edit", "rename must be a non-empty string"); if (a.length !== undefined && (!isNum(a.length) || a.length <= 0 || a.length > 10000)) return fail("bb_animation_edit", "length must be greater than 0 and at most 10000 seconds"); if (a.loop !== undefined && !["once", "loop", "hold"].includes(a.loop)) return fail("bb_animation_edit", "loop must be once, loop or hold"); if (!["rename", "length", "loop"].some((key) => a[key] !== undefined)) return fail("bb_animation_edit", "give at least one of rename, length or loop"); return okay(); },
+    },
+    bb_animation_keyframe: {
+      description: "Blockbench: add or remove one bone keyframe. action=add requires value [x,y,z]; remove identifies the frame by animation, group, channel, and snapped time (seconds). Channels: rotation, position, scale.",
+      inputSchema: { type: "object", properties: { action: { type: "string", enum: ["add", "remove"] }, animation: { type: "string" }, group: { type: "string" }, channel: { type: "string", enum: ["rotation", "position", "scale"] }, time: { type: "number" }, value: { type: "array" } }, required: ["action", "animation", "group", "channel", "time"] },
+      validate(a) { if (!["add", "remove"].includes(a && a.action)) return fail("bb_animation_keyframe", "action must be add or remove"); if (!str(a.animation) || !str(a.group)) return fail("bb_animation_keyframe", "animation and group names are required"); if (!["rotation", "position", "scale"].includes(a.channel)) return fail("bb_animation_keyframe", "channel must be rotation, position or scale"); if (!isNum(a.time) || a.time < 0 || a.time > 10000) return fail("bb_animation_keyframe", "time must be a number from 0 to 10000 seconds"); if (a.action === "add" && !vec3(a.value)) return fail("bb_animation_keyframe", "value must be [x,y,z] for action add"); return okay(); },
+    },
+    bb_animation_remove: {
+      description: "Blockbench: remove an animation from the open project in one undo step. A saved external animation file is not deleted.",
+      inputSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+      validate(a) { if (!str(a && a.name)) return fail("bb_animation_remove", "name (or uuid) is required"); return okay(); },
+    },
+    bb_marker: {
+      description: "Blockbench: list, add, or remove timeline markers on an animation. Marker time is seconds; color is a marker palette index 0-9. Remove matches the provided name and/or time.",
+      inputSchema: { type: "object", properties: { action: { type: "string", enum: ["list", "add", "remove"] }, animation: { type: "string" }, time: { type: "number" }, name: { type: "string" }, color: { type: "integer" } }, required: ["action", "animation"] },
+      validate(a) { if (!["list", "add", "remove"].includes(a && a.action)) return fail("bb_marker", "action must be list, add or remove"); if (!str(a.animation)) return fail("bb_marker", "animation name (or uuid) is required"); if (a.time !== undefined && (!isNum(a.time) || a.time < 0 || a.time > 10000)) return fail("bb_marker", "time must be a number from 0 to 10000 seconds"); if (a.action === "add" && (!str(a.name) || !isNum(a.time))) return fail("bb_marker", "action add requires name and time"); if (a.action === "add" && a.color !== undefined && (!Number.isInteger(a.color) || a.color < 0 || a.color > 9)) return fail("bb_marker", "color must be a marker colour index 0-9"); if (a.action === "remove" && !str(a.name) && !isNum(a.time)) return fail("bb_marker", "action remove needs marker name or time"); if (a.action === "remove" && a.name !== undefined && !str(a.name)) return fail("bb_marker", "name must be a non-empty string"); return okay(); },
     },
     bb_camera: {
       description: "Blockbench: frame the viewport: view = front | back | left | right | top | bottom | isometric_right | isometric_left, or position + target [x,y,z], or focus = element / group name.",

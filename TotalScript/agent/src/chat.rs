@@ -280,8 +280,9 @@ struct Catalogue {
     tools: Vec<ToolDef>,
     studio_linked: bool,
     plugin_connected: bool,
-    /// 2.21.0: the TotalScript Blockbench plugin is polling (bb_* tools live).
+    /// 2.21.0: current dedicated Hub status; stale / never-seen is unknown.
     blockbench_connected: bool,
+    blockbench_status: &'static str,
     note: String,
 }
 
@@ -304,12 +305,13 @@ async fn catalogue(state: &AppState) -> Catalogue {
     let key_set = state.plugin.key().await.is_some();
     let plugin_tools = plugin::tools(plugin_connected, key_set);
     to_defs(&plugin_tools, "roblox", &mut tools, &mut seen);
-    let blockbench_connected = state.blockbench.connected().await;
+    let bb_status = state.blockbench.status().await;
+    let blockbench_connected = bb_status.connected;
     let bb_tools = blockbench::tools(blockbench_connected);
     to_defs(&bb_tools, "roblox", &mut tools, &mut seen);
     let local = workspace::catalog();
     to_defs(&local, "local", &mut tools, &mut seen);
-    Catalogue { tools, studio_linked: studio, plugin_connected, blockbench_connected, note }
+    Catalogue { tools, studio_linked: studio, plugin_connected, blockbench_connected, blockbench_status: bb_status.state, note }
 }
 
 fn system_prompt(state: &AppState, cat: &Catalogue, instructions: &str, tools_enabled: bool, pair: &str) -> String {
@@ -336,7 +338,12 @@ fn system_prompt(state: &AppState, cat: &Catalogue, instructions: &str, tools_en
     s.push_str("LIVE STATUS\n");
     s.push_str(&format!("- Roblox Studio MCP: {}\n", if cat.studio_linked { "linked (execute_luau / screen_capture available)" } else { "NOT linked — Studio tools will fail until the user opens Studio with MCP enabled; say so instead of retrying blindly" }));
     s.push_str(&format!("- TotalScript Studio plugin: {}\n", if cat.plugin_connected { "connected" } else { "not connected (plugin commands unavailable)" }));
-    s.push_str(&format!("- Blockbench (TotalScript Bridge plugin): {}\n", if cat.blockbench_connected { "connected - bb_* tools model low-poly pieces in Blockbench (bb_status first, bb_screenshot after every pass, bb_export obj/gltf/glb writes a FILE the user imports with Studio → Import 3D; nothing is inserted into Studio by itself)" } else { "not connected (bb_* unavailable; the user loads TotalScript-Blockbench.js once in Blockbench → File → Plugins → Load Plugin from File)" }));
+    let blockbench_line = match cat.blockbench_status {
+        "connected" => "connected - bb_* tools model low-poly pieces in Blockbench (bb_status first, bb_screenshot after every pass, bb_export obj/gltf/glb writes a FILE the user imports with Studio → Import 3D; nothing is inserted into Studio by itself)",
+        "disconnected" => "confirmed disconnected - only bb_status is available; tell the user how to resume/load TotalScript-Blockbench.js, do not claim a Blockbench operation succeeded",
+        _ => "UNKNOWN - no fresh verified Blockbench heartbeat; only bb_status is available to probe. Do not say connected or disconnected, do not emulate Blockbench, and ask the user to check the desktop app/plugin",
+    };
+    s.push_str(&format!("- Blockbench (TotalScript Bridge plugin): {blockbench_line}\n"));
     if !cat.note.is_empty() { s.push_str(&format!("- {}\n", cat.note)); }
     s.push_str(&format!("- Date: {}\n", chrono::Local::now().format("%Y-%m-%d")));
     // 2.8.0 pair mode: what the user did by hand since the last turn + open findings.
@@ -708,7 +715,10 @@ pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEven
     if req.model.trim().is_empty() { finish(appended, 0, 0, 0, Some("pick a model first (press Refresh next to the model box)".into())); return; }
 
     let _ = events.send(ChatEvent::Status("collecting bridge tools".into()));
-    let cat = if req.tools { catalogue(&state).await } else { Catalogue { tools: Vec::new(), studio_linked: state.ui.studio_connected.load(Ordering::Relaxed), plugin_connected: state.plugin.connected().await, blockbench_connected: state.blockbench.connected().await, note: String::new() } };
+    let cat = if req.tools { catalogue(&state).await } else {
+        let blockbench = state.blockbench.status().await;
+        Catalogue { tools: Vec::new(), studio_linked: state.ui.studio_connected.load(Ordering::Relaxed), plugin_connected: state.plugin.connected().await, blockbench_connected: blockbench.connected, blockbench_status: blockbench.state, note: String::new() }
+    };
     let pair = state.plugin.pair_prompt_block().await;
     let system = system_prompt(&state, &cat, &req.instructions, req.tools && !cat.tools.is_empty(), &pair);
     let tool_defs: Vec<Value> = cat.tools.iter().map(|t| t.def.clone()).collect();

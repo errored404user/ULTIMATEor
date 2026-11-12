@@ -247,6 +247,8 @@ pub struct UiShared {
     pub plugin_seen: AtomicUsize,
     /// 2.21.0 seconds since boot when the Blockbench plugin last polled (0 = never).
     pub blockbench_seen: AtomicUsize,
+    /// True only after the plugin explicitly paused/unloaded; stale/missing is unknown.
+    pub blockbench_disconnected: AtomicBool,
 }
 
 impl UiShared {
@@ -275,6 +277,7 @@ impl UiShared {
             pair_seq: AtomicUsize::new(0),
             plugin_seen: AtomicUsize::new(0),
             blockbench_seen: AtomicUsize::new(0),
+            blockbench_disconnected: AtomicBool::new(false),
         }
     }
 
@@ -291,7 +294,20 @@ impl UiShared {
 
     /// 2.21.0: called by every Blockbench HTTP handler (the plugin polls every ~20 s).
     pub fn blockbench_touch(&self) {
+        self.blockbench_disconnected.store(false, Ordering::Relaxed);
         self.blockbench_seen.store(self.boot.elapsed().as_secs() as usize + 1, Ordering::Relaxed);
+    }
+
+    pub fn blockbench_disconnect(&self) {
+        self.blockbench_disconnected.store(true, Ordering::Relaxed);
+    }
+
+    /// Fresh heartbeat = connected; explicit goodbye = disconnected; otherwise
+    /// no recent evidence (never seen or stale) = unknown.
+    pub fn blockbench_status(&self) -> &'static str {
+        if self.blockbench_disconnected.load(Ordering::Relaxed) { "disconnected" }
+        else if self.blockbench_connected() { "connected" }
+        else { "unknown" }
     }
 
     /// The TotalScript Blockbench plugin talked to the bridge within the last 45 s.

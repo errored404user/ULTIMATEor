@@ -1199,6 +1199,7 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
         .route("/api/blockbench/hello", post(blockbench::hello_handler))
         .route("/api/blockbench/poll", get(blockbench::poll_handler))
         .route("/api/blockbench/result", post(blockbench::result_handler))
+        .route("/api/blockbench/goodbye", post(blockbench::goodbye_handler))
         .route("/api/blockbench/status", get(blockbench::status_handler))
         .route("/ws", get(ws_handler))
         .with_state(state)
@@ -1283,7 +1284,9 @@ async fn window_handler(State(state): State<AppState>, Json(req): Json<serde_jso
     Json(serde_json::json!({ "ok": true, "action": action }))
 }
 
-async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {    Json(serde_json::json!({
+async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let blockbench = state.blockbench.status().await;
+    Json(serde_json::json!({
         "roblox_connected": state.roblox_editor_connected.load(Ordering::Relaxed),
         "roblox_bridge_connected": state.roblox_clients.read().await.len() > 0,
         "local_bridge_connected": state.local_clients.read().await.len() > 0,
@@ -1294,7 +1297,10 @@ async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {   
         "roblox_proc": state.roblox_proc.load(Ordering::Relaxed),
         "mcp_busy": state.mcp_in_flight.load(Ordering::Relaxed) > 0,
         "plugin_connected": state.plugin.connected().await,
-        "blockbench_connected": state.blockbench.connected().await,
+        "blockbench_connected": blockbench.connected,
+        "blockbench_status": blockbench.state,
+        "blockbench_verified": blockbench.verified,
+        "blockbench_status_error": blockbench.error,
         "blockbench_plugin_file": state.blockbench.installed().await,
     }))
 }
@@ -1620,7 +1626,8 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                                     let lower = detail.to_lowercase();
                                     let error_code = if lower.contains("not found") || lower.contains("unknown command") { "COMMAND_NOT_FOUND" }
                                         else if lower.contains("required") || lower.contains("invalid") || lower.contains("missing") { "INVALID_ARGUMENT" }
-                                        else if lower.contains("blockbench is not connected") { "BLOCKBENCH_OFFLINE" }
+                                        else if lower.contains("blockbench_status_unknown") || lower.contains("status could not be verified") || lower.contains("heartbeat is stale") { "BLOCKBENCH_STATUS_UNKNOWN" }
+                                        else if lower.contains("blockbench_offline") || lower.contains("blockbench is not connected") { "BLOCKBENCH_OFFLINE" }
                                         else if lower.contains("offline") || lower.contains("not connected") || lower.contains("connection") { "STUDIO_BRIDGE_OFFLINE" }
                                         else { "TOOL_EXECUTION_ERROR" };
                                     serde_json::json!({"type":"tool_result","id":id,"ok":false,"kind":"execution","errorCode":error_code,"error":detail})

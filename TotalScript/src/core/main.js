@@ -2054,7 +2054,7 @@
   WORK_MODES.blockbench = {
     name: "Blockbench", badge: "BLOCKBENCH", short: "Blockbench",
     sub: "Low-poly models in Blockbench: project → groups → cubes → texture → animate → screenshot → export file → Studio Import 3D (manual)",
-    note: "Blockbench is the editor, a FILE is the hand-off. Build with bb_project → bb_group → bb_cubes → bb_texture → bb_animate, look at bb_screenshot after every pass, then bb_export {format:\"obj\"|\"gltf\"|\"glb\"} and tell the user the path + Studio → Home → Import 3D. Meshes too: bb_mesh_primitive (cylinder, cone, pyramid, plane, sphere, torus) and bb_mesh for free shapes. Needs the TotalScript plugin loaded in Blockbench (it connects to total-core by itself; Settings → Blockbench shows the steps); without it the mode stops with a note instead of pretending.",
+    note: "Blockbench is the editor, a FILE is the hand-off. Build with bb_project → bb_group → bb_cubes / bb_mesh → bb_texture, use bb_cube_uv / bb_duplicate / bb_visibility / bb_locator for real outliner work and bb_animate / bb_animation_keyframe / bb_marker for timelines, look at bb_screenshot after every pass, then bb_export {format:\"obj\"|\"gltf\"|\"glb\"} and tell the user the path + Studio → Home → Import 3D. Meshes too: bb_mesh_primitive (cylinder, cone, pyramid, plane, sphere, torus) and bb_mesh for free shapes. Needs the TotalScript plugin loaded in Blockbench (it connects to total-core by itself; Settings → Blockbench shows the steps); without it the mode stops with a note instead of pretending.",
     toast: "Blockbench Work Mode — model in Blockbench, screenshot every pass, export a file for Studio's Import 3D",
     starters: [
       { label: "Blocky sword", prompt: "In Blockbench, build a low-poly fantasy sword about 40 units long: blade with a fuller, crossguard, wrapped grip, pommel - each as its own group with the pivot at the grip. Flat-colour textures per material, screenshot front and iso and fix what you see, then export it as OBJ and tell me the exact Import 3D steps and scale for Studio." },
@@ -3602,16 +3602,47 @@
     } catch {}
     return false;
   }
-  // Blockbench link for the precondition: live flag first, then a fresh look at
-  // total-core (2.21.0: the plugin dials in by itself; nothing to connect here).
+  // A cached boolean is not enough: the popup, worker and total-core must all
+  // agree on a fresh, verified heartbeat before the UI claims Blockbench is up.
+  const BLOCKBENCH_UI_STATUS_MAX_AGE_MS = 12000;
+  function blockbenchStatusState(bridge) {
+    const b = bridge || A.bridge || {};
+    const status = b.blockbench_status || b.status;
+    const verified = b.blockbench_verified !== undefined ? b.blockbench_verified : b.verified;
+    const checkedAt = Number(b.blockbench_checked_at !== undefined ? b.blockbench_checked_at : b.checked_at);
+    const age = Date.now() - checkedAt;
+    const consistent = (status === "connected" && b.blockbench === true) || (status === "disconnected" && b.blockbench === false);
+    if (b.blockbench_call_mismatch || b.call_mismatch) return "unknown";
+    if (verified !== true || !consistent || !Number.isFinite(checkedAt) || checkedAt <= 0 || age < -1000 || age > BLOCKBENCH_UI_STATUS_MAX_AGE_MS) return "unknown";
+    return status;
+  }
+  function applyBlockbenchStatus(status) {
+    const current = A.bridge || {};
+    const valid = !!(status && status.verified === true && (status.status === "connected" || status.status === "disconnected") && typeof status.blockbench === "boolean" && ((status.status === "connected") === status.blockbench));
+    const checkedAt = Number(status && status.checked_at) || 0;
+    A.bridge = Object.assign({}, current, {
+      blockbench: valid && status.status === "connected",
+      blockbench_verified: valid,
+      blockbench_status: valid ? status.status : "unknown",
+      blockbench_status_error: valid ? "" : String((status && status.status_error) || "Blockbench status is not verified"),
+      blockbench_checked_at: checkedAt,
+      blockbench_core_api: !!(status && status.core === true),
+      blockbench_call_mismatch: status && status.verified === true ? (status.call_mismatch || "") : (current.blockbench_call_mismatch || ""),
+      blockbench_server_list_mismatch: status && status.verified === true ? (status.server_list_mismatch || "") : (current.blockbench_server_list_mismatch || ""),
+      blockbench_plugin_file: status && status.plugin_file || current.blockbench_plugin_file,
+    });
+    if (status && typeof status.plugin_file === "string" && status.plugin_file) A.blockbenchPluginFile = status.plugin_file;
+    return blockbenchStatusState(A.bridge);
+  }
+  // The plugin dials total-core by itself; if cached data is not fresh and
+  // internally consistent, consult the dedicated status endpoint.
   async function blockbenchReady() {
-    try { if (A.bridge && A.bridge.blockbench === true) return true; } catch {}
-    try { if (window.__rsBlockbench && window.__rsBlockbench()) return true; } catch {}
-    try {
-      const st = await bg({ type: "blockbench_status", refresh: true });
-      if (st && st.blockbench) { A.bridge = A.bridge || {}; A.bridge.blockbench = true; return true; }
-    } catch {}
-    return false;
+    let state = blockbenchStatusState(A.bridge);
+    if (state !== "connected") {
+      try { state = applyBlockbenchStatus(await bg({ type: "blockbench_status", refresh: true })); }
+      catch { applyBlockbenchStatus(null); state = "unknown"; }
+    }
+    return state === "connected";
   }
   function startModePreflight() {
     A.modeBrief = null;
@@ -3662,7 +3693,7 @@
     const probe = WM.autoCheck(mode, toolName, args, feedback);
     if (!probe) return feedback;
     if (probe.kind === "blender" && !(A.bridge && A.bridge.blender === true)) return feedback;
-    if (probe.kind === "blockbench" && !(A.bridge && A.bridge.blockbench === true)) return feedback;
+    if (probe.kind === "blockbench" && blockbenchStatusState(A.bridge) !== "connected") return feedback;
     let raw = "";
     try { raw = await runModeProbe(probe); } catch {}
     const line = WM.renderAutoCheck(probe, raw);
@@ -5488,11 +5519,16 @@
     // checks the arguments (blockbench_tools.js) and the link; here we only
     // avoid a doomed round-trip and shape the answer.
     if (/^bb_[a-z_]+$/.test(bareName)) {
-      if (!(A.bridge && A.bridge.blockbench)) {
-        const st = await bg({ type: "blockbench_status", refresh: true });
-        if (st && st.plugin_file) { A.blockbenchPluginFile = st.plugin_file; }
-        if (st && st.blockbench) { A.bridge = A.bridge || {}; A.bridge.blockbench = true; }
-        else if (bareName !== "bb_status") {
+      let bbState = blockbenchStatusState(A.bridge);
+      if (bbState !== "connected") {
+        let st = null;
+        try { st = await bg({ type: "blockbench_status", refresh: true }); } catch {}
+        bbState = applyBlockbenchStatus(st);
+        if (bbState === "unknown" && bareName !== "bb_status") {
+          const why = st && st.status_error ? " " + st.status_error : "";
+          return "ERROR BLOCKBENCH_STATUS_UNKNOWN calling '" + name + "': total-core could not verify whether the Blockbench plugin is connected." + why + " Check the desktop app and retry; do not claim the link is offline or connected.";
+        }
+        if (bbState === "disconnected" && bareName !== "bb_status") {
           const steps = st && Array.isArray(st.steps) && st.steps.length ? " Steps for the user: " + st.steps.map((x, i) => (i + 1) + ") " + x).join(" ") : "";
           return "ERROR BLOCKBENCH_OFFLINE calling '" + name + "': Blockbench is not connected to total-core (the TotalScript Bridge plugin inside Blockbench is not polling)." + steps + " Ask the user to load the plugin / open Blockbench, then run bb_status once - do not emulate the result and do not retry blindly.";
         }
@@ -5515,7 +5551,11 @@
         }
         return `Output of '${name}':\n${r.text && r.text.length ? r.text : "(tool returned an empty result)"}`;
       }
-      if (r.kind === "disconnected" || r.errorCode === "BLOCKBENCH_OFFLINE") { try { A.bridge.blockbench = false; } catch {} }
+      if (r.errorCode === "BLOCKBENCH_OFFLINE") {
+        applyBlockbenchStatus({ blockbench: false, verified: true, status: "disconnected", checked_at: Date.now(), core: true });
+      } else if (r.errorCode === "BLOCKBENCH_STATUS_UNKNOWN" || r.errorCode === "BLOCKBENCH_STATUS_MISMATCH" || r.kind === "status-unknown" || r.kind === "status-mismatch") {
+        applyBlockbenchStatus({ blockbench: false, verified: false, status: "unknown", status_error: r.error });
+      }
       const errText = String((r.error && (r.error.message || r.error.error)) || r.error || "Blockbench command failed");
       return /^ERROR\b/.test(errText) ? errText : "ERROR" + (r.errorCode ? " " + r.errorCode : "") + " calling '" + name + "': " + errText;
     }
@@ -8328,6 +8368,7 @@
     let cover, coverRaf, barRaf;
     let openMenuFn = null; // set by build(); lets the popup force the panel open via runtime message
     let bridgeOk = false, studioDown = false, placeDown = false, appDown = false, addonOk = false, studioProcUp = false;
+    let blockbenchStatusExpiryTimer = 0;
     let robloxProcUp = false, unrealProcUp = false;
     let wasConnected = false, bridgeBannerEl = null;
     // 2.2.1: the bridge-drop banner is debounced. A blip (socket close → reconnect
@@ -9812,34 +9853,42 @@
     // steps (+ Copy the plugin path once total-core told us where it is) and
     // Check again; connected = what the link unlocks.
     function blockbenchConnected() {
-      if (A.bridge && A.bridge.blockbench === true) return true;
-      const live = ((A.bridge && A.bridge.servers) || []);
-      return live.some((s) => s && s.id === "blockbench" && s.alive);
+      return blockbenchStatusState(A.bridge) === "connected";
     }
     function blockbenchCardHtml() {
-      const on = blockbenchConnected();
-      const pluginFile = String((A.bridge && A.bridge.blockbench_plugin_file) || A.blockbenchPluginFile || "").trim();
-      const core = !!(A.bridge && (A.bridge.connected || A.bridge.bridge || A.bridge.mcp_alive));
-      const pill = `<span class="rs-blender-pill" role="status"><i aria-hidden="true"></i>${on ? "Connected" : "Offline"}</span>`;
-      const body = on
-        ? `<div class="rs-blender-caps" aria-label="Available through Blockbench">
+      const state = blockbenchStatusState(A.bridge);
+      const on = state === "connected", unknown = state === "unknown";
+      const bridge = A.bridge || {};
+      const pluginFile = String(bridge.blockbench_plugin_file || A.blockbenchPluginFile || "").trim();
+      const core = !!(bridge.blockbench_core_api || bridge.blockbench_bridge_connected || bridge.connected || bridge.bridge || bridge.mcp_alive);
+      const diagnostics = [bridge.blockbench_server_list_mismatch, bridge.blockbench_call_mismatch].filter(Boolean);
+      const pillText = on ? "Connected" : unknown ? "Unknown" : "Offline";
+      const pill = `<span class="rs-blender-pill" role="status"><i aria-hidden="true"></i>${pillText}</span>`;
+      const connectedBody = `<div class="rs-blender-caps" aria-label="Available through Blockbench">
              <span class="rs-blender-cap"><b>Cubes &amp; groups</b> bb_cubes / bb_group</span>
              <span class="rs-blender-cap"><b>Meshes</b> bb_mesh / bb_mesh_primitive</span>
-             <span class="rs-blender-cap"><b>Textures &amp; clips</b> bb_texture / bb_animate</span>
+             <span class="rs-blender-cap"><b>UV &amp; outliner</b> bb_cube_uv / bb_duplicate / bb_select / bb_visibility / bb_locator</span>
+             <span class="rs-blender-cap"><b>Textures &amp; animation</b> bb_texture / bb_animate / bb_animation_* / bb_marker</span>
              <span class="rs-blender-cap"><b>Export</b> OBJ · glTF · GLB → Studio Import 3D</span>
-           </div>`
-        : `<ol class="rs-blender-steps" aria-label="How to connect Blockbench">
+           </div>`;
+      const unknownBody = `<div class="rs-blender-steps" role="status"><b>Connection status unknown.</b> A stale or inconsistent heartbeat is not treated as connected or disconnected. ${escRs(bridge.blockbench_status_error || "Press Check again to query total-core directly.")}${diagnostics.length ? ` Status diagnostic: ${escRs(diagnostics.join(" "))}` : ""}</div>`;
+      const offlineBody = `<ol class="rs-blender-steps" aria-label="How to connect Blockbench">
              <li><b>1</b><span>Start the TotalScript desktop app (total-core). It keeps the plugin file current${pluginFile ? `: <code class="rs-bb-path">${escRs(pluginFile)}</code>` : " (<code>TotalScript-Blockbench.js</code> next to total-core; also in the extension folder under <code>plugin/</code>)"}.</span></li>
              <li><b>2</b><span>In Blockbench (desktop 4.8+): <em>File → Plugins → Load Plugin from File</em> → pick <code>TotalScript-Blockbench.js</code>. Once - Blockbench loads it on every start.</span></li>
              <li><b>3</b><span><em>Tools → TotalScript</em> in Blockbench shows "connected" as soon as the plugin reaches total-core (it dials 127.0.0.1:3000 by itself).</span></li>
              <li><b>4</b><span>Press <em>Check again</em>. Models are exported as files; import them with Studio → Home → Import 3D.</span></li>
            </ol>`;
-      return `<div class="rs-blender-card rs-bb-card ${on ? "on" : ""}" id="rs-blockbench-card" data-state="${on ? "on" : "off"}">
+      const body = on ? `${connectedBody}${diagnostics.length ? `<div class="rs-blender-steps" role="status">Status diagnostic: ${escRs(diagnostics.join(" "))}</div>` : ""}` : unknown ? unknownBody : offlineBody;
+      const sub = on ? "TotalScript's Blockbench plugin is verified live through total-core — the AI models in Blockbench and exports files for Studio."
+        : unknown ? "The latest Blockbench status is stale or could not be verified. Check again before assuming the plugin is online or offline."
+        : core ? "total-core confirms the plugin is not connected. Nothing is uploaded — exports are files on this computer."
+        : "Needs the TotalScript desktop app (total-core) and the TotalScript plugin inside Blockbench. Nothing is uploaded — exports are files on this computer.";
+      return `<div class="rs-blender-card rs-bb-card ${on ? "on" : ""}" id="rs-blockbench-card" data-state="${state}">
               <div class="rs-blender-head">
                 <span class="rs-blender-mark rs-bb-mark" aria-hidden="true"></span>
                 <div class="rs-blender-copy">
                   <div class="rs-blender-title"><span class="rs-blender-name">Blockbench</span>${pill}</div>
-                  <span class="rs-blender-sub">${on ? "TotalScript's Blockbench plugin is live through total-core — the AI models in Blockbench and exports files for Studio." : core ? "total-core is up; waiting for the TotalScript plugin inside Blockbench. Nothing is uploaded — exports are files on this computer." : "Needs the TotalScript desktop app (total-core) and the TotalScript plugin inside Blockbench. Nothing is uploaded — exports are files on this computer."}</span>
+                  <span class="rs-blender-sub">${sub}</span>
                 </div>
               </div>
               ${body}
@@ -10585,19 +10634,18 @@
         setMcpBusy(true, "Asking total-core about the Blockbench plugin…");
         const r = await bg({ type: "blockbench_status", refresh: true });
         setMcpBusy(false);
-        A.bridge = A.bridge || {};
-        if (r && typeof r.plugin_file === "string" && r.plugin_file) { A.bridge.blockbench_plugin_file = r.plugin_file; A.blockbenchPluginFile = r.plugin_file; }
-        if (!r || !r.blockbench) {
+        const bbState = applyBlockbenchStatus(r);
+        if (bbState !== "connected") {
           setBbBusy(false);
-          A.bridge.blockbench = false;
-          const why = !r ? "The extension worker did not answer." : r.core === false ? "total-core is not running - start the TotalScript desktop app first." : "total-core is up but the TotalScript plugin inside Blockbench is not polling yet (load it once: File → Plugins → Load Plugin from File, then check Tools → TotalScript).";
-          showBbNote(why, "error");
-          try { toast("Blockbench is not connected yet"); playSfx("error"); } catch {}
+          const why = bbState === "unknown"
+            ? `Could not verify the Blockbench status${r && r.status_error ? ": " + r.status_error : ". Check the TotalScript desktop app and retry."}`
+            : r && r.core ? "total-core confirms the Blockbench plugin is not polling yet (load it once: File → Plugins → Load Plugin from File, then check Tools → TotalScript)." : "Could not reach total-core — start the TotalScript desktop app first.";
+          showBbNote(why, bbState === "unknown" ? "warn" : "error");
+          try { toast(bbState === "unknown" ? "Blockbench status is unknown" : "Blockbench is not connected yet"); playSfx("error"); } catch {}
           syncBlenderFlag();
           if (r && r.plugin_file) buildMenu();
           return;
         }
-        A.bridge.blockbench = true;
         try { A.toolsAt = 0; } catch {}
         try { await ensureTools(true); } catch {}
         syncBlenderFlag();
@@ -12206,8 +12254,17 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
 
     function setStatus(s) {
       A.bridge = s;
+      if (blockbenchStatusExpiryTimer) { clearTimeout(blockbenchStatusExpiryTimer); blockbenchStatusExpiryTimer = 0; }
+      if (blockbenchStatusState(s) !== "unknown") {
+        const checkedAt = Number(s && s.blockbench_checked_at);
+        const untilExpiry = Math.max(1, BLOCKBENCH_UI_STATUS_MAX_AGE_MS - (Date.now() - checkedAt) + 1);
+        blockbenchStatusExpiryTimer = setTimeout(() => {
+          blockbenchStatusExpiryTimer = 0;
+          try { renderBar(); } catch {}
+        }, untilExpiry);
+      }
       try { window.__rsBlender = () => !!(s && s.blender); } catch {}
-      try { window.__rsBlockbench = () => !!(s && s.blockbench); } catch {}
+      try { window.__rsBlockbench = () => blockbenchStatusState(s) === "connected"; } catch {}
       // AgentScript ground truth from the agent process itself. Re-render the
       // open session panel so the Danger-zone toggle mirrors the agent.
       try {
@@ -13613,7 +13670,7 @@ rsInterval(() => {
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg && msg.type === "rs-status") {
-      ui.setStatus({ connected: msg.connected, mcpAlive: msg.mcpAlive, studio: msg.studio, studioApp: msg.studioApp, studioProc: msg.studioProc, robloxProc: msg.robloxProc, roblox_connected: msg.roblox_connected, engine: msg.engine, tools: msg.tools, servers: msg.servers, local_connected: msg.local_connected, local_full: msg.local_full, local_root: msg.local_root, blender: msg.blender, blender_shim: msg.blender_shim, blender_error: msg.blender_error, lifecycle: msg.lifecycle, reconnecting: msg.reconnecting, manual: msg.manual });
+      ui.setStatus({ connected: msg.connected, mcpAlive: msg.mcpAlive, studio: msg.studio, studioApp: msg.studioApp, studioProc: msg.studioProc, robloxProc: msg.robloxProc, roblox_connected: msg.roblox_connected, engine: msg.engine, tools: msg.tools, servers: msg.servers, local_connected: msg.local_connected, local_full: msg.local_full, local_root: msg.local_root, blender: msg.blender, blender_shim: msg.blender_shim, blender_error: msg.blender_error, blockbench: msg.blockbench, blockbench_verified: msg.blockbench_verified, blockbench_status: msg.blockbench_status, blockbench_status_error: msg.blockbench_status_error, blockbench_checked_at: msg.blockbench_checked_at, blockbench_core_api: msg.blockbench_core_api, blockbench_bridge_connected: msg.blockbench_bridge_connected, blockbench_server_list_mismatch: msg.blockbench_server_list_mismatch, blockbench_call_mismatch: msg.blockbench_call_mismatch, blockbench_plugin_file: msg.blockbench_plugin_file, lifecycle: msg.lifecycle, reconnecting: msg.reconnecting, manual: msg.manual });
     }
     if (msg && msg.type === "rs-open-menu") {
       ui.openMenu(false); // from the popup's Settings button — opens at the top (Switch AI / custom prompt)

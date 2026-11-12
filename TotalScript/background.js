@@ -198,8 +198,17 @@ let blenderError = "";
 let blenderScriptsReady = false;
 // 2.21.0 Blockbench: link state mirrored from total-core (the TotalScript
 // Bridge plugin inside Blockbench long-polls total-core; see bbRefresh()).
-let bbConnected = false;        // total-core says the Blockbench plugin is polling
+let bbConnected = false;        // last authoritative total-core liveness result
+let bbStatusKnown = false;      // false means unknown/unverified, not disconnected
+let bbStatusError = "";
+let bbCheckedAt = 0;            // wall clock for UI payloads
+let bbCheckedAtMono = 0;        // monotonic timestamp for freshness decisions
+let bbRefreshTask = null;
+let bbCoreApiOk = false;
+let bbServerMismatch = "";
+let bbCallMismatch = "";
 let bbPluginFile = "";          // where total-core keeps TotalScript-Blockbench.js
+const BB_STATUS_MAX_AGE_MS = 12000; // dedicated total-core heartbeat is queried every 5s; never claim stale connectivity
 const BLENDER_TOOL_NAMES = new Set([
   "get_scene_info", "get_object_info", "execute_blender_code", "get_viewport_screenshot",
   "blender_export_fbx", "blender_import_fbx", "blender_export_obj", "blender_import_obj",
@@ -366,32 +375,51 @@ const BLENDER_TOOLS = [
 ];
 for (const t of BLENDER_TOOLS) BLENDER_TOOL_NAMES.add(t.name);
 
-function blenderServers(list) {
-  // 2.21.0: total-core reports Blockbench itself ({id:"blockbench"}); keep it,
-  // only Blender is synthesised here.
-  const rest = (Array.isArray(list) ? list : []).filter((s) => s && s.id !== "blender");
-  if (blenderAddon) {
-    rest.push({
-      id: "blender", name: "Blender",
-      alive: true, tools: BLENDER_TOOLS.length,
-    });
-  }
+function bbStatusSnapshot() {
+  const monoNow = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+  const age = Math.max(0, monoNow - bbCheckedAtMono);
+  const fresh = bbStatusKnown && age <= BB_STATUS_MAX_AGE_MS;
+  return {
+    known: fresh,
+    connected: fresh && bbConnected,
+    error: fresh ? "" : (bbStatusKnown ? "Blockbench status is stale; check again to verify it" : (bbStatusError || "Blockbench status has not been verified")),
+  };
+}
+function bbStatusChanged(before, after) {
+  return before.known !== after.known || before.connected !== after.connected || before.error !== after.error;
+}
+function blenderServers(list, snapshot) {
+  // A cached WebSocket server list is diagnostic only for Blockbench. The
+  // dedicated /api/blockbench/status heartbeat is the authority for liveness.
+  const input = Array.isArray(list) ? list : [];
+  const oldBb = input.find((s) => s && s.id === "blockbench");
+  const bb = snapshot || bbStatusSnapshot();
+  const rest = input.filter((s) => s && s.id !== "blender" && s.id !== "blockbench");
+  if (bb.known) rest.push(Object.assign({ id: "blockbench", name: "Blockbench" }, oldBb || {}, { alive: bb.connected, tools: bb.connected ? bbToolList().length : 0 }));
+  if (blenderAddon) rest.push({ id: "blender", name: "Blender", alive: true, tools: BLENDER_TOOLS.length });
   return rest;
 }
-// 2.21.0: total-core lists the bb_* tools only while the plugin is connected;
-// the extension owns the same curated table, so the catalogue is identical
-// offline / online and the AI sees one description per command.
+// The dedicated total-core heartbeat controls Blockbench liveness and tool visibility.
 function mergeBlenderTools(tools) {
   const base = (Array.isArray(tools) ? tools : []).filter((t) => !(t && /^bb_/.test(String(t.name || "").split("/").pop())));
   const have = new Set(base.map((t) => t && t.name));
   if (blenderAddon) for (const t of BLENDER_TOOLS) if (!have.has(t.name)) base.push(t);
-  if (bbConnected) for (const t of bbToolList()) if (!have.has(t.name)) base.push(t);
+  if (bbStatusSnapshot().connected) for (const t of bbToolList()) if (!have.has(t.name)) base.push(t);
   return base;
 }
 function noteBlockbenchServers(list) {
   if (!Array.isArray(list)) return;
-  const bb = list.find((s) => s && s.id === "blockbench");
-  if (bb) bbSetConnected(bb.alive === true);
+  const entry = list.find((s) => s && s.id === "blockbench");
+  if (!entry || typeof entry.alive !== "boolean") return;
+  const verified = bbStatusSnapshot();
+  if (!verified.known) return;
+  if (entry.alive === verified.connected) { bbServerMismatch = ""; return; }
+  const signature = `${entry.alive ? "alive" : "down"}/${verified.connected ? "connected" : "disconnected"}`;
+  if (!bbServerMismatch.startsWith(signature + ":")) {
+    bbServerMismatch = `${signature}: cached WebSocket server list says Blockbench ${entry.alive ? "alive" : "down"}, while the fresh dedicated status says ${verified.connected ? "connected" : "disconnected"}.`;
+    pushActivity("blockbench", "warn", "Blockbench status mismatch; the dedicated total-core heartbeat remains authoritative.");
+    bbRefresh();
+  }
 }
 
 function log(...a) {
@@ -775,6 +803,7 @@ function statusObj() {
   // was called on purpose. The content script shows the red banner only for the
   // outage, never for the blip.
   const reconnecting = !connected && !manualStudioDisconnect && ((ws && ws.readyState === WebSocket.CONNECTING) || !!reconnectTimer);
+  const bb = bbStatusSnapshot();
   return {
     type: "rs-status", connected, mcpAlive, studio: studioConnected, studioApp, studioProc,
     lifecycle: mcpLifecycle, reconnecting, manual: manualStudioDisconnect,
@@ -782,9 +811,15 @@ function statusObj() {
     local_connected: localReady, local_full: localFull,
     local_root: localRoot,
     tools: mergeBlenderTools(toolsCache).length,
-    servers: blenderServers(serversCache), engine,
+    servers: blenderServers(serversCache, bb), engine,
     blender: blenderAddon, blender_error: blenderError || undefined,
-    blockbench: bbConnected, blockbench_plugin_file: bbPluginFile || undefined,
+    blockbench: bb.connected, blockbench_verified: bb.known,
+    blockbench_status: bb.known ? (bb.connected ? "connected" : "disconnected") : "unknown",
+    blockbench_status_error: bb.error || undefined, blockbench_checked_at: bbCheckedAt || undefined,
+    blockbench_core_api: bbCoreApiOk, blockbench_bridge_connected: connected,
+    blockbench_server_list_mismatch: bb.known ? (bbServerMismatch || undefined) : undefined,
+    blockbench_call_mismatch: bbCallMismatch || undefined,
+    blockbench_plugin_file: bbPluginFile || undefined,
   };
 }
 
@@ -805,11 +840,12 @@ async function refreshProcStatus() {
     const nl = j.local_ready === true;
     const nf = j.local_full === true;
     const nrRoot = typeof j.local_root === "string" ? j.local_root : localRoot;
-    // 2.21.0: Blockbench plugin link lives in total-core; mirror it here.
-    const bbBefore = bbConnected;
-    if (typeof j.blockbench_connected === "boolean") bbSetConnected(j.blockbench_connected);
+    // Blockbench liveness is checked only through /api/blockbench/status;
+    // /api/status fields are retained for plugin-path discovery, not as a
+    // second liveness source.
+    const previousPluginFile = bbPluginFile;
     if (typeof j.blockbench_plugin_file === "string") bbPluginFile = j.blockbench_plugin_file;
-    const changed = nr !== robloxProc || nl !== localReady || nf !== localFull || nrRoot !== localRoot || bbBefore !== bbConnected;
+    const changed = nr !== robloxProc || nl !== localReady || nf !== localFull || nrRoot !== localRoot || previousPluginFile !== bbPluginFile;
     robloxProc = nr;
     localReady = nl;
     localFull = nf;
@@ -1207,37 +1243,86 @@ async function connectBlender() {
 }
 
 // ── Blockbench (2.21.0: TotalScript Bridge plugin via total-core) ──────────
-// plugin/TotalScript-Blockbench.js runs inside the Blockbench desktop app and
-// long-polls total-core (/api/blockbench/*) for jobs - the same shape as the
-// Studio plugin. The worker never talks to Blockbench: a bb_* call is checked
-// locally (TotalBlockbench.validate) and then travels down the normal Roblox
-// channel (ws 17613) where total-core hands it to the plugin. "Connected" is
-// whatever total-core reports (/api/status.blockbench_connected and the
-// {id:"blockbench"} entry in the servers list).
+// plugin/TotalScript-Blockbench.js runs inside Blockbench and long-polls
+// total-core. Its dedicated /api/blockbench/status heartbeat is the sole
+// authority; /api/status and the cached WebSocket server list are diagnostics.
 function bbToolList() {
   try { return typeof TotalBlockbench !== "undefined" ? TotalBlockbench.toolList() : []; } catch { return []; }
 }
 function bbSetConnected(on) {
-  const next = !!on;
-  if (next === bbConnected) return;
-  bbConnected = next;
-  pushActivity("blockbench", next ? "ok" : "info", next ? "Blockbench plugin connected (via total-core)" : "Blockbench plugin disconnected");
+  const previous = bbStatusSnapshot();
+  bbConnected = !!on;
+  bbStatusKnown = true;
+  bbStatusError = "";
+  bbCheckedAt = Date.now();
+  bbCheckedAtMono = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : bbCheckedAt;
+  if (bbConnected && !previous.connected) pushActivity("blockbench", "ok", "Blockbench plugin connected (verified by total-core)");
+  else if (!bbConnected && previous.known && previous.connected) pushActivity("blockbench", "info", "Blockbench plugin disconnected (verified by total-core)");
 }
-// Refresh the Blockbench flag from total-core (cheap GET; used by the popup /
-// settings card "Check again" button and the offline branch of call_tool).
-async function bbRefresh() {
-  try {
-    const r = await fetch(`${RUST_ROBLOX_HTTP}/api/blockbench/status`, { method: "GET" });
-    if (!r.ok) return bbConnected;
-    const j = await r.json();
-    bbSetConnected(j && j.connected === true);
-    if (j && typeof j.plugin_file === "string") bbPluginFile = j.plugin_file;
-    return bbConnected;
-  } catch { return bbConnected; }
+function bbSetUnknown(reason) {
+  const wasConnected = bbStatusSnapshot().connected;
+  bbConnected = false;
+  bbStatusKnown = false;
+  bbStatusError = String(reason || "total-core did not return a usable Blockbench status").slice(0, 240);
+  bbCheckedAt = Date.now();
+  bbCheckedAtMono = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : bbCheckedAt;
+  if (wasConnected) pushActivity("blockbench", "warn", "Blockbench status could not be verified; the connection state is unknown");
+}
+// Re-read the dedicated heartbeat. Failed or malformed reads become UNKNOWN;
+// never preserve a stale green flag and never infer liveness from the server list.
+function bbRefresh() {
+  if (bbRefreshTask) return bbRefreshTask;
+  const before = bbStatusSnapshot();
+  const wasCoreApiOk = bbCoreApiOk;
+  const beforeServerMismatch = bbServerMismatch;
+  const beforeCallMismatch = bbCallMismatch;
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeout = setTimeout(() => { try { controller && controller.abort(); } catch {} }, 4000);
+  const task = (async () => {
+    try {
+      const r = await fetch(`${RUST_ROBLOX_HTTP}/api/blockbench/status`, { method: "GET", cache: "no-store", ...(controller ? { signal: controller.signal } : {}) });
+      if (!r.ok) {
+        bbCoreApiOk = false;
+        bbSetUnknown("Blockbench status endpoint answered HTTP " + r.status);
+        return false;
+      }
+      bbCoreApiOk = true;
+      const j = await r.json();
+      const validState = j && (j.status === "connected" || j.status === "disconnected") && j.verified === true && typeof j.connected === "boolean" && ((j.status === "connected") === j.connected);
+      if (!validState) {
+        bbSetUnknown((j && typeof j.status_error === "string" && j.status_error) || "Blockbench status response was stale, unverified, or contradictory");
+        return false;
+      }
+      bbSetConnected(j.status === "connected");
+      if (typeof j.plugin_file === "string") bbPluginFile = j.plugin_file;
+      if (Array.isArray(serversCache)) noteBlockbenchServers(serversCache);
+      return bbStatusSnapshot().connected;
+    } catch (e) {
+      bbCoreApiOk = false;
+      bbSetUnknown((e && e.message) || String(e));
+      return false;
+    } finally {
+      clearTimeout(timeout);
+      const after = bbStatusSnapshot();
+      if (bbStatusChanged(before, after) || wasCoreApiOk !== bbCoreApiOk || beforeServerMismatch !== bbServerMismatch || beforeCallMismatch !== bbCallMismatch) broadcastStatus();
+    }
+  })();
+  bbRefreshTask = task;
+  task.then(() => { if (bbRefreshTask === task) bbRefreshTask = null; }, () => { if (bbRefreshTask === task) bbRefreshTask = null; });
+  return task;
 }
 function bbStatusPayload() {
+  const status = bbStatusSnapshot();
   const steps = typeof TotalBlockbench !== "undefined" ? TotalBlockbench.connectSteps(bbPluginFile) : [];
-  return { ok: bbConnected, blockbench: bbConnected, plugin_file: bbPluginFile || undefined, core: connected, tools: bbConnected ? bbToolList().length : 0, steps };
+  return {
+    ok: status.connected, blockbench: status.connected, verified: status.known,
+    status: status.known ? (status.connected ? "connected" : "disconnected") : "unknown",
+    status_error: status.error || undefined, checked_at: bbStatusKnown ? bbCheckedAt : undefined,
+    plugin_file: bbPluginFile || undefined, core: bbCoreApiOk, core_api: bbCoreApiOk,
+    bridge_connected: connected, tools: status.connected ? bbToolList().length : 0, steps,
+    server_list_mismatch: status.connected || status.known ? (bbServerMismatch || undefined) : undefined,
+    call_mismatch: bbCallMismatch || undefined,
+  };
 }
 
 async function agentWorkspaceRoot() {
@@ -2027,15 +2112,66 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           }
           if (!connected) { connect(); await waitForConnection(6000); }
           if (!connected) { sendResponse({ ok: false, kind: "disconnected", errorCode: "STUDIO_BRIDGE_OFFLINE", error: "total-core is not running - start the TotalScript desktop app (it carries the Blockbench link)." }); break; }
-          if (!bbConnected) await bbRefresh();
-          if (!bbConnected) { sendResponse({ ok: false, kind: "disconnected", errorCode: "BLOCKBENCH_OFFLINE", error: TotalBlockbench.offlineMessage(bbPluginFile), steps: TotalBlockbench.connectSteps(bbPluginFile) }); break; }
+          let bbState = bbStatusSnapshot();
+          if (!bbState.known || !bbState.connected) {
+            await bbRefresh();
+            bbState = bbStatusSnapshot();
+          }
+          if (!bbState.known) {
+            sendResponse({ ok: false, kind: "status-unknown", errorCode: "BLOCKBENCH_STATUS_UNKNOWN", error: "Could not verify the Blockbench plugin connection from total-core. Do not assume it is offline or connected; check the desktop app and retry. " + (bbState.error || ""), steps: TotalBlockbench.connectSteps(bbPluginFile) });
+            break;
+          }
+          if (!bbState.connected) { sendResponse({ ok: false, kind: "disconnected", errorCode: "BLOCKBENCH_OFFLINE", error: TotalBlockbench.offlineMessage(bbPluginFile), steps: TotalBlockbench.connectSteps(bbPluginFile) }); break; }
           const bbStarted = performance.now();
           const br = await send({ type: "call_tool", name: v.name, arguments: msg.arguments || {}, timeout: msg.timeout, requestId: msg.requestId }, timeout);
           const bbMs = Math.round(performance.now() - bbStarted);
-          if (br && br.ok) pushActivity("blockbench", "ok", `${v.name} ok`, { tool: v.name, ms: bbMs }); // tool output stays out of the activity feed (the AI's result carries the export path)
-          else pushActivity("blockbench", "error", `${v.name} failed: ${String((br && br.error) || "no response").slice(0, 120)}`, { tool: v.name, ms: bbMs });
-          if (br && !br.ok && /blockbench is not connected/i.test(String(br.error || ""))) { bbSetConnected(false); br.errorCode = "BLOCKBENCH_OFFLINE"; br.steps = TotalBlockbench.connectSteps(bbPluginFile); }
-          sendResponse(br);
+          // Rust bb_status represents offline as a successful tool result whose
+          // text begins with this sentinel. Check it as well as transport errors.
+          const statusText = /^\s*ERROR\s+BLOCKBENCH_(?:OFFLINE|STATUS_UNKNOWN|STATUS_MISMATCH)\b/i.test(String((br && br.text) || ""));
+          const statusErrorReply = !!(br && (["BLOCKBENCH_OFFLINE", "BLOCKBENCH_STATUS_UNKNOWN", "BLOCKBENCH_STATUS_MISMATCH"].includes(br.errorCode) || /blockbench is not connected/i.test(String(br.error || "")) || statusText));
+          const bbReplyOk = !!(br && br.ok && !statusErrorReply);
+          const bbFailure = br && (br.error || (statusText ? br.text : "")) || "no response";
+          if (bbReplyOk) pushActivity("blockbench", "ok", `${v.name} ok`, { tool: v.name, ms: bbMs }); // tool output stays out of the activity feed (the AI's result carries the export path)
+          else pushActivity("blockbench", "error", `${v.name} failed: ${String(bbFailure).slice(0, 120)}`, { tool: v.name, ms: bbMs });
+          if (bbReplyOk) {
+            if (bbCallMismatch) { bbCallMismatch = ""; broadcastStatus(); }
+          } else if (statusErrorReply) {
+            // An offline / unknown status result may race the cached heartbeat. Re-read total-core
+            // before changing state so neither the error nor an old green flag
+            // masks a contradictory live result.
+            await bbRefresh();
+            const verified = bbStatusSnapshot();
+            if (verified.known && !verified.connected) {
+              bbCallMismatch = "";
+              br.ok = false;
+              br.errorCode = "BLOCKBENCH_OFFLINE";
+              br.kind = "disconnected";
+              br.error = TotalBlockbench.offlineMessage(bbPluginFile);
+              br.steps = TotalBlockbench.connectSteps(bbPluginFile);
+              delete br.text;
+              delete br.images;
+            } else if (verified.known && verified.connected) {
+              bbCallMismatch = "A Blockbench command was rejected as offline, but a fresh total-core heartbeat reports the plugin connected. Check the plugin version/session before retrying.";
+              br.ok = false;
+              br.errorCode = "BLOCKBENCH_STATUS_MISMATCH";
+              br.kind = "status-mismatch";
+              br.error = bbCallMismatch;
+              br.steps = TotalBlockbench.connectSteps(bbPluginFile);
+              delete br.text;
+              delete br.images;
+            } else {
+              bbCallMismatch = "A Blockbench command was rejected as offline, and total-core could not verify the connection afterward.";
+              br.ok = false;
+              br.errorCode = "BLOCKBENCH_STATUS_UNKNOWN";
+              br.kind = "status-unknown";
+              br.error = bbCallMismatch + (verified.error ? " " + verified.error : "");
+              br.steps = TotalBlockbench.connectSteps(bbPluginFile);
+              delete br.text;
+              delete br.images;
+            }
+            broadcastStatus();
+          }
+          sendResponse(br || { ok: false, kind: "disconnected", error: "total-core returned no Blockbench result" });
           break;
         }
         if (blenderAddon && isBlenderToolName(msg.name)) {
@@ -2568,9 +2704,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true; // async sendResponse
 });
 
-// Proc poll — keeps RS availability gated on the live Studio process
+// Proc and Blockbench status polls. Blockbench's dedicated HTTP heartbeat is
+// the sole liveness authority; keep UI snapshots fresh and turn failed probes
+// into UNKNOWN rather than leaving an old green flag visible.
 refreshProcStatus();
 setInterval(refreshProcStatus, 5000);
+void bbRefresh();
+setInterval(() => { void bbRefresh(); }, 5000);
 
 // Wake/keepalive hooks.
 chrome.runtime.onStartup.addListener(connect);

@@ -35,11 +35,67 @@ const rs = read("agent/src/blockbench.rs"), mainRs = read("agent/src/main.rs"), 
 
 // ── A. tables agree ──────────────────────────────────────────────────────────
 const rustNames = [...rs.matchAll(/tool\(\s*"(bb_[a-z_]+)"/g)].map((m) => m[1]);
-ok("A1 plugin: VERSION 2.21.0, PLUGIN_ID totalscript_bridge, DEFAULT_BRIDGE 127.0.0.1:3000 (total-core, no new port), 17 capabilities", P.VERSION === "2.21.0" && P.PLUGIN_ID === "totalscript_bridge" && P.DEFAULT_BRIDGE === "http://127.0.0.1:3000" && P.CAPABILITIES.length === 17);
-ok("A2 plugin CAPABILITIES === extension COMMAND_NAMES === Rust tools() (same 17 names, same order)", JSON.stringify(P.CAPABILITIES) === JSON.stringify(T.COMMAND_NAMES) && JSON.stringify(rustNames) === JSON.stringify(P.CAPABILITIES), { plugin: P.CAPABILITIES, ext: T.COMMAND_NAMES, rust: rustNames });
+ok("A1 plugin: VERSION 2.21.0, PLUGIN_ID totalscript_bridge, DEFAULT_BRIDGE 127.0.0.1:3000 (total-core, no new port), 27 capabilities", P.VERSION === "2.21.0" && P.PLUGIN_ID === "totalscript_bridge" && P.DEFAULT_BRIDGE === "http://127.0.0.1:3000" && P.CAPABILITIES.length === 27);
+ok("A2 plugin CAPABILITIES === extension COMMAND_NAMES === Rust tools() (same 27 names, same order)", JSON.stringify(P.CAPABILITIES) === JSON.stringify(T.COMMAND_NAMES) && JSON.stringify(rustNames) === JSON.stringify(P.CAPABILITIES), { plugin: P.CAPABILITIES, ext: T.COMMAND_NAMES, rust: rustNames });
 ok("A3 every capability has a JOBS implementation, an extension validate() and a Rust required[] list; isCommand / is_tool agree on bb_ prefix", P.CAPABILITIES.every((n) => typeof P.JOBS[n] === "function" && typeof T.COMMANDS[n].validate === "function") && T.isCommand("roblox/bb_cubes") && !T.isCommand("execute_luau") && /pub fn is_tool\(name: &str\) -> bool \{\n\s+name\.rsplit\('\/'\)\.next\(\)\.unwrap_or\(name\)\.starts_with\("bb_"\)/.test(rs));
 ok("A4 descriptions match between the extension table and the Rust catalogue (the AI reads one of them depending on the channel)", P.CAPABILITIES.every((n) => { const d = T.COMMANDS[n].description.replace(/"/g, '\\"'); return rs.includes('"' + d + '"'); }), P.CAPABILITIES.filter((n) => !rs.includes('"' + T.COMMANDS[n].description.replace(/"/g, '\\"') + '"')));
 ok("A5 required arguments agree (Rust &[…] vs extension inputSchema.required)", P.CAPABILITIES.every((n) => { const m = rs.match(new RegExp('tool\\(\\s*"' + n + '"[\\s\\S]*?&\\[([^\\]]*)\\]\\s*,?\\s*\\)')); const rustReq = m ? [...m[1].matchAll(/"([a-z_]+)"/g)].map((x) => x[1]) : null; const extReq = T.COMMANDS[n].inputSchema.required || []; return rustReq && JSON.stringify(rustReq) === JSON.stringify(extReq); }), P.CAPABILITIES.map((n) => n + ":" + JSON.stringify(T.COMMANDS[n].inputSchema.required || [])));
+{
+  const rustSchema = (name) => {
+    const m = [...rs.matchAll(/tool\s*\(\s*"(bb_[a-z_]+)"\s*,/g)].find((x) => x[1] === name);
+    if (!m) return null;
+    let i = m.index + m[0].length;
+    const skip = () => { while (/\s/.test(rs[i] || "")) i++; };
+    const readString = (at) => {
+      if (rs[at] !== '"') return null;
+      for (let j = at + 1, escaped = false; j < rs.length; j++) {
+        const c = rs[j];
+        if (escaped) { escaped = false; continue; }
+        if (c === "\\") { escaped = true; continue; }
+        if (c === '"') return { end: j + 1, value: JSON.parse(rs.slice(at, j + 1)) };
+      }
+      return null;
+    };
+    skip();
+    const description = readString(i);
+    if (!description) return null;
+    i = description.end; skip(); if (rs[i++] !== ",") return null; skip();
+    if (!rs.startsWith("json!", i)) return null;
+    i += 5; skip(); if (rs[i++] !== "(") return null; skip();
+    const start = i;
+    let depth = 0, quoted = false, escaped = false;
+    for (; i < rs.length; i++) {
+      const c = rs[i];
+      if (quoted) { if (escaped) escaped = false; else if (c === "\\") escaped = true; else if (c === '"') quoted = false; continue; }
+      if (c === '"') { quoted = true; continue; }
+      if (c === "{") depth++;
+      else if (c === "}") { depth--; if (depth === 0) break; }
+    }
+    if (depth !== 0) return null;
+    let properties;
+    try { properties = JSON.parse(rs.slice(start, i + 1)); } catch { return null; }
+    i++; skip(); if (rs[i++] !== ")") return null; skip(); if (rs[i++] !== ",") return null; skip();
+    if (rs.slice(i, i + 2) !== "&[") return null;
+    i += 2;
+    const required = [];
+    while (i < rs.length) {
+      skip();
+      if (rs[i] === "]") break;
+      if (rs[i] === ",") { i++; continue; }
+      const item = readString(i);
+      if (!item) return null;
+      required.push(item.value); i = item.end;
+    }
+    if (rs[i] !== "]") return null;
+    return { type: "object", properties, required };
+  };
+  const canonical = (value) => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((k) => [k, canonical(value[k])])) : value;
+  const mismatches = P.CAPABILITIES.filter((name) => {
+    const rust = rustSchema(name), ext = T.COMMANDS[name] && T.COMMANDS[name].inputSchema;
+    return !rust || !ext || JSON.stringify(canonical(rust)) !== JSON.stringify(canonical(Object.assign({}, ext, { required: ext.required || [] })));
+  });
+  ok("A6 Rust and extension Blockbench property schemas match exactly for every capability", mismatches.length === 0, mismatches);
+}
 
 // ── B. geometry ──────────────────────────────────────────────────────────────
 function topology(g) {
@@ -88,28 +144,39 @@ function inwardFaces(shape, g, R) {
 // ── C. jobs against a stand-in api ───────────────────────────────────────────
 function fakeApi(opts) {
   const o = Object.assign({ project: true, meshes: true, animations: true, exportDir: null, screenshot: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" }, opts || {});
-  const st = { project: o.project ? { name: "Fake", format: "free" } : null, nodes: [], textures: [], animations: [], undo: [], redoStack: [], edits: [], camera: null, presets: ["front", "back", "left", "right", "top", "bottom", "isometric_right", "isometric_left"], writes: [] };
+  const st = { project: o.project ? { name: "Fake", format: "free" } : null, nodes: [], textures: [], animations: [], selected: [], undo: [], redoStack: [], edits: [], camera: null, presets: ["front", "back", "left", "right", "top", "bottom", "isometric_right", "isometric_left"], writes: [] };
   let uuid = 1; const mk = (type, data) => Object.assign({ type, uuid: "u" + (uuid++), parent: null }, data);
   const find = (list, key) => list.find((x) => x.uuid === key || x.name === key) || null;
   const els = () => st.nodes.filter((n) => n.type !== "group");
   const api = {
     _st: st,
     version: () => "4.12.0",
-    project: () => st.project ? { name: st.project.name, format: st.project.format, texture_width: 16, texture_height: 16, cubes: st.nodes.filter((n) => n.type === "cube").length, meshes: st.nodes.filter((n) => n.type === "mesh").length, groups: st.nodes.filter((n) => n.type === "group").length, textures: st.textures.length, animations: st.animations.length } : null,
+    project: () => st.project ? { name: st.project.name, format: st.project.format, texture_width: 16, texture_height: 16, cubes: st.nodes.filter((n) => n.type === "cube").length, meshes: st.nodes.filter((n) => n.type === "mesh").length, groups: st.nodes.filter((n) => n.type === "group").length, locators: st.nodes.filter((n) => n.type === "locator").length, textures: st.textures.length, animations: st.animations.length } : null,
     outline: (depth) => { const node = (n, d) => { const line = "[" + n.type + "] " + n.name; if (n.type !== "group") return { line }; const kids = st.nodes.filter((k) => k.parent === n); return d < depth ? { line, children: kids.map((k) => node(k, d + 1)) } : { line, children: kids.length ? [{ line: "… " + kids.length + " more" }] : undefined }; }; return st.nodes.filter((n) => !n.parent).map((n) => node(n, 1)); },
     formats: () => ["free", "bedrock", "java_block"],
     hasFormat: (id) => ["free", "bedrock", "java_block"].includes(id),
     newProject(fmt, name) { st.project = { name, format: fmt }; st.nodes = []; st.textures = []; st.animations = []; return true; },
     meshesAllowed: () => o.meshes, animationsAllowed: () => o.animations,
-    findGroup: (k) => find(st.nodes.filter((n) => n.type === "group"), k), findCube: (k) => find(st.nodes.filter((n) => n.type === "cube"), k), findMesh: (k) => find(st.nodes.filter((n) => n.type === "mesh"), k), findElement: (k) => find(els(), k), findTexture: (k) => find(st.textures, k),
+    findGroup: (k) => find(st.nodes.filter((n) => n.type === "group"), k), findCube: (k) => find(st.nodes.filter((n) => n.type === "cube"), k), findMesh: (k) => find(st.nodes.filter((n) => n.type === "mesh"), k), findElement: (k) => find(els(), k), findTexture: (k) => find(st.textures, k), findAnimation: (k) => find(st.animations, k),
+    animations: () => st.animations.slice(), animationKeyframeCount: (an) => an.keys.length, animationGroupNames: (an) => [...new Set(an.keys.map((k) => k.bone))],
+    animationKeyframes(an, group, channel) { const animator = an.animators[group.uuid]; return animator && animator[channel] || []; }, animationMarkers: (an) => an.markers,
+    snapAnimationTime: (time, an) => Math.max(0, Math.round(time * (an ? an.snapping : 24)) / (an ? an.snapping : 24)),
     textures: () => st.textures.map((t) => ({ name: t.name, uuid: t.uuid, width: t.width, height: t.height })),
-    edit(label, aspects, fn) { st.edits.push({ label, open: true }); let out; try { out = fn(); } catch (e) { st.edits.pop(); throw e; } st.edits[st.edits.length - 1].open = false; st.undo.push(label); st.redoStack = []; return out; },
-    addCube(c, group, texture) { const cube = mk("cube", Object.assign({ texture: texture ? texture.name : null }, c)); if (group) cube.parent = group; st.nodes.push(cube); return cube; },
+    edit(label, aspects, fn) { st.edits.push({ label, aspects: Object.assign({}, aspects, { elements: (aspects && aspects.elements || []).slice() }), open: true }); let out; try { out = fn(); } catch (e) { st.edits.pop(); throw e; } st.edits[st.edits.length - 1].open = false; st.undo.push(label); st.redoStack = []; return out; },
+    addCube(c, group, texture) { const cube = mk("cube", Object.assign({ texture: texture ? texture.name : null, visibility: true, faces: Object.fromEntries(["north", "south", "east", "west", "up", "down"].map((side) => [side, { uv: [0, 0, 16, 16] }])) }, c)); if (group) cube.parent = group; st.nodes.push(cube); return cube; },
     extendCube(cube, patch) { Object.assign(cube, patch); },
+    setCubeFaceUV(cube, faces) { for (const [side, uv] of Object.entries(faces)) cube.faces[side].uv = uv.slice(); },
     describeCube: (c) => ({ name: c.name, uuid: c.uuid, from: c.from, to: c.to }),
-    addGroup(data, parent) { const g = mk("group", { name: data.name, origin: data.origin || [0, 0, 0], rotation: data.rotation || [0, 0, 0] }); if (parent) g.parent = parent; st.nodes.push(g); return g; },
+    addGroup(data, parent) { const g = mk("group", { name: data.name, origin: data.origin || [0, 0, 0], rotation: data.rotation || [0, 0, 0], visibility: true }); if (parent) g.parent = parent; st.nodes.push(g); return g; },
+    addLocator(data, group) { const locator = mk("locator", { name: data.name, position: data.position || [0, 0, 0], rotation: data.rotation || [0, 0, 0], visibility: true, parent: group || null }); st.nodes.push(locator); return locator; },
     extendGroup(g, patch) { if (patch.origin) g.origin = patch.origin; if (patch.rotation) g.rotation = patch.rotation; },
     moveTo(node, group) { node.parent = group; },
+    duplicateNode(node) {
+      const clone = (source, parent) => { const data = Object.fromEntries(Object.entries(source).filter(([key]) => key !== "uuid" && key !== "parent")); const copy = mk(source.type, structuredClone(data)); copy.parent = parent || null; st.nodes.push(copy); if (source.type === "group") for (const child of st.nodes.filter((candidate) => candidate.parent === source && candidate !== copy)) clone(child, copy); copy.name += " copy"; return copy; };
+      return clone(node, node.parent || null);
+    },
+    selectNodes(nodes, additive) { st.selected = additive ? [...st.selected, ...nodes.filter((node) => !st.selected.includes(node))] : nodes.slice(); return nodes; },
+    setVisibility(node, visible) { node.visibility = visible; },
     removeNode(node) { st.nodes = st.nodes.filter((n) => n !== node && n.parent !== node); },
     addMesh(data, group, texture) { const m = mk("mesh", { name: data.name, vertices: data.vertices.map((v) => v.slice()), faces: data.faces, origin: data.origin || [0, 0, 0], texture: texture ? texture.name : null }); if (group) m.parent = group; st.nodes.push(m); return m; },
     extendMesh(m, patch) { if (patch.name) m.name = patch.name; if (patch.origin) m.origin = patch.origin; },
@@ -117,9 +184,17 @@ function fakeApi(opts) {
     describeMesh: (m) => ({ name: m.name, uuid: m.uuid, vertices: m.vertices.length, faces: m.faces.length, origin: m.origin }),
     createTexture(name, w, h, fill) { const t = mk("texture", { name, width: w, height: h, fill }); st.textures.push(t); return t; },
     importTexture(p, name) { const t = mk("texture", { name: name || path.basename(p), width: 16, height: 16, path: p }); st.textures.push(t); return t; },
-    applyTextureTo(t, node) { let n = 0; const apply = (e) => { e.texture = t.name; n++; }; if (!node) els().forEach(apply); else if (node.type === "group") st.nodes.filter((k) => k.parent === node && k.type !== "group").forEach(apply); else apply(node); return n; },
-    createAnimation(d) { const an = mk("animation", { name: d.name, loop: d.loop, length: d.length, keys: [] }); st.animations.push(an); return an; },
-    addKeyframe(an, g, ch, time, v) { an.keys.push({ bone: g.name, ch, time, v }); },
+    textureElements(node) { const found = []; const visit = (entry) => { if (entry.type === "group") st.nodes.filter((child) => child.parent === entry).forEach(visit); else if (["cube", "mesh"].includes(entry.type)) found.push(entry); }; if (!node) els().forEach(visit); else visit(node); return found; },
+    applyTextureTo(t, node) { const elements = api.textureElements(node); for (const element of elements) element.texture = t.name; return elements.length; },
+    createAnimation(d) { const an = mk("animation", { name: d.name, loop: d.loop ? "loop" : "once", length: d.length, snapping: 24, keys: [], animators: {}, markers: [] }); st.animations.push(an); return an; },
+    extendAnimation(an, patch) { if (patch.name) an.name = patch.name; if (patch.length !== undefined) an.length = patch.length; if (patch.loop !== undefined) an.loop = patch.loop; },
+    removeAnimation(an) { st.animations = st.animations.filter((item) => item !== an); st.undo.push("remove animation"); st.redoStack = []; },
+    editKeyframes(label, keyframes, fn) { return api.edit(label, { keyframes }, () => fn(keyframes)); },
+    addAnimationKeyframe(an, group, channel, time, value) { const animator = an.animators[group.uuid] || (an.animators[group.uuid] = { group, [channel]: [] }); if (!animator[channel]) animator[channel] = []; const keyframe = { uuid: "kf" + (uuid++), bone: group.name, channel, time, data_points: [{ x: value[0], y: value[1], z: value[2] }] }; animator[channel].push(keyframe); an.keys.push({ bone: group.name, ch: channel, time, v: value, keyframe }); return keyframe; },
+    removeAnimationKeyframe(keyframe) { for (const an of st.animations) { an.keys = an.keys.filter((item) => item.keyframe !== keyframe); for (const animator of Object.values(an.animators)) for (const ch of ["rotation", "position", "scale"]) if (animator[ch]) animator[ch] = animator[ch].filter((item) => item !== keyframe); } },
+    addAnimationMarker(an, data) { const marker = Object.assign({ uuid: "mk" + (uuid++) }, data); an.markers.push(marker); return marker; },
+    removeAnimationMarker(an, marker) { an.markers = an.markers.filter((item) => item !== marker); },
+    addKeyframe(an, g, ch, time, v) { const animator = an.animators[g.uuid] || (an.animators[g.uuid] = { group: g }); if (!animator[ch]) animator[ch] = []; const keyframe = { uuid: "kf" + (uuid++), bone: g.name, ch, channel: ch, time, v }; animator[ch].push(keyframe); an.keys.push({ bone: g.name, ch, time, v, keyframe }); },
     anglePresets: () => st.presets, hasAnglePreset: (id) => st.presets.includes(id), loadAnglePreset(id) { st.camera = { preset: id }; },
     setCamera(pos, target) { st.camera = { pos, target }; }, focusCamera(node) { st.camera = { focus: node.name }; },
     screenshot: async () => o.screenshot,
@@ -151,9 +226,10 @@ const run = (name, args, api) => P.runJob(name, args, api).then((r) => ({ ok: tr
   const editsBefore = st.edits.length;
   const cBad = await run("bb_cubes", { cubes: [{ name: "a", from: [0, 0, 0], to: [-1, 1, 1] }] }, api);
   const cBad2 = await run("bb_cubes", { cubes: [{ name: "a", from: [0, 0] }] }, api);
+  const cBad3 = await run("bb_cubes", { cubes: [{ name: "a", from: [0, 0, 0], to: [1, 1, 1], color: 10 }] }, api);
   const editsAfterBad = st.edits.length;
   const c1 = await run("bb_cubes", { cubes: [{ name: "Edge", from: [-1, 0, -0.5], to: [1, 24, 0.5], color: 3 }, { name: "Fuller", from: [-0.5, 2, 0.5], to: [0.5, 20, 0.6] }], group: "Blade" }, api);
-  ok("C4 bb_cubes: from > to and a 2-vector are refused BEFORE any edit; a valid batch lands in the group in ONE undo step (two cubes, colour kept)", !cBad.ok && /from must be <= to/.test(cBad.e.message) && !cBad2.ok && editsAfterBad === editsBefore && c1.ok && c1.r.created.length === 2 && st.edits.length === editsBefore + 1 && st.nodes.filter((n) => n.type === "cube").every((n) => n.parent && n.parent.name === "Blade") && st.nodes.find((n) => n.name === "Edge").color === 3 && /Placed 2 cube\(s\) in group 'Blade'/.test(c1.r.text));
+  ok("C4 bb_cubes: reversed bounds, 2-vectors and marker colors outside 0-9 are refused BEFORE any edit; a valid batch lands in the group in ONE undo step", !cBad.ok && /from must be <= to/.test(cBad.e.message) && !cBad2.ok && !cBad3.ok && /color must be a marker colour index 0-9/.test(cBad3.e.message) && editsAfterBad === editsBefore && c1.ok && c1.r.created.length === 2 && st.edits.length === editsBefore + 1 && st.nodes.filter((n) => n.type === "cube").every((n) => n.parent && n.parent.name === "Blade") && st.nodes.find((n) => n.name === "Edge").color === 3 && /Placed 2 cube\(s\) in group 'Blade'/.test(c1.r.text));
   const ce = await run("bb_cube_edit", { name: "Fuller", to: [0.5, 21, 0.6], rename: "Fuller2", group: "Tip" }, api);
   const ceNone = await run("bb_cube_edit", { name: "Edge" }, api);
   ok("C5 bb_cube_edit: patch + rename + regroup in one edit; 'nothing to change' refused; unknown cube → EXECUTION", ce.ok && st.nodes.find((n) => n.name === "Fuller2").to[1] === 21 && st.nodes.find((n) => n.name === "Fuller2").parent.name === "Tip" && !ceNone.ok && ceNone.e.code === "INVALID_ARGUMENT" && (await run("bb_cube_edit", { name: "Nope", inflate: 1 }, api)).e.code === "EXECUTION");
@@ -169,15 +245,19 @@ const run = (name, args, api) => P.runJob(name, args, api).then((r) => ({ ok: tr
   ok("C8 bb_mesh_edit: move shifts origin + vertices, uniform scale doubles the radius about the origin, rotate keeps |r|, rename applied; scale ≤ 0 refused", me.ok && JSON.stringify(pm.origin) === "[0,-3,0]" && Math.abs(Math.hypot(pm.vertices[0][0], pm.vertices[0][2]) - 4) < 0.01 && !(await run("bb_mesh_edit", { name: "Pommel2", scale: 0 }, api)).ok);
   const tl0 = await run("bb_texture", { action: "list" }, api);
   const tc = await run("bb_texture", { action: "create", name: "steel", width: 32, height: 32, fill_color: "#8a8f99", apply_to: ["Blade"] }, api);
+  const textureGroupUndoElements = st.edits.at(-1) && st.edits.at(-1).aspects.elements.map((element) => element.name);
   const tcBad = await run("bb_texture", { action: "create", name: "x", fill_color: "silver" }, api);
   const tcBig = await run("bb_texture", { action: "create", name: "x", width: 4096 }, api);
   const ta = await run("bb_texture", { action: "apply", texture: "steel", targets: "all" }, api);
+  const textureAllUndoElements = st.edits.at(-1) && st.edits.at(-1).aspects.elements.map((element) => element.name);
+  const editsBeforeMixedTargets = st.edits.length;
+  const taMixed = await run("bb_texture", { action: "apply", texture: "steel", targets: ["all", "Blade"] }, api);
   const ti = await run("bb_texture", { action: "import", path: path.join(os.tmpdir(), "definitely-missing-" + process.pid + ".png") }, api);
-  ok("C9 bb_texture: list (empty hint) → create 32×32 #hex applied to a group's children → apply to all counts every element; bad hex / 4096 px / missing file refused", tl0.ok && /No textures/.test(tl0.r.text) && tc.ok && st.textures[0].fill === "#8a8f99" && st.textures[0].width === 32 && /applied it to 2 element\(s\)/.test(tc.r.text) && !tcBad.ok && !tcBig.ok && ta.ok && ta.r.applied === st.nodes.filter((n) => n.type !== "group").length && !ti.ok && ti.e.code === "EXECUTION" && /file not found/.test(ti.e.message));
+  ok("C9 bb_texture: list → create/apply local texture; groups include nested descendants, every changed element is in the undo aspects, add/import use Blockbench undo; 'all' cannot mix with names; bad hex / oversized / missing file refused", tl0.ok && /No textures/.test(tl0.r.text) && tc.ok && st.textures[0].fill === "#8a8f99" && st.textures[0].width === 32 && /applied it to 3 element\(s\)/.test(tc.r.text) && JSON.stringify(textureGroupUndoElements.slice().sort()) === JSON.stringify(["Edge", "Fuller2", "Wedge"]) && !tcBad.ok && !tcBig.ok && ta.ok && ta.r.applied === st.nodes.filter((n) => ["cube", "mesh"].includes(n.type)).length && textureAllUndoElements.length === ta.r.applied && textureAllUndoElements.every((name) => st.nodes.some((node) => node.name === name && ["cube", "mesh"].includes(node.type))) && /\.add\(true\)/.test(pluginSrc) && !/(?:fromDataURL|fromPath)[^\n]*\.add\(false\)/.test(pluginSrc) && !taMixed.ok && taMixed.e.code === "INVALID_ARGUMENT" && /do not mix 'all'/.test(taMixed.e.message) && st.edits.length === editsBeforeMixedTargets && !ti.ok && ti.e.code === "EXECUTION" && /file not found/.test(ti.e.message));
   const an = await run("bb_animate", { name: "swing", length: 1, bones: { Blade: [{ time: 0, rotation: [0, 0, 0] }, { time: 0.5, rotation: [0, 0, -40], position: [0, 1, 0] }, { time: 1, rotation: [0, 0, 0] }] } }, api);
   const anBad = await run("bb_animate", { name: "x", bones: { Blade: [{ time: 2, rotation: [0, 0, 0] }] }, length: 1 }, api);
   const anNoGroup = await run("bb_animate", { name: "x", bones: { Edge: [{ time: 0, rotation: [0, 0, 0] }] } }, api);
-  ok("C10 bb_animate: keyframes per channel on the GROUP (4 here), loop default, text says glTF carries it partially; time beyond length refused; a cube name (not a group) → EXECUTION 'animations target GROUPS'", an.ok && st.animations[0].keys.length === 4 && st.animations[0].loop === true && /Studio imports glTF animations only partially/.test(an.r.text) && !anBad.ok && anBad.e.code === "INVALID_ARGUMENT" && !anNoGroup.ok && /target GROUPS/.test(anNoGroup.e.message));
+  ok("C10 bb_animate: keyframes per channel on the GROUP (4 here), loop default, text says glTF carries it partially; time beyond length refused; a cube name (not a group) → EXECUTION 'animations target GROUPS'", an.ok && st.animations[0].keys.length === 4 && st.animations[0].loop === "loop" && /Studio imports glTF animations only partially/.test(an.r.text) && !anBad.ok && anBad.e.code === "INVALID_ARGUMENT" && !anNoGroup.ok && /target GROUPS/.test(anNoGroup.e.message));
   const cam = await run("bb_camera", { view: "isometric_right" }, api);
   const camA = st.camera;
   const cam2 = await run("bb_camera", { position: [40, 30, 40], target: [0, 8, 0] }, api);
@@ -209,17 +289,54 @@ const run = (name, args, api) => P.runJob(name, args, api).then((r) => ({ ok: tr
   const afterRedo = st.undo.length;
   const uAll = await run("bb_undo", { steps: 99 }, api);
   ok("C16 bb_undo / bb_redo step through the real undo stack (clamped 1-20) and report when nothing older exists", undoN >= 5 && u.ok && /Undid 2 step/.test(u.r.text) && afterUndo === undoN - 2 && rd.ok && afterRedo === undoN - 1 && uAll.ok && /Nothing older to undo/.test(uAll.r.text) && st.undo.length === 0);
+  const uvEditsBefore = st.edits.length;
+  const uv = await run("bb_cube_uv", { name: "Edge", faces: { north: [2, 3, 14, 15], up: [0, 0, 8, 8] } }, api);
+  const uvBad = await run("bb_cube_uv", { name: "Edge", faces: { front: [0, 0, 1, 1] } }, api);
+  ok("C17 bb_cube_uv writes real per-face UV rectangles in one undoable edit; unknown faces are refused without opening an edit", uv.ok && JSON.stringify(st.nodes.find((n) => n.name === "Edge").faces.north.uv) === "[2,3,14,15]" && JSON.stringify(st.nodes.find((n) => n.name === "Edge").faces.up.uv) === "[0,0,8,8]" && st.edits.length === uvEditsBefore + 1 && !uvBad.ok && uvBad.e.code === "INVALID_ARGUMENT" && st.edits.length === uvEditsBefore + 1);
+  const duplicateEditsBefore = st.edits.length, duplicateNodesBefore = st.nodes.length;
+  const dup = await run("bb_duplicate", { names: ["Blade"] }, api);
+  const bladeCopy = st.nodes.find((node) => node.type === "group" && node.name === "Blade copy");
+  ok("C18 bb_duplicate uses Blockbench's node duplicate operation in one edit; duplicating a group carries its nested descendants and gets a unique root name", dup.ok && bladeCopy && dup.r.duplicated.some((node) => node.name === "Blade copy") && st.nodes.length > duplicateNodesBefore + 1 && st.edits.length === duplicateEditsBefore + 1 && st.nodes.some((node) => node.parent === bladeCopy && node.name === "Tip copy"));
+  const editsBeforeSelect = st.edits.length;
+  const selected = await run("bb_select", { names: ["Edge", "Wedge"] }, api);
+  const selectedAdd = await run("bb_select", { names: ["Pommel2"], additive: true }, api);
+  ok("C19 bb_select sets and extends the outliner selection without editing model data", selected.ok && selected.r.selected.length === 2 && selected.r.selected.some((node) => node.name === "Edge") && selectedAdd.ok && st.selected.length === 3 && st.selected.some((node) => node.name === "Pommel2") && st.edits.length === editsBeforeSelect);
+  const visibleEditsBefore = st.edits.length;
+  const hidden = await run("bb_visibility", { names: ["Blade", "Edge"], visible: false }, api);
+  const visibilityBad = await run("bb_visibility", { names: ["Edge", "missing"], visible: true }, api);
+  ok("C20 bb_visibility toggles real outliner/viewport visibility in one undoable edit; unresolved names are rejected before an edit", hidden.ok && st.nodes.find((node) => node.name === "Blade").visibility === false && st.nodes.find((node) => node.name === "Edge").visibility === false && st.edits.length === visibleEditsBefore + 1 && !visibilityBad.ok && visibilityBad.e.code === "EXECUTION" && st.edits.length === visibleEditsBefore + 1);
+  const loc = await run("bb_locator", { name: "RightHand", position: [1, 8, 0], rotation: [0, 90, 0], group: "Blade" }, api);
+  const locBad = await run("bb_locator", { name: "Bad", position: [0, 1] }, api);
+  ok("C21 bb_locator creates an outliner locator with its transform and parent group; invalid vectors are refused", loc.ok && st.nodes.some((node) => node.type === "locator" && node.name === "RightHand" && node.parent.name === "Blade" && node.position[1] === 8) && !locBad.ok && locBad.e.code === "INVALID_ARGUMENT");
+  const animationList = await run("bb_animation_list", {}, api);
+  ok("C22 bb_animation_list reads the actual animation list, loop / duration, tracks and keyframe count", animationList.ok && animationList.r.animations.some((animation) => animation.name === "swing" && animation.keyframes === 4 && animation.groups.includes("Blade")) && /Animations \(1\): swing/.test(animationList.r.text));
+  const animationEdit = await run("bb_animation_edit", { name: "swing", rename: "swing_v2", length: 2, loop: "hold" }, api);
+  const animationEditBad = await run("bb_animation_edit", { name: "swing_v2", length: -1 }, api);
+  ok("C23 bb_animation_edit changes the live animation name, duration and loop mode in one undo step; invalid duration is rejected", animationEdit.ok && st.animations[0].name === "swing_v2" && st.animations[0].length === 2 && st.animations[0].loop === "hold" && !animationEditBad.ok && animationEditBad.e.code === "INVALID_ARGUMENT");
+  const keyframeEditCount = st.edits.length;
+  const keyAdd = await run("bb_animation_keyframe", { action: "add", animation: "swing_v2", group: "Blade", channel: "scale", time: 0.25, value: [1, 1.2, 1] }, api);
+  const keyDuplicate = await run("bb_animation_keyframe", { action: "add", animation: "swing_v2", group: "Blade", channel: "scale", time: 0.25, value: [1, 1, 1] }, api);
+  const keyRemove = await run("bb_animation_keyframe", { action: "remove", animation: "swing_v2", group: "Blade", channel: "scale", time: 0.25 }, api);
+  ok("C24 bb_animation_keyframe adds then removes a native bone-channel keyframe through one edit each; duplicate snapped times are refused before an edit", keyAdd.ok && keyAdd.r.keyframe.time === 0.25 && st.animations[0].animators[st.nodes.find((node) => node.name === "Blade").uuid].scale.length === 0 && !keyDuplicate.ok && keyDuplicate.e.code === "INVALID_ARGUMENT" && keyRemove.ok && /Removed scale keyframe/.test(keyRemove.r.text) && st.edits.length === keyframeEditCount + 2);
+  const markerListBefore = await run("bb_marker", { action: "list", animation: "swing_v2" }, api);
+  const markerAdd = await run("bb_marker", { action: "add", animation: "swing_v2", name: "impact", time: 0.75, color: 4 }, api);
+  const markerAddDup = await run("bb_marker", { action: "add", animation: "swing_v2", name: "impact-again", time: 0.75 }, api);
+  const markerList = await run("bb_marker", { action: "list", animation: "swing_v2" }, api);
+  const markerRemove = await run("bb_marker", { action: "remove", animation: "swing_v2", name: "impact" }, api);
+  ok("C25 bb_marker lists, adds and removes actual timeline markers; duplicate timestamps are refused and marker edits participate in animation undo", markerListBefore.ok && markerListBefore.r.markers.length === 0 && markerAdd.ok && markerAdd.r.marker.color === 4 && !markerAddDup.ok && markerAddDup.e.code === "INVALID_ARGUMENT" && markerList.ok && markerList.r.markers.length === 1 && markerList.r.markers[0].name === "impact" && markerRemove.ok && markerRemove.r.removed.length === 1 && st.animations[0].markers.length === 0);
+  const animationRemove = await run("bb_animation_remove", { name: "swing_v2" }, api);
+  ok("C26 bb_animation_remove uses Blockbench's undoable remove API but does not delete any external animation file", animationRemove.ok && st.animations.length === 0 && /external animation file was not deleted/.test(animationRemove.r.text) && st.undo.at(-1) === "remove animation");
   const tools = await run("bb_tools", {}, api);
   const unknown = await run("bb_paint", {}, api);
-  ok("C17 bb_tools lists the 17 commands + formats + views + primitives; an unknown name → COMMAND_NOT_FOUND with the ERROR prefix", tools.ok && P.CAPABILITIES.every((n) => tools.r.text.includes(n)) && /Mesh primitives: cylinder/.test(tools.r.text) && !unknown.ok && unknown.e.code === "COMMAND_NOT_FOUND" && /^ERROR COMMAND_NOT_FOUND/.test(unknown.e.message));
+  ok("C27 bb_tools lists the 27 commands + formats + views + primitives; an unknown name → COMMAND_NOT_FOUND with the ERROR prefix", tools.ok && P.CAPABILITIES.every((n) => tools.r.text.includes(n)) && /Mesh primitives: cylinder/.test(tools.r.text) && !unknown.ok && unknown.e.code === "COMMAND_NOT_FOUND" && /^ERROR COMMAND_NOT_FOUND/.test(unknown.e.message));
   const noProjCalls = await Promise.all(["bb_cubes", "bb_group", "bb_mesh", "bb_screenshot", "bb_export", "bb_animate"].map((n) => run(n, { name: "x", cubes: [{ name: "a", from: [0, 0, 0], to: [1, 1, 1] }], vertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], faces: [[0, 1, 2]], format: "obj", bones: { a: [{ time: 0, rotation: [0, 0, 0] }] } }, fakeApi({ project: false }))));
-  ok("C18 every building / capturing job refuses to run without an open project (EXECUTION, names bb_project)", noProjCalls.every((x) => !x.ok && x.e.code === "EXECUTION" && /no project is open/i.test(x.e.message)));
-  ok("C19 argument errors carry code INVALID_ARGUMENT and the message prefix 'ERROR INVALID_ARGUMENT in <cmd>:' (what the AI sees verbatim)", [cBad, cBad2, ceNone, mBad, primBad, tcBad, anBad, camBad, exBad].every((x) => x.e.code === "INVALID_ARGUMENT" && /^ERROR INVALID_ARGUMENT in bb_[a-z_]+: /.test(x.e.message)));
+  ok("C28 every building / capturing job refuses to run without an open project (EXECUTION, names bb_project)", noProjCalls.every((x) => !x.ok && x.e.code === "EXECUTION" && /no project is open/i.test(x.e.message)));
+  ok("C29 argument errors carry code INVALID_ARGUMENT and the message prefix 'ERROR INVALID_ARGUMENT in <cmd>:' (what the AI sees verbatim)", [cBad, cBad2, ceNone, mBad, primBad, tcBad, anBad, camBad, exBad].every((x) => x.e.code === "INVALID_ARGUMENT" && /^ERROR INVALID_ARGUMENT in bb_[a-z_]+: /.test(x.e.message)));
   fs.rmSync(dir, { recursive: true, force: true });
 
   // ── D. bridge loop against a fake total-core ───────────────────────────────
   {
-    const hub = { hellos: [], results: [], queue: [], polls: 0 };
+    const hub = { hellos: [], results: [], goodbyes: [], queue: [], polls: 0 };
     const srv = http.createServer((req, res) => {
       const chunks = []; req.on("data", (c) => chunks.push(c));
       req.on("end", () => {
@@ -228,6 +345,7 @@ const run = (name, args, api) => P.runJob(name, args, api).then((r) => ({ ok: tr
         if (req.method === "POST" && req.url === "/api/blockbench/hello") { hub.hellos.push({ body, origin: req.headers.origin || null }); return send(200, { ok: true, version: "2.21.0", client_id: body.client_id }); }
         if (req.method === "GET" && req.url.startsWith("/api/blockbench/poll?client_id=")) { hub.polls++; const job = hub.queue.shift() || null; return setTimeout(() => send(200, { ok: true, job }), job ? 0 : 30); }
         if (req.method === "POST" && req.url === "/api/blockbench/result") { hub.results.push(body); return send(200, { ok: true }); }
+        if (req.method === "POST" && req.url === "/api/blockbench/goodbye") { hub.goodbyes.push(body); return send(200, { ok: true, disconnected: true }); }
         send(404, { ok: false });
       });
     });
@@ -247,23 +365,69 @@ const run = (name, args, api) => P.runJob(name, args, api).then((r) => ({ ok: tr
     await new Promise((r) => setTimeout(r, 60));
     srv.close();
     const h = hub.hellos[0] && hub.hellos[0].body;
-    ok("D1 hello: POST /api/blockbench/hello {client_id bb-…, version 2.21.0, blockbench_version, project, format, capabilities[17]} with NO Origin header (total-core's origin_guard would refuse a browser origin)", h && /^bb-[a-z0-9]{8}$/.test(h.client_id) && h.version === "2.21.0" && h.blockbench_version === "4.12.0" && h.project === "Fake" && h.format === "free" && JSON.stringify(h.capabilities) === JSON.stringify(P.CAPABILITIES) && hub.hellos[0].origin === null);
-    ok("D2 poll → job → POST /api/blockbench/result: ok job carries {id, ok:true, result:{text,…}, elapsed_ms}; the cube really landed in the stand-in Blockbench", hub.results[0] && hub.results[0].id === "bbjob-1" && hub.results[0].ok === true && /Placed 1 cube/.test(hub.results[0].result.text) && typeof hub.results[0].elapsed_ms === "number" && bapi._st.nodes.some((n) => n.name === "Box"));
+    ok("D1 hello: POST /api/blockbench/hello {client_id bb-…, version 2.21.0, blockbench_version, project, format, capabilities[27]} with NO Origin header (total-core's origin_guard would refuse a browser origin)", h && /^bb-[a-z0-9]{8}$/.test(h.client_id) && h.version === "2.21.0" && h.blockbench_version === "4.12.0" && h.project === "Fake" && h.format === "free" && JSON.stringify(h.capabilities) === JSON.stringify(P.CAPABILITIES) && hub.hellos[0].origin === null);
+    ok("D2 poll → job → POST /api/blockbench/result: ok job carries {id, ok:true, result:{text,…}, elapsed_ms}; the cube really landed in the stand-in Blockbench", hub.results[0] && hub.results[0].id === "bbjob-1" && hub.results[0].client_id === h.client_id && hub.results[0].ok === true && /Placed 1 cube/.test(hub.results[0].result.text) && typeof hub.results[0].elapsed_ms === "number" && bapi._st.nodes.some((n) => n.name === "Box"));
     ok("D3 failing jobs answer ok:false with the ERROR-prefixed message and a code (INVALID_ARGUMENT / COMMAND_NOT_FOUND) - never an exception that stalls the loop", hub.results[1] && hub.results[1].ok === false && hub.results[1].code === "INVALID_ARGUMENT" && /^ERROR INVALID_ARGUMENT in bb_cubes/.test(hub.results[1].error) && hub.results[2] && hub.results[2].code === "COMMAND_NOT_FOUND", hub.results.slice(1));
-    ok("D4 state(): connected with jobsDone 3 while running; stop() → connected false + onState fired for the change; polling kept going between jobs", s.connected === true && s.jobsDone === 3 && s.running === true && bridge.state().connected === false && states[0] === false && states.includes(true) && hub.polls >= 3);
+    ok("D4 state(): connected with jobsDone 3 while running; stop() → connected false + explicit client goodbye; polling kept going between jobs", s.connected === true && s.jobsDone === 3 && s.running === true && bridge.state().connected === false && states[0] === false && states.includes(true) && hub.polls >= 3 && hub.goodbyes.length === 1 && hub.goodbyes[0].client_id === h.client_id);
+    const lifecycle = { calls: [] };
+    const lifecycleRequest = (method, target, body) => {
+      lifecycle.calls.push({ method, target, body });
+      if (target.endsWith("/api/blockbench/hello")) return Promise.resolve({ status: 200, json: { ok: true } });
+      if (target.includes("/api/blockbench/poll?")) return new Promise((resolve) => setTimeout(() => resolve({ status: 200, json: { ok: true, job: null } }), 30));
+      if (target.endsWith("/api/blockbench/goodbye")) return Promise.resolve({ status: 200, json: { ok: true } });
+      return Promise.resolve({ status: 200, json: { ok: true } });
+    };
+    const lifecycleBridge = P.createBridge({ request: lifecycleRequest, api: bapi, url: "http://total-core-old", log() {}, onState() {} });
+    const waitFor = async (predicate) => { const deadline = Date.now() + 1500; while (!predicate() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 5)); return predicate(); };
+    lifecycleBridge.start();
+    await waitFor(() => lifecycle.calls.some((c) => c.method === "GET" && c.target.includes("total-core-old/api/blockbench/poll")));
+    const firstClient = lifecycleBridge.state().clientId;
+    lifecycleBridge.setUrl("http://total-core-new");
+    const urlChanged = await waitFor(() => lifecycle.calls.some((c) => c.method === "POST" && c.target === "http://total-core-new/api/blockbench/hello"));
+    const secondClient = lifecycleBridge.state().clientId;
+    await new Promise((r) => setTimeout(r, 45)); // the old long-poll resolves after the new session starts
+    const oldGoodbye = lifecycle.calls.find((c) => c.method === "POST" && c.target === "http://total-core-old/api/blockbench/goodbye");
+    const oldPollDidNotWin = lifecycleBridge.state().connected === true && lifecycleBridge.state().url === "http://total-core-new";
+    lifecycleBridge.stop();
+    lifecycleBridge.start();
+    const resumed = await waitFor(() => lifecycle.calls.filter((c) => c.method === "POST" && c.target === "http://total-core-new/api/blockbench/hello").length >= 2);
+    const thirdClient = lifecycleBridge.state().clientId;
+    lifecycleBridge.stop();
+    const goodbyes = lifecycle.calls.filter((c) => c.method === "POST" && c.target.endsWith("/api/blockbench/goodbye"));
+    ok("D6 URL change, pause and resume send goodbye to the old session, rotate client IDs, reconnect promptly and ignore a late old poll", urlChanged && resumed && firstClient !== secondClient && secondClient !== thirdClient && oldGoodbye && oldGoodbye.body.client_id === firstClient && oldPollDidNotWin && goodbyes.length === 3 && goodbyes[1].body.client_id === secondClient && goodbyes[2].body.client_id === thirdClient);
     const dead = P.createBridge({ request: P.nodeRequest(http), api: bapi, url: "http://127.0.0.1:1", log() {}, onState() {} });
     const helloDead = await dead.hello();
-    ok("D5 nothing listening → hello() false, lastError names the refusal, nothing thrown (the plugin keeps retrying with backoff 2 s → 15 s)", helloDead === false && /ECONNREFUSED|connect/i.test(dead.state().lastError) && /backoff = Math\.min\(15000, Math\.round\(backoff \* 1\.5\)\)/.test(pluginSrc) && /let running = false, connected = false, helloTimer = null, pollAbort = null, backoff = 2000/.test(pluginSrc));
+    ok("D5 nothing listening → hello() false, lastError names the refusal, nothing thrown (the plugin keeps retrying with backoff 2 s → 15 s)", helloDead === false && /ECONNREFUSED|connect/i.test(dead.state().lastError) && /backoff = Math\.min\(15000, Math\.round\(backoff \* 1\.5\)\)/.test(pluginSrc) && /let running = false, connected = false, helloTimer = null, backoff = 2000/.test(pluginSrc) && /generation = 0/.test(pluginSrc));
   }
 
   // ── E. wiring pins (Rust + extension) ──────────────────────────────────────
-  ok("E1 blockbench.rs: Hub (info/queue/Notify/broadcast/seq), STALE 45 s, POLL_WAIT 20 s, hello/poll/result/status handlers, run() timeouts explain 'picked up but did not finish' vs 'did not pick up'", /pub struct Hub \{\n\s+info: Mutex<Option<\(PluginInfo, Instant\)>>,\n\s+queue: Mutex<VecDeque<Job>>,\n\s+wake: Notify,\n\s+results: broadcast::Sender<JobResult>,/.test(rs) && /const STALE_AFTER: Duration = Duration::from_secs\(45\);/.test(rs) && /const POLL_WAIT: Duration = Duration::from_secs\(20\);/.test(rs) && ["hello_handler", "poll_handler", "result_handler", "status_handler"].every((h) => rs.includes("pub async fn " + h + "(")) && /picked up '\{name\}' but did not finish it/.test(rs) && /did not pick up '\{name\}' within/.test(rs));
-  ok("E2 blockbench.rs call(): bb_status offline → ERROR BLOCKBENCH_OFFLINE text (not a tool error) so the AI reads the steps; bb_export gets _export_dir = <workspace>/blockbench_exports only when the workspace is ready; results render text + images [{mimeType,data}] (empty data dropped); export paths tracked in the activity feed", /if bare == "bb_status" && !state\.blockbench\.connected\(\)\.await \{\n\s+return Ok\(McpToolOutput \{ text: format!\("ERROR BLOCKBENCH_OFFLINE: \{\}"/.test(rs) && /obj\.insert\("_export_dir"\.to_string\(\), Value::String\(dir\)\);/.test(rs) && /if state\.workspace\.ready\(\) \{\n\s+Some\(PathBuf::from\(state\.workspace\.root_display\(\)\)\.join\(EXPORT_DIR\)/.test(rs) && /pub const EXPORT_DIR: &str = "blockbench_exports";/.test(rs) && /\.filter\(\|img\| img\.get\("data"\)/.test(rs) && /state\.ui\.track\("blockbench", format!\("export written: \{p\}"\)\)/.test(rs));
-  ok("E3 blockbench.rs tools(): only bb_status while disconnected (so the AI can probe), all 17 when connected, every entry server:\"blockbench\" with an object schema; plugin_source_is_the_bridge_plugin test pins JOBS.<name> = for every catalogue name; install() writes PLUGIN_SOURCE next to the executable unless TOTAL_NO_PLUGIN_INSTALL", /if !connected \{\n\s+return v;\n\s+\}/.test(rs) && /"server": "blockbench"/.test(rs) && /assert!\(PLUGIN_SOURCE\.contains\(&format!\("JOBS\.\{n\} ="\)\)/.test(rs) && /include_str!\("\.\.\/\.\.\/plugin\/TotalScript-Blockbench\.js"\)/.test(rs) && /TOTAL_NO_PLUGIN_INSTALL/.test(rs) && /std::fs::write\(&path, PLUGIN_SOURCE\)\?;/.test(rs));
-  ok("E4 main.rs: mod blockbench, AppState.blockbench, the four routes, install() logged at boot + set_installed, call_tool dispatch bb_* BEFORE the Studio plugin / MCP helper, BLOCKBENCH_OFFLINE error code, with_blockbench_server() adds {id:\"blockbench\"} to intro + list_tools servers (also when the MCP helper is down), /api/status carries blockbench_connected + blockbench_plugin_file", /^mod blockbench;$/m.test(mainRs) && /blockbench: Arc<blockbench::Hub>,/.test(mainRs) && ["/api/blockbench/hello", "/api/blockbench/poll", "/api/blockbench/result", "/api/blockbench/status"].every((r) => mainRs.includes('.route("' + r + '"')) && /match blockbench::install\(\) \{/.test(mainRs) && /state\.blockbench\.set_installed\(Some\(path\.display\(\)\.to_string\(\)\)\)\.await;/.test(mainRs) && /"roblox" => if blockbench::is_tool\(&name\) \{ blockbench::call\(&state2, &name, args\)\.await \} else if plugin::is_plugin_tool\(&name\)/.test(mainRs) && /lower\.contains\("blockbench is not connected"\) \{ "BLOCKBENCH_OFFLINE" \}/.test(mainRs) && (mainRs.match(/with_blockbench_server\(&state, /g) || []).length === 4 && /"blockbench_connected": state\.blockbench\.connected\(\)\.await,\n\s+"blockbench_plugin_file": state\.blockbench\.installed\(\)\.await,/.test(mainRs) && /tools\.extend\(blockbench::tools\(state\.blockbench\.connected\(\)\.await\)\);/.test(mainRs));
-  ok("E5 chat.rs (desktop chat): catalogue lists bb_* on the roblox engine, execute dispatches blockbench::is_tool first, the system prompt states the Blockbench link + file hand-off; gui shows the plugin in Integrations / Health / Help", /let bb_tools = blockbench::tools\(blockbench_connected\);\n\s+to_defs\(&bb_tools, "roblox", &mut tools, &mut seen\);/.test(chatRs) && /if blockbench::is_tool\(name\) \{ blockbench::call\(state, name, args\)\.await \} else if plugin::is_plugin_tool\(name\)/.test(chatRs) && /Blockbench \(TotalScript Bridge plugin\): \{\}/.test(chatRs) && /nothing is inserted into Studio by itself/.test(chatRs) && /pub fn blockbench_connected\(&self\) -> bool/.test(read("agent/src/gui.rs")) && /"Blockbench plugin \(TotalScript-Blockbench\.js\)"/.test(read("agent/src/gui/prefs.rs")) && /title: "Blockbench plugin"/.test(read("agent/src/gui/center.rs")));
-  ok("E6 plugin source: BBPlugin.register(totalscript_bridge) desktop-only, min 4.8.0, onload builds the api + Node http bridge, Tools-menu status / pause actions, a bridge-URL setting, onunload stops + deletes; module.exports only outside Blockbench", /BBPlugin\.register\(PLUGIN_ID, \{/.test(pluginSrc) && /variant: "desktop",\n\s+min_version: "4\.8\.0",/.test(pluginSrc) && /new Action\("totalscript_bridge_status"/.test(pluginSrc) && /new Action\("totalscript_bridge_toggle"/.test(pluginSrc) && /new Setting\("totalscript_bridge_url"/.test(pluginSrc) && /MenuBar\.addAction\(actionStatus, "tools"\)/.test(pluginSrc) && /onunload\(\) \{\n\s+try \{ if \(bridge\) bridge\.stop\(\); \} catch \{\}/.test(pluginSrc) && /if \(typeof BBPlugin === "undefined" && typeof module !== "undefined" && module\.exports\) module\.exports = core;/.test(pluginSrc) && /Undo\.initEdit\(asp\);/.test(pluginSrc) && /Undo\.finishEdit\(label, after\);/.test(pluginSrc) && /Undo\.cancelEdit\(\)/.test(pluginSrc));
-  ok("E7 background.js: importScripts blockbench_tools.js; call_tool bb_* branch validates locally (INVALID_ARGUMENT, nothing sent), needs the Roblox socket but NOT Studio (no robloxEditorConnected gate before the send), BLOCKBENCH_OFFLINE + steps when total-core says the plugin is away, then the plain Roblox send(); link state mirrored from /api/status + servers; the MCP client, DNR rule and URL key are gone", /importScripts\("src\/core\/blockbench_tools\.js"\)/.test(bg) && /const isBb = typeof TotalBlockbench !== "undefined" && TotalBlockbench\.isCommand\(msg\.name\);/.test(bg) && /if \(!v\.ok\) \{ sendResponse\(\{ ok: false, kind: "validation", errorCode: "INVALID_ARGUMENT", error: v\.error \}\); break; \}/.test(bg) && /if \(!bbConnected\) \{ sendResponse\(\{ ok: false, kind: "disconnected", errorCode: "BLOCKBENCH_OFFLINE", error: TotalBlockbench\.offlineMessage\(bbPluginFile\), steps: TotalBlockbench\.connectSteps\(bbPluginFile\) \}\); break; \}/.test(bg) && /const br = await send\(\{ type: "call_tool", name: v\.name, arguments: msg\.arguments \|\| \{\}, timeout: msg\.timeout, requestId: msg\.requestId \}, timeout\);/.test(bg) && !/robloxEditorConnected/.test(bg.slice(bg.indexOf("const isBb ="), bg.indexOf("const br = await send("))) && /if \(typeof j\.blockbench_connected === "boolean"\) bbSetConnected\(j\.blockbench_connected\);/.test(bg) && /function noteBlockbenchServers\(list\)/.test(bg) && !/TotalBlockbenchMcp|declarativeNetRequest|rsBlockbenchUrl|bb-mcp|blockbenchCall|connectBlockbench/.test(bg) && !fs.existsSync(path.join(ROOT, "src/core/blockbench_mcp.js")));
+  ok("E1 blockbench.rs: Hub status distinguishes connected / explicit disconnect / stale unknown; plugin poll/results and queued jobs are client-bound; goodbye, status, 45s stale and 20s poll handlers; run() timeouts explain picked-up vs not-picked-up", /pub struct Hub \{[\s\S]*?info: Mutex<Option<\(PluginInfo, Instant\)>>,[\s\S]*?explicitly_disconnected: AtomicBool,[\s\S]*?queue: Mutex<VecDeque<PendingJob>>/.test(rs) && /const STALE_AFTER: Duration = Duration::from_secs\(45\);/.test(rs) && /const POLL_WAIT: Duration = Duration::from_secs\(20\);/.test(rs) && ["hello_handler", "poll_handler", "result_handler", "goodbye_handler", "status_handler"].every((h) => rs.includes("pub async fn " + h + "(")) && /state: "unknown"[\s\S]*?heartbeat is stale/.test(rs) && /unknown or disconnected Blockbench client/.test(rs) && /struct PendingJob \{[\s\S]*?client_id: String/.test(rs) && /take_job_for\(&self, client_id: &str\)/.test(rs) && /picked up '\{name\}' but did not finish it/.test(rs) && /did not pick up '\{name\}' within/.test(rs));
+  ok("E2 blockbench.rs call(): verified disconnect → ERROR BLOCKBENCH_OFFLINE; stale/unverified → ERROR BLOCKBENCH_STATUS_UNKNOWN; exports get _export_dir only when ready; results render text/images; export paths tracked", /let link = state\.blockbench\.status\(\)\.await;/.test(rs) && /ERROR BLOCKBENCH_OFFLINE/.test(rs) && /ERROR BLOCKBENCH_STATUS_UNKNOWN/.test(rs) && /if link\.state == "disconnected" \{[\s\S]*?anyhow::bail!/.test(rs) && /anyhow::bail!\("ERROR BLOCKBENCH_STATUS_UNKNOWN:/.test(rs) && /obj\.insert\("_export_dir"\.to_string\(\), Value::String\(dir\)\);/.test(rs) && /if state\.workspace\.ready\(\) \{\n\s+Some\(PathBuf::from\(state\.workspace\.root_display\(\)\)\.join\(EXPORT_DIR\)/.test(rs) && /pub const EXPORT_DIR: &str = "blockbench_exports";/.test(rs) && /\.filter\(\|img\| img\.get\("data"\)/.test(rs) && /state\.ui\.track\("blockbench", format!\("export written: \{p\}"\)\)/.test(rs));
+  ok("E3 blockbench.rs tools(): only bb_status while disconnected (so the AI can probe), all 27 when connected, every entry server:\"blockbench\" with an object schema; plugin_source_is_the_bridge_plugin test pins JOBS.<name> = for every catalogue name; install() writes PLUGIN_SOURCE next to the executable unless TOTAL_NO_PLUGIN_INSTALL", /if !connected \{\n\s+return v;\n\s+\}/.test(rs) && /"server": "blockbench"/.test(rs) && /assert!\(PLUGIN_SOURCE\.contains\(&format!\("JOBS\.\{n\} ="\)\)/.test(rs) && /include_str!\("\.\.\/\.\.\/plugin\/TotalScript-Blockbench\.js"\)/.test(rs) && /TOTAL_NO_PLUGIN_INSTALL/.test(rs) && /std::fs::write\(&path, PLUGIN_SOURCE\)\?;/.test(rs));
+  ok("E4 main.rs: mod blockbench, AppState.blockbench, the four routes, install() logged at boot + set_installed, call_tool dispatch bb_* BEFORE the Studio plugin / MCP helper, BLOCKBENCH_OFFLINE error code, with_blockbench_server() adds {id:\"blockbench\"} to intro + list_tools servers (also when the MCP helper is down), /api/status carries blockbench_connected + blockbench_plugin_file", /^mod blockbench;$/m.test(mainRs) && /blockbench: Arc<blockbench::Hub>,/.test(mainRs) && ["/api/blockbench/hello", "/api/blockbench/poll", "/api/blockbench/result", "/api/blockbench/goodbye", "/api/blockbench/status"].every((r) => mainRs.includes('.route("' + r + '"')) && /match blockbench::install\(\) \{/.test(mainRs) && /state\.blockbench\.set_installed\(Some\(path\.display\(\)\.to_string\(\)\)\)\.await;/.test(mainRs) && /"roblox" => if blockbench::is_tool\(&name\) \{ blockbench::call\(&state2, &name, args\)\.await \} else if plugin::is_plugin_tool\(&name\)/.test(mainRs) && /lower\.contains\("blockbench_status_unknown"\)[\s\S]*?"BLOCKBENCH_STATUS_UNKNOWN"/.test(mainRs) && /lower\.contains\("blockbench_offline"\)[\s\S]*?"BLOCKBENCH_OFFLINE"/.test(mainRs) && (mainRs.match(/with_blockbench_server\(&state, /g) || []).length === 4 && /"blockbench_connected": blockbench\.connected,\n\s+"blockbench_status": blockbench\.state,\n\s+"blockbench_verified": blockbench\.verified,/.test(mainRs) && /tools\.extend\(blockbench::tools\(state\.blockbench\.connected\(\)\.await\)\);/.test(mainRs));
+  ok("E5 chat.rs (desktop chat): catalogue lists bb_* on the roblox engine, execute dispatches blockbench::is_tool first, the system prompt states the Blockbench link + file hand-off; gui shows the plugin in Integrations / Health / Help", /let bb_tools = blockbench::tools\(blockbench_connected\);\n\s+to_defs\(&bb_tools, "roblox", &mut tools, &mut seen\);/.test(chatRs) && /blockbench_status: bb_status\.state/.test(chatRs) && /UNKNOWN - no fresh verified Blockbench heartbeat/.test(chatRs) && /if blockbench::is_tool\(name\) \{ blockbench::call\(state, name, args\)\.await \} else if plugin::is_plugin_tool\(name\)/.test(chatRs) && /Blockbench \(TotalScript Bridge plugin\): \{blockbench_line\}/.test(chatRs) && /nothing is inserted into Studio by itself/.test(chatRs) && /pub fn blockbench_status\(&self\) -> &'static str/.test(read("agent/src/gui.rs")) && /unknown — last heartbeat/.test(read("agent/src/gui/center.rs")) && /plugin explicitly paused or unloaded/.test(read("agent/src/gui/prefs.rs")));
+  ok("E6 plugin source: BBPlugin.register(totalscript_bridge) desktop-only, min 4.8.0, onload builds the api + Node http bridge, Tools-menu status / pause actions, a bridge-URL setting, onunload stops + deletes; module.exports only outside Blockbench", /BBPlugin\.register\(PLUGIN_ID, \{/.test(pluginSrc) && /variant: "desktop",\n\s+min_version: "4\.8\.0",/.test(pluginSrc) && /new Action\("totalscript_bridge_status"/.test(pluginSrc) && /new Action\("totalscript_bridge_toggle"/.test(pluginSrc) && /new Setting\("totalscript_bridge_url"/.test(pluginSrc) && /api\/blockbench\/goodbye/.test(pluginSrc) && /MenuBar\.addAction\(actionStatus, "tools"\)/.test(pluginSrc) && /onunload\(\) \{\n\s+try \{ if \(bridge\) bridge\.stop\(\); \} catch \{\}/.test(pluginSrc) && /if \(typeof BBPlugin === "undefined" && typeof module !== "undefined" && module\.exports\) module\.exports = core;/.test(pluginSrc) && /Undo\.initEdit\(asp\);/.test(pluginSrc) && /Undo\.finishEdit\(label, after\);/.test(pluginSrc) && /Undo\.cancelEdit\(\)/.test(pluginSrc));
+  ok("E7 background.js: Blockbench calls validate locally, require a fresh verified total-core status but not the Studio gate, detect offline successful-text replies, and treat cached /api/status server fields as diagnostics only", (() => {
+    const i = bg.indexOf('const isBb = typeof TotalBlockbench !== "undefined" && TotalBlockbench.isCommand(msg.name);');
+    const j = bg.indexOf("if (blenderAddon && isBlenderToolName(msg.name)) {", i);
+    const k = bg.indexOf("if (!connected || robloxEditorConnected !== true) await refreshStudioStatus();", j);
+    const branch = bg.slice(i, j);
+    const proc = bg.slice(bg.indexOf("async function refreshProcStatus()"), bg.indexOf("\nfunction broadcastStatus()"));
+    const refresh = bg.slice(bg.indexOf("function bbRefresh()"), bg.indexOf("\nfunction bbStatusPayload()"));
+    const servers = bg.slice(bg.indexOf("function noteBlockbenchServers(list)"), bg.indexOf("\nfunction log("));
+    return bg.includes('importScripts("src/core/blockbench_tools.js")') && i > 0 && i < j && j < k &&
+      branch.includes('if (!v.ok) { sendResponse({ ok: false, kind: "validation", errorCode: "INVALID_ARGUMENT", error: v.error }); break; }') &&
+      branch.includes("bbStatusSnapshot()") && branch.includes("await bbRefresh()") &&
+      branch.includes("BLOCKBENCH_STATUS_UNKNOWN") && branch.includes("BLOCKBENCH_OFFLINE") &&
+      branch.includes('const br = await send({ type: "call_tool", name: v.name') && !branch.includes("robloxEditorConnected") &&
+      branch.includes("const statusText =") && branch.includes("statusErrorReply") && branch.includes("BLOCKBENCH_STATUS_MISMATCH") &&
+      refresh.includes("/api/blockbench/status") && refresh.includes('cache: "no-store"') && refresh.includes("j.verified === true") && refresh.includes('j.status === "connected" || j.status === "disconnected"') && refresh.includes('typeof j.connected === "boolean"') && bg.includes("setInterval(() => { void bbRefresh(); }, 5000);") &&
+      bg.includes("blockbench_verified: bb.known") && bg.includes("blockbench_status: bb.known") &&
+      !proc.includes("blockbench_connected") && !proc.includes("bbSetConnected") &&
+      servers.includes("dedicated total-core heartbeat remains authoritative") && !servers.includes("bbSetConnected(bb.alive === true)") &&
+      !/TotalBlockbenchMcp|declarativeNetRequest|rsBlockbenchUrl|bb-mcp|blockbenchCall|connectBlockbench/.test(bg) &&
+      !fs.existsSync(path.join(ROOT, "src/core/blockbench_mcp.js"));
+  })());
   ok("E8 manifest: declarativeNetRequestWithHostAccess permission removed (only the Blockbench MCP client used it); loopback host permissions stay for total-core", !JSON.parse(read("manifest.json")).permissions.includes("declarativeNetRequestWithHostAccess") && JSON.parse(read("manifest.json")).host_permissions.includes("http://127.0.0.1/*"));
   ok("E9 blockbench_tools.js validate(): mirrors the plugin's refusals for the obvious cases (so a bad call never crosses the bridge) and passes the good ones; connectSteps names the file + Load Plugin from File + Tools → TotalScript; offlineMessage starts with ERROR BLOCKBENCH_OFFLINE", !T.validate("bb_cubes", { cubes: [] }).ok && !T.validate("bb_mesh", { name: "m", vertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], faces: [[0, 1, 2, 3, 0]] }).ok && !T.validate("bb_mesh_primitive", { shape: "cube", name: "x" }).ok && !T.validate("bb_texture", { action: "create", name: "t", fill_color: "red" }).ok && !T.validate("bb_animate", { name: "a", bones: {} }).ok && !T.validate("bb_camera", {}).ok && !T.validate("bb_export", { format: "fbx" }).ok && T.validate("roblox/bb_cubes", { cubes: [{ name: "a", from: [0, 0, 0], to: [1, 1, 1] }] }).name === "bb_cubes" && T.validate("bb_mesh_primitive", { shape: "torus", name: "ring", tube: 1 }).ok && T.validate("bb_texture", { action: "apply", texture: "t", targets: "all" }).ok && T.validate("bb_status", {}).ok && /UNKNOWN_COMMAND/.test(T.validate("bb_paint", {}).error) && T.connectSteps("C:/x/TotalScript-Blockbench.js").some((s) => /Load Plugin from File/.test(s)) && T.connectSteps("C:/x/TotalScript-Blockbench.js")[0].includes("C:/x/TotalScript-Blockbench.js") && T.connectSteps().some((s) => /Tools → TotalScript/.test(s)) && /^ERROR BLOCKBENCH_OFFLINE: /.test(T.offlineMessage()));
 

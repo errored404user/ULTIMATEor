@@ -6,7 +6,7 @@
 //   node tests/test-blockbench-mode.js
 //
 // What this proves:
-//   A. src/core/blockbench_tools.js: the 17 bb_* commands, validate() refuses
+//   A. src/core/blockbench_tools.js: the 27 bb_* commands, validate() refuses
 //      what the plugin would refuse (nothing bad crosses the bridge), the
 //      tool list the AI reads, connect steps + offline message.
 //   B. background.js in a vm against a fake total-core socket: a bb_* call_tool
@@ -37,14 +37,20 @@ const PLUGIN_FILE = "C:\\Users\\me\\AppData\\Local\\TotalScript\\TotalScript-Blo
 
 (async () => {
   // ── A. the command table ──────────────────────────────────────────────────
-  const NAMES = ["bb_status", "bb_project", "bb_cubes", "bb_cube_edit", "bb_group", "bb_remove", "bb_mesh", "bb_mesh_primitive", "bb_mesh_edit", "bb_texture", "bb_animate", "bb_camera", "bb_screenshot", "bb_export", "bb_undo", "bb_redo", "bb_tools"];
-  ok("A1 TotalBlockbench: 17 curated commands (build + export + mesh), every one with description / inputSchema / validate; isCommand only for the table (not any bb_ prefix, not blender_)", JSON.stringify(BB.COMMAND_NAMES) === JSON.stringify(NAMES) && NAMES.every((n) => BB.COMMANDS[n] && typeof BB.COMMANDS[n].description === "string" && BB.COMMANDS[n].inputSchema && BB.COMMANDS[n].inputSchema.type === "object" && typeof BB.COMMANDS[n].validate === "function") && BB.isCommand("bb_cubes") && !BB.isCommand("bb_call") && !BB.isCommand("blender_add_cube"));
+  const NAMES = ["bb_status", "bb_project", "bb_cubes", "bb_cube_edit", "bb_cube_uv", "bb_duplicate", "bb_select", "bb_visibility", "bb_group", "bb_locator", "bb_remove", "bb_mesh", "bb_mesh_primitive", "bb_mesh_edit", "bb_texture", "bb_animate", "bb_animation_list", "bb_animation_edit", "bb_animation_keyframe", "bb_animation_remove", "bb_marker", "bb_camera", "bb_screenshot", "bb_export", "bb_undo", "bb_redo", "bb_tools"];
+  ok("A1 TotalBlockbench: 27 curated real commands (modeling, selection, UV, animation, camera, export), every one with description / inputSchema / validate; isCommand only for the table (not any bb_ prefix, not blender_)", JSON.stringify(BB.COMMAND_NAMES) === JSON.stringify(NAMES) && NAMES.every((n) => BB.COMMANDS[n] && typeof BB.COMMANDS[n].description === "string" && BB.COMMANDS[n].inputSchema && BB.COMMANDS[n].inputSchema.type === "object" && typeof BB.COMMANDS[n].validate === "function") && BB.isCommand("bb_cubes") && !BB.isCommand("bb_call") && !BB.isCommand("blender_add_cube"));
   const bad = [
     ["bb_project", {}, /name/],
     ["bb_cubes", {}, /cubes/],
     ["bb_cubes", { cubes: [{ name: "a", from: [0, 0, 0], to: [-1, 1, 1] }] }, /from must be <= to/],
     ["bb_cubes", { cubes: [{ name: "a", from: [0, 0], to: [1, 1, 1] }] }, /\[x,y,z\]/],
+    ["bb_cubes", { cubes: [{ name: "a", from: [0, 0, 0], to: [1, 1, 1], color: 10 }] }, /color.*0-9/],
+    ["bb_cube_uv", { name: "Body", faces: { top: [0, 0, 1, 1] } }, /unknown cube face/],
+    ["bb_duplicate", { names: [] }, /names/],
+    ["bb_select", { names: ["Body"], additive: "yes" }, /additive/],
+    ["bb_visibility", { names: ["Body"], visible: 1 }, /visible/],
     ["bb_group", {}, /name/],
+    ["bb_locator", { name: "Hand", position: [0, 1] }, /\[x,y,z\]/],
     ["bb_remove", { names: [] }, /names/],
     ["bb_mesh", { name: "w", vertices: [[0, 0, 0], [1, 0, 0]], faces: [[0, 1, 1]] }, /vert/i],
     ["bb_mesh", { name: "w", vertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [2, 2, 0]], faces: [[0, 1, 2, 3, 4]] }, /3 or 4/],
@@ -55,7 +61,13 @@ const PLUGIN_FILE = "C:\\Users\\me\\AppData\\Local\\TotalScript\\TotalScript-Blo
     ["bb_texture", { action: "create", name: "t", fill_color: "red" }, /#/],
     ["bb_texture", { action: "create", name: "t", width: 4096 }, /2048|size|width/i],
     ["bb_texture", { action: "apply", texture: "t" }, /targets/],
+    ["bb_texture", { action: "apply", texture: "t", targets: ["all", "Body"] }, /do not mix/],
+    ["bb_texture", { action: "create", name: "t", apply_to: ["all", "Body"] }, /do not mix/],
     ["bb_animate", { name: "idle", bones: {} }, /bones/],
+    ["bb_animation_edit", { name: "idle" }, /at least one/],
+    ["bb_animation_keyframe", { action: "add", animation: "idle", group: "Body", channel: "rotation", time: 0 }, /value/],
+    ["bb_animation_remove", {}, /name/],
+    ["bb_marker", { action: "remove", animation: "idle" }, /needs marker/],
     ["bb_camera", {}, /view|position|focus/],
     ["bb_export", { format: "fbx" }, /obj/],
     ["bb_undo", { steps: 0 }, /steps/],
@@ -66,26 +78,33 @@ const PLUGIN_FILE = "C:\\Users\\me\\AppData\\Local\\TotalScript\\TotalScript-Blo
   const good = [
     ["bb_status", {}], ["bb_status", { max_depth: 2 }], ["bb_project", { name: "Sword", format: "free" }],
     ["bb_cubes", { cubes: [{ name: "Edge", from: [-1, 0, -0.5], to: [1, 24, 0.5], color: 3 }], group: "Blade" }],
-    ["bb_cube_edit", { name: "Edge", to: [1, 26, 0.5] }], ["bb_group", { name: "Blade", origin: [0, 8, 0] }], ["bb_remove", { names: ["Edge"] }],
+    ["bb_cube_edit", { name: "Edge", to: [1, 26, 0.5] }],
+    ["bb_cube_uv", { name: "Edge", faces: { north: [0, 0, 16, 16] } }], ["bb_duplicate", { names: ["Edge", "Blade"] }],
+    ["bb_select", { names: ["Edge", "Blade"], additive: true }], ["bb_visibility", { names: ["Edge", "Blade"], visible: false }],
+    ["bb_group", { name: "Blade", origin: [0, 8, 0] }], ["bb_locator", { name: "Hand", position: [0, 8, 0], group: "Blade" }], ["bb_remove", { names: ["Edge"] }],
     ["bb_mesh", { name: "Wedge", vertices: [[0, 0, 0], [4, 0, 0], [4, 0, 4], [0, 0, 4], [0, 4, 0], [4, 4, 0]], faces: [[0, 3, 2, 1], [0, 1, 5, 4], [1, 2, 5], [2, 3, 4, 5], [3, 0, 4]] }],
     ["bb_mesh_primitive", { shape: "cylinder", name: "Pommel", diameter: 4, height: 2, sides: 8, position: [0, -2, 0] }],
     ["bb_mesh_edit", { name: "Pommel", scale: 2, rotate: [0, 45, 0] }],
     ["bb_texture", { action: "list" }], ["bb_texture", { action: "create", name: "steel", width: 32, height: 32, fill_color: "#9aa3ad" }], ["bb_texture", { action: "apply", texture: "steel", targets: "all" }],
     ["bb_animate", { name: "idle", loop: true, length: 2, bones: { Blade: [{ time: 0, rotation: [0, 0, 0] }, { time: 1, rotation: [0, 0, 5] }] } }],
+    ["bb_animation_list", {}], ["bb_animation_edit", { name: "idle", rename: "idle_v2", length: 3, loop: "hold" }],
+    ["bb_animation_keyframe", { action: "add", animation: "idle", group: "Blade", channel: "rotation", time: 0.5, value: [0, 0, 10] }],
+    ["bb_animation_keyframe", { action: "remove", animation: "idle", group: "Blade", channel: "rotation", time: 0.5 }],
+    ["bb_animation_remove", { name: "idle" }], ["bb_marker", { action: "list", animation: "idle" }], ["bb_marker", { action: "add", animation: "idle", name: "hit", time: 0.5, color: 2 }], ["bb_marker", { action: "remove", animation: "idle", name: "hit" }],
     ["bb_camera", { view: "isometric_right" }], ["bb_screenshot", {}], ["bb_screenshot", { view: "front", max_size: 800 }],
     ["bb_export", { format: "obj", name: "sword" }], ["bb_export", { format: "glb" }], ["bb_undo", {}], ["bb_redo", { steps: 3 }], ["bb_tools", {}],
   ];
   const goodFails = good.filter(([n, a]) => !BB.validate(n, a).ok).map(([n, a]) => n + " " + JSON.stringify(a) + " → " + BB.validate(n, a).error);
   ok("A3 validate() passes every well-formed call the Blockbench profile teaches (status, project, cubes, cube_edit, group, remove, mesh, primitives, mesh_edit, texture list/create/apply, animate, camera, screenshot, export obj/glb, undo/redo, tools) and returns the canonical name", goodFails.length === 0 && BB.validate("bb_cubes", good[3][1]).name === "bb_cubes", goodFails);
   const tl = BB.toolList();
-  ok("A4 toolList(): 17 entries {name, description, inputSchema, server:'blockbench'} in table order - what the extension merges into the AI's catalogue while the plugin is connected", tl.length === 17 && tl.every((t, i) => t.name === NAMES[i] && t.server === "blockbench" && typeof t.description === "string" && t.description.length > 20 && t.inputSchema && t.inputSchema.type === "object"));
+  ok("A4 toolList(): 27 entries {name, description, inputSchema, server:'blockbench'} in table order - what the extension merges into the AI's catalogue while the plugin is connected", tl.length === 27 && tl.every((t, i) => t.name === NAMES[i] && t.server === "blockbench" && typeof t.description === "string" && t.description.length > 20 && t.inputSchema && t.inputSchema.type === "object"));
   const steps = BB.connectSteps(PLUGIN_FILE), stepsNoFile = BB.connectSteps("");
   ok("A5 connectSteps(file): desktop app first, then Blockbench File → Plugins → Load Plugin from File → the actual plugin path, then Tools → TotalScript shows the link; without a known path it still names TotalScript-Blockbench.js; offlineMessage = 'ERROR BLOCKBENCH_OFFLINE: …' + the numbered steps (what the AI reads verbatim)", steps.length >= 3 && /desktop app|total-core/i.test(steps[0]) && steps[0].includes(PLUGIN_FILE) && steps.some((s) => /File → Plugins → Load Plugin from File → pick TotalScript-Blockbench\.js/.test(s)) && steps.some((s) => /Tools → TotalScript/.test(s) && /127\.0\.0\.1:3000/.test(s)) && stepsNoFile.some((s) => /TotalScript-Blockbench\.js/.test(s)) && BB.offlineMessage(PLUGIN_FILE).startsWith("ERROR BLOCKBENCH_OFFLINE: Blockbench is not connected to total-core. 1) ") && BB.offlineMessage(PLUGIN_FILE).includes(PLUGIN_FILE), { steps });
 
   // ── B. background.js in a vm against a fake total-core socket ────────────
   {
     const stored = {};
-    const hub = { connected: false, frames: [], sockets: [], replyHook: null };
+    const hub = { connected: false, frames: [], sockets: [], replyHook: null, statusOverride: null };
     class FakeSocket {
       static get OPEN() { return 1; } static get CONNECTING() { return 0; } static get CLOSED() { return 3; }
       constructor(url) {
@@ -112,7 +131,10 @@ const PLUGIN_FILE = "C:\\Users\\me\\AppData\\Local\\TotalScript\\TotalScript-Blo
     const fakeFetch = async (u) => {
       const url = String(u); fetchLog.push(url);
       const json = (obj, status) => ({ ok: (status || 200) < 300, status: status || 200, json: async () => obj, text: async () => JSON.stringify(obj) });
-      if (url.endsWith("/api/blockbench/status")) return json({ connected: hub.connected, plugin_file: PLUGIN_FILE, tools: 17 });
+      if (url.endsWith("/api/blockbench/status")) {
+        const state = hub.statusOverride || { status: hub.connected ? "connected" : "disconnected", connected: hub.connected, verified: true };
+        return json({ connected: state.connected, status: state.status, verified: state.verified, status_error: state.status === "unknown" ? "fake stale heartbeat" : undefined, plugin_file: PLUGIN_FILE, tools: 27 });
+      }
       if (url.endsWith("/api/status")) return json({ roblox_proc: true, local_ready: false, local_full: false, blockbench_connected: hub.connected, blockbench_plugin_file: PLUGIN_FILE });
       return json({ error: "not found" }, 404);
     };
@@ -136,12 +158,20 @@ const PLUGIN_FILE = "C:\\Users\\me\\AppData\\Local\\TotalScript\\TotalScript-Blo
     ok("B2 call_tool bb_cubes with a 2-vector → kind validation / INVALID_ARGUMENT from the worker's own table; NOTHING is sent to total-core", r1 && r1.ok === false && r1.kind === "validation" && r1.errorCode === "INVALID_ARGUMENT" && /\[x,y,z\]/.test(r1.error) && bbFrames().length === 0, r1);
     const st0 = await ask({ type: "blockbench_status", refresh: true });
     ok("B3 blockbench_status {refresh:true} re-reads total-core's /api/blockbench/status: off → {ok false, blockbench false, plugin_file (from total-core), core, tools 0, steps[] naming the file}", st0 && st0.ok === false && st0.blockbench === false && st0.plugin_file === PLUGIN_FILE && st0.tools === 0 && Array.isArray(st0.steps) && st0.steps.some((s) => s.includes(PLUGIN_FILE)) && fetchLog.some((u) => u.endsWith("/api/blockbench/status")), st0);
+    hub.statusOverride = { status: "unknown", connected: false, verified: false };
+    const stUnknown = await ask({ type: "blockbench_status", refresh: true });
+    const framesBeforeUnknownCall = bbFrames().length;
+    const unknownCall = await ask({ type: "call_tool", name: "bb_undo", arguments: {} });
+    hub.statusOverride = { status: "connected", connected: false, verified: true };
+    const stContradictory = await ask({ type: "blockbench_status", refresh: true });
+    hub.statusOverride = null;
+    ok("B3a unverified or contradictory dedicated status stays UNKNOWN; a Blockbench call is refused before the socket is touched", stUnknown && stUnknown.status === "unknown" && stUnknown.verified === false && stUnknown.blockbench === false && unknownCall && unknownCall.kind === "status-unknown" && unknownCall.errorCode === "BLOCKBENCH_STATUS_UNKNOWN" && bbFrames().length === framesBeforeUnknownCall && stContradictory && stContradictory.status === "unknown" && stContradictory.verified === false, { stUnknown, unknownCall, stContradictory });
     const r2 = await ask({ type: "call_tool", name: "bb_cubes", arguments: { cubes: [{ name: "Torso", from: [-4, 0, -2], to: [4, 12, 2] }], group: "Body" } });
     ok("B4 a valid bb_* call while total-core says the plugin is away → kind disconnected / BLOCKBENCH_OFFLINE, error = offlineMessage (ERROR BLOCKBENCH_OFFLINE: … 1) …), steps[] attached, nothing sent over the socket (no Studio gate involved: studio is false throughout)", r2 && r2.ok === false && r2.kind === "disconnected" && r2.errorCode === "BLOCKBENCH_OFFLINE" && /^ERROR BLOCKBENCH_OFFLINE: Blockbench is not connected to total-core\. 1\) /.test(r2.error) && Array.isArray(r2.steps) && r2.steps.length >= 3 && bbFrames().length === 0 && vm.runInContext("robloxEditorConnected", ctx) !== true, r2);
     hub.connected = true;
     const st1 = await ask({ type: "blockbench_status", refresh: true });
     const statusNow = vm.runInContext("statusObj()", ctx);
-    ok("B5 plugin up (total-core reports connected) → blockbench_status {ok true, blockbench true, core true, tools 17}; statusObj carries blockbench + blockbench_plugin_file; mergeBlenderTools(toolsCache) folds the 17 bb_* tools (server 'blockbench') into the catalogue", st1 && st1.ok === true && st1.blockbench === true && st1.core === true && st1.tools === 17 && statusNow.blockbench === true && statusNow.blockbench_plugin_file === PLUGIN_FILE && (() => { const tools = vm.runInContext("mergeBlenderTools(toolsCache)", ctx); return NAMES.every((n) => tools.some((t) => t.name === n && t.server === "blockbench")); })(), { st1, keys: Object.keys(statusNow) });
+    ok("B5 plugin up (total-core reports connected) → blockbench_status {ok true, blockbench true, core true, tools 27}; statusObj carries blockbench + blockbench_plugin_file; mergeBlenderTools(toolsCache) folds the 27 bb_* tools (server 'blockbench') into the catalogue", st1 && st1.ok === true && st1.blockbench === true && st1.core === true && st1.tools === 27 && statusNow.blockbench === true && statusNow.blockbench_plugin_file === PLUGIN_FILE && (() => { const tools = vm.runInContext("mergeBlenderTools(toolsCache)", ctx); return NAMES.every((n) => tools.some((t) => t.name === n && t.server === "blockbench")); })(), { st1, keys: Object.keys(statusNow) });
     const r3 = await ask({ type: "call_tool", name: "bb_cubes", arguments: { cubes: [{ name: "Torso", from: [-4, 0, -2], to: [4, 12, 2] }], group: "Body" }, requestId: "req-bb-1" });
     const f3 = bbFrames().at(-1);
     ok("B6 connected: the call travels as the plain total-core frame {type call_tool, command bb_cubes, args, requestId, version 1.0, id} and the plugin's own text comes back (ok, text) - no MCP, no second socket", r3 && r3.ok === true && /Placed 1 cube\(s\) in group 'Body'/.test(r3.text) && f3 && f3.type === "call_tool" && f3.command === "bb_cubes" && f3.name === "bb_cubes" && f3.args.group === "Body" && f3.args.cubes[0].name === "Torso" && f3.requestId === "req-bb-1" && f3.version === "1.0" && typeof f3.id === "number" && hub.sockets.length >= 1 && hub.sockets.every((s) => s.url === "ws://127.0.0.1:17613"), { r3, f3 });
@@ -155,12 +185,34 @@ const PLUGIN_FILE = "C:\\Users\\me\\AppData\\Local\\TotalScript\\TotalScript-Blo
     await new Promise((r) => setTimeout(r, 20));
     const st3 = await ask({ type: "blockbench_status", refresh: false });
     const srv = await ask({ type: "add_server", server_id: "blockbench" });
-    ok("B9 a tools frame from total-core (with_blockbench_server adds {id:'blockbench', alive:true} to connected / tools frames) turns the flag on without a fetch; add_server 'blockbench' (legacy popup path) answers the same status payload instead of trying to spawn an MCP server", st3 && st3.blockbench === true && srv && typeof srv.blockbench === "boolean" && Array.isArray(srv.steps) && !hub.frames.some((f) => f.type === "add_server"), { st3, srv });
+    ok("B9 a cached server-list alive entry cannot override the dedicated verified disconnected status; the mismatch is reported, and legacy add_server re-reads total-core instead of spawning MCP", st3 && st3.verified === true && st3.status === "disconnected" && st3.blockbench === false && String(st3.server_list_mismatch || "").includes("alive/disconnected") && srv && srv.status === "disconnected" && srv.blockbench === false && !hub.frames.some((f) => f.type === "add_server"), { st3, srv });
+    // total-core's bb_status offline path is a successful tool result whose text carries the sentinel.
+    // Verify that it cannot keep a previously fresh worker/UI status green.
+    hub.connected = true;
+    const stFreshAgain = await ask({ type: "blockbench_status", refresh: true });
+    hub.connected = false;
+    hub.replyHook = (f) => f.command === "bb_status" ? { ok: true, text: "ERROR BLOCKBENCH_OFFLINE: Blockbench is not connected to total-core. 1) start the app" } : null;
+    const r7 = await ask({ type: "call_tool", name: "bb_status", arguments: {} });
+    hub.replyHook = null;
+    const st4 = await ask({ type: "blockbench_status", refresh: false });
+    ok("B9a bb_status offline sentinel in a successful text result forces a fresh total-core probe and is returned as a failure, not as a false connected success", stFreshAgain && stFreshAgain.blockbench === true && r7 && r7.ok === false && r7.errorCode === "BLOCKBENCH_OFFLINE" && !r7.text && st4 && st4.verified === true && st4.status === "disconnected" && st4.blockbench === false && /ERROR BLOCKBENCH_OFFLINE/.test(r7.error) && bbFrames().at(-1).command === "bb_status", { stFreshAgain, r7, st4 });
+    hub.connected = true;
+    const stUnknownAgain = await ask({ type: "blockbench_status", refresh: true });
+    hub.replyHook = (f) => {
+      if (f.command !== "bb_status") return null;
+      hub.statusOverride = { status: "unknown", connected: false, verified: false };
+      return { ok: true, text: "ERROR BLOCKBENCH_STATUS_UNKNOWN: Blockbench status cannot be verified" };
+    };
+    const r8 = await ask({ type: "call_tool", name: "bb_status", arguments: {} });
+    hub.replyHook = null;
+    hub.statusOverride = null;
+    ok("B9b successful-text STATUS_UNKNOWN sentinel is never surfaced as a successful Blockbench call", stUnknownAgain && stUnknownAgain.blockbench === true && r8 && r8.ok === false && r8.errorCode === "BLOCKBENCH_STATUS_UNKNOWN" && /could not verify/i.test(r8.error) && !r8.text);
+    const bbFramesBeforeLocal = bbFrames().length;
     vm.runInContext('engine = "local"', ctx);
     const r6 = await ask({ type: "call_tool", name: "bb_status", arguments: {} });
     vm.runInContext('engine = "roblox"', ctx);
-    ok("B10 on the local engine a bb_* call is refused with ENGINE_MISMATCH (the plugin link lives in total-core on ws 17613) before anything is sent", r6 && r6.ok === false && r6.errorCode === "ENGINE_MISMATCH" && r6.workerEngine === "local" && bbFrames().at(-1).command === "bb_undo", r6);
-    ok("B11 background source: the bb_* branch sits BEFORE the Blender and Studio paths inside call_tool, has no robloxEditorConnected gate, routes through the plain send(); the status broadcast carries blockbench + blockbench_plugin_file; noteBlockbenchServers reads {id:'blockbench', alive}", (() => { const i = bg.indexOf("const isBb = typeof TotalBlockbench !== \"undefined\" && TotalBlockbench.isCommand(msg.name);"); const j = bg.indexOf("if (blenderAddon && isBlenderToolName(msg.name)) {"); const k = bg.indexOf("if (!connected || robloxEditorConnected !== true) await refreshStudioStatus();"); const branch = bg.slice(i, j); return i > 0 && i < j && j < k && !/robloxEditorConnected/.test(branch) && /await send\(\{ type: "call_tool", name: v\.name, arguments: msg\.arguments \|\| \{\}, timeout: msg\.timeout, requestId: msg\.requestId \}, timeout\)/.test(branch) && /blockbench: bbConnected, blockbench_plugin_file: bbPluginFile \|\| undefined,/.test(bg) && /const bb = list\.find\(\(s\) => s && s\.id === "blockbench"\);\n  if \(bb\) bbSetConnected\(bb\.alive === true\);/.test(bg); })());
+    ok("B10 on the local engine a bb_* call is refused with ENGINE_MISMATCH (the plugin link lives in total-core on ws 17613) before anything is sent", r6 && r6.ok === false && r6.errorCode === "ENGINE_MISMATCH" && r6.workerEngine === "local" && bbFrames().length === bbFramesBeforeLocal, r6);
+    ok("B11 background source: Blockbench liveness comes only from fresh /api/blockbench/status; server-list conflicts are diagnostics; call results detect the bb_status offline sentinel and refuse to mask unknown/mismatched status", (() => { const i = bg.indexOf("const isBb = typeof TotalBlockbench !== \"undefined\" && TotalBlockbench.isCommand(msg.name);"); const j = bg.indexOf("if (blenderAddon && isBlenderToolName(msg.name)) {"); const k = bg.indexOf("if (!connected || robloxEditorConnected !== true) await refreshStudioStatus();"); const branch = bg.slice(i, j); const serverFn = bg.slice(bg.indexOf("function noteBlockbenchServers(list)"), bg.indexOf("\n}\n", bg.indexOf("function noteBlockbenchServers(list)"))); return i > 0 && i < j && j < k && !/robloxEditorConnected/.test(branch) && /await send\(\{ type: "call_tool", name: v\.name, arguments: msg\.arguments \|\| \{\}, timeout: msg\.timeout, requestId: msg\.requestId \}, timeout\)/.test(branch) && /blockbench: bb\.connected, blockbench_verified: bb\.known/.test(bg) && /function bbStatusSnapshot\(\)/.test(bg) && /cache: "no-store"/.test(bg) && /void bbRefresh\(\);/.test(bg) && /setInterval\(\(\) => \{ void bbRefresh\(\); \}, 5000\)/.test(bg) && /const statusText = \//.test(branch) && /statusErrorReply/.test(branch) && /BLOCKBENCH_STATUS_MISMATCH/.test(branch) && /cached WebSocket server list is diagnostic only/.test(bg) && /bbServerMismatch/.test(serverFn) && /bbRefresh\(\)/.test(serverFn) && !/bbSetConnected\(bb\.alive === true\)/.test(serverFn); })());
     ok("B12 manifest: no declarativeNetRequest* permission any more (only the MCP client needed the Origin rewrite); storage / alarms kept; loopback host permission for total-core kept", !manifest.permissions.some((p) => /declarativeNetRequest/.test(p)) && !(manifest.optional_permissions || []).some((p) => /declarativeNetRequest/.test(p)) && manifest.permissions.includes("storage") && manifest.permissions.includes("alarms") && manifest.host_permissions.some((h) => /127\.0\.0\.1|localhost|http:\/\/\*\/\*/.test(h)));
     for (const s of hub.sockets) s.close();
     vm.runInContext("try { stopHeartbeat(); } catch {} try { clearTimeout(reconnectTimer); } catch {} manualStudioDisconnect = true;", ctx);
@@ -187,13 +239,34 @@ const PLUGIN_FILE = "C:\\Users\\me\\AppData\\Local\\TotalScript\\TotalScript-Blo
     const model = gates.find((g) => g.id === "model"), exp = gates.find((g) => g.id === "export");
     ok("E2 MODE_GATES.blockbench: MODEL (did bb_cubes/group/mesh/mesh_primitive/mesh_edit/texture/animate → proof bb_screenshot|bb_status) + EXPORT (did builds → proof bb_export); scripts + look pushed from creation; nudges say Import 3D is manual", model && exp && model.did.test("bb_cubes") && model.did.test("bb_mesh_primitive") && model.did.test("bb_mesh_edit") && !model.did.test("bb_tools") && !model.did.test("bb_screenshot") && model.proof.test("bb_screenshot") && model.proof.test("bb_status") && !model.proof.test("bb_export") && exp.did.test("bb_group") && !exp.did.test("bb_remove") && exp.proof.test("bb_export") && !exp.proof.test("bb_status") && /Do not claim it is in Studio/.test(exp.nudge) && main.includes('MODE_GATES.blockbench.push(...MODE_GATES.creation.filter((g) => g.id === "scripts" || g.id === "look"));'));
   }
-  ok("E3 runTool: bb_* branch BEFORE the Blender branch — not linked → one blockbench_status {refresh:true} probe (plugin file remembered), still offline → ERROR BLOCKBENCH_OFFLINE naming the plugin + the user steps (no emulation, no MCP left in main.js), images attached like other captures, worker errors passed through; probes of kind blockbench run through call_tool; preflight/auto-check wired with blockbenchConnected", main.indexOf('if (/^bb_[a-z_]+$/.test(bareName)) {') > 0 && main.indexOf('if (/^bb_[a-z_]+$/.test(bareName)) {') < main.indexOf('const BLENDER_OPS = new Set(') && main.includes('"ERROR BLOCKBENCH_OFFLINE calling \'" + name + "\': Blockbench is not connected to total-core (the TotalScript Bridge plugin inside Blockbench is not polling)."') && main.includes('const st = await bg({ type: "blockbench_status", refresh: true });') && main.includes("if (st && st.plugin_file) { A.blockbenchPluginFile = st.plugin_file; }") && !/blockbench_(connect|disconnect|set_url)\b|jasonjgardner|bb-mcp/.test(main) && main.includes('probe.kind === "blender" || probe.kind === "blockbench"') && main.includes("const blockbenchUp = mode === \"blockbench\" ? await blockbenchReady() : false;") && main.includes("blenderConnected: blenderUp, blockbenchConnected: blockbenchUp") && main.includes('if (probe.kind === "blockbench" && !(A.bridge && A.bridge.blockbench === true)) return feedback;') && main.includes("async function blockbenchReady()"));
+  ok("E3 runTool and preflight: Blockbench calls require a fresh consistent verified status; unknown and disconnected are distinct, the offline result clears the green state, and no fake execution or MCP route exists", main.indexOf('if (/^bb_[a-z_]+$/.test(bareName)) {') > 0 && main.indexOf('if (/^bb_[a-z_]+$/.test(bareName)) {') < main.indexOf('const BLENDER_OPS = new Set(') && main.includes("function blockbenchStatusState(bridge)") && main.includes("function applyBlockbenchStatus(status)") && main.includes('await bg({ type: "blockbench_status", refresh: true })') && main.includes("ERROR BLOCKBENCH_STATUS_UNKNOWN calling '") && main.includes("ERROR BLOCKBENCH_OFFLINE calling '") && main.includes('if (probe.kind === "blockbench" && blockbenchStatusState(A.bridge) !== "connected") return feedback;') && main.includes('applyBlockbenchStatus({ blockbench: false, verified: true, status: "disconnected"') && main.includes('probe.kind === "blender" || probe.kind === "blockbench"') && main.includes("async function blockbenchReady()") && main.includes("ui.showImages(r.images, name)") && !/blockbench_(connect|disconnect|set_url)\b|jasonjgardner|bb-mcp/.test(main));
+  {
+    const start = main.indexOf("const BLOCKBENCH_UI_STATUS_MAX_AGE_MS = 12000;");
+    const end = main.indexOf("function startModePreflight()", start);
+    const statusCtx = { Date, A: { bridge: {} } }; vm.createContext(statusCtx);
+    vm.runInContext(main.slice(start, end) + "\nthis.__bbState = blockbenchStatusState; this.__applyBb = applyBlockbenchStatus;", statusCtx);
+    const apply = statusCtx.__applyBb, state = statusCtx.__bbState, now = Date.now();
+    const connected = apply({ verified: true, status: "connected", blockbench: true, checked_at: now, core: true });
+    const contradictory = apply({ verified: true, status: "connected", blockbench: false, checked_at: now, core: true });
+    const stale = apply({ verified: true, status: "disconnected", blockbench: false, checked_at: now - 12001, core: true });
+    const disconnected = apply({ verified: true, status: "disconnected", blockbench: false, checked_at: now, core: true });
+    const callMismatch = apply({ verified: true, status: "connected", blockbench: true, checked_at: now, core: true, call_mismatch: "offline reply disagrees" });
+    const clearedMismatch = apply({ verified: true, status: "connected", blockbench: true, checked_at: now, core: true });
+    ok("E3a main.js normalizes only fresh internally consistent verified status; contradictions become unknown, expiry repaints the UI, and a fresh worker response clears a resolved call mismatch", connected === "connected" && contradictory === "unknown" && stale === "unknown" && disconnected === "disconnected" && callMismatch === "unknown" && clearedMismatch === "connected" && !statusCtx.A.bridge.blockbench_call_mismatch && main.includes("blockbenchStatusExpiryTimer = setTimeout") && main.includes("try { renderBar(); } catch {}"));
+  }
+  {
+    const start = main.indexOf("chrome.runtime.onMessage.addListener((msg) => {");
+    const end = main.indexOf('if (msg && msg.type === "rs-open-menu")', start);
+    const listener = main.slice(start, end);
+    const fields = ["blockbench", "blockbench_verified", "blockbench_status", "blockbench_status_error", "blockbench_checked_at", "blockbench_core_api", "blockbench_bridge_connected", "blockbench_server_list_mismatch", "blockbench_call_mismatch", "blockbench_plugin_file"];
+    ok("E3b content-script status messages preserve all verified Blockbench fields into ui.setStatus", start >= 0 && end > start && fields.every((field) => listener.includes(field + ": msg." + field)));
+  }
   {
     const famBlock = main.slice(main.indexOf("const COMMAND_FAMILIES = ["), main.indexOf("function familyOrderFor"));
     const c = {}; vm.runInNewContext(famBlock + "\nthis.F=COMMAND_FAMILIES;this.O=FAMILY_ORDER;", c);
     ok("E4 COMMAND_FAMILIES: blockbench family (re /^bb_/) second after blender, OTHER last; FAMILY_ORDER has a blockbench order (blockbench first) and every mode order holds every family exactly once", c.F[0].id === "blender" && c.F[1].id === "blockbench" && c.F[1].re.test("bb_cubes") && !c.F[1].re.test("blender_add_cube") && c.F.at(-1).id === "other" && c.O.blockbench[0] === "blockbench" && ["creation", "blender", "animate", "blockbench"].every((m) => new Set(c.O[m]).size === c.F.length && c.F.every((f) => c.O[m].includes(f.id))) && c.O.creation.slice(0, 3).join() === "script,blueprint,data" && c.O.blender[0] === "blender" && c.O.animate.slice(0, 3).join() === "animation,motion,script");
   }
-  ok("E5 blockbenchModeTools folds server:'blockbench' tools into the default catalogue only in Blockbench mode (both list sites), __rsBlockbench flag from status + menu, settings card (numbered steps with the real plugin path, Check again → blockbench_status refresh, Copy plugin path, blockbench.net; no URL field / Connect button - the plugin dials out) with handlers", main.includes("function blockbenchModeTools(requested)") && (main.match(/allScoped\.push\(\.\.\.blockbenchModeTools\(requested\)\)/g) || []).length === 2 && main.includes("window.__rsBlockbench = () => !!(s && s.blockbench)") && main.includes("function blockbenchCardHtml()") && main.includes('id="rs-blockbench-card"') && main.includes('<code class="rs-bb-path">${escRs(pluginFile)}</code>') && main.includes("<em>File → Plugins → Load Plugin from File</em> → pick <code>TotalScript-Blockbench.js</code>") && main.includes('<button type="button" id="rs-mcp-blockbench" class="rs-blender-primary">Check again</button>') && main.includes('id="rs-blockbench-copy"') && main.includes('id="rs-blockbench-site"') && main.includes('menuEl.querySelector("#rs-mcp-blockbench")') && main.includes('menuEl.querySelector("#rs-blockbench-copy")') && main.includes('const r = await bg({ type: "blockbench_status", refresh: true });') && /total-core is not running - start the TotalScript desktop app first\./.test(main) && main.includes("https://www.blockbench.net/") && main.includes("${blockbenchCardHtml()}") && !main.includes('id="rs-blockbench-url"'));
+  ok("E5 Blockbench catalogue + UI: mode-gated tools and the settings card use fresh, verified status, expose diagnostics, and provide real Check again / Copy plugin path actions", main.includes("function blockbenchModeTools(requested)") && (main.match(/allScoped\.push\(\.\.\.blockbenchModeTools\(requested\)\)/g) || []).length === 2 && main.includes('window.__rsBlockbench = () => blockbenchStatusState(s) === "connected"') && main.includes("function blockbenchCardHtml()") && main.includes('id="rs-blockbench-card"') && main.includes('data-state="${state}"') && main.includes('<code class="rs-bb-path">${escRs(pluginFile)}</code>') && main.includes("<em>File → Plugins → Load Plugin from File</em> → pick <code>TotalScript-Blockbench.js</code>") && main.includes('<button type="button" id="rs-mcp-blockbench" class="rs-blender-primary">Check again</button>') && main.includes('id="rs-blockbench-copy"') && main.includes('id="rs-blockbench-site"') && main.includes('menuEl.querySelector("#rs-mcp-blockbench")') && main.includes('menuEl.querySelector("#rs-blockbench-copy")') && main.includes('const r = await bg({ type: "blockbench_status", refresh: true });') && main.includes("const bbState = applyBlockbenchStatus(r);") && main.includes("Status diagnostic:") && main.includes("https://www.blockbench.net/") && main.includes("${blockbenchCardHtml()}") && !main.includes('id="rs-blockbench-url"'));
   ok("E6 overlay.css: Blockbench card recolour + mark + selectable plugin path, reduced-motion honoured", /\.rs-blender-card\.rs-bb-card \{ --bl: #1e9c86;/.test(css) && /\.rs-bb-mark::before/.test(css) && /\.rs-bb-path \{ display: inline-block; max-width: 100%; user-select: all; \}/.test(css) && !/\.rs-bb-url/.test(css) && /\.rs-blender-card\.rs-bb-card\.on \.rs-blender-mark \{ animation: none; \}/.test(css));
 
   // ── F. config.js ──────────────────────────────────────────────────────────
@@ -212,17 +285,31 @@ const PLUGIN_FILE = "C:\\Users\\me\\AppData\\Local\\TotalScript\\TotalScript-Blo
   }
 
   // ── G. popup ──────────────────────────────────────────────────────────────
-  ok("G1 popup.js: WORK_MODES literal gains blockbench (4th), preset, SERVER_LABEL + classifier (bb_ → blockbench) + SERVER_ORDER, Studio category row {id blockbench, type blockbench} with state line + plugin path + Check again via blockbench_status (no URL field, no Connect), palette 'Blockbench mode', hidden launcher", popup.includes('const WORK_MODES = ["creation", "blender", "animate", "blockbench"];') && /blockbench: \{ thinking: "max", extra: false \}/.test(popup) && /blockbench: "Blockbench" \}/.test(popup) && popup.includes('if (/^bb_/.test(n)) return "blockbench";') && popup.includes('["roblox", "studio", "local", "agent", "blender", "blockbench"]') && popup.includes('{ id: "blockbench", type: "blockbench", label: "Blockbench"') && popup.includes('case "blockbench": {') && popup.includes('id="blockbench-check"') && popup.includes('id="blockbench-state"') && popup.includes('id="blockbench-path"') && popup.includes('bg({ type: "blockbench_status", refresh: false }).then(paint);') && popup.includes('const r = await bg({ type: "blockbench_status", refresh: true });') && !/blockbench_(connect|disconnect|set_url)\b|blockbench-url|bb-mcp/.test(popup) && popup.includes('add({ id: "mode:blockbench", group: "Work mode", title: "Blockbench mode"') && popup.includes('$("blockbench")?.addEventListener("click"'));
+  ok("G1 popup.js: Blockbench UI uses fresh, consistent verified status; launcher/category, path, Check again and copy actions remain wired with no URL/Connect path", popup.includes('const WORK_MODES = ["creation", "blender", "animate", "blockbench"];') && /blockbench: \{ thinking: "max", extra: false \}/.test(popup) && /blockbench: "Blockbench" \}/.test(popup) && popup.includes('if (/^bb_/.test(n)) return "blockbench";') && popup.includes('["roblox", "studio", "local", "agent", "blender", "blockbench"]') && popup.includes('{ id: "blockbench", type: "blockbench", label: "Blockbench"') && popup.includes('case "blockbench": {') && popup.includes('id="blockbench-check"') && popup.includes('id="blockbench-state"') && popup.includes('id="blockbench-path"') && popup.includes('const bbUp = blockbenchStatusState(s, true) === "connected";') && popup.includes('const bbState = blockbenchStatusState(r, false);') && popup.includes('bg({ type: "blockbench_status", refresh: false }).then(paint).catch(() => paint(null));') && popup.includes('bg({ type: "blockbench_status", refresh: true }).then(paint).catch(() => paint(null));') && popup.includes('const r = await bg({ type: "blockbench_status", refresh: true });') && !/blockbench_(connect|disconnect|set_url)\\b|blockbench-url|bb-mcp/.test(popup) && popup.includes('add({ id: "mode:blockbench", group: "Work mode", title: "Blockbench mode"') && popup.includes('$("blockbench")?.addEventListener("click"'));
   ok("G2 popup.html: four work cards in a 2 × 2 grid, Blockbench card (teal selected style) names the manual Import 3D, hidden #blockbench launcher; the three older cards unchanged", (popupHtml.match(/class="work-card" data-work="/g) || []).length === 4 && popupHtml.includes('<button type="button" class="work-card" data-work="blockbench" id="work-blockbench">') && popupHtml.includes(".work.work-modes{grid-template-columns:1fr 1fr}") && /#work-blockbench\.on\{background:linear-gradient\(135deg,#bff3e8/.test(popupHtml) && /Studio Import 3D<\/span>/.test(popupHtml) && popupHtml.includes('<button type="button" id="blockbench">Blockbench — open menu</button>') && popupHtml.includes("Low-poly models in Blockbench through the TotalScript plugin: groups → cubes → meshes → texture") && !/Blockbench[^<"]*MCP|MCP plugin/.test(popupHtml) && popupHtml.includes('data-work="creation" id="work-creation"') && popupHtml.includes('data-work="blender" id="work-blender"') && popupHtml.includes('data-work="animate" id="work-animate"'));
   {
     const pctx = { window: {}, console }; vm.createContext(pctx);
     vm.runInContext(popup.slice(popup.indexOf("const WORK_MODES = ["), popup.indexOf("const WORK_PRESETS")) + "\nthis.normalizeWorkMode = normalizeWorkMode;", pctx);
     ok("G3 popup normaliser keeps blockbench and still folds legacy ids to creation", pctx.normalizeWorkMode("blockbench") === "blockbench" && pctx.normalizeWorkMode("animator") === "creation" && pctx.normalizeWorkMode("x") === "creation");
   }
-  ok("G4 popup badge: Studio card badge says Blockbench linked / Blender + Blockbench linked from the status", popup.includes('s.blender && s.blockbench ? "Blender + Blockbench linked" : s.blockbench ? "Blockbench linked" : "Blender linked"'));
+  ok("G4 popup badge: Blockbench appears only from a fresh, internally consistent verified status", popup.includes('const bbUp = blockbenchStatusState(s, true) === "connected";') && popup.includes('blockbenchStatusState(r, false)') && popup.includes('BLOCKBENCH_STATUS_MAX_AGE_MS - (Date.now() - checkedAt) + 1'));
+  {
+    const start = popup.indexOf("const BLOCKBENCH_STATUS_MAX_AGE_MS = 12000;");
+    const end = popup.indexOf("// Sound volume", start);
+    const statusCtx = { Date }; vm.createContext(statusCtx);
+    vm.runInContext(popup.slice(start, end) + "\nthis.__bbStatus = blockbenchStatusState;", statusCtx);
+    const state = statusCtx.__bbStatus, now = Date.now();
+    const workerConnected = state({ blockbench_verified: true, blockbench_status: "connected", blockbench: true, blockbench_checked_at: now }, true);
+    const directConnected = state({ verified: true, status: "connected", blockbench: true, checked_at: now }, false);
+    const stale = state({ blockbench_verified: true, blockbench_status: "connected", blockbench: true, blockbench_checked_at: now - 12001 }, true);
+    const mismatch = state({ verified: true, status: "connected", blockbench: false, checked_at: now }, false);
+    const offline = state({ verified: true, status: "disconnected", blockbench: false, checked_at: now }, false);
+    const callMismatch = state({ verified: true, status: "connected", blockbench: true, checked_at: now, call_mismatch: "conflict" }, false);
+    ok("G5 popup rejects stale, contradictory and call-mismatched states as unknown across worker and direct status payloads", workerConnected === "connected" && directConnected === "connected" && stale === "unknown" && mismatch === "unknown" && offline === "disconnected" && callMismatch === "unknown");
+  }
 
   // ── H. README ─────────────────────────────────────────────────────────────
-  ok("H1 README: 2.21.0 block names the TotalScript Blockbench plugin (Load Plugin from File, total-core, bb_* build + export + mesh commands, manual Import 3D, MCP client removed) and both Blockbench tests are listed under Testing", /2\.21\.0/.test(readme) && /TotalScript-Blockbench\.js/.test(readme) && /Load Plugin from File/.test(readme) && /Import 3D/.test(readme) && /bb_mesh_primitive/.test(readme) && /test-blockbench-mode\.js/.test(readme) && /test-blockbench-plugin\.js/.test(readme) && (() => { const i = readme.indexOf("2.21.0"); const block = readme.slice(i, i + 3000); return /MCP/.test(block) && /removed|replaces|no longer/i.test(block); })());
+  ok("H1 README: current 2.21.0 Blockbench section documents the 27-command contract, dedicated three-state status, plugin hand-off, tested suites and honest live/Rust limitations", /2\.21\.0/.test(readme) && /TotalScript-Blockbench\.js/.test(readme) && /Load Plugin from File/.test(readme) && /Import 3D/.test(readme) && /bb_animation_keyframe/.test(readme) && /dedicated `\/api\/blockbench\/status`/.test(readme) && /UNKNOWN|unknown/.test(readme) && /54 checks/.test(readme) && /45 checks/.test(readme) && /cargo` is unavailable/.test(readme) && /test-blockbench-mode\.js/.test(readme) && /test-blockbench-plugin\.js/.test(readme));
 
   console.log(failed ? `\n${failed} FAILED` : "\nALL OK");
   process.exit(failed ? 1 : 0);

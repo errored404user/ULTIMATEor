@@ -10,7 +10,8 @@
 // hello / long-poll / result loop the Studio plugin uses:
 //   POST /api/blockbench/hello    {client_id, version, blockbench_version, project, format, capabilities}
 //   GET  /api/blockbench/poll?client_id=…   → {ok, job:{id,name,args}|null}   (long poll, ~20 s)
-//   POST /api/blockbench/result   {id, ok, result, error?, elapsed_ms}
+//   POST /api/blockbench/result   {id, client_id, ok, result, error?, elapsed_ms}
+//   POST /api/blockbench/goodbye  {client_id} on pause, URL change or unload
 // No port is opened in Blockbench, nothing listens, no MCP session, no CORS
 // / Origin dance: the app is the only thing that ever talks to this plugin and
 // it is the app's own loopback server (requests without an Origin header).
@@ -32,8 +33,9 @@
   const HELLO_EVERY_MS = 25000;
   const POLL_TIMEOUT_MS = 30000;
   const CAPABILITIES = Object.freeze([
-    "bb_status", "bb_project", "bb_cubes", "bb_cube_edit", "bb_group", "bb_remove",
-    "bb_mesh", "bb_mesh_primitive", "bb_mesh_edit", "bb_texture", "bb_animate",
+    "bb_status", "bb_project", "bb_cubes", "bb_cube_edit", "bb_cube_uv", "bb_duplicate", "bb_select", "bb_visibility",
+    "bb_group", "bb_locator", "bb_remove", "bb_mesh", "bb_mesh_primitive", "bb_mesh_edit", "bb_texture", "bb_animate",
+    "bb_animation_list", "bb_animation_edit", "bb_animation_keyframe", "bb_animation_remove", "bb_marker",
     "bb_camera", "bb_screenshot", "bb_export", "bb_undo", "bb_redo", "bb_tools",
   ]);
 
@@ -41,6 +43,7 @@
   const isNum = (v) => typeof v === "number" && Number.isFinite(v);
   const vec3 = (v) => Array.isArray(v) && v.length === 3 && v.every(isNum);
   const str = (v) => typeof v === "string" && v.trim().length > 0;
+  const textureTargetsValid = (targets) => targets === "all" || (Array.isArray(targets) && targets.length > 0 && targets.every(str) && (!targets.some((target) => target.trim() === "all") || (targets.length === 1 && targets[0] === "all")));
   const r3 = (n) => Math.round(n * 1000) / 1000;
   const clip = (s, n) => { s = String(s == null ? "" : s); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
   function fail(cmd, msg) { const e = new Error("ERROR INVALID_ARGUMENT in " + cmd + ": " + msg); e.code = "INVALID_ARGUMENT"; return e; }
@@ -182,6 +185,20 @@
     return { text: "Placed " + made.length + " cube(s)" + (group ? " in group '" + group.name + "'" : " at root") + (texture ? " with texture '" + texture.name + "'" : "") + ": " + made.map((m) => m.name).join(", ") + ". bb_screenshot to look; bb_status to read the tree back.", created: made.map((m) => ({ name: m.name, uuid: m.uuid })) };
   };
 
+  JOBS.bb_cube_uv = async (a, api) => {
+    if (!str(a && a.name)) throw fail("bb_cube_uv", "name (or uuid) of the cube is required");
+    const cube = api.findCube(a.name);
+    if (!cube) throw failRun("bb_cube_uv", "no cube named '" + a.name + "' (bb_status lists them)");
+    if (!a.faces || typeof a.faces !== "object" || Array.isArray(a.faces) || !Object.keys(a.faces).length) throw fail("bb_cube_uv", "faces must map one or more cube sides to [u1,v1,u2,v2]");
+    const sides = ["north", "south", "east", "west", "up", "down"];
+    for (const [side, uv] of Object.entries(a.faces)) {
+      if (!sides.includes(side)) throw fail("bb_cube_uv", "unknown cube face '" + side + "'; use " + sides.join(", "));
+      if (!Array.isArray(uv) || uv.length !== 4 || !uv.every(isNum)) throw fail("bb_cube_uv", "faces." + side + " must be [u1,v1,u2,v2] numbers");
+    }
+    api.edit("TotalScript: edit cube UV", { elements: [cube] }, () => api.setCubeFaceUV(cube, a.faces));
+    return { text: "Updated UV rectangles for " + Object.keys(a.faces).length + " face(s) on cube '" + cube.name + "'.", cube: cube.name, faces: Object.keys(a.faces) };
+  };
+
   JOBS.bb_cube_edit = async (a, api) => {
     const key = a && (a.name || a.uuid);
     if (!str(key)) throw fail("bb_cube_edit", "name (or uuid) of the cube is required");
@@ -200,6 +217,43 @@
     if (str(a.group) && !group) throw failRun("bb_cube_edit", "group '" + a.group + "' not found");
     api.edit("TotalScript: edit cube", { elements: [cube], outliner: !!group }, () => { api.extendCube(cube, patch); if (group) api.moveTo(cube, group); });
     return { text: "Edited cube '" + cube.name + "': " + Object.keys(patch).join(", ") + (group ? " → group '" + group.name + "'" : "") + ".", cube: api.describeCube(cube) };
+  };
+
+  function resolveOutlinerNodes(cmd, names, api) {
+    if (!Array.isArray(names) || !names.length) throw fail(cmd, "names must be a non-empty array of element / group names or UUIDs");
+    if (names.length > 200) throw fail(cmd, "at most 200 names per call");
+    for (let i = 0; i < names.length; i++) if (!str(names[i])) throw fail(cmd, "names[" + i + "] must be a non-empty string");
+    const nodes = [], missing = [];
+    for (const name of names) {
+      const node = api.findElement(name) || api.findGroup(name);
+      if (node) nodes.push(node); else missing.push(name);
+    }
+    if (missing.length) throw failRun(cmd, "not found: " + missing.join(", ") + " (bb_status lists the outliner)");
+    return nodes;
+  }
+
+  JOBS.bb_duplicate = async (a, api) => {
+    if (!api.project()) throw failRun("bb_duplicate", "no project is open - bb_project first");
+    const nodes = resolveOutlinerNodes("bb_duplicate", a && a.names, api);
+    const copies = api.edit("TotalScript: duplicate", { outliner: true }, () => nodes.map((node) => api.duplicateNode(node)));
+    return { text: "Duplicated " + copies.length + " node(s): " + copies.map((node) => node.name).join(", ") + ". Groups include their descendants; Blockbench assigns unique names.", duplicated: copies.map((node) => ({ name: node.name, uuid: node.uuid, type: node.type })) };
+  };
+
+  JOBS.bb_select = async (a, api) => {
+    if (!api.project()) throw failRun("bb_select", "no project is open - bb_project first");
+    const nodes = resolveOutlinerNodes("bb_select", a && a.names, api);
+    const selected = api.selectNodes(nodes, a.additive === true);
+    return { text: (a.additive ? "Added " : "Selected ") + selected.length + " node(s): " + selected.map((node) => node.name).join(", ") + ".", selected: selected.map((node) => ({ name: node.name, uuid: node.uuid, type: node.type })) };
+  };
+
+  JOBS.bb_visibility = async (a, api) => {
+    if (!api.project()) throw failRun("bb_visibility", "no project is open - bb_project first");
+    const nodes = resolveOutlinerNodes("bb_visibility", a && a.names, api);
+    if (typeof a.visible !== "boolean") throw fail("bb_visibility", "visible must be true or false");
+    const unsupported = nodes.filter((node) => typeof node.visibility !== "boolean");
+    if (unsupported.length) throw failRun("bb_visibility", "visibility is not supported for: " + unsupported.map((node) => node.name).join(", "));
+    api.edit("TotalScript: set visibility", { elements: nodes.filter((node) => node.type !== "group"), outliner: nodes.some((node) => node.type === "group") }, () => nodes.forEach((node) => api.setVisibility(node, a.visible)));
+    return { text: "Set " + nodes.length + " node(s) " + (a.visible ? "visible" : "hidden") + ": " + nodes.map((node) => node.name).join(", ") + ".", visible: a.visible, names: nodes.map((node) => node.name) };
   };
 
   JOBS.bb_group = async (a, api) => {
@@ -221,6 +275,17 @@
       return grp;
     });
     return { text: (existing ? "Updated" : "Created") + " group '" + g.name + "'" + (parent ? " under '" + parent.name + "'" : "") + (a.origin ? " pivot " + JSON.stringify(a.origin) : "") + (members.length ? ", moved in: " + move.join(", ") : "") + ".", group: { name: g.name, uuid: g.uuid } };
+  };
+
+  JOBS.bb_locator = async (a, api) => {
+    if (!str(a && a.name)) throw fail("bb_locator", "name is required");
+    if (!api.project()) throw failRun("bb_locator", "no project is open - bb_project first");
+    if (a.position !== undefined && !vec3(a.position)) throw fail("bb_locator", "position must be [x,y,z]");
+    if (a.rotation !== undefined && !vec3(a.rotation)) throw fail("bb_locator", "rotation must be [x,y,z] degrees");
+    const group = str(a.group) ? api.findGroup(a.group) : null;
+    if (str(a.group) && !group) throw failRun("bb_locator", "group '" + a.group + "' not found");
+    const locator = api.edit("TotalScript: create locator", { outliner: true }, () => api.addLocator({ name: String(a.name).trim(), position: a.position || [0, 0, 0], rotation: a.rotation || [0, 0, 0] }, group));
+    return { text: "Created locator '" + locator.name + "' at " + JSON.stringify(a.position || [0, 0, 0]) + (group ? " in group '" + group.name + "'" : " at root") + ". Export support depends on the selected Blockbench format.", locator: { name: locator.name, uuid: locator.uuid, position: locator.position || a.position || [0, 0, 0] } };
   };
 
   JOBS.bb_remove = async (a, api) => {
@@ -300,17 +365,19 @@
       if (w < 1 || h < 1 || w > 1024 || h > 1024) throw fail("bb_texture", "width / height must be 1-1024");
       const fill = a.fill_color === undefined ? "#8e8e8e" : hex(a.fill_color);
       if (!fill) throw fail("bb_texture", "fill_color must be a #rrggbb hex colour");
+      const targets = a.apply_to === undefined ? null : textureTargetList(api, a.apply_to);
       const t = api.createTexture(String(a.name).trim(), w, h, fill);
       let applied = 0;
-      if (a.apply_to) applied = applyTexture(api, t, a.apply_to);
+      if (targets) applied = applyTexture(api, t, targets);
       return { text: "Created texture '" + t.name + "' " + w + "x" + h + " filled " + fill + (applied ? " and applied it to " + applied + " element(s)" : "") + ". bb_texture {action:\"apply\", texture:\"" + t.name + "\", targets:[…]} to put it on cubes / meshes / groups.", texture: { name: t.name, uuid: t.uuid, width: w, height: h } };
     }
     if (action === "import") {
       if (!str(a.path)) throw fail("bb_texture", "path (PNG on this computer) is required for import");
+      const targets = a.apply_to === undefined ? null : textureTargetList(api, a.apply_to);
       if (!api.fileExists(a.path)) throw failRun("bb_texture", "file not found: " + a.path);
       const t = api.importTexture(String(a.path), str(a.name) ? String(a.name).trim() : undefined);
       let applied = 0;
-      if (a.apply_to) applied = applyTexture(api, t, a.apply_to);
+      if (targets) applied = applyTexture(api, t, targets);
       return { text: "Imported texture '" + t.name + "' from " + a.path + (applied ? " and applied it to " + applied + " element(s)" : "") + ".", texture: { name: t.name, uuid: t.uuid } };
     }
     if (action === "apply") {
@@ -325,16 +392,22 @@
     }
     throw fail("bb_texture", "action must be list | create | import | apply");
   };
+  function textureTargetList(api, targets) {
+    if (!textureTargetsValid(targets)) throw fail("bb_texture", "targets must be 'all' or a non-empty array of target names; do not mix 'all' with names");
+    const list = targets === "all" ? ["all"] : targets.map((x) => x.trim());
+    const missing = list.filter((name) => name !== "all" && !api.findElement(name) && !api.findGroup(name));
+    if (missing.length) throw failRun("bb_texture", "target(s) not found: " + missing.join(", "));
+    return list;
+  }
   function applyTexture(api, t, targets) {
-    const list = targets === "all" ? ["all"] : (Array.isArray(targets) ? targets.map(String) : [String(targets)]);
+    const list = Array.isArray(targets) && targets.length && targets.every((name) => name === "all" || str(name)) ? targets : textureTargetList(api, targets);
+    if (list.includes("all") && list.length !== 1) throw fail("bb_texture", "do not mix 'all' with named targets");
+    const nodes = list.map((name) => name === "all" ? null : (api.findElement(name) || api.findGroup(name)));
+    if (nodes.some((node, index) => node === null && list[index] !== "all")) throw failRun("bb_texture", "one or more texture targets were not found");
+    const elements = [...new Set(nodes.flatMap((node) => api.textureElements(node)))];
     let n = 0;
-    api.edit("TotalScript: apply texture", { elements: [], outliner: false }, () => {
-      for (const name of list) {
-        if (name === "all") { n += api.applyTextureTo(t, null); continue; }
-        const node = api.findElement(name) || api.findGroup(name);
-        if (!node) throw failRun("bb_texture", "target '" + name + "' not found");
-        n += api.applyTextureTo(t, node);
-      }
+    api.edit("TotalScript: apply texture", { elements, outliner: false }, () => {
+      for (const node of nodes) n += api.applyTextureTo(t, node);
     });
     return n;
   }
@@ -367,6 +440,101 @@
       return an;
     });
     return { text: "Animation '" + anim.name + "' (" + length + " s, " + (a.loop === false ? "once" : "loop") + ") with " + anim.__keyframes + " keyframe(s) on " + plan.map((p) => p[0].name).join(", ") + ". It is selected in the Animate tab; glTF export carries it (Studio imports glTF animations only partially).", animation: { name: anim.name, length, keyframes: anim.__keyframes } };
+  };
+
+  JOBS.bb_animation_list = async (a, api) => {
+    if (!api.project()) throw failRun("bb_animation_list", "no project is open - bb_project first");
+    const animations = api.animations().map((animation) => ({
+      name: animation.name,
+      uuid: animation.uuid,
+      length: animation.length,
+      loop: animation.loop,
+      keyframes: api.animationKeyframeCount(animation),
+      groups: api.animationGroupNames(animation),
+    }));
+    return { text: animations.length ? "Animations (" + animations.length + "): " + animations.map((animation) => animation.name + " (" + animation.length + " s, " + animation.loop + ", " + animation.keyframes + " keyframe(s); groups: " + (animation.groups.join(", ") || "none") + ")").join("; ") : "No animations in the project.", animations };
+  };
+
+  JOBS.bb_animation_edit = async (a, api) => {
+    const key = a && a.name;
+    if (!str(key)) throw fail("bb_animation_edit", "name (or uuid) of the animation is required");
+    const animation = api.findAnimation(key);
+    if (!animation) throw failRun("bb_animation_edit", "animation '" + key + "' not found (bb_animation_list lists them)");
+    const patch = {};
+    if (a.rename !== undefined) { if (!str(a.rename)) throw fail("bb_animation_edit", "rename must be a non-empty string"); patch.name = String(a.rename).trim(); }
+    if (a.length !== undefined) { if (!isNum(a.length) || a.length <= 0 || a.length > 10000) throw fail("bb_animation_edit", "length must be a number greater than 0 and at most 10000 seconds"); patch.length = a.length; }
+    if (a.loop !== undefined) { if (!["once", "loop", "hold"].includes(a.loop)) throw fail("bb_animation_edit", "loop must be once, loop or hold"); patch.loop = a.loop; }
+    if (!Object.keys(patch).length) throw fail("bb_animation_edit", "give at least one of rename, length or loop");
+    api.edit("TotalScript: edit animation", { animations: [animation] }, () => api.extendAnimation(animation, patch));
+    return { text: "Updated animation '" + animation.name + "': " + Object.keys(patch).join(", ") + ".", animation: { name: animation.name, uuid: animation.uuid, length: animation.length, loop: animation.loop } };
+  };
+
+  JOBS.bb_animation_keyframe = async (a, api) => {
+    const action = String(a && a.action || "").trim().toLowerCase();
+    if (! ["add", "remove"].includes(action)) throw fail("bb_animation_keyframe", "action must be add or remove");
+    if (!str(a.animation) || !str(a.group)) throw fail("bb_animation_keyframe", "animation and group names are required");
+    if (!["rotation", "position", "scale"].includes(a.channel)) throw fail("bb_animation_keyframe", "channel must be rotation, position or scale");
+    if (!isNum(a.time) || a.time < 0 || a.time > 10000) throw fail("bb_animation_keyframe", "time must be a number from 0 to 10000 seconds");
+    if (action === "add" && !vec3(a.value)) throw fail("bb_animation_keyframe", "value must be [x,y,z] for action add");
+    const animation = api.findAnimation(a.animation);
+    if (!animation) throw failRun("bb_animation_keyframe", "animation '" + a.animation + "' not found");
+    const group = api.findGroup(a.group);
+    if (!group) throw failRun("bb_animation_keyframe", "group '" + a.group + "' not found; animation channels target groups (bones)");
+    if (!api.animationsAllowed()) throw failRun("bb_animation_keyframe", "the current format has no animation mode");
+    const snappedTime = api.snapAnimationTime(a.time, animation);
+    const existing = api.animationKeyframes(animation, group, a.channel).find((keyframe) => Math.abs(keyframe.time - snappedTime) < 0.0005);
+    if (action === "add" && existing) throw fail("bb_animation_keyframe", "a " + a.channel + " keyframe already exists at snapped time " + snappedTime + " for '" + group.name + "'");
+    if (action === "remove" && !existing) throw failRun("bb_animation_keyframe", "no " + a.channel + " keyframe at snapped time " + snappedTime + " for '" + group.name + "'");
+    let keyframe;
+    api.editKeyframes("TotalScript: " + action + " animation keyframe", action === "remove" ? [existing] : [], (tracked) => {
+      if (action === "add") {
+        keyframe = api.addAnimationKeyframe(animation, group, a.channel, snappedTime, a.value);
+        if (!keyframe) throw failRun("bb_animation_keyframe", "Blockbench could not create a " + a.channel + " keyframe for this animation format");
+        tracked.push(keyframe);
+      } else {
+        keyframe = existing;
+        api.removeAnimationKeyframe(keyframe);
+      }
+    });
+    return { text: (action === "add" ? "Added" : "Removed") + " " + a.channel + " keyframe at " + snappedTime + " s on '" + group.name + "' in animation '" + animation.name + "'.", keyframe: action === "add" ? { uuid: keyframe.uuid, time: keyframe.time, channel: keyframe.channel } : null };
+  };
+
+  JOBS.bb_animation_remove = async (a, api) => {
+    if (!str(a && a.name)) throw fail("bb_animation_remove", "name (or uuid) of the animation is required");
+    const animation = api.findAnimation(a.name);
+    if (!animation) throw failRun("bb_animation_remove", "animation '" + a.name + "' not found (bb_animation_list lists them)");
+    api.removeAnimation(animation);
+    return { text: "Removed animation '" + animation.name + "' from the open project in one undo step. Any external animation file was not deleted.", removed: { name: animation.name, uuid: animation.uuid } };
+  };
+
+  JOBS.bb_marker = async (a, api) => {
+    const action = String(a && a.action || "").trim().toLowerCase();
+    if (!["list", "add", "remove"].includes(action)) throw fail("bb_marker", "action must be list, add or remove");
+    if (!str(a.animation)) throw fail("bb_marker", "animation name (or uuid) is required");
+    if (a.name !== undefined && !str(a.name)) throw fail("bb_marker", "name must be a non-empty string");
+    if (a.time !== undefined && (!isNum(a.time) || a.time < 0 || a.time > 10000)) throw fail("bb_marker", "time must be a number from 0 to 10000 seconds");
+    if (a.color !== undefined && (!Number.isInteger(a.color) || a.color < 0 || a.color > 9)) throw fail("bb_marker", "color must be a marker colour index 0-9");
+    const animation = api.findAnimation(a.animation);
+    if (!animation) throw failRun("bb_marker", "animation '" + a.animation + "' not found (bb_animation_list lists them)");
+    const markers = api.animationMarkers(animation);
+    if (action === "list") {
+      const list = markers.map((marker) => ({ name: marker.name, time: marker.time, color: marker.color, uuid: marker.uuid }));
+      return { text: list.length ? "Markers for '" + animation.name + "': " + list.map((marker) => (marker.name || "(unnamed)") + " at " + marker.time + " s, color " + marker.color).join("; ") : "No timeline markers in '" + animation.name + "'.", markers: list };
+    }
+    if (action === "add") {
+      if (!isNum(a.time) || a.time < 0 || a.time > 10000) throw fail("bb_marker", "time must be a number from 0 to 10000 seconds");
+      if (!str(a.name)) throw fail("bb_marker", "name is required for action add");
+      if (markers.some((marker) => Math.abs(marker.time - a.time) < 0.001)) throw fail("bb_marker", "a marker already exists at " + a.time + " s");
+      let marker;
+      api.edit("TotalScript: add timeline marker", { animations: [animation] }, () => { marker = api.addAnimationMarker(animation, { name: String(a.name).trim(), time: a.time, color: a.color === undefined ? 0 : a.color }); });
+      return { text: "Added marker '" + marker.name + "' at " + marker.time + " s in animation '" + animation.name + "'.", marker: { name: marker.name, time: marker.time, color: marker.color, uuid: marker.uuid } };
+    }
+    if (!str(a.name) && !isNum(a.time)) throw fail("bb_marker", "action remove needs marker name or time");
+    const matchName = str(a.name), matchTime = isNum(a.time);
+    const found = markers.filter((marker) => (!matchName || marker.name === String(a.name).trim()) && (!matchTime || Math.abs(marker.time - a.time) < 0.001));
+    if (!found.length) throw failRun("bb_marker", "no marker matched the given name / time");
+    api.edit("TotalScript: remove timeline marker", { animations: [animation] }, () => found.forEach((marker) => api.removeAnimationMarker(animation, marker)));
+    return { text: "Removed " + found.length + " marker(s) from animation '" + animation.name + "': " + found.map((marker) => marker.name || marker.time + " s").join(", ") + ".", removed: found.map((marker) => ({ name: marker.name, time: marker.time, uuid: marker.uuid })) };
   };
 
   JOBS.bb_camera = async (a, api) => {
@@ -443,7 +611,7 @@
       version: () => (typeof Blockbench !== "undefined" && Blockbench.version) || "?",
       project() {
         if (typeof Project === "undefined" || !Project) return null;
-        return { name: Project.name || "(untitled)", format: (Project.format && Project.format.id) || (typeof Format !== "undefined" && Format && Format.id) || "?", texture_width: Project.texture_width, texture_height: Project.texture_height, cubes: Cube.all.length, meshes: typeof Mesh !== "undefined" ? Mesh.all.length : 0, groups: Group.all.length, textures: Texture.all.length, animations: typeof Animation !== "undefined" && Animation.all ? Animation.all.length : 0 };
+        return { name: Project.name || "(untitled)", format: (Project.format && Project.format.id) || (typeof Format !== "undefined" && Format && Format.id) || "?", texture_width: Project.texture_width, texture_height: Project.texture_height, cubes: Cube.all.length, meshes: typeof Mesh !== "undefined" ? Mesh.all.length : 0, groups: Group.all.length, locators: typeof Outliner !== "undefined" && Outliner.elements ? Outliner.elements.filter((element) => element.type === "locator").length : 0, textures: Texture.all.length, animations: typeof Animation !== "undefined" && Animation.all ? Animation.all.length : 0 };
       },
       outline(depth) {
         const node = (n, d) => {
@@ -464,6 +632,13 @@
       findMesh: (key) => typeof Mesh !== "undefined" ? byName(Mesh.all, key) : null,
       findElement: (key) => byName(Outliner.elements, key),
       findTexture: (key) => byName(Texture.all, key),
+      findAnimation: (key) => typeof Animation !== "undefined" && Animation.all ? byName(Animation.all, key) : null,
+      animations: () => typeof Animation !== "undefined" && Animation.all ? Animation.all.slice() : [],
+      animationKeyframeCount: (animation) => Object.values(animation.animators || {}).reduce((sum, animator) => sum + (animator.keyframes ? animator.keyframes.length : 0), 0),
+      animationGroupNames: (animation) => Object.values(animation.animators || {}).map((animator) => { const group = typeof animator.getGroup === "function" ? animator.getGroup() : null; return (group && group.name) || animator._name || animator.name || animator.uuid; }),
+      animationKeyframes(animation, group, channel) { const animator = animation.getBoneAnimator(group); return animator && Array.isArray(animator[channel]) ? animator[channel] : []; },
+      animationMarkers: (animation) => Array.isArray(animation.markers) ? animation.markers : [],
+      snapAnimationTime: (time, animation) => Timeline.snapTime(time, animation),
       textures: () => Texture.all.map((t) => ({ name: t.name, uuid: t.uuid, width: t.width, height: t.height })),
       edit(label, aspects, fn) {
         const asp = Object.assign({ elements: [], outliner: false }, aspects || {});
@@ -488,10 +663,32 @@
         return cube;
       },
       extendCube(cube, patch) { cube.extend(patch); },
+      setCubeFaceUV(cube, faces) { for (const [side, uv] of Object.entries(faces)) cube.faces[side].uv = uv.slice(); },
       describeCube: (c) => ({ name: c.name, uuid: c.uuid, from: c.from.map(r3), to: c.to.map(r3), origin: c.origin.map(r3), rotation: c.rotation.map(r3), inflate: c.inflate }),
       addGroup(data, parent) { const g = new Group({ name: data.name, origin: data.origin || [0, 0, 0], rotation: data.rotation || [0, 0, 0] }).init(); if (parent) g.addTo(parent); return g; },
+      addLocator(data, group) { const locator = new Locator({ name: data.name, position: data.position || [0, 0, 0], rotation: data.rotation || [0, 0, 0] }); locator.init(); locator.addTo(group || "root"); return locator; },
       extendGroup(g, patch) { if (patch.origin) g.origin.V3_set(patch.origin[0], patch.origin[1], patch.origin[2]); if (patch.rotation) g.rotation.V3_set(patch.rotation[0], patch.rotation[1], patch.rotation[2]); },
       moveTo(node, group) { node.addTo(group); },
+      duplicateNode(node) { if (!node || typeof node.duplicate !== "function") throw new Error("Blockbench node does not support duplicate()"); return node.duplicate(); },
+      setVisibility(node, visible) { node.visibility = visible; },
+      selectNodes(nodes, additive) {
+        Undo.initSelection();
+        try {
+          if (!additive) {
+            unselectAllElements();
+            Group.multi_selected.splice(0, Group.multi_selected.length);
+            Group.all.forEach((group) => { group.selected = false; });
+          }
+          for (const node of nodes) {
+            if (node.type === "group" && typeof node.multiSelect === "function") node.multiSelect();
+            else if (typeof node.markAsSelected === "function") node.markAsSelected();
+            else throw new Error("Blockbench node does not support selection");
+          }
+          updateSelection();
+          Undo.finishSelection("Select Blockbench elements");
+          return nodes;
+        } catch (e) { try { Undo.cancelSelection(); } catch {} throw e; }
+      },
       removeNode(node) { if (node instanceof Group) node.remove(false); else node.remove(); },
       addMesh(data, group, texture) {
         const mesh = new Mesh({ name: data.name, vertices: {} });
@@ -519,19 +716,34 @@
       createTexture(name, w, h, fill) {
         const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext("2d"); ctx.fillStyle = fill; ctx.fillRect(0, 0, w, h);
-        const t = new Texture({ name }).fromDataURL(canvas.toDataURL("image/png")).add(false);
-        return t;
+        // Texture.add(true) records Blockbench's native texture-add undo entry.
+        return new Texture({ name }).fromDataURL(canvas.toDataURL("image/png")).add(true);
       },
-      importTexture(filePath, name) { const t = new Texture({ name: name || nodePath.basename(filePath) }).fromPath(filePath).add(false); return t; },
+      importTexture(filePath, name) { return new Texture({ name: name || nodePath.basename(filePath) }).fromPath(filePath).add(true); },
+      textureElements(node) {
+        const elements = [];
+        const visit = (entry) => {
+          if (!entry) return;
+          if (entry instanceof Group) { for (const child of entry.children || []) visit(child); }
+          else if (typeof entry.applyTexture === "function") elements.push(entry);
+        };
+        if (!node) Outliner.elements.forEach(visit);
+        else visit(node);
+        return elements;
+      },
       applyTextureTo(t, node) {
-        let n = 0;
-        const apply = (el) => { if (el && typeof el.applyTexture === "function") { el.applyTexture(t, true); n++; } };
-        if (!node) { Outliner.elements.forEach(apply); }
-        else if (node instanceof Group) { node.forEachChild(apply, undefined, false); }
-        else apply(node);
-        return n;
+        const elements = this.textureElements(node);
+        for (const element of elements) element.applyTexture(t, true);
+        return elements.length;
       },
       createAnimation(data) { const an = new Animation({ name: data.name, loop: data.loop ? "loop" : "once", length: data.length, snapping: 24 }).add(false); an.select(); return an; },
+      extendAnimation(animation, patch) { if (patch.name !== undefined) { animation.name = patch.name; animation.createUniqueName(); } if (patch.length !== undefined) animation.setLength(patch.length); if (patch.loop !== undefined) animation.setLoop(patch.loop, false); },
+      removeAnimation(animation) { animation.remove(true, false); },
+      editKeyframes(label, keyframes, fn) { const tracked = keyframes.slice(); Undo.initEdit({ keyframes: tracked }); try { const result = fn(tracked); Undo.finishEdit(label); return result; } catch (e) { try { Undo.cancelEdit(); } catch {} throw e; } },
+      addAnimationKeyframe(animation, group, channel, time, value) { animation.select(); const animator = animation.getBoneAnimator(group); return animator && animator.createKeyframe({ data_points: [{ x: value[0], y: value[1], z: value[2] }] }, time, channel, false, false); },
+      removeAnimationKeyframe(keyframe) { keyframe.remove(); },
+      addAnimationMarker(animation, data) { const marker = new TimelineMarker(data); animation.markers.push(marker); return marker; },
+      removeAnimationMarker(animation, marker) { const index = animation.markers.indexOf(marker); if (index >= 0) animation.markers.splice(index, 1); },
       addKeyframe(an, group, channel, time, v) { const animator = an.getBoneAnimator(group); animator.addKeyframe({ channel, time, data_points: [{ x: v[0], y: v[1], z: v[2] }] }); },
       anglePresets: () => (typeof DefaultCameraPresets !== "undefined" ? DefaultCameraPresets.map((p) => p.id) : []),
       hasAnglePreset(id) { return typeof DefaultCameraPresets !== "undefined" && DefaultCameraPresets.some((p) => p.id === id); },
@@ -596,50 +808,103 @@
   function createBridge(opts) {
     const request = opts.request, api = opts.api, log = opts.log || (() => {}), onState = opts.onState || (() => {});
     let url = String(opts.url || DEFAULT_BRIDGE).replace(/\/+$/, "");
-    const clientId = "bb-" + Math.random().toString(36).slice(2, 10);
-    let running = false, connected = false, helloTimer = null, pollAbort = null, backoff = 2000, jobsDone = 0, lastError = "";
+    const newClientId = () => "bb-" + Math.random().toString(36).slice(2, 10);
+    let clientId = newClientId();
+    let running = false, connected = false, helloTimer = null, backoff = 2000, jobsDone = 0, lastError = "", generation = 0;
     const setConnected = (on, err) => { const was = connected; connected = on; lastError = on ? "" : String(err || ""); if (was !== on) { log(on ? "connected to total-core at " + url : "total-core not reachable (" + lastError + ")"); onState(state()); } };
     function state() { return { connected, url, clientId, jobsDone, lastError, running }; }
-    async function hello() {
+    function sayGoodbye(targetUrl, targetClientId) {
+      try {
+        const pending = request("POST", String(targetUrl || url).replace(/\/+$/, "") + "/api/blockbench/goodbye", { client_id: targetClientId || clientId }, 3000);
+        if (pending && typeof pending.catch === "function") pending.catch(() => {});
+      } catch {}
+    }
+    async function hello(token = generation, targetUrl = url, targetClientId = clientId) {
       const p = api.project();
       try {
-        const r = await request("POST", url + "/api/blockbench/hello", { client_id: clientId, version: VERSION, blockbench_version: api.version(), project: p ? p.name : "", format: p ? p.format : "", capabilities: CAPABILITIES }, 8000);
+        const r = await request("POST", targetUrl + "/api/blockbench/hello", { client_id: targetClientId, version: VERSION, blockbench_version: api.version(), project: p ? p.name : "", format: p ? p.format : "", capabilities: CAPABILITIES }, 8000);
+        if (token !== generation) return false;
         if (r.status === 200 && r.json && r.json.ok) { setConnected(true); backoff = 2000; return true; }
         setConnected(false, "hello answered HTTP " + r.status);
-      } catch (e) { setConnected(false, (e && e.message) || String(e)); }
+      } catch (e) {
+        if (token !== generation) return false;
+        setConnected(false, (e && e.message) || String(e));
+      }
       return false;
     }
-    async function runOne(job) {
+    async function runOne(job, targetUrl, targetClientId) {
       const started = Date.now();
       let body;
       try {
         const result = await runJob(job.name, job.args, api);
-        body = { id: job.id, ok: true, result, elapsed_ms: Date.now() - started };
+        body = { id: job.id, client_id: targetClientId, ok: true, result, elapsed_ms: Date.now() - started };
       } catch (e) {
-        body = { id: job.id, ok: false, result: null, error: String((e && e.message) || e), code: (e && e.code) || "EXECUTION", elapsed_ms: Date.now() - started };
+        body = { id: job.id, client_id: targetClientId, ok: false, result: null, error: String((e && e.message) || e), code: (e && e.code) || "EXECUTION", elapsed_ms: Date.now() - started };
       }
       jobsDone++;
-      try { await request("POST", url + "/api/blockbench/result", body, 8000); } catch (e) { log("result delivery failed: " + ((e && e.message) || e)); }
+      try { await request("POST", targetUrl + "/api/blockbench/result", body, 8000); } catch (e) { log("result delivery failed: " + ((e && e.message) || e)); }
       onState(state());
     }
-    async function loop() {
-      while (running) {
+    async function loop(token) {
+      while (running && token === generation) {
         if (!connected) {
-          const ok = await hello();
-          if (!ok) { await sleep(backoff); backoff = Math.min(15000, Math.round(backoff * 1.5)); continue; }
+          const ok = await hello(token, url, clientId);
+          if (token !== generation) return;
+          if (!ok) { await sleep(backoff); if (token !== generation) return; backoff = Math.min(15000, Math.round(backoff * 1.5)); continue; }
         }
+        const targetUrl = url, targetClientId = clientId;
         try {
-          const r = await request("GET", url + "/api/blockbench/poll?client_id=" + encodeURIComponent(clientId), null, POLL_TIMEOUT_MS);
+          const r = await request("GET", targetUrl + "/api/blockbench/poll?client_id=" + encodeURIComponent(targetClientId), null, POLL_TIMEOUT_MS);
+          if (token !== generation) return;
           if (r.status !== 200 || !r.json || !r.json.ok) { setConnected(false, "poll answered HTTP " + r.status); continue; }
-          if (r.json.job) await runOne(r.json.job);
-        } catch (e) { setConnected(false, (e && e.message) || String(e)); await sleep(backoff); }
+          if (r.json.job) await runOne(r.json.job, targetUrl, targetClientId);
+        } catch (e) {
+          if (token !== generation) return;
+          setConnected(false, (e && e.message) || String(e));
+          await sleep(backoff);
+        }
       }
     }
     const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+    function armHello(token) {
+      clearInterval(helloTimer);
+      helloTimer = setInterval(() => { if (running && token === generation && connected) void hello(token); }, HELLO_EVERY_MS);
+    }
     return {
-      start() { if (running) return; running = true; helloTimer = setInterval(() => { if (connected) hello(); }, HELLO_EVERY_MS); loop(); onState(state()); },
-      stop() { running = false; clearInterval(helloTimer); helloTimer = null; setConnected(false, "stopped"); onState(state()); },
-      setUrl(u) { url = String(u || DEFAULT_BRIDGE).replace(/\/+$/, ""); setConnected(false, "url changed"); },
+      start() {
+        if (running) return;
+        clientId = newClientId();
+        running = true;
+        const token = ++generation;
+        backoff = 2000;
+        armHello(token);
+        void loop(token);
+        onState(state());
+      },
+      stop() {
+        const wasRunning = running, targetUrl = url, targetClientId = clientId;
+        running = false;
+        generation++;
+        clearInterval(helloTimer); helloTimer = null;
+        if (wasRunning) sayGoodbye(targetUrl, targetClientId);
+        setConnected(false, "stopped");
+        onState(state());
+      },
+      setUrl(u) {
+        const next = String(u || DEFAULT_BRIDGE).replace(/\/+$/, "");
+        if (next === url) return;
+        const wasRunning = running, targetUrl = url, targetClientId = clientId;
+        if (wasRunning) sayGoodbye(targetUrl, targetClientId);
+        url = next;
+        if (wasRunning) {
+          clientId = newClientId();
+          const token = ++generation;
+          backoff = 2000;
+          armHello(token);
+        }
+        setConnected(false, "url changed");
+        if (wasRunning) void loop(generation);
+      },
       state, hello,
     };
   }
