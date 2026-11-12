@@ -467,8 +467,6 @@ pub enum UiCommand {
     KillStudio,
     SetFullAccess(bool),
     SetWorkspace { path: String, reply: Sender<Result<String, String>> },
-    /// Point reference_search at a notes folder (empty = off). Reply = shown path or None.
-    SetReferenceDir { path: String, reply: Sender<Result<Option<String>, String>> },
     SetMcpCommand(String),
     /// 2.8.0 pair mode on / off (persisted; forwarded to the Studio plugin).
     SetPair(bool),
@@ -490,7 +488,8 @@ pub struct Settings {
     pub start_hidden: bool,
     pub launch_at_login: bool,
     pub workspace_root: String,
-    /// 2.7: optional folder of Markdown notes for reference_search (empty = off).
+    /// Legacy 2.7 custom reference folder. Retained in settings for compatibility;
+    /// desktop Skills now always come from the active workspace's `Skills/` folder.
     pub reference_dir: String,
     pub mcp_command: String,
     pub full_access: bool,
@@ -1098,11 +1097,7 @@ pub struct App {
     /// 2.9.1 easter eggs opened from the palette search box.
     egg: crate::easter::EggState,
     picker_rx: Option<Receiver<Option<String>>>,
-    /// Which text field the running folder picker fills.
-    picker_for_reference: bool,
     workspace_rx: Option<Receiver<Result<String, String>>>,
-    draft_reference: String,
-    reference_rx: Option<Receiver<Result<Option<String>, String>>>,
     tray: Option<TrayState>,
     /// Handle the tray worker can use to raise this window again (Windows:
     /// HWND; elsewhere a marker that the egui context is registered).
@@ -1162,7 +1157,6 @@ impl App {
         let mut app = Self {
             draft_workspace: shared.root(),
             draft_mcp: settings.mcp_command.clone(),
-            draft_reference: settings.reference_dir.clone(),
             shared,
             cmd_tx,
             settings,
@@ -1212,9 +1206,7 @@ impl App {
             palette_query: String::new(),
             egg: crate::easter::EggState::default(),
             picker_rx: None,
-            picker_for_reference: false,
             workspace_rx: None,
-            reference_rx: None,
             tray,
             native_hwnd: None,
             size_dirty: false,
@@ -1314,6 +1306,41 @@ impl App {
         self.explorer_dir = dir;
         self.explorer_note.clear();
         self.refresh_explorer();
+    }
+
+    fn ensure_skills_dir(&mut self) -> Option<PathBuf> {
+        let workspace = self.workspace_root();
+        let dir = workspace.join("Skills");
+        let created = if std::fs::symlink_metadata(&dir).map(|m| m.file_type().is_symlink()).unwrap_or(false) {
+            Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Skills folder must not be a symlink"))
+        } else {
+            std::fs::create_dir_all(&dir)
+        };
+        let canonical = created.and_then(|_| std::fs::canonicalize(&dir));
+        match canonical {
+            Ok(path) if path.starts_with(&workspace) => Some(path),
+            Ok(_) => {
+                self.settings_note = "Skills folder resolves outside the workspace and was not opened".into();
+                self.toast("Skills folder is outside the workspace", false);
+                None
+            }
+            Err(e) => {
+                self.settings_note = format!("Skills folder unavailable: {e}");
+                self.toast("Could not open Skills folder", false);
+                None
+            }
+        }
+    }
+
+    fn manage_skills(&mut self) {
+        if let Some(dir) = self.ensure_skills_dir() {
+            self.navigate(dir.clone());
+            if self.explorer_dir == dir { self.go(Page::Explorer); }
+        }
+    }
+
+    fn open_skills_folder(&mut self) {
+        if let Some(dir) = self.ensure_skills_dir() { open_external(&dir.to_string_lossy()); }
     }
 
     fn open_file(&mut self, path: PathBuf) {
@@ -1443,7 +1470,7 @@ impl App {
         let picked = self.picker_rx.as_ref().map(|rx| rx.try_recv());
         if let Some(result) = picked {
             match result {
-                Ok(Some(path)) => { if self.picker_for_reference { self.draft_reference = path; } else { self.draft_workspace = path; } self.picker_rx = None; }
+                Ok(Some(path)) => { self.draft_workspace = path; self.picker_rx = None; }
                 Ok(None) => { self.picker_rx = None; }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
                 Err(_) => { self.picker_rx = None; }
@@ -1470,25 +1497,6 @@ impl App {
                 Ok(Err(e)) => { self.workspace_rx = None; self.settings_note = format!("Workspace switch failed: {e}"); self.toast("Workspace switch failed", false); }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
                 Err(_) => { self.workspace_rx = None; }
-            }
-        }
-        // Reference library switch
-        let rf = self.reference_rx.as_ref().map(|rx| rx.try_recv());
-        if let Some(result) = rf {
-            match result {
-                Ok(Ok(shown)) => {
-                    self.reference_rx = None;
-                    self.settings.reference_dir = shown.clone().unwrap_or_default();
-                    let _ = self.settings.save();
-                    self.draft_reference = self.settings.reference_dir.clone();
-                    match shown {
-                        Some(p) => { self.settings_note = format!("Reference library is now {p}"); self.toast("Reference library set", true); }
-                        None => { self.settings_note = "Reference library turned off".into(); self.toast("Reference library off", true); }
-                    }
-                }
-                Ok(Err(e)) => { self.reference_rx = None; self.settings_note = format!("Reference library not set: {e}"); self.toast("Reference library not set", false); }
-                Err(std::sync::mpsc::TryRecvError::Empty) => {}
-                Err(_) => { self.reference_rx = None; }
             }
         }
     }
@@ -2891,14 +2899,13 @@ impl App {
                 ui.label(RichText::new("Motion, backdrop and glow live in Settings › Performance.").small().color(t.muted));
             });
             }
-            if self.settings_visible(SettingsCat::Workspace, "Workspace", "folder root full pc access reference library vault lihfolk notes workspaces recent favourite favorite switch") {
+            if self.settings_visible(SettingsCat::Workspace, "Workspace", "folder root full pc access skills skill markdown notes workspaces recent favourite favorite switch") {
             section_card(ui, t, "05", "Workspace", "The folder the AgentScript file tools and the Explorer work in.", |ui| {
                 ui.label(RichText::new(format!("Active root: {}", self.shared.root())).monospace().color(t.muted));
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut self.draft_workspace).hint_text(if cfg!(windows) { "C:\\Users\\you\\TotalWorkspace" } else { "~/TotalWorkspace" }).desired_width(420.0).font(TextStyle::Monospace));
                     let picking = self.picker_rx.is_some();
                     if ui.add_enabled(!picking, button_widget(t, if picking { "Choosing…" } else { "Browse…" }, Btn::Secondary)).clicked() {
-                        self.picker_for_reference = false;
                         self.picker_rx = Some(pick_folder(&self.draft_workspace));
                     }
                     let switching = self.workspace_rx.is_some();
@@ -2917,27 +2924,17 @@ impl App {
                     let _ = self.cmd_tx.send(UiCommand::SetFullAccess(full));
                 }
                 ui.add_space(8.0);
-                ui.label(RichText::new("Reference library (optional)").strong().color(t.text));
-                ui.label(RichText::new(if self.settings.reference_dir.trim().is_empty() { "Off — the AI answers limits and API questions from memory only.".to_string() } else { format!("Active: {}", self.settings.reference_dir) }).monospace().color(t.muted));
+                let skills_dir = self.workspace_root().join("Skills");
+                ui.label(RichText::new("Skills").strong().color(t.text));
+                ui.label(RichText::new(format!("Workspace folder: {}", skills_dir.display())).monospace().color(t.muted));
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut self.draft_reference).hint_text(if cfg!(windows) { "C:\\Users\\you\\LihFolk Vault V2" } else { "~/LihFolk Vault V2" }).desired_width(420.0).font(TextStyle::Monospace));
-                    let picking = self.picker_rx.is_some();
-                    if ui.add_enabled(!picking, button_widget(t, if picking { "Choosing…" } else { "Browse…" }, Btn::Secondary)).clicked() {
-                        self.picker_for_reference = true;
-                        self.picker_rx = Some(pick_folder(&self.draft_reference));
-                    }
-                    let switching = self.reference_rx.is_some();
-                    let changed = self.draft_reference.trim() != self.settings.reference_dir.trim();
-                    if ui.add_enabled(changed && !switching, pill_widget(t, if switching { "Applying…" } else { "Apply" }, true)).clicked() {
-                        let (tx, rx) = std::sync::mpsc::channel();
-                        if self.cmd_tx.send(UiCommand::SetReferenceDir { path: self.draft_reference.trim().to_string(), reply: tx }).is_ok() { self.reference_rx = Some(rx); }
-                    }
-                    if ui.add_enabled(!self.settings.reference_dir.trim().is_empty() && !switching, button_widget(t, "Turn off", Btn::Secondary)).clicked() {
-                        let (tx, rx) = std::sync::mpsc::channel();
-                        if self.cmd_tx.send(UiCommand::SetReferenceDir { path: String::new(), reply: tx }).is_ok() { self.reference_rx = Some(rx); }
-                    }
+                    if pill(ui, t, "Manage Skills in Explorer", true).clicked() { self.manage_skills(); }
+                    if pill(ui, t, "Open folder", false).clicked() { self.open_skills_folder(); }
                 });
-                ui.label(RichText::new("A folder of Markdown notes the AI can search with reference_search before stating limits, defaults or 2025-26 API changes (one call, three note summaries). Works with LihFolk Vault V2 (github.com/lihfolk-cy/v2-vault, notes CC BY 4.0 — download it yourself; nothing is bundled), a creator-docs clone or your own notes. Nothing leaves your PC except the snippets the AI reads.").small().color(t.muted));
+                ui.label(RichText::new("Add one Markdown file per skill (`.md`) in this folder; subfolders are searched too. In Explorer, enter a filename such as `my-skill.md`, choose New file, write the guidance, then Save. Changes are searchable immediately. Search ranks titles, frontmatter/tags and body matches deterministically; the provider receives only excerpts returned by the search/read tools when chat tools are enabled. Skill text is advisory data: it is never executed and cannot override user intent, permissions or validation.").small().color(t.muted));
+                if !self.settings.reference_dir.trim().is_empty() {
+                    ui.label(RichText::new(format!("Previous reference folder is kept untouched in settings (not used): {}. Copy any Markdown you still need into Skills/.", self.settings.reference_dir)).small().color(t.warn));
+                }
                 ui.add_space(12.0);
                 self.workspace_manager(ui);
             });
@@ -4388,7 +4385,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
             "Your layout: Comfortable or Compact density cards, Sharp / Soft / Round corners, UI size 90–125 %, icon-rail and two-line sidebar switches. Appearance: 16 palettes (TotalScript Aqua by default, Gold, Emerald, Graphite, Midnight, Nord, Violet, Rosé, Crimson, Sunset, Ocean, Mocha, Forest, and the light Paper, Snow and Sage) with a search box, a custom accent colour (picker, hex or six quick swatches) and Motion / Backdrop / Glow effect switches; every change applies instantly.",
             "Behaviour: keep running in the notification area when the window is closed, start hidden, always show the checklist, launch at sign-in (hidden).",
             "Workspace: the folder the AI may use outside Studio, and the FULL PC ACCESS switch.",
-            "Reference library (optional, same card): a folder of Markdown notes — for example LihFolk Vault V2 (notes CC BY 4.0, download it yourself) or your own — that the AI searches with reference_search before stating a limit, default or API change. Off until you set it; nothing is bundled.",
+            "Skills (same card): user-authored Markdown files under the active workspace's Skills/ folder. The built-in chat can search relevant skills with reference_search and read one section with reference_read; only the returned excerpts are sent to the provider when chat tools are enabled. The deterministic ranking is local, and skill text is advisory only — it is never executed or allowed to override permissions or validation.",
             "Roblox Studio MCP: the launcher command for the helper.",
             "AI chat (side panel): provider, API key, model and base URL for the in-app chat.",
             "Donate: Robux game passes, if TotalScript saves you time. About: version, rebuild command, keyboard list, repository link. Diagnostics: live status grid and 'Copy diagnostics'.",
@@ -4425,7 +4422,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
         summary: "This app is one of three parts. The browser extension (TotalScript bar on the AI site) owns work modes, skills, Blender and the Studio plugin link; the Studio plugin (plugin/TotalScript.lua) handles animation, GUI and screenshot work inside Studio; this app is the bridge and the local engine.",
         steps: &[
             "Blender connects through the extension, not this app: press Start MCP Server in Blender (N panel → MCP for Blender), then Settings → MCP servers → Connect Blender on the TotalScript bar. The Blender work mode makes the AI plan, build, validate, render and send assets to Studio from there.",
-            "Work modes (Totality, Blender, Animator), skills, templates, prompt enhancer, Paint and Video are in the extension's Settings and bar — this app does not change them.",
+            "Work modes (Totality, Blender, Animator), Public Skills, templates, prompt enhancer, Paint and Video belong to the separate extension system. Desktop workspace Skills are local Markdown files under the active workspace and do not sync with Public Skills.",
             "The Studio plugin: this app copies plugin/TotalScript.lua into Studio's local Plugins folder; restart Studio once, open Plugins → TotalScript and click Allow on the HTTP prompt. The plugin then long-polls this bridge for jobs.",
             "Blockbench (2.21.0): this app keeps TotalScript-Blockbench.js next to its executable; load it once in Blockbench (File → Plugins → Load Plugin from File). It then connects to this app on every start - no port, no MCP - and the bb_* tools (cubes, groups, meshes, textures, animation, screenshot, export OBJ / glTF / bbmodel) work from the extension's Blockbench mode and from this chat.",
         ],
@@ -4446,7 +4443,7 @@ const HELP_TOPICS: &[HelpTopic] = &[
         page: Some(Page::Diagnostics),
         summary: "Every row is read from the bridge state each frame — there is no cached 'all good'. Red rows carry the button that fixes them where one exists.",
         steps: &[
-            "Checks: bridge ports, extension channels, Studio process, MCP helper, place link, Studio plugin, workspace folder (exists / writable), reference library, chat provider, settings and log files, tool errors this session.",
+            "Checks: bridge ports, extension channels, Studio process, MCP helper, place link, Studio plugin, workspace folder (exists / writable), Skills folder, chat provider, settings and log files, tool errors this session.",
             "Fix buttons reuse the normal actions: Restart helper, Probe Studio, open the right Settings category, open a file.",
             "Copy report — the check list plus the diagnostics text and the last 40 console lines. No API keys, no chat text.",
             "The Bridge card on Home and the status bar's bridge item open this page.",

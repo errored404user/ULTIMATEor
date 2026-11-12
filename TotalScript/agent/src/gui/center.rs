@@ -42,7 +42,6 @@ impl App {
         if let Some(run) = &self.luau_run { v.push(Job { title: "Luau in Studio".into(), detail: format!("{} · Studio executes it; no cancel", run.name), started: run.started, cancellable: false }); }
         if let Some(run) = &self.snapshot_run { v.push(Job { title: "Studio viewport capture".into(), detail: run.name.clone(), started: run.started, cancellable: false }); }
         if self.workspace_rx.is_some() { v.push(Job { title: "Workspace switch".into(), detail: self.draft_workspace.clone(), started: self.page_opened, cancellable: false }); }
-        if self.reference_rx.is_some() { v.push(Job { title: "Reference library switch".into(), detail: self.draft_reference.clone(), started: self.page_opened, cancellable: false }); }
         if self.picker_rx.is_some() { v.push(Job { title: "Folder picker".into(), detail: "waiting for the system dialog".into(), started: self.page_opened, cancellable: false }); }
         if self.chat_models_rx.is_some() { v.push(Job { title: "Model list".into(), detail: "asking the provider for /models".into(), started: self.page_opened, cancellable: false }); }
         v
@@ -233,10 +232,13 @@ impl App {
                 let readonly = std::fs::metadata(&root_path).map(|m| m.permissions().readonly()).unwrap_or(false);
                 Check { title: "Workspace folder", state: if readonly { CheckState::Warn } else { CheckState::Ok }, detail: format!("{}{}{}", short_path(&root, 60), if readonly { " · read-only" } else { "" }, if s.full_access() { " · FULL PC ACCESS on" } else { "" }), fix: None }
             });
-        let rd = self.settings.reference_dir.trim();
-        v.push(if rd.is_empty() { Check { title: "Reference library", state: CheckState::Info, detail: "off (optional)".into(), fix: None } }
-            else if Path::new(rd).is_dir() { Check { title: "Reference library", state: CheckState::Ok, detail: short_path(rd, 60), fix: None } }
-            else { Check { title: "Reference library", state: CheckState::Warn, detail: format!("folder missing: {rd}"), fix: Some(("Fix", Action::Settings(SettingsCat::Workspace))) } });
+        let skills = PathBuf::from(&root).join("Skills");
+        let skills_shown = skills.to_string_lossy().to_string();
+        let skills_safe = std::fs::symlink_metadata(&skills).map(|m| m.is_dir() && !m.file_type().is_symlink()).unwrap_or(false)
+            && std::fs::canonicalize(&skills).map(|p| p.starts_with(&root_path)).unwrap_or(false);
+        v.push(if root.trim().is_empty() { Check { title: "Skills folder", state: CheckState::Info, detail: "workspace not set".into(), fix: Some(("Choose workspace", Action::Settings(SettingsCat::Workspace))) } }
+            else if skills_safe { Check { title: "Skills folder", state: CheckState::Ok, detail: short_path(&skills_shown, 60), fix: None } }
+            else { Check { title: "Skills folder", state: CheckState::Warn, detail: format!("missing, unreadable or outside workspace: {skills_shown}"), fix: Some(("Open Settings", Action::Settings(SettingsCat::Workspace))) } });
         let p = self.chat_provider();
         v.push(if self.chat_ready() { Check { title: "AI chat provider", state: CheckState::Ok, detail: format!("{} · {}", p.name, self.chat_model()), fix: None } }
             else { Check { title: "AI chat provider", state: CheckState::Info, detail: format!("{} not configured (key / model) — the extension path works without it", p.name), fix: Some(("Set up", Action::Settings(SettingsCat::Ai))) } });

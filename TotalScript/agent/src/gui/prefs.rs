@@ -23,7 +23,7 @@ impl SettingsCat {
     }
     pub fn blurb(self) -> &'static str {
         match self {
-            SettingsCat::General => "Startup, tray, dashboard", SettingsCat::Appearance => "Theme, accent, density", SettingsCat::Workspace => "Folders & reference library",
+            SettingsCat::General => "Startup, tray, dashboard", SettingsCat::Appearance => "Theme, accent, density", SettingsCat::Workspace => "Workspace folder & Skills",
             SettingsCat::Ai => "Provider, key, model", SettingsCat::Integrations => "Studio MCP, plugin, extension", SettingsCat::Performance => "Motion, effects, logs",
             SettingsCat::Privacy => "What is stored where", SettingsCat::Shortcuts => "Every key the window handles", SettingsCat::Advanced => "Paths, reset, import / export", SettingsCat::About => "Version, donate, repository",
         }
@@ -62,7 +62,7 @@ impl App {
         match cat {
             SettingsCat::General => { s.close_to_tray = d.close_to_tray; s.start_hidden = d.start_hidden; s.show_checklist = d.show_checklist; s.home_stats = d.home_stats; s.home_quick = d.home_quick; s.home_recent = d.home_recent; s.home_viewport = d.home_viewport; "General reset" }
             SettingsCat::Appearance => { s.theme = d.theme; s.accent = d.accent; s.corners = d.corners; s.ui_scale = d.ui_scale; s.compact = d.compact; s.sidebar_rail = d.sidebar_rail; s.sidebar_blurbs = d.sidebar_blurbs; s.glow = d.glow; "Appearance reset" }
-            SettingsCat::Workspace => { "Workspace folders are not reset from here — use the Apply buttons" }
+            SettingsCat::Workspace => { "Workspace and Skills folders are managed in the Workspace section" }
             SettingsCat::Ai => { s.chat_tools = d.chat_tools; s.chat_send_images = d.chat_send_images; s.chat_max_steps = d.chat_max_steps; s.chat_temperature = d.chat_temperature; s.chat_instructions = d.chat_instructions; s.chat_panel_width = d.chat_panel_width; "AI chat preferences reset (keys and models kept)" }
             SettingsCat::Integrations => { s.mcp_command = d.mcp_command; self.draft_mcp.clear(); let cmd = self.settings.mcp_command.clone(); let _ = self.cmd_tx.send(UiCommand::SetMcpCommand(cmd)); "MCP launcher reset to default (restart the helper to apply)" }
             SettingsCat::Performance => { s.motion = d.motion; s.backdrop = d.backdrop; s.glow = d.glow; "Performance reset" }
