@@ -811,16 +811,23 @@ const RSProvider = (() => {
   // The mode dropdown's trigger
   // is a `button[role="combobox"]` whose visible text IS the current mode name.
   // Detection fails OPEN (unknown → allow) so a DOM reskin never wrongly blocks.
-  const MODE_RE = /\b(direct|battle|agent|side by side)\b/i;
+  // Match only a mode name at the start of the trigger. Arena also uses
+  // role=combobox for its model picker; treating any combobox as the mode menu
+  // made restoreDirectOnce open (then close) the model picker on page load.
+  const MODE_RE = /^\s*(direct|battle|agent|side by side)\b/i;
   const SUPPORTED_MODES = new Set(["direct"]);
-  function currentMode() {
-    if (isAgentRoute()) return "agent";
+  function modeCombo() {
     for (const c of document.querySelectorAll('button[role="combobox"]')) {
       if (c.offsetParent === null) continue;
-      const m = (c.textContent || "").trim().toLowerCase().match(MODE_RE);
-      if (m) return m[1];
+      if (MODE_RE.test(c.textContent || "")) return c;
     }
-    return null; // unknown
+    return null;
+  }
+  function currentMode() {
+    if (isAgentRoute()) return "agent";
+    const c = modeCombo();
+    const m = c && (c.textContent || "").trim().toLowerCase().match(MODE_RE);
+    return m ? m[1] : null; // unknown
   }
   // ── Unsupported composer modes (Build Apps / Web Search / Generate Image) ──
   // The composer's "Code", "Search" and "Image" buttons each switch the WHOLE
@@ -882,10 +889,11 @@ const RSProvider = (() => {
     if (isAgentRoute()) return; // Agent is a different app — warn, don't navigate
     let combo = null;
     for (let i = 0; i < 60 && !combo; i++) { // up to ~15s for post-login load
-      combo = [...document.querySelectorAll('button[role="combobox"]')].find((x) => x.offsetParent !== null) || null;
+      combo = modeCombo(); // never mistake the independent model picker for chat mode
       if (!combo) await sleep(250);
     }
-    if (!combo || /direct|agent/i.test(combo.textContent || "")) return; // gone or already supported
+    const mode = combo && (combo.textContent || "").trim().toLowerCase().match(MODE_RE);
+    if (!combo || !mode || mode[1] === "direct" || mode[1] === "agent") return; // gone or already supported
     // Open the dropdown only if it is closed - clicking an already-open combobox
     // would toggle it shut and there would be no option to pick.
     if (combo.getAttribute("aria-expanded") !== "true") { try { combo.click(); } catch {} }
