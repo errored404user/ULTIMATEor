@@ -2081,6 +2081,19 @@
       return (A.toolList || []).filter((t) => t && t.server === "blender" && !t.hidden);
     } catch { return []; }
   }
+  // When the selected editor is offline, Blender mode can still use Blender's
+  // independent catalogue as the default. An explicit server request always wins;
+  // use the same readiness path as tool calls instead of trusting cached schemas.
+  async function blenderModeCatalogueFallback(args) {
+    if (String(args && args.server || "").trim() || currentWorkMode() !== "blender") return null;
+    try { return await blenderReady(); } catch { return false; }
+  }
+  function blenderCatalogueUnavailableReply(name) {
+    const connected = !!(A.bridge && A.bridge.blender === true);
+    return `Output of '${name}':\n${connected
+      ? "Blender is reachable, but TotalScript could not load its command catalogue. Reconnect Blender from Settings → MCP servers, then retry."
+      : "Blender is currently OFFLINE. In Blender press N → MCP for Blender → Start MCP Server, then use TotalScript Settings → MCP servers → Connect Blender."}`;
+  }
   // 2.21.0: same for the Blockbench family (server "blockbench") in Blockbench mode.
   function blockbenchModeTools(requested) {
     try {
@@ -3590,17 +3603,87 @@
     const r = await Promise.race([req, new Promise((res) => setTimeout(() => res(null), ms))]);
     return r && r.ok ? String(r.text || "") : "";
   }
-  // Blender link for the precondition: the live flag first, then the same
-  // status → connect attempt runTool makes before a blender_* call.
+  // Blender link for the precondition. Auto-connect can run after a provider's
+  // startup catalogue was built (notably ChatGPT's embedded catalogue), so a
+  // successful link must also refresh the live tool names before the model's
+  // reply is parsed. A cached "connected" flag without get_scene_info in the
+  // catalogue is not enough to take the fast path.
   async function blenderReady() {
-    try { if (A.bridge && A.bridge.blender === true) return true; } catch {}
-    try { if (window.__rsBlender && window.__rsBlender()) return true; } catch {}
-    try {
-      let st = await bg({ type: "blender_status" });
-      if (!(st && (st.blender || st.ok))) st = await bg({ type: "blender_connect" });
-      if (st && (st.blender || st.ok)) { A.bridge = A.bridge || {}; A.bridge.blender = true; return true; }
-    } catch {}
-    return false;
+    const hasBlenderTools = () => (A.toolList || []).some((t) => t && t.server === "blender" && bareToolName(t.name) === "get_scene_info");
+    let ready = false;
+    try { ready = !!(A.bridge && A.bridge.blender === true); } catch {}
+    try { if (!ready && window.__rsBlender && window.__rsBlender()) ready = true; } catch {}
+    let st = null;
+    if (!ready || !hasBlenderTools()) {
+      try { st = await bg({ type: "blender_status" }); } catch {}
+      // If the page has a connected flag but no Blender schemas, probe again:
+      // the worker's persisted status can outlive its tool catalogue / addon.
+      if (!(st && (st.blender || st.ok)) || !hasBlenderTools()) {
+        try { st = await bg({ type: "blender_connect" }); } catch { st = null; }
+      }
+      ready = !!(st && (st.blender || st.ok));
+      A.bridge = Object.assign({}, A.bridge || {}, { blender: ready });
+    }
+    if (!ready) return false;
+    if (!hasBlenderTools()) {
+      try {
+        A.toolsAt = 0;
+        await ensureTools(true);
+      } catch (e) {
+        diag("blender.toolsRefreshFailed", { error: String(e && e.message || e) });
+      }
+    }
+    if (!hasBlenderTools()) {
+      diag("blender.toolsUnavailable", { connected: true });
+      return false;
+    }
+    return true;
+  }
+  // Blender calls can arrive from a ChatGPT page whose cached connection flag
+  // outlived the worker's state. The worker marks a refused addon call as
+  // BLENDER_OFFLINE; reconnect once, refresh schemas, and replay only that
+  // definitely-undispatched request. Other errors and writes are never retried.
+  async function callBlenderToolWithRecovery(name, args, timeout) {
+    const invoke = async () => {
+      let hardTimer = 0, stopTimer = 0;
+      const hardCap = new Promise((resolve) => {
+        hardTimer = setTimeout(() => resolve({ ok: false, kind: "timeout", error: "no response from Blender" }), timeout + 30000);
+      });
+      const stopWatch = new Promise((resolve) => {
+        stopTimer = setInterval(() => { if (A.stop) resolve({ ok: false, kind: "stopped" }); }, 150);
+      });
+      try {
+        return cleanToolResult(await Promise.race([
+          bg({ type: "call_tool", name, arguments: args || {}, timeout, requestId: A.activeRequestId }),
+          hardCap,
+          stopWatch,
+        ]));
+      } finally {
+        clearTimeout(hardTimer);
+        clearInterval(stopTimer);
+      }
+    };
+    let result = await invoke();
+    if (!result || result.errorCode !== "BLENDER_OFFLINE" || A.stop) return result;
+    A.bridge = Object.assign({}, A.bridge || {}, { blender: false });
+    diag("blender.linkDropped", { tool: bareToolName(name) });
+    let status = null;
+    try { status = await bg({ type: "blender_connect" }); } catch {}
+    if (!(status && (status.blender || status.ok))) {
+      if (status && typeof status.blender === "boolean") A.bridge.blender = status.blender;
+      return Object.assign({}, result, {
+        error: String((status && status.error) || result.error || "Blender is offline; reconnect and retry."),
+      });
+    }
+    A.bridge.blender = true;
+    A.toolsAt = 0;
+    try { await ensureTools(true); }
+    catch (e) { diag("blender.toolsRefreshFailed", { error: String(e && e.message || e) }); }
+    if (A.stop) return { ok: false, kind: "stopped", error: "stopped by user" };
+    const retried = await invoke();
+    if (retried && retried.errorCode === "BLENDER_OFFLINE") A.bridge.blender = false;
+    diag("blender.linkRetry", { tool: bareToolName(name), ok: !!(retried && retried.ok) });
+    return retried;
   }
   // A cached boolean is not enough: the popup, worker and total-core must all
   // agree on a fresh, verified heartbeat before the UI claims Blockbench is up.
@@ -5181,7 +5264,7 @@
       }
       if(args.category&&typeof TotalCommandRegistry!=="undefined"){const rows=TotalCommandRegistry.list(String(args.category),args.environment);return `Output of '${name}':\n`+JSON.stringify({ok:true,category:args.category,count:rows.length,commands:rows.map((c)=>({id:c.id,description:c.description,environment:c.environment,parameters:c.parameters}))},null,2);}
       const curEng = activeEngine();
-      const requested = (args.server || curEng).trim().toLowerCase();
+      let requested = (args.server || curEng).trim().toLowerCase();
       const broadCatalogueRequest = !String(args.query || args.search || "").trim();
       // The first broad catalogue request is the bootstrap truth test. Probe the
       // editor now instead of trusting a periodic status tick or cached schemas.
@@ -5202,7 +5285,15 @@
             A.toolList.length > 0
           );
           if (!usable) {
-            return `Output of '${name}':\nAgentScript is currently OFFLINE (the native agent process is not running), so its commands cannot run. This is an environment problem on the user's machine, not your mistake. Tell the user in one short sentence to start bin/total-core.exe.`;
+            const blenderFallback = broadCatalogueRequest ? await blenderModeCatalogueFallback(args) : null;
+            if (blenderFallback === true) {
+              requested = "blender";
+              diag("tools.blenderCatalogueFallback", { engine: curEng });
+            } else if (blenderFallback === false) {
+              return blenderCatalogueUnavailableReply(name);
+            } else {
+              return `Output of '${name}':\nAgentScript is currently OFFLINE (the native agent process is not running), so its commands cannot run. This is an environment problem on the user's machine, not your mistake. Tell the user in one short sentence to start bin/total-core.exe.`;
+            }
           }
         } else if (curEng !== "local") {
           const rbx = srv.find((x) => x.id === "roblox" || x.id === "studio");
@@ -5220,11 +5311,22 @@
             (!explicitEditorState && s.mcpAlive === true)
           );
           if (!rbxUsable) {
-            const others = srv.filter((x) => x.id !== "roblox" && x.alive && (x.tools || 0) > 0);
-            const otherStr = others.length
-              ? `Other connected MCP server(s): ${others.map((x) => x.id).join(", ")}. Call list_mcp_servers, then list_commands with a "server" param to use them for anything that does not need Roblox.`
-              : `No other MCP server is connected right now.`;
-            return `Output of '${name}':\nRoblox Studio is currently OFFLINE (closed, no place open, or its MCP server disabled), so its commands cannot run. This is an environment problem on the user's machine, not your mistake. Tell the user in one short sentence to open their place in Roblox Studio and enable its MCP server. ${otherStr}`;
+            const blenderFallback = broadCatalogueRequest ? await blenderModeCatalogueFallback(args) : null;
+            if (blenderFallback === true) {
+              // Blender is an independent live server in Blender mode. Do not
+              // turn its catalogue into a primary-engine-offline failure just
+              // because the optional Studio destination is not open.
+              requested = "blender";
+              diag("tools.blenderCatalogueFallback", { engine: curEng });
+            } else if (blenderFallback === false) {
+              return blenderCatalogueUnavailableReply(name);
+            } else {
+              const others = srv.filter((x) => x.id !== "roblox" && x.alive && (x.tools || 0) > 0);
+              const otherStr = others.length
+                ? `Other connected MCP server(s): ${others.map((x) => x.id).join(", ")}. Call list_mcp_servers, then list_commands with a "server" param to use them for anything that does not need Roblox.`
+                : `No other MCP server is connected right now.`;
+              return `Output of '${name}':\nRoblox Studio is currently OFFLINE (closed, no place open, or its MCP server disabled), so its commands cannot run. This is an environment problem on the user's machine, not your mistake. Tell the user in one short sentence to open their place in Roblox Studio and enable its MCP server. ${otherStr}`;
+            }
           }
         }
       }
@@ -5608,6 +5710,10 @@
         if (st && (st.blender || st.ok)) {
           A.bridge = A.bridge || {};
           A.bridge.blender = true;
+          A.toolsAt = 0;
+          try { await ensureTools(true); } catch (e) { diag("blender.toolsRefreshFailed", { error: String(e && e.message || e) }); }
+        } else if (st && typeof st.blender === "boolean") {
+          A.bridge = Object.assign({}, A.bridge || {}, { blender: st.blender });
         }
       }
       if (!(A.bridge && A.bridge.blender)) {
@@ -5617,23 +5723,8 @@
         return await runAssetBridgeImport(args);
       }
       const timeout = 120000;
-      const hardCap = new Promise((res) =>
-        setTimeout(() => res({ ok: false, kind: "timeout", error: "no response from Blender" }), timeout + 30000));
-      let stopTimer;
-      const stopWatch = new Promise((res) => {
-        stopTimer = setInterval(() => { if (A.stop) res({ ok: false, kind: "stopped" }); }, 150);
-      });
-      let sendArgs = args;
-      if (bareName === "execute_luau" && args && args.code && args._totalNoTxn !== true && !/ChangeHistoryService/.test(String(args.code))) {
-        sendArgs = Object.assign({}, args, { code: wrapStudioTxn(String(args.code), String(bareName || "edit")) });
-      }
-      if (sendArgs && Object.prototype.hasOwnProperty.call(sendArgs, "_totalNoTxn")) {
-        sendArgs = Object.assign({}, sendArgs);
-        delete sendArgs._totalNoTxn;
-      }
-      let r = await Promise.race([bg({ type: "call_tool", name: bareName, arguments: sendArgs, timeout, requestId:A.activeRequestId }), hardCap, stopWatch]);
-      clearInterval(stopTimer);
-      r = cleanToolResult(r);
+      const sendArgs = args;
+      let r = await callBlenderToolWithRecovery(bareName, sendArgs, timeout);
       if (r && r.kind === "stopped") return "(stopped by user)";
       if (!r) return RS.FEEDBACK.bridgeOffline;
       if (r.ok) {
@@ -10576,7 +10667,8 @@
         if (!r || !r.ok) {
           setBlenderBusy(false);
           const raw = String((r && r.error) || "").trim();
-          const err = /refused|unreachable|timed? ?out|not (listening|running|reach)|ECONN|closed/i.test(raw) || !raw
+          const addonAnsweredTcp = /^Blender is reachable on port 9876, but get_scene_info failed:/i.test(raw);
+          const err = !addonAnsweredTcp && (/refused|unreachable|timed? ?out|not (listening|running|reach)|ECONN|closed/i.test(raw) || !raw)
             ? "Nothing is listening on port 9876. In Blender press N → MCP for Blender → Start MCP Server, then try again."
             : raw.slice(0, 180);
           showBlenderNote(err, "error");

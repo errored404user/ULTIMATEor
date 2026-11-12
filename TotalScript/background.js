@@ -1224,20 +1224,26 @@ async function probeBlenderTcp() {
 
 async function connectBlender() {
   const p = await probeBlenderTcp();
-  if (!p.ok) {
-    setBlender(false, p.error);
+  if (!p || !p.ok) {
+    const error = String((p && p.error) || "Blender did not answer on port 9876.");
+    setBlender(false, error);
     broadcastStatus();
-    return { ok: false, blender: false, error: p.error };
+    return { ok: false, blender: false, error };
+  }
+  // A listening TCP port alone is not a working Blender link. Keep the worker
+  // flag, tool catalogue and ChatGPT prompt offline until the addon successfully
+  // answers the same read-only command the work mode uses as its first probe.
+  let ping = null;
+  try { ping = await blenderCall("get_scene_info", {}, 20000, true); }
+  catch (e) { ping = { ok: false, error: String(e && e.message || e) }; }
+  if (!ping || ping.ok !== true) {
+    const reason = String((ping && ping.error) || "no successful get_scene_info response").slice(0, 240);
+    const error = `Blender is reachable on port 9876, but get_scene_info failed: ${reason}`;
+    setBlender(false, error);
+    broadcastStatus();
+    return { ok: false, blender: false, error };
   }
   setBlender(true, "");
-  try {
-    const ping = await blenderCall("get_scene_info", {}, 20000);
-    if (ping && ping.ok === false && /not listening|closed|refused|10061|Connection refused/i.test(String(ping.error || ""))) {
-      setBlender(false, ping.error);
-      broadcastStatus();
-      return { ok: false, blender: false, error: ping.error };
-    }
-  } catch {}
   broadcastStatus();
   return { ok: true, blender: true };
 }
@@ -1533,8 +1539,8 @@ function blenderStructuredError(result, fallback) {
   }
   return out;
 }
-async function blenderCall(name, args, timeout) {
-  if (!blenderAddon) {
+async function blenderCall(name, args, timeout, allowUnverified = false) {
+  if (!blenderAddon && !allowUnverified) {
     return { ok: false, error: "Blender is not connected. Click Connect Blender (Blender: N → MCP for Blender → Start MCP Server)." };
   }
   const run = async () => {
@@ -1544,6 +1550,9 @@ async function blenderCall(name, args, timeout) {
     const meshPath = payload._totalMesh || "";
     const wire = { type: payload.type, params: payload.params };
     await localWrite("total_blender_in.json", JSON.stringify(wire));
+    // If every Python runner fails before launching, an old successful output
+    // file must not satisfy the live get_scene_info handshake (or any tool call).
+    await localWrite("total_blender_out.json", "");
     let plat = { os: "win" };
     try { plat = await chrome.runtime.getPlatformInfo(); } catch {}
     const win = plat.os === "win";
@@ -1577,9 +1586,12 @@ async function blenderCall(name, args, timeout) {
     }
     if (data && data.status === "error") {
       const msg = data.message || "Blender addon error";
-      if (/not listening|closed|actively refused|10061|Connection refused/i.test(msg)) {
-        setBlender(false, "Blender addon dropped. Start MCP Server in Blender, then Connect Blender again.");
-      }
+      const socketDropped = /not listening|closed|actively refused|10061|Connection refused/i.test(msg);
+      const definitelyNotDispatched = /not listening|actively refused|10061|Connection refused/i.test(msg);
+      if (socketDropped) setBlender(false, "Blender addon dropped. Start MCP Server in Blender, then Connect Blender again.");
+      // A refused TCP connection proves no tool reached Blender; a closed socket
+      // could have happened after execution, so clear status but never replay it.
+      if (definitelyNotDispatched) return { ok: false, kind: "disconnected", errorCode: "BLENDER_OFFLINE", error: msg };
       return { ok: false, error: msg };
     }
     let result = (data && Object.prototype.hasOwnProperty.call(data, "result")) ? data.result : data;
@@ -1655,6 +1667,19 @@ async function blenderCall(name, args, timeout) {
   await prev.catch(() => {});
   try { return await run(); }
   finally { release(); }
+}
+
+async function dispatchBlenderTool(name, args, timeout) {
+  if (!isBlenderToolName(name)) return null;
+  if (!blenderAddon) {
+    return {
+      ok: false,
+      kind: "disconnected",
+      errorCode: "BLENDER_OFFLINE",
+      error: blenderError || "Blender is not connected. Start MCP Server in Blender, then use Connect Blender in TotalScript.",
+    };
+  }
+  return blenderCall(name, args, timeout);
 }
 
 async function robloxCsrf() {
@@ -2174,8 +2199,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse(br || { ok: false, kind: "disconnected", error: "total-core returned no Blockbench result" });
           break;
         }
-        if (blenderAddon && isBlenderToolName(msg.name)) {
-          sendResponse(await blenderCall(msg.name, msg.arguments, timeout));
+        // Blender is a separate transport, not a tool family of the selected
+        // Studio / AgentScript engine. Route every Blender name here so a stale
+        // or offline Blender flag can never send get_scene_info (or a write) to
+        // the unrelated default MCP server.
+        if (isBlenderToolName(msg.name)) {
+          sendResponse(await dispatchBlenderTool(msg.name, msg.arguments, timeout));
           break;
         }
         // 1.81.0: the page states which engine it believes it is on. If the

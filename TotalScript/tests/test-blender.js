@@ -19,7 +19,8 @@ ok("bg does not spawn uvx for blender", !/uvx\s+blender-mcp/.test(bg));
 ok("bg has no HTTP shim port", !bg.includes("17617") && !bg.includes("PORT_BLENDER_HTTP") && !bg.includes("launch_blender_mcp.py"));
 ok("bg does not rememberBlender before success", !bg.includes("rememberBlender") && !bg.includes("blenderWanted"));
 ok("bg heartbeat does not restart blender", !bg.includes("ensureBlenderShim") && !bg.includes("blenderHealth"));
-ok("bg routes blender tools only when connected", bg.includes("blenderAddon && isBlenderToolName"));
+ok("bg routes every Blender name to its own dispatch before primary-engine routing", /if \(isBlenderToolName\(msg\.name\)\) \{[\s\S]{0,180}dispatchBlenderTool\(msg\.name, msg\.arguments, timeout\)[\s\S]{0,80}break;/.test(bg) && !bg.includes("blenderAddon && isBlenderToolName"));
+ok("bg labels disconnected Blender dispatch instead of forwarding to Studio/AgentScript", /async function dispatchBlenderTool\(name, args, timeout\)[\s\S]{0,260}errorCode: "BLENDER_OFFLINE"[\s\S]{0,200}return blenderCall\(name, args, timeout\);/.test(bg));
 ok("bg sendLocalEngine for one-shot", bg.includes("sendLocalEngine") && bg.includes("blender_once."));
 ok("main connect uses blender_connect", main.includes('type: "blender_connect"') && !main.includes("uvx blender-mcp"));
 ok("main does not intercept blender tools when disconnected",
