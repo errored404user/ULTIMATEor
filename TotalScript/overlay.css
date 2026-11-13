@@ -170,6 +170,14 @@ html[data-rs-glass="true"][data-rs-engine="anim"] #rs-bar { border-color: rgba(2
 #rs-bar.rs-prov-gemini #rs-action,
 #rs-bar.rs-prov-gemini #rs-state b { font-weight: 500; }
 #rs-bar.rs-prov-gemini #rs-action { border-radius: 20px; }
+#rs-bar.rs-prov-aistudio {
+  font-family: "Google Sans Text", "Google Sans", Roboto, ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.05px;
+}
+#rs-bar.rs-prov-aistudio #rs-brand,
+#rs-bar.rs-prov-aistudio #rs-action,
+#rs-bar.rs-prov-aistudio #rs-state b { font-weight: 500; }
+#rs-bar.rs-prov-aistudio #rs-action { border-radius: 20px; }
 
 #rs-bar.rs-prov-chatgpt {
   font-family: "Söhne", "Inter", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
@@ -201,6 +209,7 @@ html[data-rs-glass="true"][data-rs-engine="anim"] #rs-bar { border-color: rgba(2
 #rs-bar.rs-bar-inline.rs-prov-chatgpt,
 #rs-bar.rs-bar-inline.rs-prov-claude,
 #rs-bar.rs-bar-inline.rs-prov-gemini,
+#rs-bar.rs-bar-inline.rs-prov-aistudio,
 #rs-bar.rs-bar-inline.rs-prov-kimi,
 #rs-bar.rs-bar-inline.rs-prov-glm,
 #rs-bar.rs-bar-inline.rs-prov-arena,
@@ -213,6 +222,7 @@ html[data-rs-glass="true"][data-rs-engine="anim"] #rs-bar { border-color: rgba(2
 #rs-bar.rs-bar-anchored.rs-prov-chatgpt,
 #rs-bar.rs-bar-anchored.rs-prov-claude,
 #rs-bar.rs-bar-anchored.rs-prov-gemini,
+#rs-bar.rs-bar-anchored.rs-prov-aistudio,
 #rs-bar.rs-bar-anchored.rs-prov-kimi,
 #rs-bar.rs-bar-anchored.rs-prov-glm,
 #rs-bar.rs-bar-anchored.rs-prov-arena,
@@ -236,6 +246,7 @@ html.rs-light #rs-bar.rs-bar-inline.rs-prov-deepseek,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-chatgpt,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-claude,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-gemini,
+html.rs-light #rs-bar.rs-bar-inline.rs-prov-aistudio,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-kimi,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-glm,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-arena,
@@ -248,6 +259,7 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-deepseek,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-chatgpt,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-claude,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-gemini,
+html.rs-light #rs-bar.rs-bar-anchored.rs-prov-aistudio,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-kimi,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-glm,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-arena,
@@ -800,6 +812,12 @@ html.rs-site-chatgpt.rs-chatgpt-injecting [class*="prosemirror-parent"] {
    .rs-cmd-mask and this rule keeps every recreated code-block hidden with no
    flash. Inert on DeepSeek (no such elements). */
 message-content.rs-cmd-mask code-block { display: none !important; }
+/* Google AI Studio (Angular custom elements): keep generated tool blocks hidden
+   if the host rebuilds its rendered chunk and drops the per-block class. */
+.chat-turn-container.model.rs-cmd-mask ms-code-block,
+.chat-turn-container.model.rs-cmd-mask code-block,
+.model-prompt-container.rs-cmd-mask ms-code-block,
+.model-prompt-container.rs-cmd-mask code-block { display: none !important; }
 /* ChatGPT (React): React re-creates the <pre> code blocks inside a reply on
    every token, wiping any per-element .rs-tool-hide class. The .markdown
    container keeps its identity, so the provider marks IT with .rs-cmd-mask and

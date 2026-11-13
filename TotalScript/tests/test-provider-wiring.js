@@ -29,7 +29,7 @@ function mockWindow(host, pathname) {
 const bundles = manifest.content_scripts.filter((c) => c.world !== "MAIN" && c.js.some((j) => j.includes("src/core/main.js")));
 const siteList = [...main.matchAll(/\{ name: "([^"]+)", url: "https:\/\/([^/"]+)[^"]*" \}/g)].map((m) => ({ name: m[1], host: m[2] }));
 const hostOf = (pattern) => pattern.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-const matchesHost = (pattern, host) => { const h = hostOf(pattern); return h === host || (h.startsWith("*.") && host.endsWith(h.slice(1))); };
+const matchesHost = (pattern, host) => { if (pattern === "<all_urls>" || /^https?:\/\/\*\/\*$/.test(pattern)) return true; const h = hostOf(pattern); return h === host || (h.startsWith("*.") && (host === h.slice(2) || host.endsWith(h.slice(1)))); };
 
 let failures = 0, rows = [];
 for (const b of bundles) {

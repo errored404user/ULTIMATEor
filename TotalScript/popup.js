@@ -11,7 +11,7 @@ const DISCORD_URL = "https://discord.gg/YqVZaZYuy";
 const SUPPORTED_HOSTS = [
   "chat.deepseek.com", "deepseek.com", "chatgpt.com", "chat.openai.com",
   "claude.ai", "claude.com",
-  "gemini.google.com", "kimi.ai", "www.kimi.ai", // 1.86.0: kimi.ai was injected (manifest) but the popup did not recognise the tab; 1.89.0: kimi.com dropped
+  "gemini.google.com", "aistudio.google.com", "kimi.ai", "www.kimi.ai", // 1.86.0: kimi.ai was injected (manifest) but the popup did not recognise the tab; 1.89.0: kimi.com dropped
   "chat.z.ai", "chat.qwen.ai", "arena.ai",
   "c.vani.ai",
   "huggingface.co", "www.huggingface.co",
@@ -91,6 +91,7 @@ const SITE_NAMES = {
   "chatgpt.com": "ChatGPT", "chat.openai.com": "ChatGPT",
   "claude.ai": "Claude", "claude.com": "Claude",
   "gemini.google.com": "Gemini",
+  "aistudio.google.com": "Google AI Studio",
   "kimi.ai": "Kimi",
   "chat.z.ai": "GLM", "chat.qwen.ai": "Qwen",
   "arena.ai": "Arena",
@@ -102,6 +103,7 @@ const PROVIDER_SITES = [
   ["ChatGPT", "https://chatgpt.com/", "chatgpt.com"],
   ["Claude", "https://claude.ai/new", "claude.ai"],
   ["Gemini", "https://gemini.google.com/app", "gemini.google.com"],
+  ["Google AI Studio", "https://aistudio.google.com/prompts/new_chat", "aistudio.google.com"],
   ["Kimi", "https://www.kimi.ai/", "kimi.ai"],
   ["GLM", "https://chat.z.ai/", "chat.z.ai"],
   ["Qwen", "https://chat.qwen.ai/", "chat.qwen.ai"],

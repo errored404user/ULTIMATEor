@@ -91,7 +91,7 @@ chrome.storage?.onChanged.addListener((changes, area) => {
 // Chat sites where an TotalScript provider content script runs. Status pushes go
 // to every tab matching these. Add the new provider's URL pattern here (and in
 // manifest.json content_scripts + host_permissions) when integrating another AI.
-const PROVIDER_URLS = ["https://chat.deepseek.com/*", "https://deepseek.com/*", "https://chatgpt.com/*", "https://chat.openai.com/*", "https://claude.ai/*", "https://www.claude.ai/*", "https://claude.com/*", "https://www.claude.com/*", "https://gemini.google.com/*", "https://kimi.ai/*", "https://www.kimi.ai/*", "https://chat.z.ai/*", "https://chat.qwen.ai/*", "https://arena.ai/*", "https://c.vani.ai/*", "https://huggingface.co/chat/*", "https://openrouter.ai/*", "https://www.openrouter.ai/*"];
+const PROVIDER_URLS = ["https://chat.deepseek.com/*", "https://deepseek.com/*", "https://chatgpt.com/*", "https://chat.openai.com/*", "https://claude.ai/*", "https://www.claude.ai/*", "https://claude.com/*", "https://www.claude.com/*", "https://gemini.google.com/*", "https://aistudio.google.com/*", "https://kimi.ai/*", "https://www.kimi.ai/*", "https://chat.z.ai/*", "https://chat.qwen.ai/*", "https://arena.ai/*", "https://c.vani.ai/*", "https://huggingface.co/chat/*", "https://openrouter.ai/*", "https://www.openrouter.ai/*"];
 // CodeCraft API has no web chat: TotalScript hosts one at codecraft.html (an
 // extension page), which runs the same bundle and needs the same broadcasts.
 const CODECRAFT_PAGE = "codecraft.html";

@@ -1,15 +1,14 @@
 "use strict";
-// 1.85.0 — provider PARITY suite: Vani Chat (1.89.0: ClickUp Brain and Xiaomi MiMo removed)
-// against the Gemini / ChatGPT baseline (the adapters whose send path commits
-// exactly once and whose row counts the core trusts).
+// Provider parity: the repaired Vani / Arena / MultiChat send paths plus the
+// Google AI Studio visible-UI adapter are checked against Gemini / ChatGPT's
+// provider surface. The DOM is synthetic; no live provider is contacted.
 //
-// Part 1 (adapter table, no DOM): the three adapters export the same RSProvider
-// surface as the baseline - same method names, same return types, the
-// plain-text protocol in their prompt notes, bounded commandless retries,
-// identical CMD_SHAPE masking rules (###CMD / ###LUA / escaped JSON).
+// Part 1 (adapter table, no DOM): each adapter exports the same RSProvider
+// surface as the baseline - same method names, same return types, bounded
+// commandless retries, and consistent CMD_SHAPE masking (###CMD / ###LUA / JSON).
 //
-// Part 2 (jsdom, adapter-level): the SEND contract under the three conditions
-// that broke the pre-1.85 adapters -
+// Part 2 (jsdom, adapter-level): the SEND contract under three conditions that
+// broke the pre-1.85 adapters -
 //   * slow acceptance: the site clears the box 1.2 s after the click and adds
 //     the user row at 1.5 s → exactly ONE submit (the old ≤5-click loop fired
 //     again at 900 ms), text delivered byte-for-byte (multiline, indentation,
@@ -32,6 +31,13 @@ function ok(name, cond, extra) { if (cond) { pass++; console.log("ok   " + name)
 
 const PAGES = {
   gemini: { host: "gemini.google.com", path: "/app", html: "<main></main>" },
+  aistudio: {
+    host: "aistudio.google.com", path: "/prompts/new_chat", diagPrefix: "aistudio.send", landed: "aistudio.send.landed", unconfirmed: "aistudio.send.unconfirmed",
+    html: `<main><div id="thread"></div><form><ms-prompt-input-wrapper><textarea id="ed" aria-label="Enter a prompt"></textarea>
+      <ms-run-button><button id="send" type="submit" aria-label="Run"></button></ms-run-button></ms-prompt-input-wrapper></form></main>`,
+    editorIsTextarea: true,
+    userRow(d, text) { const turn = d.createElement("ms-chat-turn"); const row = d.createElement("div"); row.className = "chat-turn-container user"; const chunk = d.createElement("ms-prompt-chunk"); chunk.textContent = text; row.appendChild(chunk); turn.appendChild(row); d.getElementById("thread").appendChild(turn); },
+  },
   vani: {
     host: "c.vani.ai", path: "/chat", diagPrefix: "vani.send", landed: "vani.send.landed", unconfirmed: "vani.send.unconfirmed",
     html: `<main data-rect="0,0,1280,800"><div id="thread" class="messages" data-rect="300,0,900,640"></div>
@@ -77,7 +83,7 @@ function loadAdapter(id) {
 const SEND_PATH_FNS = ["getEditor", "typeAndSend", "ensureComposerReady", "enforceComposer", "installSendHooks", "readAssistant", "lastAssistant", "isGenerating", "isHardGenerating", "isBusyNow", "userCount", "assistantCount", "allItems", "chatIsEmpty", "conversationKey", "scanError", "findToolBlockSpot", "classifyText", "snapshot", "stopGeneration", "isTooLongMsg", "findContinueBtn", "clickContinueBtn", "editorText"];
 const base = loadAdapter("gemini").P;
 const table = [];
-const REPAIRED = ["vani", "arena", "multichat"]; // 1.89.0: mimo / clickup / oxalpha providers removed; 2.21.0: meta removed
+const REPAIRED = ["vani", "arena", "multichat", "aistudio"]; // 1.89.0: mimo / clickup / oxalpha providers removed; 2.21.0: meta removed; AI Studio added
 for (const id of REPAIRED) {
   const { P } = loadAdapter(id);
   const missing = SEND_PATH_FNS.filter((f) => typeof base[f] === "function" && typeof P[f] !== "function");

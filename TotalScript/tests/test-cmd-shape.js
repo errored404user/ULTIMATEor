@@ -39,7 +39,7 @@ function regexConst(src, name) {
   try { return new RegExp(m[1], m[2]); } catch (e) { return null; }
 }
 
-const ADAPTERS = ["arena", "chatgpt", "codecraft", "gemini", "kimi", "multichat", "qwen", "claude", "glm", "vani"];
+const ADAPTERS = ["arena", "chatgpt", "codecraft", "gemini", "aistudio", "kimi", "multichat", "qwen", "claude", "glm", "vani"];
 const OPENERS = [
   "###CMD part_create###\nname: X\nsize: 4,2,4\n###END_CMD###",
   "###COMMAND part_create###\nname: X\n###END_COMMAND###",
@@ -124,6 +124,7 @@ if (!JSDOM) {
   const PAGES = {
     codecraft: { host: "codecraftapi.com", path: "/" },
     multichat: { host: "huggingface.co", path: "/chat/" },
+    aistudio: { host: "aistudio.google.com", path: "/prompts/new_chat" },
     vani: { host: "c.vani.ai", path: "/chat" },
     // arena / gemini / qwen / kimi / chatgpt / claude / glm scan their site-specific
     // reply containers (slide / .markdown / body) - covered by their e2e suites.
