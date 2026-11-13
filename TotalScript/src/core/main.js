@@ -2101,6 +2101,10 @@
       if (normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()) !== "blockbench") return [];
       return (A.toolList || []).filter((t) => t && t.server === "blockbench" && !t.hidden);
     } catch { return []; }
+  }
+  function figmaModeTools(requested) {
+    if (requested === "figma" || !figmaConnected() || requested !== activeEngine()) return [];
+    return (A.toolList || []).filter((t) => t && t.server === "figma" && !t.hidden);
   } // ultimate/visualizer/animator (and older fast/balanced/thorough/adaptive) → creation
   // UNIVERSAL commands: the navigation / inspection / scripting / verification
   // core that EVERY work mode gets with full schemas, ahead of the mode's own
@@ -2279,6 +2283,7 @@
       try { wm = (window.__rsWorkMode && window.__rsWorkMode()) || "creation"; } catch {}
       try { perm = (window.__rsPermMode && window.__rsPermMode()) || "sandbox"; } catch {}
       const blender = !!bridge.blender;
+      const figmaState = figmaStatusState(bridge, true);
       // Browser↔total-core connectivity is not Studio connectivity. total-core can be
       // healthy and keep cached schemas while Roblox Studio is closed. Never tell
       // the model STUDIO LINKED from the generic bridge bit again.
@@ -2295,7 +2300,7 @@
         env = studioLinked ? " | STUDIO LINKED" : " | STUDIO UNLINKED";
       }
       try { if (typeof TotalTaskList !== "undefined") env += TotalTaskList.stateTag(); } catch {}
-      return `[SYSTEM_STATE: ENGINE=${eng} | WORK=${wm} | EXTRA=${extra} | PLAN=${plan} | DEBUG=${dbg} | MULTI=${multi} | THINK=${lvl} | PERM=${perm}${env} | BRIDGE ${connected ? "UP" : "DOWN"} | BLENDER ${blender ? "ON" : "OFF"} | TOOLS ${n}]\nMODE LOCK: stay on ${eng}. Obey WORK/EXTRA/PLAN/THINK/DEBUG/MULTI this turn. ONE command per reply.\n${(RS.FEEDBACK && RS.FEEDBACK.creationFocus) || ""}`;
+      return `[SYSTEM_STATE: ENGINE=${eng} | WORK=${wm} | EXTRA=${extra} | PLAN=${plan} | DEBUG=${dbg} | MULTI=${multi} | THINK=${lvl} | PERM=${perm}${env} | BRIDGE ${connected ? "UP" : "DOWN"} | BLENDER ${blender ? "ON" : "OFF"} | FIGMA ${figmaState.toUpperCase()} | TOOLS ${n}]\nMODE LOCK: stay on ${eng}. Obey WORK/EXTRA/PLAN/THINK/DEBUG/MULTI this turn. ONE command per reply.\n${(RS.FEEDBACK && RS.FEEDBACK.creationFocus) || ""}`;
     } catch { return ""; }
   }
   function currentEngineIsLive() {
@@ -3727,6 +3732,36 @@
     }
     return state === "connected";
   }
+  // Figma status comes from the extension's direct MCP handshake, never from
+  // total-core's Roblox server list. Unknown/stale is intentionally not offline.
+  const FIGMA_UI_STATUS_MAX_AGE_MS = 12000;
+  function figmaStatusState(status, workerSnapshot) {
+    const b = status || A.bridge || {};
+    const state = workerSnapshot ? b.figma_status : b.status;
+    const verified = workerSnapshot ? b.figma_verified : b.verified;
+    const checkedAt = Number(workerSnapshot ? b.figma_checked_at : b.checked_at);
+    const connected = workerSnapshot ? b.figma : b.connected;
+    if ((workerSnapshot ? b.figma_manual_disconnected : b.manual_disconnected) === true) return "disconnected";
+    const age = Date.now() - checkedAt;
+    const consistent = (state === "connected" && connected === true) || (state === "disconnected" && connected === false);
+    if (verified !== true || !consistent || !Number.isFinite(checkedAt) || checkedAt <= 0 || age < -1000 || age > FIGMA_UI_STATUS_MAX_AGE_MS) return "unknown";
+    return state;
+  }
+  function applyFigmaStatus(status) {
+    const current = A.bridge || {};
+    const valid = !!(status && status.verified === true && (status.status === "connected" || status.status === "disconnected") && typeof status.connected === "boolean" && ((status.status === "connected") === status.connected));
+    A.bridge = Object.assign({}, current, {
+      figma: valid && status.status === "connected",
+      figma_verified: valid,
+      figma_status: valid ? status.status : "unknown",
+      figma_status_error: valid ? (status.status_error || "") : String((status && status.status_error) || "Figma status is not verified"),
+      figma_checked_at: Number(status && status.checked_at) || 0,
+      figma_manual_disconnected: !!(status && status.manual_disconnected),
+      figma_tools: valid && status.status === "connected" ? Number(status.tools) || 0 : 0,
+    });
+    return figmaStatusState(A.bridge, true);
+  }
+  function figmaConnected() { return figmaStatusState(A.bridge, true) === "connected"; }
   function startModePreflight() {
     A.modeBrief = null;
     try { if (A.explorerTarget) A.explorerTarget.sent = false; } catch {}
@@ -5033,7 +5068,8 @@
         ? servers.map((sv) => {
             const isPrimary = sv.id === curEng2;
             const label = isPrimary ?  `${engName(curEng2)} (primary)` : `${sv.id} (addon)`;
-            return `- ${sv.id}: ${label} - ${sv.alive ?  `${sv.tools || 0} commands available` : "offline (no tools)"}`;
+            const health = sv.status === "unknown" ? "status unknown (not verified)" : sv.alive ? `${sv.tools || 0} commands available` : "offline (no tools)";
+            return `- ${sv.id}: ${label} - ${health}`;
           })
         : [`- ${curEng2}: ${engName(curEng2)} (primary) - unknown (bridge did not report server health)`];
       return (
@@ -5247,6 +5283,8 @@
         bridge_connected: bridge.connected === true,
         studio_connected: bridge.connected === true && bridge.roblox_connected === true,
         blender: !!bridge.blender,
+        figma_mcp: figmaStatusState(bridge, true),
+        figma_tools: figmaStatusState(bridge, true) === "connected" ? Number(bridge.figma_tools) || 0 : 0,
         tools: A.toolList.length || 0,
         agent_started: !!A.started,
         agent_running: !!A.running,
@@ -5266,6 +5304,10 @@
       const curEng = activeEngine();
       let requested = (args.server || curEng).trim().toLowerCase();
       const broadCatalogueRequest = !String(args.query || args.search || "").trim();
+      if (requested === "figma" && !figmaConnected()) {
+        const state = figmaStatusState(A.bridge, true);
+        return `Output of '${name}':\nFigma MCP status is ${state}. Figma tools are not advertised until the local Figma Desktop connection is verified. Open Figma Desktop, enable its local MCP server, then use Settings → Connections → Figma MCP → ${state === "disconnected" ? "Connect Figma" : "Check connection"}.`;
+      }
       // The first broad catalogue request is the bootstrap truth test. Probe the
       // editor now instead of trusting a periodic status tick or cached schemas.
       if (requested === curEng && curEng !== "local" && broadCatalogueRequest) {
@@ -5289,6 +5331,9 @@
             if (blenderFallback === true) {
               requested = "blender";
               diag("tools.blenderCatalogueFallback", { engine: curEng });
+            } else if (broadCatalogueRequest && figmaConnected()) {
+              requested = "figma";
+              diag("tools.figmaCatalogueFallback", { engine: curEng });
             } else if (blenderFallback === false) {
               return blenderCatalogueUnavailableReply(name);
             } else {
@@ -5318,6 +5363,9 @@
               // because the optional Studio destination is not open.
               requested = "blender";
               diag("tools.blenderCatalogueFallback", { engine: curEng });
+            } else if (broadCatalogueRequest && figmaConnected()) {
+              requested = "figma";
+              diag("tools.figmaCatalogueFallback", { engine: curEng });
             } else if (blenderFallback === false) {
               return blenderCatalogueUnavailableReply(name);
             } else {
@@ -5336,9 +5384,10 @@
       const commandQuery = String(args.query || args.search || "").trim().toLowerCase();
       // Hidden entries (legacy aliases, duplicate setters) stay callable but are
       // only listed when asked for by exact name.
-      const allScoped = A.toolList.filter((t) => (t.server || curEng) === requested && (!t.hidden || String(t.name || "").toLowerCase() === commandQuery));
+      const allScoped = A.toolList.filter((t) => (t.server || curEng) === requested && (requested !== "figma" || figmaConnected()) && (!t.hidden || String(t.name || "").toLowerCase() === commandQuery));
       allScoped.push(...blenderModeTools(requested)); // 1.95.0: Blender mode lists the Blender family in the default catalogue
       allScoped.push(...blockbenchModeTools(requested)); // 2.21.0: Blockbench mode lists the bb_* family
+      allScoped.push(...figmaModeTools(requested)); // Figma's own tools are added only while its local MCP link is verified
       const queryTerms = commandQuery.split(/\s+/).filter(Boolean);
       const queryMatches = (value) => !queryTerms.length
         || queryTerms.every((term) => String(value || "").toLowerCase().includes(term));
@@ -5614,6 +5663,91 @@
       // here threw a swallowed ReferenceError, so none of them ever ran.
       try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(name, args, ok, res); } catch {}
       return res;
+      }
+    }
+    // Figma MCP tools use a separate, verified Figma Desktop transport. Never
+    // send a figma_* request through the Roblox/AgentScript bridge.
+    if (/^figma_[A-Za-z][A-Za-z0-9_.-]{0,54}$/.test(bareName)) {
+      try { if (typeof window.__rsBeforeTool === "function") window.__rsBeforeTool(name, args); } catch {}
+      const timeout = 120000;
+      const requestId = A.activeRequestId || `figma-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+      const stopToken = {};
+      let stopTimer = 0, hardTimer = 0, cancelSent = false;
+      const cancelFigma = () => {
+        if (cancelSent) return;
+        cancelSent = true;
+        try { void bg({ type: "figma_cancel", requestId }); } catch {}
+      };
+      const stopPromise = new Promise((resolve) => {
+        stopTimer = setInterval(() => { if (A.stop) { cancelFigma(); resolve(stopToken); } }, 150);
+      });
+      const finish = (text, success) => {
+        const result = String(text == null ? "" : text);
+        clearInterval(stopTimer);
+        try { if (typeof window.__rsAfterTool === "function") window.__rsAfterTool(name, args, !!success, result); } catch {}
+        return result;
+      };
+      const waitUnlessStopped = (promise) => Promise.race([promise, stopPromise]);
+      try {
+        if ((A.bridge || {}).figma_manual_disconnected === true) {
+          return finish("ERROR FIGMA_DISCONNECTED calling '" + name + "': Figma MCP was disconnected in TotalScript. Ask the user to connect Figma from Settings → MCP servers; do not reconnect on their behalf.", false);
+        }
+        let figmaState = figmaStatusState(A.bridge, true);
+        let figmaStatus = null;
+        if (figmaState !== "connected") {
+          figmaStatus = await waitUnlessStopped(bg({ type: "figma_status", refresh: true, timeout: 6500 }));
+          if (figmaStatus === stopToken) return finish("(stopped by user)", false);
+          figmaState = applyFigmaStatus(figmaStatus);
+        }
+        if (figmaState !== "connected") {
+          const reason = String((figmaStatus && figmaStatus.status_error) || ((A.bridge || {}).figma_status_error) || "");
+          return finish(figmaState === "disconnected"
+            ? "ERROR FIGMA_DISCONNECTED calling '" + name + "': Figma MCP is disconnected. Open Figma Desktop, enable its local MCP server, then connect from Settings → MCP servers. " + reason
+            : "ERROR FIGMA_STATUS_UNKNOWN calling '" + name + "': TotalScript could not verify Figma Desktop MCP, so the command was not sent. Open Figma Desktop, enable its local MCP server, then press Connect Figma. " + reason, false);
+        }
+        if (!(A.toolList || []).some((tool) => tool && tool.server === "figma" && tool.name === bareName)) {
+          try {
+            A.toolsAt = 0;
+            const refreshed = await waitUnlessStopped(ensureTools(true));
+            if (refreshed === stopToken) return finish("(stopped by user)", false);
+          } catch (e) { diag("figma.toolsRefreshFailed", { error: String(e && e.message || e) }); }
+        }
+        if (A.stop) return finish("(stopped by user)", false);
+        if (!(A.toolList || []).some((tool) => tool && tool.server === "figma" && tool.name === bareName)) {
+          return finish("ERROR FIGMA_TOOL_STALE calling '" + name + "': Figma MCP no longer advertises this tool. Refresh the tool list in TotalScript and retry.", false);
+        }
+        const hardCap = new Promise((resolve) => {
+          hardTimer = setTimeout(() => { cancelFigma(); resolve({ ok: false, kind: "timeout", error: "no response from Figma Desktop MCP", errorCode: "FIGMA_TIMEOUT" }); }, timeout + 20000);
+        });
+        let r;
+        try { r = await Promise.race([bg({ type: "call_tool", name: bareName, arguments: args || {}, timeout, requestId }), hardCap, stopPromise]); }
+        finally { clearTimeout(hardTimer); }
+        if (r === stopToken || A.stop || (r && r.kind === "stopped")) return finish("(stopped by user)", false);
+        r = cleanToolResult(r);
+        if (r && r.errorCode === "FIGMA_CANCELLED") {
+          return finish("ERROR FIGMA_CANCELLED calling '" + name + "': " + String(r.error || "The request was cancelled; Figma may already have completed the operation."), false);
+        }
+        if (!r) return finish("ERROR FIGMA_STATUS_UNKNOWN calling '" + name + "': Figma MCP returned no response.", false);
+        if (r.ok) {
+          if (r.images && r.images.length) {
+            ui.showImages(r.images, name);
+            A.pendingImages = r.images;
+            const caption = r.text && r.text.trim() ? r.text.trim() : `${r.images.length} image(s) returned by Figma.`;
+            return finish(`Output of '${name}':\n${caption}\n(The image is attached to THIS message - inspect it before continuing.)`, true);
+          }
+          return finish(`Output of '${name}':\n${r.text && r.text.length ? r.text : "(Figma MCP tool returned an empty result)"}`, true);
+        }
+        if (["FIGMA_DISCONNECTED", "FIGMA_STATUS_UNKNOWN"].includes(r.errorCode)) {
+          try { applyFigmaStatus(await bg({ type: "figma_status", refresh: false, timeout: 1500 })); } catch { applyFigmaStatus(null); }
+        }
+        const figmaError = String((r.error && (r.error.message || r.error.error)) || r.error || "Figma MCP tool failed");
+        const errorText = /^ERROR\b/.test(figmaError) ? figmaError : "ERROR" + (r.errorCode ? " " + r.errorCode : "") + " calling '" + name + "': " + figmaError;
+        return finish(errorText, false);
+      } catch (e) {
+        return finish("ERROR FIGMA_MCP_ERROR calling '" + name + "': " + String(e && e.message || e || "Figma MCP call failed"), false);
+      } finally {
+        clearInterval(stopTimer);
+        clearTimeout(hardTimer);
       }
     }
     // 2.21.0 Blockbench: bb_* ride the Roblox bridge to total-core, which hands
@@ -7042,6 +7176,7 @@
         const allScoped = A.toolList.filter((t) => t && (t.server || requested) === requested && !t.hidden);
         allScoped.push(...blenderModeTools(requested)); // 1.95.0: Blender mode embeds the Blender family too
         allScoped.push(...blockbenchModeTools(requested)); // 2.21.0: Blockbench mode embeds the bb_* family too
+        allScoped.push(...figmaModeTools(requested)); // Verified local Figma tools stay separate from the primary engine
         if (!allScoped.length) return "";
         const animLines = requested === "roblox" && typeof RSAnim !== "undefined" ? RSAnim.describeCommands() : [];
         const skillLines = requested === "roblox" && typeof RobloxScriptSkills !== "undefined" ? RobloxScriptSkills.describeCommands() : [];
@@ -9991,6 +10126,48 @@
               </div>
             </div>`;
     }
+    function figmaCardHtml() {
+      const state = figmaStatusState(A.bridge, true);
+      const on = state === "connected", unknown = state === "unknown";
+      const bridge = A.bridge || {};
+      const n = on ? Math.max(0, Number(bridge.figma_tools) || 0) : 0;
+      const error = String(bridge.figma_status_error || "");
+      const pillText = on ? "Connected" : unknown ? "Unknown" : "Disconnected";
+      const pill = `<span class="rs-blender-pill" role="status"><i aria-hidden="true"></i>${pillText}</span>`;
+      const connectedBody = `<div class="rs-blender-caps" aria-label="Figma MCP tools">
+             <span class="rs-blender-cap"><b>Figma Desktop</b> MCP session verified</span>
+             <span class="rs-blender-cap"><b>Tools</b> discovered from Figma</span>
+             <span class="rs-blender-cap rs-blender-cap-n">${n} tools</span>
+           </div>`;
+      const unknownBody = `<div class="rs-blender-steps" role="status"><b>Connection status unknown.</b> TotalScript could not verify the local Figma MCP endpoint${error ? `: ${escRs(error)}` : ". Check Figma Desktop and retry."}</div>`;
+      const disconnectedBody = `<ol class="rs-blender-steps" aria-label="How to connect Figma Desktop MCP">
+             <li><b>1</b><span>Open <em>Figma Desktop</em> and enable its local MCP server. The browser version does not provide this local connection.</span></li>
+             <li><b>2</b><span>Press <em>Connect Figma</em>. TotalScript checks the MCP handshake and discovers the tools Figma actually advertises.</span></li>
+             <li><b>3</b><span>Figma document access follows the permissions and limits of your Figma account.</span></li>
+           </ol>`;
+      const body = on ? connectedBody : unknown ? unknownBody : disconnectedBody;
+      const sub = on
+        ? "Figma Desktop MCP is verified. Its advertised tools are routed directly to Figma; Roblox Studio and total-core are not involved."
+        : unknown
+          ? "The local Figma MCP endpoint has not been verified. Unknown is not treated as connected or disconnected."
+          : error || "Requires Figma Desktop with its local MCP server enabled. No Figma API key is stored by TotalScript.";
+      return `<div class="rs-blender-card rs-figma-card ${on ? "on" : ""}" id="rs-figma-card" data-state="${state}">
+              <div class="rs-blender-head">
+                <span class="rs-blender-mark rs-figma-mark" aria-hidden="true"></span>
+                <div class="rs-blender-copy">
+                  <div class="rs-blender-title"><span class="rs-blender-name">Figma MCP</span>${pill}</div>
+                  <span class="rs-blender-sub">${escRs(sub)}</span>
+                </div>
+              </div>
+              ${body}
+              <div class="rs-blender-note" id="rs-figma-note" hidden></div>
+              <div class="rs-blender-actions">
+                <button type="button" id="rs-mcp-figma" class="rs-blender-primary">${on ? "Reconnect" : unknown ? "Check connection" : "Connect Figma"}</button>
+                ${on ? '<button type="button" class="rs-blender-off" id="rs-mcp-figma-off">Disconnect</button>' : ""}
+              </div>
+            </div>`;
+    }
+    try { window.__rsFigma = () => figmaConnected(); } catch {}
     try { window.__rsBlockbench = () => blockbenchConnected(); } catch {}
     // The bridge (config.json + live health) is the SOURCE OF TRUTH for which
     // addon servers actually exist - chrome.storage.local is just a display-name
@@ -10005,7 +10182,7 @@
         const cached = byId.get(sv.id);
         return {
           id: sv.id, name: (cached && cached.name) || sv.id, command: cached && cached.command,
-          alive: sv.alive, tools: sv.tools,
+          alive: sv.alive, tools: sv.tools, status: sv.status,
         };
       });
       // Self-heal: cache didn't know about a server the bridge actually has.
@@ -10381,8 +10558,8 @@
       mergedServers.forEach((s, i) => {
         // alive === undefined -> the bridge hasn't reported this server's health
         // yet (just added/removed, still restarting) - shown neutral, not red.
-        const healthClass = s.alive === true ?  "on" : s.alive === false ?  "off" : "unknown";
-        const healthTitle = s.alive === true ?  `${s.tools || 0} tools available` : s.alive === false ?  "offline" : "status unknown";
+        const healthClass = s.status === "unknown" || s.alive === undefined ? "unknown" : s.alive === true ? "on" : "off";
+        const healthTitle = s.status === "unknown" || s.alive === undefined ? "status unknown" : s.alive === true ? `${s.tools || 0} tools available` : "offline";
         mcpList += `<div class="rs-mcp-item"><span class="rs-mcp-health rs-mcp-health-${healthClass}" title="${healthTitle}"></span><div class="rs-mcp-info"><span class="rs-mcp-name">${esc(s.name)}</span><span class="rs-mcp-url">${esc(s.command || s.id)}</span></div><button class="rs-mcp-remove" data-id="${esc(s.id)}" title="Remove">✕</button></div>`;
       });
       menuEl.innerHTML =
@@ -10484,9 +10661,10 @@
           </section>
           <section class="rs-menu-sec rs-adv">
             <div class="rs-sec-label"><span>MCP servers</span></div>
-            <div class="rs-menu-note">Roblox Studio is primary. Blender connects to the addon running in Blender on port 9876; Blockbench connects through the TotalScript plugin inside Blockbench, which dials total-core by itself.</div>
+            <div class="rs-menu-note">Roblox Studio is primary. Blender connects to its local addon, Blockbench connects through TotalScript's plugin, and Figma connects directly to the Figma Desktop local MCP server. These integrations use separate transports.</div>
             ${blenderCardHtml()}
             ${blockbenchCardHtml()}
+            ${figmaCardHtml()}
            ${mcpList}
            <div class="rs-mcp-sep"></div>
             <input id="rs-mcp-name" class="rs-mcp-field" placeholder="Name, e.g. Sketchfab" />
@@ -10757,6 +10935,59 @@
       const bbSite = menuEl.querySelector("#rs-blockbench-site");
       if (bbSite) bbSite.addEventListener("click", () => {
         try { window.open("https://www.blockbench.net/", "_blank", "noopener"); } catch {}
+      });
+      // Figma uses the extension worker's fixed local Streamable HTTP client;
+      // it does not register a generic total-core server or store an API key.
+      const figmaBtn = menuEl.querySelector("#rs-mcp-figma");
+      const figmaCard = menuEl.querySelector("#rs-figma-card");
+      const figmaNote = menuEl.querySelector("#rs-figma-note");
+      function setFigmaBusy(on, label) {
+        if (figmaCard) figmaCard.classList.toggle("busy", !!on);
+        if (!figmaBtn) return;
+        figmaBtn.disabled = !!on;
+        if (on) { figmaBtn.dataset.label = figmaBtn.textContent; figmaBtn.innerHTML = `<span class="rs-mcp-spin"></span>${label || "Checking…"}`; }
+        else if (figmaBtn.dataset.label) figmaBtn.textContent = figmaBtn.dataset.label;
+      }
+      function showFigmaNote(text, kind) {
+        if (!figmaNote) return;
+        figmaNote.textContent = text || "";
+        figmaNote.dataset.kind = kind || "error";
+        figmaNote.hidden = !text;
+      }
+      if (figmaBtn) figmaBtn.addEventListener("click", async () => {
+        if (mcpBusy) return;
+        showFigmaNote("");
+        setFigmaBusy(true, "Connecting…");
+        setMcpBusy(true, "Checking Figma Desktop MCP…");
+        const r = await bg({ type: "figma_connect" });
+        setMcpBusy(false);
+        const state = applyFigmaStatus(r);
+        if (state !== "connected") {
+          setFigmaBusy(false);
+          const why = String((r && r.status_error) || (state === "unknown" ? "Figma Desktop MCP could not be verified." : "Figma MCP is disconnected."));
+          showFigmaNote(why, state === "unknown" ? "warn" : "error");
+          try { toast(state === "unknown" ? "Figma connection status is unknown" : "Figma is not connected"); playSfx("error"); } catch {}
+          buildMenu();
+          return;
+        }
+        try { A.toolsAt = 0; await ensureTools(true); } catch (e) { diag("figma.toolsRefreshFailed", { error: String(e && e.message || e) }); }
+        try { window.__rsFigma = () => figmaConnected(); } catch {}
+        const count = Number(r && r.tools) || 0;
+        try { toast(count ? `Figma connected — ${count} tools ready` : "Figma connected, but it advertised no tools"); playSfx("ok"); } catch {}
+        buildMenu();
+      });
+      const figmaOff = menuEl.querySelector("#rs-mcp-figma-off");
+      if (figmaOff) figmaOff.addEventListener("click", async () => {
+        if (mcpBusy) return;
+        figmaOff.disabled = true;
+        if (figmaCard) figmaCard.classList.add("busy");
+        setMcpBusy(true, "Disconnecting Figma…");
+        const r = await bg({ type: "figma_disconnect" });
+        setMcpBusy(false);
+        applyFigmaStatus(r);
+        try { A.toolsAt = 0; await ensureTools(true); } catch {}
+        try { toast("Figma disconnected in TotalScript"); playSfx("ok"); } catch {}
+        buildMenu();
       });
       // ── Work mode cards ──
       menuEl.querySelectorAll("[data-work-starter]").forEach(btn=>{
@@ -12345,6 +12576,11 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
     function setStarting() { try{updateExtraButton();}catch{}; renderBar(); }
 
     function setStatus(s) {
+      const previousFigmaState = figmaStatusState(A.bridge, true);
+      const nextFigmaState = figmaStatusState(s, true);
+      const previousFigmaTools = Number((A.bridge || {}).figma_tools) || 0;
+      const nextFigmaTools = Number((s || {}).figma_tools) || 0;
+      if (previousFigmaState !== nextFigmaState || previousFigmaTools !== nextFigmaTools) A.toolsAt = 0;
       A.bridge = s;
       if (blockbenchStatusExpiryTimer) { clearTimeout(blockbenchStatusExpiryTimer); blockbenchStatusExpiryTimer = 0; }
       if (blockbenchStatusState(s) !== "unknown") {
@@ -12357,6 +12593,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       }
       try { window.__rsBlender = () => !!(s && s.blender); } catch {}
       try { window.__rsBlockbench = () => blockbenchStatusState(s) === "connected"; } catch {}
+      try { window.__rsFigma = () => figmaStatusState(s, true) === "connected"; } catch {}
       // AgentScript ground truth from the agent process itself. Re-render the
       // open session panel so the Danger-zone toggle mirrors the agent.
       try {
@@ -13762,7 +13999,7 @@ rsInterval(() => {
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg && msg.type === "rs-status") {
-      ui.setStatus({ connected: msg.connected, mcpAlive: msg.mcpAlive, studio: msg.studio, studioApp: msg.studioApp, studioProc: msg.studioProc, robloxProc: msg.robloxProc, roblox_connected: msg.roblox_connected, engine: msg.engine, tools: msg.tools, servers: msg.servers, local_connected: msg.local_connected, local_full: msg.local_full, local_root: msg.local_root, blender: msg.blender, blender_shim: msg.blender_shim, blender_error: msg.blender_error, blockbench: msg.blockbench, blockbench_verified: msg.blockbench_verified, blockbench_status: msg.blockbench_status, blockbench_status_error: msg.blockbench_status_error, blockbench_checked_at: msg.blockbench_checked_at, blockbench_core_api: msg.blockbench_core_api, blockbench_bridge_connected: msg.blockbench_bridge_connected, blockbench_server_list_mismatch: msg.blockbench_server_list_mismatch, blockbench_call_mismatch: msg.blockbench_call_mismatch, blockbench_plugin_file: msg.blockbench_plugin_file, lifecycle: msg.lifecycle, reconnecting: msg.reconnecting, manual: msg.manual });
+      ui.setStatus({ connected: msg.connected, mcpAlive: msg.mcpAlive, studio: msg.studio, studioApp: msg.studioApp, studioProc: msg.studioProc, robloxProc: msg.robloxProc, roblox_connected: msg.roblox_connected, engine: msg.engine, tools: msg.tools, servers: msg.servers, local_connected: msg.local_connected, local_full: msg.local_full, local_root: msg.local_root, blender: msg.blender, blender_shim: msg.blender_shim, blender_error: msg.blender_error, blockbench: msg.blockbench, blockbench_verified: msg.blockbench_verified, blockbench_status: msg.blockbench_status, blockbench_status_error: msg.blockbench_status_error, blockbench_checked_at: msg.blockbench_checked_at, blockbench_core_api: msg.blockbench_core_api, blockbench_bridge_connected: msg.blockbench_bridge_connected, blockbench_server_list_mismatch: msg.blockbench_server_list_mismatch, blockbench_call_mismatch: msg.blockbench_call_mismatch, blockbench_plugin_file: msg.blockbench_plugin_file, figma: msg.figma, figma_verified: msg.figma_verified, figma_status: msg.figma_status, figma_status_error: msg.figma_status_error, figma_checked_at: msg.figma_checked_at, figma_manual_disconnected: msg.figma_manual_disconnected, figma_tools: msg.figma_tools, lifecycle: msg.lifecycle, reconnecting: msg.reconnecting, manual: msg.manual });
     }
     if (msg && msg.type === "rs-open-menu") {
       ui.openMenu(false); // from the popup's Settings button — opens at the top (Switch AI / custom prompt)

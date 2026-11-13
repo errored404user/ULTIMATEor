@@ -8376,3 +8376,44 @@ html[data-rs-theme="aqua"] #rs-ornament { display: none !important; }
 #rs-root, #rs-root *, #rs-cards-window, #rs-cards-window * { font-variant-ligatures: none; }
 #rs-root .rs-banner, #rs-cards-window .rs-template-empty span, #rs-cards-window p { overflow-wrap: break-word; }
 #rs-root code, #rs-root pre, #rs-cards-window code, #rs-cards-window pre { font-family: "Cascadia Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; overflow-wrap: break-word; }
+
+/* Figma Desktop MCP card: shared compact layout, Figma-specific mark and controls. */
+.rs-blender-card.rs-figma-card { --bl: #6c4cd2; --bl2: #a58aff; --bl-ink: #160d2d; }
+.rs-blender-card.rs-figma-card.on {
+  border-color: rgba(124,92,255,.58);
+  box-shadow: 0 0 0 1px rgba(124,92,255,.16) inset, 0 10px 22px rgba(0,0,0,.22), 0 0 24px rgba(124,92,255,.12);
+}
+.rs-figma-mark { background: #f24e1e; box-shadow: 0 2px 10px rgba(242,78,30,.32), inset 0 1px 0 rgba(255,255,255,.28); }
+.rs-figma-mark::before {
+  content: "F"; left: 0; top: 0; width: 100%; height: 100%; display: grid; place-items: center;
+  border: 0; border-radius: inherit; box-sizing: border-box; color: #fff;
+  font: 800 20px/1 Arial, sans-serif; letter-spacing: -.06em;
+}
+.rs-figma-mark::after { display: none; }
+.rs-blender-card.rs-figma-card.on .rs-blender-pill { color: #e9e1ff; border-color: rgba(165,138,255,.5); background: rgba(108,76,210,.2); }
+.rs-blender-card.rs-figma-card.on .rs-blender-pill i { background: #4ade80; box-shadow: 0 0 0 2px rgba(74,222,128,.22), 0 0 8px rgba(74,222,128,.7); }
+.rs-blender-card.rs-figma-card .rs-blender-cap { border-color: rgba(124,92,255,.24); background: rgba(124,92,255,.09); color: #ddd4f5; }
+.rs-blender-card.rs-figma-card .rs-blender-cap b { color: #f1ebff; }
+#rs-mcp-figma.rs-blender-primary, #rs-mcp-figma {
+  flex: 1 1 130px; min-width: 0; padding: 0 12px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  font-weight: 760; font-size: 11.5px; letter-spacing: .01em;
+  background: linear-gradient(180deg, #a58aff, #7657e8); color: #160d2d;
+  border: 1px solid rgba(216,203,255,.55); box-shadow: 0 1px 0 rgba(255,255,255,.3) inset, 0 6px 14px rgba(108,76,210,.24);
+}
+#rs-mcp-figma:hover:not(:disabled) { filter: brightness(1.07); }
+#rs-mcp-figma .rs-mcp-spin { border-color: rgba(22,13,45,.25); border-top-color: #160d2d; }
+.rs-blender-card.rs-figma-card .rs-blender-off { border-color: rgba(124,92,255,.3); color: #e4dcf8; }
+html.rs-light .rs-blender-card.rs-figma-card { background: radial-gradient(120px 70px at 100% 0%, rgba(124,92,255,.12), transparent 70%), rgba(247,244,255,.95); border-color: rgba(108,76,210,.32); }
+html.rs-light .rs-blender-card.rs-figma-card .rs-blender-name,
+html.rs-light .rs-blender-card.rs-figma-card .rs-blender-steps em,
+html.rs-light .rs-blender-card.rs-figma-card .rs-blender-cap b { color: #21143e; }
+html.rs-light .rs-blender-card.rs-figma-card .rs-blender-sub,
+html.rs-light .rs-blender-card.rs-figma-card .rs-blender-steps li,
+html.rs-light .rs-blender-card.rs-figma-card .rs-blender-cap { color: #51416d; }
+html.rs-light .rs-blender-card.rs-figma-card.on .rs-blender-pill { color: #443077; border-color: rgba(108,76,210,.34); background: rgba(124,92,255,.1); }
+html.rs-light .rs-blender-card.rs-figma-card .rs-blender-off { background: rgba(0,0,0,.04); color: #443077; }
+@media (prefers-reduced-motion: reduce) {
+  .rs-blender-card.rs-figma-card.on .rs-blender-mark,
+  .rs-blender-card.rs-figma-card.on .rs-blender-pill i { animation: none; }
+}

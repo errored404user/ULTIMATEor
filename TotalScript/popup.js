@@ -56,6 +56,19 @@ function blockbenchStatusState(s, workerSnapshot) {
   if ((workerSnapshot ? s.blockbench_call_mismatch : s.call_mismatch) || verified !== true || !consistent || !Number.isFinite(checkedAt) || checkedAt <= 0 || age < -1000 || age > BLOCKBENCH_STATUS_MAX_AGE_MS) return "unknown";
   return status;
 }
+const FIGMA_STATUS_MAX_AGE_MS = 12000;
+function figmaStatusState(s, workerSnapshot) {
+  if (!s || typeof s !== "object") return "unknown";
+  if ((workerSnapshot ? s.figma_manual_disconnected : s.manual_disconnected) === true) return "disconnected";
+  const status = workerSnapshot ? s.figma_status : s.status;
+  const verified = workerSnapshot ? s.figma_verified : s.verified;
+  const checkedAt = Number(workerSnapshot ? s.figma_checked_at : s.checked_at);
+  const connected = workerSnapshot ? s.figma : s.connected;
+  const age = Date.now() - checkedAt;
+  const consistent = (status === "connected" && connected === true) || (status === "disconnected" && connected === false);
+  if (verified !== true || !consistent || !Number.isFinite(checkedAt) || checkedAt <= 0 || age < -1000 || age > FIGMA_STATUS_MAX_AGE_MS) return "unknown";
+  return status;
+}
 
 // Sound volume (0-100) read by the content script at load. The key predates
 // the sound system's rename and is spelled in two parts here only because the
@@ -416,9 +429,8 @@ function render(s) {
   state.classList.toggle("bad", !s.connected && !(s.reconnecting === true && s.lifecycle !== "ERROR"));
   state.classList.toggle("warn", (s.connected && !ok) || (!s.connected && s.reconnecting === true && s.lifecycle !== "ERROR"));
   tools.textContent = s.connected ? `${s.tools || 0} tools ready` : s.reconnecting === true && s.lifecycle !== "ERROR" ? "reconnecting…" : `Run ${RUN_CMD}`;
-  servers.textContent = s.connected
-    ? list.map((x) => `${x.alive ? "●" : "○"} ${x.id} (${x.alive ? x.tools + " tools" : "down"})`).join("\n")
-    : "";
+  servers.textContent = (s.connected ? list : list.filter((x) => x.id === "figma"))
+    .map((x) => `${x.status === "unknown" ? "?" : x.alive ? "●" : "○"} ${x.id} (${x.status === "unknown" ? "status unknown" : x.alive ? x.tools + " tools" : "down"})`).join("\n");
   // Studio / workspace row
   const sd = $("dot-studio"), ss = $("studio-state"), sb = $("studio-badge");
   if (sd && ss) {
@@ -433,7 +445,9 @@ function render(s) {
       ss.textContent = !mcpOk ? "Waiting for the bridge…" : editorOk ? "MCP linked to an open place" : app ? "Studio MCP is on — open a place" : proc ? "Studio is open — switch on its MCP server" : "Not running";
       ss.className = "conn-state" + (editorOk && mcpOk ? " ok" : mcpOk && (app || proc) ? " warn" : "");
       const bbUp = blockbenchStatusState(s, true) === "connected";
-      if (sb) { sb.hidden = !(mcpOk && (s.blender || bbUp)); sb.className = "ts-badge accent"; sb.firstElementChild.textContent = s.blender && bbUp ? "Blender + Blockbench linked" : bbUp ? "Blockbench linked" : "Blender linked"; }
+      const figmaUp = figmaStatusState(s, true) === "connected";
+      const linked = [s.blender ? "Blender" : "", bbUp ? "Blockbench" : "", figmaUp ? "Figma" : ""].filter(Boolean);
+      if (sb) { sb.hidden = !linked.length; sb.className = "ts-badge accent"; sb.firstElementChild.textContent = linked.length ? `${linked.join(" + ")} linked` : ""; }
     }
   }
   // 1.40.0 Beginner mode: the hint row is a live checklist. It stays visible
@@ -515,6 +529,7 @@ const QUICK_ACTIONS = [
   { id: "codecraft", label: "CodeCraft chat", icon: "bolt", run: () => $("codecraft").click() },
   { id: "discord", label: "Discord", icon: "discord", run: () => $("discord").click() },
   { id: "settings-studio", label: "Studio & bridge", icon: "studio", run: () => { showView("settings"); openCategory("studio"); } },
+  { id: "settings-figma", label: "Figma MCP connection", icon: "plug", run: () => { showView("settings"); openCategory("studio"); } },
   { id: "palette", label: "Command palette", icon: "search", run: () => openPalette() },
   { id: "activity", label: "Activity", icon: "pulse", run: () => showView("activity") },
   { id: "tools", label: "Tools", icon: "tools", run: () => showView("tools") },
@@ -637,13 +652,14 @@ function onActivityPush(item) {
 // ── tools ──────────────────────────────────────────────────────────────────
 let toolsData = [];
 let toolsLoadedAt = 0;
-const SERVER_LABEL = { roblox: "Roblox Studio", studio: "Roblox Studio", local: "AgentScript (this PC)", blender: "Blender", agent: "AgentScript (this PC)", blockbench: "Blockbench" };
+const SERVER_LABEL = { roblox: "Roblox Studio", studio: "Roblox Studio", local: "AgentScript (this PC)", blender: "Blender", agent: "AgentScript (this PC)", blockbench: "Blockbench", figma: "Figma" };
 function toolServer(t) {
   const n = String(t.name || "");
   if (t.server) return String(t.server);
   if (n.includes("/")) return n.split("/")[0];
   if (/^blender_|^(get_scene_info|execute_blender)/.test(n)) return "blender";
   if (/^bb_/.test(n)) return "blockbench";
+  if (/^figma_/.test(n)) return "figma";
   if (/^(read_file|write_file|list_dir|run_command|search_files|move|delete|open_path|download|process|shell|fs_)/.test(n)) return "local";
   return "roblox";
 }
@@ -685,7 +701,7 @@ function renderTools() {
   const total = toolsData.length;
   $("tools-count").firstElementChild.textContent = q ? `${[...groups.values()].reduce((a, b) => a + b.length, 0)} of ${total}` : `${total} tools`;
   if (!groups.size) { root.appendChild(h(`<div class="ts-card"><div class="ts-empty">${icon("search", 20)}<b>${total ? "No tool matches" : "No tools yet"}</b><span>${total ? "Try a shorter word." : "The bridge has not reported its tools — press Refresh once it is connected."}</span></div></div>`)); return; }
-  const SERVER_ORDER = ["roblox", "studio", "local", "agent", "blender", "blockbench"];
+  const SERVER_ORDER = ["roblox", "studio", "local", "agent", "blender", "blockbench", "figma"];
   const rank = (s) => { const i = SERVER_ORDER.indexOf(s); return i < 0 ? 99 : i; };
   for (const [server, list] of [...groups.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))) {
     const card = h(`<div class="ts-card flush"><div class="tool-group"><div class="tool-head"><span class="ts-h3"></span><span class="ts-badge"><span>${list.length}</span></span></div><div class="ts-list"></div></div></div>`);
@@ -753,12 +769,13 @@ const CATEGORIES = [
     { id: "codecraft", type: "action", label: "CodeCraft API chat", sub: "Any CodeCraft model with your own cc_ key — TotalScript hosts the chat page.", button: "Open", run: () => $("codecraft").click() },
     { id: "sites", type: "providers", label: "Supported sites" },
   ] },
-  { id: "studio", title: "Roblox Studio", sub: "Bridge, Studio MCP, engine, Blender, publishing", icon: "studio", items: [
+  { id: "studio", title: "Connections", sub: "Roblox Studio, Blender, Blockbench, Figma, publishing", icon: "studio", items: [
     { id: "conn", type: "connection", label: "Connection" },
     { id: "repair", type: "action", label: "Repair the Studio link", sub: "Restarts the Studio MCP helper inside the agent app — fixes “connected but every command fails” after a Studio update or sleep / resume.", button: "Restart server", run: (btn) => QUICK_ACTIONS.find((q) => q.id === "restart").run(btn) },
     { id: "reconnect", type: "action", label: "Reconnect the bridge", sub: `Re-dial ${RUN_CMD} on port 3000 / 17613 / 17615.`, button: "Reconnect", run: (btn) => QUICK_ACTIONS.find((q) => q.id === "reconnect").run(btn) },
     { id: "blender", type: "blender", label: "Blender MCP", sub: "Connects to the TotalScript addon running inside Blender on port 9876." },
     { id: "blockbench", type: "blockbench", label: "Blockbench", sub: "TotalScript's own Blockbench plugin (TotalScript-Blockbench.js) runs inside Blockbench and connects to the desktop app by itself — load it once via File → Plugins → Load Plugin from File. Models are exported as files for Studio's Import 3D." },
+    { id: "figma", type: "figma", label: "Figma MCP", sub: "Connects the extension directly to Figma Desktop's local MCP server. No Figma API key is stored by TotalScript." },
     { id: "publish", key: "rsAllowPublishAutomation", type: "toggle", default: false, label: "Allow confirmed publishing without a per-operation prompt", sub: "Off by default. Roblox authentication, ownership, moderation and rate limits always apply." },
     { id: "diag", type: "action", label: "Diagnostics", sub: "Copy the bridge status, health check and your non-secret settings as JSON for a bug report.", button: "Copy diagnostics", run: (btn) => busy(btn, copyDiagnostics) },
   ] },
@@ -982,6 +999,57 @@ async function renderItem(it, stored) {
       }));
       return row;
     }
+    case "figma": {
+      const row = rowShell(it, `<button type="button" class="ts-btn sm" id="figma-toggle"><span>…</span></button>`);
+      const main = row.querySelector(".ts-row-main");
+      const state = h(`<span class="ts-row-sub" id="figma-state" style="margin-top:6px;display:block"></span>`);
+      main.appendChild(state);
+      const b = row.querySelector("#figma-toggle");
+      let expiryTimer = null;
+      let currentStatus = null;
+      const paint = (r) => {
+        currentStatus = r && typeof r === "object" ? r : null;
+        if (expiryTimer) { clearTimeout(expiryTimer); expiryTimer = null; }
+        const figmaState = figmaStatusState(currentStatus, false);
+        const on = figmaState === "connected";
+        const unknown = figmaState === "unknown";
+        const reason = String((currentStatus && currentStatus.status_error) || "");
+        if (on) state.textContent = `Connected — ${Number(currentStatus.tools) || 0} Figma MCP tools ready.`;
+        else if (unknown) state.textContent = `Connection unknown — could not verify Figma Desktop's local MCP endpoint${reason ? ": " + reason : ". Open Figma Desktop and check again."}`;
+        else state.textContent = reason || "Disconnected in TotalScript. Figma Desktop remains open.";
+        state.style.color = on ? "var(--ok, #4caf50)" : "";
+        b.firstElementChild.textContent = on ? "Disconnect" : unknown ? "Connect / check" : "Connect Figma";
+        b.classList.toggle("primary", !on);
+        b.classList.toggle("danger", on);
+        if (figmaState !== "unknown" && !(currentStatus && currentStatus.manual_disconnected)) {
+          const checkedAt = Number(currentStatus && currentStatus.checked_at);
+          const untilExpiry = Math.max(1, FIGMA_STATUS_MAX_AGE_MS - (Date.now() - checkedAt) + 1);
+          expiryTimer = setTimeout(() => {
+            if (row.isConnected) bg({ type: "figma_status", refresh: true, timeout: 6500 }).then(paint).catch(() => paint(null));
+          }, untilExpiry);
+        }
+      };
+      bg({ type: "figma_status", refresh: false }).then(paint).catch(() => paint(null));
+      b.addEventListener("click", () => busy(b, async () => {
+        const wasConnected = figmaStatusState(currentStatus, false) === "connected";
+        const r = await bg({ type: wasConnected ? "figma_disconnect" : "figma_connect" });
+        paint(r);
+        if (!wasConnected && figmaStatusState(r, false) !== "connected") {
+          toast(String((r && r.status_error) || "Could not verify Figma Desktop MCP"), "warn", 4500);
+          return false;
+        }
+        if (!wasConnected) {
+          await fetchTools(true);
+          toast(`Figma connected — ${Number(r && r.tools) || 0} tools`, "ok");
+        } else {
+          await fetchTools(true);
+          toast("Figma disconnected in TotalScript", "ok");
+        }
+        refresh();
+        return true;
+      }, { ok: "Figma connection updated" }));
+      return row;
+    }
     case "imagetools": {
       const r = await storeGet(["rsImageTools"]);
       const n = Array.isArray(r.rsImageTools) ? r.rsImageTools.length : 0;
@@ -1038,7 +1106,8 @@ async function renderItem(it, stored) {
 function refreshPanelValues() {
   const kv = $("conn-kv"); if (kv && lastStatus) {
     const s = lastStatus; const isLocal = s.engine === "local";
-    const rows = [["Bridge", s.connected ? "connected" : s.reconnecting ? "reconnecting…" : "offline"], ["Engine", isLocal ? "AgentScript (ws 17615)" : "Roblox (ws 17613)"], ["Lifecycle", s.lifecycle || "—"], ["Studio MCP", isLocal ? "n/a" : s.roblox_connected ? "linked to a place" : s.studioApp ? "on, no place" : s.studioProc ? "Studio open, MCP off" : "not detected"], ["Tools", String(s.tools || 0)], ["Servers", (s.servers || []).map((x) => `${x.id} ${x.alive ? "●" : "○"}`).join("  ") || "—"], ["Blender", s.blender ? "linked" : s.blender_error ? `error: ${s.blender_error}` : "not linked"]];
+    const figmaState = figmaStatusState(s, true);
+    const rows = [["Bridge", s.connected ? "connected" : s.reconnecting ? "reconnecting…" : "offline"], ["Engine", isLocal ? "AgentScript (ws 17615)" : "Roblox (ws 17613)"], ["Lifecycle", s.lifecycle || "—"], ["Studio MCP", isLocal ? "n/a" : s.roblox_connected ? "linked to a place" : s.studioApp ? "on, no place" : s.studioProc ? "Studio open, MCP off" : "not detected"], ["Tools", String(s.tools || 0)], ["Servers", (s.servers || []).map((x) => `${x.id} ${x.status === "unknown" ? "?" : x.alive ? "●" : "○"}`).join("  ") || "—"], ["Blender", s.blender ? "linked" : s.blender_error ? `error: ${s.blender_error}` : "not linked"], ["Figma MCP", figmaState === "unknown" ? "status unknown" : figmaState]];
     kv.innerHTML = rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd class="ts-wrap">${esc(v)}</dd>`).join("");
   }
 }

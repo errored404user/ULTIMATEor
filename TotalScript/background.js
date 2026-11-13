@@ -10,6 +10,8 @@
 // 2.21.0: curated Blockbench bb_* table + local argument checks (pure JS, also
 // required by tests/test-blockbench-mode.js). Classic worker → importScripts.
 try { importScripts("src/core/blockbench_tools.js"); } catch (e) { console.warn("[total-bg] blockbench_tools.js not loaded", e); }
+// Figma Desktop speaks MCP Streamable HTTP on its fixed loopback endpoint.
+try { importScripts("src/core/figma_mcp.js"); } catch (e) { console.warn("[total-bg] figma_mcp.js not loaded", e); }
 const PORT_ROBLOX = 17613;
 const PORT_LOCAL = 17615; // AgentScript — native FS/terminal engine
 const RUST_ROBLOX_HTTP = "http://127.0.0.1:3000";
@@ -209,6 +211,32 @@ let bbServerMismatch = "";
 let bbCallMismatch = "";
 let bbPluginFile = "";          // where total-core keeps TotalScript-Blockbench.js
 const BB_STATUS_MAX_AGE_MS = 12000; // dedicated total-core heartbeat is queried every 5s; never claim stale connectivity
+const FIGMA_STATUS_MAX_AGE_MS = 12000;
+const FIGMA_MANUAL_KEY = "rs-figma-manual-disconnect";
+let figmaConnected = false;
+let figmaStatusKnown = false;
+let figmaStatusError = "";
+let figmaCheckedAt = 0;
+let figmaCheckedAtMono = 0;
+let figmaStatusBroadcastAt = 0;
+let figmaToolsCache = [];
+let figmaRefreshTask = null;
+let figmaManualDisconnected = false;
+let figmaManualReady = new Promise((resolve) => {
+  let settled = false;
+  const finish = () => { if (!settled) { settled = true; resolve(); } };
+  const fallback = setTimeout(finish, 500);
+  try {
+    chrome.storage.local.get(FIGMA_MANUAL_KEY, (value) => {
+      clearTimeout(fallback);
+      figmaManualDisconnected = !!(value && value[FIGMA_MANUAL_KEY]);
+      finish();
+    });
+  } catch { clearTimeout(fallback); finish(); }
+});
+const figmaClient = typeof TotalFigmaMcp !== "undefined" && TotalFigmaMcp.Client
+  ? new TotalFigmaMcp.Client()
+  : null;
 const BLENDER_TOOL_NAMES = new Set([
   "get_scene_info", "get_object_info", "execute_blender_code", "get_viewport_screenshot",
   "blender_export_fbx", "blender_import_fbx", "blender_export_obj", "blender_import_obj",
@@ -388,23 +416,163 @@ function bbStatusSnapshot() {
 function bbStatusChanged(before, after) {
   return before.known !== after.known || before.connected !== after.connected || before.error !== after.error;
 }
+function figmaStatusSnapshot() {
+  if (figmaManualDisconnected) return { known: true, connected: false, state: "disconnected", error: "Figma MCP was disconnected in TotalScript", manual: true };
+  const monoNow = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+  const age = Math.max(0, monoNow - figmaCheckedAtMono);
+  const fresh = figmaStatusKnown && age <= FIGMA_STATUS_MAX_AGE_MS;
+  return {
+    known: fresh,
+    connected: fresh && figmaConnected,
+    state: fresh ? (figmaConnected ? "connected" : "disconnected") : "unknown",
+    error: fresh ? "" : (figmaStatusKnown ? "Figma MCP status is stale; check again to verify it" : (figmaStatusError || "Figma Desktop MCP has not been verified")),
+  };
+}
+function figmaStatusChanged(before, after) {
+  return before.known !== after.known || before.connected !== after.connected || before.state !== after.state || before.error !== after.error;
+}
+function figmaTools() {
+  return figmaStatusSnapshot().connected ? figmaToolsCache.slice() : [];
+}
+function figmaStatusPayload() {
+  const state = figmaStatusSnapshot();
+  return {
+    ok: state.connected, figma: state.connected, connected: state.connected,
+    verified: state.known, status: state.state, status_error: state.error || undefined,
+    manual_disconnected: !!figmaManualDisconnected,
+    checked_at: figmaCheckedAt || undefined, tools: state.connected ? figmaToolsCache.length : 0,
+    endpoint: typeof TotalFigmaMcp !== "undefined" ? TotalFigmaMcp.ENDPOINT : undefined,
+  };
+}
+async function figmaRefresh(force, timeoutMs) {
+  await figmaManualReady;
+  if (force && figmaManualDisconnected) {
+    figmaManualDisconnected = false;
+    try { chrome.storage.local.set({ [FIGMA_MANUAL_KEY]: false }); } catch {}
+  }
+  if (figmaManualDisconnected) return figmaStatusSnapshot();
+  const current = figmaStatusSnapshot();
+  if (!force && current.known) return current;
+  if (figmaRefreshTask) return figmaRefreshTask;
+  const before = figmaStatusSnapshot();
+  const task = (async () => {
+    try {
+      if (!figmaClient) throw new Error("Figma MCP transport module did not load; reload the TotalScript extension");
+      figmaToolsCache = await figmaClient.refresh(Number(timeoutMs) || 3000);
+      figmaConnected = true;
+      figmaStatusKnown = true;
+      figmaStatusError = "";
+    } catch (error) {
+      figmaConnected = false;
+      figmaStatusKnown = false;
+      figmaToolsCache = [];
+      figmaStatusError = String(error && error.message || error || "Figma Desktop MCP could not be verified").slice(0, 240);
+      try { figmaClient && figmaClient.disconnect(); } catch {}
+    }
+    figmaCheckedAt = Date.now();
+    figmaCheckedAtMono = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : figmaCheckedAt;
+    const after = figmaStatusSnapshot();
+    if (figmaStatusChanged(before, after)) {
+      if (after.connected) pushActivity("figma", "ok", `Figma Desktop MCP connected (${figmaToolsCache.length} tools)`);
+      else if (before.connected) pushActivity("figma", "warn", "Figma MCP status could not be verified; its connection is unknown");
+    }
+    // Keep the extension surfaces' 12s freshness checks alive even when the
+    // Roblox/total-core socket is offline. Do not emit a status message every
+    // periodic MCP tools/list refresh.
+    if (figmaStatusChanged(before, after) || (after.connected && figmaCheckedAt - figmaStatusBroadcastAt >= 8000)) {
+      figmaStatusBroadcastAt = figmaCheckedAt;
+      broadcastStatus();
+    }
+    return after;
+  })();
+  figmaRefreshTask = task;
+  task.then(() => { if (figmaRefreshTask === task) figmaRefreshTask = null; }, () => { if (figmaRefreshTask === task) figmaRefreshTask = null; });
+  return task;
+}
+async function figmaDisconnect() {
+  await figmaManualReady;
+  figmaManualDisconnected = true;
+  figmaConnected = false;
+  figmaStatusKnown = true;
+  figmaStatusError = "Figma MCP was disconnected in TotalScript";
+  figmaToolsCache = [];
+  figmaCheckedAt = Date.now();
+  figmaCheckedAtMono = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : figmaCheckedAt;
+  figmaStatusBroadcastAt = figmaCheckedAt;
+  try { figmaClient && figmaClient.disconnect(); } catch {}
+  try { chrome.storage.local.set({ [FIGMA_MANUAL_KEY]: true }); } catch {}
+  pushActivity("figma", "info", "Figma MCP session disconnected in TotalScript; Figma Desktop was left running");
+  broadcastStatus();
+  return figmaStatusPayload();
+}
+function isFigmaToolName(name) {
+  return /^figma_[A-Za-z][A-Za-z0-9_.-]{0,54}$/.test(String(name || "").split("/").pop());
+}
+async function dispatchFigmaTool(exposedName, args, timeoutMs, requestId) {
+  await figmaManualReady;
+  const name = String(exposedName || "").split("/").pop();
+  if (!isFigmaToolName(name)) return { ok: false, kind: "validation", errorCode: "FIGMA_TOOL_INVALID", error: "Invalid Figma MCP tool name" };
+  if (figmaManualDisconnected) return { ok: false, kind: "disconnected", errorCode: "FIGMA_DISCONNECTED", error: "Figma MCP is disconnected in TotalScript. Press Connect Figma in Settings → MCP servers before retrying." };
+  let state = figmaStatusSnapshot();
+  if (!state.known || !state.connected) state = await figmaRefresh(false, 6500);
+  if (!state.known) return { ok: false, kind: "status-unknown", errorCode: "FIGMA_STATUS_UNKNOWN", error: "Could not verify the Figma Desktop MCP connection. Open Figma Desktop, enable its local MCP server, then press Connect Figma. " + (state.error || "") };
+  if (!state.connected) return { ok: false, kind: "disconnected", errorCode: "FIGMA_DISCONNECTED", error: "Figma MCP is not connected. Open Figma Desktop, enable its local MCP server, then press Connect Figma in Settings → MCP servers." };
+  const listed = figmaToolsCache.find((tool) => tool && tool.name === name);
+  if (!listed) return { ok: false, kind: "validation", errorCode: "FIGMA_TOOL_STALE", error: "Figma no longer advertises that tool. Refresh the Figma tool list before retrying." };
+  if (!figmaClient) return { ok: false, kind: "transport", errorCode: "FIGMA_TRANSPORT_UNAVAILABLE", error: "Figma MCP transport module did not load; reload the TotalScript extension." };
+  const rawName = name.slice("figma_".length);
+  const started = performance.now();
+  try {
+    const result = await figmaClient.callTool(rawName, args || {}, timeoutMs, requestId);
+    const ms = Math.round(performance.now() - started);
+    if (result && result.requestId === undefined && requestId !== undefined) result.requestId = requestId;
+    pushActivity("figma", result && result.ok ? "ok" : "error", `${rawName} ${result && result.ok ? "ok" : "failed"}`, { tool: name, ms, code: result && result.errorCode });
+    return result;
+  } catch (error) {
+    const detail = String(error && error.message || error || "Figma MCP tool call failed").slice(0, 1000);
+    const kind = error && error.kind || "transport";
+    const code = error && error.code || "FIGMA_MCP_ERROR";
+    if (kind === "cancelled") {
+      const message = "Figma MCP request was cancelled locally; Figma may already have completed the operation.";
+      pushActivity("figma", "info", `${rawName} cancelled`, { tool: name, ms: Math.round(performance.now() - started), code });
+      return { ok: false, kind, errorCode: code, error: message, requestId };
+    }
+    if (kind !== "tool" && kind !== "validation") {
+      figmaConnected = false;
+      figmaStatusKnown = false;
+      figmaToolsCache = [];
+      figmaStatusError = detail.slice(0, 240);
+      figmaCheckedAt = Date.now();
+      figmaCheckedAtMono = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : figmaCheckedAt;
+      try { figmaClient.disconnect(); } catch {}
+      broadcastStatus();
+    }
+    // Keep server text / document names out of the persistent activity history.
+    pushActivity("figma", "error", `${rawName} failed (${code})`, { tool: name, ms: Math.round(performance.now() - started), code });
+    return { ok: false, kind, errorCode: code, error: detail, requestId };
+  }
+}
 function blenderServers(list, snapshot) {
-  // A cached WebSocket server list is diagnostic only for Blockbench. The
-  // dedicated /api/blockbench/status heartbeat is the authority for liveness.
+  // The cached WebSocket server list is diagnostic only for Blockbench. Its
+  // dedicated total-core heartbeat is the liveness authority; Figma uses its MCP handshake.
   const input = Array.isArray(list) ? list : [];
   const oldBb = input.find((s) => s && s.id === "blockbench");
+  const oldFigma = input.find((s) => s && s.id === "figma");
   const bb = snapshot || bbStatusSnapshot();
-  const rest = input.filter((s) => s && s.id !== "blender" && s.id !== "blockbench");
+  const figma = figmaStatusSnapshot();
+  const rest = input.filter((s) => s && s.id !== "blender" && s.id !== "blockbench" && s.id !== "figma");
   if (bb.known) rest.push(Object.assign({ id: "blockbench", name: "Blockbench" }, oldBb || {}, { alive: bb.connected, tools: bb.connected ? bbToolList().length : 0 }));
   if (blenderAddon) rest.push({ id: "blender", name: "Blender", alive: true, tools: BLENDER_TOOLS.length });
+  rest.push(Object.assign({ id: "figma", name: "Figma" }, oldFigma || {}, { alive: figma.connected, tools: figma.connected ? figmaToolsCache.length : 0, status: figma.state }));
   return rest;
 }
-// The dedicated total-core heartbeat controls Blockbench liveness and tool visibility.
+// App-specific MCP tools are merged only after their own connection is verified.
 function mergeBlenderTools(tools) {
-  const base = (Array.isArray(tools) ? tools : []).filter((t) => !(t && /^bb_/.test(String(t.name || "").split("/").pop())));
+  const base = (Array.isArray(tools) ? tools : []).filter((t) => !(t && (/^bb_/.test(String(t.name || "").split("/").pop()) || /^figma_/.test(String(t.name || "")))));
   const have = new Set(base.map((t) => t && t.name));
   if (blenderAddon) for (const t of BLENDER_TOOLS) if (!have.has(t.name)) base.push(t);
   if (bbStatusSnapshot().connected) for (const t of bbToolList()) if (!have.has(t.name)) base.push(t);
+  if (figmaStatusSnapshot().connected) for (const t of figmaToolsCache) if (!have.has(t.name)) base.push(t);
   return base;
 }
 function noteBlockbenchServers(list) {
@@ -804,6 +972,7 @@ function statusObj() {
   // outage, never for the blip.
   const reconnecting = !connected && !manualStudioDisconnect && ((ws && ws.readyState === WebSocket.CONNECTING) || !!reconnectTimer);
   const bb = bbStatusSnapshot();
+  const figma = figmaStatusSnapshot();
   return {
     type: "rs-status", connected, mcpAlive, studio: studioConnected, studioApp, studioProc,
     lifecycle: mcpLifecycle, reconnecting, manual: manualStudioDisconnect,
@@ -820,6 +989,10 @@ function statusObj() {
     blockbench_server_list_mismatch: bb.known ? (bbServerMismatch || undefined) : undefined,
     blockbench_call_mismatch: bbCallMismatch || undefined,
     blockbench_plugin_file: bbPluginFile || undefined,
+    figma: figma.connected, figma_verified: figma.known, figma_status: figma.state,
+    figma_status_error: figma.error || undefined, figma_checked_at: figmaCheckedAt || undefined,
+    figma_manual_disconnected: !!figmaManualDisconnected,
+    figma_tools: figma.connected ? figmaToolsCache.length : 0,
   };
 }
 
@@ -2058,10 +2231,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // hundred ms, and answering immediately made every tab flash the red
         // "Bridge went down" banner on each wake-up (2.2.1).
         if (!connected && !manualStudioDisconnect) { connect(); await waitForConnection(STATUS_SETTLE_MS); }
+        await figmaManualReady;
         sendResponse(statusObj());
         break;
       case "list_tools": {
-        if(!connected&&toolsCache.length===0){connect();sendResponse({ok:false,tools:mergeBlenderTools([]),studio:false,roblox_connected:false,servers:blenderServers(serversCache),errorCode:"MCP_SERVER_UNAVAILABLE",error:"MCP unavailable. Normal AI responses remain available."});break;}
+        await figmaManualReady;
+        if(!connected&&toolsCache.length===0){connect();const addonTools=mergeBlenderTools([]);sendResponse({ok:addonTools.length>0,tools:addonTools,studio:false,roblox_connected:false,servers:blenderServers(serversCache),errorCode:addonTools.length?undefined:"MCP_SERVER_UNAVAILABLE",error:addonTools.length?undefined:"MCP unavailable. Normal AI responses remain available."});break;}
         if(!msg.refresh&&toolsCache.length&&Date.now()-toolsCacheAt<MCP_CACHE_TTL_MS){sendResponse({ok:true,tools:mergeBlenderTools(toolsCache),studio:robloxEditorConnected===true,roblox_connected:robloxEditorConnected===true,servers:blenderServers(serversCache),cached:true,cacheAge:Date.now()-toolsCacheAt});break;}
         const discoveryStarted=Date.now();
         // Prefer a live refresh; fall back to cache so the loop never stalls.
@@ -2123,6 +2298,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if(!manualStudioDisconnect){connect();await waitForConnection(6000);await refreshStudioStatus();}sendResponse({success:connected&&robloxEditorConnected===true,state:manualStudioDisconnect||!connected?"DISCONNECTED":robloxEditorConnected===true?([...pending.values()].some(p=>p.type==="call_tool")?"BUSY":"CONNECTED"):"ERROR",bridge:connected,studio:robloxEditorConnected===true,protocolVersion:"1.0",error:connected&&robloxEditorConnected===true?null:{code:"STUDIO_BRIDGE_OFFLINE",message:"Studio MCP did not answer the health probe"}});break;
       case "call_tool": {
         const timeout = (msg.timeout || 120000) + 10000;
+        // Figma is an independent local Streamable HTTP server, not a tool
+        // family of Roblox, AgentScript, Blender or total-core.
+        if (isFigmaToolName(msg.name)) {
+          sendResponse(await dispatchFigmaTool(msg.name, msg.arguments, timeout, msg.requestId));
+          break;
+        }
         // 2.21.0: Blockbench commands go to total-core like any Roblox tool
         // (total-core hands them to the Blockbench plugin). They need the
         // bridge socket but NOT Studio: check the arguments locally first,
@@ -2297,6 +2478,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: true, blender: false });
         break;
       }
+      case "figma_connect": {
+        await figmaRefresh(true, 6500);
+        sendResponse(figmaStatusPayload());
+        break;
+      }
+      case "figma_status": {
+        await figmaManualReady;
+        if (msg.refresh === true) await figmaRefresh(true, 6500);
+        sendResponse(figmaStatusPayload());
+        break;
+      }
+      case "figma_disconnect": {
+        sendResponse(await figmaDisconnect());
+        break;
+      }
+      case "figma_cancel": {
+        const cancelled = !!(figmaClient && figmaClient.cancel(msg.requestId));
+        sendResponse({ ok: true, cancelled });
+        break;
+      }
       case "blockbench_status": {
         // 2.21.0: there is nothing to connect from here - the plugin dials
         // total-core. refresh:true re-reads total-core right now ("Check again").
@@ -2305,7 +2506,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         break;
       }
       case "add_server": {
-        // Native bin/total-core.exe rejects custom MCP. Blender uses blender_connect.
+        // Native bin/total-core.exe rejects generic custom MCP. Dedicated
+        // providers are routed to their own verified transports.
+        if (String(msg.server_id || "").toLowerCase() === "figma") {
+          await figmaRefresh(true, 6500);
+          sendResponse(figmaStatusPayload());
+          break;
+        }
         if (String(msg.server_id || "").toLowerCase() === "blender") {
           sendResponse(await connectBlender());
           break;
@@ -2324,6 +2531,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         break;
       }
       case "remove_server": {
+        if (String(msg.server_id || "").toLowerCase() === "figma") {
+          sendResponse(await figmaDisconnect());
+          break;
+        }
         const r = await send({ type: "remove_server", server_id: msg.server_id }, 15000);
         pushActivity("server", r && r.ok ? "info" : "error", r && r.ok ? `MCP server removed: ${String(msg.server_id || "")}` : `Removing MCP server ${String(msg.server_id || "")} failed`);
         sendResponse(r);
@@ -2740,6 +2951,7 @@ refreshProcStatus();
 setInterval(refreshProcStatus, 5000);
 void bbRefresh();
 setInterval(() => { void bbRefresh(); }, 5000);
+setInterval(() => { if (figmaStatusSnapshot().connected) void figmaRefresh(true, 6500); }, 8000);
 
 // Wake/keepalive hooks.
 chrome.runtime.onStartup.addListener(connect);
