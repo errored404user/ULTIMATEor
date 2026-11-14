@@ -5012,7 +5012,13 @@
         payload = { type: "web_fetch", query: payload.query || payload.q, max_chars: payload.max_chars };
       }
       const r = await bg(payload);
-      if (r && r.ok) return `Output of '${name}':\n${r.text}`;
+      if (r && r.ok) {
+        const source = bareName === "web_fetch" && r.url ? `Fetched URL: ${r.url}\n\n` : "";
+        const output = bareName === "web_fetch"
+          ? `Fetched page text:\n${typeof r.page_text === "string" ? r.page_text : ""}`
+          : r.text;
+        return `Output of '${name}':\n${source}${output}`;
+      }
       return `ERROR in ${name}: ${(r && r.error) || "fetch failed"}\nTry a different URL/query.`;
     }
     if (bareName === "api_request" || bareName === "web_api" || bareName === "api_json_get" || bareName === "api_json_post") {
@@ -5407,7 +5413,7 @@
       let skillLines = (requested === "roblox" && typeof RobloxScriptSkills !== "undefined") ? RobloxScriptSkills.describeCommands({ includeHidden: !!commandQuery }) : [];
       const hiddenSkillNames = (requested === "roblox" && typeof RobloxScriptSkills !== "undefined" && RobloxScriptSkills.hiddenCommandNames) ? RobloxScriptSkills.hiddenCommandNames() : new Set();
       let agentLines = (requested === "local" && typeof AgentScriptSkills !== "undefined") ? AgentScriptSkills.describeCommands() : [];
-      let webLines = [`— Screenshot: total_screenshot {target?: auto|studio|game|viewport|blender|tab} — PHOTO of the real Studio/game viewport when MCP is on. Use target:studio or game for gameplay; target:tab is only for this browser chat. A failed Studio capture returns an error and NEVER substitutes the browser. NOT capture_id (IDs only).`, `— Debugger: total_debug {} — classified Output errors + NEXT fix. Automatic Debugger appends new errors after edits.`, `— Templates: get_template {name} searches the place then Creator Store and CLONES a match.`, `— TotalScript Status: total_status {} — live engine, work mode, extra thinking, bridge, blender. Call this if you are unsure which mode you are in.`, `— Web Tools (bridge-level, no Studio needed): web_fetch {url?, query?, max_chars?} — fetch a URL, OR pass query to search the web then fetch the top result; web_search {query, limit?} — DuckDuckGo titles+URLs`, `— IDs (not a photo): capture_id {path?} — UniqueId + MeshId/Image/SoundId/AnimationId from the Studio selection. For a PHOTO use total_screenshot.`, `— Screenshot: total_screenshot {target?: auto|studio|game|viewport|tab|blender} — capture Studio/game through MCP and attach it to the next message. Use tab only for the browser. Aliases: screenshot, take_screenshot, send_screenshot.`, `— Debugger: total_debug {} — Studio LogService errors/warnings. Automatic Debugger (Settings) appends new errors after mutating commands.`, `— Multi-Agent: total_agent {role: planner|builder|scripter|reviewer|tester|debugger|done, task?, goal?, plan?:[...], step?, step_done?, findings?:[...], fixed?:[...], summary?} — hand off to a specialist on a shared board (plan, findings, verification). Read-only roles are guarded; done is refused until the tester verified. Enable Multi-Agent in Settings.`, `— Developer Products: developer_product_create {name, price, description?, reward?} — create a real Roblox Developer Product on this published universe (sign into roblox.com in Chrome). developer_product_list {} lists them. Aliases: create_developer_product, create_dev_product.`];
+      let webLines = [`— Screenshot: total_screenshot {target?: auto|studio|game|viewport|blender|tab} — PHOTO of the real Studio/game viewport when MCP is on. Use target:studio or game for gameplay; target:tab is only for this browser chat. A failed Studio capture returns an error and NEVER substitutes the browser. NOT capture_id (IDs only).`, `— Debugger: total_debug {} — classified Output errors + NEXT fix. Automatic Debugger appends new errors after edits.`, `— Templates: get_template {name} searches the place then Creator Store and CLONES a match.`, `— TotalScript Status: total_status {} — live engine, work mode, extra thinking, bridge, blender. Call this if you are unsure which mode you are in.`, `— Web Tools (TotalScript bridge, no Studio needed): web_search {query, limit?} — result titles/URLs/snippets; web_fetch {url?, query?, max_chars?} — page text or searches then fetches a top result. For research, search, fetch a source, and cite the returned URL.`, `— IDs (not a photo): capture_id {path?} — UniqueId + MeshId/Image/SoundId/AnimationId from the Studio selection. For a PHOTO use total_screenshot.`, `— Screenshot: total_screenshot {target?: auto|studio|game|viewport|tab|blender} — capture Studio/game through MCP and attach it to the next message. Use tab only for the browser. Aliases: screenshot, take_screenshot, send_screenshot.`, `— Debugger: total_debug {} — Studio LogService errors/warnings. Automatic Debugger (Settings) appends new errors after mutating commands.`, `— Multi-Agent: total_agent {role: planner|builder|scripter|reviewer|tester|debugger|done, task?, goal?, plan?:[...], step?, step_done?, findings?:[...], fixed?:[...], summary?} — hand off to a specialist on a shared board (plan, findings, verification). Read-only roles are guarded; done is refused until the tester verified. Enable Multi-Agent in Settings.`, `— Developer Products: developer_product_create {name, price, description?, reward?} — create a real Roblox Developer Product on this published universe (sign into roblox.com in Chrome). developer_product_list {} lists them. Aliases: create_developer_product, create_dev_product.`];
       if (commandQuery) {
         const exactLine = (line) => {
           const match = String(line).match(/^\s*([A-Za-z_][\w.-]*)\s*[:({]/);
@@ -6213,6 +6219,10 @@
     let parseRetries = 0;
     let providerRetries = 0; // 1.69: bounded re-send after a TRANSIENT provider error (rate limit / busy / network)
     let falseSuccessNudged = false; // 1.69: one "you said done but nothing ran" correction per run
+    const MAX_RESEARCH_FETCH_NUDGES = 2, MAX_RESEARCH_CITATION_NUDGES = 1;
+    let researchFetchNudges = 0, researchCitationNudges = 0;
+    let researchSearchSucceeded = false, researchFetched = false;
+    const researchSources = new Set();
     let luaFenceNudged = false; // 1.81.0: one "shown ```lua is not executed" correction per run
     let modeGateRounds = 0; // 1.38.0: evidence gate per run (1.99.9: up to 2 rounds, see MODE_GATE_ROUNDS)
     const effortGate = { verify: false, audit: false, review: false }; // 1.60: one of each per run
@@ -6481,9 +6491,43 @@
             providerCommandless = toolTurns === 0 && typeof P.shouldRetryCommandlessText === "function"
               && P.shouldRetryCommandlessText(body);
           } catch {}
+          // Research answers are not accepted until TotalScript fetched readable
+          // page text; when citations were requested, the reply must cite one of
+          // the exact URLs returned by that fetch. Retries are bounded separately
+          // for retrieval and citation so one source can still be cited after it lands.
+          const researchRequired = !!(ORCH && A.task && A.task.requiresResearch);
+          const researchNeedsFetch = researchRequired && !researchFetched;
+          const researchNeedsCitation = researchRequired && A.task.requiresCitations && researchFetched
+            && !ORCH.hasResearchCitation(body, [...researchSources]);
+          if (researchNeedsFetch || researchNeedsCitation) {
+            const canRetryFetch = researchNeedsFetch && researchFetchNudges < MAX_RESEARCH_FETCH_NUDGES;
+            const canRetryCitation = researchNeedsCitation && researchCitationNudges < MAX_RESEARCH_CITATION_NUDGES;
+            if (canRetryFetch || canRetryCitation) {
+              const stage = researchNeedsFetch ? "fetch" : "citation";
+              const note = researchNeedsFetch
+                ? ORCH.FEEDBACK.researchRequired(researchSearchSucceeded)
+                : ORCH.FEEDBACK.researchCitation;
+              if (researchNeedsFetch) researchFetchNudges++;
+              else researchCitationNudges++;
+              diag("loop.researchRequired", { stage, n: researchNeedsFetch ? researchFetchNudges : researchCitationNudges, sources: researchSources.size });
+              try { ui.toast(stage === "fetch" ? "Research check — requesting a fetched source" : "Research check — requesting a source citation"); } catch {}
+              ui.steeringProgress("correcting", stage === "fetch" ? "A fetched TotalScript source is required" : "Cite the fetched TotalScript source", toolTurns);
+              const state = asStateTag();
+              base = await submitAndGetBase(note + (state ? "\n" + state : ""));
+              continue;
+            }
+            const stage = researchNeedsFetch ? "fetch" : "citation";
+            const reason = researchNeedsFetch
+              ? "TotalScript did not obtain readable page text from web_fetch after the bounded retries. The answer was not accepted as researched; check web access or retry."
+              : "TotalScript fetched page text, but the reply did not cite a URL returned by web_fetch. It was not accepted as a sourced answer; retry and include the fetched URL.";
+            diag("loop.researchUnverified", { stage, sources: researchSources.size });
+            ui.steeringProgress("error", "Stopped: research could not be verified", toolTurns);
+            ui.banner("warn", "Research could not be verified", reason);
+            break;
+          }
           // 1.69: a request to EXPLAIN / answer / plan is allowed to end in prose.
           // Only implement / fix / review intents are nudged for a command.
-          if (providerCommandless && A.task && A.task.explainOnly) { providerCommandless = false; diag("loop.commandlessAccepted", { intent: A.task.intent }); }
+          if (providerCommandless && A.task && A.task.explainOnly && (!A.task.requiresResearch || researchFetched)) { providerCommandless = false; diag("loop.commandlessAccepted", { intent: A.task.intent, researchVerified: !!researchFetched }); }
           // 1.69: false-success guard - prose that reports the work as done while
           // NO command has run in this task gets ONE correction (truthful report
           // or real commands), never a silent "complete".
@@ -6741,6 +6785,20 @@
           try { ui.trackCard(call.tool, "run", "executing\u2026", category); } catch {}
           const blocked = repeatBlocked(call);
           feedback = blocked !== null ? blocked : await runTool(call);
+          const researchTool = bareToolName(call.tool);
+          try {
+            if (ORCH && ORCH.hasResearchResult(researchTool, feedback)) {
+              if (researchTool === "web_search") researchSearchSucceeded = true;
+              if (researchTool === "web_fetch") {
+                const fetchedSources = ORCH.researchSources(researchTool, feedback);
+                if (fetchedSources.length) {
+                  researchFetched = true;
+                  for (const source of fetchedSources) researchSources.add(source);
+                }
+              }
+              diag("research.result", { tool: researchTool, fetched: researchFetched, sources: researchSources.size });
+            }
+          } catch {}
           // Loop guard: the same command with the same parameters failing over
           // and over is the classic agent death spiral. Tag the result so the
           // model is told to change approach instead of resending it.

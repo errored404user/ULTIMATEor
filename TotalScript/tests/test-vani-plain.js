@@ -73,6 +73,7 @@ const dummy = R.parseToolCalls(BT + "\n###CMD npc_spawn_pathfinding###\nrig_name
 ok("B11 the dummy example written as instructed parses with rig_name", dummy.length === 1 && dummy[0].tool === "npc_spawn_pathfinding" && dummy[0].arguments.rig_name === "Dummy");
 ok("B12 Vani prompt stays within the known soft budget (core ≤ 14000 before site notes; whole prompt < 17600)", core.length <= 14000 && vaniPrompt.length < 17600, { core: core.length, whole: vaniPrompt.length });
 ok("B13 the site notes still follow (VANI rules + PLAIN_FORMAT_NOTE) - one consistent story, no contradiction", vaniPrompt.includes("Vani Chat rules:") && vaniPrompt.includes(R.PLAIN_FORMAT_NOTE));
+ok("B13a Vani native search stays off while requested research uses TotalScript web_search + web_fetch", /Vani's native search only/.test(vaniPrompt) && /TotalScript web_search then web_fetch/.test(vaniPrompt) && /requested research/.test(vaniPrompt));
 // the full (non-compact) prompt also honours the flag, for any roomy plain provider
 const fullPlain = RS.buildSystemPrompt({ siteName: "X", providerId: "x", engine: "roblox", maxChars: 0, commandFormat: "plain" });
 ok("B14 full prompt with commandFormat plain: CMD block is the STANDARD COMMAND FORMAT, no json fence, no JSON envelope example", /━━━ STANDARD COMMAND FORMAT \(everything except execute_luau\) ━━━\nWrite a CMD block/.test(fullPlain) && !fullPlain.includes(BT + "json") && !/\{"command": "list_commands"\}/.test(fullPlain) && /━━━ FORMAT FOR execute_luau ━━━/.test(fullPlain));

@@ -2705,7 +2705,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           const origLen = text.length;
           const truncated = origLen > maxChars;
           if (truncated) text = text.slice(0, maxChars) + `\n\n…[truncated ${origLen - maxChars} chars]`;
-          sendResponse({ ok: true, text: searchNote + text, truncated, status: res.status, url, content_type: ctype });
+          sendResponse({ ok: true, text: searchNote + text, page_text: text, truncated, status: res.status, url, content_type: ctype });
         } catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
         break;
       }

@@ -43,7 +43,7 @@
     // Document / Slides / Design, code runs). Models then answer "I can only use
     // the tools I was given" and write prose. Say it outright.
     "You are NOT being asked to execute anything yourself and you do not need any tool for this: the extension on this page runs the block the moment you post it. Vani's own tools (web search, Document, Slides, Design, code execution) cannot reach Roblox Studio - ignore them while this chat is linked.",
-    "Do not search the web. Do not create a Document, Slides, Design, canvas or any side-panel artifact, and do not propose Vani tools - everything goes in this chat reply as text. One short line of prose at most; the command block is the work.",
+    "Do not search the web. This restriction applies to Vani's native search only; for user-requested research, use TotalScript web_search then web_fetch commands through the extension. Do not create a Document, Slides, Design, canvas or any side-panel artifact, and do not propose Vani tools - everything goes in this chat reply as text. One short line of prose at most except for requested research; then give concise findings with sources. The command block is the work.",
     // 1.95.0 — reported live: "cannot use JSON blocks" -> plain prose. The pin
     // no longer mentions the JSON envelope at all (the parser still accepts it).
     // 1.78.1 — reported live: the model SHOWED the block (escaped backticks /
