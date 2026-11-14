@@ -62,6 +62,7 @@ function deferred() {
   const client = new MCP.Client({ fetch: fakeFetch, endpoint: "http://example.invalid/" });
   const tools = await client.connect(6500);
   check("client initializes Streamable HTTP with the negotiated MCP version and sends the initialized notification", wire[0].frame.method === "initialize" && wire[0].frame.params.protocolVersion === "2025-06-18" && wire[0].init.headers["MCP-Protocol-Version"] === "2025-06-18" && wire.some((x) => x.frame.method === "notifications/initialized"));
+  check("Figma MCP identifies the client as the current TotalScript version", client.clientInfo.version === "3.0.0" && wire[0].frame.params.clientInfo.version === "3.0.0");
   check("SSE tools/list becomes a deduplicated, bounded figma_* catalogue with sanitized schemas", tools.length === 2 && tools[0].name === "figma_get_file" && tools[0].server === "figma" && tools[0].inputSchema.required.length === 1 && tools[1].name === "figma_render_file" && tools[1].inputSchema.properties && !tools.some((t) => /bad\/name/.test(t.name)));
   const toolCall = await client.callTool("get_file", { key: "file-key" }, 3000, "test-request-1");
   const sentCall = wire.find((x) => x.frame.method === "tools/call");
@@ -149,7 +150,7 @@ function deferred() {
     runtime: {
       onMessage: listener(), onStartup: noopEvent(), onInstalled: noopEvent(), lastError: null,
       sendMessage: () => Promise.resolve(), getURL: (name) => "chrome-extension://figma-test/" + name,
-      getPlatformInfo: async () => ({ os: "linux" }), getManifest: () => ({ version: "2.21.0" }),
+      getPlatformInfo: async () => ({ os: "linux" }), getManifest: () => ({ version: "3.0.0" }),
     },
     tabs: { query: async () => [], sendMessage: async () => {}, create: async () => ({ id: 1 }) },
     alarms: { create() {}, onAlarm: noopEvent() },

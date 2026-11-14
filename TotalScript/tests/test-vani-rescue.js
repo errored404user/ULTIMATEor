@@ -115,6 +115,6 @@ ok("adapter: version marker bumped", vani.includes('setAttribute("data-rs-vani-v
   const readme = read("README.md");
   ok("README: 1.76.0 entry + test listed", /\*\*1\.76\.0 — Vani: commandless-reply rescue, visible bridge status\.\*\*/.test(readme) && /test-vani-rescue\.js/.test(readme));
   const manifest = JSON.parse(read("manifest.json"));
-  ok("version pins 2.21.0", manifest.version === "2.21.0" && /^version = "2\.21\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "2.21.0"'));
+  ok("version pins 3.0.0", manifest.version === "3.0.0" && /^version = "3\.0\.0"/m.test(read("agent/Cargo.toml")) && read("plugin/TotalScript.lua").includes('local VERSION = "3.0.0"'));
   finish();
 })();

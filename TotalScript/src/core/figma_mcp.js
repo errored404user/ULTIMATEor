@@ -17,6 +17,15 @@
   const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
   const TOOL_NAME_RE = /^[A-Za-z][A-Za-z0-9_.-]{0,54}$/;
 
+  function currentExtensionVersion() {
+    try {
+      const runtime = root && root.chrome && root.chrome.runtime;
+      const version = runtime && typeof runtime.getManifest === "function" && runtime.getManifest().version;
+      if (typeof version === "string" && version) return version;
+    } catch {}
+    return "3.0.0";
+  }
+
   function timeoutBudget(value, fallback) {
     return Math.max(1000, Math.min(Number(value) || fallback || 6500, 150000));
   }
@@ -167,7 +176,7 @@
       const opts = options || {};
       this.endpoint = ENDPOINT;
       this.fetchImpl = typeof opts.fetch === "function" ? opts.fetch : (root && typeof root.fetch === "function" ? root.fetch.bind(root) : null);
-      this.clientInfo = isRecord(opts.clientInfo) ? opts.clientInfo : { name: "TotalScript", version: "2.21.0" };
+      this.clientInfo = isRecord(opts.clientInfo) ? opts.clientInfo : { name: "TotalScript", version: currentExtensionVersion() };
       this._nextId = 1;
       this._activeCalls = new Set();
       this._callsByRequestId = new Map();
@@ -256,7 +265,7 @@
       const initialized = await this._post("initialize", {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: {},
-        clientInfo: { name: clip(this.clientInfo.name || "TotalScript", 80), version: clip(this.clientInfo.version || "2.21.0", 40) },
+        clientInfo: { name: clip(this.clientInfo.name || "TotalScript", 80), version: clip(this.clientInfo.version || currentExtensionVersion(), 40) },
       }, remaining(), false);
       if (!isRecord(initialized) || typeof initialized.protocolVersion !== "string") {
         this._reset();
