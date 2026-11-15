@@ -1184,7 +1184,7 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
     // `origin_guard` (which also rejects their preflights).
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin: &axum::http::HeaderValue, parts: &axum::http::request::Parts| {
-            origin_allowed_for_path(origin.to_str().ok(), parts.uri().path())
+            origin_allowed_for_path(origin.to_str().ok(), parts.uri.path())
         }))
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers(Any);
