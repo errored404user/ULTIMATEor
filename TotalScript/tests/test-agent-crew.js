@@ -62,6 +62,9 @@ ok("state tag + badge reflect the board", (() => { Crew.reset(); Crew.handoff({ 
 ok("mutations invalidate verification", (() => { Crew.handoff({ role: "tester" }); Crew.afterTool("total_debug", {}, "Output is clean (no errors)"); Crew.handoff({ role: "builder" }); Crew.afterTool("part_create", {}, "Output of 'part_create':\nOK"); return Crew.summary().verified === false; })());
 ok("guard and hints are inert when Multi-Agent is off", (() => { multi = false; const g = Crew.guard("part_create", {}); const t = Crew.afterTool("part_create", {}, "Output of 'part_create':\nOK"); multi = true; return g === null && t === "Output of 'part_create':\nOK" && Crew.stateTag() !== "OFF"; })());
 ok("prompt block documents roles, guard and completion gate", /planner .*builder .*scripter .*reviewer .*tester .*debugger/.test(Crew.promptBlock()) && /ROLE GUARD/.test(Crew.promptBlock()) && /REFUSED until the tester verified/.test(Crew.promptBlock()));
+Crew.reset();
+const batchHandoff = Crew.handoff({ role: "builder", task: "build the lobby" });
+ok("crew role guidance permits up to 4 independent commands and preserves dependency sequencing", /up to 4 independent commands per reply/.test(batchHandoff) && /wait for results before dependent operations/.test(batchHandoff) && !/ONE command per reply/.test(batchHandoff));
 
 // ── wiring ──────────────────────────────────────────────────────────────────
 const main = read("src/core/main.js");

@@ -548,7 +548,7 @@ const RSProvider = (() => {
     displayName: SITE.name,
     supportsVision: true,
     timings,
-    maxBatchCommands: 6,
+    maxBatchCommands: 4,
     thinkingSel: ".reasoning, [class*='thinking'], [class*='reason'], [class*='thought'], [data-testid*='reasoning']",
     init({ diag: d } = {}) {
       if (d) diag = d;

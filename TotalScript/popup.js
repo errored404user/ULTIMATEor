@@ -654,13 +654,14 @@ function onActivityPush(item) {
 // ── tools ──────────────────────────────────────────────────────────────────
 let toolsData = [];
 let toolsLoadedAt = 0;
-const SERVER_LABEL = { roblox: "Roblox Studio", studio: "Roblox Studio", local: "AgentScript (this PC)", blender: "Blender", agent: "AgentScript (this PC)", blockbench: "Blockbench", figma: "Figma" };
+const SERVER_LABEL = { roblox: "Roblox Studio", studio: "Roblox Studio", local: "AgentScript (this PC)", blender: "Blender", agent: "AgentScript (this PC)", blockbench: "Blockbench", figma: "Figma Desktop MCP", figma_plugin: "Figma Design plugin" };
 function toolServer(t) {
   const n = String(t.name || "");
   if (t.server) return String(t.server);
   if (n.includes("/")) return n.split("/")[0];
   if (/^blender_|^(get_scene_info|execute_blender)/.test(n)) return "blender";
   if (/^bb_/.test(n)) return "blockbench";
+  if (/^figma_plugin_/.test(n)) return "figma_plugin";
   if (/^figma_/.test(n)) return "figma";
   if (/^(read_file|write_file|list_dir|run_command|search_files|move|delete|open_path|download|process|shell|fs_)/.test(n)) return "local";
   return "roblox";
@@ -703,7 +704,7 @@ function renderTools() {
   const total = toolsData.length;
   $("tools-count").firstElementChild.textContent = q ? `${[...groups.values()].reduce((a, b) => a + b.length, 0)} of ${total}` : `${total} tools`;
   if (!groups.size) { root.appendChild(h(`<div class="ts-card"><div class="ts-empty">${icon("search", 20)}<b>${total ? "No tool matches" : "No tools yet"}</b><span>${total ? "Try a shorter word." : "The bridge has not reported its tools — press Refresh once it is connected."}</span></div></div>`)); return; }
-  const SERVER_ORDER = ["roblox", "studio", "local", "agent", "blender", "blockbench", "figma"];
+  const SERVER_ORDER = ["roblox", "studio", "local", "agent", "blender", "blockbench", "figma_plugin", "figma"];
   const rank = (s) => { const i = SERVER_ORDER.indexOf(s); return i < 0 ? 99 : i; };
   for (const [server, list] of [...groups.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))) {
     const card = h(`<div class="ts-card flush"><div class="tool-group"><div class="tool-head"><span class="ts-h3"></span><span class="ts-badge"><span>${list.length}</span></span></div><div class="ts-list"></div></div></div>`);
@@ -777,7 +778,8 @@ const CATEGORIES = [
     { id: "reconnect", type: "action", label: "Reconnect the bridge", sub: `Re-dial ${RUN_CMD} on port 3000 / 17613 / 17615.`, button: "Reconnect", run: (btn) => QUICK_ACTIONS.find((q) => q.id === "reconnect").run(btn) },
     { id: "blender", type: "blender", label: "Blender MCP", sub: "Connects to the TotalScript addon running inside Blender on port 9876." },
     { id: "blockbench", type: "blockbench", label: "Blockbench", sub: "TotalScript's own Blockbench plugin (TotalScript-Blockbench.js) runs inside Blockbench and connects to the desktop app by itself — load it once via File → Plugins → Load Plugin from File. Models are exported as files for Studio's Import 3D." },
-    { id: "figma", type: "figma", label: "Figma MCP", sub: "Connects the extension directly to Figma Desktop's local MCP server. No Figma API key is stored by TotalScript." },
+    { id: "figma-plugin", type: "figma-plugin", label: "Figma Design plugin", sub: "Live, token-paired bridge inside Figma Design — import plugin/figma/manifest.json, then run TotalScript Figma from Plugins. No Dev Mode, Figma API key, cloud relay, or Figma Desktop MCP required." },
+    { id: "figma", type: "figma", label: "Figma Desktop MCP", sub: "Separate connection: the extension talks directly to Figma Desktop's local MCP endpoint. No Figma API key is stored by TotalScript." },
     { id: "publish", key: "rsAllowPublishAutomation", type: "toggle", default: false, label: "Allow confirmed publishing without a per-operation prompt", sub: "Off by default. Roblox authentication, ownership, moderation and rate limits always apply." },
     { id: "diag", type: "action", label: "Diagnostics", sub: "Copy the bridge status, health check and your non-secret settings as JSON for a bug report.", button: "Copy diagnostics", run: (btn) => busy(btn, copyDiagnostics) },
   ] },
@@ -1001,6 +1003,119 @@ async function renderItem(it, stored) {
       }));
       return row;
     }
+    case "figma-plugin": {
+      const row = rowShell(it, "");
+      const main = row.querySelector(".ts-row-main");
+      const state = h(`<span class="ts-row-sub" id="figma-plugin-state" style="margin-top:6px;display:block"></span>`);
+      const controls = h(`<div class="ts-inline" style="margin-top:8px;gap:6px;flex-wrap:wrap"><button type="button" class="ts-btn sm primary" id="figma-plugin-generate"><span>Generate pairing code</span></button><button type="button" class="ts-btn sm danger" id="figma-plugin-revoke"><span>Revoke pairing</span></button><button type="button" class="ts-btn sm ghost" id="figma-plugin-check"><span>Check status</span></button></div>`);
+      const pairBox = h(`<div id="figma-plugin-codebox" style="display:none;margin-top:9px;padding:10px;border:1px solid var(--ts-line,#303946);border-radius:9px;background:var(--ts-surface-2,#151a20)"><label class="ts-row-sub" for="figma-plugin-code" style="display:block;margin-bottom:5px;color:var(--ts-text)">One-time code · expires in five minutes · share only with your Figma plugin</label><div class="ts-inline" style="gap:6px;flex-wrap:nowrap"><input id="figma-plugin-code" class="ts-input" type="text" readonly spellcheck="false" aria-label="Figma pairing code" style="min-width:0;flex:1;font-family:var(--ts-mono,monospace);font-size:11px"><button type="button" class="ts-btn sm" id="figma-plugin-copy"><span>Copy</span></button></div><span class="ts-row-sub" id="figma-plugin-expires" style="display:block;margin-top:5px"></span></div>`);
+      const steps = h(`<span class="ts-row-sub" style="display:block;margin-top:8px">In Figma Design: Plugins → Development → Import plugin from manifest → select <code>plugin/figma/manifest.json</code>. Run “TotalScript Figma” from Plugins → Development, then paste the one-time code. This is the normal plugin UI; Dev Mode is not required.</span>`);
+      main.append(state, controls, pairBox, steps);
+      const generate = controls.querySelector("#figma-plugin-generate");
+      const revoke = controls.querySelector("#figma-plugin-revoke");
+      const check = controls.querySelector("#figma-plugin-check");
+      const codeField = pairBox.querySelector("#figma-plugin-code");
+      const expiry = pairBox.querySelector("#figma-plugin-expires");
+      const copy = pairBox.querySelector("#figma-plugin-copy");
+      let current = null;
+      let pairingToken = "";
+      let pairingExpiresAt = 0;
+      let requestBusy = false;
+      const paint = (r) => {
+        current = r && typeof r === "object" ? r : null;
+        const valid = !!(current && current.verified === true && ((current.status === "connected" && current.connected === true) || (current.status === "disconnected" && current.connected === false)));
+        const on = valid && current.status === "connected";
+        const unknown = !valid || current.status === "unknown";
+        if (on) state.textContent = `Connected — ${Math.max(0, (Number(current.tools) || 0) - 1)} Figma Design plugin tools verified live on port 3000. Separate from Figma Desktop MCP.`;
+        else if (unknown) state.textContent = `Connection status unknown — ${String((current && current.status_error) || "Start the TotalScript desktop app, then check again.")} No canvas operation will be sent until the plugin is verified.`;
+        else state.textContent = current && current.pairing_pending
+          ? "Not paired yet — a one-time code is waiting to be entered in the Figma plugin."
+          : "Disconnected — generate a one-time code, then paste it into the Figma plugin.";
+        if (current && current.pairing_pending && !pairingToken && current.pairing_expires_at) {
+          state.textContent += " A pairing code is already pending; generate a new one if you no longer have it.";
+        }
+        generate.disabled = requestBusy || on;
+        generate.firstElementChild.textContent = on ? "Already paired" : "Generate pairing code";
+        revoke.disabled = requestBusy;
+        check.disabled = requestBusy;
+        if (on && pairingToken) {
+          pairingToken = "";
+          pairingExpiresAt = 0;
+          codeField.value = "";
+        }
+        const showCode = !!(pairingToken && pairingExpiresAt > Date.now() && !on);
+        pairBox.style.display = showCode ? "block" : "none";
+        if (showCode) expiry.textContent = `Expires at ${new Date(pairingExpiresAt).toLocaleTimeString()}. The code is single-use and is not saved by the extension.`;
+        if (pairingToken) codeField.value = pairingToken;
+        state.style.color = on ? "var(--ok, #4caf50)" : "";
+      };
+      const refreshStatus = async () => {
+        const r = await bg({ type: "figma_plugin_status" });
+        paint(r);
+        return r;
+      };
+      const setBusy = (busy) => { requestBusy = busy; paint(current); };
+      const statusTimer = setInterval(() => {
+        if (!row.isConnected) { clearInterval(statusTimer); return; }
+        if (pairingToken && pairingExpiresAt <= Date.now()) { pairingToken = ""; pairingExpiresAt = 0; codeField.value = ""; }
+        void refreshStatus();
+      }, 5000);
+      void refreshStatus().catch(() => paint(null));
+      generate.addEventListener("click", async () => {
+        if (requestBusy) return;
+        setBusy(true);
+        try {
+          const r = await bg({ type: "figma_plugin_pair" });
+          if (!r || r.ok !== true || typeof r.pairing_token !== "string") {
+            paint(r);
+            toast(String((r && r.error) || "Could not generate a pairing code. Start the TotalScript desktop app and retry."), "warn", 4500);
+            return;
+          }
+          pairingToken = r.pairing_token;
+          pairingExpiresAt = Number(r.expires_at) || Date.now() + 5 * 60 * 1000;
+          codeField.value = pairingToken;
+          paint(r);
+          toast("One-time Figma pairing code generated — paste it into the Figma plugin", "ok", 4500);
+        } catch (error) {
+          toast(String(error && error.message || error || "Pairing code generation failed"), "warn", 4500);
+        } finally { setBusy(false); }
+      });
+      revoke.addEventListener("click", async () => {
+        if (requestBusy) return;
+        const yes = await confirmDialog("Revoke the Figma Design plugin pairing?", "This invalidates the current Figma session and any pending code. The Figma plugin will need a new one-time code. No Figma document is changed.", "Revoke pairing", true);
+        if (!yes) return;
+        setBusy(true);
+        try {
+          const r = await bg({ type: "figma_plugin_revoke" });
+          if (!r || r.ok !== true) { toast(String((r && r.error) || "Could not revoke the Figma pairing"), "warn"); return; }
+          pairingToken = ""; pairingExpiresAt = 0; codeField.value = "";
+          paint(r);
+          await fetchTools(true);
+          toast("Figma Design plugin pairing revoked", "ok");
+        } catch (error) { toast(String(error && error.message || error || "Could not revoke pairing"), "warn"); }
+        finally { setBusy(false); }
+      });
+      check.addEventListener("click", async () => {
+        if (requestBusy) return;
+        setBusy(true);
+        try {
+          const before = current && current.status;
+          const r = await refreshStatus();
+          const nowConnected = r && r.status === "connected" && r.verified === true;
+          if (nowConnected && before !== "connected") { await fetchTools(true); toast("Figma Design plugin connected — tools are ready", "ok"); }
+          else if (r && r.status === "unknown") toast(String(r.status_error || "The plugin status could not be verified"), "warn");
+        } catch (error) { paint(null); toast(String(error && error.message || error || "Could not check the Figma plugin"), "warn"); }
+        finally { setBusy(false); }
+      });
+      copy.addEventListener("click", async () => {
+        if (!pairingToken || pairingExpiresAt <= Date.now()) { toast("Generate a fresh pairing code first", "warn"); return; }
+        let copied = false;
+        try { await navigator.clipboard.writeText(pairingToken); copied = true; } catch {}
+        if (!copied) { try { codeField.focus(); codeField.select(); copied = document.execCommand("copy"); } catch {} }
+        toast(copied ? "Pairing code copied — paste it into TotalScript Figma" : "Could not copy the code; select it and copy manually", copied ? "ok" : "warn");
+      });
+      return row;
+    }
     case "figma": {
       const row = rowShell(it, `<button type="button" class="ts-btn sm" id="figma-toggle"><span>…</span></button>`);
       const main = row.querySelector(".ts-row-main");
@@ -1109,7 +1224,9 @@ function refreshPanelValues() {
   const kv = $("conn-kv"); if (kv && lastStatus) {
     const s = lastStatus; const isLocal = s.engine === "local";
     const figmaState = figmaStatusState(s, true);
-    const rows = [["Bridge", s.connected ? "connected" : s.reconnecting ? "reconnecting…" : "offline"], ["Engine", isLocal ? "AgentScript (ws 17615)" : "Roblox (ws 17613)"], ["Lifecycle", s.lifecycle || "—"], ["Studio MCP", isLocal ? "n/a" : s.roblox_connected ? "linked to a place" : s.studioApp ? "on, no place" : s.studioProc ? "Studio open, MCP off" : "not detected"], ["Tools", String(s.tools || 0)], ["Servers", (s.servers || []).map((x) => `${x.id} ${x.status === "unknown" ? "?" : x.alive ? "●" : "○"}`).join("  ") || "—"], ["Blender", s.blender ? "linked" : s.blender_error ? `error: ${s.blender_error}` : "not linked"], ["Figma MCP", figmaState === "unknown" ? "status unknown" : figmaState]];
+    const figmaPluginState = s.figma_plugin_status === "connected" && s.figma_plugin_verified === true && s.figma_plugin_connected === true
+      ? "connected" : s.figma_plugin_status === "disconnected" && s.figma_plugin_verified === true && s.figma_plugin_connected === false ? "disconnected" : "status unknown";
+    const rows = [["Bridge", s.connected ? "connected" : s.reconnecting ? "reconnecting…" : "offline"], ["Engine", isLocal ? "AgentScript (ws 17615)" : "Roblox (ws 17613)"], ["Lifecycle", s.lifecycle || "—"], ["Studio MCP", isLocal ? "n/a" : s.roblox_connected ? "linked to a place" : s.studioApp ? "on, no place" : s.studioProc ? "Studio open, MCP off" : "not detected"], ["Tools", String(s.tools || 0)], ["Servers", (s.servers || []).map((x) => `${x.id} ${x.status === "unknown" ? "?" : x.alive ? "●" : "○"}`).join("  ") || "—"], ["Blender", s.blender ? "linked" : s.blender_error ? `error: ${s.blender_error}` : "not linked"], ["Figma Design plugin", figmaPluginState], ["Figma Desktop MCP", figmaState === "unknown" ? "status unknown" : figmaState]];
     kv.innerHTML = rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd class="ts-wrap">${esc(v)}</dd>`).join("");
   }
 }

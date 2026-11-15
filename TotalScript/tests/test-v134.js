@@ -1,5 +1,5 @@
 "use strict";
-// 1.34.0: batched command execution (up to 6 independent commands per reply,
+// 1.34.0: batched command execution (up to 4 independent commands per reply,
 // one combined result), work modes 2.0 (shared OPERATING LOOP + distinct
 // profiles, light mode-switch rider, reminder checklist, quick starts), and
 // the system-prompt diet that came with it.
@@ -7,6 +7,7 @@ const fs = require("fs"), assert = require("assert"), vm = require("vm");
 const main = fs.readFileSync("src/core/main.js", "utf8");
 const config = fs.readFileSync("src/core/config.js", "utf8");
 const parser = fs.readFileSync("src/core/parser.js", "utf8");
+const readme = fs.readFileSync("README.md", "utf8");
 let passed = 0;
 function ok(name, cond, extra) { if (!cond) { console.error("FAIL  " + name + (extra ? " :: " + extra : "")); process.exitCode = 1; } else { passed++; } }
 
@@ -23,14 +24,16 @@ const calls = RSParse.parseToolCalls(reply);
 ok("parser returns every command of a multi-command reply (curly quotes included)", calls.length === 4, String(calls.length));
 ok("parser keeps the order (json, json, lua, json)", calls.map((c) => c.tool).join(",") === "part_create,part_create,execute_luau,part_create");
 ok("curly-quoted command parsed with its args", calls[1] && calls[1].arguments && calls[1].arguments.name === "Wall_N");
+const fiveCommandReply = Array.from({ length: 5 }, (_, i) => ["```json", JSON.stringify({ command: "part_create", params: { name: "Part_" + i } }), "```"].join("\n")).join("\n");
+ok("parser preserves over-limit replies so the execution loop can reject them safely", RSParse.parseToolCalls(fiveCommandReply).length === 5);
 
-ok("open-block detection judges the LAST json envelope", RSParse.hasOpenToolBlock('{"command":"a","params":{}}\n{"command":"b","params":{"x":') === true && RSParse.hasOpenToolBlock('{"command":"a","params":{}}\n{"command":"b","params":{}}') === false);
+ok("open-block detection judges the LAST json envelope",  RSParse.hasOpenToolBlock('{"command":"a","params":{}}\n{"command":"b","params":{"x":') === true && RSParse.hasOpenToolBlock('{"command":"a","params":{}}\n{"command":"b","params":{}}') === false);
 ok("open-block detection judges the LAST lua block", RSParse.hasOpenToolBlock("###LUA###\nreturn 1\n###END_LUA###\n###LUA###\nreturn 2") === true && RSParse.hasOpenToolBlock("###LUA###\nreturn 1\n###END_LUA###\n###LUA###\nreturn 2\n###END_LUA###") === false);
 ok("json envelope wrapping execute_luau with inner markers is one call", RSParse.parseToolCalls('{"command":"execute_luau","params":{"code":"###LUA###\\nreturn 1\\n###END_LUA###"}}').length === 1);
 ok("lua block whose code contains a json-looking string is one call", RSParse.parseToolCalls('###LUA###\nlocal s = \'{"command": "x"}\'\nreturn s\n###END_LUA###').length === 1);
 
 // ── main.js: the batch loop ───────────────────────────────────────────────────
-ok("MAX_BATCH_COMMANDS defaults to 6 (provider override, hard cap 8)", main.includes("const MAX_BATCH_COMMANDS = Math.max(1, Math.min(8, Number(P.maxBatchCommands) || 6));"));
+ok("MAX_BATCH_COMMANDS defaults to 4 (provider may lower it, hard cap 4)", main.includes("const MAX_BATCH_COMMANDS = Math.max(1, Math.min(4, Number(P.maxBatchCommands) || 4));"));
 ok("over the cap we still ask for a smaller reply (with the limit)", main.includes("if (calls.length > MAX_BATCH_COMMANDS) {") && main.includes("RS.FEEDBACK.multiTool(calls.map((c) => c.tool || \"?\"), MAX_BATCH_COMMANDS)"));
 ok("the old one-command rejection is gone", !main.includes("Model proposed multiple commands — requesting one safe step"));
 ok("identical repeats in one reply run once", main.includes("1.34: identical repeats in one reply") && main.includes('diag("tool.dedupe"'));
@@ -47,12 +50,14 @@ ok("chip summarises the batch", main.includes("const chipName = batchN > 1 ? `${
 global.window = global; global.chrome = { runtime: { getURL: () => "" }, storage: { local: { get() {}, set() {} } } };
 vm.runInThisContext(config + ";globalThis.__RS=RS;", { filename: "config.js" });
 const RS = globalThis.__RS;
-const mt = RS.FEEDBACK.multiTool(["a", "b", "c", "d", "e", "f", "g"], 6);
-ok("multiTool feedback names the limit and says nothing ran", /too many commands in one reply \(7; the limit is 6\)/.test(mt) && /Nothing was run/.test(mt));
-ok("full prompt rules teach batching", config.includes("BATCHING: up to 6 INDEPENDENT commands per reply, each in its own block; they run in order and you get ONE combined result"));
-ok("compact prompt rules teach batching", config.includes("BATCHING: up to 6 INDEPENDENT commands per reply - they run in order and you get ONE combined result"));
-ok("AgentScript prompt teaches batching", config.includes("Up to 6 INDEPENDENT commands per reply (they run in order, one combined result; a failed step stops the batch)"));
-ok("no 'ONE command per reply' rule left", !/ONE command (block )?per reply/.test(config));
+const mt = RS.FEEDBACK.multiTool(["a", "b", "c", "d", "e"], 4);
+ok("multiTool feedback enforces the limit of 4 and says nothing ran", /too many commands in one reply \(5; the limit is 4\)/.test(mt) && /Nothing was run/.test(mt) && /dependent commands for a later reply/.test(mt));
+ok("full prompt rules teach a 4-command batch and dependency-aware sequencing", config.includes("BATCHING: up to 4 independent commands per reply, one block each; run in order, return one combined result") && config.includes("Wait for a result before any dependent command"));
+ok("compact prompt rules teach batching up to 4", config.includes("Batch up to 4 independent commands per reply, in order, with one combined result"));
+ok("AgentScript prompt teaches batching up to 4", config.includes("Up to 4 INDEPENDENT commands per reply (they run in order, one combined result; a failed step stops the batch)"));
+ok("no stale one-command-per-reply rule remains in core prompts", !/ONE command (block )?per reply|One command per turn|Next: one command|issue at most one next command/.test(config));
+ok("README documents the hard four-command ceiling, lower provider caps and whole-batch rejection", readme.includes("providers may lower the limit but cannot raise the hard ceiling") && readme.includes("rejected as a whole before any command runs") && readme.includes("dependent operations wait for a later reply"));
+ok("README marks the old 8/6 provider limits as historical", readme.includes("that historical limit was superseded by 1.34.0's hard cap of 4 across providers"));
 
 // ── prompt diet ───────────────────────────────────────────────────────────────
 for (const wm of ["creation"]) {

@@ -37,7 +37,7 @@
   const CHAT_URL_RE = /\/api\/(public\/chat|chat\/stream|chat\/completions|chat|conversations\/[^/]+\/messages|messages)(\?|$)/i;
   const PIN = [
     MARK + " This chat is live-linked to the user's Roblox Studio by a browser extension that EXECUTES the command you write and pastes the result back as the next user message.",
-    "Reply with exactly ONE command block inside a fenced code block - no JSON needed: ###LUA### + your Luau + ###END_LUA### for Studio code, or ###CMD name### + one key: value line per parameter + ###END_CMD### for any other command - then stop and wait for the result.",
+    "Reply with up to 4 independent command blocks, one in each fenced code block, in execution order - no JSON needed: ###LUA### + your Luau + ###END_LUA### for Studio code, or ###CMD name### + one key: value line per parameter + ###END_CMD### for any other command. Wait for results before commands that depend on them.",
     "Writing the block IS the tool call: never say you cannot run commands or use command blocks, never describe a command instead of writing it, and never show Luau in a bare lua fence without the ###LUA### markers - shown code is not executed.",
     // 1.76.0 — logged-in Vani hands the model its own tool list (web search,
     // Document / Slides / Design, code runs). Models then answer "I can only use

@@ -53,7 +53,7 @@ for (const b of manifest.content_scripts.filter((c) => c.world !== "MAIN" && c.j
 providers.sort((a, b) => a.id.localeCompare(b.id));
 ok("adapters loaded for the benchmark: " + providers.map((p) => p.id).join(", "), providers.length >= 10); // 1.89.0: 12 bundles after the provider removal; 2.21.0: 11 (meta removed); 2.21.0: 10 (notion removed)
 // The desktop app (total-agent, OpenAI-compatible HTTP) is benchmarked from its source pins.
-providers.push({ id: "total-agent", P: null, caps: { id: "total-agent", name: "total-agent (HTTP tools)", vision: false, tightPrompt: false, sysMaxChars: 0, sendCharBudget: 0, maxBatchCommands: 8, timings: {} }, rust: true });
+providers.push({ id: "total-agent", P: null, caps: { id: "total-agent", name: "total-agent (HTTP tools)", vision: false, tightPrompt: false, sysMaxChars: 0, sendCharBudget: 0, maxBatchCommands: 4, timings: {} }, rust: true });
 
 // ── the 12 scenarios ──
 // Each returns { pass: bool, note } for one provider. `c` = capability record.
@@ -81,9 +81,9 @@ const SCENARIOS = [
     return { pass: v.problems.length === 0 && v.args.timeout === 5 && /ORCH\.validateToolArgs\(/.test(main), note: "coerced " + v.coerced.join(",") };
   }],
   ["multi tool calls", (p) => {
-    if (p.rust) return { pass: /for \(i, \(id, name, args\)\) in calls/.test(rs) || /calls\.iter\(\)\.enumerate\(\)/.test(rs) || /for \(id, name, args\) in/.test(rs), note: "sequential tool loop with per-call ids (source pin)" };
+    if (p.rust) return { pass: /MAX_TOOL_CALLS_PER_REPLY: usize = 4/.test(rs) && /exceeds_tool_batch_limit\(calls\.len\(\)\)/.test(rs) && /Nothing in this reply was run/.test(rs), note: "hard cap 4 rejects the entire oversized reply; per-call ids stay paired" };
     const n = p.caps.maxBatchCommands;
-    return { pass: Number.isInteger(n) && n >= 1 && n <= 8, note: `batch cap ${n}` };
+    return { pass: Number.isInteger(n) && n >= 1 && n <= 4, note: `batch cap ${n}` };
   }],
   ["error recovery", (p) => {
     if (p.rust) return { pass: /transient_retries < 2/.test(rs) && /ErrClass::Permanent/.test(rs) && /last_fail_count >= 4/.test(rs), note: "≤2 transient retries, permanent = stop, repeat-failure guard (source pin)" };

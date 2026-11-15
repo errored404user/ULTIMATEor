@@ -7,8 +7,8 @@
 // crew protocol with a shared board:
 //
 //   planner  → writes GOAL + numbered PLAN on the board (read-only)
-//   builder  → modeling / instances / UI, ONE mutating command per reply
-//   scripter → Luau, ONE mutating command per reply
+//   builder  → modeling / instances / UI, up to 4 independent commands per reply
+//   scripter → Luau, up to 4 independent commands per reply
 //   reviewer → read-only inspection, records FINDINGS
 //   tester   → playtests (start_stop_play, console, screenshots) and VERIFIES
 //   debugger → total_debug first, then the smallest fix
@@ -35,15 +35,15 @@ const TotalAgentCrew = (() => {
     },
     builder: {
       title: "Builder", badge: "BUILD", mutates: true,
-      brief: "Modeling, instances, terrain, UI and properties for the CURRENT step. Finished parts only: anchored, named, materials and colors set, grouped into a named Model with a PrimaryPart, placed where the plan says. Prefer one well-formed command (execute_luau builds a whole model in one go) over many tiny ones. Read what you touch before you change it.",
+      brief: "Modeling, instances, terrain, UI and properties for the CURRENT step. Finished parts only: anchored, named, materials and colors set, grouped into a named Model with a PrimaryPart, placed where the plan says. Use up to 4 independent commands in one reply when useful (execute_luau can build a whole model in one call); wait for results before dependent operations. Read what you touch before you change it.",
       next: "When the step is visibly complete, advance: total_agent {\"role\":\"builder\"|\"scripter\", \"step\":N+1, \"task\":\"...\"}. After the last build step, or every 4 changes, hand off: total_agent {\"role\":\"reviewer\", \"task\":\"verify steps ...\"}.",
-      allowed: "any command, ONE per reply.",
+      allowed: "any command, up to 4 independent commands per reply; keep dependent steps separate.",
     },
     scripter: {
       title: "Scripter", badge: "LUAU", mutates: true,
       brief: "Luau for the CURRENT step. script_read / script_outline before editing, script_backup before a rewrite, then the smallest write (script_set_source / multi_edit / script_create). Production Luau: typed where cheap, services via GetService, WaitForChild with timeouts, no loadstring, server authority for anything that matters, RemoteEvents validated on the server, connections cleaned up. After the write, script_lint or script_check it.",
       next: "When the step compiles clean, advance with total_agent {\"step\":N+1,...} or hand off to the reviewer: total_agent {\"role\":\"reviewer\", \"task\":\"review <script paths>\"}.",
-      allowed: "any command, ONE per reply.",
+      allowed: "any command, up to 4 independent commands per reply; keep dependent steps separate.",
     },
     reviewer: {
       title: "Reviewer", badge: "REVIEW", mutates: false,
@@ -61,7 +61,7 @@ const TotalAgentCrew = (() => {
       title: "Debugger", badge: "DEBUG", mutates: true,
       brief: "total_debug {} first, then reproduce (start_stop_play if needed), read the script around the failing line (script_read with a range), fix the CAUSE with the smallest command, add a guard so it cannot silently recur, total_debug again. First error only. Do not widen scope, do not refactor.",
       next: "Console clean → total_agent {\"role\":\"tester\", \"task\":\"re-run the playtest\"}. Fixed one of several findings → stay debugger and take the next finding.",
-      allowed: "any command, ONE per reply.",
+      allowed: "any command, up to 4 independent commands per reply; keep dependent steps separate.",
     },
   };
 
@@ -257,7 +257,7 @@ const TotalAgentCrew = (() => {
     lines.push(`HAND OFF: ${def.next}`);
     if (role === "planner" && S.plan.length) lines.push("NOTE: a plan already exists — revise it only if the request changed, otherwise hand off to the owner of the current step.");
     if (MUTATOR_ROLES.has(role) && !S.plan.length && S.handoffs > 1) lines.push("NOTE: no plan on the board. Pass plan:[...] with your next total_agent call so progress can be tracked.");
-    lines.push(`Reply as the ${def.title} only. ONE command per reply.`);
+    lines.push(`Reply as the ${def.title} only. Use up to 4 independent commands per reply; issue dependent commands after their result.`);
     return lines.join("\n");
   }
 
@@ -298,7 +298,7 @@ const TotalAgentCrew = (() => {
       S.guardHits = 0;
       S.handoffs++;
       S.history.push({ role: promoted, task: "auto-promoted from " + was, at: Date.now() });
-      S.notes.push(`[CREW] Auto-handoff: the ${was} tried to change the place twice, so you are now the ${ROLES[promoted].title}. Keep ONE command per reply and hand off to the reviewer after this step.`);
+      S.notes.push(`[CREW] Auto-handoff: the ${was} tried to change the place twice, so you are now the ${ROLES[promoted].title}. Use up to 4 independent commands per reply; keep dependent commands separate and hand off to the reviewer after this step.`);
       emit();
       return null;
     }
@@ -406,7 +406,7 @@ const TotalAgentCrew = (() => {
     return [
       "━━━ MULTI-AGENT (user enabled) ━━━",
       "You are a crew of specialists sharing one board. Hand off with total_agent {role, task, goal?, plan?:[...], step?, step_done?, findings?:[...], fixed?:[...], summary?}; the result shows the board (GOAL, PLAN with [x]/[>]/[ ], FINDINGS) and your brief.",
-      "Roles: planner (read-only: GOAL + numbered PLAN with owners), builder (modeling/instances/UI, ONE mutating command per reply), scripter (Luau, ONE mutating command per reply), reviewer (read-only audit → FINDINGS), tester (start_stop_play + console + screenshot → verifies), debugger (total_debug first, smallest fix). done = finish.",
+      "Roles: planner (read-only: GOAL + numbered PLAN with owners), builder (modeling/instances/UI), scripter (Luau), reviewer (read-only audit → FINDINGS), tester (start_stop_play + console + screenshot → verifies), debugger (total_debug first, smallest fix). Any role may use up to 4 independent commands per reply; wait for results before dependent commands. done = finish.",
       "Rules: start as planner unless a role is already assigned. Read-only roles cannot mutate — the ROLE GUARD refuses and tells you how to hand off. Advance the plan with step:N / step_done:N. Every 4 changes, or when a step is complete, hand off to the reviewer; the reviewer hands to tester (clean) or debugger (findings). total_agent {role:\"done\"} is REFUSED until the tester verified a clean run after the last change and no findings are open — then report to the user.",
       "Never play several roles in one reply. [CREW] lines appended to results are the board talking: follow them.",
     ].join("\n");

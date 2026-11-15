@@ -1067,7 +1067,7 @@
     templates:{title:"Templates",summary:"Reusable task recipes (name, instructions, steps, commands, variables) saved locally and run from the Templates library in the TotalScript menu.",details:["Open the TotalScript menu → Templates. New template opens the editor with Basics, Instructions, Steps, Project, Commands, Variables, Validation, AI Improvement and Versions tabs.","Templates can be imported/exported as JSON and versioned; AI Improvement asks the current provider for a structurally better draft that you approve before it is saved.","The agent can list and run them with the template_* commands (get_template, template_list, template_run_…) - nothing is mutated without your save."],howTo:["TotalScript menu → Templates → New template","Fill Basics + Instructions, optionally attach a Roblox project in the Project tab","Save, then type the template name or pick it from the library"]},
     commands:{title:"Commands / tool registry",summary:"TotalScript exposes 630+ advertised Studio commands (plus hidden legacy aliases, workspace, template and help tools) through an embedded catalogue in the system prompt (and a broad list_commands on tight providers). Since 1.37.1 the agent never searches commands: the catalogue is final and lookups are answered with the closest signatures plus an instruction to act.",details:["Since 1.33 roomy providers receive a compact command catalogue inside the system prompt (universal block + the active work mode's family as signatures, the rest as names), so the agent no longer starts every session with list_commands; tight-composer providers (Vani, CodeCraft) still get the catalogue as the first tool result.","list_commands returns the catalogue for the active work mode: a UNIVERSAL block (42 inspection/scripting/verification commands present in every mode, including inspect_service and query_instances) followed by the mode family.","No command searching (1.37.1): search_commands / get_command / command_registry_stats / generate_command_docs are no longer advertised and list_commands {query} no longer opens a search - the agent gets at most five closest signatures and must act (or use execute_luau). A wrong parameter returns the exact schema in the error, so no lookup is ever needed.","Commands are executed through total-core (127.0.0.1:3000) - either the Studio MCP helper or the TotalScript Studio plugin when it is connected."],howTo:["Ask: 'what can you do with lights'","The agent answers from the catalogue in its instructions and runs the command directly - it does not search"]},
     studio:{title:"Roblox Studio connection",summary:"The browser extension talks to the total-core desktop agent on 127.0.0.1:3000, which bridges to Studio through the Studio MCP helper and the optional TotalScript Studio plugin.",details:["Run total-core (agent/ crate, cargo build) once; it stays in the background and auto-installs plugin/TotalScript.lua into the Studio Plugins folder.","In Studio: Plugins → TotalScript panel → enable; click Allow on the HTTP prompt. The plugin runs execute_luau with plugin-level APIs and adds csg_*, open_script, script_live_update, studio_undo/redo, screenshot_frame, gamepass_handler_create…","total_status / studio_plugin_status report the connection; total_screenshot captures the Studio window through the MCP screen_capture tool."],howTo:["Start total-core","Open the place in Studio and enable the TotalScript plugin","Check the status pill in the TotalScript bar is green, then chat"]},
-    workmode:{title:"Work mode: Totality",summary:"There is ONE built-in work mode, Totality (named Creation until 1.73): the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. (Custom Public-Skill work modes were retired in 2.21.0 - Public Skills are skills only; their knowledge rides along when the request matches.)",details:["Totality runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 6 commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → total_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Totality automatically; custom modes created on an old base keep working on Totality.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send.","Two more built-in modes sit next to Totality: Blender (1.95.0, stored id blender - Blender-first 3D asset pipeline -> Studio) and Animator (1.99.4, stored id animate - rig -> clip -> animation_preview on the actual rig -> playback code through the Animator -> play-test, on R6 and R15; its RIG and PLAYBACK gates demand a preview and a play-tested playback script). The old pre-1.39 Animator id still migrates to Totality; the new mode is a different id."],howTo:["TotalScript menu → Work mode → Totality (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
+    workmode:{title:"Work mode: Totality",summary:"There is ONE built-in work mode, Totality (named Creation until 1.73): the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. (Custom Public-Skill work modes were retired in 2.21.0 - Public Skills are skills only; their knowledge rides along when the request matches.)",details:["Totality runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 4 independent commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → total_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Totality automatically; custom modes created on an old base keep working on Totality.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send.","Two more built-in modes sit next to Totality: Blender (1.95.0, stored id blender - Blender-first 3D asset pipeline -> Studio) and Animator (1.99.4, stored id animate - rig -> clip -> animation_preview on the actual rig -> playback code through the Animator -> play-test, on R6 and R15; its RIG and PLAYBACK gates demand a preview and a play-tested playback script). The old pre-1.39 Animator id still migrates to Totality; the new mode is a different id."],howTo:["TotalScript menu → Work mode → Totality (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
     projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .totalscript-project-reference.json you can re-import."],howTo:["TotalScript menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
     permissions:{title:"Access: Sandbox only / Full PC",summary:"Two states since 1.99.5. Sandbox only (default) = Studio + the workspace folder; commands that leave it (run_command, process_kill, delete_path, move_path, download_file, open_path, execute_blender_code, blender_export_fbx) are refused with ERROR ACCESS_SANDBOX - no approval card. Full PC = those run directly and total-core's FULL PC ACCESS is switched on with it.",details:["Sandbox only never asks and never runs anything on the PC - ideal for Studio-only work; the refusal tells you which step needs Full PC and offers a one-click switch.","Full PC is one switch in two places: Settings → Access and the Session panel's Danger zone. Picking it persists rsPermMode and pushes FULL PC ACCESS to total-core (the agent's own state is mirrored back into the Session panel).","The old Ask state (confirm every write) was removed; a stored 'ask' reads as Sandbox only.","Publishing / marketplace changes always show a confirmation card unless the 'Allow publish automation' switch is on; it auto-denies after 120 s so a hidden card cannot stall the agent."],howTo:["TotalScript menu → Access → Sandbox only / Full PC","Session panel → Danger zone → FULL PC (same switch)"]},
     providers:{title:"Chat providers",summary:"TotalScript runs inside ChatGPT, Claude, Gemini, Google AI Studio, DeepSeek, Qwen, Kimi, GLM, Arena, Vani, HuggingChat, OpenRouter Chat and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["CodeCraft API (codecraftapi.com) has no web chat, so TotalScript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","Compact composers (Vani, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Vani guest mode is text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the TotalScript bar appears above the composer"]},
@@ -2285,6 +2285,7 @@
       try { perm = (window.__rsPermMode && window.__rsPermMode()) || "sandbox"; } catch {}
       const blender = !!bridge.blender;
       const figmaState = figmaStatusState(bridge, true);
+      const figmaDesignPluginState = figmaPluginStatusState(bridge);
       // Browser↔total-core connectivity is not Studio connectivity. total-core can be
       // healthy and keep cached schemas while Roblox Studio is closed. Never tell
       // the model STUDIO LINKED from the generic bridge bit again.
@@ -2301,7 +2302,7 @@
         env = studioLinked ? " | STUDIO LINKED" : " | STUDIO UNLINKED";
       }
       try { if (typeof TotalTaskList !== "undefined") env += TotalTaskList.stateTag(); } catch {}
-      return `[SYSTEM_STATE: ENGINE=${eng} | WORK=${wm} | EXTRA=${extra} | PLAN=${plan} | DEBUG=${dbg} | MULTI=${multi} | THINK=${lvl} | PERM=${perm}${env} | BRIDGE ${connected ? "UP" : "DOWN"} | BLENDER ${blender ? "ON" : "OFF"} | FIGMA ${figmaState.toUpperCase()} | TOOLS ${n}]\nMODE LOCK: stay on ${eng}. Obey WORK/EXTRA/PLAN/THINK/DEBUG/MULTI this turn. ONE command per reply.\n${(RS.FEEDBACK && RS.FEEDBACK.creationFocus) || ""}`;
+      return `[SYSTEM_STATE: ENGINE=${eng} | WORK=${wm} | EXTRA=${extra} | PLAN=${plan} | DEBUG=${dbg} | MULTI=${multi} | THINK=${lvl} | PERM=${perm}${env} | BRIDGE ${connected ? "UP" : "DOWN"} | BLENDER ${blender ? "ON" : "OFF"} | FIGMA_DESKTOP_MCP ${figmaState.toUpperCase()} | FIGMA_DESIGN_PLUGIN ${figmaDesignPluginState.toUpperCase()} | TOOLS ${n}]\nMODE LOCK: stay on ${eng}. Obey WORK/EXTRA/PLAN/THINK/DEBUG/MULTI this turn. Use up to 4 independent commands per reply; wait for results before dependent commands.\n${(RS.FEEDBACK && RS.FEEDBACK.creationFocus) || ""}`;
     } catch { return ""; }
   }
   function currentEngineIsLive() {
@@ -3763,6 +3764,21 @@
     return figmaStatusState(A.bridge, true);
   }
   function figmaConnected() { return figmaStatusState(A.bridge, true) === "connected"; }
+  // Figma Design plugin liveness comes from total-core's separate pairing hub;
+  // it must never be inferred from the Figma Desktop MCP status or tool cache.
+  const FIGMA_PLUGIN_UI_STATUS_MAX_AGE_MS = 12000;
+  function figmaPluginStatusState(bridge) {
+    const b = bridge || A.bridge || {};
+    const status = b.figma_plugin_status;
+    const verified = b.figma_plugin_verified;
+    const connected = b.figma_plugin_connected;
+    const checkedAt = Number(b.figma_plugin_checked_at);
+    const age = Date.now() - checkedAt;
+    const consistent = (status === "connected" && connected === true) || (status === "disconnected" && connected === false);
+    if (verified !== true || !consistent || !Number.isFinite(checkedAt) || checkedAt <= 0 || age < -1000 || age > FIGMA_PLUGIN_UI_STATUS_MAX_AGE_MS) return "unknown";
+    return status;
+  }
+  function figmaPluginConnected() { return figmaPluginStatusState(A.bridge) === "connected"; }
   function startModePreflight() {
     A.modeBrief = null;
     try { if (A.explorerTarget) A.explorerTarget.sent = false; } catch {}
@@ -5082,7 +5098,8 @@
       return (
         `Output of 'list_mcp_servers':\n` +
         `Connected MCP servers (${lines.length}):\n${lines.join("\n")}\n` +
-        `Use list_commands with a "server" param (one of the ids above) to see that server's exact commands. Without "server", list_commands defaults to "${curEng2}".`
+        `Use list_commands with a "server" param (one of the ids above) to see that server's exact commands. Without "server", list_commands defaults to "${curEng2}".\n` +
+        `Figma Design plugin uses server "figma_plugin" and runs inside the normal Figma Design editor through the paired local plugin on port 3000; it does not use Dev Mode, a Figma API key, or the separate Figma Desktop MCP server "figma".`
       );
     }
     // Virtual command: list available commands with full details. Defaults to
@@ -5170,7 +5187,7 @@
         ui: "ScreenGui in StarterGui. Scale not offset. Named instances. Default grey Frames are not finished art.",
         physics: "Anchored skips simulation. PhysicsService collision groups. Debris:AddItem for timed cleanup.",
         tween: "TweenService:Create(inst, TweenInfo.new(t), props):Play(). Set a ChangeHistoryService waypoint first.",
-        general: "Build objects first, then scripts that WaitForChild them. inspect_instance / search_game_tree before guessing paths. One command per turn."
+        general: "Build objects first, then scripts that WaitForChild them. inspect_instance / search_game_tree before guessing paths. Batch up to 4 independent commands per reply; wait for results before dependent work."
       };
       const hit = packs[key] || packs.debug;
       for (const k of Object.keys(packs)) { if (key.indexOf(k) >= 0) { return "Output of 'skill':\n" + k + "\n" + packs[k]; } }
@@ -5263,7 +5280,7 @@
         debugger: "You are the DEBUGGER agent. Read console via total_debug, then apply the smallest fix. Do not expand scope.",
       };
       const brief = briefs[role] || briefs.builder;
-      return "Output of 'total_agent':\nROLE=" + role + "\n" + brief + "\nTASK: " + (task || "(continue the user's request)") + "\nReply as this agent only. ONE command.";
+      return "Output of 'total_agent':\nROLE=" + role + "\n" + brief + "\nTASK: " + (task || "(continue the user's request)") + "\nReply as this agent only. Use up to 4 independent commands per reply; keep dependent steps separate.";
     }
     if (name === "total_status" || name === "status") {
       let extra = false, plan = false, lvl = "default", wm = "creation", perm = "sandbox", autoDbg = true, multi = false;
@@ -5292,6 +5309,8 @@
         blender: !!bridge.blender,
         figma_mcp: figmaStatusState(bridge, true),
         figma_tools: figmaStatusState(bridge, true) === "connected" ? Number(bridge.figma_tools) || 0 : 0,
+        figma_design_plugin: figmaPluginStatusState(bridge),
+        figma_design_plugin_tools: figmaPluginStatusState(bridge) === "connected" ? Number(bridge.figma_plugin_tools) || 0 : 0,
         tools: A.toolList.length || 0,
         agent_started: !!A.started,
         agent_running: !!A.running,
@@ -5413,7 +5432,7 @@
       let skillLines = (requested === "roblox" && typeof RobloxScriptSkills !== "undefined") ? RobloxScriptSkills.describeCommands({ includeHidden: !!commandQuery }) : [];
       const hiddenSkillNames = (requested === "roblox" && typeof RobloxScriptSkills !== "undefined" && RobloxScriptSkills.hiddenCommandNames) ? RobloxScriptSkills.hiddenCommandNames() : new Set();
       let agentLines = (requested === "local" && typeof AgentScriptSkills !== "undefined") ? AgentScriptSkills.describeCommands() : [];
-      let webLines = [`— Screenshot: total_screenshot {target?: auto|studio|game|viewport|blender|tab} — PHOTO of the real Studio/game viewport when MCP is on. Use target:studio or game for gameplay; target:tab is only for this browser chat. A failed Studio capture returns an error and NEVER substitutes the browser. NOT capture_id (IDs only).`, `— Debugger: total_debug {} — classified Output errors + NEXT fix. Automatic Debugger appends new errors after edits.`, `— Templates: get_template {name} searches the place then Creator Store and CLONES a match.`, `— TotalScript Status: total_status {} — live engine, work mode, extra thinking, bridge, blender. Call this if you are unsure which mode you are in.`, `— Web Tools (TotalScript bridge, no Studio needed): web_search {query, limit?} — result titles/URLs/snippets; web_fetch {url?, query?, max_chars?} — page text or searches then fetches a top result. For research, search, fetch a source, and cite the returned URL.`, `— IDs (not a photo): capture_id {path?} — UniqueId + MeshId/Image/SoundId/AnimationId from the Studio selection. For a PHOTO use total_screenshot.`, `— Screenshot: total_screenshot {target?: auto|studio|game|viewport|tab|blender} — capture Studio/game through MCP and attach it to the next message. Use tab only for the browser. Aliases: screenshot, take_screenshot, send_screenshot.`, `— Debugger: total_debug {} — Studio LogService errors/warnings. Automatic Debugger (Settings) appends new errors after mutating commands.`, `— Multi-Agent: total_agent {role: planner|builder|scripter|reviewer|tester|debugger|done, task?, goal?, plan?:[...], step?, step_done?, findings?:[...], fixed?:[...], summary?} — hand off to a specialist on a shared board (plan, findings, verification). Read-only roles are guarded; done is refused until the tester verified. Enable Multi-Agent in Settings.`, `— Developer Products: developer_product_create {name, price, description?, reward?} — create a real Roblox Developer Product on this published universe (sign into roblox.com in Chrome). developer_product_list {} lists them. Aliases: create_developer_product, create_dev_product.`];
+      let webLines = [`— Screenshot: total_screenshot {target?: auto|studio|game|viewport|blender|tab} — PHOTO of the real Studio/game viewport when MCP is on. Use target:studio or game for gameplay; target:tab is only for this browser chat. A failed Studio capture returns an error and NEVER substitutes the browser. NOT capture_id (IDs only).`, `— Debugger: total_debug {} — classified Output errors + NEXT fix. Automatic Debugger appends new errors after edits.`, `— Templates: get_template {name} searches the place then Creator Store and CLONES a match.`, `— TotalScript Status: total_status {} — live engine, work mode, extra thinking, bridge, blender. Call this if you are unsure which mode you are in.`, `— Web Tools (TotalScript bridge, no Studio needed): web_search {query, limit?} — result titles/URLs/snippets; web_fetch {url?, query?, max_chars?} — page text or searches then fetches a top result. For research, search, fetch a source, and cite the returned URL.`, `— Figma Design plugin: use list_mcp_servers, then list_commands {server:"figma_plugin"} for the separately paired plugin inside Figma Design. This is distinct from Figma Desktop MCP {server:"figma"}; no Dev Mode or Figma API key is required.`, `— IDs (not a photo): capture_id {path?} — UniqueId + MeshId/Image/SoundId/AnimationId from the Studio selection. For a PHOTO use total_screenshot.`, `— Screenshot: total_screenshot {target?: auto|studio|game|viewport|tab|blender} — capture Studio/game through MCP and attach it to the next message. Use tab only for the browser. Aliases: screenshot, take_screenshot, send_screenshot.`, `— Debugger: total_debug {} — Studio LogService errors/warnings. Automatic Debugger (Settings) appends new errors after mutating commands.`, `— Multi-Agent: total_agent {role: planner|builder|scripter|reviewer|tester|debugger|done, task?, goal?, plan?:[...], step?, step_done?, findings?:[...], fixed?:[...], summary?} — hand off to a specialist on a shared board (plan, findings, verification). Read-only roles are guarded; done is refused until the tester verified. Enable Multi-Agent in Settings.`, `— Developer Products: developer_product_create {name, price, description?, reward?} — create a real Roblox Developer Product on this published universe (sign into roblox.com in Chrome). developer_product_list {} lists them. Aliases: create_developer_product, create_dev_product.`];
       if (commandQuery) {
         const exactLine = (line) => {
           const match = String(line).match(/^\s*([A-Za-z_][\w.-]*)\s*[:({]/);
@@ -6237,9 +6256,9 @@
     // next answer slower. Keep the full reminder for normal providers, but make
     // the compact path substantially lighter while preserving recovery guidance.
     const REMIND_TOOLS_EVERY = P.compactCommandList ? 50 : 25;
-    // 1.34: how many commands one reply may carry (run in order, one combined
-    // result). Providers can lower it (P.maxBatchCommands); 1 disables batching.
-    const MAX_BATCH_COMMANDS = Math.max(1, Math.min(8, Number(P.maxBatchCommands) || 6));
+    // Hard ceiling: at most four commands per model reply. A provider may opt
+    // into a lower cap; dependent commands still need separate result turns.
+    const MAX_BATCH_COMMANDS = Math.max(1, Math.min(4, Number(P.maxBatchCommands) || 4));
     ui.showStop(true);
     ui.steeringProgress("waiting", "Waiting for the model's next action", 0);
     P.setInputLock(true); // prevent user from typing while the agent is active
@@ -6565,7 +6584,7 @@
             refuseRetries++;
             const bridge = bridgeInfo();
             diag("loop.capabilityRefuse", { n: refuseRetries, max: maxRefuse, providerCommandless, bridge: bridge ? { shaped: bridge.shaped, pinned: bridge.pinned, label: bridge.label } : undefined });
-            try { ui.toast(`Model replied without acting — requesting one command… (${refuseRetries}/${maxRefuse})${bridge && bridge.label ? " · " + bridge.label : ""}`); } catch {}
+            try { ui.toast(`Model replied without acting — requesting an actionable reply… (${refuseRetries}/${maxRefuse})${bridge && bridge.label ? " · " + bridge.label : ""}`); } catch {}
             let retryFeedback = refuseRetries > 1 && P.commandlessRetryFeedbackFinal
               ? P.commandlessRetryFeedbackFinal
               : providerCommandless && P.commandlessRetryFeedback
@@ -12294,7 +12313,7 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       if (!A.running && !A.starting) { try { inputCover(false); } catch {} }
       try { syncSteeringUi(); } catch {}
       // Persona badge: only visible when a specialist persona is active.
-      
+
       try {
         const engEl = uiEl("rs-engine");
         if (engEl) {
@@ -12639,8 +12658,18 @@ SAFETY: Inspect the existing place first, use verified tools, and do not claim w
       const nextFigmaState = figmaStatusState(s, true);
       const previousFigmaTools = Number((A.bridge || {}).figma_tools) || 0;
       const nextFigmaTools = Number((s || {}).figma_tools) || 0;
-      if (previousFigmaState !== nextFigmaState || previousFigmaTools !== nextFigmaTools) A.toolsAt = 0;
+      const previousFigmaPluginState = figmaPluginStatusState(A.bridge);
+      const nextFigmaPluginState = figmaPluginStatusState(s);
+      const previousFigmaPluginTools = Number((A.bridge || {}).figma_plugin_tools) || 0;
+      const nextFigmaPluginTools = Number((s || {}).figma_plugin_tools) || 0;
+      const figmaPluginCatalogueChanged = previousFigmaPluginState !== nextFigmaPluginState || previousFigmaPluginTools !== nextFigmaPluginTools;
+      if (previousFigmaState !== nextFigmaState || previousFigmaTools !== nextFigmaTools || figmaPluginCatalogueChanged) A.toolsAt = 0;
       A.bridge = s;
+      if (figmaPluginCatalogueChanged && A.started) {
+        setTimeout(() => {
+          if (A.started) void ensureTools(true).catch((error) => diag("figmaPlugin.toolsRefreshFailed", { error: String(error && error.message || error) }));
+        }, 0);
+      }
       if (blockbenchStatusExpiryTimer) { clearTimeout(blockbenchStatusExpiryTimer); blockbenchStatusExpiryTimer = 0; }
       if (blockbenchStatusState(s) !== "unknown") {
         const checkedAt = Number(s && s.blockbench_checked_at);
@@ -14058,7 +14087,7 @@ rsInterval(() => {
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg && msg.type === "rs-status") {
-      ui.setStatus({ connected: msg.connected, mcpAlive: msg.mcpAlive, studio: msg.studio, studioApp: msg.studioApp, studioProc: msg.studioProc, robloxProc: msg.robloxProc, roblox_connected: msg.roblox_connected, engine: msg.engine, tools: msg.tools, servers: msg.servers, local_connected: msg.local_connected, local_full: msg.local_full, local_root: msg.local_root, blender: msg.blender, blender_shim: msg.blender_shim, blender_error: msg.blender_error, blockbench: msg.blockbench, blockbench_verified: msg.blockbench_verified, blockbench_status: msg.blockbench_status, blockbench_status_error: msg.blockbench_status_error, blockbench_checked_at: msg.blockbench_checked_at, blockbench_core_api: msg.blockbench_core_api, blockbench_bridge_connected: msg.blockbench_bridge_connected, blockbench_server_list_mismatch: msg.blockbench_server_list_mismatch, blockbench_call_mismatch: msg.blockbench_call_mismatch, blockbench_plugin_file: msg.blockbench_plugin_file, figma: msg.figma, figma_verified: msg.figma_verified, figma_status: msg.figma_status, figma_status_error: msg.figma_status_error, figma_checked_at: msg.figma_checked_at, figma_manual_disconnected: msg.figma_manual_disconnected, figma_tools: msg.figma_tools, lifecycle: msg.lifecycle, reconnecting: msg.reconnecting, manual: msg.manual });
+      ui.setStatus({ connected: msg.connected, mcpAlive: msg.mcpAlive, studio: msg.studio, studioApp: msg.studioApp, studioProc: msg.studioProc, robloxProc: msg.robloxProc, roblox_connected: msg.roblox_connected, engine: msg.engine, tools: msg.tools, servers: msg.servers, local_connected: msg.local_connected, local_full: msg.local_full, local_root: msg.local_root, blender: msg.blender, blender_shim: msg.blender_shim, blender_error: msg.blender_error, blockbench: msg.blockbench, blockbench_verified: msg.blockbench_verified, blockbench_status: msg.blockbench_status, blockbench_status_error: msg.blockbench_status_error, blockbench_checked_at: msg.blockbench_checked_at, blockbench_core_api: msg.blockbench_core_api, blockbench_bridge_connected: msg.blockbench_bridge_connected, blockbench_server_list_mismatch: msg.blockbench_server_list_mismatch, blockbench_call_mismatch: msg.blockbench_call_mismatch, blockbench_plugin_file: msg.blockbench_plugin_file, figma: msg.figma, figma_verified: msg.figma_verified, figma_status: msg.figma_status, figma_status_error: msg.figma_status_error, figma_checked_at: msg.figma_checked_at, figma_manual_disconnected: msg.figma_manual_disconnected, figma_tools: msg.figma_tools, figma_plugin_connected: msg.figma_plugin_connected, figma_plugin_verified: msg.figma_plugin_verified, figma_plugin_status: msg.figma_plugin_status, figma_plugin_status_error: msg.figma_plugin_status_error, figma_plugin_checked_at: msg.figma_plugin_checked_at, figma_plugin_tools: msg.figma_plugin_tools, figma_plugin_pairing_pending: msg.figma_plugin_pairing_pending, figma_plugin_pairing_expires_at: msg.figma_plugin_pairing_expires_at, lifecycle: msg.lifecycle, reconnecting: msg.reconnecting, manual: msg.manual });
     }
     if (msg && msg.type === "rs-open-menu") {
       ui.openMenu(false); // from the popup's Settings button — opens at the top (Switch AI / custom prompt)

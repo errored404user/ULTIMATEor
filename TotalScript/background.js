@@ -222,6 +222,17 @@ let figmaStatusBroadcastAt = 0;
 let figmaToolsCache = [];
 let figmaRefreshTask = null;
 let figmaManualDisconnected = false;
+// Figma Design's in-file plugin bridge is separate from Figma Desktop MCP.
+// This status comes from total-core's dedicated token-paired plugin hub only.
+let figmaPluginConnected = false;
+let figmaPluginVerified = false;
+let figmaPluginStatus = "unknown";
+let figmaPluginStatusError = "Figma Design plugin has not been verified";
+let figmaPluginCheckedAt = 0;
+let figmaPluginTools = 0;
+let figmaPluginPairingPending = false;
+let figmaPluginPairingExpiresAt = null;
+let figmaPluginStatusBroadcastAt = 0;
 let figmaManualReady = new Promise((resolve) => {
   let settled = false;
   const finish = () => { if (!settled) { settled = true; resolve(); } };
@@ -505,6 +516,9 @@ async function figmaDisconnect() {
   broadcastStatus();
   return figmaStatusPayload();
 }
+function isFigmaPluginToolName(name) {
+  return /^figma_plugin_[A-Za-z][A-Za-z0-9_.-]{0,54}$/.test(String(name || "").split("/").pop());
+}
 function isFigmaToolName(name) {
   return /^figma_[A-Za-z][A-Za-z0-9_.-]{0,54}$/.test(String(name || "").split("/").pop());
 }
@@ -560,15 +574,27 @@ function blenderServers(list, snapshot) {
   const oldFigma = input.find((s) => s && s.id === "figma");
   const bb = snapshot || bbStatusSnapshot();
   const figma = figmaStatusSnapshot();
-  const rest = input.filter((s) => s && s.id !== "blender" && s.id !== "blockbench" && s.id !== "figma");
+  const rest = input.filter((s) => s && s.id !== "blender" && s.id !== "blockbench" && s.id !== "figma" && s.id !== "figma_plugin");
   if (bb.known) rest.push(Object.assign({ id: "blockbench", name: "Blockbench" }, oldBb || {}, { alive: bb.connected, tools: bb.connected ? bbToolList().length : 0 }));
   if (blenderAddon) rest.push({ id: "blender", name: "Blender", alive: true, tools: BLENDER_TOOLS.length });
-  rest.push(Object.assign({ id: "figma", name: "Figma" }, oldFigma || {}, { alive: figma.connected, tools: figma.connected ? figmaToolsCache.length : 0, status: figma.state }));
+  rest.push({
+    id: "figma_plugin", name: "Figma Design plugin",
+    alive: figmaPluginVerified && figmaPluginConnected,
+    status: figmaPluginVerified ? figmaPluginStatus : "unknown",
+    tools: figmaPluginVerified && figmaPluginConnected ? figmaPluginTools : 0,
+  });
+  rest.push(Object.assign({ id: "figma", name: "Figma Desktop MCP" }, oldFigma || {}, { alive: figma.connected, tools: figma.connected ? figmaToolsCache.length : 0, status: figma.state }));
   return rest;
 }
 // App-specific MCP tools are merged only after their own connection is verified.
 function mergeBlenderTools(tools) {
-  const base = (Array.isArray(tools) ? tools : []).filter((t) => !(t && (/^bb_/.test(String(t.name || "").split("/").pop()) || /^figma_/.test(String(t.name || "")))));
+  const base = (Array.isArray(tools) ? tools : []).filter((t) => {
+    if (!t) return false;
+    const name = String(t.name || "").split("/").pop();
+    const pairedPluginTool = t.server === "figma_plugin" || /^figma_plugin_/.test(name);
+    if (pairedPluginTool && !figmaPluginConnected && name !== "figma_plugin_status") return false;
+    return !(/^bb_/.test(name) || (/^figma_/.test(name) && !pairedPluginTool));
+  });
   const have = new Set(base.map((t) => t && t.name));
   if (blenderAddon) for (const t of BLENDER_TOOLS) if (!have.has(t.name)) base.push(t);
   if (bbStatusSnapshot().connected) for (const t of bbToolList()) if (!have.has(t.name)) base.push(t);
@@ -993,6 +1019,14 @@ function statusObj() {
     figma_status_error: figma.error || undefined, figma_checked_at: figmaCheckedAt || undefined,
     figma_manual_disconnected: !!figmaManualDisconnected,
     figma_tools: figma.connected ? figmaToolsCache.length : 0,
+    figma_plugin_connected: figmaPluginConnected,
+    figma_plugin_verified: figmaPluginVerified,
+    figma_plugin_status: figmaPluginStatus,
+    figma_plugin_status_error: figmaPluginStatusError || undefined,
+    figma_plugin_checked_at: figmaPluginCheckedAt || undefined,
+    figma_plugin_tools: figmaPluginConnected ? figmaPluginTools : 0,
+    figma_plugin_pairing_pending: figmaPluginPairingPending,
+    figma_plugin_pairing_expires_at: figmaPluginPairingExpiresAt || undefined,
   };
 }
 
@@ -1018,7 +1052,23 @@ async function refreshProcStatus() {
     // second liveness source.
     const previousPluginFile = bbPluginFile;
     if (typeof j.blockbench_plugin_file === "string") bbPluginFile = j.blockbench_plugin_file;
-    const changed = nr !== robloxProc || nl !== localReady || nf !== localFull || nrRoot !== localRoot || previousPluginFile !== bbPluginFile;
+    const previousFigmaPlugin = [figmaPluginConnected, figmaPluginVerified, figmaPluginStatus, figmaPluginStatusError, figmaPluginTools, figmaPluginPairingPending, figmaPluginPairingExpiresAt].join("|");
+    const reportedFigmaPluginStatus = ["connected", "disconnected", "unknown"].includes(j.figma_plugin_status) ? j.figma_plugin_status : "unknown";
+    const reportedFigmaPluginConnected = j.figma_plugin_connected === true;
+    const figmaPluginStatusConsistent = (reportedFigmaPluginStatus === "connected" && reportedFigmaPluginConnected)
+      || (reportedFigmaPluginStatus === "disconnected" && !reportedFigmaPluginConnected);
+    figmaPluginVerified = j.figma_plugin_verified === true && figmaPluginStatusConsistent;
+    figmaPluginStatus = figmaPluginVerified ? reportedFigmaPluginStatus : "unknown";
+    figmaPluginConnected = figmaPluginStatus === "connected";
+    figmaPluginStatusError = figmaPluginVerified ? String(j.figma_plugin_status_error || "")
+      : String(j.figma_plugin_status_error || "Figma Design plugin status is not verified").slice(0, 240);
+    figmaPluginCheckedAt = Number(j.figma_plugin_checked_at) || Date.now();
+    figmaPluginTools = figmaPluginConnected ? Math.max(0, Number(j.figma_plugin_tools) || 0) : 0;
+    figmaPluginPairingPending = j.figma_plugin_pairing_pending === true;
+    figmaPluginPairingExpiresAt = Number(j.figma_plugin_pairing_expires_at) || null;
+    const currentFigmaPlugin = [figmaPluginConnected, figmaPluginVerified, figmaPluginStatus, figmaPluginStatusError, figmaPluginTools, figmaPluginPairingPending, figmaPluginPairingExpiresAt].join("|");
+    const figmaPluginHeartbeat = figmaPluginStatus !== "unknown" && Date.now() - figmaPluginStatusBroadcastAt >= 8000;
+    const changed = nr !== robloxProc || nl !== localReady || nf !== localFull || nrRoot !== localRoot || previousPluginFile !== bbPluginFile || previousFigmaPlugin !== currentFigmaPlugin || figmaPluginHeartbeat;
     robloxProc = nr;
     localReady = nl;
     localFull = nf;
@@ -1039,7 +1089,10 @@ async function refreshProcStatus() {
         });
       } catch {}
     }
-    if (changed) broadcastStatus();
+    if (changed) {
+      if (figmaPluginStatus !== "unknown") figmaPluginStatusBroadcastAt = Date.now();
+      broadcastStatus();
+    }
   } catch {}
 }
 
@@ -1502,6 +1555,63 @@ function bbStatusPayload() {
     server_list_mismatch: status.connected || status.known ? (bbServerMismatch || undefined) : undefined,
     call_mismatch: bbCallMismatch || undefined,
   };
+}
+
+function trustedFigmaSettingsPopup(sender) {
+  if (!sender || sender.id !== chrome.runtime.id || sender.tab) return false;
+  const expected = chrome.runtime.getURL("popup.html");
+  return String(sender.url || "").split(/[?#]/, 1)[0] === expected;
+}
+function setFigmaPluginStatus(payload) {
+  const before = [figmaPluginConnected, figmaPluginVerified, figmaPluginStatus, figmaPluginStatusError, figmaPluginTools, figmaPluginPairingPending, figmaPluginPairingExpiresAt].join("|");
+  const status = payload && ["connected", "disconnected", "unknown"].includes(payload.status) ? payload.status : "unknown";
+  const connected = !!(payload && payload.connected === true);
+  const consistent = (status === "connected" && connected) || (status === "disconnected" && !connected);
+  figmaPluginVerified = !!(payload && payload.verified === true && consistent);
+  figmaPluginStatus = figmaPluginVerified ? status : "unknown";
+  figmaPluginConnected = figmaPluginStatus === "connected";
+  figmaPluginStatusError = figmaPluginVerified ? String(payload.status_error || "")
+    : String((payload && payload.status_error) || "Figma Design plugin status could not be verified").slice(0, 240);
+  figmaPluginCheckedAt = Number(payload && payload.checked_at) || Date.now();
+  figmaPluginTools = figmaPluginConnected ? Math.max(0, Number(payload && payload.tools) || 0) : 0;
+  figmaPluginPairingPending = !!(payload && payload.pairing_pending);
+  figmaPluginPairingExpiresAt = Number(payload && payload.pairing_expires_at) || null;
+  const after = [figmaPluginConnected, figmaPluginVerified, figmaPluginStatus, figmaPluginStatusError, figmaPluginTools, figmaPluginPairingPending, figmaPluginPairingExpiresAt].join("|");
+  if (before !== after) { figmaPluginStatusBroadcastAt = Date.now(); broadcastStatus(); }
+  return {
+    ok: figmaPluginConnected,
+    connected: figmaPluginConnected,
+    verified: figmaPluginVerified,
+    status: figmaPluginStatus,
+    status_error: figmaPluginStatusError || undefined,
+    checked_at: figmaPluginCheckedAt,
+    tools: figmaPluginTools,
+    pairing_pending: figmaPluginPairingPending,
+    pairing_expires_at: figmaPluginPairingExpiresAt || undefined,
+    queue: Number(payload && payload.queue) || 0,
+  };
+}
+async function figmaPluginHttp(route, init, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs || 5000);
+  try {
+    const response = await fetch(`${RUST_ROBLOX_HTTP}/api/figma-plugin/${route}`, Object.assign({ cache: "no-store", signal: controller.signal }, init || {}));
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, status: response.status, error: String(payload.error || `total-core answered HTTP ${response.status}`) };
+    return payload && typeof payload === "object" ? payload : { ok: false, error: "Invalid Figma plugin status response" };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message || error || "Could not reach total-core on port 3000") };
+  } finally { clearTimeout(timer); }
+}
+async function refreshFigmaPluginStatus() {
+  const result = await figmaPluginHttp("status", { method: "GET" }, 4500);
+  if (result && result.status === 404) {
+    result.status = "unknown";
+    result.connected = false;
+    result.verified = false;
+    result.status_error = "This TotalScript desktop build does not expose the Figma Design plugin bridge yet";
+  }
+  return setFigmaPluginStatus(result);
 }
 
 async function agentWorkspaceRoot() {
@@ -2298,8 +2408,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if(!manualStudioDisconnect){connect();await waitForConnection(6000);await refreshStudioStatus();}sendResponse({success:connected&&robloxEditorConnected===true,state:manualStudioDisconnect||!connected?"DISCONNECTED":robloxEditorConnected===true?([...pending.values()].some(p=>p.type==="call_tool")?"BUSY":"CONNECTED"):"ERROR",bridge:connected,studio:robloxEditorConnected===true,protocolVersion:"1.0",error:connected&&robloxEditorConnected===true?null:{code:"STUDIO_BRIDGE_OFFLINE",message:"Studio MCP did not answer the health probe"}});break;
       case "call_tool": {
         const timeout = (msg.timeout || 120000) + 10000;
-        // Figma is an independent local Streamable HTTP server, not a tool
-        // family of Roblox, AgentScript, Blender or total-core.
+        // Figma Design plugin tools use total-core's token-paired port-3000
+        // bridge, independent of both the active engine and Figma Desktop MCP.
+        if (isFigmaPluginToolName(msg.name)) {
+          if (!connected) { connect(); await waitForConnection(6000); }
+          if (!connected) {
+            sendResponse({ ok: false, kind: "disconnected", errorCode: "TOTAL_CORE_OFFLINE", error: "The TotalScript desktop bridge on port 3000 is not connected; no Figma operation was sent." });
+            break;
+          }
+          const started = performance.now();
+          const result = await send({ type: "call_tool", name: String(msg.name).split("/").pop(), arguments: msg.arguments || {}, timeout: msg.timeout, requestId: msg.requestId }, timeout);
+          const elapsed = Math.round(performance.now() - started);
+          const ok = !!(result && result.ok);
+          const tool = String(msg.name).split("/").pop();
+          pushActivity("figma_plugin", ok ? "ok" : "error", `${tool} ${ok ? "ok" : "failed"}`, { tool, ms: elapsed, code: result && result.errorCode });
+          sendResponse(result || { ok: false, kind: "transport", errorCode: "FIGMA_PLUGIN_NO_RESPONSE", error: "total-core did not answer the Figma plugin tool call" });
+          break;
+        }
+        // Figma Desktop MCP uses its own verified Streamable HTTP session; its
+        // `figma_*` calls must never be folded into the Figma Design plugin.
         if (isFigmaToolName(msg.name)) {
           sendResponse(await dispatchFigmaTool(msg.name, msg.arguments, timeout, msg.requestId));
           break;
@@ -2476,6 +2603,44 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         pushActivity("blender", "info", "Blender addon unlinked");
         broadcastStatus();
         sendResponse({ ok: true, blender: false });
+        break;
+      }
+      case "figma_plugin_status": {
+        sendResponse(await refreshFigmaPluginStatus());
+        break;
+      }
+      case "figma_plugin_pair": {
+        if (!trustedFigmaSettingsPopup(sender)) {
+          sendResponse({ ok: false, error: "Figma pairing codes can only be generated from TotalScript Settings." });
+          break;
+        }
+        const reply = await figmaPluginHttp("pair", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        }, 5000);
+        if (!reply || typeof reply.pairing_token !== "string" || reply.ok !== true) {
+          sendResponse({ ok: false, error: String((reply && reply.error) || "Could not generate a Figma pairing code. Start the TotalScript desktop app and retry.") });
+          break;
+        }
+        const status = await refreshFigmaPluginStatus();
+        // Pairing material is returned only to the trusted popup; it is never
+        // persisted in chrome.storage, broadcast, logged, or sent to page scripts.
+        sendResponse({ ...status, ok: true, pairing_token: reply.pairing_token, expires_at: reply.expires_at, expires_in: reply.expires_in, single_use: reply.single_use });
+        break;
+      }
+      case "figma_plugin_revoke": {
+        if (!trustedFigmaSettingsPopup(sender)) {
+          sendResponse({ ok: false, error: "Figma pairing can only be revoked from TotalScript Settings." });
+          break;
+        }
+        const reply = await figmaPluginHttp("revoke", { method: "POST" }, 5000);
+        if (!reply || reply.ok !== true) {
+          sendResponse({ ok: false, error: String((reply && reply.error) || "Could not revoke the Figma pairing. Start the TotalScript desktop app and retry.") });
+          break;
+        }
+        const status = await refreshFigmaPluginStatus();
+        sendResponse({ ...status, ok: true, revoked: true });
         break;
       }
       case "figma_connect": {

@@ -439,7 +439,7 @@ const TotalOrchestrator = (() => {
       errorScan: has("scanError"), tooLongScan: has("isTooLongMsg"), busyScan: has("isBusyMsg"),
       compactCommandList: !!P.compactCommandList, embedCatalogue: P.embedCatalogue !== false,
       sysMaxChars: num("sysMaxChars"), sendCharBudget: num("sendCharBudget"), commandListMaxChars: num("commandListMaxChars"),
-      maxBatchCommands: Math.max(1, Math.min(8, Number(P.maxBatchCommands) || 6)),
+      maxBatchCommands: Math.max(1, Math.min(4, Number(P.maxBatchCommands) || 4)),
       resendSystemEvery: num("resendSystemEvery"), reliableCounts: !!P.reliableCounts, immutableTranscript: !!P.immutableTranscript,
       thinkingVisible: !!P.thinkingSel, commandsMayAppearInThinking: !!P.commandsMayAppearInThinking,
       tightPrompt: !!(num("sysMaxChars") && num("sysMaxChars") < 16000) || !!P.compactCommandList,

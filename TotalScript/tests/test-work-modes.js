@@ -88,8 +88,8 @@ for (const s of [
   "HAND-OFF", "blueprint_install", "project_index_build",
 ]) assert(block.includes(s), "creation profile mentions " + s);
 for (const s of ["NEW SYSTEM:", "BUG FIX:", "EXISTING PLACE / REFACTOR:", "BUILD:", "MOOD PASS:", "HERO VFX:", "UI SCREEN:", "THUMBNAIL / ICON:", "COMBAT CLIP:", "LOCOMOTION LOOP:", "PROP / UI MOTION:", "CUTSCENE:"]) assert(full.includes("- " + s), "playbook " + s);
-// batching is taught in the loop (1.34: up to 6 independent commands per reply)
-assert(/BATCH up to 6 INDEPENDENT commands per reply/.test(full) && /batch up to 6 independent commands per reply/.test(tight), "loop teaches batching");
+// batching is taught in the loop (up to 4 independent commands per reply)
+assert(/Batch up to 4 independent commands per reply/.test(full) && /batch up to 4 independent commands per reply/.test(tight), "loop teaches batching");
 // every command cited in the prompts must exist somewhere in the source
 const src = ["src/core", "src/providers"].flatMap((d) => fs.readdirSync(d, { recursive: true }).filter((f) => f.endsWith(".js")).map((f) => fs.readFileSync(d + "/" + f, "utf8"))).join("\n");
 const cited = [...new Set([...(block + " " + RS.workModeChecklist(wm)).matchAll(/\b([a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b/g)].map((m) => m[1]))];

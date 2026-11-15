@@ -76,7 +76,7 @@ html {
     text-shadow 0.4s ease;
 }
   html[data-rs-engine="roblox"] #rs-brand { text-shadow: 0 0 12px rgba(0,162,255,0.20); }
-  
+
   html[data-rs-engine="local"] #rs-brand { text-shadow: 0 0 12px rgba(16,185,129,0.22); }
   html[data-rs-engine="anim"] #rs-brand { text-shadow: 0 0 12px rgba(255,94,158,0.24); }
 /* Premium glass — v1.11 default look (revert: FLAGS.uiGlass = false in src/core/config.js).

@@ -591,7 +591,7 @@ const TotalCreation = (() => {
         const short = miss.slice(0, 4).map((m) => m.kind === "integration" ? `${m.label} (${m.status})` : `${m.label} ${m.status === "unverified" ? "unverified → " + m.text.split("run ")[1] : m.status === "unaudited" ? "unaudited" : "not built"}`);
         s = `(TotalScript creation check ${roundTxt}, derived from the command log.) Still missing: ${short.join("; ")}. Do these now, or say plainly which you are not doing and why.`;
       } else {
-        s = `━━━ CREATION CHECK ${roundTxt} (System note from TotalScript, not the user · ${prof.label} profile) ━━━\nStatus of the deliverables in your request, read from the command log — not from your message:\n` + miss.slice(0, 6).map((m) => "- " + m.text).join("\n") + `\nFinish these now (one command per step, read each result), or state plainly which ones you are not doing and why. Never describe missing work as done.`;
+        s = `━━━ CREATION CHECK ${roundTxt} (System note from TotalScript, not the user · ${prof.label} profile) ━━━\nStatus of the deliverables in your request, read from the command log — not from your message:\n` + miss.slice(0, 6).map((m) => "- " + m.text).join("\n") + `\nFinish these now using up to 4 independent commands per reply; wait for each result before a dependent step. If any are not being done, state plainly which ones and why. Never describe missing work as done.`;
       }
       const cap = tight ? 460 : 1400;
       if (s.length > cap) s = s.slice(0, cap - 1).replace(/\s+\S*$/, "") + "…";

@@ -174,7 +174,7 @@ const RSParse = (() => {
     "depth: 2",
     "###END_CMD###",
     "Values: plain text stays text; numbers, true/false, [lists] and {objects} are read as such; a multi-line value goes between a line \"key: <<<\" and a line \">>>\" (nothing is escaped inside). A command without parameters is just the opener and the closer.",
-    "The JSON form {\"command\": \"name\", \"params\": {...}} is still accepted but never required. Up to 6 independent commands per reply, each in its own block, in the order they must run. Never escape backticks, quotes or braces with backslashes, never show a command as a quoted example or inline code, and never write a bare ```lua block without the ###LUA### markers - code without the markers is NOT executed.",
+    "The JSON form {\"command\": \"name\", \"params\": {...}} is still accepted but never required. Up to 4 independent commands per reply, each in its own block, in the order they must run. Keep a command in a later reply when it depends on an earlier result. Never escape backticks, quotes or braces with backslashes, never show a command as a quoted example or inline code, and never write a bare ```lua block without the ###LUA### markers - code without the markers is NOT executed.",
   ].join("\n");
 
   // Find the first LUA start marker at or after `from`. Returns { pos, len, dm }

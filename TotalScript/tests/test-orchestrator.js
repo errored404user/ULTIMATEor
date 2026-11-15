@@ -165,6 +165,8 @@ ok("FEEDBACK.providerRetry(cls, attempt, seconds) tells the model the previous m
 {
   const c = O.capabilities({ id: "x", displayName: "X", supportsVision: true, attachImages() {}, timings: { WARMUP_MS: 10000, RESPONSE_TIMEOUT_MS: 300000 }, sysMaxChars: 14000, compactCommandList: true, maxBatchCommands: 4, scanError() {}, findContinueBtn() {}, clickContinueBtn() {} });
   ok("capabilities(): vision needs supportsVision + attachImages, tightPrompt from sysMaxChars/compact flag, timings copied", c.vision === true && c.tightPrompt === true && c.maxBatchCommands === 4 && c.timings.warmupMs === 10000 && c.timings.responseTimeoutMs === 300000 && c.errorScan && c.nativeContinue);
+  ok("capabilities(): default batch cap is 4 and oversized provider caps are clamped to 4", O.capabilities({ id: "default" }).maxBatchCommands === 4 && O.capabilities({ id: "large", maxBatchCommands: 99 }).maxBatchCommands === 4);
+  ok("capabilities(): providers may still opt for a lower batch cap", O.capabilities({ id: "low", maxBatchCommands: 2 }).maxBatchCommands === 2);
   ok("capabilities(): nothing is invented for a bare adapter", (() => { const b = O.capabilities({ id: "y", displayName: "Y" }); return b.vision === false && b.streamTap === false && !b.sysMaxChars && b.tightPrompt === false && b.nativeContinue === false; })());
 }
 ok("orchestrator VERSION pinned", O.VERSION === "2.21.0", O.VERSION);

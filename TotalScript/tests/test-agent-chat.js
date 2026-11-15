@@ -53,7 +53,7 @@ ok("retries once without tools when a provider rejects them", chat.includes("mod
 ok("request timeout is long enough for slow models", /Duration::from_secs\(900\)/.test(chat));
 
 // ── chat.rs: tool catalogue -> OpenAI function tools ──
-ok("collects Studio MCP + plugin + workspace tools", chat.includes("crate::roblox_tools(state)") && chat.includes("plugin::tools(plugin_connected, key_set)") && chat.includes("workspace::catalog()"));
+ok("collects Studio MCP + Studio/Blockbench/Figma plugin + workspace tools", chat.includes("crate::roblox_tools(state)") && chat.includes("plugin::tools(plugin_connected, key_set)") && chat.includes("blockbench::tools(blockbench_connected)") && chat.includes("figma_plugin::tools(figma_status.connected)") && chat.includes('to_defs(&figma_tools, "figma_plugin"') && chat.includes("workspace::catalog()"));
 ok("skips MCP when Studio is not running", chat.includes("studio_running.load(Ordering::Relaxed)") && chat.includes("Roblox Studio is not running"));
 ok("OpenAI tool shape", chat.includes('"type": "function"') && chat.includes('"parameters": clean_schema('));
 ok("tool names sanitised to ^[a-zA-Z0-9_-]{1,64}$", chat.includes("fn wire_name") && chat.includes("s.truncate(64)"));
@@ -63,9 +63,12 @@ ok("tool_choice auto", chat.includes('body["tool_choice"] = json!("auto")'));
 // ── chat.rs: agent loop ──
 ok("run_turn entry point", chat.includes("pub async fn run_turn(state: AppState, req: TurnRequest, events: Sender<ChatEvent>, cancel: Arc<AtomicBool>)"));
 ok("system prompt explains execute_luau", chat.includes("execute_luau {code, datamodel_type:\\\"edit\\\"}") && chat.includes("ChangeHistoryService"));
-ok("system prompt carries live Studio / plugin status", chat.includes("LIVE STATUS") && chat.includes("Roblox Studio MCP:") && chat.includes("TotalScript Studio plugin:"));
+ok("desktop agent prompts for up to 4 independent calls and waits before dependent calls", chat.includes("up to 4 independent tools in one reply") && chat.includes("Keep calls that depend on a previous result in a later reply"));
+ok("desktop agent hard-caps each reply at four and rejects oversized batches before execution", chat.includes("pub const MAX_TOOL_CALLS_PER_REPLY: usize = 4") && chat.includes("exceeds_tool_batch_limit(calls.len())") && chat.includes("if batch_over_limit") && chat.includes("Nothing in this reply was run"));
+ok("system prompt carries live Studio / Studio plugin status", chat.includes("LIVE STATUS") && chat.includes("Roblox Studio MCP:") && chat.includes("TotalScript Studio plugin:"));
+ok("system prompt reports the paired Figma Design plugin separately from Desktop MCP", chat.includes("Figma Design plugin (separate from Figma Desktop MCP)") && chat.includes("no Figma API key is needed") && chat.includes("only figma_plugin_status is available"));
 ok("standing instructions appended", chat.includes("USER INSTRUCTIONS"));
-ok("tool calls run through the bridge's own paths", chat.includes("workspace::dispatch(&state.workspace, name, args)") && chat.includes("plugin::call(state, name, args)") && chat.includes("crate::roblox_tool(state, name, args)"));
+ok("tool calls run through the bridge's own paths, including the separate Figma plugin hub", chat.includes('"figma_plugin" => figma_plugin::call(state, name, args).await') && chat.includes("workspace::dispatch(&state.workspace, name, args)") && chat.includes("plugin::call(state, name, args)") && chat.includes("crate::roblox_tool(state, name, args)"));
 ok("per-tool timeout", chat.includes("tokio::time::timeout(Duration::from_secs(300), fut)"));
 ok("assistant + tool messages appended in OpenAI order", chat.includes('"role": "tool", "tool_call_id": id, "content": clamp_result(&content)') && chat.includes('assistant["tool_calls"] = Value::Array(tc)'));
 ok("errors returned to the model as ERROR:", chat.includes('format!("ERROR: {text}")'));
@@ -84,7 +87,7 @@ const eventNames = ["Status", "Delta", "AssistantStart", "ToolStart", "ToolDone"
 ok("gui handles every ChatEvent", eventNames.every((e) => gui.includes("E::" + e)));
 const reqFields = ["base_url", "api_key", "model", "messages", "tools", "max_steps", "temperature", "send_images", "instructions"];
 ok("gui builds every TurnRequest field", reqFields.every((f) => new RegExp("\\b" + f + ":\\s").test(gui.slice(gui.indexOf("crate::chat::TurnRequest {")))));
-ok("Tools page Run routes plugin commands through plugin::call (fix)", main.includes('_ => if plugin::is_plugin_tool(&name) { plugin::call(&state2, &name, args).await } else { roblox_tool(&state2, &name, args).await },'));
+ok("Tools page Run routes plugin commands through their dedicated local hubs", main.includes('_ => if figma_plugin::is_tool(&name) { figma_plugin::call(&state2, &name, args).await } else if plugin::is_plugin_tool(&name) { plugin::call(&state2, &name, args).await } else { roblox_tool(&state2, &name, args).await },'));
 
 // ── gui.rs: settings ──
 for (const f of ["chat_provider: String", "chat_custom_url: String", "chat_keys: HashMap<String, String>", "chat_models: HashMap<String, String>", "chat_tools: bool", "chat_send_images: bool", "chat_max_steps: u32", "chat_temperature: f32", "chat_instructions: String", "chat_panel_open: bool", "chat_panel_width: f32"]) {
@@ -122,6 +125,7 @@ ok("suggestion chips on empty transcript", gui.includes("Build a spawn lobby"));
 
 // ── docs + pins ──
 ok("agent README documents the panel", agentReadme.includes("## AI chat panel (1.37.0)") && agentReadme.includes("src/chat.rs"));
+ok("agent README documents the four-tool hard cap, whole-batch rejection and dependency sequencing", agentReadme.includes("up to **4 tools per reply (a hard ceiling; provider settings cannot raise it)**") && agentReadme.includes("rejected as a whole before any tool runs") && agentReadme.includes("dependent operations for a later reply"));
 ok("README changelog 1.37.0", readme.includes("**1.37.0 — total-core: AI chat side panel that works in Studio.**"));
 ok("README crate line updated", readme.includes("`total-agent` 3.0.0") && !readme.includes("removed desktop status window"));
 ok("manifest version is 3.0.0", manifest.version === "3.0.0", manifest.version);

@@ -4159,6 +4159,7 @@ dependencies = [
  "clap",
  "eframe",
  "futures",
+ "getrandom 0.2.17",
  "glob",
  "once_cell",
  "regex",

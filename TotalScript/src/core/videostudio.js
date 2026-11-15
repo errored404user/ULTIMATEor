@@ -394,7 +394,7 @@
     out.push(`TIMELINE (shot \u00b7 time range \u00b7 camera \u00b7 motion \u00b7 look):\n${shotRows.join("\n")}`);
     out.push(`IMAGES: ${imagesNote}`);
     out.push(`RECREATION PROTOCOL (${kind}):\n` + PROTOCOL[kind](a).map((l, i) => `  ${i + 1}. ${l}`).join("\n"));
-    out.push(`RULES: ${opts.exact === false ? "Keep the idea, timing and mood; you may simplify shapes." : "CLONE, do not approximate: same order, same timings (±10%), same colours and framing as the keyframes; read any text in the frames literally."} First reply = a 3-6 line plan mapping each shot / keyframe to the commands you will run, then start with the first command in the SAME reply. One command per reply afterwards. When done, say honestly what differs from the video.`);
+    out.push(`RULES: ${opts.exact === false ? "Keep the idea, timing and mood; you may simplify shapes." : "CLONE, do not approximate: same order, same timings (±10%), same colours and framing as the keyframes; read any text in the frames literally."} First reply = a 3-6 line plan mapping each shot / keyframe to the commands you will run, then start in the SAME reply. Batch up to 4 independent commands per reply in execution order; wait for results before issuing dependent commands. When done, say honestly what differs from the video.`);
     return out.join("\n");
   }
 

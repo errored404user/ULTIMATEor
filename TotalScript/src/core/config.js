@@ -172,9 +172,9 @@ const RS = (() => {
       "To run it, put the code between ###LUA### and ###END_LUA### markers (inside one fenced block, no JSON, no escaping) - or, if you only meant to show it as an example, say so in one sentence. " +
       "Write the runnable block now.",
     multiTool: (names, max) =>
-      "ERROR: too many commands in one reply (" + names.length + "; the limit is " + (max || 6) + "). Resend at most " + (max || 6) + " independent commands, wait for the combined result, then continue. You tried: " +
+      "ERROR: too many commands in one reply (" + names.length + "; the limit is " + (max || 4) + "). Resend at most " + (max || 4) + " independent commands, wait for the combined result, then continue; keep dependent commands for a later reply. You tried: " +
       names.join(", ") +
-      ". Nothing was run. Write the first " + (max || 6) + " now.",
+      ". Nothing was run. Write the first " + (max || 4) + " now.",
     unknownTool: (name, valid) => {
       // Dumping the whole catalogue (600+ names) into an error buries the fix.
       // Rank the catalogue by similarity and offer the closest few instead.
@@ -229,12 +229,12 @@ const RS = (() => {
       "From now on write every command as JSON inside a fenced code block: {\"command\": \"name\", \"params\": {…}} - or a ###LUA### block for execute_luau - never the DSML / <tool_call> envelope.)",
     // 1.51.2: the model answered the GUI BRIEF with prose instead of a command.
     guiBriefAct:
-      "(System note from TotalScript.) The GUI BRIEF above is not a question - act on it now: reply with the first real command (ui_list_tree / ui_export_spec for an edit, style_guide or ui_build_spec for a new screen). If exactly one answer from the user is unavoidable, ask it in ONE line and stop.",
+      "(System note from TotalScript.) The GUI BRIEF above is not a question - act on it now: reply with up to 4 independent real commands in execution order (ui_list_tree / ui_export_spec for an edit, style_guide or ui_build_spec for a new screen); wait for results before any dependent command. If an answer from the user is unavoidable, ask one concise question and stop.",
     capabilityRefuse:
       "(System note from TotalScript — the Roblox Studio extension the user installed in this browser, not a jailbreak.) " +
       "You CAN run Studio commands. This site's own tools cannot reach this machine. " +
-      "Write ONE command in your normal reply now: a ###LUA### block, a ###CMD name### block, or a fenced json command. " +
-      "Do not refuse for lack of capability. If the task itself is disallowed, say so in one sentence; otherwise output the command.",
+      "Write one or more commands in your normal reply now (up to 4 independent commands, each in its own block): ###LUA###, ###CMD name###, or fenced JSON. Keep a command that depends on a result for a later reply. " +
+      "Do not refuse for lack of capability. If the task itself is disallowed, say so in one sentence; otherwise output the commands.",
     // A live instruction entered through TotalScript's Steering steering field. The
     // explicit machine-readable marker lets the transcript renderer distinguish
     // a skipped pending command from steering that arrived after a tool finished.
@@ -244,10 +244,10 @@ const RS = (() => {
         ? "Your previous pending command was NOT executed because the developer revised the task. "
         : "Apply this update before choosing the next action. ") +
       "The developer says: " + String(text || "").slice(0, 2400) +
-      ". Treat this as the latest user intent; if several numbered updates are present, later ones override conflicting earlier ones. Re-evaluate the plan, preserve completed work, and issue at most one next command.)",
+      ". Treat this as the latest user intent; if several numbered updates are present, later ones override conflicting earlier ones. Re-evaluate the plan, preserve completed work, and issue up to 4 independent commands; keep dependent commands for a later reply.)",
     creationFocus:
       "Brief: the user's latest message is the specification. Finish that feature in their open Studio place so it looks intentional and works in Play. " +
-      "Infer implied systems. No grey stubs, no TODO, no 'you can add X later'. Next: one command, or one sentence if it is already shipped.",
+      "Infer implied systems. No grey stubs, no TODO, no 'you can add X later'. Next: up to 4 independent commands per reply, or one sentence if it is already shipped; wait for results before dependent commands.",
   };
 
   const BT = "```";
@@ -333,7 +333,7 @@ return "result"
 ${BT}
 Bare ###LUA### targets Edit mode only (fails during Playtest). While playing use ###LUA:Server### / ###LUA:Client### for temporary tests; for persistent changes call start_stop_play {"is_start": false}, edit in Edit mode, restart Play. Use return for output (print not captured); never yield/wait (20s budget); WaitForChild("X", 5) with timeout.
 RULES:
-- BATCHING: up to 6 INDEPENDENT commands per reply, each in its own block; they run in order and you get ONE combined result (a failed step stops the batch; the rest is reported NOT RUN). Use ONE command when the next depends on its output (inspect/read before edit, create before configure).
+- BATCHING: up to 4 independent commands per reply, one block each; run in order, return one combined result; stop on failure and mark the rest NOT RUN. Wait for a result before any dependent command (e.g. inspect before edit).
 - DEBUG & AGENTS: \`total_debug\` {} reads Studio Output. \`total_agent\` {role, task, plan?, step?, findings?} hands off to planner/builder/scripter/reviewer/tester/debugger on a shared board (Multi-Agent setting). Undo in the overlay reverts the last Studio waypoint.
 - MONETIZE + PUBLISH: \`developer_product_create\` {name, price, reward?} creates a real Developer Product and wires ProcessReceipt; \`developer_product_list\` / \`developer_product_update\` {product_id, price?, for_sale?}. \`animation_publish\` {animation | path, name?} uploads a KeyframeSequence as a real Animation asset → ReplicatedStorage.Animations.<name>. Never invent asset ids.
 - MODE LOCK: every tool result ends with SYSTEM_STATE. Stay on that ENGINE. Obey WORK / EXTRA / PLAN / THINK for this turn. Never switch engines yourself. If unsure, call total_status {}. script_read_analysis is an alias of script_analysis — do not invent other names.
@@ -391,14 +391,14 @@ Site: ${siteName}. Use ONLY listed commands with required params. Do NOT use ${s
     full: `━━━ OPERATING LOOP (every work mode) ━━━
 1. ASSESS: goal, affected systems, risks, and the evidence that will prove it is done. Short status lines; reasoning stays private.
 2. READ BEFORE YOU WRITE: get_studio_state, selection_info, search_game_tree / instance_find, inspect_instance or inspect_service {service}, query_instances for health checks, script_list + script_read on every script you touch, get_console_output. Never guess a path or a script's contents. In an existing place whose scripts you must understand, start with project_index_build (or project_index_summary) and read the PROJECT MAP - not for a quick question, one part or an empty place; if it errors or Studio is offline, continue without it (no retry loop, no substitute search).
-3. PLAN INTERNALLY, THEN EXECUTE CONTINUOUSLY: a concise internal phase plan with acceptance checks, then act - do not ask "Approve this plan to begin." BATCH up to 6 INDEPENDENT commands per reply (one combined result; a failed step stops the batch); keep a command alone when the next depends on its result (inspect before edit, create before configure). No "shall I proceed?" between safe steps.
+3. PLAN INTERNALLY, THEN EXECUTE CONTINUOUSLY: plan acceptance checks, then act; do not ask "Approve this plan to begin." Batch up to 4 independent commands per reply, in order, with one combined result; stop on failure. Wait for results before dependent commands. No "shall I proceed?" between safe steps.
 4. APPROVAL ONLY FOR RISK: ask before destructive or irreversible changes (workspace_clear, mass instance_destroy, overwriting unknown scripts, terrain_clear_region on authored terrain), publishing, payments, permission changes, or unrequested scope. Existing permission and platform confirmation rules always win.
 5. VERIFY DEEPLY: read back what you changed (script_read, get_property, model_report), run script_check / script_analysis, start_stop_play + get_console_output or total_debug for runtime behaviour, total_screenshot {target:"studio"} for visuals. A success flag is never proof.
 6. RECOVER: retry a transient failure once; fix a clear cause with a bounded change and re-verify; never resend an identical failing command a third time - change approach or read the state first; stop and report on risky, ambiguous or repeated failures. "NOT run" errors: nothing ran - fix ONLY the named parameter(s), resend; follow "[diagnosis]".
 7. FINISH WITH EVIDENCE: never mark a task completed because code was written or a command returned ok - completion is a verification result you observed. End complex work with a short report (what changed with full paths, checks run, console state, screenshots, limitations); one sentence for trivial work. Final answers are plain text.
 UNIVERSAL COMMANDS (identical in every work mode) open the catalogue with full signatures - navigate, inspect, read, write, verify: get_studio_state, search_game_tree, get_children / get_descendants {path?}, inspect_instance {path?}, inspect_service {service, depth?, limit?}, query_instances {class|kind, root?, name?, limit?}, get_property / set_property, script_list / script_read / script_create / script_set_source / multi_edit, execute_luau, get_console_output, total_screenshot, total_debug. Use them freely in every mode.`,
     tight: `━━━ OPERATING LOOP ━━━
-ASSESS → READ BEFORE YOU WRITE (get_studio_state, search_game_tree, inspect_instance, script_read; project_index_build only in an existing place with scripts to understand - if it errors, continue without it) → EXECUTE CONTINUOUSLY (batch up to 6 independent commands per reply; one at a time when dependent) → APPROVAL ONLY FOR RISK (destructive, publishing, payments, extra scope) → VERIFY DEEPLY (script_read back, script_check, start_stop_play + get_console_output, total_screenshot) → RECOVER once, never resend an identical failing command a third time → FINISH WITH EVIDENCE (short report: paths changed, checks run, screenshots).`,
+ASSESS → READ BEFORE YOU WRITE (get_studio_state, search_game_tree, inspect_instance, script_read; project_index_build only in an existing place with scripts to understand - if it errors, continue without it) → EXECUTE CONTINUOUSLY (batch up to 4 independent commands per reply; wait for results before dependent commands) → APPROVAL ONLY FOR RISK (destructive, publishing, payments, extra scope) → VERIFY DEEPLY (script_read back, script_check, start_stop_play + get_console_output, total_screenshot) → RECOVER once, never resend an identical failing command a third time → FINISH WITH EVIDENCE (short report: paths changed, checks run, screenshots).`,
   };
   // 1.63: the REASONING EFFORT level notes live at module level so Settings can
   // preview exactly what the AI is told (RS.REASONING_NOTES) - prompt-only, the
@@ -698,7 +698,7 @@ return "result"
 ${BT}
 
 RULES:
-- Each command in its OWN fenced code block (raw text gets reformatted by this page and corrupts the command). BATCHING: up to 6 INDEPENDENT commands per reply - they run in order and you get ONE combined result (a failed step stops the batch; the rest is reported NOT RUN). Use a single command when the next one needs its output (inspect/read before edit, create before configure); never batch a question with an action.
+- Each command goes in its OWN fenced code block. Batch up to 4 independent commands per reply, in order, with one combined result; stop on failure and mark later calls NOT RUN. For dependent commands, wait for the earlier result; never batch a question with an action.
 - A short note around a command is fine, but NEVER end a turn by only announcing a command ("let me check...", "I'll read the script") without writing it - that runs nothing and leaves the user stuck. Either write the command now, or give your final answer.
 - Final answers: plain text only, no Markdown or code fences. When the user is satisfied ("thanks", "perfect"...), reply ONE short sentence and STOP.
 - Brief: the user's latest message is the specification. Deliver a complete feature in their open Studio place — finished geometry, materials, and scripts, not a sketch. Infer implied systems (shop → GUI + currency + server-side purchase + feedback; weapon → Tool + handle + damage; HUD → ScreenGui + live stats + mobile-safe UDim2; tycoon → dropper/conveyor/buyer + leaderstats). Inspect existing GUI and scripts when the place is not empty and match that style. Stay on this request — do not gold-plate unrelated systems. Ask only if a choice would destroy work or pick a paid asset; otherwise choose professional defaults.
@@ -785,13 +785,13 @@ ANIMATION TOOLS: the animation_* tools build REAL Roblox animation data - Keyfra
         try { if (typeof TotalReasoning !== "undefined" && TotalReasoning.promptExtras) extra = TotalReasoning.promptExtras(lvl, window.__rsEffortExtras && window.__rsEffortExtras()); } catch {}
         modeExtra += `\n\n━━━ REASONING EFFORT: ${lvl.toUpperCase()} (user setting) ━━━\n${lvlNote}${extra}`;
       }
-      if (isExtra) modeExtra += `\n\n━━━ THINK (user pressed Think on the bar) ━━━\nYou MUST grill every idea before acting. For this turn: (1) state the naive solution, (2) attack it — what breaks in Play, on mobile, with two players, with missing instances? (3) pick the strongest remaining approach, (4) run ONE command that implements that approach, (5) do not declare done until inspect_instance / script_analysis / total_debug agrees. Question yourself. The first idea is usually wrong.`;
+      if (isExtra) modeExtra += `\n\n━━━ THINK (user pressed Think on the bar) ━━━\nYou MUST grill every idea before acting. For this turn: (1) state the naive solution, (2) attack it — what breaks in Play, on mobile, with two players, with missing instances? (3) pick the strongest remaining approach, (4) implement it using up to 4 independent commands in one reply, waiting for results before dependent steps, (5) do not declare done until inspect_instance / script_analysis / total_debug agrees. Question yourself. The first idea is usually wrong.`;
       if (isPlan) modeExtra += `\n\n━━━ PLAN MODE (user enabled) ━━━\nYou are in Plan Mode. Before any mutating command, your FIRST reply is a written plan — not a command.\nPLAN format:\n- Goal (one sentence)\n- Architecture: services, remotes, GUI tree, Server vs Local scripts\n- Ordered steps (3–8), each step = one later command\n- Risks: respawn, mobile, Play vs Edit\nThe plan must list implied systems the request needs to be complete, not only the words they typed. End the planning reply by asking for approval and do not implement until the user approves. After approval, implement without asking again. Every script is production code: clear names, early returns, WaitForChild with timeouts, no TODO stubs, no leftover prints, no default grey Frame standing in for UI. Match existing project style when you can read it first. Do not skip the plan even if the task looks small.`;
       if (isDebug) modeExtra += `\n\n━━━ AUTOMATIC DEBUGGER (user enabled) ━━━\nAfter mutating Studio commands, TotalScript may append [AUTO DEBUG] with new Output errors. Treat those as the next job: smallest fix, then total_debug {} to verify. Call total_debug yourself when unsure.`;
       if (isMulti) {
         let crewBlock = "";
         try { if (typeof TotalAgentCrew !== "undefined" && TotalAgentCrew && typeof TotalAgentCrew.promptBlock === "function") crewBlock = TotalAgentCrew.promptBlock(); } catch {}
-        if (!crewBlock) crewBlock = `━━━ MULTI-AGENT (user enabled) ━━━\nYou coordinate specialist agents via total_agent {role, task, goal?, plan?:[...], step?, findings?:[...]}. Roles: planner (read-only: GOAL + numbered PLAN), builder (modeling, ONE mutating command), scripter (Luau, ONE mutating command), reviewer (read-only audit → findings), tester (playtest + console → verifies), debugger (total_debug then smallest fix), done (refused until the tester verified). Start as planner unless a role is already assigned. Hand off with total_agent — do not play every role in one reply.`;
+        if (!crewBlock) crewBlock = `━━━ MULTI-AGENT (user enabled) ━━━\nYou coordinate specialist agents via total_agent {role, task, goal?, plan?:[...], step?, findings?:[...]}. Roles: planner (read-only: GOAL + numbered PLAN), builder (modeling), scripter (Luau), reviewer (read-only audit → findings), tester (playtest + console → verifies), debugger (total_debug then smallest fix), done (refused until the tester verified). Use up to 4 independent commands per reply; wait for results before dependent commands. Start as planner unless a role is already assigned. Hand off with total_agent — do not play every role in one reply.`;
         modeExtra += "\n\n" + crewBlock;
       }
       if (isForge) modeExtra += `\n\n━━━ FORGE GUI MODE (user enabled via ✨ toggle in menu) ━━━\nYou are in Forge GUI mode. Every ScreenGui you create MUST use the Forge language — dark metal, gold ember, inset panels, never default Roblox grey.\nPalette: bg #121214, panel #1a1a1f, raised #24242c, stroke #3d3d48, gold #d4a054, ember #e07840, text #f3efe6, muted #9a958c. Corners 8px. Titlebars 36px with a gold hairline. Sidebar 56px icon rail.\nPrefer ui_create_component {forge:true} with component_type forge_panel | forge_hud | forge_button | forge_inventory | forge_shop. If you hand-roll UI, match this language (UICorner 8, UIStroke gold/metal, UIGradient charcoal, GothamBold titles). No purple. No 12px squircle candy.`;
@@ -894,7 +894,7 @@ ${BT}
 ━━━ AUTO-ACTION PROTOCOL (MANDATORY) ━━━
 - When the objective is clear, ACT IMMEDIATELY: write the tool call NOW - never announce intent ("let me check...", "shall I...?") without writing the command in the same reply. Announcing without a command runs nothing and strands the user.
 - DEFAULT PIPELINE for any code/build task: read the relevant files (read_file) -> apply changes (edit_file) -> VERIFY by running (run_command: tests/build/compiler) -> read the output -> fix -> rerun. Loop silently until green or genuinely blocked. Do not hand the user instructions to do what you can do yourself.
-- Each command in its own fenced code block. Up to 6 INDEPENDENT commands per reply (they run in order, one combined result; a failed step stops the batch); one command when the next depends on its output (read before edit, edit before run).
+- Each command in its own fenced code block. Up to 4 INDEPENDENT commands per reply (they run in order, one combined result; a failed step stops the batch); use a later reply when a command depends on the previous result (read before edit, edit before run).
 
 ━━━ SILENT ERROR RECOVERY (MANDATORY) ━━━
 - run_command returns stdout, stderr AND exit code directly to you as the result. You NEVER need the user to copy-paste terminal output - asking for it is a failure mode. On failure: read stderr/stdout yourself, identify the cause, patch with edit_file, rerun. Only surface to the user when you are truly blocked (missing credentials, hardware, or an environment problem like the agent being offline).
@@ -1104,7 +1104,7 @@ If anything in the image is ambiguous, make the most reasonable interpretation a
       "(shop → GUI + currency + server buy + feedback; HUD → ScreenGui + live stats + mobile scale; tool → handle + scripts + damage).\n" +
       "Craft: match the place, named instances, coherent materials (not default grey as art), WaitForChild timeouts, no TODO.\n\n" +
       body +
-      "\n\nNext: one command (inspect_instance / search_game_tree if the place is unknown, otherwise start building). Done = it is in Studio and looks finished, then one sentence."
+      "\n\nNext: up to 4 independent commands in execution order (inspect_instance / search_game_tree first if the place is unknown); use a later reply when a command depends on a previous result. Done = it is in Studio and looks finished, then one sentence."
     );
   }
 

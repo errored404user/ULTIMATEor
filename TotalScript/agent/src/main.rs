@@ -25,8 +25,10 @@ use tracing::info;
 // an `Origin` header, and the only browser caller we have is the extension
 // itself (chrome-extension:// / moz-extension:// …). The Studio plugin
 // (HttpService) and local tools send no Origin at all. So: no Origin → local
-// caller, allowed; extension scheme → allowed; any http(s)/null/file origin →
-// a web page → refused before any handler runs (HTTP 403, WS handshake 403).
+// caller, allowed; extension scheme → allowed; http(s)/file and null Origins
+// are refused on all existing routes. The only exception is `Origin: null` on
+// the dedicated Figma plugin routes, whose handlers require a pairing/session
+// token; WebSocket origin checks remain unchanged.
 pub fn origin_allowed(origin: Option<&str>) -> bool {
     let Some(o) = origin.map(str::trim) else { return true };
     if o.is_empty() { return true; }
@@ -36,10 +38,28 @@ pub fn origin_allowed(origin: Option<&str>) -> bool {
         .any(|scheme| lower.starts_with(scheme) && lower.len() > scheme.len())
 }
 
+// Figma plugin requests may carry `Origin: null`. That exception is confined
+// to the token-gated Figma plugin routes; every other HTTP and WebSocket route
+// retains the existing browser-origin policy.
+fn figma_plugin_null_origin_route(path: &str) -> bool {
+    matches!(path,
+        "/api/figma-plugin/hello" |
+        "/api/figma-plugin/poll" |
+        "/api/figma-plugin/result" |
+        "/api/figma-plugin/goodbye"
+    )
+}
+
+fn origin_allowed_for_path(origin: Option<&str>, path: &str) -> bool {
+    if origin_allowed(origin) { return true; }
+    origin.map(str::trim) == Some("null") && figma_plugin_null_origin_route(path)
+}
+
 async fn origin_guard(req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
     let origin = req.headers().get(axum::http::header::ORIGIN).and_then(|v| v.to_str().ok()).map(|s| s.to_string());
-    if !origin_allowed(origin.as_deref()) {
-        tracing::warn!("refused bridge request from web origin {:?} ({} {})", origin.as_deref().unwrap_or(""), req.method(), req.uri().path());
+    let path = req.uri().path().to_string();
+    if !origin_allowed_for_path(origin.as_deref(), &path) {
+        tracing::warn!("refused bridge request from web origin {:?} ({} {})", origin.as_deref().unwrap_or(""), req.method(), path);
         return (axum::http::StatusCode::FORBIDDEN, "TotalScript bridge: requests from web pages are not allowed").into_response();
     }
     next.run(req).await
@@ -101,6 +121,7 @@ fn init_file_logger(ui: Option<Arc<gui::UiShared>>) {
 mod blockbench;
 mod chat;
 mod easter;
+mod figma_plugin;
 mod gui;
 mod plugin;
 mod workspace;
@@ -318,6 +339,8 @@ struct AppState {
     plugin: Arc<plugin::Hub>,
     /// 2.21.0 TotalScript Blockbench plugin hub (bb_* jobs, plugin file path).
     blockbench: Arc<blockbench::Hub>,
+    /// Figma Design plugin bridge; token-paired independently from Figma Desktop MCP.
+    figma_plugin: Arc<figma_plugin::Hub>,
 }
 
 impl AppState {
@@ -335,6 +358,7 @@ impl AppState {
             ui,
             plugin: Arc::new(plugin::Hub::new()),
             blockbench: Arc::new(blockbench::Hub::new()),
+            figma_plugin: Arc::new(figma_plugin::Hub::new()),
         }
     }
 }
@@ -972,7 +996,7 @@ async fn ui_command_loop(state: AppState, mut rx: tokio::sync::mpsc::UnboundedRe
                         "local" => workspace::dispatch(&state2.workspace, &name, args).await
                             .map(|text| McpToolOutput { text, images: Vec::new() })
                             .map_err(anyhow::Error::msg),
-                        _ => if plugin::is_plugin_tool(&name) { plugin::call(&state2, &name, args).await } else { roblox_tool(&state2, &name, args).await },
+                        _ => if figma_plugin::is_tool(&name) { figma_plugin::call(&state2, &name, args).await } else if plugin::is_plugin_tool(&name) { plugin::call(&state2, &name, args).await } else { roblox_tool(&state2, &name, args).await },
                     };
                     let elapsed_ms = started.elapsed().as_millis();
                     let out = match outcome {
@@ -1155,10 +1179,13 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
     let s3 = state.clone();
     tokio::spawn(async move { let _ = run_legacy_ws(s3, 17615, "local").await; });
     let ws_root_display = state.workspace.root_display();
-    // CORS only ever reflects extension origins; web-page origins are refused
-    // outright by `origin_guard` (which also rejects their preflights).
+    // CORS reflects extension origins and permits Origin: null only on the
+    // exact, token-gated Figma plugin routes; web-page origins are refused by
+    // `origin_guard` (which also rejects their preflights).
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::predicate(|origin: &axum::http::HeaderValue, _parts: &axum::http::request::Parts| origin_allowed(origin.to_str().ok())))
+        .allow_origin(AllowOrigin::predicate(|origin: &axum::http::HeaderValue, parts: &axum::http::request::Parts| {
+            origin_allowed_for_path(origin.to_str().ok(), parts.uri().path())
+        }))
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers(Any);
     let app = Router::new()
@@ -1182,6 +1209,13 @@ async fn run_server(state: AppState, addr: SocketAddr, start: std::time::Instant
         .route("/api/blockbench/result", post(blockbench::result_handler))
         .route("/api/blockbench/goodbye", post(blockbench::goodbye_handler))
         .route("/api/blockbench/status", get(blockbench::status_handler))
+        .route("/api/figma-plugin/pair", post(figma_plugin::pairing_handler))
+        .route("/api/figma-plugin/hello", post(figma_plugin::hello_handler))
+        .route("/api/figma-plugin/poll", get(figma_plugin::poll_handler))
+        .route("/api/figma-plugin/result", post(figma_plugin::result_handler).layer(axum::extract::DefaultBodyLimit::max(8 * 1024 * 1024)))
+        .route("/api/figma-plugin/goodbye", post(figma_plugin::goodbye_handler))
+        .route("/api/figma-plugin/status", get(figma_plugin::status_handler))
+        .route("/api/figma-plugin/revoke", post(figma_plugin::revoke_handler))
         .route("/ws", get(ws_handler))
         .with_state(state)
         .layer(cors)
@@ -1267,6 +1301,8 @@ async fn window_handler(State(state): State<AppState>, Json(req): Json<serde_jso
 
 async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
     let blockbench = state.blockbench.status().await;
+    let figma_plugin = state.figma_plugin.status().await;
+    let figma_pairing_expires_at = state.figma_plugin.pairing_expiry().await;
     Json(serde_json::json!({
         "roblox_connected": state.roblox_editor_connected.load(Ordering::Relaxed),
         "roblox_bridge_connected": state.roblox_clients.read().await.len() > 0,
@@ -1283,6 +1319,14 @@ async fn status_handler(State(state): State<AppState>) -> impl IntoResponse {
         "blockbench_verified": blockbench.verified,
         "blockbench_status_error": blockbench.error,
         "blockbench_plugin_file": state.blockbench.installed().await,
+        "figma_plugin_connected": figma_plugin.connected,
+        "figma_plugin_status": figma_plugin.state,
+        "figma_plugin_verified": figma_plugin.verified,
+        "figma_plugin_status_error": figma_plugin.error,
+        "figma_plugin_checked_at": chrono::Utc::now().timestamp_millis(),
+        "figma_plugin_tools": if figma_plugin.connected { figma_plugin::tools(true).len().saturating_sub(1) } else { 0 },
+        "figma_plugin_pairing_pending": figma_pairing_expires_at.is_some(),
+        "figma_plugin_pairing_expires_at": figma_pairing_expires_at,
     }))
 }
 async fn ws_handler(ws: axum::extract::ws::WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
@@ -1328,26 +1372,66 @@ async fn roblox_tools(state: &AppState) -> anyhow::Result<Vec<serde_json::Value>
     }
 }
 
-/// MCP tool list plus the TotalScript Studio plugin's commands (only while the
-/// plugin is connected; Open Cloud commands only once a key is set).
+/// MCP tool list plus the independent TotalScript plugin bridges. The Figma
+/// Design bridge remains discoverable even if Roblox Studio's stdio MCP helper
+/// is unavailable; no Figma operation is sent to Studio or Figma Desktop MCP.
 async fn roblox_tools_with_plugin(state: &AppState) -> anyhow::Result<Vec<serde_json::Value>> {
-    let mut tools = roblox_tools(state).await?;
+    let mut tools = match roblox_tools(state).await {
+        Ok(tools) => tools,
+        Err(error) => {
+            tracing::info!("Studio MCP tool discovery unavailable; keeping standalone plugin tools visible: {error:#}");
+            let mut fallback = Vec::new();
+            fallback.extend(plugin::tools(state.plugin.connected().await, state.plugin.key().await.is_some()));
+            fallback.extend(blockbench::tools(state.blockbench.connected().await));
+            fallback.extend(figma_plugin::tools(state.figma_plugin.connected().await));
+            if fallback.is_empty() { return Err(error); }
+            fallback
+        }
+    };
     tools.extend(plugin::tools(state.plugin.connected().await, state.plugin.key().await.is_some()));
     tools.extend(blockbench::tools(state.blockbench.connected().await));
+    tools.extend(figma_plugin::tools(state.figma_plugin.connected().await));
     Ok(tools)
 }
 
-/// 2.21.0: the Blockbench plugin rides the Roblox channel's server list so the
-/// extension's status bar / popup show it next to Studio (no socket of its own).
-async fn with_blockbench_server(state: &AppState, mut v: serde_json::Value) -> serde_json::Value {
-    let connected = state.blockbench.connected().await;
-    let entry = serde_json::json!({"id":"blockbench","name":"Blockbench","alive":connected,"tools":if connected { blockbench::tools(true).len() } else { 0 }});
-    match v.get_mut("servers").and_then(|s| s.as_array_mut()) {
-        Some(arr) => arr.push(entry),
-        None => { if let Some(obj) = v.as_object_mut() { obj.insert("servers".into(), serde_json::json!([entry])); } }
+async fn figma_plugin_server_entry(state: &AppState) -> serde_json::Value {
+    let status = state.figma_plugin.status().await;
+    serde_json::json!({
+        "id": "figma_plugin",
+        "name": "Figma Design plugin",
+        "alive": status.connected,
+        "status": status.state,
+        "tools": if status.connected { figma_plugin::tools(true).len().saturating_sub(1) } else { 0 },
+    })
+}
+
+async fn local_tools_and_servers(state: &AppState) -> (bool, Vec<serde_json::Value>, Vec<serde_json::Value>) {
+    let ready = state.workspace.ready();
+    let mut tools = workspace::catalog();
+    tools.extend(figma_plugin::tools(state.figma_plugin.connected().await));
+    let servers = vec![
+        serde_json::json!({"id":"local","name":"Local Filesystem","alive":ready,"tools":if ready { workspace::catalog().len() } else { 0 }}),
+        figma_plugin_server_entry(state).await,
+    ];
+    (ready, tools, servers)
+}
+
+/// Blockbench and Figma Design ride the existing Roblox/AgentScript discovery
+/// channel as independent addon servers (neither requires a Studio place).
+async fn with_plugin_servers(state: &AppState, mut v: serde_json::Value) -> serde_json::Value {
+    let bb_connected = state.blockbench.connected().await;
+    let bb_entry = serde_json::json!({"id":"blockbench","name":"Blockbench","alive":bb_connected,"tools":if bb_connected { blockbench::tools(true).len() } else { 0 }});
+    let figma_entry = figma_plugin_server_entry(state).await;
+    if let Some(arr) = v.get_mut("servers").and_then(|s| s.as_array_mut()) {
+        arr.push(bb_entry);
+        arr.push(figma_entry);
+    } else if let Some(obj) = v.as_object_mut() {
+        obj.insert("servers".into(), serde_json::json!([bb_entry, figma_entry]));
     }
     if !v.get("tools").map(|t| t.is_array()).unwrap_or(false) {
-        if let Some(obj) = v.as_object_mut() { obj.insert("tools".into(), serde_json::json!(blockbench::tools(connected))); }
+        let mut addon_tools = blockbench::tools(bb_connected);
+        addon_tools.extend(figma_plugin::tools(state.figma_plugin.connected().await));
+        if let Some(obj) = v.as_object_mut() { obj.insert("tools".into(), serde_json::json!(addon_tools)); }
     }
     v
 }
@@ -1470,9 +1554,8 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
 
     let intro = tokio::time::timeout(Duration::from_secs(8), async {
         if engine == "local" {
-            let ready = state.workspace.ready();
-            let tools = workspace::catalog();
-            serde_json::json!({"type":"connected","id":0,"ok":ready,"mcp_alive":ready,"studio":ready,"tools":tools,"servers":[{"id":"local","name":"Local Filesystem","alive":ready,"tools":if ready { tools.len() } else { 0 }}],"workspace_root":state.workspace.root_display()})
+            let (ready, tools, servers) = local_tools_and_servers(&state).await;
+            serde_json::json!({"type":"connected","id":0,"ok":ready,"mcp_alive":ready,"studio":ready,"tools":tools,"servers":servers,"workspace_root":state.workspace.root_display()})
         } else {
             match roblox_tools_with_plugin(&state).await {
                 Ok(tools) => {
@@ -1481,9 +1564,9 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                         mcp.probe_studio().await.is_ok()
                     };
                     set_editor(&state, studio);
-                    with_blockbench_server(&state, serde_json::json!({"type":"connected","id":0,"ok":studio,"mcp_alive":true,"studio":studio,"tools":tools,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":studio,"tools":if studio { tools.len() } else { 0 }}]})).await
+                    with_plugin_servers(&state, serde_json::json!({"type":"connected","id":0,"ok":studio,"mcp_alive":true,"studio":studio,"tools":tools,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":studio,"tools":if studio { tools.len() } else { 0 }}]})).await
                 },
-                Err(_) => with_blockbench_server(&state, serde_json::json!({"type":"connected","id":0,"ok":false,"mcp_alive":false,"studio":false,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":false,"tools":0}]})).await,
+                Err(_) => with_plugin_servers(&state, serde_json::json!({"type":"connected","id":0,"ok":false,"mcp_alive":false,"studio":false,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":false,"tools":0}]})).await,
             }
         }
     })
@@ -1500,9 +1583,8 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                     "ping" => { send_json(&out_tx, serde_json::json!({"type":"pong","id":id})); },
                     "list_tools" => {
                         let response = if engine == "local" {
-                            let ready = state.workspace.ready();
-                            let tools = workspace::catalog();
-                            serde_json::json!({"type":"tools","id":id,"ok":ready,"mcp_alive":ready,"studio":ready,"tools":tools,"servers":[{"id":"local","name":"Local Filesystem","alive":ready,"tools":if ready { tools.len() } else { 0 }}]})
+                            let (ready, tools, servers) = local_tools_and_servers(&state).await;
+                            serde_json::json!({"type":"tools","id":id,"ok":ready,"mcp_alive":ready,"studio":ready,"tools":tools,"servers":servers})
                         } else {
                             match roblox_tools_with_plugin(&state).await {
                                 Ok(tools) => {
@@ -1514,9 +1596,9 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                                         mcp.probe_studio().await.is_ok()
                                     };
                                     set_editor(&state, studio);
-                                    with_blockbench_server(&state, serde_json::json!({"type":"tools","id":id,"ok":studio,"mcp_alive":true,"studio":studio,"tools":tools,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":studio,"tools":if studio { tools.len() } else { 0 }}]})).await
+                                    with_plugin_servers(&state, serde_json::json!({"type":"tools","id":id,"ok":studio,"mcp_alive":true,"studio":studio,"tools":tools,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":studio,"tools":if studio { tools.len() } else { 0 }}]})).await
                                 },
-                                Err(error) => with_blockbench_server(&state, serde_json::json!({"type":"tools","id":id,"ok":false,"mcp_alive":false,"studio":false,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":false,"tools":0}],"error":error.to_string()})).await,
+                                Err(error) => with_plugin_servers(&state, serde_json::json!({"type":"tools","id":id,"ok":false,"mcp_alive":false,"studio":false,"servers":[{"id":"roblox","name":"Roblox Studio MCP","alive":false,"tools":0}],"error":error.to_string()})).await,
                             }
                         };
                         send_json(&out_tx, response);
@@ -1587,6 +1669,7 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                         tokio::spawn(async move {
                             let started = std::time::Instant::now();
                             let outcome: anyhow::Result<McpToolOutput> = match eng.as_str() {
+                                _ if figma_plugin::is_tool(&name) => figma_plugin::call(&state2, &name, args).await,
                                 "local" => workspace::dispatch(&state2.workspace, &name, args).await
                                     .map(|text| McpToolOutput { text, images: Vec::new() })
                                     .map_err(anyhow::Error::msg),
@@ -1605,7 +1688,10 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
                                 Err(error) => {
                                     let detail = error.to_string();
                                     let lower = detail.to_lowercase();
-                                    let error_code = if lower.contains("not found") || lower.contains("unknown command") { "COMMAND_NOT_FOUND" }
+                                    let error_code = if lower.contains("figma_plugin_status_unknown") { "FIGMA_PLUGIN_STATUS_UNKNOWN" }
+                                        else if lower.contains("figma_plugin_offline") { "FIGMA_PLUGIN_OFFLINE" }
+                                        else if lower.contains("figma_plugin_busy") { "FIGMA_PLUGIN_BUSY" }
+                                        else if lower.contains("not found") || lower.contains("unknown command") { "COMMAND_NOT_FOUND" }
                                         else if lower.contains("required") || lower.contains("invalid") || lower.contains("missing") { "INVALID_ARGUMENT" }
                                         else if lower.contains("blockbench_status_unknown") || lower.contains("status could not be verified") || lower.contains("heartbeat is stale") { "BLOCKBENCH_STATUS_UNKNOWN" }
                                         else if lower.contains("blockbench_offline") || lower.contains("blockbench is not connected") { "BLOCKBENCH_OFFLINE" }
@@ -1640,7 +1726,7 @@ async fn handle_legacy_ws(ws_stream: tokio_tungstenite::WebSocketStream<tokio::n
 
 #[cfg(test)]
 mod origin_tests {
-    use super::origin_allowed;
+    use super::{origin_allowed, origin_allowed_for_path};
 
     #[test]
     fn extension_and_local_callers_pass_web_pages_do_not() {
@@ -1652,5 +1738,25 @@ mod origin_tests {
         for bad in ["https://evil.example", "http://127.0.0.1:3000", "http://localhost:8080", "null", "file://", "chrome-extension://", "https://chatgpt.com"] {
             assert!(!origin_allowed(Some(bad)), "{bad} must be refused");
         }
+    }
+
+    #[test]
+    fn null_origin_is_allowed_only_on_exact_figma_plugin_routes() {
+        for route in [
+            "/api/figma-plugin/hello", "/api/figma-plugin/poll",
+            "/api/figma-plugin/result", "/api/figma-plugin/goodbye",
+        ] {
+            assert!(origin_allowed_for_path(Some("null"), route), "Figma plugin route {route}");
+        }
+        for path in [
+            "/api/status", "/api/plugin/poll", "/api/blockbench/poll", "/ws",
+            "/api/figma-plugin/pair", "/api/figma-plugin/status", "/api/figma-plugin/revoke",
+            "/api/figma-plugin/unknown", "/api/figma-plugin/hello/extra",
+        ] {
+            assert!(!origin_allowed_for_path(Some("null"), path), "null Origin must not pass {path}");
+        }
+        assert!(!origin_allowed_for_path(Some("https://evil.example"), "/api/figma-plugin/hello"));
+        assert!(origin_allowed_for_path(Some("chrome-extension://test-id"), "/api/figma-plugin/pair"));
+        assert!(origin_allowed_for_path(None, "/api/figma-plugin/hello"), "native local callers retain the existing no-Origin behavior");
     }
 }

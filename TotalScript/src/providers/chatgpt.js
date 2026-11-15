@@ -101,7 +101,7 @@ const RSProvider = (() => {
     reply: ".markdown, .prose, .markdown-new-styling, [data-message-content]",
     workItem: "[data-chatgpt-search-unit-key][data-chatgpt-search-message-ids]",
     workReply: '[data-markdown-text-style="assistant-message"]',
-    thinking: '[data-markdown-text-style="thinking"], [data-testid="thinking-status"], [data-testid*="reasoning" i]', 
+    thinking: '[data-markdown-text-style="thinking"], [data-testid="thinking-status"], [data-testid*="reasoning" i]',
     editor: "#prompt-textarea, [data-testid='prompt-textarea'], [data-testid='composer-input'], [contenteditable='true'][data-lexical-editor='true'], form[data-chatgpt-composer] [data-composer-markdown][contenteditable='true'][role='textbox'], form[data-chatgpt-composer] [role='textbox'], form [contenteditable]:not([contenteditable='false'])",
     // The ONE submit control; its data-testid says whether it is currently a
     // send or a stop button (see isStopBtn). Id first - it survives testid churn.

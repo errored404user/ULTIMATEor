@@ -143,7 +143,7 @@ const visible = (el) => { for (let n = el; n; n = n.parentElement) if (n.hidden 
     const { w, d, errors } = await boot({ tabs: [TAB_DS], status: CONNECTED });
     d.querySelector('.ts-tab[data-view="settings"]').click(); await sleep(10);
     const cats = [...d.querySelectorAll("#cat-list .cat b")].map((b) => b.textContent);
-    ok("C1 nine categories in the agreed order", cats.join("|") === "General|Appearance|AI & Agents|Providers|Roblox Studio|Tools & Skills|Keyboard shortcuts|Advanced|Support & about");
+    ok("C1 nine categories in the agreed order, including the Connections section", cats.join("|") === "General|Appearance|AI & Agents|Providers|Connections|Tools & Skills|Keyboard shortcuts|Advanced|Support & about");
     const q = d.getElementById("set-search"); q.value = "auto-fix"; q.dispatchEvent(new w.Event("input"));
     ok("C2 search finds the setting with its category", !d.getElementById("set-results").hidden && /Auto-fix playtest errors/.test(d.getElementById("set-results-list").textContent) && /AI & Agents/.test(d.getElementById("set-results-list").textContent));
     d.querySelector("#set-results-list .set-result").click(); await sleep(40);
