@@ -24,7 +24,8 @@ use tokio::sync::{broadcast, Mutex, Notify};
 
 use crate::{AppState, McpToolOutput};
 
-pub const PLUGIN_SOURCE: &str = include_str!("../../plugin/figma/TotalScript-Figma.js");
+#[cfg(test)]
+const PLUGIN_SOURCE: &str = include_str!("../../plugin/figma/TotalScript-Figma.js");
 pub const PAIRING_TTL: Duration = Duration::from_secs(5 * 60);
 const STALE_AFTER: Duration = Duration::from_secs(45);
 const POLL_WAIT: Duration = Duration::from_secs(20);
