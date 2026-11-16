@@ -7,7 +7,7 @@ const fs = require("fs"), path = require("path"), vm = require("vm");
 const root = path.join(__dirname, "..");
 const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
 const O = require(path.join(root, "src/core/orchestrator.js"));
-const main = read("src/core/main.js"), config = read("src/core/config.js"), background = read("background.js"), rs = read("agent/src/chat.rs"), manifest = JSON.parse(read("manifest.json")), html = read("codecraft.html");
+const main = read("src/core/main.js"), deepseek = read("src/providers/deepseek.js"), config = read("src/core/config.js"), background = read("background.js"), rs = read("agent/src/chat.rs"), manifest = JSON.parse(read("manifest.json")), html = read("codecraft.html");
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra) { if (cond) { pass++; console.log("ok   " + name); } else { fail++; console.log("FAIL " + name + (extra !== undefined ? " — " + JSON.stringify(extra).slice(0, 300) : "")); } }
@@ -117,6 +117,8 @@ Searched "DataStore docs". Top result: https://create.roblox.com/docs/cloud-serv
 // ── 4. provider error taxonomy ──
 const ERR = [
   ["HTTP 429 Too Many Requests, retry after 20 seconds", "rate_limit", true, 20000],
+  ["DeepSeek: sending messages too frequently", "throttled", false],
+  ["Due to violation of user policies, your account has been suspended until October 12, 2026 15:00", "account_block", false],
   ["This conversation has reached the maximum context length", "context_limit", false],
   ["401 Unauthorized: invalid api key", "auth", false],
   ["You have exceeded your current quota, please check your plan and billing", "quota", false],
@@ -134,8 +136,14 @@ for (const [text, cls, retryable, waitMs] of ERR) {
   const r = O.classifyProviderError(text);
   ok(`classifyProviderError(${JSON.stringify(text)}) = ${cls}${retryable ? " (retryable)" : ""}`, r.cls === cls && r.retryable === retryable && (waitMs === undefined || r.waitMs === waitMs) && typeof r.hint === "string" && r.hint.length > 10, r);
 }
+{
+  const sourceMatch = deepseek.match(/^\s*accountBlock:\s*\/(.*)\/i,$/m);
+  const noticeRe = sourceMatch && new RegExp(sourceMatch[1], "i");
+  ok("DeepSeek's visible-error pattern recognizes account restrictions, too-many-requests and 429/rate-limit notices", !!noticeRe && ["Account temporarily suspended", "Too many requests", "HTTP 429 rate limit"].every((s) => noticeRe.test(s)) && !noticeRe.test("normal assistant reply") && /function scanError\(\) \{\s*const blocked = scanAccountBlock\(\);\s*if \(blocked\) return blocked;/.test(deepseek));
+}
 ok("every error class has a retryable flag and a user hint", Object.keys(O.ERROR_CLASSES).length >= 11 && Object.values(O.ERROR_CLASSES).every((m) => typeof m.retryable === "boolean" && m.hint.length > 10));
-ok("retryDelay: bounded back-off (2 attempts) for transient classes, null for permanent ones", O.retryDelay("rate_limit", 1) === 15000 && O.retryDelay("rate_limit", 2) === 45000 && O.retryDelay("rate_limit", 3) === null && O.retryDelay("busy", 1) === 6000 && O.retryDelay("network", 2) === 12000 && O.retryDelay("auth", 1) === null && O.retryDelay("quota", 1) === null && O.retryDelay("context_limit", 1) === null && O.retryDelay("cancelled", 1) === null);
+ok("retryDelay: bounded back-off (2 attempts) for transient classes, null for permanent ones and explicit throttles", O.retryDelay("rate_limit", 1) === 15000 && O.retryDelay("rate_limit", 2) === 45000 && O.retryDelay("rate_limit", 3) === null && O.retryDelay("busy", 1) === 6000 && O.retryDelay("network", 2) === 12000 && O.retryDelay("auth", 1) === null && O.retryDelay("quota", 1) === null && O.retryDelay("context_limit", 1) === null && O.retryDelay("cancelled", 1) === null && O.retryDelay("throttled", 1, 180000) === null);
+ok("shouldStopOnSlowdown: every explicit throttle and DeepSeek rate-limit stops without an automatic retry", O.shouldStopOnSlowdown("deepseek", "throttled") && O.shouldStopOnSlowdown("deepseek", "rate_limit") && O.shouldStopOnSlowdown("chatgpt", "throttled") && !O.shouldStopOnSlowdown("chatgpt", "rate_limit"));
 ok("retryDelay honours a server-provided wait (retry-after) up to 120 s", O.retryDelay("rate_limit", 1, 30000) === 30500 && O.retryDelay("rate_limit", 1, 600000) === 120000);
 // ── 5. tool argument validation against the registry schema ──
 {
@@ -180,6 +188,8 @@ const PINS = [
   ["task state on A", /task: null,[\s\S]{0,200}lastSent: null,/],
   ["diag payloads are redacted", /ORCH\.redactData\(/],
   ["provider_error classified", /ORCH\.classifyProviderError\(/],
+  ["explicit throttles stop before the provider retry path", /ORCH\.shouldStopOnSlowdown\(P\.id, cls\.cls\)/],
+  ["slowdown handling logs a stop rather than a timed resend", /loop\.slowdownStop/],
   ["bounded provider retry resends the SAME message", /loop\.providerRetry/],
   ["false-success nudge", /loop\.falseSuccess/],
   ["explain-only tasks accept command-less replies", /loop\.commandlessAccepted/],

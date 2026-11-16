@@ -73,11 +73,9 @@ const RSProvider = (() => {
       "i"
     ),
     tooLong: /conversation .{0,20}(too long|getting too long|trop longue)/i,
-    // 1.99.0: ACCOUNT-level notices. DeepSeek suspends web-chat accounts for
-    // bot-like cadence ("Due to violation of user policies, your account has been
-    // suspended until <date>") and throttles with "sending messages too
-    // frequently". Both must stop the loop at once - never be retried.
-    accountBlock: /account (has been |is |was )?(temporarily )?(suspended|banned|restricted|locked|disabled|blocked)|suspended until|violation of (the )?user polic|(sending|sent) (messages |requests )?too (frequently|often|fast|quickly)|too frequently|compte (a été |est )?(suspendu|bloqué)|trop fréquemment|请求过于频繁|操作过于频繁|账号.{0,8}(封禁|暂停|冻结|异常)/i,
+    // Account restrictions, slow-down notices and explicit rate limits are stop
+    // signals. The run must not automatically retry or resend after any of them.
+    accountBlock: /account (has been |is |was )?(temporarily )?(suspended|banned|restricted|locked|disabled|blocked)|suspended until|violation of (the )?user polic|(sending|sent) (messages |requests )?too (frequently|often|fast|quickly)|too frequently|too many requests|rate[- ]?limit|HTTP\s*429|\b429\b|compte (a été |est )?(suspendu|bloqué)|trop fréquemment|请求过于频繁|操作过于频繁|账号.{0,8}(封禁|暂停|冻结|异常)/i,
     busy: /server is busy|serveur est occup|please try again|réessayer plus tard|system is currently busy/i,
     continueBtn: /^(continue|continuer|继续(生成)?|fortfahren|continuar|seguir|続行)$/i,
     stopped: /(arrêté|arrété|stopped|已停止|停止生成|已暂停)/i,

@@ -6304,39 +6304,24 @@
           break;
         }
         if (res.kind === "provider_error") {
-          // 1.69: classify first. Transient classes (rate limit, overloaded /
-          // 5xx, dropped connection) get a bounded back-off and the SAME message
-          // re-sent (the site never delivered it to the model, so nothing runs
-          // twice); permanent classes (auth, quota, moderation, invalid request)
-          // stop at once with an actionable hint instead of a generic banner.
+          // Classify first. Explicit slow-down signals (and DeepSeek web-chat
+          // rate limits) stop below without a resend. Other transient failures
+          // may get bounded back-off; permanent errors stop with a clear hint.
           const cls = res.cls || (ORCH ? ORCH.classifyProviderError(res.detail) : null);
-          if (cls && cls.cls === "throttled") {
-            // 1.99.3: "sending messages too frequently" = slow down, NOT a suspension
-            // (1.99.0-1.99.2 reported this as "account blocked" - a false verdict).
-            // The message was never delivered, so after a real cool-down (3+ min,
-            // or what the site asked) it is sent ONCE more, unchanged. A second
-            // throttle in the same run stops the loop - resume by hand later.
-            A.throttleRetries = A.throttleRetries || 0;
-            const cool = ORCH && A.lastSent && !A.stop && A.started ? ORCH.retryDelay("throttled", A.throttleRetries + 1, cls.waitMs) : null;
-            diag("loop.throttled", { n: A.throttleRetries + 1, coolMs: cool, detail: String(res.detail || "").slice(0, 120) });
-            if (cool != null) {
-              A.throttleRetries++;
-              const mins = Math.max(1, Math.round(cool / 60000));
-              ui.toast(`${P.displayName} asked to slow down — cooling down ${mins} min, then sending the message once more (Stop to cancel)`);
-              const t0 = Date.now();
-              while (Date.now() - t0 < cool && !A.stop) {
-                const left = Math.ceil((cool - (Date.now() - t0)) / 1000);
-                ui.steeringProgress("correcting", `${P.displayName} asked to slow down — cooling down ${left >= 90 ? Math.ceil(left / 60) + " min" : left + " s"}`, toolTurns);
-                await sleep(1000);
-              }
-              if (A.stop) break;
-              const again = A.lastSent;
-              base = await submitAndGetBase(again.text, again.images);
-              continue;
-            }
-            ui.steeringProgress("error", `${P.displayName} asked to slow down again — paused`, toolTurns);
-            ui.banner("warn", `${P.displayName} asked to slow down`,
-              `${P.displayName} said: "${String(res.detail || "").slice(0, 160)}". This is a throttle, not a suspension. TotalScript stopped so the account does not accumulate strikes - wait a few minutes, then send "continue".`);
+          const stopForSlowdown = cls && (ORCH && typeof ORCH.shouldStopOnSlowdown === "function"
+            ? ORCH.shouldStopOnSlowdown(P.id, cls.cls)
+            : cls.cls === "throttled" || (P.id === "deepseek" && cls.cls === "rate_limit"));
+          if (stopForSlowdown) {
+            // An explicit slow-down / rate-limit response is a stop signal, not
+            // an invitation to retry later. Respect it without another send.
+            const detail = String(res.detail || "").slice(0, 160);
+            const title = cls.cls === "throttled"
+              ? `${P.displayName} asked to slow down — paused`
+              : `${P.displayName} rate-limited this run — paused`;
+            diag("loop.slowdownStop", { provider: P.id, cls: cls.cls, detail: detail.slice(0, 120) });
+            ui.steeringProgress("error", title, toolTurns);
+            ui.banner("warn", title,
+              `${P.displayName} said: "${detail}". TotalScript stopped without automatically retrying or resending. Follow the provider's stated limits and resume only when permitted. Automated web-chat use may be restricted; use only a provider-authorized API or automation route for repeated workflows.`);
             break;
           }
           const wait = cls && cls.retryable && ORCH && A.lastSent && !A.stop && A.started ? ORCH.retryDelay(cls.cls, providerRetries + 1, cls.waitMs) : null;

@@ -197,13 +197,11 @@ const TotalOrchestrator = (() => {
   // succeed later without any change"; everything else needs the user.
   const ERROR_CLASSES = {
     context_limit: { retryable: false, hint: "The conversation is too long for this model - open a fresh chat and continue there." },
-    // 1.99.0: the ACCOUNT (not this request) was suspended or throttled for bot-like
-    // use of the web chat. Never retried - every extra message lengthens the ban.
-    account_block: { retryable: false, hint: "The provider suspended or throttled this ACCOUNT for bot-like use of its web chat. TotalScript stopped and will not resend. Wait the stated time out; for heavy automation use the desktop app with your own official API key." },
-    // 1.99.3: "you are sending messages too frequently" - a slow-down request, NOT
-    // a suspension. One retry of the undelivered message after a long cool-down
-    // (minutes, like a person would).
-    throttled: { retryable: true, hint: "The provider asked to slow down (not a suspension). TotalScript cools down for a few minutes, retries the undelivered message once, and otherwise stops so you can resume later." },
+    // An account restriction is terminal for this run; never try to work around it.
+    account_block: { retryable: false, hint: "The provider restricted this account. TotalScript stopped and will not resend. Follow the provider's notice or appeal process; use only an API or automation route the provider authorizes." },
+    // An explicit slow-down response is also terminal for this run: no timed
+    // retry or human-like pacing. The user can resume only when the provider allows it.
+    throttled: { retryable: false, hint: "The provider asked to slow down. TotalScript stopped immediately and will not retry or resend. Follow the provider's stated limit and resume only when permitted." },
     rate_limit: { retryable: true, hint: "The provider is rate limiting this account - TotalScript waits and retries, then stops if it persists." },
     quota: { retryable: false, hint: "The account's usage allowance / credits are exhausted - wait for the reset or switch provider." },
     auth: { retryable: false, hint: "The session or API key is not accepted - sign in again / check the key, then press Start." },
@@ -215,7 +213,7 @@ const TotalOrchestrator = (() => {
     cancelled: { retryable: false, hint: "The request was cancelled (Stop pressed or the site aborted it) - nothing was resent." },
     unknown: { retryable: false, hint: "The provider reported an error OR could not classify - check the site and send \"continue\"." },
   };
-  const MAX_ATTEMPTS = { rate_limit: 2, busy: 2, network: 2, throttled: 1 };
+  const MAX_ATTEMPTS = { rate_limit: 2, busy: 2, network: 2 };
   function classifyProviderError(text) {
     const t = String(text || "").slice(0, 2000);
     const l = t.toLowerCase();
@@ -263,10 +261,17 @@ const TotalOrchestrator = (() => {
     const max = MAX_ATTEMPTS[cls] || 0;
     const n = Math.max(1, attempt | 0);
     if (n > max) return null;
-    const base = cls === "throttled" ? [180000] : cls === "rate_limit" ? [15000, 45000] : cls === "network" ? [4000, 12000] : [6000, 20000];
+    const base = cls === "rate_limit" ? [15000, 45000] : cls === "network" ? [4000, 12000] : [6000, 20000];
     let ms = base[Math.min(n, base.length) - 1];
-    if (waitMs > 0) ms = Math.max(ms, Math.min(waitMs + 500, cls === "throttled" ? 600000 : 120000));
+    if (waitMs > 0) ms = Math.max(ms, Math.min(waitMs + 500, 120000));
     return ms;
+  }
+
+  // Honor explicit slow-down signals without sending a retry. DeepSeek's web
+  // chat also reports these as generic 429/rate-limit errors; those must not
+  // enter the normal bounded-retry path either.
+  function shouldStopOnSlowdown(providerId, cls) {
+    return cls === "throttled" || (String(providerId || "").toLowerCase() === "deepseek" && cls === "rate_limit");
   }
 
   // ───────────────────────── 4. tool argument validation ─────────────────────────
@@ -600,7 +605,7 @@ const TotalOrchestrator = (() => {
     }
   }
 
-  return { VERSION, classifyTask, taskLayer, classifyProviderError, retryDelay, ERROR_CLASSES, ACCOUNT_BLOCK_RE, ACCOUNT_SUSPEND_RE, THROTTLE_RE, suspendedUntil, validateToolArgs, argProblemsMessage, claimsCompletion, FEEDBACK, hasResearchResult, researchSources, hasResearchCitation, capabilities, redact, redactData, CATEGORY_LABEL, compactFeedback, PROBLEM_LINE_RE };
+  return { VERSION, classifyTask, taskLayer, classifyProviderError, retryDelay, shouldStopOnSlowdown, ERROR_CLASSES, ACCOUNT_BLOCK_RE, ACCOUNT_SUSPEND_RE, THROTTLE_RE, suspendedUntil, validateToolArgs, argProblemsMessage, claimsCompletion, FEEDBACK, hasResearchResult, researchSources, hasResearchCitation, capabilities, redact, redactData, CATEGORY_LABEL, compactFeedback, PROBLEM_LINE_RE };
 })();
 if (typeof window !== "undefined") window.TotalOrchestrator = TotalOrchestrator;
 if (typeof module !== "undefined" && module.exports) module.exports = TotalOrchestrator;
