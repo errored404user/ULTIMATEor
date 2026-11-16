@@ -1,5 +1,7 @@
-# TotalScript asset builder (2.21.0). Sent to Blender as execute_code like
+# TotalScript asset builder (2.22.0). Sent to Blender as execute_code like
 # blender_ops.py; tokens CMD / ARGS / OUT / MESH are filled by TotalScript.
+# 2.22.0 adds profile-driven lathe meshes to custom specs; the JS planner's
+# blockout / standard / hero / ultra detail control is persisted on the asset.
 #
 # Commands
 #   asset_build    {spec}                 build a TotalAssetPlan spec: parts with roles, scale-relative
@@ -266,8 +268,96 @@ def tri_count(obj):
 
 
 # ─────────────────────────── primitive construction ─────────────────────────
+def bm_lathe_into(bm, profile, size, segments=24):
+    """Revolve a normalized [radius, height] profile around local Z.
 
-def bm_primitive(shape, size, segments=24, subdivisions=2):
+    Radius is a fraction of the part's half-width / half-depth and height is a
+    fraction of its full height. Endpoints at radius zero become clean poles;
+    nonzero endpoints are capped, so the result is a closed, manifold solid.
+    This gives the planner a real custom-silhouette tool for handles, vessels,
+    columns, grips and other forms that should not be stacked cubes.
+    """
+    if not isinstance(profile, (list, tuple)) or len(profile) < 2 or len(profile) > 64:
+        raise ValueError("lathe profile needs 2..64 [radius, height] pairs")
+    sx, sy, sz = [max(1e-4, float(x)) for x in size]
+    seg = max(3, min(256, int(segments)))
+    points = []
+    prev_h = -float("inf")
+    for i, item in enumerate(profile):
+        if not isinstance(item, (list, tuple)) or len(item) < 2:
+            raise ValueError("lathe profile entries must be [radius, height]")
+        radius, height = float(item[0]), float(item[1])
+        if not math.isfinite(radius) or not math.isfinite(height) or radius < 0 or radius > 1 or height < 0 or height > 1 or height < prev_h:
+            raise ValueError("lathe profile radius / height must be in 0..1 and ordered bottom-to-top")
+        if points and abs(radius - points[-1][0]) < 1e-9 and abs(height - points[-1][1]) < 1e-9:
+            raise ValueError("lathe profile cannot repeat a point")
+        if radius <= 1e-9 and i not in (0, len(profile) - 1):
+            raise ValueError("lathe profile radius 0 is only valid at either endpoint")
+        points.append((radius, height))
+        prev_h = height
+    if not any(r > 1e-9 for r, _ in points):
+        raise ValueError("lathe profile needs a nonzero radius")
+    if points[-1][1] <= points[0][1]:
+        raise ValueError("lathe profile must span a positive height")
+    if abs(sx - sy) > max(sx, sy) * 0.001:
+        raise ValueError("rotational lathe needs equal X and Y diameters")
+
+    rings = []
+    for radius, height in points:
+        z = (height - 0.5) * sz
+        if radius <= 1e-9:
+            rings.append([bm.verts.new((0.0, 0.0, z))])
+        else:
+            ring = []
+            for i in range(seg):
+                a = 2.0 * math.pi * i / seg
+                ring.append(bm.verts.new((math.cos(a) * radius * sx / 2.0, math.sin(a) * radius * sy / 2.0, z)))
+            rings.append(ring)
+
+    for i in range(len(rings) - 1):
+        lower, upper = rings[i], rings[i + 1]
+        if len(lower) == 1 and len(upper) == 1:
+            raise ValueError("adjacent lathe profile points cannot both have radius 0")
+        if len(lower) == 1:
+            apex = lower[0]
+            for j in range(seg):
+                try:
+                    bm.faces.new((apex, upper[(j + 1) % seg], upper[j]))
+                except ValueError:
+                    pass
+        elif len(upper) == 1:
+            apex = upper[0]
+            for j in range(seg):
+                try:
+                    bm.faces.new((lower[j], lower[(j + 1) % seg], apex))
+                except ValueError:
+                    pass
+        else:
+            for j in range(seg):
+                try:
+                    bm.faces.new((lower[j], lower[(j + 1) % seg], upper[(j + 1) % seg], upper[j]))
+                except ValueError:
+                    pass
+
+    # Close flat ends with triangle fans. Apex endpoints are already closed by
+    # the profile's cone triangles and must not receive a duplicate cap.
+    for ring_index, flip in ((0, True), (len(rings) - 1, False)):
+        ring = rings[ring_index]
+        if len(ring) == 1:
+            continue
+        height = points[ring_index][1]
+        center = bm.verts.new((0.0, 0.0, (height - 0.5) * sz))
+        for j in range(seg):
+            try:
+                if flip:
+                    bm.faces.new((center, ring[(j + 1) % seg], ring[j]))
+                else:
+                    bm.faces.new((center, ring[j], ring[(j + 1) % seg]))
+            except ValueError:
+                pass
+
+
+def bm_primitive(shape, size, segments=24, subdivisions=2, profile=None):
     bm = bmesh.new()
     sx, sy, sz = [max(1e-4, float(x)) for x in size]
     if shape == "box":
@@ -293,6 +383,12 @@ def bm_primitive(shape, size, segments=24, subdivisions=2):
         except TypeError:
             bmesh.ops.create_icosphere(bm, subdivisions=max(1, min(4, int(subdivisions))), diameter=2.0)
         bmesh.ops.scale(bm, vec=(sx / 2.0, sy / 2.0, sz / 2.0), verts=bm.verts)
+    elif shape == "lathe":
+        try:
+            bm_lathe_into(bm, profile, (sx, sy, sz), segments)
+        except Exception:
+            bm.free()
+            raise
     elif shape == "torus":
         # major radius from x, minor from z (tube thickness)
         major = sx / 2.0
@@ -835,8 +931,9 @@ def op_inset(bm, op, size):
     return len(want)
 
 
-def make_cutter(shape, size, pos, rot_deg, coll, name):
-    bm = bm_primitive(shape if shape in ("box", "cylinder", "sphere") else "box", size, segments=24)
+def make_cutter(shape, size, pos, rot_deg, coll, name, profile=None):
+    supported = ("box", "cylinder", "sphere", "cone", "torus", "ico", "lathe")
+    bm = bm_primitive(shape if shape in supported else "box", size, segments=24, profile=profile)
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
     bm.free()
@@ -886,7 +983,7 @@ def op_cut_objects(obj, op, part, coll):
         specs.append((rel[0], -rel[1], rel[2]))
     for i, r in enumerate(specs):
         world = base @ Vector(r)
-        c = make_cutter(shape, size, world, rot, coll, obj.name + "_cut%d" % i)
+        c = make_cutter(shape, size, world, rot, coll, obj.name + "_cut%d" % i, profile=op.get("profile"))
         # inherit the part rotation so cut rot is relative to the part
         c.matrix_world = base @ Matrix.Translation(Vector(r)) @ Euler([math.radians(a) for a in rot], "XYZ").to_matrix().to_4x4()
         c.scale = (1, 1, 1)
@@ -1546,7 +1643,7 @@ def build_part(spec, part, coll, mats, style):
     if shape == "generator":
         bm, gen_info = bm_generate(part.get("generator"), size, segments if part.get("segments") else None, subdiv if part.get("subdivisions") else None)
     else:
-        bm = bm_primitive(shape, size, segments=segments, subdivisions=subdiv)
+        bm = bm_primitive(shape, size, segments=segments, subdivisions=subdiv, profile=part.get("profile"))
     ops = [o for o in (part.get("ops") or []) if isinstance(o, dict)]
     applied = []
     # vertex-level ops first (they reshape the primitive before any boolean)
@@ -1601,7 +1698,7 @@ def build_part(spec, part, coll, mats, style):
     # UVs
     uv_mode = None
     if spec.get("uv", True):
-        uv_mode = unwrap(obj, shape in ("ico", "sphere", "generator") or "displace" in applied)
+        uv_mode = unwrap(obj, shape in ("ico", "sphere", "lathe", "generator") or "displace" in applied)
     # non-destructive finishing stack (kept live, exported with modifiers applied)
     mods = []
     bev = part.get("bevel")
@@ -1689,6 +1786,8 @@ def build_asset(spec):
     root["total_origin"] = str(spec.get("origin") or "bottom")
     root["total_category"] = str(spec.get("category") or "")
     root["total_style"] = str(spec.get("style") or "")
+    root["total_detail_level"] = str(spec.get("detail_level") or "")
+    root["total_detail"] = fnum(spec.get("detail"), fnum(style.get("detail"), 0.55))
     mats = {}
     for mid, m in mats_spec.items():
         if isinstance(m, dict):
@@ -2458,10 +2557,10 @@ def main():
         if cmd == "asset_inspect":
             if not name:
                 return emit({"ok": False, "error": "asset_inspect needs name"})
-            views = ARGS.get("views") or ["front", "side", "top", "iso"]
+            views = ARGS.get("views") or ["front", "side", "top", "iso", "closeup"]
             if not isinstance(views, list):
                 views = [str(views)]
-            size = int(max(128, min(2048, fnum(ARGS.get("size"), 640))))
+            size = int(max(128, min(2048, fnum(ARGS.get("size"), 768))))
             return emit(inspect_asset(name, [str(v) for v in views][:7], size))
         if cmd == "asset_export":
             if not name:

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript Asset Planner (1.99.1) - brief -> structured 3D asset spec.
+// TotalScript Asset Planner (2.22.0) - brief -> structured 3D asset spec.
 //
 // This is the "think before you add a cube" half of the Blender pipeline. A
 // natural-language brief ("detailed sci-fi sword, 1.2 m, teal accents") becomes
@@ -18,7 +18,7 @@
 // extents; pos = part centre; rot = degrees.
 (function (root) {
   "use strict";
-  const VERSION = "2.21.0";
+  const VERSION = "2.22.0";
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
   const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -34,6 +34,20 @@
     anime: { label: "Anime-inspired", bevel_scale: 1.2, bevel_segments: 2, exaggerate: 1.3, saturation: 1.1, value: 1.05, roughness_bias: 0.15, metal_bias: -0.05, emissive: true, detail: 0.5, poly_mult: 1.0, subdiv: 0, facet: false, cylinder_segments: 20 },
     horror: { label: "Horror / dark", bevel_scale: 0.8, bevel_segments: 2, exaggerate: 1.05, saturation: 0.55, value: 0.6, roughness_bias: 0.3, metal_bias: -0.1, emissive: false, detail: 0.7, poly_mult: 1.1, subdiv: 0, facet: false, cylinder_segments: 24, wear: true },
   };
+  // Explicit detail presets override the style default and drive both recipe
+  // geometry and the asset budget. A numeric `detail` in [0, 1] is also accepted.
+  const DETAIL_LEVELS = Object.freeze({ blockout: 0.25, standard: 0.55, hero: 0.82, ultra: 1.0 });
+  const detailName = (value) => value >= 0.95 ? "ultra" : value >= 0.75 ? "hero" : value >= 0.4 ? "standard" : "blockout";
+  function parseDetail(value) {
+    if (typeof value === "string") {
+      const text = value.trim().toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(DETAIL_LEVELS, text)) return DETAIL_LEVELS[text];
+      if (!text) return null;
+      value = Number(text);
+    }
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
   const STYLE_WORDS = [["low_poly", /low[- ]?poly|flat[- ]shaded|faceted/i], ["cartoon", /cartoon|toon|chibi|cute/i], ["anime", /anime|manga|cel[- ]?shad/i], ["horror", /horror|creepy|haunted|dark|grim|rotten|rusty|decay/i], ["scifi", /sci[- ]?fi|futur|cyber|space|laser|plasma|blaster|mech/i], ["realistic", /realis|photo|pbr|semi[- ]real/i], ["stylized_fantasy", /fantasy|stylized|stylised|medieval|rpg|magic|rune/i]];
 
   // ── Categories: budgets (triangles for ONE hero asset at normal viewing distance) ──
@@ -267,7 +281,7 @@
 
   RECIPES.tree_procedural = (o, st) => {
     const h = o.height || 6.0, ex = st.exaggerate, seed = o.seed || 3;
-    const levels = st.detail >= 0.8 ? 4 : st.detail >= 0.5 ? 3 : 2, branches = st.facet || levels === 4 ? 2 : 3;
+    const levels = st.detail >= 0.95 ? 5 : st.detail >= 0.8 ? 4 : st.detail >= 0.5 ? 3 : 2, branches = st.facet || levels >= 4 ? 2 : 3;
     const trunkD = r3(h * 0.07 * ex), skelH = r3(h * 0.85);
     const skel = { seed, levels, branches, spread: 38, trunk_ratio: 0.45, length_ratio: 0.62, tree_height: skelH, tree_width: r3(h * 0.6) };
     const mats = { bark: material("bark", "bark", o.secondary || [0.33, 0.22, 0.13], st, { texture_scale: 0.5 }), leaves: material("leaves", "foliage", o.primary || [0.2, 0.46, 0.18], st, { texture_scale: 0.7 }) };
@@ -280,7 +294,7 @@
 
   RECIPES.terrain_tile = (o, st) => {
     const s = o.size || 24, ex = st.exaggerate, seed = o.seed || 3, fl = o.flags || {};
-    const h = r3(s * (fl.steep ? 0.28 : 0.14) * ex), res = st.facet ? 16 : st.detail >= 0.8 ? 40 : 28;
+    const h = r3(s * (fl.steep ? 0.28 : 0.14) * ex), res = st.facet ? 16 : st.detail >= 0.95 ? 48 : st.detail >= 0.8 ? 40 : 28;
     const mats = { ground: material("ground", "foliage", o.primary || [0.24, 0.45, 0.18], st, { texture_scale: 3 }), rock: material("rock", "stone", o.secondary || [0.42, 0.4, 0.37], st, { texture_scale: 1.5 }) };
     const parts = [P(G({ name: "Ground", role: "primary", generator: { kind: "terrain", seed, resolution: res, octaves: st.facet ? 3 : 4, frequency: fl.steep ? 2.4 : 1.6, falloff: fl.island ? "island" : "none", plateau: fl.mesa ? 0.6 : 0, skirt: true }, size: [s, s, h], material: "ground", smooth: st.facet ? "flat" : "smooth" }))];
     if (st.detail >= 0.5) parts.push(P(G({ name: "Rocks", role: "secondary", generator: { kind: "rock_cluster", seed: seed + 1, count: st.detail >= 0.8 ? 7 : 4 }, size: [s * 0.45, s * 0.4, h * 0.9], pos: [s * 0.18, -s * 0.12, h * 0.25], material: "rock", subdivisions: st.facet ? 1 : 2, smooth: st.facet ? "flat" : "auto" })));
@@ -393,6 +407,14 @@
     if (o.style && !STYLES[o.style]) return { ok: false, error: "unknown style " + o.style + " (" + Object.keys(STYLES).join(", ") + ")" };
     const st = Object.assign({}, STYLES[styleId]);
     if (o.style2 && STYLES[o.style2]) { const s2 = STYLES[o.style2]; for (const k of Object.keys(st)) if (typeof st[k] === "number") st[k] = (st[k] + s2[k]) / 2; st.hybrid = o.style2; }
+    const styleDefaultDetail = st.detail;
+    const detailExplicit = o.detail != null && o.detail !== "" || o.detail_level != null && o.detail_level !== "";
+    const detailValue = o.detail != null && o.detail !== "" ? parseDetail(o.detail) : parseDetail(o.detail_level);
+    if (detailExplicit && (detailValue == null || detailValue < 0 || detailValue > 1)) return { ok: false, error: "detail must be 0..1 or detail_level must be blockout | standard | hero | ultra" };
+    if (detailExplicit) st.detail = detailValue;
+    st.detail_level = detailName(st.detail);
+    // Ultra assets get one extra bevel segment where the style is not faceted.
+    if (detailExplicit && st.detail >= 0.95 && !st.facet) st.bevel_segments = Math.min(4, st.bevel_segments + 1);
     const ro = Object.assign({}, it.palette, o.palette || {}, { seed: it.seed, flags: Object.assign({}, it.flags || {}, o.flags || {}) });
     const main = num(o.size, it.size.main);
     if (main) { ({ sword: "length", blaster: "length", crate: "size", barrel: "height", table: "width", chair: "width", lamp_post: "height", pillar: "height", rock: "size", tree: "height", car: "length", tree_procedural: "height", terrain_tile: "size", rock_cluster: "size", crystal_cluster: "size", stairs: "width", building: "height", fence: "length" }[recipeId] || "size").split(",").forEach((k) => { ro[k] = main; }); }
@@ -403,13 +425,26 @@
     const category = CATEGORIES[RECIPE_CATEGORY[recipeId]];
     const name = (o.name || (recipeId.replace(/_module$/, "").replace(/(^|_)(\w)/g, (_, a, c) => c.toUpperCase()))).replace(/[^A-Za-z0-9_]/g, "");
     const spm = num(o.studs_per_meter, 3.5);
-    const budget = { tris: Math.round(category.tris * st.poly_mult), parts: category.parts + 4, materials: category.materials };
+    const detailLift = Math.max(0, st.detail - styleDefaultDetail);
+    // Reserve 8 % for hero finish bevels and 20 % for ultra's denser bevels
+    // or deeper procedural detail; recipe complexity above style default is separate.
+    const finishReserve = detailExplicit && st.detail >= 0.95 ? 0.20 : detailExplicit && st.detail >= DETAIL_LEVELS.hero ? 0.08 : 0;
+    const budget = { tris: Math.round(category.tris * st.poly_mult * (1 + detailLift * 0.35 + finishReserve)), parts: category.parts + 4, materials: category.materials };
     const spec = {
-      version: VERSION, name, brief: String(brief || ""), recipe: recipeId, category: RECIPE_CATEGORY[recipeId], style: styleId, style_profile: st, studs_per_meter: spm,
+      version: VERSION, name, brief: String(brief || ""), recipe: recipeId, category: RECIPE_CATEGORY[recipeId], style: styleId, style_profile: st, detail: r3(st.detail), detail_level: st.detail_level, studs_per_meter: spm,
       dims: vec(r.dims), origin: r.origin || category.origin, origin_pos: r.origin_pos ? vec(r.origin_pos) : null, collision: o.collision || category.collision,
-      materials: r.materials, parts: r.parts.map((p) => { const q = Object.assign({}, p); q.size = vec(q.size); q.pos = vec(q.pos); if (q.collision === "inherit") q.collision = o.collision || category.collision; if (q.can_collide === null) q.can_collide = q.collision !== "none"; if (st.facet) { q.smooth = "flat"; q.bevel = null; } return q; }),
+      materials: r.materials, parts: r.parts.map((p) => {
+        const q = Object.assign({}, p); q.size = vec(q.size); q.pos = vec(q.pos);
+        if (q.collision === "inherit") q.collision = o.collision || category.collision;
+        if (q.can_collide === null) q.can_collide = q.collision !== "none";
+        if (detailExplicit && st.detail >= DETAIL_LEVELS.hero && !st.facet && !Object.prototype.hasOwnProperty.call(q, "bevel") && (q.shape === "box" || q.shape === "cylinder")) {
+          q.bevel = bevel(q.size, q.role === "primary" ? 0.012 : 0.018, st, st.bevel_segments);
+        }
+        if (st.facet) { q.smooth = "flat"; q.bevel = null; }
+        return q;
+      }),
       attachments: (r.attachments || []).map((a) => ({ name: a.name, pos: vec(a.pos) })), budget, uv: o.uv !== false, kit: r.kit || null, notes: r.notes,
-      inspect: { views: ["front", "side", "top", "iso"], size: 640 },
+      inspect: { views: ["front", "side", "top", "iso", "closeup"], size: 768 },
     };
     const v = validate(spec);
     return { ok: v.errors === 0, spec, validation: v, summary: summary(spec) };
@@ -422,8 +457,35 @@
   }
 
   // ── Structural validation of a spec (JS side - before Blender runs) ───────
-  const SHAPES = ["box", "cylinder", "sphere", "cone", "torus", "ico", "generator"];
+  const SHAPES = ["box", "cylinder", "sphere", "cone", "torus", "ico", "lathe", "generator"];
   const OPS = ["inset", "cut", "taper", "grooves", "displace", "flatten_bottom", "decimate", "bulge"];
+  function validLatheProfile(profile) {
+    if (!Array.isArray(profile) || profile.length < 2 || profile.length > 64) return false;
+    let previousHeight = -Infinity, nonzero = 0;
+    for (let i = 0; i < profile.length; i++) {
+      const point = profile[i];
+      if (!Array.isArray(point) || point.length < 2) return false;
+      const radius = Number(point[0]), height = Number(point[1]);
+      if (!Number.isFinite(radius) || !Number.isFinite(height) || radius < 0 || radius > 1 || height < 0 || height > 1 || height < previousHeight) return false;
+      if (i && Math.abs(radius - Number(profile[i - 1][0])) < 1e-9 && Math.abs(height - Number(profile[i - 1][1])) < 1e-9) return false;
+      if (radius > 1e-9) nonzero++;
+      if (radius <= 1e-9 && i > 0 && i < profile.length - 1) return false;
+      previousHeight = height;
+    }
+    return nonzero > 0 && Number(profile[profile.length - 1][1]) > Number(profile[0][1]);
+  }
+  function estimateLatheTris(profile, segments) {
+    if (!Array.isArray(profile) || profile.length < 2) return 0;
+    const seg = Number(segments) || 24;
+    let tris = 0;
+    for (let i = 0; i < profile.length - 1; i++) {
+      const a = Number(profile[i] && profile[i][0]), b = Number(profile[i + 1] && profile[i + 1][0]);
+      tris += a <= 1e-9 || b <= 1e-9 ? seg : seg * 2;
+    }
+    if (Number(profile[0] && profile[0][0]) > 1e-9) tris += seg;
+    if (Number(profile[profile.length - 1] && profile[profile.length - 1][0]) > 1e-9) tris += seg;
+    return tris;
+  }
   function validate(spec) {
     const issues = [];
     let estTris = 0;
@@ -447,6 +509,10 @@
       if (!p.name || !/^[A-Za-z][A-Za-z0-9_]*$/.test(String(p.name))) add("error", "part-name", tag + ": name must be an identifier - no Cube.001 style names");
       else if (names.has(p.name)) add("error", "part-dup", tag + ": duplicate part name"); else names.add(p.name);
       if (!SHAPES.includes(p.shape)) add("error", "part-shape", tag + ": shape must be one of " + SHAPES.join(", "));
+      if (p.shape === "lathe" && !validLatheProfile(p.profile)) add("error", "lathe-profile", tag + ": lathe profile must be 2..64 [radius, height] pairs in 0..1, ordered bottom-to-top; radius 0 is only allowed at either end");
+      if (p.shape === "lathe" && Array.isArray(p.size) && p.size.length !== 3) add("error", "lathe-size", tag + ": lathe size must be exactly [diameter, diameter, height]");
+      if (p.shape === "lathe" && Array.isArray(p.size) && p.size.length >= 2 && Number.isFinite(Number(p.size[0])) && Number.isFinite(Number(p.size[1])) && Math.abs(Number(p.size[0]) - Number(p.size[1])) > Math.max(Number(p.size[0]), Number(p.size[1])) * 0.001) add("error", "lathe-size", tag + ": a rotational lathe needs equal X and Y diameters");
+      if (p.shape === "lathe" && p.segments != null && !(Number.isInteger(Number(p.segments)) && p.segments >= 3 && p.segments <= 256)) add("error", "lathe-segments", tag + ": lathe segments must be an integer in 3..256");
       if (p.shape === "generator") {
         const g = p.generator && typeof p.generator === "object" ? p.generator : null;
         if (!g || !GENERATORS.includes(g.kind)) add("error", "generator", tag + ": generator.kind must be one of " + GENERATORS.join(", "));
@@ -467,6 +533,9 @@
       for (const op of p.ops || []) {
         if (!OPS.includes(op.op)) add("error", "op", tag + ": unknown op '" + op.op + "' (" + OPS.join(", ") + ")");
         if (op.op === "cut" && (!Array.isArray(op.size) || !SHAPES.includes(op.shape || "box"))) add("error", "op-cut", tag + ": cut needs shape + size");
+        if (op.op === "cut" && op.shape === "lathe" && !validLatheProfile(op.profile)) add("error", "op-cut-profile", tag + ": a lathe cutter needs a valid profile");
+        if (op.op === "cut" && op.shape === "lathe" && (!Array.isArray(op.size) || op.size.length !== 3 || !op.size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0))) add("error", "op-cut-size", tag + ": a lathe cutter needs exactly three positive sizes");
+        else if (op.op === "cut" && op.shape === "lathe" && Math.abs(Number(op.size[0]) - Number(op.size[1])) > Math.max(Number(op.size[0]), Number(op.size[1])) * 0.001) add("error", "op-cut-size", tag + ": a rotational lathe cutter needs equal X and Y diameters");
         if (op.op === "displace" && Array.isArray(p.size) && op.strength > Math.min.apply(null, p.size.map(Number)) * 0.3) add("warning", "displace-noise", tag + ": displace strength > 30 % of the smallest dimension destroys the silhouette");
         if (op.op === "decimate" && !(op.ratio > 0.05 && op.ratio <= 1)) add("error", "op-decimate", tag + ": decimate ratio must be 0.05..1");
       }
@@ -474,7 +543,7 @@
         const ext = extents(p);
         for (let a = 0; a < 3; a++) { const half = ext[a] / 2, c = Number(p.pos[a]) + (p.shape === "generator" && a === 2 ? half : 0); const lim = a === 2 ? [-(dims[2] * 0.15), dims[2] * 1.05] : [-(dims[a] / 2) * 1.1, (dims[a] / 2) * 1.1]; if (c + half > lim[1] + 1e-6 || c - half < lim[0] - 1e-6) { add("warning", "bounds", tag + ": extends outside spec.dims on axis " + "xyz"[a]); break; } }
       }
-      if (Array.isArray(p.size)) { const seg = Number(p.segments) || 24; const base = p.shape === "box" ? 12 : p.shape === "cylinder" || p.shape === "cone" ? seg * 4 : p.shape === "sphere" ? seg * seg : p.shape === "torus" ? seg * 24 : p.shape === "generator" ? generatorTris(p) : 20 * Math.pow(4, Number(p.subdivisions) || 1); let t = base; if (p.bevel) t *= 1 + (Number(p.bevel.segments) || 2) * 1.5; for (const op of p.ops || []) { if (op.op === "grooves") t += 24 * (Number(op.count) || 1); if (op.op === "cut") t += 40; if (op.op === "inset") t += 12; if (op.op === "decimate") t *= Number(op.ratio) || 1; } if (p.mirror) t *= 2; if (p.array) t *= Number(p.array.count) || 1; estTris += t; }
+      if (Array.isArray(p.size)) { const seg = Number(p.segments) || 24; const prof = Array.isArray(p.profile) ? p.profile : []; const latheTris = estimateLatheTris(prof, seg); const base = p.shape === "box" ? 12 : p.shape === "cylinder" || p.shape === "cone" ? seg * 4 : p.shape === "sphere" ? seg * seg : p.shape === "torus" ? seg * 24 : p.shape === "lathe" ? latheTris : p.shape === "generator" ? generatorTris(p) : 20 * Math.pow(4, Number(p.subdivisions) || 1); let t = base; if (p.bevel) t *= 1 + (Number(p.bevel.segments) || 2) * 1.5; for (const op of p.ops || []) { if (op.op === "grooves") t += 24 * (Number(op.count) || 1); if (op.op === "cut") t += 40; if (op.op === "inset") t += 12; if (op.op === "decimate") t *= Number(op.ratio) || 1; } if (p.mirror) t *= 2; if (p.array) t *= Number(p.array.count) || 1; estTris += t; }
     });
     if (parts.length && roles.primary === 0) add("error", "roles", "no part has role 'primary' - establish the silhouette before details");
     if (parts.length >= 4 && roles.tertiary === parts.length) add("warning", "roles", "every part is tertiary - the primary form is missing");
@@ -517,10 +586,10 @@
   function summary(spec) {
     const byRole = { primary: [], secondary: [], tertiary: [] };
     for (const p of spec.parts || []) (byRole[p.role] || byRole.secondary).push(p.name);
-    return spec.name + " (" + spec.recipe + ", " + spec.style + (spec.style_profile && spec.style_profile.hybrid ? "+" + spec.style_profile.hybrid : "") + "): " + spec.dims.join(" x ") + " m, " + (spec.parts || []).length + " parts [primary: " + byRole.primary.join(", ") + " | secondary: " + byRole.secondary.join(", ") + " | tertiary: " + byRole.tertiary.join(", ") + "], materials " + Object.keys(spec.materials || {}).map((k) => k + "=" + spec.materials[k].family + "->" + spec.materials[k].roblox).join(", ") + "; budget " + spec.budget.tris + " tris; origin " + spec.origin + "; " + spec.studs_per_meter + " studs/m";
+    return spec.name + " (" + spec.recipe + ", " + spec.style + (spec.style_profile && spec.style_profile.hybrid ? "+" + spec.style_profile.hybrid : "") + ", detail " + (spec.detail_level || "standard") + " " + (spec.detail == null ? "" : spec.detail) + "): " + spec.dims.join(" x ") + " m, " + (spec.parts || []).length + " parts [primary: " + byRole.primary.join(", ") + " | secondary: " + byRole.secondary.join(", ") + " | tertiary: " + byRole.tertiary.join(", ") + "], materials " + Object.keys(spec.materials || {}).map((k) => k + "=" + spec.materials[k].family + "->" + spec.materials[k].roblox).join(", ") + "; budget " + spec.budget.tris + " tris; origin " + spec.origin + "; " + spec.studs_per_meter + " studs/m";
   }
 
-  const api = { VERSION, extents, STYLES, CATEGORIES, FAMILIES, GENERATORS, generatorTris, RECIPES, RECIPE_CATEGORY, RECIPE_WORDS, STYLE_WORDS, SWATCH, interpret, plan, validate, summary, parseColor, material, bevel };
+  const api = { VERSION, extents, STYLES, DETAIL_LEVELS, SHAPES, CATEGORIES, FAMILIES, GENERATORS, generatorTris, RECIPES, RECIPE_CATEGORY, RECIPE_WORDS, STYLE_WORDS, SWATCH, interpret, plan, validate, summary, parseColor, material, bevel };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (root) root.TotalAssetPlan = api;
 })(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : null));
