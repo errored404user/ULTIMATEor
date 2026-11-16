@@ -91,13 +91,13 @@ function makeOfflineGate(A, args, curEng, mode, ready) {
   const helpers = makeFallbackHelpers(A, mode, ready);
   const gate = new Function(
     "A", "args", "name", "curEng", "requested", "broadCatalogueRequest",
-    "blenderModeCatalogueFallback", "blenderCatalogueUnavailableReply", "diag",
+    "blenderModeCatalogueFallback", "blenderCatalogueUnavailableReply", "figmaConnected", "figmaModeTools", "diag",
     "return (async () => {\n" + gateSrc + "\nreturn { requested };\n})();"
   );
   const diagnostics = [];
   return gate(A, args, "list_commands", curEng, (args.server || curEng).trim().toLowerCase(), true,
     helpers.blenderModeCatalogueFallback, helpers.blenderCatalogueUnavailableReply,
-    (event, data) => diagnostics.push({ event, data })).then((result) => ({ result, diagnostics }));
+    () => false, () => [], (event, data) => diagnostics.push({ event, data })).then((result) => ({ result, diagnostics }));
 }
 
 (async () => {
@@ -244,9 +244,9 @@ function makeOfflineGate(A, args, curEng, mode, ready) {
   if (scopedStart < 0 || scopedEnd < 0) throw new Error("could not extract catalogue scoping");
   const scopedSrc = main.slice(scopedStart, scopedEnd);
   const scopedTools = new Function(
-    "A", "requested", "curEng", "commandQuery", "blenderModeTools", "blockbenchModeTools",
+    "A", "requested", "curEng", "commandQuery", "blenderModeTools", "blockbenchModeTools", "figmaModeTools",
     scopedSrc + "\nreturn allScoped;"
-  )(rbA, "blender", "roblox", "", () => [], () => []);
+  )(rbA, "blender", "roblox", "", () => [], () => [], () => []);
   ok("fallback scope contains the live Blender commands, not the offline Roblox catalogue", scopedTools.map((t) => t.name).join() === "get_scene_info");
 
   const explicitA = { bridge: { connected: true, roblox_connected: false, studio: false, servers: [{ id: "roblox", alive: false }] }, toolList: [{ name: "get_scene_info", server: "blender" }] };
