@@ -7,11 +7,12 @@ node, builds the real Luau for every skill with realistic arguments, runs each
 installer in the mocked DataModel (tests/roblox_sim.py), checks what got installed,
 COMPILES every embedded Script / LocalScript / ModuleScript, and then RUNS the ones
 that can run without a frame loop: the door controller (locked -> denied, key ->
-opens -> RequestOpen closes), the dialogue server (valid action accepted, bogus action
-ignored) and client (panel, typewriter, branching), the zone server (one tick: enter,
-damage, leave), the collectible server (spawn, touch -> stat, respawn queued) and
-client (spin), the boss bar (bind, drain, death), damage numbers (server fire, client
-popup) and the NPC brain (compiles; dead humanoid -> State 'dead').
+opens -> RequestOpen closes), the dialogue server and client (valid action, bogus action,
+panel, typewriter, branching), the zone server (enter, damage, leave), collectibles
+(spawn, touch -> stat, queued respawn, client spin), boss bar, damage numbers and NPC
+brain. The new systems also exercise profile persistence / session-conflict and schema-mismatch
+fail-closed behaviour, leave/shutdown cleanup, remote allowlisting / throttling / payload
+rejection, and a deterministic single-player round through spawn, winner and Results.
 
 2.21.0: after each successful install the skill's VERIFY block (PublicSkills.buildVerify,
 the exact program public_skill_test {dry_run:false} sends to Studio) runs in the same
@@ -75,6 +76,12 @@ WANT = {
     "gui_bad": ["gui_polish_kit", {"screen": "Workspace.Lava"}],
     "feel": ["game_feel_kit", {"intensity": "heavy", "demo": True}],
     "audit": ["place_audit_report", {"fix_deprecated": True}],
+    "profile": ["player_data_service", {"store_name": "TestProfiles_v1", "defaults": {"Coins": 0, "Level": 1, "Member": False}, "schema_version": 2, "auto_save_seconds": 30, "retry_count": 3}],
+    "profile_bad": ["player_data_service", {"store_name": "bad store name", "defaults": {"Coins": 0}}],
+    "profile_bad_defaults": ["player_data_service", {"store_name": "BadDefaults_v1", "defaults": {"Coins": 0, "Nested": {"Level": 1}}}],
+    "gateway": ["secure_action_gateway", {"global_rate": 5, "burst": 10, "max_payload_bytes": 4096}],
+    "round": ["round_controller", {"spawns": "Workspace.MatchSpawns", "lobby_spawn": "Workspace.LobbySpawn", "intermission": 0, "round_seconds": 60, "min_players": 1}],
+    "round_missing": ["round_controller", {"spawns": "Workspace.NoSuchSpawnFolder", "min_players": 1}],
 }
 
 gen = subprocess.run(["node", "-e", GEN, json.dumps(WANT)], capture_output=True, text=True)
@@ -95,7 +102,7 @@ def ok(name, cond, detail=""):
         failed += 1
         print("FAIL  " + name + ("  -- " + str(detail)[:700] if detail != "" else ""))
 
-ok("pack installs 11 items with no errors and no warnings", len(data["installed"]) == 11 and not data["errors"] and not data["warnings"], (data["errors"], data["warnings"]))
+ok("pack installs 14 items with no errors and no warnings", len(data["installed"]) == 14 and not data["errors"] and not data["warnings"], (data["errors"], data["warnings"]))
 
 L, M, run = make_runtime()
 L.globals()["M"] = M  # the Lua snippets below reach the sim's hooks (fakePlayer, fired, delayed, runScript) through M
@@ -132,6 +139,7 @@ local sp = Instance.new("SpawnLocation") sp.Name = "SpawnLocation" sp.Parent = w
 local player = M.fakePlayer
 local ch, chum, croot = rig("Tester", Vector3.new(0, 3, 0), 100)
 player.Character = ch
+player.Parent = game:GetService("Players")
 local bp = Instance.new("Backpack") bp.Name = "Backpack" bp.Parent = player
 M.players = { player }
 _G.Char = ch _G.CharHum = chum _G.CharRoot = croot
@@ -146,6 +154,9 @@ _G.HUD = hud _G.PlayBtn = play
 local loose = part("Loose", workspace, Vector3.new(0, 5, -80)) loose.Anchored = false
 part("Far", workspace, Vector3.new(9000, 1, 0))
 local empty = Instance.new("Folder") empty.Name = "Empty" empty.Parent = workspace
+local matchSpawns = Instance.new("Folder") matchSpawns.Name = "MatchSpawns" matchSpawns.Parent = workspace
+part("ArenaSpawnB", matchSpawns, Vector3.new(20, 2, 20)) part("ArenaSpawnA", matchSpawns, Vector3.new(10, 2, 10))
+_G.LobbySpawn = part("LobbySpawn", workspace, Vector3.new(0, 2, -100))
 local old = Instance.new("Script") old.Name = "Old" old.Source = "wait(1)\nspawn(function() print(1) end)\nlocal bv = Instance.new('BodyVelocity')\nworkspace.Part:Remove()\n" old.Parent = game.ServerScriptService
 local bad = Instance.new("LocalScript") bad.Name = "Bad" bad.Source = "local ds = game:GetService('DataStoreService')" bad.Parent = game.StarterGui
 """)
@@ -402,11 +413,110 @@ ok("  fix_deprecated rewrote wait/spawn to task.* in exactly 1 script, left Body
 ok("  score / verdict honest (errors -> blocked), report ModuleScript written to ServerStorage and it requires back", r.get("errors") >= 1 and r.get("verdict").startswith("blocked") and r.get("score") < 100 and r.get("report") == "ServerStorage.TotalScriptAuditReport" and lua('local rep = M.runModule(game.ServerStorage.TotalScriptAuditReport) return type(rep) == "table" and rep.score and #rep.findings') == r.get("total"), r)
 ok("  the unanchored character root is NOT flagged (character models are skipped)", not any(c.endswith("HumanoidRootPart") for c in checks))
 verify_ok("audit", "place_audit_report")
-ok("  every one of the 11 verify programs is plain Lua the sim could compile (no --ERR, no `continue`)", all(not v.startswith("--ERR") and "continue" not in v for v in verifies.values()), [k for k, v in verifies.items() if v.startswith("--ERR")])
+
+# ── 12. player data service ─────────────────────────────────────────────────
+bad_profile = runp("profile_bad")
+ok("player_data_service rejects an invalid DataStore name before writing scripts", not bad_profile.get("ok") and "store_name" in bad_profile.get("error", "") and lua('return game.ServerScriptService:FindFirstChild("TotalPlayerData") == nil'), bad_profile)
+bad_defaults = runp("profile_bad_defaults")
+ok("player_data_service rejects nested defaults instead of silently omitting schema fields", not bad_defaults.get("ok") and "must be a string, boolean or finite number" in bad_defaults.get("error", "") and lua('return game.ServerScriptService:FindFirstChild("TotalPlayerData") == nil'), bad_defaults)
+r = runp("profile")
+ok("player_data_service installs the server ModuleScript + bootstrap with safe schema/settings", r.get("ok") and r.get("store") == "TestProfiles_v1" and r.get("schema_version") == 2 and r.get("lease_seconds") >= 90 and lua('return game.ServerScriptService.TotalPlayerData:IsA("ModuleScript") and game.ServerScriptService.TotalPlayerDataBootstrap:IsA("Script")'), r)
+verify_ok("profile", "player_data_service")
+lua(r"""M.runScript(game.ServerScriptService.TotalPlayerDataBootstrap)
+_G.ProfileAPI = M.runModule(game.ServerScriptService.TotalPlayerData)""")
+profile_ops = lua(r"""local api, player = _G.ProfileAPI, M.fakePlayer
+local ready = api:WaitForPlayer(player, 0.1)
+local defaultCoins, defaultBool = api:Get(player, "Coins"), api:Get(player, "Member")
+local setOk = api:Set(player, "Member", true)
+local addOk = api:Add(player, "Coins", 75)
+local saved = api:Save(player)
+local record = M.datastores.TestProfiles_v1["u_1"]
+return ready, defaultCoins, defaultBool, setOk, addOk, api:Get(player, "Coins"), saved, record.data.Coins, record.data.Member, record.session ~= nil, player:GetAttribute("DataReady"), player:GetAttribute("Profile_Member")""")
+ok("  successful load publishes defaults (including false), Set/Add update the server profile and mirror attributes, UpdateAsync persists while retaining its lease", profile_ops[0] == True and profile_ops[1] == 0 and profile_ops[2] == False and profile_ops[3] == True and profile_ops[4] == True and profile_ops[5] == 75 and profile_ops[6] == True and profile_ops[7] == 75 and profile_ops[8] == True and profile_ops[9] == True and profile_ops[10] == True and profile_ops[11] == True, profile_ops)
+schema_mismatch = lua(r"""local player, Players = Instance.new("Player"), game:GetService("Players")
+player.Name = "SchemaMismatch" player.UserId = 2
+M.datastores.TestProfiles_v1["u_2"] = { schemaVersion = 1, data = { Coins = "corrupt", Level = 2, Member = false, LegacyGems = 9 }, updatedAt = os.time() }
+player.Parent = Players Players.PlayerAdded:Fire(player)
+local ready = _G.ProfileAPI:WaitForPlayer(player, 0.1)
+local setOk = _G.ProfileAPI:Set(player, "Coins", 999)
+local record = M.datastores.TestProfiles_v1["u_2"]
+return ready, setOk, player:GetAttribute("DataReady"), record.data.Coins, record.data.LegacyGems, record.session == nil""")
+ok("  incompatible stored fields fail closed without claiming a lease or replacing corrupt/legacy values", schema_mismatch[0] == False and schema_mismatch[1] == False and schema_mismatch[2] == False and schema_mismatch[3] == "corrupt" and schema_mismatch[4] == 9 and schema_mismatch[5] == True, schema_mismatch)
+lock = lua(r"""local player, Players = Instance.new("Player"), game:GetService("Players")
+player.Name = "DuplicateSession" player.UserId = 1 player.Parent = Players
+Players.PlayerAdded:Fire(player)
+local ready, reason = _G.ProfileAPI:WaitForPlayer(player, 0.1)
+local writeOk = _G.ProfileAPI:Set(player, "Coins", 999)
+local record = M.datastores.TestProfiles_v1["u_1"]
+return ready, reason, writeOk, record.data.Coins, record.session ~= nil, player:GetAttribute("DataReady")""")
+ok("  concurrent session is rejected without erasing the existing record; failed-load profile stays read-only and is not marked ready", lock[0] == False and "read-only" in lock[1] and lock[2] == False and lock[3] == 75 and lock[4] == True and lock[5] == False, lock)
+rejoin = lua(r"""local Players = game:GetService("Players")
+Players.PlayerRemoving:Fire(M.fakePlayer)
+local released = M.datastores.TestProfiles_v1["u_1"].session == nil
+local player = Instance.new("Player") player.Name = "Rejoined" player.UserId = 1 player.Parent = Players
+Players.PlayerAdded:Fire(player)
+local ready = _G.ProfileAPI:WaitForPlayer(player, 0.1)
+_G.rejoinedProfilePlayer = player
+return released, ready, _G.ProfileAPI:Get(player, "Coins"), _G.ProfileAPI:Get(player, "Member"), player:GetAttribute("DataReady")""")
+ok("  PlayerRemoving releases only the matching session; the next load restores saved values", rejoin[0] == True and rejoin[1] == True and rejoin[2] == 75 and rejoin[3] == True and rejoin[4] == True, rejoin)
+shutdown = lua(r"""local player = _G.rejoinedProfilePlayer
+local added = _G.ProfileAPI:Add(player, "Coins", 25)
+local close = M.closeHandlers[#M.closeHandlers]
+local hasHandler = type(close) == "function"
+if hasHandler then close() end
+local record = M.datastores.TestProfiles_v1["u_1"]
+local noLongerLoaded = _G.ProfileAPI:Get(player, "Coins") == nil
+return added, hasHandler, record.data.Coins, record.session == nil, noLongerLoaded""")
+ok("  BindToClose persists the latest profile and releases its matching lease before shutdown", shutdown[0] == True and shutdown[1] == True and shutdown[2] == 100 and shutdown[3] == True and shutdown[4] == True, shutdown)
+
+# ── 13. secure action gateway ────────────────────────────────────────────────
+r = runp("gateway")
+ok("secure_action_gateway installs the shared RemoteEvent, registry ModuleScript and bootstrap", r.get("ok") and r.get("rate") == 5 and r.get("burst") == 10 and lua('return game.ReplicatedStorage.TotalActions.Request:IsA("RemoteEvent") and game.ServerScriptService.TotalActionGateway:IsA("ModuleScript")'), r)
+verify_ok("gateway", "secure_action_gateway")
+lua(r"""M.runScript(game.ServerScriptService.TotalActionGatewayBootstrap)
+_G.Gateway = M.runModule(game.ServerScriptService.TotalActionGateway)
+_G.actionCount = 0
+_G.registered = _G.Gateway.Register("buy_item", { cooldown = 1 }, function(player, payload)
+  if payload.itemId == "sword" then _G.actionCount = _G.actionCount + 1 end
+end)
+_G.duplicate = _G.Gateway.Register("buy_item", { cooldown = 0 }, function() end)
+local event = game.ReplicatedStorage.TotalActions.Request
+local player = M.fakePlayer
+event.OnServerEvent:Fire(player, "buy_item", { itemId = "sword", price = 1 })
+event.OnServerEvent:Fire(player, "buy_item", { itemId = "sword", price = 1 })
+event.OnServerEvent:Fire(player, "not_registered", { itemId = "sword" })
+event.OnServerEvent:Fire(player, "buy_item", { itemId = workspace.Lava })
+event.OnServerEvent:Fire(player, "buy_item", { itemId = string.rep("x", 5000) })""")
+ok("  only the first registered, valid request reaches its handler; cooldown, unknown action, Instance payload and oversized string are rejected", lua("return _G.registered == true and _G.duplicate == false and _G.actionCount == 1"))
+gateway_recovery = lua(r"""local before = #M.warnings
+_G.healthyCount = 0
+_G.Gateway.Register("explode", { cooldown = 0 }, function() error("expected handler failure") end)
+_G.Gateway.Register("healthy", { cooldown = 0 }, function() _G.healthyCount = _G.healthyCount + 1 end)
+game.ReplicatedStorage.TotalActions.Request.OnServerEvent:Fire(M.fakePlayer, "explode", {})
+game.ReplicatedStorage.TotalActions.Request.OnServerEvent:Fire(M.fakePlayer, "healthy", {})
+return #M.warnings > before, _G.healthyCount""")
+ok("  handler exceptions are contained and logged; subsequent valid requests still work", gateway_recovery[0] == True and gateway_recovery[1] == 1, gateway_recovery)
+
+# ── 14. round controller ─────────────────────────────────────────────────────
+r_missing = runp("round_missing")
+ok("round_controller refuses a missing spawn folder before creating state", not r_missing.get("ok") and "not found" in r_missing.get("error", "") and lua('return game.ReplicatedStorage:FindFirstChild("TotalMatchState") == nil'), r_missing)
+verify_fails("round_missing", "round_controller")
+r = runp("round")
+ok("round_controller validates the spawn folder and installs state/config/controller against valid spawn markers", r.get("ok") and r.get("phase") == "Waiting" and r.get("min_players") == 1 and r.get("spawns") == "Workspace.MatchSpawns" and lua('return game.ReplicatedStorage.TotalMatchState.SpawnFolder.Value == workspace.MatchSpawns and game.ReplicatedStorage.TotalMatchState.LobbySpawn.Value == _G.LobbySpawn'), r)
+verify_ok("round", "round_controller")
+lua(r"""M.runScript(game.ServerScriptService.MatchRoundController)""")
+round_state = lua(r"""local state = game.ReplicatedStorage.TotalMatchState
+local player = M.fakePlayer
+return state:GetAttribute("Phase"), state:GetAttribute("Round"), state:GetAttribute("WinnerUserId"), state:GetAttribute("AliveCount"), player:GetAttribute("InRound"), player:GetAttribute("RoundAlive"), player.Character:GetPivot().Position.X, player.Character:GetPivot().Position.Y""")
+ok("  one eligible player with min_players=1 starts deterministically, spawns at sorted ArenaSpawnA, wins, and exposes Results state", round_state[0] == "Results" and round_state[1] == 1 and round_state[2] == 1 and round_state[3] == 1 and round_state[4] == True and round_state[5] == True and round_state[6] == 10 and round_state[7] == 5, round_state)
+round_source = lua('return game.ServerScriptService.MatchRoundController.Source')
+ok("  round controller waits for spawn markers both before and during intermission; missing markers cannot create a zero-delay busy loop", round_source.count("or #matchSpawns() == 0") >= 2, round_source.count("or #matchSpawns() == 0"))
+
+ok("every generated verify program is plain Lua the sim could compile (no --ERR, no `continue`)", all(not v.startswith("--ERR") and "continue" not in v for v in verifies.values()), [k for k, v in verifies.items() if v.startswith("--ERR")])
 
 # ── compile every embedded script ────────────────────────────────────────────
 n, bad = compile_sources()
-ok("every installed Script / LocalScript / ModuleScript compiles (%d sources)" % n, n == 22 and bad == "", bad)
+ok("every installed Script / LocalScript / ModuleScript compiles (%d sources)" % n, n == 27 and bad == "", bad)
 ok("no Luau-only syntax the mocked parser cannot read slipped in (+= / continue / `::` types)", lua(r"""for _, d in ipairs(game:GetDescendants()) do if d:IsA("LuaSourceContainer") and (d.Source:find("+=", 1, true) or d.Source:find("\ncontinue", 1, true) or d.Source:find("::", 1, true)) then return false end end return true"""))
 
 print("public-pack-sim: %d passed, %d failed (MOCKED DataModel - not Studio)" % (passed, failed))

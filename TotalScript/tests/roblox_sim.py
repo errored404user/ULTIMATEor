@@ -556,14 +556,14 @@ end
 function methods:GetOrderedDataStore(name)
   M.ordered[name] = M.ordered[name] or {}
   local data = M.ordered[name]
-  return {SetAsync=function(_, key, v) data[key] = v end, GetAsync=function(_, key) return data[key] end, UpdateAsync=function(_, key, fn) data[key] = fn(data[key]) return data[key] end,
+  return {SetAsync=function(_, key, v) data[key] = v end, GetAsync=function(_, key) return data[key] end, UpdateAsync=function(_, key, fn) local nextValue = fn(data[key]) if nextValue ~= nil then data[key] = nextValue end return nextValue end,
     GetSortedAsync=function(_, asc, n) local rows={} for k,v in pairs(data) do rows[#rows+1]={key=k,value=v} end table.sort(rows, function(a,b) if asc then return a.value<b.value end return a.value>b.value end) local page={} for i=1,math.min(n or 10,#rows) do page[i]=rows[i] end return {GetCurrentPage=function() return page end, IsFinished=true, AdvanceToNextPageAsync=function() end} end}
 end
 M.ordered = {}
 function methods:GetDataStore(name)
   M.datastores[name] = M.datastores[name] or {}
   local data = M.datastores[name]
-  return {GetAsync=function(_, key) M.dsCalls = M.dsCalls + 1 return data[key] end, SetAsync=function(_, key, v) M.dsCalls = M.dsCalls + 1 data[key] = v end, UpdateAsync=function(_, key, fn) data[key] = fn(data[key]) return data[key] end}
+  return {GetAsync=function(_, key) M.dsCalls = M.dsCalls + 1 return data[key] end, SetAsync=function(_, key, v) M.dsCalls = M.dsCalls + 1 data[key] = v end, UpdateAsync=function(_, key, fn) local nextValue = fn(data[key]) if nextValue ~= nil then data[key] = nextValue end return nextValue end}
 end
 M.datastores = {}
 M.dsCalls = 0

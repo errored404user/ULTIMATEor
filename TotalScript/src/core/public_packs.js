@@ -2781,11 +2781,813 @@ return {
 `,
   };
 
+  // ── 12. session-safe player data service ────────────────────────────────
+  const PLAYER_DATA_SERVICE = {
+    kind: "skill", name: "player_data_service", title: "Session-Safe Player Data Service",
+    description: "Installs a server-only profile ModuleScript and bootstrap: versioned primitive defaults, UpdateAsync session leases, bounded retries, autosave and shutdown saves. Get/Set/Add are gated until load succeeds; incompatible stored schemas fail closed rather than silently replacing saved values.",
+    tags: ["data", "datastore", "persistence", "profile", "server"],
+    triggers: ["player data service", "save player data", "datastore profile", "persistent player data", "autosave player data", "save coins"],
+    expert: "data_persistence", version: 1,
+    usage: 'player_data_service {store_name:"MyGame_Profile_v1", defaults:{Coins:0, Level:1}, schema_version:1}',
+    params: [
+      { name: "store_name", type: "string", required: false, default: "MyGame_Profile_v1", description: "Use a separate name for test places and production" },
+      { name: "defaults", type: "object", required: false, default: { Coins: 0, Level: 1 }, description: "Up to 40 flat string, boolean and finite-number defaults (no nested tables)" },
+      { name: "schema_version", type: "number", required: false, default: 1, description: "Increase after writing an explicit migration for changed or removed fields" },
+      { name: "auto_save_seconds", type: "number", required: false, default: 60, description: "Autosave interval, clamped to 30-300 seconds" },
+      { name: "retry_count", type: "number", required: false, default: 4, description: "Bounded UpdateAsync attempts (1-8)" },
+    ],
+    references: [
+      ref("Data stores", "cloud-services/data-stores"),
+      ref("DataStoreService", "reference/engine/classes/DataStoreService"),
+      ref("GlobalDataStore:UpdateAsync", "reference/engine/classes/GlobalDataStore#UpdateAsync"),
+      ref("Players", "reference/engine/classes/Players"),
+      ref("Instance attributes", "reference/engine/classes/Instance#SetAttribute"),
+    ],
+    knowledge: String.raw`## When to use
+- The game needs a small server-owned profile for coins, level, settings, or other flat primitive fields that persist between sessions.
+
+## Before running
+- Pick the exact DataStore name and field defaults first. Defaults define the supported schema; up to 40 fields of string, boolean, and finite number values are accepted. The generated service exposes fields as player attributes named Profile_<Field> for display, but those replicated attributes are mirrors, never trusted input.
+- Enable Studio Access to API Services only in a separate test place and use a separate store name from production. DataStores are shared by places in the same experience.
+- This is a compact reference service, not a replacement for a battle-tested profile library for high-value economies. It does not provide custom field migrations, session messaging, global leaderboards, or multi-key transactions.
+
+## After running
+- Confirm both TotalPlayerData and TotalPlayerDataBootstrap appear under ServerScriptService. Wait for DataReady before enabling rewards, and check a test profile survives a leave/rejoin in a separate test store.
+
+## Use from a server Script
+- require ServerScriptService.TotalPlayerData. Call WaitForPlayer(player, timeout) before granting rewards or reading values. If it returns false, keep the player in a safe/read-only flow; this installer does not kick automatically.
+- Get(player, "Coins") reads a server-side value. Set(player, "Coins", amount) and Add(player, "Coins", delta) reject unknown fields, wrong types, non-finite numbers, and writes before a successful load. Check their boolean result.
+- Call Save(player) for an important checkpoint, but keep autosave and PlayerRemoving/BindToClose handling too. UpdateAsync is used for every claim/save; a live session lease prevents a second server from overwriting a profile.
+
+## Schema changes and failure handling
+- Add-only schema changes are safe: new fields receive their defaults while matching stored fields are retained. Before loading, the service rejects unknown stored fields, type changes, invalid values, and a stored schema version newer than this install instead of silently dropping or resetting data. For a rename, removal, or type change, add an explicit migration to the generated ModuleScript before increasing schema_version; only then should the old field be transformed or intentionally retired.
+- A load error never publishes defaults as a ready profile and never permits Set/Add. Retries are bounded with backoff; a failed save keeps the lease (it is not falsely released) so another server cannot immediately take unsaved data.
+- Never accept a client-supplied balance or write Profile_* attributes from a LocalScript. All rewards and profile mutations belong in server Scripts that check gameplay rules first.`,
+    verify: {
+      note: "the profile ModuleScript and server bootstrap exist and contain the guarded UpdateAsync lifecycle",
+      luau: String.raw`local module = find("ServerScriptService.TotalPlayerData")
+local runner = find("ServerScriptService.TotalPlayerDataBootstrap")
+check(module and module:IsA("ModuleScript") and #module.Source > 2500, "TotalPlayerData ModuleScript missing or too small")
+check(runner and runner:IsA("Script") and runner.Source:find("TotalPlayerData", 1, true), "profile bootstrap missing")
+check(module.Source:find("UpdateAsync", 1, true) and module.Source:find("BindToClose", 1, true) and module.Source:find("sessionLost", 1, true), "guarded UpdateAsync / shutdown / lost-session handling missing")
+check(module.Source:find("DataReady", 1, true) and module.Source:find("WaitForPlayer", 1, true) and module.Source:find("validateStoredData", 1, true), "load gate / fail-closed schema check missing")
+return { ok = true, detail = "server profile module + bootstrap installed; schema=" .. tostring(args.schema_version) .. ", store=" .. tostring(args.store_name) }`,
+    },
+    luau: PRELUDE + String.raw`
+local storeName = tostring(args.store_name or "MyGame_Profile_v1")
+if #storeName < 1 or #storeName > 50 or not string.match(storeName, "^[%w%._%-]+$") then
+  return { ok = false, error = "store_name must be 1-50 letters, digits, dot, underscore or hyphen" }
+end
+local function finite(v) return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge end
+local function clamp(v, fallback, lo, hi)
+  local n = tonumber(v)
+  if not finite(n) then n = fallback end
+  return math.max(lo, math.min(hi, n))
+end
+local schemaVersion = math.floor(clamp(args.schema_version, 1, 1, 1000))
+local autosave = math.floor(clamp(args.auto_save_seconds, 60, 30, 300))
+local retries = math.floor(clamp(args.retry_count, 4, 1, 8))
+local leaseSeconds = math.max(120, math.min(900, autosave * 3))
+local defaults = {}
+if args.defaults ~= nil and type(args.defaults) ~= "table" then
+  return { ok = false, error = "defaults must be a flat object with at most 40 fields" }
+end
+local defaultCount = 0
+if type(args.defaults) == "table" then
+  for key, value in pairs(args.defaults) do
+    if type(key) ~= "string" or #key > 40 or not string.match(key, "^[%a_][%w_]*$") then
+      return { ok = false, error = "default field names must be 1-40 letters, digits or underscores and start with a letter or underscore" }
+    end
+    local kind = type(value)
+    if kind ~= "boolean" and kind ~= "number" and kind ~= "string" then
+      return { ok = false, error = "default field '" .. key .. "' must be a string, boolean or finite number" }
+    end
+    if kind == "number" and not finite(value) then return { ok = false, error = "default field '" .. key .. "' must be finite" } end
+    if kind == "string" and #value > 1000 then return { ok = false, error = "default field '" .. key .. "' exceeds 1000 bytes" } end
+    defaultCount = defaultCount + 1
+    if defaultCount > 40 then return { ok = false, error = "defaults may contain at most 40 fields" } end
+    defaults[key] = value
+  end
+end
+if next(defaults) == nil then defaults = { Coins = 0, Level = 1 } end
+local http = game:GetService("HttpService")
+local moduleSource = [==[
+-- TotalScript Session-Safe Player Data Service.
+-- Server-only API: require this ModuleScript from a Script, never from a LocalScript.
+local Players = game:GetService("Players")
+local DataStoreService = game:GetService("DataStoreService")
+local HttpService = game:GetService("HttpService")
+local STORE_NAME = @@STORE_NAME@@
+local SCHEMA_VERSION = @@SCHEMA_VERSION@@
+local AUTO_SAVE_SECONDS = @@AUTO_SAVE_SECONDS@@
+local RETRY_COUNT = @@RETRY_COUNT@@
+local LEASE_SECONDS = @@LEASE_SECONDS@@
+local DEFAULTS = HttpService:JSONDecode(@@DEFAULTS_JSON@@)
+local okStore, store = pcall(function() return DataStoreService:GetDataStore(STORE_NAME) end)
+local storeError = okStore and nil or tostring(store)
+local serverId = tostring(game.JobId or "")
+if serverId == "" then serverId = HttpService:GenerateGUID(false) end
+local profiles, loading, failures, leaving = {}, {}, {}, {}
+local started = false
+local API = { SchemaVersion = SCHEMA_VERSION, StoreName = STORE_NAME }
+
+local function finite(n)
+  return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge
+end
+local function validKey(key)
+  return type(key) == "string" and DEFAULTS[key] ~= nil
+end
+local function copyData(source)
+  local out = {}
+  for key, default in pairs(DEFAULTS) do
+    local value = nil
+    if type(source) == "table" then value = source[key] end
+    if type(value) == type(default) then
+      if type(value) == "boolean" then out[key] = value
+      elseif type(value) == "string" and #value <= 1000 then out[key] = value
+      elseif type(value) == "number" and finite(value) then out[key] = value
+      else out[key] = default end
+    else
+      out[key] = default
+    end
+  end
+  return out
+end
+local function validateStoredData(source)
+  if type(source) ~= "table" then return false, "stored profile data is not a table" end
+  for key, value in pairs(source) do
+    local default = DEFAULTS[key]
+    if default == nil then return false, "stored field '" .. tostring(key) .. "' is not in this schema" end
+    if type(value) ~= type(default) then return false, "stored field '" .. tostring(key) .. "' has a different type" end
+    if type(value) == "number" and not finite(value) then return false, "stored numeric field '" .. tostring(key) .. "' is not finite" end
+    if type(value) == "string" and #value > 1000 then return false, "stored string field '" .. tostring(key) .. "' exceeds 1000 bytes" end
+  end
+  return true
+end
+local function publish(player, profile)
+  for key, value in pairs(profile.data) do player:SetAttribute("Profile_" .. key, value) end
+  player:SetAttribute("DataSchemaVersion", SCHEMA_VERSION)
+  player:SetAttribute("DataReady", true)
+end
+local function markFailed(player, message)
+  failures[player] = tostring(message or "profile unavailable")
+  if player then player:SetAttribute("DataReady", false) end
+end
+local function updateWithRetry(key, transform)
+  if not okStore or not store then return false, storeError or "DataStore unavailable" end
+  local lastError = "UpdateAsync failed"
+  for attempt = 1, RETRY_COUNT do
+    local ok, value = pcall(function() return store:UpdateAsync(key, transform) end)
+    if ok and value ~= nil then return true, value end
+    if ok then return false, "UpdateAsync cancelled (session lock or schema conflict)" end
+    lastError = tostring(value)
+    if attempt < RETRY_COUNT then task.wait(math.min(2 ^ (attempt - 1), 8) + math.random() * 0.2) end
+  end
+  return false, lastError
+end
+local function releaseUnattachedSession(userId, sessionId)
+  updateWithRetry("u_" .. tostring(userId), function(old)
+    if type(old) ~= "table" or type(old.session) ~= "table" or old.session.id ~= sessionId then return nil end
+    return { schemaVersion = SCHEMA_VERSION, data = copyData(old.data), updatedAt = os.time() }
+  end)
+end
+local function loadPlayer(player)
+  if not player or profiles[player] or loading[player] then return end
+  if leaving[player] then failures[player] = nil leaving[player] = nil return end
+  loading[player] = true
+  failures[player] = nil
+  player:SetAttribute("DataReady", false)
+  local userId = tonumber(player.UserId)
+  if not userId or userId <= 0 then loading[player] = nil markFailed(player, "invalid UserId") return end
+  local sessionId = serverId .. ":" .. HttpService:GenerateGUID(false)
+  local rejection = nil
+  local ok, recordOrError = updateWithRetry("u_" .. tostring(userId), function(old)
+    if leaving[player] then rejection = "player left while loading" return nil end
+    if type(old) == "table" then
+      local oldVersion = tonumber(old.schemaVersion) or 0
+      if oldVersion > SCHEMA_VERSION then rejection = "stored profile uses a newer schema" return nil end
+      local lock = type(old.session) == "table" and old.session or nil
+      if lock and lock.id ~= sessionId and (tonumber(lock.expiresAt) or 0) > os.time() then
+        rejection = "profile is locked by an active server" return nil
+      end
+    end
+    local oldData = {}
+    if type(old) == "table" then
+      if type(old.data) == "table" then
+        oldData = old.data
+      else
+        for key, value in pairs(old) do
+          if key ~= "schemaVersion" and key ~= "updatedAt" and key ~= "session" then oldData[key] = value end
+        end
+      end
+    end
+    local compatible, schemaError = validateStoredData(oldData)
+    if not compatible then rejection = tostring(schemaError) .. "; explicit schema migration required" return nil end
+    return {
+      schemaVersion = SCHEMA_VERSION,
+      data = copyData(oldData),
+      updatedAt = os.time(),
+      session = { id = sessionId, expiresAt = os.time() + LEASE_SECONDS },
+    }
+  end)
+  loading[player] = nil
+  if not ok or leaving[player] then
+    if ok and leaving[player] then releaseUnattachedSession(userId, sessionId) end
+    markFailed(player, rejection or recordOrError)
+    if not leaving[player] then warn("[TotalPlayerData] load failed for UserId " .. tostring(userId) .. "; profile remains read-only: " .. tostring(rejection or recordOrError))
+    else failures[player] = nil leaving[player] = nil end
+    return
+  end
+  local record = recordOrError
+  local profile = {
+    data = copyData(type(record) == "table" and record.data or nil),
+    sessionId = sessionId,
+    revision = 0,
+    saving = false,
+    sessionLost = false,
+  }
+  profiles[player] = profile
+  failures[player] = nil
+  publish(player, profile)
+end
+local function saveProfile(player, releaseSession)
+  local profile = profiles[player]
+  if not profile then return false, failures[player] or "profile is not loaded" end
+  if profile.saving then return false, "save already in progress" end
+  if profile.sessionLost then return false, "session lock was lost; profile is read-only" end
+  profile.saving = true
+  local snapshot = copyData(profile.data)
+  local revision = profile.revision
+  local lockLost, changedDuringSave = false, false
+  local ok, result = updateWithRetry("u_" .. tostring(player.UserId), function(old)
+    if type(old) ~= "table" or type(old.session) ~= "table" or old.session.id ~= profile.sessionId then
+      lockLost = true
+      return nil
+    end
+    if profile.revision ~= revision then
+      changedDuringSave = true
+      return nil
+    end
+    local nextRecord = {
+      schemaVersion = SCHEMA_VERSION,
+      data = snapshot,
+      updatedAt = os.time(),
+    }
+    if not releaseSession then nextRecord.session = { id = profile.sessionId, expiresAt = os.time() + LEASE_SECONDS } end
+    return nextRecord
+  end)
+  profile.saving = false
+  if ok then
+    if profile.revision == revision then profile.dirty = false else profile.dirty = true end
+    if releaseSession then profiles[player] = nil failures[player] = nil leaving[player] = nil end
+    return true, result
+  end
+  if lockLost then
+    profile.sessionLost = true
+    player:SetAttribute("DataReady", false)
+  end
+  local reason = changedDuringSave and "profile changed during save; retry safely" or (lockLost and "session lock was lost; refusing to overwrite" or tostring(result))
+  return false, reason
+end
+local function saveAndRelease(player, deadline)
+  deadline = deadline or (os.clock() + 20)
+  while profiles[player] and os.clock() < deadline do
+    local ok, reason = saveProfile(player, true)
+    if ok then return true end
+    if reason ~= "save already in progress" and reason ~= "profile changed during save; retry safely" then
+      warn("[TotalPlayerData] final save failed for UserId " .. tostring(player.UserId) .. "; session lease left to expire: " .. tostring(reason))
+      profiles[player] = nil
+      leaving[player] = nil
+      return false, reason
+    end
+    task.wait(0.1)
+  end
+  if profiles[player] then
+    profiles[player] = nil
+    leaving[player] = nil
+    warn("[TotalPlayerData] final save deadline reached for UserId " .. tostring(player.UserId) .. "; session lease left to expire")
+  end
+  return false, "shutdown save deadline reached"
+end
+function API:Start()
+  if started then return true end
+  started = true
+  Players.PlayerAdded:Connect(function(player)
+    leaving[player] = nil
+    task.spawn(loadPlayer, player)
+  end)
+  Players.PlayerRemoving:Connect(function(player)
+    leaving[player] = true
+    task.spawn(function() saveAndRelease(player, os.clock() + 20) end)
+  end)
+  for _, player in ipairs(Players:GetPlayers()) do task.spawn(loadPlayer, player) end
+  task.spawn(function()
+    while true do
+      task.wait(AUTO_SAVE_SECONDS)
+      for player in pairs(profiles) do
+        local subject = player
+        task.spawn(function()
+          local ok, reason = saveProfile(subject, false)
+          if not ok and reason ~= "save already in progress" then warn("[TotalPlayerData] autosave failed for UserId " .. tostring(subject.UserId) .. ": " .. tostring(reason)) end
+        end)
+      end
+    end
+  end)
+  game:BindToClose(function()
+    local pending = 0
+    local deadline = os.clock() + 24
+    for player in pairs(profiles) do
+      local subject = player
+      pending = pending + 1
+      task.spawn(function()
+        saveAndRelease(subject, deadline)
+        pending = pending - 1
+      end)
+    end
+    while pending > 0 and os.clock() < deadline do task.wait(0.1) end
+  end)
+  return true
+end
+function API:WaitForPlayer(player, timeout)
+  local seconds = tonumber(timeout) or 15
+  if not finite(seconds) then seconds = 15 end
+  seconds = math.max(0, math.min(120, seconds))
+  local deadline = os.clock() + seconds
+  repeat
+    if profiles[player] then
+      if profiles[player].sessionLost then return false, "profile session was lost; read-only" end
+      return true
+    end
+    if failures[player] then return false, "profile failed to load; read-only" end
+    if leaving[player] then return false, "player is leaving" end
+    if os.clock() >= deadline then return false, "profile load timed out" end
+    task.wait(0.05)
+  until false
+end
+function API:Get(player, key)
+  if not validKey(key) then return nil end
+  local profile = profiles[player]
+  if not profile then return nil end
+  return profile.data[key]
+end
+local function writeValue(player, key, value)
+  if not validKey(key) then return false, "unknown profile field" end
+  local profile = profiles[player]
+  if not profile or profile.sessionLost then return false, "profile is not writable" end
+  local default = DEFAULTS[key]
+  if type(value) ~= type(default) then return false, "value type does not match the schema" end
+  if type(value) == "number" and not finite(value) then return false, "number must be finite" end
+  if type(value) == "string" and #value > 1000 then return false, "string exceeds 1000 bytes" end
+  profile.data[key] = value
+  profile.revision = profile.revision + 1
+  profile.dirty = true
+  player:SetAttribute("Profile_" .. key, value)
+  return true
+end
+function API:Set(player, key, value) return writeValue(player, key, value) end
+function API:Add(player, key, amount)
+  if not validKey(key) or type(DEFAULTS[key]) ~= "number" then return false, "field is not numeric" end
+  if not finite(amount) then return false, "amount must be a finite number" end
+  local profile = profiles[player]
+  if not profile or profile.sessionLost then return false, "profile is not writable" end
+  local total = profile.data[key] + amount
+  if not finite(total) then return false, "result must be finite" end
+  return writeValue(player, key, total)
+end
+function API:Save(player) return saveProfile(player, false) end
+return API
+]==]
+moduleSource = moduleSource:gsub("@@STORE_NAME@@", function() return string.format("%q", storeName) end)
+moduleSource = moduleSource:gsub("@@SCHEMA_VERSION@@", function() return tostring(schemaVersion) end)
+moduleSource = moduleSource:gsub("@@AUTO_SAVE_SECONDS@@", function() return tostring(autosave) end)
+moduleSource = moduleSource:gsub("@@RETRY_COUNT@@", function() return tostring(retries) end)
+moduleSource = moduleSource:gsub("@@LEASE_SECONDS@@", function() return tostring(leaseSeconds) end)
+moduleSource = moduleSource:gsub("@@DEFAULTS_JSON@@", function() return string.format("%q", http:JSONEncode(defaults)) end)
+local ss = game:GetService("ServerScriptService")
+setSource(ss, "ModuleScript", "TotalPlayerData", moduleSource)
+setSource(ss, "Script", "TotalPlayerDataBootstrap", [==[
+-- Loads the singleton profile service on the server.
+local service = require(game:GetService("ServerScriptService"):WaitForChild("TotalPlayerData"))
+service:Start()
+]==])
+waypoint("TotalScript: player_data_service")
+return { ok = true, store = storeName, schema_version = schemaVersion, fields = defaults, autosave_seconds = autosave, retry_count = retries, lease_seconds = leaseSeconds, installed = { "ServerScriptService.TotalPlayerData (ModuleScript)", "ServerScriptService.TotalPlayerDataBootstrap (Script)" }, note = "Use WaitForPlayer before gameplay writes. Profile_* attributes are client-visible mirrors; the ModuleScript is the server source of truth." }
+`,
+  };
+
+  // ── 13. server-authoritative remote action gateway ────────────────────────
+  const SECURE_ACTION_GATEWAY = {
+    kind: "skill", name: "secure_action_gateway", title: "Secure Remote Action Gateway",
+    description: "Installs one server-owned RemoteEvent and a reusable handler registry with an allowlist, per-player token-bucket throttling, per-action cooldowns and bounded payload validation. Unregistered actions, Instances, oversized/nested payloads and handler errors are rejected without trusting client authority.",
+    tags: ["security", "remoteevent", "networking", "server", "rate limit"],
+    triggers: ["secure remote event", "secure remote handler", "remote rate limit", "server validate remote", "remote exploit protection", "client server security"],
+    expert: "networking", version: 1,
+    usage: 'secure_action_gateway {global_rate:5, burst:10, max_payload_bytes:4096}',
+    params: [
+      { name: "global_rate", type: "number", required: false, default: 5, description: "Token refill per second for each player (1-60)" },
+      { name: "burst", type: "number", required: false, default: 10, description: "Maximum queued calls per player (1-60)" },
+      { name: "max_payload_bytes", type: "number", required: false, default: 4096, description: "Total string/key budget per payload (256-16384)" },
+    ],
+    references: [
+      ref("Client-server boundary", "scripting/security/client-server-boundary"),
+      ref("Remote events", "scripting/events/remote"),
+      ref("RemoteEvent", "reference/engine/classes/RemoteEvent"),
+      ref("Security tactics", "scripting/security/security-tactics"),
+      ref("Players", "reference/engine/classes/Players"),
+    ],
+    knowledge: String.raw`## When to use
+- Several LocalScripts need to request server-side actions such as buying, claiming, or interacting, and each request needs a common throttle and payload gate.
+
+## Before running
+- Decide the exact action names and payload fields. Keep client payloads to small IDs / choices; the server must look up authoritative prices, damage, ownership, and permissions itself.
+
+## How it works
+- The client fires ReplicatedStorage.TotalActions.Request:FireServer(actionName, payloadTable). Only names registered on the server are accepted. The gateway applies a per-player token bucket and the registered action's cooldown, then bounds payload depth, key count, and string bytes before calling the handler.
+- In a server Script, require ServerScriptService.TotalActionGateway and call Register(name, {cooldown = 0.5}, function(player, payload) ... end). Register returns true or false, reason. The callback is the only place to implement the action.
+
+## After running
+- The module and bootstrap install the shared Request event. Register each handler from a separate server Script, check the Register return value, then test one valid request and malformed, unknown, and spammed requests in Studio.
+
+## Security rules the gateway cannot replace
+- Validate meaning in every handler: item IDs against a server catalog, distance against server positions, ownership, cooldowns, permissions, and current game state. Derive prices, damage, rewards and UserIds on the server; never accept those as client authority.
+- Validate a handler's exact payload fields and reject unknown fields. The generic gate only validates primitive JSON-like shape and size; it is not a per-action schema.
+- Keep RemoteEvent inside the installed folder and let the gateway own its OnServerEvent connection. Do not attach a second permissive listener to the same event. The callback is protected by pcall; failures are logged server-side and are not returned as trusted client data.
+- Rerunning replaces the gateway module/bootstrap and reuses the same RemoteEvent. Keep your action registrations in separate server Scripts so rerunning the installer does not erase them.
+- This reduces common abuse paths; it is not an anti-cheat guarantee and does not make an unsafe handler safe.`,
+    verify: {
+      note: "the RemoteEvent, gateway ModuleScript, and server bootstrap are installed with allowlist, throttling, and payload checks",
+      luau: String.raw`local folder = find("ReplicatedStorage.TotalActions")
+check(folder and folder:IsA("Folder"), "TotalActions folder missing")
+local remote = folder and folder:FindFirstChild("Request")
+check(remote and remote:IsA("RemoteEvent"), "Request RemoteEvent missing")
+local module = find("ServerScriptService.TotalActionGateway")
+local runner = find("ServerScriptService.TotalActionGatewayBootstrap")
+check(module and module:IsA("ModuleScript") and #module.Source > 1200, "gateway ModuleScript missing or too small")
+check(runner and runner:IsA("Script"), "gateway bootstrap missing")
+check(module.Source:find("OnServerEvent", 1, true) and module.Source:find("takeToken", 1, true) and module.Source:find("validatePayload", 1, true), "server gate / throttle / payload validator missing")
+return { ok = true, detail = "allowlisted server gateway installed; rate=" .. tostring(args.global_rate) .. "/s/player" }`,
+    },
+    luau: PRELUDE + String.raw`
+local function clampNumber(value, fallback, lo, hi)
+  local n = tonumber(value)
+  if not n or n ~= n or n == math.huge or n == -math.huge then n = fallback end
+  return math.max(lo, math.min(hi, n))
+end
+local rate = clampNumber(args.global_rate, 5, 1, 60)
+local burst = math.floor(clampNumber(args.burst, 10, 1, 60))
+local payloadBytes = math.floor(clampNumber(args.max_payload_bytes, 4096, 256, 16384))
+local folder = ensure(game:GetService("ReplicatedStorage"), "Folder", "TotalActions")
+ensure(folder, "RemoteEvent", "Request")
+local moduleSource = [==[
+-- TotalScript Secure Remote Action Gateway. Register handlers in server Scripts.
+local Players = game:GetService("Players")
+local remote = game:GetService("ReplicatedStorage"):WaitForChild("TotalActions"):WaitForChild("Request")
+local GLOBAL_RATE = @@RATE@@
+local BURST = @@BURST@@
+local MAX_PAYLOAD_BYTES = @@PAYLOAD_BYTES@@
+local MAX_DEPTH = 4
+local MAX_FIELDS = 32
+local MAX_KEY_BYTES = 40
+local MAX_STRING_BYTES = 1024
+local handlers, buckets = {}, {}
+local started = false
+local Gateway = {}
+local function finite(n) return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge end
+local function inspect(value, depth, seen, budget)
+  local kind = typeof(value)
+  if kind == "nil" or kind == "boolean" then return true end
+  if kind == "number" then return finite(value) end
+  if kind == "string" then
+    if #value > MAX_STRING_BYTES then return false end
+    budget.bytes = budget.bytes + #value
+    return budget.bytes <= MAX_PAYLOAD_BYTES
+  end
+  if kind ~= "table" or depth >= MAX_DEPTH or seen[value] then return false end
+  seen[value] = true
+  for key, child in pairs(value) do
+    budget.fields = budget.fields + 1
+    if budget.fields > MAX_FIELDS or type(key) ~= "string" or #key > MAX_KEY_BYTES then return false end
+    budget.bytes = budget.bytes + #key
+    if budget.bytes > MAX_PAYLOAD_BYTES or not inspect(child, depth + 1, seen, budget) then return false end
+  end
+  return true
+end
+local function validatePayload(payload)
+  if type(payload) ~= "table" then return false end
+  return inspect(payload, 0, {}, { bytes = 0, fields = 0 })
+end
+local function takeToken(player, now)
+  local bucket = buckets[player]
+  if not bucket then bucket = { tokens = BURST, at = now, actions = {} } buckets[player] = bucket end
+  local elapsed = math.max(0, now - bucket.at)
+  bucket.tokens = math.min(BURST, bucket.tokens + elapsed * GLOBAL_RATE)
+  bucket.at = now
+  if bucket.tokens < 1 then return false, bucket end
+  bucket.tokens = bucket.tokens - 1
+  return true, bucket
+end
+function Gateway.Register(name, options, callback)
+  if type(name) ~= "string" or #name < 2 or #name > 32 or not string.match(name, "^[%a_][%w_]*$") then return false, "invalid action name" end
+  if handlers[name] then return false, "action is already registered" end
+  if type(callback) ~= "function" then return false, "handler callback is required" end
+  options = type(options) == "table" and options or {}
+  local cooldown = tonumber(options.cooldown) or 0
+  if not finite(cooldown) then cooldown = 0 end
+  handlers[name] = { callback = callback, cooldown = math.max(0, math.min(60, cooldown)) }
+  return true
+end
+function Gateway.Start()
+  if started then return true end
+  started = true
+  remote.OnServerEvent:Connect(function(player, name, payload)
+    if typeof(player) ~= "Instance" or not player:IsA("Player") then return end
+    local allowed, bucket = takeToken(player, os.clock())
+    if not allowed then return end
+    if type(name) ~= "string" or #name > 32 then return end
+    local entry = handlers[name]
+    if not entry or not validatePayload(payload) then return end
+    local now = os.clock()
+    local last = bucket.actions[name]
+    if last and now - last < entry.cooldown then return end
+    bucket.actions[name] = now
+    local ok, err = pcall(entry.callback, player, payload)
+    if not ok then warn("[TotalActionGateway] handler '" .. name .. "' failed: " .. tostring(err)) end
+  end)
+  Players.PlayerRemoving:Connect(function(player) buckets[player] = nil end)
+  return true
+end
+return Gateway
+]==]
+moduleSource = moduleSource:gsub("@@RATE@@", function() return tostring(rate) end)
+moduleSource = moduleSource:gsub("@@BURST@@", function() return tostring(burst) end)
+moduleSource = moduleSource:gsub("@@PAYLOAD_BYTES@@", function() return tostring(payloadBytes) end)
+local ss = game:GetService("ServerScriptService")
+setSource(ss, "ModuleScript", "TotalActionGateway", moduleSource)
+setSource(ss, "Script", "TotalActionGatewayBootstrap", [==[
+-- Starts the shared server-owned action gateway.
+local gateway = require(game:GetService("ServerScriptService"):WaitForChild("TotalActionGateway"))
+gateway:Start()
+]==])
+waypoint("TotalScript: secure_action_gateway")
+return { ok = true, rate = rate, burst = burst, max_payload_bytes = payloadBytes, remote = "ReplicatedStorage.TotalActions.Request", installed = { "ReplicatedStorage.TotalActions.Request", "ServerScriptService.TotalActionGateway (ModuleScript)", "ServerScriptService.TotalActionGatewayBootstrap (Script)" }, note = "Register allowlisted server callbacks; each callback still owns semantic validation and server-derived prices, damage and rewards." }
+`,
+  };
+
+  // ── 14. match / round controller ─────────────────────────────────────────
+  const ROUND_CONTROLLER = {
+    kind: "skill", name: "round_controller", title: "Server Round Controller",
+    description: "Installs a server-owned match loop with Waiting, Intermission, Round and Results phases, minimum-player gating, sorted spawn points, alive-player elimination, timeout/draw handling, optional lobby return, and replicated match-state attributes for any UI to observe.",
+    tags: ["round", "match", "multiplayer", "spawn", "gameplay"],
+    triggers: ["round system", "match loop", "intermission", "round manager", "last player standing", "multiplayer match"],
+    expert: "gameplay_systems", version: 1,
+    usage: 'round_controller {spawns:"Workspace.MatchSpawns", lobby_spawn:"Workspace.LobbySpawn", intermission:15, round_seconds:180, min_players:2}',
+    params: [
+      { name: "spawns", type: "string", required: true, description: "Path to a Folder or Model containing direct-child BasePart spawn markers" },
+      { name: "lobby_spawn", type: "string", required: false, default: "", description: "Optional BasePart to return participants to after Results" },
+      { name: "intermission", type: "number", required: false, default: 15, description: "Countdown before a match (0-300 seconds)" },
+      { name: "round_seconds", type: "number", required: false, default: 180, description: "Maximum round duration (10-1800 seconds)" },
+      { name: "min_players", type: "number", required: false, default: 2, description: "Living players required to start (1-50)" },
+    ],
+    references: [
+      ref("Players", "reference/engine/classes/Players"),
+      ref("Model:PivotTo", "reference/engine/classes/Model#PivotTo"),
+      ref("Humanoid", "reference/engine/classes/Humanoid"),
+      ref("Instance attributes", "reference/engine/classes/Instance#SetAttribute"),
+      ref("SpawnLocation", "reference/engine/classes/SpawnLocation"),
+    ],
+    knowledge: String.raw`## When to use
+- A round-based multiplayer game needs a server-owned phase clock, participant selection, spawn placement, elimination detection, winner state, and a clean results window.
+
+## Before running
+- Create a Folder or Model with direct-child BaseParts as match spawn markers. Supply its exact Explorer path. Use one marker per expected player where possible. An optional lobby_spawn must be a BasePart.
+- The installer writes ReplicatedStorage.TotalMatchState and ServerScriptService.MatchRoundController. Re-running replaces only that named controller and refreshes its settings; do not use the same state folder for unrelated data.
+
+## After running
+- Confirm the controller and TotalMatchState appear in Explorer, then run a two-player Studio test: verify the countdown, spawn placement, one elimination, winner, results, and return-to-lobby sequence before adding rewards.
+
+## Observe state and integrate
+- Clients can observe TotalMatchState attributes Phase (Waiting / Intermission / Round / Results), Round, TimeLeft, AliveCount and WinnerUserId. No UI is included; build a HUD that listens to AttributeChanged signals instead of polling a second round clock.
+- Players receive server-set InRound and RoundAlive attributes. The controller treats Character Humanoid death as elimination; a respawn during the same round does not rejoin automatically.
+- This is a last-player-standing loop, not team scoring, map rotation, rewards, matchmaking, or a combat system. Add those rules explicitly in server code; do not award a winner until your own game rules pass.
+
+## Failure modes / testing
+- The loop waits when fewer than min_players have a living character. Players joining mid-round wait until the next intermission.
+- If the spawn folder is removed or emptied after install, the controller returns to Waiting instead of starting without valid spawns. If a player leaves or their character dies, alive count is recomputed on the next second.
+- Start with a separate test place and watch the replicated attributes in Play mode. A mocked verify proves the objects and configuration exist, not actual Studio physics, respawn timing, or multiplayer behavior.`,
+    verify: {
+      note: "the match state, spawn references, settings, and server controller exist",
+      luau: String.raw`local state = find("ReplicatedStorage.TotalMatchState")
+check(state and state:IsA("Folder"), "TotalMatchState folder missing")
+local spawns = state and state:FindFirstChild("SpawnFolder")
+check(spawns and spawns:IsA("ObjectValue") and spawns.Value and #spawns.Value:GetChildren() > 0, "match spawn reference missing or empty")
+check(state:GetAttribute("Phase") == "Waiting" and state:GetAttribute("RoundSeconds") ~= nil and state:GetAttribute("MinimumPlayers") ~= nil, "initial match attributes missing")
+local controller = find("ServerScriptService.MatchRoundController")
+check(controller and controller:IsA("Script") and #controller.Source > 2000, "MatchRoundController missing or too small")
+check(controller.Source:find("humanoid.Died", 1, true) and controller.Source:find("WinnerUserId", 1, true), "elimination / winner handling missing")
+check(controller.Source:find("or #matchSpawns() == 0", 1, true), "waiting / intermission must pause until spawn markers exist")
+return { ok = true, detail = "round controller installed; spawns=" .. tostring(args.spawns) .. ", min_players=" .. tostring(args.min_players) }`,
+    },
+    luau: PRELUDE + String.raw`
+local spawns = resolve(args.spawns)
+if not spawns then return { ok = false, error = "spawn folder not found at '" .. tostring(args.spawns) .. "'" } end
+if not (spawns:IsA("Folder") or spawns:IsA("Model")) then return { ok = false, error = spawns:GetFullName() .. " must be a Folder or Model containing spawn Parts" } end
+local spawnParts = {}
+for _, child in ipairs(spawns:GetChildren()) do if child:IsA("BasePart") then table.insert(spawnParts, child) end end
+if #spawnParts == 0 then return { ok = false, error = spawns:GetFullName() .. " has no direct-child BaseParts to spawn on" } end
+local lobby = nil
+if args.lobby_spawn and args.lobby_spawn ~= "" then
+  lobby = resolve(args.lobby_spawn)
+  if not lobby then return { ok = false, error = "lobby spawn not found at '" .. tostring(args.lobby_spawn) .. "'" } end
+  if not lobby:IsA("BasePart") then return { ok = false, error = lobby:GetFullName() .. " must be a BasePart" } end
+end
+local function clamp(v, fallback, lo, hi)
+  local n = tonumber(v)
+  if not n or n ~= n or n == math.huge or n == -math.huge then n = fallback end
+  return math.max(lo, math.min(hi, n))
+end
+local minPlayers = math.floor(clamp(args.min_players, 2, 1, 50))
+local intermission = math.floor(clamp(args.intermission, 15, 0, 300))
+local roundSeconds = math.floor(clamp(args.round_seconds, 180, 10, 1800))
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local state = ensure(ReplicatedStorage, "Folder", "TotalMatchState")
+local spawnRef = ensure(state, "ObjectValue", "SpawnFolder")
+spawnRef.Value = spawns
+local lobbyRef = ensure(state, "ObjectValue", "LobbySpawn")
+lobbyRef.Value = lobby
+state:SetAttribute("Phase", "Waiting")
+state:SetAttribute("Round", 0)
+state:SetAttribute("TimeLeft", 0)
+state:SetAttribute("AliveCount", 0)
+state:SetAttribute("WinnerUserId", 0)
+state:SetAttribute("MinimumPlayers", minPlayers)
+state:SetAttribute("IntermissionSeconds", intermission)
+state:SetAttribute("RoundSeconds", roundSeconds)
+setSource(game:GetService("ServerScriptService"), "Script", "MatchRoundController", [==[
+-- TotalScript Server Round Controller. UI reads attributes from ReplicatedStorage.TotalMatchState.
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local state = ReplicatedStorage:WaitForChild("TotalMatchState")
+local spawnRef = state:WaitForChild("SpawnFolder")
+local lobbyRef = state:WaitForChild("LobbySpawn")
+local MIN_PLAYERS = state:GetAttribute("MinimumPlayers") or 2
+local INTERMISSION = state:GetAttribute("IntermissionSeconds") or 15
+local ROUND_SECONDS = state:GetAttribute("RoundSeconds") or 180
+local RESULTS_SECONDS = 5
+local roundNumber = state:GetAttribute("Round") or 0
+local function setPhase(name, timeLeft)
+  state:SetAttribute("Phase", name)
+  state:SetAttribute("TimeLeft", timeLeft or 0)
+end
+local function setOut(player)
+  player:SetAttribute("InRound", false)
+  player:SetAttribute("RoundAlive", false)
+end
+local function watchPlayer(player)
+  if player:GetAttribute("InRound") == nil then player:SetAttribute("InRound", false) end
+  if player:GetAttribute("RoundAlive") == nil then player:SetAttribute("RoundAlive", false) end
+  player.CharacterAdded:Connect(function(character)
+    local humanoid = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 10)
+    if humanoid then
+      humanoid.Died:Connect(function()
+        if player.Character == character and player:GetAttribute("InRound") then player:SetAttribute("RoundAlive", false) end
+      end)
+    end
+  end)
+  local character = player.Character
+  local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+  if humanoid then
+    humanoid.Died:Connect(function()
+      if player.Character == character and player:GetAttribute("InRound") then player:SetAttribute("RoundAlive", false) end
+    end)
+  end
+end
+local function alive(player)
+  if player:GetAttribute("InRound") ~= true or player:GetAttribute("RoundAlive") ~= true then return false end
+  local character = player.Character
+  local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+  local root = character and character:FindFirstChild("HumanoidRootPart")
+  return humanoid ~= nil and humanoid.Health > 0 and root ~= nil
+end
+local function eligiblePlayers()
+  local out = {}
+  for _, player in ipairs(Players:GetPlayers()) do
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if humanoid and humanoid.Health > 0 and root then table.insert(out, player) end
+  end
+  return out
+end
+local function activePlayers(participants)
+  local out = {}
+  for _, player in ipairs(participants) do if player.Parent and alive(player) then table.insert(out, player) end end
+  return out
+end
+local function countAlive(participants)
+  local n = #activePlayers(participants)
+  state:SetAttribute("AliveCount", n)
+  return n
+end
+local function matchSpawns()
+  local folder = spawnRef.Value
+  if not folder or not folder.Parent then return {} end
+  local out = {}
+  for _, child in ipairs(folder:GetChildren()) do if child:IsA("BasePart") then table.insert(out, child) end end
+  table.sort(out, function(a, b) return a.Name < b.Name end)
+  return out
+end
+local function moveToPart(player, part)
+  local character = player.Character
+  if not character or not character:IsA("Model") then return false end
+  local ok = pcall(function() character:PivotTo(part.CFrame * CFrame.new(0, 3, 0)) end)
+  return ok
+end
+local function setup()
+  for _, player in ipairs(Players:GetPlayers()) do watchPlayer(player) end
+  Players.PlayerAdded:Connect(watchPlayer)
+  Players.PlayerRemoving:Connect(setOut)
+end
+local function runRound()
+  local candidates = eligiblePlayers()
+  local markers = matchSpawns()
+  if #candidates < MIN_PLAYERS or #markers == 0 then
+    setPhase("Waiting", 0)
+    state:SetAttribute("AliveCount", 0)
+    return false
+  end
+  table.sort(candidates, function(a, b) return a.UserId < b.UserId end)
+  for _, player in ipairs(Players:GetPlayers()) do setOut(player) end
+  roundNumber = roundNumber + 1
+  state:SetAttribute("Round", roundNumber)
+  state:SetAttribute("WinnerUserId", 0)
+  local participants = {}
+  for index, player in ipairs(candidates) do
+    local marker = markers[((index - 1) % #markers) + 1]
+    if moveToPart(player, marker) then
+      player:SetAttribute("InRound", true)
+      player:SetAttribute("RoundAlive", true)
+      table.insert(participants, player)
+    end
+  end
+  if #participants < MIN_PLAYERS then
+    for _, player in ipairs(participants) do setOut(player) end
+    setPhase("Waiting", 0)
+    return false
+  end
+  setPhase("Round", ROUND_SECONDS)
+  state:SetAttribute("AliveCount", #participants)
+  for remaining = ROUND_SECONDS, 1, -1 do
+    state:SetAttribute("TimeLeft", remaining)
+    local aliveCount = countAlive(participants)
+    if aliveCount <= 1 then break end
+    task.wait(1)
+  end
+  local stillAlive = activePlayers(participants)
+  state:SetAttribute("AliveCount", #stillAlive)
+  if #stillAlive == 1 then state:SetAttribute("WinnerUserId", stillAlive[1].UserId) end
+  setPhase("Results", RESULTS_SECONDS)
+  for remaining = RESULTS_SECONDS, 1, -1 do
+    state:SetAttribute("TimeLeft", remaining)
+    task.wait(1)
+  end
+  local lobby = lobbyRef.Value
+  for _, player in ipairs(participants) do
+    if player.Parent and lobby and lobby:IsA("BasePart") then moveToPart(player, lobby) end
+    setOut(player)
+  end
+  state:SetAttribute("AliveCount", 0)
+  setPhase("Waiting", 0)
+  return true
+end
+setup()
+task.spawn(function()
+  while true do
+    while #eligiblePlayers() < MIN_PLAYERS or #matchSpawns() == 0 do
+      setPhase("Waiting", 0)
+      state:SetAttribute("AliveCount", 0)
+      task.wait(1)
+    end
+    local cancelled = false
+    setPhase("Intermission", INTERMISSION)
+    for remaining = INTERMISSION, 1, -1 do
+      if #eligiblePlayers() < MIN_PLAYERS or #matchSpawns() == 0 then cancelled = true break end
+      state:SetAttribute("TimeLeft", remaining)
+      task.wait(1)
+    end
+    if not cancelled then runRound() end
+  end
+end)
+]==])
+waypoint("TotalScript: round_controller")
+return { ok = true, phase = "Waiting", round = 0, min_players = minPlayers, intermission = intermission, round_seconds = roundSeconds, spawns = spawns:GetFullName(), lobby_spawn = lobby and lobby:GetFullName() or "none", installed = { "ReplicatedStorage.TotalMatchState", "ServerScriptService.MatchRoundController" }, note = "Clients can observe Phase, TimeLeft, Round, AliveCount and WinnerUserId; no HUD or reward rules are added." }
+`,
+  };
+
   const PACKS = [
     {
       id: PACK_ID, title: "Featured by TotalScript", version: VERSION,
-      description: "Eleven complete skills - real Luau systems installed in one call: damage numbers, NPC brain, keycard doors, dialogue trees, collectibles, zones, boss bar, checkpoints, GUI polish kit, game feel kit and a place audit report. Every one carries its docs references. Curated, idempotent, settings as attributes, no invented asset ids.",
-      items: [DAMAGE_NUMBERS, NPC_BRAIN, DOOR, DIALOGUE, COLLECTIBLES, ZONES, BOSS_BAR, CHECKPOINTS, GUI_POLISH_KIT, GAME_FEEL_KIT, PLACE_AUDIT],
+      description: "Fourteen complete skills - real Luau systems installed in one call: gameplay feedback and world systems, a player data service, a secure remote gateway, a round controller and a place audit report. Every one carries docs references, knowledge and a verify block. Curated, settings as attributes, no invented asset ids.",
+      items: [DAMAGE_NUMBERS, NPC_BRAIN, DOOR, DIALOGUE, COLLECTIBLES, ZONES, BOSS_BAR, CHECKPOINTS, GUI_POLISH_KIT, GAME_FEEL_KIT, PLACE_AUDIT, PLAYER_DATA_SERVICE, SECURE_ACTION_GATEWAY, ROUND_CONTROLLER],
     },
   ];
   for (const p of PACKS) for (const it of p.items) { it.author = it.author || AUTHOR; it.source = "import"; it.pack = p.id; }
