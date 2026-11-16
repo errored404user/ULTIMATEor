@@ -1,7 +1,7 @@
-# TotalScript asset builder (2.23.0). Sent to Blender as execute_code like
+# TotalScript asset builder (2.24.0). Sent to Blender as execute_code like
 # blender_ops.py; tokens CMD / ARGS / OUT / MESH are filled by TotalScript.
-# 2.22.0 added profile-driven lathe meshes; 2.23.0 adds closed profile
-# extrusions and path sweeps with planner estimates, UVs, bounds and manifold QA.
+# 2.22.0 added profile-driven lathe meshes; 2.23.0 added closed profile
+# extrusions and path sweeps; 2.24.0 adds tapered / twistable sweep stations.
 #
 # Commands
 #   asset_build    {spec}                 build a TotalAssetPlan spec: parts with roles, scale-relative
@@ -448,20 +448,52 @@ def _normalized_sweep_path(path, size):
     return [Vector(((p[0] - 0.5) * sx, (p[1] - 0.5) * sy, (p[2] - 0.5) * sz)) for p in normalized]
 
 
-def bm_sweep_into(bm, profile, path, size, section_size):
+def _sweep_station_sizes(section_size, section_sizes, station_count):
+    """Resolve per-station metre sizes, preserving the legacy uniform field."""
+    if section_sizes is not None:
+        if not isinstance(section_sizes, (list, tuple)) or len(section_sizes) != station_count:
+            raise ValueError("sweep section_sizes needs one [width, height] pair per path station")
+        resolved = []
+        for pair in section_sizes:
+            if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                raise ValueError("each sweep section_sizes entry must be [width, height]")
+            values = [float(x) for x in pair]
+            if not all(math.isfinite(x) and x > 0 for x in values):
+                raise ValueError("sweep section_sizes must contain positive finite sizes")
+            resolved.append(values)
+        return resolved
+    if not isinstance(section_size, (list, tuple)) or len(section_size) != 2:
+        raise ValueError("sweep needs section_size [width, height] or section_sizes per station")
+    values = [float(x) for x in section_size]
+    if not all(math.isfinite(x) and x > 0 for x in values):
+        raise ValueError("sweep section_size must contain two positive finite sizes")
+    return [values[:] for _ in range(station_count)]
+
+
+def _sweep_station_twists(twist_degrees, station_count):
+    if twist_degrees is None:
+        return [0.0] * station_count
+    if not isinstance(twist_degrees, (list, tuple)) or len(twist_degrees) != station_count:
+        raise ValueError("sweep twist_degrees needs one angle per path station")
+    twists = [float(x) for x in twist_degrees]
+    if not all(math.isfinite(x) for x in twists):
+        raise ValueError("sweep twist_degrees must contain finite angles")
+    return twists
+
+
+def bm_sweep_into(bm, profile, path, size, section_size=None, section_sizes=None, twist_degrees=None):
     """Sweep a normalized 2D section along a normalized 3D polyline.
 
-    section_size is the real-world cross-section [width, height] in metres;
-    path points are normalized inside the part's size envelope. Parallel
-    transport keeps the section from arbitrarily twisting around bends.
+    section_size is the legacy uniform cross-section [width, height] in metres.
+    Optional section_sizes and twist_degrees provide one actual section size
+    and cumulative roll angle per path station. Path points are normalized
+    inside the part's size envelope. Parallel transport avoids arbitrary frame
+    twists around bends; requested twist is applied relative to that frame.
     """
     points = _normalized_profile2d(profile, "sweep profile")
     centers = _normalized_sweep_path(path, size)
-    if not isinstance(section_size, (list, tuple)) or len(section_size) != 2:
-        raise ValueError("sweep section_size must be [width, height]")
-    sw, sh = [float(x) for x in section_size]
-    if not math.isfinite(sw) or not math.isfinite(sh) or sw <= 0 or sh <= 0:
-        raise ValueError("sweep section_size must contain two positive finite sizes")
+    sizes = _sweep_station_sizes(section_size, section_sizes, len(centers))
+    twists = _sweep_station_twists(twist_degrees, len(centers))
 
     def initial_normal(tangent):
         axes = (Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1)))
@@ -496,10 +528,14 @@ def bm_sweep_into(bm, profile, path, size, section_size):
         previous_normal = normal
 
     rings = []
-    for center, (normal, binormal) in zip(centers, frames):
+    for center, (normal, binormal), (sw, sh), twist in zip(centers, frames, sizes, twists):
+        angle = math.radians(twist % 360.0)
+        cosine, sine = math.cos(angle), math.sin(angle)
+        section_normal = normal * cosine + binormal * sine
+        section_binormal = binormal * cosine - normal * sine
         ring = []
         for u, v in points:
-            offset = normal * ((u - 0.5) * sw) + binormal * ((v - 0.5) * sh)
+            offset = section_normal * ((u - 0.5) * sw) + section_binormal * ((v - 0.5) * sh)
             ring.append(bm.verts.new(tuple(center + offset)))
         rings.append(ring)
     bm.faces.new(tuple(reversed(rings[0])))
@@ -511,7 +547,7 @@ def bm_sweep_into(bm, profile, path, size, section_size):
             bm.faces.new((lower[j], lower[k], upper[k], upper[j]))
 
 
-def bm_primitive(shape, size, segments=24, subdivisions=2, profile=None, path=None, section_size=None):
+def bm_primitive(shape, size, segments=24, subdivisions=2, profile=None, path=None, section_size=None, section_sizes=None, twist_degrees=None):
     bm = bmesh.new()
     sx, sy, sz = [max(1e-4, float(x)) for x in size]
     if shape == "box":
@@ -551,7 +587,7 @@ def bm_primitive(shape, size, segments=24, subdivisions=2, profile=None, path=No
             raise
     elif shape == "sweep":
         try:
-            bm_sweep_into(bm, profile, path, (sx, sy, sz), section_size)
+            bm_sweep_into(bm, profile, path, (sx, sy, sz), section_size, section_sizes, twist_degrees)
         except Exception:
             bm.free()
             raise
@@ -1097,9 +1133,9 @@ def op_inset(bm, op, size):
     return len(want)
 
 
-def make_cutter(shape, size, pos, rot_deg, coll, name, profile=None, path=None, section_size=None):
+def make_cutter(shape, size, pos, rot_deg, coll, name, profile=None, path=None, section_size=None, section_sizes=None, twist_degrees=None):
     supported = ("box", "cylinder", "sphere", "cone", "torus", "ico", "lathe", "extrusion", "sweep")
-    bm = bm_primitive(shape if shape in supported else "box", size, segments=24, profile=profile, path=path, section_size=section_size)
+    bm = bm_primitive(shape if shape in supported else "box", size, segments=24, profile=profile, path=path, section_size=section_size, section_sizes=section_sizes, twist_degrees=twist_degrees)
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
     bm.free()
@@ -1149,7 +1185,7 @@ def op_cut_objects(obj, op, part, coll):
         specs.append((rel[0], -rel[1], rel[2]))
     for i, r in enumerate(specs):
         world = base @ Vector(r)
-        c = make_cutter(shape, size, world, rot, coll, obj.name + "_cut%d" % i, profile=op.get("profile"), path=op.get("path"), section_size=op.get("section_size"))
+        c = make_cutter(shape, size, world, rot, coll, obj.name + "_cut%d" % i, profile=op.get("profile"), path=op.get("path"), section_size=op.get("section_size"), section_sizes=op.get("section_sizes"), twist_degrees=op.get("twist_degrees"))
         # inherit the part rotation so cut rot is relative to the part
         c.matrix_world = base @ Matrix.Translation(Vector(r)) @ Euler([math.radians(a) for a in rot], "XYZ").to_matrix().to_4x4()
         c.scale = (1, 1, 1)
@@ -1809,7 +1845,7 @@ def build_part(spec, part, coll, mats, style):
     if shape == "generator":
         bm, gen_info = bm_generate(part.get("generator"), size, segments if part.get("segments") else None, subdiv if part.get("subdivisions") else None)
     else:
-        bm = bm_primitive(shape, size, segments=segments, subdivisions=subdiv, profile=part.get("profile"), path=part.get("path"), section_size=part.get("section_size"))
+        bm = bm_primitive(shape, size, segments=segments, subdivisions=subdiv, profile=part.get("profile"), path=part.get("path"), section_size=part.get("section_size"), section_sizes=part.get("section_sizes"), twist_degrees=part.get("twist_degrees"))
     ops = [o for o in (part.get("ops") or []) if isinstance(o, dict)]
     applied = []
     # vertex-level ops first (they reshape the primitive before any boolean)
@@ -1870,7 +1906,12 @@ def build_part(spec, part, coll, mats, style):
     bev = part.get("bevel")
     if isinstance(bev, dict) and fnum(bev.get("width"), 0) > 0:
         mod = obj.modifiers.new(name="Bevel", type="BEVEL")
-        bevel_dims = [float(x) for x in part.get("section_size")] if shape == "sweep" and isinstance(part.get("section_size"), (list, tuple)) and len(part.get("section_size")) == 2 else size
+        if shape == "sweep" and isinstance(part.get("section_sizes"), (list, tuple)) and part.get("section_sizes"):
+            bevel_dims = [float(x) for pair in part["section_sizes"] for x in pair]
+        elif shape == "sweep" and isinstance(part.get("section_size"), (list, tuple)) and len(part.get("section_size")) == 2:
+            bevel_dims = [float(x) for x in part["section_size"]]
+        else:
+            bevel_dims = size
         mod.width = min(fnum(bev.get("width"), 0.01), min(bevel_dims) * 0.45)
         mod.segments = max(1, int(fnum(bev.get("segments"), 2)))
         mod.limit_method = "ANGLE"

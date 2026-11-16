@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript Asset Planner (2.23.0) - brief -> structured 3D asset spec.
+// TotalScript Asset Planner (2.24.0) - brief -> structured 3D asset spec.
 //
 // This is the "think before you add a cube" half of the Blender pipeline. A
 // natural-language brief ("detailed sci-fi sword, 1.2 m, teal accents") becomes
@@ -18,7 +18,7 @@
 // extents; pos = part centre; rot = degrees.
 (function (root) {
   "use strict";
-  const VERSION = "2.23.0";
+  const VERSION = "2.24.0";
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
   const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -532,6 +532,21 @@
     }
     return true;
   }
+  function validSweepSectionSize(size) {
+    return Array.isArray(size) && size.length === 2 && size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0);
+  }
+  function validSweepSectionSizes(sizes, pathLength) {
+    return Array.isArray(sizes) && sizes.length === pathLength && sizes.every(validSweepSectionSize);
+  }
+  function validSweepTwists(twists, pathLength) {
+    return Array.isArray(twists) && twists.length === pathLength && twists.every((x) => Number.isFinite(Number(x)));
+  }
+  function sweepSectionSizes(p) {
+    const count = Array.isArray(p.path) ? p.path.length : 0;
+    if (validSweepSectionSizes(p.section_sizes, count)) return p.section_sizes.map((pair) => pair.map(Number));
+    if (validSweepSectionSize(p.section_size)) return Array.from({ length: count }, () => p.section_size.map(Number));
+    return null;
+  }
   function estimateExtrusionTris(profile) {
     return validProfile2D(profile) ? profile.length * 4 - 4 : 0;
   }
@@ -583,7 +598,11 @@
       if (p.shape === "sweep") {
         if (!validProfile2D(p.profile)) add("error", "sweep-profile", tag + ": sweep profile must be a simple, non-degenerate polygon of 3..128 normalized [x, y] points in 0..1; it closes implicitly");
         if (!validSweepPath(p.path)) add("error", "sweep-path", tag + ": sweep path must have 2..128 distinct normalized [x, y, z] points in 0..1 without a 180-degree reversal");
-        if (!Array.isArray(p.section_size) || p.section_size.length !== 2 || !p.section_size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0)) add("error", "sweep-section-size", tag + ": sweep section_size must be [width, height] in metres");
+        const pathLength = Array.isArray(p.path) ? p.path.length : 0;
+        const stationSizesValid = validSweepSectionSizes(p.section_sizes, pathLength);
+        if (p.section_sizes != null && !stationSizesValid) add("error", "sweep-section-sizes", tag + ": section_sizes must contain one positive [width, height] pair in metres per path station");
+        if (!validSweepSectionSize(p.section_size) && !stationSizesValid) add("error", "sweep-section-size", tag + ": sweep needs section_size [width, height] or section_sizes per path station, in metres");
+        if (p.twist_degrees != null && !validSweepTwists(p.twist_degrees, pathLength)) add("error", "sweep-twist", tag + ": twist_degrees must contain one finite angle in degrees per path station");
       }
       if (p.shape === "generator") {
         const g = p.generator && typeof p.generator === "object" ? p.generator : null;
@@ -598,8 +617,8 @@
       if (!p.material || !mats[p.material]) add("error", "part-material", tag + ": material '" + p.material + "' is not defined in spec.materials");
       if (p.role && roles[p.role] !== undefined) roles[p.role]++;
       if (p.bevel) {
-        const bevelDims = p.shape === "sweep" && Array.isArray(p.section_size) && p.section_size.length === 2 && p.section_size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0) ? p.section_size : p.size;
-        const minDim = Array.isArray(bevelDims) ? Math.min.apply(null, bevelDims.map(Number)) : 1;
+        const sweepSizes = p.shape === "sweep" ? sweepSectionSizes(p) : null;
+        const minDim = sweepSizes ? Math.min.apply(null, sweepSizes.flat()) : Array.isArray(p.size) ? Math.min.apply(null, p.size.map(Number)) : 1;
         if (!(p.bevel.width > 0) || p.bevel.width > minDim / 2) add("error", "bevel-width", tag + ": bevel width " + p.bevel.width + " must be > 0 and <= half the smallest dimension (" + r3(minDim / 2) + ")");
         else bevels.push(r3(p.bevel.width));
       }
@@ -613,7 +632,11 @@
         if (op.op === "cut" && op.shape === "sweep") {
           if (!validProfile2D(op.profile)) add("error", "op-cut-profile", tag + ": a sweep cutter needs a valid normalized 2D profile");
           if (!validSweepPath(op.path)) add("error", "op-cut-path", tag + ": a sweep cutter needs a valid normalized 3D path");
-          if (!Array.isArray(op.section_size) || op.section_size.length !== 2 || !op.section_size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0)) add("error", "op-cut-section-size", tag + ": a sweep cutter needs section_size [width, height] in metres");
+          const pathLength = Array.isArray(op.path) ? op.path.length : 0;
+          const stationSizesValid = validSweepSectionSizes(op.section_sizes, pathLength);
+          if (op.section_sizes != null && !stationSizesValid) add("error", "op-cut-section-sizes", tag + ": sweep cutter section_sizes need one positive [width, height] pair in metres per path station");
+          if (!validSweepSectionSize(op.section_size) && !stationSizesValid) add("error", "op-cut-section-size", tag + ": a sweep cutter needs section_size or section_sizes in metres");
+          if (op.twist_degrees != null && !validSweepTwists(op.twist_degrees, pathLength)) add("error", "op-cut-twist", tag + ": sweep cutter twist_degrees need one finite angle per path station");
         }
         if ((op.op === "cut" && (op.shape === "extrusion" || op.shape === "sweep")) && (!Array.isArray(op.size) || op.size.length !== 3 || !op.size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0))) add("error", "op-cut-size", tag + ": an extrusion or sweep cutter needs exactly three positive sizes");
         if (op.op === "displace" && Array.isArray(p.size) && op.strength > Math.min.apply(null, p.size.map(Number)) * 0.3) add("warning", "displace-noise", tag + ": displace strength > 30 % of the smallest dimension destroys the silhouette");
@@ -684,9 +707,10 @@
   // swaps. A sweep's centerline is inside size; its section can extend beyond it.
   function extents(p) {
     let e = Array.isArray(p.size) ? p.size.slice(0, 3).map(Number) : [0, 0, 0];
-    if (p.shape === "sweep" && validProfile2D(p.profile) && validSweepPath(p.path) && Array.isArray(p.section_size) && p.section_size.length === 2 && p.section_size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0) && e.length === 3 && e.every((x) => Number.isFinite(x) && x > 0)) {
+    const sectionSizes = p.shape === "sweep" ? sweepSectionSizes(p) : null;
+    if (p.shape === "sweep" && validProfile2D(p.profile) && validSweepPath(p.path) && sectionSizes && e.length === 3 && e.every((x) => Number.isFinite(x) && x > 0)) {
       let radius = 0;
-      for (const point of p.profile) radius = Math.max(radius, Math.hypot((Number(point[0]) - 0.5) * Number(p.section_size[0]), (Number(point[1]) - 0.5) * Number(p.section_size[1])));
+      for (const point of p.profile) for (const section of sectionSizes) radius = Math.max(radius, Math.hypot((Number(point[0]) - 0.5) * section[0], (Number(point[1]) - 0.5) * section[1]));
       const half = [0, 0, 0];
       for (const point of p.path) for (let a = 0; a < 3; a++) half[a] = Math.max(half[a], Math.abs((Number(point[a]) - 0.5) * e[a]));
       e = half.map((h) => 2 * (h + radius));
