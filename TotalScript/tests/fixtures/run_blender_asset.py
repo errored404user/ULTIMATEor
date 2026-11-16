@@ -26,6 +26,18 @@ results = []
 def fake_step(args):
     """Mutate the mock scene the way a user / older file could: broken meshes,
     missing texture files, default names - so the validators have something to find."""
+    if args.get("open_closed_mesh"):
+        obj = bpy.data.objects.get(str(args["open_closed_mesh"]))
+        if obj is None or obj.type != "MESH" or not obj.data.polygons:
+            return {"ok": False, "error": "mesh not found or has no faces"}
+        me = obj.data
+        verts = [tuple(v.co) for v in me.vertices]
+        faces = [list(p.vertices) for p in me.polygons[:-1]]
+        smooth = [p.use_smooth for p in me.polygons[:-1]]
+        mats = [p.material_index for p in me.polygons[:-1]]
+        removed = len(me.polygons) - len(faces)
+        me.set_geometry(verts, faces, smooth, mats)
+        return {"ok": True, "object": obj.name, "removed_faces": removed}
     if args.get("add_broken_mesh"):
         me = bpy.data.meshes.new("Broken")
         # a quad, a zero-area triangle, and a loose vertex

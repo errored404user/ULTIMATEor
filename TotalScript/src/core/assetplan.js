@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TotalScript Asset Planner (2.22.0) - brief -> structured 3D asset spec.
+// TotalScript Asset Planner (2.23.0) - brief -> structured 3D asset spec.
 //
 // This is the "think before you add a cube" half of the Blender pipeline. A
 // natural-language brief ("detailed sci-fi sword, 1.2 m, teal accents") becomes
@@ -18,7 +18,7 @@
 // extents; pos = part centre; rot = degrees.
 (function (root) {
   "use strict";
-  const VERSION = "2.22.0";
+  const VERSION = "2.23.0";
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
   const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -457,7 +457,7 @@
   }
 
   // ── Structural validation of a spec (JS side - before Blender runs) ───────
-  const SHAPES = ["box", "cylinder", "sphere", "cone", "torus", "ico", "lathe", "generator"];
+  const SHAPES = ["box", "cylinder", "sphere", "cone", "torus", "ico", "lathe", "extrusion", "sweep", "generator"];
   const OPS = ["inset", "cut", "taper", "grooves", "displace", "flatten_bottom", "decimate", "bulge"];
   function validLatheProfile(profile) {
     if (!Array.isArray(profile) || profile.length < 2 || profile.length > 64) return false;
@@ -474,6 +474,70 @@
     }
     return nonzero > 0 && Number(profile[profile.length - 1][1]) > Number(profile[0][1]);
   }
+  function validProfile2D(profile) {
+    if (!Array.isArray(profile) || profile.length < 3 || profile.length > 128) return false;
+    const points = [];
+    for (const point of profile) {
+      if (!Array.isArray(point) || point.length !== 2) return false;
+      const x = Number(point[0]), y = Number(point[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return false;
+      points.push([x, y]);
+    }
+    const n = points.length, eps = 1e-10;
+    const orient = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    const onSegment = (a, b, p) => p[0] >= Math.min(a[0], b[0]) - eps && p[0] <= Math.max(a[0], b[0]) + eps && p[1] >= Math.min(a[1], b[1]) - eps && p[1] <= Math.max(a[1], b[1]) + eps;
+    const intersects = (a, b, c, d) => {
+      const o1 = orient(a, b, c), o2 = orient(a, b, d), o3 = orient(c, d, a), o4 = orient(c, d, b);
+      if (Math.abs(o1) <= eps && onSegment(a, b, c)) return true;
+      if (Math.abs(o2) <= eps && onSegment(a, b, d)) return true;
+      if (Math.abs(o3) <= eps && onSegment(c, d, a)) return true;
+      if (Math.abs(o4) <= eps && onSegment(c, d, b)) return true;
+      return (o1 > eps && o2 < -eps || o1 < -eps && o2 > eps) && (o3 > eps && o4 < -eps || o3 < -eps && o4 > eps);
+    };
+    let area2 = 0;
+    for (let i = 0; i < n; i++) {
+      const a = points[i], b = points[(i + 1) % n];
+      if ((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) <= 1e-12) return false;
+      area2 += a[0] * b[1] - b[0] * a[1];
+    }
+    if (Math.abs(area2) <= 1e-8) return false;
+    for (let i = 0; i < n; i++) {
+      const a = points[i], b = points[(i + 1) % n];
+      for (let j = i + 1; j < n; j++) {
+        if (j === i || j === (i + 1) % n || i === (j + 1) % n) continue;
+        if (intersects(a, b, points[j], points[(j + 1) % n])) return false;
+      }
+    }
+    return true;
+  }
+  function validSweepPath(path) {
+    if (!Array.isArray(path) || path.length < 2 || path.length > 128) return false;
+    const points = [];
+    for (const point of path) {
+      if (!Array.isArray(point) || point.length !== 3) return false;
+      const p = point.map(Number);
+      if (!p.every((x) => Number.isFinite(x) && x >= 0 && x <= 1)) return false;
+      points.push(p);
+    }
+    const distance2 = (a, b) => a.reduce((sum, x, i) => sum + (x - b[i]) * (x - b[i]), 0);
+    for (let i = 0; i < points.length; i++) {
+      if (i && distance2(points[i - 1], points[i]) <= 1e-12) return false;
+      for (let j = 0; j < i - 1; j++) if (distance2(points[j], points[i]) <= 1e-12) return false;
+    }
+    for (let i = 1; i < points.length - 1; i++) {
+      const incoming = points[i].map((x, a) => x - points[i - 1][a]), outgoing = points[i + 1].map((x, a) => x - points[i][a]);
+      const dot = incoming.reduce((sum, x, a) => sum + x * outgoing[a], 0);
+      const lengths = Math.sqrt(distance2(points[i], points[i - 1]) * distance2(points[i + 1], points[i]));
+      if (dot <= -0.999999 * lengths) return false;
+    }
+    return true;
+  }
+  function estimateExtrusionTris(profile) {
+    return validProfile2D(profile) ? profile.length * 4 - 4 : 0;
+  }
+  function estimateSweepTris(profile, path) {
+    return validProfile2D(profile) && validSweepPath(path) ? 2 * profile.length * (path.length - 1) + 2 * (profile.length - 2) : 0;
+  }
   function estimateLatheTris(profile, segments) {
     if (!Array.isArray(profile) || profile.length < 2) return 0;
     const seg = Number(segments) || 24;
@@ -488,7 +552,8 @@
   }
   function validate(spec) {
     const issues = [];
-    let estTris = 0;
+    let estTris = 0, hasBounds = false;
+    const boundMin = [Infinity, Infinity, Infinity], boundMax = [-Infinity, -Infinity, -Infinity];
     const add = (level, code, msg, part) => issues.push({ level, code, msg, part: part || null });
     if (!spec || typeof spec !== "object") { add("error", "spec", "spec must be an object"); return finish(); }
     if (!spec.name || !/^[A-Za-z][A-Za-z0-9_]*$/.test(String(spec.name))) add("error", "name", "spec.name must be an identifier (letters, digits, underscore)");
@@ -513,6 +578,13 @@
       if (p.shape === "lathe" && Array.isArray(p.size) && p.size.length !== 3) add("error", "lathe-size", tag + ": lathe size must be exactly [diameter, diameter, height]");
       if (p.shape === "lathe" && Array.isArray(p.size) && p.size.length >= 2 && Number.isFinite(Number(p.size[0])) && Number.isFinite(Number(p.size[1])) && Math.abs(Number(p.size[0]) - Number(p.size[1])) > Math.max(Number(p.size[0]), Number(p.size[1])) * 0.001) add("error", "lathe-size", tag + ": a rotational lathe needs equal X and Y diameters");
       if (p.shape === "lathe" && p.segments != null && !(Number.isInteger(Number(p.segments)) && p.segments >= 3 && p.segments <= 256)) add("error", "lathe-segments", tag + ": lathe segments must be an integer in 3..256");
+      if ((p.shape === "extrusion" || p.shape === "sweep") && Array.isArray(p.size) && p.size.length !== 3) add("error", p.shape + "-size", tag + ": " + p.shape + " size must be exactly [x, y, z]");
+      if (p.shape === "extrusion" && !validProfile2D(p.profile)) add("error", "extrusion-profile", tag + ": extrusion profile must be a simple, non-degenerate polygon of 3..128 normalized [x, y] points in 0..1; it closes implicitly");
+      if (p.shape === "sweep") {
+        if (!validProfile2D(p.profile)) add("error", "sweep-profile", tag + ": sweep profile must be a simple, non-degenerate polygon of 3..128 normalized [x, y] points in 0..1; it closes implicitly");
+        if (!validSweepPath(p.path)) add("error", "sweep-path", tag + ": sweep path must have 2..128 distinct normalized [x, y, z] points in 0..1 without a 180-degree reversal");
+        if (!Array.isArray(p.section_size) || p.section_size.length !== 2 || !p.section_size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0)) add("error", "sweep-section-size", tag + ": sweep section_size must be [width, height] in metres");
+      }
       if (p.shape === "generator") {
         const g = p.generator && typeof p.generator === "object" ? p.generator : null;
         if (!g || !GENERATORS.includes(g.kind)) add("error", "generator", tag + ": generator.kind must be one of " + GENERATORS.join(", "));
@@ -526,7 +598,8 @@
       if (!p.material || !mats[p.material]) add("error", "part-material", tag + ": material '" + p.material + "' is not defined in spec.materials");
       if (p.role && roles[p.role] !== undefined) roles[p.role]++;
       if (p.bevel) {
-        const minDim = Array.isArray(p.size) ? Math.min.apply(null, p.size.map(Number)) : 1;
+        const bevelDims = p.shape === "sweep" && Array.isArray(p.section_size) && p.section_size.length === 2 && p.section_size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0) ? p.section_size : p.size;
+        const minDim = Array.isArray(bevelDims) ? Math.min.apply(null, bevelDims.map(Number)) : 1;
         if (!(p.bevel.width > 0) || p.bevel.width > minDim / 2) add("error", "bevel-width", tag + ": bevel width " + p.bevel.width + " must be > 0 and <= half the smallest dimension (" + r3(minDim / 2) + ")");
         else bevels.push(r3(p.bevel.width));
       }
@@ -536,14 +609,44 @@
         if (op.op === "cut" && op.shape === "lathe" && !validLatheProfile(op.profile)) add("error", "op-cut-profile", tag + ": a lathe cutter needs a valid profile");
         if (op.op === "cut" && op.shape === "lathe" && (!Array.isArray(op.size) || op.size.length !== 3 || !op.size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0))) add("error", "op-cut-size", tag + ": a lathe cutter needs exactly three positive sizes");
         else if (op.op === "cut" && op.shape === "lathe" && Math.abs(Number(op.size[0]) - Number(op.size[1])) > Math.max(Number(op.size[0]), Number(op.size[1])) * 0.001) add("error", "op-cut-size", tag + ": a rotational lathe cutter needs equal X and Y diameters");
+        if (op.op === "cut" && op.shape === "extrusion" && !validProfile2D(op.profile)) add("error", "op-cut-profile", tag + ": an extrusion cutter needs a valid normalized 2D profile");
+        if (op.op === "cut" && op.shape === "sweep") {
+          if (!validProfile2D(op.profile)) add("error", "op-cut-profile", tag + ": a sweep cutter needs a valid normalized 2D profile");
+          if (!validSweepPath(op.path)) add("error", "op-cut-path", tag + ": a sweep cutter needs a valid normalized 3D path");
+          if (!Array.isArray(op.section_size) || op.section_size.length !== 2 || !op.section_size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0)) add("error", "op-cut-section-size", tag + ": a sweep cutter needs section_size [width, height] in metres");
+        }
+        if ((op.op === "cut" && (op.shape === "extrusion" || op.shape === "sweep")) && (!Array.isArray(op.size) || op.size.length !== 3 || !op.size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0))) add("error", "op-cut-size", tag + ": an extrusion or sweep cutter needs exactly three positive sizes");
         if (op.op === "displace" && Array.isArray(p.size) && op.strength > Math.min.apply(null, p.size.map(Number)) * 0.3) add("warning", "displace-noise", tag + ": displace strength > 30 % of the smallest dimension destroys the silhouette");
         if (op.op === "decimate" && !(op.ratio > 0.05 && op.ratio <= 1)) add("error", "op-decimate", tag + ": decimate ratio must be 0.05..1");
       }
-      if (dims && Array.isArray(p.size) && Array.isArray(p.pos)) {
+      if (Array.isArray(p.size) && Array.isArray(p.pos) && p.size.length >= 3 && p.pos.length >= 3 && p.size.slice(0, 3).every((x) => Number.isFinite(Number(x)) && Number(x) > 0) && p.pos.slice(0, 3).every((x) => Number.isFinite(Number(x)))) {
         const ext = extents(p);
-        for (let a = 0; a < 3; a++) { const half = ext[a] / 2, c = Number(p.pos[a]) + (p.shape === "generator" && a === 2 ? half : 0); const lim = a === 2 ? [-(dims[2] * 0.15), dims[2] * 1.05] : [-(dims[a] / 2) * 1.1, (dims[a] / 2) * 1.1]; if (c + half > lim[1] + 1e-6 || c - half < lim[0] - 1e-6) { add("warning", "bounds", tag + ": extends outside spec.dims on axis " + "xyz"[a]); break; } }
+        let outside = -1;
+        for (let a = 0; a < 3; a++) {
+          const half = ext[a] / 2, c = Number(p.pos[a]) + (p.shape === "generator" && a === 2 ? half : 0);
+          if (!Number.isFinite(c) || !Number.isFinite(half)) continue;
+          boundMin[a] = Math.min(boundMin[a], c - half);
+          boundMax[a] = Math.max(boundMax[a], c + half);
+          hasBounds = true;
+          if (outside < 0 && dims && dims.length >= 3) {
+            const lim = a === 2 ? [-(dims[2] * 0.15), dims[2] * 1.05] : [-(dims[a] / 2) * 1.1, (dims[a] / 2) * 1.1];
+            if (c + half > lim[1] + 1e-6 || c - half < lim[0] - 1e-6) outside = a;
+          }
+        }
+        if (outside >= 0) add("warning", "bounds", tag + ": extends outside spec.dims on axis " + "xyz"[outside]);
       }
-      if (Array.isArray(p.size)) { const seg = Number(p.segments) || 24; const prof = Array.isArray(p.profile) ? p.profile : []; const latheTris = estimateLatheTris(prof, seg); const base = p.shape === "box" ? 12 : p.shape === "cylinder" || p.shape === "cone" ? seg * 4 : p.shape === "sphere" ? seg * seg : p.shape === "torus" ? seg * 24 : p.shape === "lathe" ? latheTris : p.shape === "generator" ? generatorTris(p) : 20 * Math.pow(4, Number(p.subdivisions) || 1); let t = base; if (p.bevel) t *= 1 + (Number(p.bevel.segments) || 2) * 1.5; for (const op of p.ops || []) { if (op.op === "grooves") t += 24 * (Number(op.count) || 1); if (op.op === "cut") t += 40; if (op.op === "inset") t += 12; if (op.op === "decimate") t *= Number(op.ratio) || 1; } if (p.mirror) t *= 2; if (p.array) t *= Number(p.array.count) || 1; estTris += t; }
+      if (Array.isArray(p.size)) {
+        const seg = Number(p.segments) || 24, prof = Array.isArray(p.profile) ? p.profile : [];
+        const latheTris = estimateLatheTris(prof, seg);
+        const extrusionTris = estimateExtrusionTris(prof), sweepTris = estimateSweepTris(prof, p.path);
+        const base = p.shape === "box" ? 12 : p.shape === "cylinder" || p.shape === "cone" ? seg * 4 : p.shape === "sphere" ? seg * seg : p.shape === "torus" ? seg * 24 : p.shape === "lathe" ? latheTris : p.shape === "extrusion" ? extrusionTris : p.shape === "sweep" ? sweepTris : p.shape === "generator" ? generatorTris(p) : 20 * Math.pow(4, Number(p.subdivisions) || 1);
+        let t = base;
+        if (p.bevel) t *= 1 + (Number(p.bevel.segments) || 2) * 1.5;
+        for (const op of p.ops || []) { if (op.op === "grooves") t += 24 * (Number(op.count) || 1); if (op.op === "cut") t += 40; if (op.op === "inset") t += 12; if (op.op === "decimate") t *= Number(op.ratio) || 1; }
+        if (p.mirror) t *= 2;
+        if (p.array) t *= Number(p.array.count) || 1;
+        estTris += t;
+      }
     });
     if (parts.length && roles.primary === 0) add("error", "roles", "no part has role 'primary' - establish the silhouette before details");
     if (parts.length >= 4 && roles.tertiary === parts.length) add("warning", "roles", "every part is tertiary - the primary form is missing");
@@ -557,7 +660,11 @@
     if (spec.studs_per_meter != null && !(spec.studs_per_meter > 0.5 && spec.studs_per_meter < 100)) add("error", "scale", "studs_per_meter must be 0.5..100");
     for (const a of spec.attachments || []) if (!a.name || !Array.isArray(a.pos)) add("error", "attachment", "attachment needs name + pos");
     return finish();
-    function finish() { const errors = issues.filter((i) => i.level === "error").length; return { ok: errors === 0, errors, warnings: issues.length - errors, issues, estimated_tris: Math.round(estTris) }; }
+    function finish() {
+      const errors = issues.filter((i) => i.level === "error").length;
+      const estimated_bounds = hasBounds ? { min: vec(boundMin), max: vec(boundMax), dims: vec(boundMax.map((x, i) => x - boundMin[i])) } : null;
+      return { ok: errors === 0, errors, warnings: issues.length - errors, issues, estimated_tris: Math.round(estTris), estimated_bounds };
+    }
   }
 
   // triangle estimate of a generator part (mirrors the construction in tools/blender_asset.py)
@@ -573,9 +680,18 @@
     return 100;
   }
 
-  // world-axis extents of a part: 90-degree rotations swap axes (enough for the recipes' cylinders / tori)
+  // Conservative local bounds, then the planner's existing 90-degree axis
+  // swaps. A sweep's centerline is inside size; its section can extend beyond it.
   function extents(p) {
-    let e = p.size.map(Number); const rot = Array.isArray(p.rot) ? p.rot.map((d) => Math.round(Number(d) || 0)) : [0, 0, 0];
+    let e = Array.isArray(p.size) ? p.size.slice(0, 3).map(Number) : [0, 0, 0];
+    if (p.shape === "sweep" && validProfile2D(p.profile) && validSweepPath(p.path) && Array.isArray(p.section_size) && p.section_size.length === 2 && p.section_size.every((x) => Number.isFinite(Number(x)) && Number(x) > 0) && e.length === 3 && e.every((x) => Number.isFinite(x) && x > 0)) {
+      let radius = 0;
+      for (const point of p.profile) radius = Math.max(radius, Math.hypot((Number(point[0]) - 0.5) * Number(p.section_size[0]), (Number(point[1]) - 0.5) * Number(p.section_size[1])));
+      const half = [0, 0, 0];
+      for (const point of p.path) for (let a = 0; a < 3; a++) half[a] = Math.max(half[a], Math.abs((Number(point[a]) - 0.5) * e[a]));
+      e = half.map((h) => 2 * (h + radius));
+    }
+    const rot = Array.isArray(p.rot) ? p.rot.map((d) => Math.round(Number(d) || 0)) : [0, 0, 0];
     const q = (d) => Math.abs(((d % 180) + 180) % 180 - 90) < 15;
     if (q(rot[0])) e = [e[0], e[2], e[1]];
     if (q(rot[1])) e = [e[2], e[1], e[0]];
@@ -589,7 +705,7 @@
     return spec.name + " (" + spec.recipe + ", " + spec.style + (spec.style_profile && spec.style_profile.hybrid ? "+" + spec.style_profile.hybrid : "") + ", detail " + (spec.detail_level || "standard") + " " + (spec.detail == null ? "" : spec.detail) + "): " + spec.dims.join(" x ") + " m, " + (spec.parts || []).length + " parts [primary: " + byRole.primary.join(", ") + " | secondary: " + byRole.secondary.join(", ") + " | tertiary: " + byRole.tertiary.join(", ") + "], materials " + Object.keys(spec.materials || {}).map((k) => k + "=" + spec.materials[k].family + "->" + spec.materials[k].roblox).join(", ") + "; budget " + spec.budget.tris + " tris; origin " + spec.origin + "; " + spec.studs_per_meter + " studs/m";
   }
 
-  const api = { VERSION, extents, STYLES, DETAIL_LEVELS, SHAPES, CATEGORIES, FAMILIES, GENERATORS, generatorTris, RECIPES, RECIPE_CATEGORY, RECIPE_WORDS, STYLE_WORDS, SWATCH, interpret, plan, validate, summary, parseColor, material, bevel };
+  const api = { VERSION, extents, STYLES, DETAIL_LEVELS, SHAPES, CATEGORIES, FAMILIES, GENERATORS, generatorTris, validProfile2D, validSweepPath, estimateLatheTris, estimateExtrusionTris, estimateSweepTris, RECIPES, RECIPE_CATEGORY, RECIPE_WORDS, STYLE_WORDS, SWATCH, interpret, plan, validate, summary, parseColor, material, bevel };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (root) root.TotalAssetPlan = api;
 })(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : null));

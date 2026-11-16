@@ -1,7 +1,7 @@
-# TotalScript asset builder (2.22.0). Sent to Blender as execute_code like
+# TotalScript asset builder (2.23.0). Sent to Blender as execute_code like
 # blender_ops.py; tokens CMD / ARGS / OUT / MESH are filled by TotalScript.
-# 2.22.0 adds profile-driven lathe meshes to custom specs; the JS planner's
-# blockout / standard / hero / ultra detail control is persisted on the asset.
+# 2.22.0 added profile-driven lathe meshes; 2.23.0 adds closed profile
+# extrusions and path sweeps with planner estimates, UVs, bounds and manifold QA.
 #
 # Commands
 #   asset_build    {spec}                 build a TotalAssetPlan spec: parts with roles, scale-relative
@@ -357,7 +357,161 @@ def bm_lathe_into(bm, profile, size, segments=24):
                 pass
 
 
-def bm_primitive(shape, size, segments=24, subdivisions=2, profile=None):
+def _normalized_profile2d(profile, label="profile"):
+    """Validate a simple normalized polygon and return counter-clockwise points.
+
+    The ring closes implicitly: repeating the first point would create a zero
+    edge and is rejected. Keeping this check here as well as in the JS planner
+    makes direct Blender calls fail safely instead of emitting broken meshes.
+    """
+    if not isinstance(profile, (list, tuple)) or len(profile) < 3 or len(profile) > 128:
+        raise ValueError("%s needs 3..128 normalized [x, y] points" % label)
+    points = []
+    for item in profile:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise ValueError("%s entries must be normalized [x, y] pairs" % label)
+        x, y = float(item[0]), float(item[1])
+        if not math.isfinite(x) or not math.isfinite(y) or x < 0 or x > 1 or y < 0 or y > 1:
+            raise ValueError("%s coordinates must be finite and in 0..1" % label)
+        points.append((x, y))
+
+    eps = 1e-10
+    n = len(points)
+    area2 = 0.0
+    for i in range(n):
+        a, b = points[i], points[(i + 1) % n]
+        if (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 <= 1e-12:
+            raise ValueError("%s cannot repeat a point or contain a zero-length edge" % label)
+        area2 += a[0] * b[1] - b[0] * a[1]
+    if abs(area2) <= 1e-8:
+        raise ValueError("%s polygon area must be nonzero" % label)
+
+    def orient(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    def on_segment(a, b, p):
+        return min(a[0], b[0]) - eps <= p[0] <= max(a[0], b[0]) + eps and min(a[1], b[1]) - eps <= p[1] <= max(a[1], b[1]) + eps
+
+    def intersects(a, b, c, d):
+        o1, o2, o3, o4 = orient(a, b, c), orient(a, b, d), orient(c, d, a), orient(c, d, b)
+        if abs(o1) <= eps and on_segment(a, b, c): return True
+        if abs(o2) <= eps and on_segment(a, b, d): return True
+        if abs(o3) <= eps and on_segment(c, d, a): return True
+        if abs(o4) <= eps and on_segment(c, d, b): return True
+        return ((o1 > eps and o2 < -eps) or (o1 < -eps and o2 > eps)) and ((o3 > eps and o4 < -eps) or (o3 < -eps and o4 > eps))
+
+    for i in range(n):
+        a, b = points[i], points[(i + 1) % n]
+        for j in range(i + 1, n):
+            if j == (i + 1) % n or i == (j + 1) % n:
+                continue
+            if intersects(a, b, points[j], points[(j + 1) % n]):
+                raise ValueError("%s polygon edges cannot self-intersect or touch" % label)
+    if area2 < 0:
+        points.reverse()
+    return points
+
+
+def bm_extrusion_into(bm, profile, size):
+    """Extrude a normalized simple XY polygon through local Z as a closed solid."""
+    points = _normalized_profile2d(profile, "extrusion profile")
+    sx, sy, sz = [max(1e-4, float(x)) for x in size]
+    bottom = [bm.verts.new(((x - 0.5) * sx, (y - 0.5) * sy, -sz / 2.0)) for x, y in points]
+    top = [bm.verts.new(((x - 0.5) * sx, (y - 0.5) * sy, sz / 2.0)) for x, y in points]
+    bm.faces.new(tuple(reversed(bottom)))
+    bm.faces.new(tuple(top))
+    for i in range(len(points)):
+        j = (i + 1) % len(points)
+        bm.faces.new((bottom[i], bottom[j], top[j], top[i]))
+
+
+def _normalized_sweep_path(path, size):
+    if not isinstance(path, (list, tuple)) or len(path) < 2 or len(path) > 128:
+        raise ValueError("sweep path needs 2..128 normalized [x, y, z] points")
+    normalized = []
+    for item in path:
+        if not isinstance(item, (list, tuple)) or len(item) != 3:
+            raise ValueError("sweep path entries must be normalized [x, y, z] points")
+        p = tuple(float(x) for x in item)
+        if not all(math.isfinite(x) and 0 <= x <= 1 for x in p):
+            raise ValueError("sweep path coordinates must be finite and in 0..1")
+        normalized.append(p)
+    for i, point in enumerate(normalized):
+        if i and sum((point[a] - normalized[i - 1][a]) ** 2 for a in range(3)) <= 1e-12:
+            raise ValueError("sweep path cannot repeat adjacent points")
+        if any(sum((point[a] - normalized[j][a]) ** 2 for a in range(3)) <= 1e-12 for j in range(i - 1)):
+            raise ValueError("sweep path cannot revisit a point")
+    for i in range(1, len(normalized) - 1):
+        if sum((normalized[i + 1][a] - normalized[i - 1][a]) ** 2 for a in range(3)) <= 1e-12:
+            raise ValueError("sweep path cannot reverse 180 degrees at a station")
+    sx, sy, sz = [max(1e-4, float(x)) for x in size]
+    return [Vector(((p[0] - 0.5) * sx, (p[1] - 0.5) * sy, (p[2] - 0.5) * sz)) for p in normalized]
+
+
+def bm_sweep_into(bm, profile, path, size, section_size):
+    """Sweep a normalized 2D section along a normalized 3D polyline.
+
+    section_size is the real-world cross-section [width, height] in metres;
+    path points are normalized inside the part's size envelope. Parallel
+    transport keeps the section from arbitrarily twisting around bends.
+    """
+    points = _normalized_profile2d(profile, "sweep profile")
+    centers = _normalized_sweep_path(path, size)
+    if not isinstance(section_size, (list, tuple)) or len(section_size) != 2:
+        raise ValueError("sweep section_size must be [width, height]")
+    sw, sh = [float(x) for x in section_size]
+    if not math.isfinite(sw) or not math.isfinite(sh) or sw <= 0 or sh <= 0:
+        raise ValueError("sweep section_size must contain two positive finite sizes")
+
+    def initial_normal(tangent):
+        axes = (Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1)))
+        axis = min(axes, key=lambda a: abs(a.dot(tangent)))
+        normal = (axis - tangent * axis.dot(tangent)).normalized()
+        if normal.length <= 1e-9:
+            raise ValueError("could not establish a stable sweep frame")
+        return normal
+
+    frames = []
+    previous_normal = None
+    for i, center in enumerate(centers):
+        if i == 0:
+            delta = centers[1] - centers[0]
+        elif i == len(centers) - 1:
+            delta = centers[i] - centers[i - 1]
+        else:
+            delta = centers[i + 1] - centers[i - 1]
+        if delta.length <= 1e-9:
+            raise ValueError("sweep path has a degenerate tangent")
+        tangent = delta.normalized()
+        if previous_normal is None:
+            normal = initial_normal(tangent)
+        else:
+            normal = (previous_normal - tangent * previous_normal.dot(tangent)).normalized()
+            if normal.length <= 1e-9:
+                normal = initial_normal(tangent)
+        binormal = tangent.cross(normal).normalized()
+        if binormal.length <= 1e-9:
+            raise ValueError("could not establish a stable sweep frame")
+        frames.append((normal, binormal))
+        previous_normal = normal
+
+    rings = []
+    for center, (normal, binormal) in zip(centers, frames):
+        ring = []
+        for u, v in points:
+            offset = normal * ((u - 0.5) * sw) + binormal * ((v - 0.5) * sh)
+            ring.append(bm.verts.new(tuple(center + offset)))
+        rings.append(ring)
+    bm.faces.new(tuple(reversed(rings[0])))
+    bm.faces.new(tuple(rings[-1]))
+    for i in range(len(rings) - 1):
+        lower, upper = rings[i], rings[i + 1]
+        for j in range(len(points)):
+            k = (j + 1) % len(points)
+            bm.faces.new((lower[j], lower[k], upper[k], upper[j]))
+
+
+def bm_primitive(shape, size, segments=24, subdivisions=2, profile=None, path=None, section_size=None):
     bm = bmesh.new()
     sx, sy, sz = [max(1e-4, float(x)) for x in size]
     if shape == "box":
@@ -386,6 +540,18 @@ def bm_primitive(shape, size, segments=24, subdivisions=2, profile=None):
     elif shape == "lathe":
         try:
             bm_lathe_into(bm, profile, (sx, sy, sz), segments)
+        except Exception:
+            bm.free()
+            raise
+    elif shape == "extrusion":
+        try:
+            bm_extrusion_into(bm, profile, (sx, sy, sz))
+        except Exception:
+            bm.free()
+            raise
+    elif shape == "sweep":
+        try:
+            bm_sweep_into(bm, profile, path, (sx, sy, sz), section_size)
         except Exception:
             bm.free()
             raise
@@ -931,9 +1097,9 @@ def op_inset(bm, op, size):
     return len(want)
 
 
-def make_cutter(shape, size, pos, rot_deg, coll, name, profile=None):
-    supported = ("box", "cylinder", "sphere", "cone", "torus", "ico", "lathe")
-    bm = bm_primitive(shape if shape in supported else "box", size, segments=24, profile=profile)
+def make_cutter(shape, size, pos, rot_deg, coll, name, profile=None, path=None, section_size=None):
+    supported = ("box", "cylinder", "sphere", "cone", "torus", "ico", "lathe", "extrusion", "sweep")
+    bm = bm_primitive(shape if shape in supported else "box", size, segments=24, profile=profile, path=path, section_size=section_size)
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
     bm.free()
@@ -983,7 +1149,7 @@ def op_cut_objects(obj, op, part, coll):
         specs.append((rel[0], -rel[1], rel[2]))
     for i, r in enumerate(specs):
         world = base @ Vector(r)
-        c = make_cutter(shape, size, world, rot, coll, obj.name + "_cut%d" % i, profile=op.get("profile"))
+        c = make_cutter(shape, size, world, rot, coll, obj.name + "_cut%d" % i, profile=op.get("profile"), path=op.get("path"), section_size=op.get("section_size"))
         # inherit the part rotation so cut rot is relative to the part
         c.matrix_world = base @ Matrix.Translation(Vector(r)) @ Euler([math.radians(a) for a in rot], "XYZ").to_matrix().to_4x4()
         c.scale = (1, 1, 1)
@@ -1643,7 +1809,7 @@ def build_part(spec, part, coll, mats, style):
     if shape == "generator":
         bm, gen_info = bm_generate(part.get("generator"), size, segments if part.get("segments") else None, subdiv if part.get("subdivisions") else None)
     else:
-        bm = bm_primitive(shape, size, segments=segments, subdivisions=subdiv, profile=part.get("profile"))
+        bm = bm_primitive(shape, size, segments=segments, subdivisions=subdiv, profile=part.get("profile"), path=part.get("path"), section_size=part.get("section_size"))
     ops = [o for o in (part.get("ops") or []) if isinstance(o, dict)]
     applied = []
     # vertex-level ops first (they reshape the primitive before any boolean)
@@ -1698,13 +1864,14 @@ def build_part(spec, part, coll, mats, style):
     # UVs
     uv_mode = None
     if spec.get("uv", True):
-        uv_mode = unwrap(obj, shape in ("ico", "sphere", "lathe", "generator") or "displace" in applied)
+        uv_mode = unwrap(obj, shape in ("ico", "sphere", "lathe", "extrusion", "sweep", "generator") or "displace" in applied)
     # non-destructive finishing stack (kept live, exported with modifiers applied)
     mods = []
     bev = part.get("bevel")
     if isinstance(bev, dict) and fnum(bev.get("width"), 0) > 0:
         mod = obj.modifiers.new(name="Bevel", type="BEVEL")
-        mod.width = min(fnum(bev.get("width"), 0.01), min(size) * 0.45)
+        bevel_dims = [float(x) for x in part.get("section_size")] if shape == "sweep" and isinstance(part.get("section_size"), (list, tuple)) and len(part.get("section_size")) == 2 else size
+        mod.width = min(fnum(bev.get("width"), 0.01), min(bevel_dims) * 0.45)
         mod.segments = max(1, int(fnum(bev.get("segments"), 2)))
         mod.limit_method = "ANGLE"
         mod.angle_limit = math.radians(fnum(bev.get("angle"), 30.0))
@@ -1748,6 +1915,8 @@ def build_part(spec, part, coll, mats, style):
             pass
     # custom properties -> read back by dump_meshes / the Studio importer
     obj["total_asset"] = ident(spec.get("name"), "Asset")
+    obj["total_shape"] = shape
+    obj["total_closed_solid"] = shape in ("lathe", "extrusion", "sweep")
     obj["total_role"] = str(part.get("role") or "secondary")
     obj["total_collision"] = str(part.get("collision") or "box")
     obj["total_can_collide"] = bool(part.get("can_collide", True))
@@ -1850,7 +2019,7 @@ def build_asset(spec):
         "asset": name,
         "collection": coll.name,
         "root": root.name,
-        "parts": [dict(info, tris=m["tris"]) for (obj, info), m in zip(built, metrics["parts"])],
+        "parts": [dict(info, tris=m["tris"], bounds_m=m.get("bounds_m")) for (obj, info), m in zip(built, metrics["parts"])],
         "part_errors": errors,
         "materials": sorted(mats.keys()),
         "attachments": attachments,
@@ -1869,6 +2038,16 @@ def build_asset(spec):
     }
 
 
+def object_bounds(obj):
+    try:
+        corners = [obj.matrix_world @ Vector(corner) for corner in obj.bound_box]
+        if not corners:
+            return None
+        return {"min": [round(min(p[i] for p in corners), 4) for i in range(3)], "max": [round(max(p[i] for p in corners), 4) for i in range(3)]}
+    except Exception:
+        return None
+
+
 def asset_metrics(name):
     root, coll, meshes = asset_objects(name)
     parts = []
@@ -1878,16 +2057,13 @@ def asset_metrics(name):
     for o in meshes:
         t = tri_count(o)
         total += t
-        parts.append({"name": o.name, "tris": t})
-        try:
-            for corner in o.bound_box:
-                w = o.matrix_world @ Vector(corner)
-                for i in range(3):
-                    lo[i] = min(lo[i], w[i])
-                    hi[i] = max(hi[i], w[i])
-        except Exception:
-            pass
-    if not meshes:
+        bounds = object_bounds(o)
+        parts.append({"name": o.name, "tris": t, "bounds_m": bounds})
+        if bounds:
+            for i in range(3):
+                lo[i] = min(lo[i], bounds["min"][i])
+                hi[i] = max(hi[i], bounds["max"][i])
+    if not meshes or lo[0] == 1e9:
         lo = [0, 0, 0]
         hi = [0, 0, 0]
     dims = [round(hi[i] - lo[i], 4) for i in range(3)]
@@ -1910,7 +2086,9 @@ def validate_asset(name, spec=None):
     total = 0
     boxes = []
     for o in meshes:
-        rep = {"name": o.name}
+        shape = str(o.get("total_shape") or "")
+        closed_solid = bool(o.get("total_closed_solid")) or shape in ("lathe", "extrusion", "sweep")
+        rep = {"name": o.name, "shape": shape, "closed_solid": closed_solid}
         if any(abs(s - 1.0) > 1e-4 for s in o.scale):
             add("warning", "scale", "object scale is %s - apply scale before export so bevels / normals / collisions match" % [round(s, 3) for s in o.scale], o.name)
         if any(s < 0 for s in o.scale):
@@ -1949,7 +2127,9 @@ def validate_asset(name, spec=None):
             add("error", "loose", "%d loose vertices / %d wire edges" % (loose, wire), o.name)
         if flipped:
             add("error", "normals", "%d edges with inconsistent face winding - recalculate normals" % flipped, o.name)
-        if non_manifold - boundary > 0:
+        if closed_solid and (non_manifold > 0 or boundary > 0):
+            add("error", "manifold", "closed %s solid has %d non-manifold edges (%d boundary)" % (shape or "custom", non_manifold, boundary), o.name)
+        elif non_manifold - boundary > 0:
             add("warning", "non-manifold", "%d non-manifold edges (boolean leftovers?) - fine for rendering, breaks precise collision / booleans" % (non_manifold - boundary), o.name)
         elif boundary > 0:
             add("info", "open", "%d boundary edges (open mesh)" % boundary, o.name)
@@ -1969,11 +2149,10 @@ def validate_asset(name, spec=None):
         rep["shading"] = "flat" if smooth * 2 < max(1, len(me.polygons)) else "smooth"
         if tris > 20000:
             add("error", "tris", "%d triangles - EditableMesh / mesh bridge limit is 20000 per part" % tris, o.name)
-        try:
-            ws = [o.matrix_world @ Vector(c) for c in o.bound_box]
-            boxes.append((o.name, [min(w[i] for w in ws) for i in range(3)], [max(w[i] for w in ws) for i in range(3)]))
-        except Exception:
-            pass
+        bounds = object_bounds(o)
+        if bounds:
+            rep["bounds_m"] = bounds
+            boxes.append((o.name, bounds["min"], bounds["max"]))
         ev.to_mesh_clear()
         parts.append(rep)
     # overlap estimate (AABB) between sibling parts: >80 % of the smaller box
@@ -1990,9 +2169,10 @@ def validate_asset(name, spec=None):
                 vb *= max(1e-9, b[2][k] - b[1][k])
             if inter > 0 and inter / min(va, vb) > 0.8:
                 add("info", "overlap", "%s is mostly inside %s (%.0f %% of its box) - expected for cores / insets, wasteful otherwise" % ((a[0], b[0], 100 * inter / min(va, vb)) if va < vb else (b[0], a[0], 100 * inter / min(va, vb))))
+    metrics = asset_metrics(name)
     if spec:
         dims = spec.get("dims")
-        m = asset_metrics(name)
+        m = metrics
         if isinstance(dims, list) and len(dims) >= 3:
             for k in range(3):
                 want = fnum(dims[k], 0)
@@ -2006,7 +2186,7 @@ def validate_asset(name, spec=None):
             add("warning", "budget", "%d triangles over the %d budget" % (total, int(fnum(budget["tris"]))))
     errors = sum(1 for i in issues if i["level"] == "error")
     warnings = sum(1 for i in issues if i["level"] == "warning")
-    return {"ok": errors == 0, "errors": errors, "warnings": warnings, "issues": issues, "parts": parts, "total_tris": total, "structural_only": True, "note": "structural checks only - silhouette, proportion and material reads need blender_asset_inspect renders"}
+    return {"ok": errors == 0, "errors": errors, "warnings": warnings, "issues": issues, "parts": parts, "total_tris": total, "bounds_m": metrics["bounds"], "dims_m": metrics["dims"], "structural_only": True, "note": "structural checks only - silhouette, proportion and material reads need blender_asset_inspect renders"}
 
 
 # ─────────────────────────── inspect (preview renders) ──────────────────────
