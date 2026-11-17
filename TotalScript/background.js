@@ -2253,6 +2253,225 @@ async function robloxPublishAnimation(msg) {
   return { ok: false, error: "could not upload the animation with the browser session — " + tried.join(" | "), tried: tried };
 }
 
+// Image Studio provider profiles live behind the service worker. The content
+// script receives only public metadata (configured + masked key tail), never a
+// stored credential. Native integrations are pinned to their official hosts;
+// only the explicit OpenAI-compatible profile accepts a custom base URL.
+const IMAGE_API_PROVIDERS = Object.freeze({
+  openai: Object.freeze({ protocol: "openai-compatible", base: "https://api.openai.com/v1", model: "gpt-image-1" }),
+  google: Object.freeze({ protocol: "google-imagen", base: "https://generativelanguage.googleapis.com/v1beta", model: "imagen-4.0-generate-001" }),
+  stability: Object.freeze({ protocol: "stability", base: "https://api.stability.ai", model: "core" }),
+  replicate: Object.freeze({ protocol: "replicate", base: "https://api.replicate.com", model: "black-forest-labs/flux-schnell" }),
+  compatible: Object.freeze({ protocol: "openai-compatible", base: "", model: "" }),
+});
+const IMAGE_API_PROVIDER_IDS = Object.keys(IMAGE_API_PROVIDERS);
+const IMAGE_API_MAX_BYTES = 20 * 1024 * 1024;
+function normalizeImageApiConfig(raw) {
+  raw = raw && typeof raw === "object" ? raw : {};
+  const profilesIn = raw.profiles && typeof raw.profiles === "object" ? raw.profiles : null;
+  const profiles = {};
+  if (profilesIn) {
+    for (const id of IMAGE_API_PROVIDER_IDS) {
+      const saved = profilesIn[id] && typeof profilesIn[id] === "object" ? profilesIn[id] : {};
+      const defaults = IMAGE_API_PROVIDERS[id];
+      const savedModel = String(saved.model == null ? defaults.model : saved.model).trim();
+      profiles[id] = {
+        base: id === "compatible" ? String(saved.base == null ? defaults.base : saved.base).trim() : defaults.base,
+        model: id !== "compatible" && !savedModel ? defaults.model : savedModel,
+        key: String(saved.key || ""),
+      };
+    }
+  }
+  let legacyProvider = null;
+  if (!profilesIn && ("base" in raw || "model" in raw || "key" in raw)) {
+    const legacyBase = String(raw.base || "").trim().replace(/\/+$/, "");
+    legacyProvider = IMAGE_API_PROVIDER_IDS.includes(raw.provider) ? raw.provider :
+      (legacyBase && legacyBase !== IMAGE_API_PROVIDERS.openai.base ? "compatible" : "openai");
+    const defaults = IMAGE_API_PROVIDERS[legacyProvider];
+    const legacyModel = String(raw.model == null ? defaults.model : raw.model).trim();
+    profiles[legacyProvider] = {
+      base: legacyProvider === "compatible" ? String(raw.base == null ? defaults.base : raw.base).trim() : defaults.base,
+      model: legacyProvider !== "compatible" && !legacyModel ? defaults.model : legacyModel,
+      key: String(raw.key || ""),
+    };
+  }
+  for (const id of IMAGE_API_PROVIDER_IDS) {
+    if (!profiles[id]) profiles[id] = { base: IMAGE_API_PROVIDERS[id].base, model: IMAGE_API_PROVIDERS[id].model, key: "" };
+  }
+  const provider = IMAGE_API_PROVIDER_IDS.includes(raw.provider) ? raw.provider : (legacyProvider || "openai");
+  return { version: 2, provider, profiles };
+}
+function imageApiPublicStatus(raw) {
+  const config = normalizeImageApiConfig(raw), profiles = {};
+  for (const id of IMAGE_API_PROVIDER_IDS) {
+    const profile = config.profiles[id];
+    profiles[id] = { base: profile.base, model: profile.model, configured: !!profile.key, key_masked: profile.key ? "…" + profile.key.slice(-4) : "" };
+  }
+  const active = config.profiles[config.provider];
+  return { ok: true, provider: config.provider, configured: !!active.key, base: active.base, model: active.model,
+    key_masked: active.key ? "…" + active.key.slice(-4) : "", profiles };
+}
+async function readImageApiConfig() {
+  const stored = (await chrome.storage.local.get("rs_image_api")).rs_image_api || {};
+  const config = normalizeImageApiConfig(stored);
+  // One-time migration from the original {base, model, key} setting.
+  if (!stored.profiles && ("base" in stored || "model" in stored || "key" in stored)) {
+    await chrome.storage.local.set({ rs_image_api: config });
+  }
+  return config;
+}
+function updateImageApiConfig(raw, msg) {
+  const config = normalizeImageApiConfig(raw);
+  const provider = String(msg.provider || config.provider);
+  if (!IMAGE_API_PROVIDER_IDS.includes(provider)) return { ok: false, error: "unknown image API provider" };
+  const profile = config.profiles[provider];
+  const action = String(msg.action || "");
+  if (action === "select") {
+    config.provider = provider;
+  } else if (action === "save" || action === "clear") {
+    if (action === "clear") profile.key = "";
+    else {
+      const key = String(msg.key || "").trim();
+      if (key.length > 4096) return { ok: false, error: "API key is too long" };
+      if (key) profile.key = key; // blank means keep the existing credential
+    }
+    if (provider === "compatible" && msg.base != null) {
+      const base = String(msg.base || "").trim();
+      if (base.length > 2048) return { ok: false, error: "image API base URL is too long" };
+      profile.base = base;
+    }
+    if (msg.model != null) {
+      const model = String(msg.model || "").trim();
+      if (model.length > 300) return { ok: false, error: "image API model name is too long" };
+      profile.model = provider !== "compatible" && !model ? IMAGE_API_PROVIDERS[provider].model : model;
+    }
+    config.provider = provider;
+  } else return { ok: false, error: "unknown image API settings action" };
+  config.version = 2;
+  return { ok: true, config };
+}
+function imageApiSafeText(value, key) {
+  let text = typeof value === "string" ? value : String(value == null ? "provider error" : value);
+  if (key) text = text.split(key).join("[redacted]");
+  return text.slice(0, 400);
+}
+function imageApiAspect(kind) {
+  return /^(thumbnail|gui_background|gui_button)$/.test(String(kind || "")) ? "16:9" : "1:1";
+}
+function imageApiBytesToBase64(bytes) {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return btoa(binary);
+}
+async function imageApiJsonResponse(res, key) {
+  const text = await res.text();
+  if (text.length > 30 * 1024 * 1024) return { json: null, text: "provider response exceeded the 30 MB safety limit" };
+  let json = null;
+  try { json = JSON.parse(text); } catch {}
+  return { json, text: imageApiSafeText(text, key) };
+}
+async function imageApiGenerate(msg) {
+  let key = "";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 180000);
+  try {
+    const config = await readImageApiConfig();
+    const provider = config.provider;
+    const meta = IMAGE_API_PROVIDERS[provider];
+    const profile = config.profiles[provider];
+    key = String(profile.key || "");
+    if (!key) return { ok: false, error: `no ${provider} image API key saved (Images window → API providers & keys)` };
+    const model = String(profile.model || "").trim();
+    if (!model) return { ok: false, error: `select a model for ${provider} in the Images window → API providers & keys` };
+    const prompt = String(msg.prompt || "").slice(0, 4000);
+    if (!prompt) return { ok: false, error: "prompt is required" };
+    const base = String(profile.base || meta.base || "").trim().replace(/\/+$/, "");
+    if (!/^https?:\/\//i.test(base)) return { ok: false, error: provider === "compatible" ? "custom image API base URL must start with http:// or https://" : "invalid image API endpoint" };
+    const aspect = imageApiAspect(msg.kind);
+    let url, init;
+    if (provider === "google") {
+      url = base + "/models/" + encodeURIComponent(model) + ":predict";
+      init = { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: aspect, outputMimeType: "image/png" } }), signal: controller.signal };
+    } else if (provider === "stability") {
+      const form = new FormData();
+      form.set("prompt", prompt); form.set("output_format", "png"); form.set("aspect_ratio", aspect);
+      url = base + "/v2beta/stable-image/generate/" + encodeURIComponent(model);
+      init = { method: "POST", headers: { "Authorization": "Bearer " + key, "Accept": "image/*" }, body: form, signal: controller.signal };
+    } else if (provider === "replicate") {
+      const parts = model.split("/");
+      if (parts.length !== 2 || parts.some((part) => !/^[A-Za-z0-9_.-]+$/.test(part))) return { ok: false, error: "Replicate model must be an owner/name path (for example black-forest-labs/flux-schnell)" };
+      url = base + "/v1/models/" + parts.map(encodeURIComponent).join("/") + "/predictions";
+      init = { method: "POST", headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json", "Prefer": "wait=60" },
+        body: JSON.stringify({ input: { prompt, aspect_ratio: aspect, output_format: "png" } }), signal: controller.signal };
+    } else {
+      const family = /gpt-image/i.test(model) ? "gpt-image" : /dall-e-3/i.test(model) ? "dall-e-3" : /dall-e-2/i.test(model) ? "dall-e-2" : "generic";
+      const landscape = /^(thumbnail|gui_background|gui_button)$/.test(String(msg.kind || ""));
+      const size = !landscape ? "1024x1024" : family === "gpt-image" ? "1536x1024" : family === "dall-e-3" ? "1792x1024" : "1024x1024";
+      const body = { model, prompt, n: 1, size };
+      if (family === "gpt-image") { body.output_format = "png"; if (msg.transparent) body.background = "transparent"; }
+      else body.response_format = "b64_json";
+      url = base + "/images/generations";
+      init = { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key }, body: JSON.stringify(body), signal: controller.signal };
+    }
+    let res = await fetch(url, init);
+    if (provider === "stability") {
+      if (!res.ok) {
+        const body = await res.text();
+        return { ok: false, error: `HTTP ${res.status}: ${imageApiSafeText(body, key)}` };
+      }
+      const mime = String(res.headers.get("content-type") || "image/png").split(";")[0].trim().toLowerCase();
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (bytes.length > IMAGE_API_MAX_BYTES) return { ok: false, error: "Stability returned an image larger than 20 MB" };
+      if (!/^image\//.test(mime)) return { ok: false, error: "Stability response was not an image (" + mime + ")" };
+      return { ok: true, b64: imageApiBytesToBase64(bytes), mime, provider, model, size: aspect };
+    }
+    let read = await imageApiJsonResponse(res, key);
+    let json = read.json;
+    if (!res.ok) {
+      const detail = json && json.error && (json.error.message || json.error.code) || read.text;
+      return { ok: false, error: `HTTP ${res.status}: ${imageApiSafeText(detail, key)}` };
+    }
+    if (provider === "replicate") {
+      const deadline = Date.now() + 174000;
+      while (json && (json.status === "starting" || json.status === "processing")) {
+        const id = String(json.id || "");
+        if (!id) return { ok: false, error: "Replicate returned a running prediction without an id" };
+        if (Date.now() >= deadline) return { ok: false, error: "Replicate image generation timed out after 180 s" };
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        res = await fetch(base + "/v1/predictions/" + encodeURIComponent(id), {
+          headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" }, signal: controller.signal,
+        });
+        read = await imageApiJsonResponse(res, key); json = read.json;
+        if (!res.ok) return { ok: false, error: `Replicate status HTTP ${res.status}: ${imageApiSafeText((json && json.error) || read.text, key)}` };
+      }
+      if (json && (json.status === "failed" || json.status === "canceled")) return { ok: false, error: "Replicate prediction " + json.status + ": " + imageApiSafeText(json.error || "no provider detail", key) };
+      const output = json && (Array.isArray(json.output) ? json.output[0] : json.output);
+      if (typeof output !== "string" || !output) return { ok: false, error: "Replicate prediction returned no image URL" };
+      return { ok: true, url: output, provider, model, size: aspect };
+    }
+    if (json && json.error) return { ok: false, error: imageApiSafeText(json.error.message || json.error.code || json.error, key) };
+    if (provider === "google") {
+      const prediction = json && Array.isArray(json.predictions) ? json.predictions[0] : null;
+      const b64 = prediction && (prediction.bytesBase64Encoded || prediction.bytes_base64_encoded);
+      if (!b64) return { ok: false, error: "Google Imagen returned no image bytes" };
+      if (String(b64).length > Math.ceil(IMAGE_API_MAX_BYTES * 4 / 3) + 8) return { ok: false, error: "Google Imagen returned an image larger than 20 MB" };
+      return { ok: true, b64: String(b64), mime: String(prediction.mimeType || "image/png"), provider, model, size: aspect };
+    }
+    const data = json && Array.isArray(json.data) ? json.data[0] : null;
+    if (!data) return { ok: false, error: "the API returned no data[0]" };
+    if (data.b64_json) {
+      if (String(data.b64_json).length > Math.ceil(IMAGE_API_MAX_BYTES * 4 / 3) + 8) return { ok: false, error: "image API returned an image larger than 20 MB" };
+      return { ok: true, b64: String(data.b64_json), mime: "image/png", provider, model, size: data.size || "", revised: data.revised_prompt || "" };
+    }
+    if (data.url) return { ok: true, url: String(data.url), provider, model, size: data.size || "", revised: data.revised_prompt || "" };
+    return { ok: false, error: "data[0] carries neither b64_json nor url" };
+  } catch (e) {
+    return { ok: false, error: e && e.name === "AbortError" ? "image API timed out after 180 s" : imageApiSafeText(e && e.message || e, key) };
+  } finally { clearTimeout(timer); }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     if (!msg || typeof msg !== "object" || typeof msg.type !== "string") {
@@ -2874,53 +3093,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         } catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
         break;
       }
-      // ── 2.1.0 Image Studio ──
-      // image_api_status / image_api: the user's OpenAI-compatible images
-      // endpoint. The key is read HERE from chrome.storage.local and sent only
-      // to the base URL the user typed; it never reaches a content script, the
-      // AI, a prompt or a log (the status reply carries a masked tail only).
+      // ── Image Studio provider profiles ──
+      // image_api_status / image_api_config / image_api use independent saved
+      // provider credentials. The worker returns masked metadata only; raw keys
+      // remain in extension storage and are sent only to that provider's API.
       // image_fetch: bytes of a picture URL (what a chat site drew), read with
       // the extension's host permissions so page CORS cannot block it.
       case "image_api_status": {
+        try { sendResponse(imageApiPublicStatus(await readImageApiConfig())); }
+        catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
+        break;
+      }
+      case "image_api_config": {
         try {
-          const cfg = (await chrome.storage.local.get("rs_image_api")).rs_image_api || {};
-          const key = String(cfg.key || "");
-          sendResponse({ ok: true, configured: !!key, base: String(cfg.base || "https://api.openai.com/v1"), model: String(cfg.model || "gpt-image-1"), key_masked: key ? "…" + key.slice(-4) : "" });
+          const current = await readImageApiConfig();
+          const updated = updateImageApiConfig(current, msg);
+          if (!updated.ok) { sendResponse(updated); break; }
+          await chrome.storage.local.set({ rs_image_api: updated.config });
+          sendResponse(imageApiPublicStatus(updated.config));
         } catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
         break;
       }
       case "image_api": {
-        try {
-          const cfg = (await chrome.storage.local.get("rs_image_api")).rs_image_api || {};
-          const key = String(cfg.key || "");
-          if (!key) { sendResponse({ ok: false, error: "no image API key saved (Images window → API)" }); break; }
-          const base = String(cfg.base || "https://api.openai.com/v1").trim().replace(/\/+$/, "");
-          if (!/^https?:\/\//i.test(base)) { sendResponse({ ok: false, error: "image API base URL must start with http:// or https://" }); break; }
-          const model = String(cfg.model || "gpt-image-1").trim();
-          const prompt = String(msg.prompt || "").slice(0, 4000);
-          if (!prompt) { sendResponse({ ok: false, error: "prompt is required" }); break; }
-          // Same shaping as TotalImageGen.apiRequest (kept in sync by tests/test-imagegen.js).
-          const fam = /gpt-image/i.test(model) ? "gpt-image" : /dall-e-3/i.test(model) ? "dall-e-3" : /dall-e-2/i.test(model) ? "dall-e-2" : "generic";
-          const landscape = /^(thumbnail|gui_background|gui_button)$/.test(String(msg.kind || ""));
-          const size = !landscape ? "1024x1024" : fam === "gpt-image" ? "1536x1024" : fam === "dall-e-3" ? "1792x1024" : "1024x1024";
-          const body = { model, prompt, n: 1, size };
-          if (fam === "gpt-image") { body.output_format = "png"; if (msg.transparent) body.background = "transparent"; }
-          else body.response_format = "b64_json";
-          const ctrl = new AbortController();
-          const timer = setTimeout(() => ctrl.abort(), 180000);
-          let res;
-          try {
-            res = await fetch(base + "/images/generations", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key }, body: JSON.stringify(body), signal: ctrl.signal });
-          } finally { clearTimeout(timer); }
-          const text = await res.text();
-          let j = null; try { j = JSON.parse(text); } catch {}
-          if (!res.ok) { sendResponse({ ok: false, error: "HTTP " + res.status + ": " + String((j && j.error && (j.error.message || j.error.code)) || text.slice(0, 300)) }); break; }
-          const d = j && Array.isArray(j.data) ? j.data[0] : null;
-          if (!d) { sendResponse({ ok: false, error: "the API returned no data[0]" + (j && j.error ? ": " + String(j.error.message || j.error) : "") }); break; }
-          if (d.b64_json) sendResponse({ ok: true, b64: String(d.b64_json), mime: "image/png", model, size, revised: d.revised_prompt || "" });
-          else if (d.url) sendResponse({ ok: true, url: String(d.url), model, size, revised: d.revised_prompt || "" });
-          else sendResponse({ ok: false, error: "data[0] carries neither b64_json nor url" });
-        } catch (e) { sendResponse({ ok: false, error: e && e.name === "AbortError" ? "image API timed out after 180 s" : String(e && e.message || e) }); }
+        sendResponse(await imageApiGenerate(msg));
         break;
       }
       case "image_fetch": {

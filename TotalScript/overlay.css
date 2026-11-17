@@ -8127,7 +8127,7 @@ html.rs-light #rs-video .rsv-shell { color-scheme: dark; /* 2.21.0: dark on ligh
 @media (max-width:760px){.rs-ex-split{grid-template-columns:1fr}.rs-ex-tree,.rs-ex-inspector{max-height:40vh}}
 html.rs-light .rs-ex-tree { color-scheme: dark; }
 
-/* 2.1.0 Image Studio (src/core/imagegen.js) - thumbnails, icons, GUI art -> Studio.
+/* 2.22.0 Image Studio (src/core/imagegen.js) - provider profiles, thumbnails, icons, GUI art -> Studio.
    Own dialog (data-rs-owned) at the Video Studio scale; aqua accents from the brand tokens. */
 #rs-images { position: fixed; z-index: 2147483600; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(1120px, 96vw); max-height: min(820px, 92vh); display: flex; flex-direction: column; border-radius: 16px; overflow: hidden; background: linear-gradient(180deg, #11151c, #0b0e14); border: 1px solid rgba(34,211,238,.22); box-shadow: 0 30px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04) inset; font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #e6edf3; }
 #rs-images[hidden] { display: none; }

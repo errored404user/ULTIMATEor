@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/core/imagegen.js — TotalScript Image Studio (2.21.0)
+// src/core/imagegen.js — TotalScript Image Studio (2.22.0)
 //
 // AI-generated images for game thumbnails, icons and GUI art, carried into
-// Roblox Studio. Two honest sources, nothing invented:
-//   * api  — a bring-your-own-key OpenAI-compatible images endpoint
-//            (POST {base}/images/generations; api.openai.com, a compatible
-//            cloud, or a local server). The key lives in chrome.storage.local
-//            and is only ever read by background.js - never by the AI, never
-//            in a prompt, never in a diagnostic.
+// Roblox Studio. Three honest sources:
+//   * api  — independent key profiles for OpenAI, Google Imagen, Stability AI,
+//            Replicate, or any OpenAI-compatible endpoint. The keys stay in
+//            chrome.storage.local and are read only by background.js - never
+//            by the AI, never in a prompt, never in a diagnostic.
 //   * chat — the AI site draws the picture itself (ChatGPT, Gemini, Qwen, Meta
 //            AI … whichever chat can); image_pickup grabs the newest picture
 //            from the assistant's reply and reads its pixels.
@@ -30,7 +29,7 @@
   "use strict";
   const G = typeof window !== "undefined" ? window : globalThis;
   if (G.TotalImageGen) return;
-  const VERSION = "2.21.0";
+  const VERSION = "2.22.0";
 
   // ───────────────────────── specs ─────────────────────────
   // w/h = delivered PNG size; studio = max EditableImage edge for the live carry
@@ -58,6 +57,19 @@
   const STYLE_IDS = Object.keys(STYLES);
   const COMMANDS = ["image_generate", "image_pickup", "image_to_gui", "image_thumbnail", "image_list"];
   const SOURCES = ["auto", "api", "chat", "file"];
+  // API profiles are independent: selecting a provider chooses its own endpoint,
+  // model and key. Provider endpoints are pinned for native integrations so a
+  // credential cannot be sent to a user-edited host; `compatible` is the
+  // explicit escape hatch for OpenRouter, Together, local servers, etc.
+  const API_PROVIDERS = Object.freeze({
+    openai: Object.freeze({ label: "OpenAI", protocol: "openai-compatible", base: "https://api.openai.com/v1", model: "gpt-image-1", keyLabel: "OpenAI API key", baseEditable: false, note: "OpenAI Images API. Uses your OpenAI billing and key." }),
+    google: Object.freeze({ label: "Google Imagen", protocol: "google-imagen", base: "https://generativelanguage.googleapis.com/v1beta", model: "imagen-4.0-generate-001", keyLabel: "Google AI Studio API key", baseEditable: false, note: "Google Imagen 4 via the Gemini API. Enable the API and use an AI Studio key with access." }),
+    stability: Object.freeze({ label: "Stability AI", protocol: "stability", base: "https://api.stability.ai", model: "core", keyLabel: "Stability AI API key", baseEditable: false, note: "Stable Image API; model can be core or ultra. Returns PNG image bytes." }),
+    replicate: Object.freeze({ label: "Replicate", protocol: "replicate", base: "https://api.replicate.com", model: "black-forest-labs/flux-schnell", keyLabel: "Replicate API token", baseEditable: false, note: "Runs a Replicate model path (owner/name); returns a PNG URL after the prediction finishes." }),
+    compatible: Object.freeze({ label: "OpenAI-compatible / custom", protocol: "openai-compatible", base: "", model: "", keyLabel: "Provider API key", baseEditable: true, note: "For OpenRouter, Together AI, a local server or another service implementing POST /images/generations. Enter its base URL and model." }),
+  });
+  const API_PROVIDER_IDS = Object.keys(API_PROVIDERS);
+  const OPENAI_DEFAULT_BASE = API_PROVIDERS.openai.base;
 
   const clampInt = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
   const kindOf = (k) => (KINDS[String(k || "").toLowerCase()] ? String(k).toLowerCase() : null);
@@ -113,12 +125,59 @@
     return { prompt, negative: neg, kind, style, transparent };
   }
 
-  // ───────────────────────── OpenAI-compatible images API (pure shaping) ─────────────────────────
-  // Family rules that are documented, not guessed: dall-e-3 takes 1024x1024 /
-  // 1792x1024 / 1024x1792 and needs response_format:"b64_json" to return bytes;
-  // gpt-image-* takes 1024x1024 / 1536x1024 / 1024x1536, always returns b64 and
-  // rejects response_format, but accepts background:"transparent" + output_format.
-  // Anything else gets the safest common denominator (1024x1024 + b64_json).
+  // ───────────────────────── API profiles + request shaping ─────────────────────────
+  // Older installs stored {base, model, key} at the top level. Migrate that
+  // shape while preserving custom endpoints as the explicit `compatible` profile.
+  function normalizeApiConfig(raw) {
+    raw = raw && typeof raw === "object" ? raw : {};
+    const profilesIn = raw.profiles && typeof raw.profiles === "object" ? raw.profiles : null;
+    const profiles = {};
+    if (profilesIn) {
+      for (const id of API_PROVIDER_IDS) {
+        const saved = profilesIn[id] && typeof profilesIn[id] === "object" ? profilesIn[id] : {};
+        const defaults = API_PROVIDERS[id];
+        const savedModel = String(saved.model == null ? defaults.model : saved.model).trim();
+        profiles[id] = {
+          // Native provider keys are pinned to their official host. Only the
+          // explicitly custom profile accepts a user-entered base URL.
+          base: id === "compatible" ? String(saved.base == null ? defaults.base : saved.base).trim() : defaults.base,
+          model: id !== "compatible" && !savedModel ? defaults.model : savedModel,
+          key: String(saved.key || ""),
+        };
+      }
+    }
+    let legacyProvider = null;
+    if (!profilesIn && ("base" in raw || "model" in raw || "key" in raw)) {
+      const legacyBase = String(raw.base || "").trim().replace(/\/+$/, "");
+      legacyProvider = API_PROVIDER_IDS.includes(raw.provider) ? raw.provider :
+        (legacyBase && legacyBase !== OPENAI_DEFAULT_BASE ? "compatible" : "openai");
+      const defaults = API_PROVIDERS[legacyProvider];
+      const legacyModel = String(raw.model == null ? defaults.model : raw.model).trim();
+      profiles[legacyProvider] = {
+        base: legacyProvider === "compatible" ? String(raw.base == null ? defaults.base : raw.base).trim() : defaults.base,
+        model: legacyProvider !== "compatible" && !legacyModel ? defaults.model : legacyModel,
+        key: String(raw.key || ""),
+      };
+    }
+    for (const id of API_PROVIDER_IDS) {
+      if (!profiles[id]) profiles[id] = { base: API_PROVIDERS[id].base, model: API_PROVIDERS[id].model, key: "" };
+    }
+    const provider = API_PROVIDER_IDS.includes(raw.provider) ? raw.provider : (legacyProvider || "openai");
+    return { version: 2, provider, profiles };
+  }
+  function publicApiConfig(raw) {
+    const config = normalizeApiConfig(raw), profiles = {};
+    for (const id of API_PROVIDER_IDS) {
+      const p = config.profiles[id];
+      profiles[id] = { base: p.base, model: p.model, configured: !!p.key, key_masked: p.key ? "…" + p.key.slice(-4) : "" };
+    }
+    const active = config.profiles[config.provider];
+    // Never return a raw key to the page/content-script side.
+    return { ok: true, provider: config.provider, configured: !!active.key, base: active.base, model: active.model, key_masked: active.key ? "…" + active.key.slice(-4) : "", profiles };
+  }
+
+  // OpenAI's documented model-family rules stay unchanged; the remaining
+  // profiles use their native request and response contracts below.
   function modelFamily(model) {
     const m = String(model || "").toLowerCase();
     if (/gpt-image/.test(m)) return "gpt-image";
@@ -135,26 +194,65 @@
     if (fam === "dall-e-3") return "1792x1024";
     return "1024x1024";
   }
+  function imageAspectFor(kind) {
+    const K = KINDS[kindOf(kind) || "gui_panel"];
+    return K.w > K.h ? "16:9" : "1:1";
+  }
   function apiRequest(o) {
     o = o || {};
-    const model = String(o.model || "gpt-image-1").trim();
+    const provider = API_PROVIDER_IDS.includes(String(o.provider || "")) ? String(o.provider) : "openai";
+    const meta = API_PROVIDERS[provider];
+    const configuredModel = String(o.model == null ? meta.model : o.model).trim();
+    const model = provider !== "compatible" && !configuredModel ? meta.model : configuredModel;
+    const prompt = String(o.prompt || "");
+    const rawBase = provider === "compatible" ? (o.base == null ? meta.base : o.base) : meta.base;
+    const base = String(rawBase || "").trim().replace(/\/+$/, "");
+    if (provider === "google") {
+      return { provider, protocol: meta.protocol, method: "POST", url: base + "/models/" + encodeURIComponent(model) + ":predict",
+        body: { instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: imageAspectFor(o.kind), outputMimeType: "image/png" } }, family: meta.protocol };
+    }
+    if (provider === "stability") {
+      return { provider, protocol: meta.protocol, method: "POST", url: base + "/v2beta/stable-image/generate/" + encodeURIComponent(model),
+        form: { prompt, output_format: "png", aspect_ratio: imageAspectFor(o.kind) }, family: meta.protocol };
+    }
+    if (provider === "replicate") {
+      const parts = model.split("/");
+      return { provider, protocol: meta.protocol, method: "POST", url: base + "/v1/models/" + parts.map(encodeURIComponent).join("/") + "/predictions",
+        body: { input: { prompt, aspect_ratio: imageAspectFor(o.kind), output_format: "png" } }, family: meta.protocol };
+    }
     const fam = modelFamily(model);
-    const body = { model, prompt: String(o.prompt || ""), n: 1, size: apiSizeFor(model, o.kind) };
+    const body = { model, prompt, n: 1, size: apiSizeFor(model, o.kind) };
     if (fam === "gpt-image") {
       body.output_format = "png";
       if (o.transparent) body.background = "transparent";
     } else {
       body.response_format = "b64_json";
     }
-    const base = String(o.base || "https://api.openai.com/v1").trim().replace(/\/+$/, "");
-    return { url: base + "/images/generations", body, family: fam };
+    return { provider, protocol: meta.protocol, method: "POST", url: base + "/images/generations", body, family: fam };
   }
-  function parseApiResponse(j) {
+  function parseApiResponse(j, provider) {
     if (!j || typeof j !== "object") return { error: "empty response" };
-    if (j.error) return { error: String((j.error && (j.error.message || j.error.code)) || j.error).slice(0, 400) };
+    if (j.error || j.errors) {
+      const problem = j.error || j.errors;
+      let message = problem && (problem.message || problem.code);
+      if (!message) { try { message = JSON.stringify(problem); } catch { message = String(problem); } }
+      return { error: String(message || "provider error").slice(0, 400) };
+    }
+    if (provider === "google") {
+      const p = Array.isArray(j.predictions) ? j.predictions[0] : null;
+      if (!p) return { error: "Google Imagen returned no predictions[0]" };
+      const b64 = p.bytesBase64Encoded || p.bytes_base64_encoded || p.b64_json;
+      return b64 ? { b64: String(b64), mime: String(p.mimeType || "image/png") } : { error: "Google Imagen prediction has no image bytes" };
+    }
+    if (provider === "replicate") {
+      if (j.status === "failed" || j.status === "canceled") return { error: String(j.error || "Replicate prediction " + j.status).slice(0, 400) };
+      const output = Array.isArray(j.output) ? j.output[0] : j.output;
+      return typeof output === "string" && output ? { url: output } : { error: "Replicate prediction has no output image yet" };
+    }
+    if (provider === "stability") return { error: "Stability returns image bytes; the background worker handles its binary response." };
     const d = Array.isArray(j.data) ? j.data[0] : null;
     if (!d) return { error: "no data[0] in the response" };
-    if (d.b64_json) return { b64: String(d.b64_json), revised: d.revised_prompt || "" };
+    if (d.b64_json) return { b64: String(d.b64_json), mime: "image/png", revised: d.revised_prompt || "" };
     if (d.url) return { url: String(d.url), revised: d.revised_prompt || "" };
     return { error: "data[0] carries neither b64_json nor url" };
   }
@@ -385,7 +483,7 @@
     if (source === "file") return err(name, "source:file is the Images window (drop a PNG there, or use image_pickup after the user attached one)");
     const st = await apiStatus(H);
     if (source === "auto") source = st.configured ? "api" : "chat";
-    if (source === "api" && !st.configured) return err(name, "no image API configured: open the Images window (bar button or Ctrl+Shift+I) → API and save an OpenAI-compatible endpoint + key, or use source:\"chat\" on a site that can draw.");
+    if (source === "api" && !st.configured) return err(name, "no image API configured: open the Images window (bar button or Ctrl+Shift+I) → API, choose a provider and save its key; or use source:\"chat\" on a site that can draw.");
     if (source === "chat") {
       return out(name, {
         ok: true, pending: true, source: "chat", kind, style: built.style,
@@ -394,9 +492,9 @@
         suggested_name: String(a.name || subject.slice(0, 24).replace(/[^\w ]+/g, "").trim() || kind),
       });
     }
-    H.diag && H.diag("image.api.request", { kind, model: st.model || "", chars: built.prompt.length });
+    H.diag && H.diag("image.api.request", { provider: st.provider || "openai", kind, model: st.model || "", chars: built.prompt.length });
     const r = await H.bg({ type: "image_api", prompt: built.prompt, kind, transparent: built.transparent });
-    if (!r || !r.ok) return err(name, "image API: " + String((r && r.error) || "no response"), { model: st.model, base: st.base, hint: "check the key / model / base URL in the Images window → API; the raw API message is above." });
+    if (!r || !r.ok) return err(name, "image API: " + String((r && r.error) || "no response"), { provider: st.provider || "openai", model: st.model, base: st.base, hint: "check the selected provider's key and model in the Images window → API; the raw API message is above." });
     let bmp;
     try {
       if (r.b64) bmp = await decodeToBitmap({ b64: r.b64, mime: r.mime || "image/png" });
@@ -494,7 +592,7 @@
   }
 
   // ───────────────────────── window ─────────────────────────
-  let W = null, HOOKS = null;
+  let W = null, HOOKS = null, API_STATE = null;
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   function isOpen() { return !!(W && W.isConnected && !W.hidden); }
   function close() { if (W) { W.hidden = true; } }
@@ -516,6 +614,7 @@
     W.setAttribute("aria-label", "Image Studio");
     const kinds = KIND_IDS.map((k) => `<option value="${k}">${esc(KINDS[k].label)} · ${KINDS[k].w}×${KINDS[k].h}</option>`).join("");
     const styles = STYLE_IDS.map((s) => `<option value="${s}">${s}</option>`).join("");
+    const apiProviders = API_PROVIDER_IDS.map((id) => `<option value="${id}">${esc(API_PROVIDERS[id].label)}</option>`).join("");
     W.innerHTML = `
       <div class="rs-ig-head"><span class="rs-ig-title">Image Studio</span><span class="rs-ig-sub">thumbnails · icons · GUI art → Studio</span><button type="button" class="rs-ig-close" data-ig-close aria-label="Close">×</button></div>
       <div class="rs-ig-body">
@@ -534,12 +633,15 @@
             <label class="rs-ig-btn rs-ig-file">Drop / pick a file<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-ig-file hidden></label>
           </div>
           <div class="rs-ig-drop" data-ig-drop>drop a PNG / JPG / WebP here</div>
-          <details class="rs-ig-api"><summary>API (bring your own key)</summary>
-            <div class="rs-ig-note">Any OpenAI-compatible <code>/images/generations</code> endpoint: api.openai.com (gpt-image-1, dall-e-3), a compatible cloud, or a local server. The key is stored in this browser's extension storage and used only by the extension's background worker - the AI never sees it.</div>
-            <label class="rs-ig-field"><span>Base URL</span><input data-ig-api-base placeholder="https://api.openai.com/v1"></label>
-            <label class="rs-ig-field"><span>Model</span><input data-ig-api-model placeholder="gpt-image-1"></label>
-            <label class="rs-ig-field"><span>API key</span><input data-ig-api-key type="password" autocomplete="off" placeholder="sk-…"></label>
-            <div class="rs-ig-actions"><button type="button" class="rs-ig-btn" data-ig-api-save>Save</button><button type="button" class="rs-ig-btn" data-ig-api-clear>Clear key</button><span class="rs-ig-api-state" data-ig-api-state></span></div>
+          <details class="rs-ig-api"><summary>API providers &amp; keys</summary>
+            <div class="rs-ig-note">Each provider has its own saved key, model and settings. Keys stay in extension storage and are read only by the background worker; they are never sent to the AI or included in diagnostics. Providers charge separately.</div>
+            <label class="rs-ig-field"><span>Provider</span><select data-ig-api-provider>${apiProviders}</select></label>
+            <div class="rs-ig-note" data-ig-api-provider-note></div>
+            <label class="rs-ig-field"><span data-ig-api-base-label>Base URL</span><input data-ig-api-base placeholder="https://api.openai.com/v1"></label>
+            <label class="rs-ig-field"><span>Model / endpoint</span><input data-ig-api-model placeholder="gpt-image-1"></label>
+            <label class="rs-ig-field"><span data-ig-api-key-label>API key</span><input data-ig-api-key type="password" autocomplete="off" placeholder="Paste a key or token"></label>
+            <div class="rs-ig-note">Leave the key box blank to keep the existing key. Use <b>Clear key</b> to remove only this provider’s credential.</div>
+            <div class="rs-ig-actions"><button type="button" class="rs-ig-btn" data-ig-api-save>Save this provider</button><button type="button" class="rs-ig-btn" data-ig-api-clear>Clear key</button><span class="rs-ig-api-state" data-ig-api-state></span></div>
           </details>
         </div>
         <div class="rs-ig-col rs-ig-preview-col">
@@ -615,19 +717,38 @@
       const ok = HOOKS.send ? await HOOKS.send(text, [e.png], (m) => setStatus(m, "busy")) : false;
       setStatus(ok ? "Sent - the AI now has the image id." : "Could not send.", ok ? "" : "warn");
     });
-    const apiEls = { base: $("[data-ig-api-base]"), model: $("[data-ig-api-model]"), key: $("[data-ig-api-key]") };
-    $("[data-ig-api-save]").addEventListener("click", async () => {
-      const cfg = { base: apiEls.base.value.trim() || "https://api.openai.com/v1", model: apiEls.model.value.trim() || "gpt-image-1" };
-      const key = apiEls.key.value.trim();
+    const apiEls = { provider: $("[data-ig-api-provider]"), base: $("[data-ig-api-base]"), model: $("[data-ig-api-model]"), key: $("[data-ig-api-key]") };
+    apiEls.provider.addEventListener("change", async () => {
+      const provider = apiEls.provider.value;
+      showApiStatus(API_STATE, provider);
       try {
-        const prev = await storageGet("rs_image_api");
-        cfg.key = key || (prev && prev.key) || "";
-        await storageSet("rs_image_api", cfg);
-        apiEls.key.value = "";
-        setStatus(cfg.key ? "API settings saved." : "Saved base + model; no key yet.", cfg.key ? "" : "warn"); refreshApi();
-      } catch (e) { setStatus("Could not save: " + String(e && e.message || e), "warn"); }
+        const r = await HOOKS.bg({ type: "image_api_config", action: "select", provider });
+        if (!r || !r.ok) { setStatus("Could not select provider: " + String((r && r.error) || "no response"), "warn"); return; }
+        showApiStatus(r, provider);
+      } catch (e) { setStatus("Could not select provider: " + String(e && e.message || e), "warn"); }
     });
-    $("[data-ig-api-clear]").addEventListener("click", async () => { try { const prev = (await storageGet("rs_image_api")) || {}; await storageSet("rs_image_api", { base: prev.base || "", model: prev.model || "", key: "" }); setStatus("Key removed.", ""); refreshApi(); } catch {} });
+    $("[data-ig-api-save]").addEventListener("click", async () => {
+      const provider = apiEls.provider.value;
+      const payload = { type: "image_api_config", action: "save", provider, base: apiEls.base.value.trim(), model: apiEls.model.value.trim(), key: apiEls.key.value.trim() };
+      try {
+        const r = await HOOKS.bg(payload);
+        if (!r || !r.ok) { setStatus("Could not save API settings: " + String((r && r.error) || "no response"), "warn"); return; }
+        apiEls.key.value = "";
+        showApiStatus(r, provider);
+        const profile = r.profiles && r.profiles[provider];
+        setStatus(profile && profile.configured ? "Provider settings saved; the key remains masked." : "Provider settings saved; add its key before generating.", profile && profile.configured ? "" : "warn");
+      } catch (e) { setStatus("Could not save API settings: " + String(e && e.message || e), "warn"); }
+    });
+    $("[data-ig-api-clear]").addEventListener("click", async () => {
+      const provider = apiEls.provider.value;
+      try {
+        const r = await HOOKS.bg({ type: "image_api_config", action: "clear", provider, base: apiEls.base.value.trim(), model: apiEls.model.value.trim() });
+        if (!r || !r.ok) { setStatus("Could not clear key: " + String((r && r.error) || "no response"), "warn"); return; }
+        apiEls.key.value = "";
+        showApiStatus(r, provider);
+        setStatus("This provider’s key was removed; its model and endpoint settings remain.", "");
+      } catch (e) { setStatus("Could not clear key: " + String(e && e.message || e), "warn"); }
+    });
   }
   let currentId = null;
   const current = () => regGet(currentId) || regGet("latest");
@@ -645,19 +766,35 @@
     box.querySelectorAll("[data-ig-item]").forEach((b) => b.addEventListener("click", () => showEntry(regGet(b.getAttribute("data-ig-item")))));
     if (!currentId && REG.list.length) showEntry(regGet("latest"));
   }
+  function showApiStatus(st, selectedProvider) {
+    if (!W) return;
+    if (st && st.ok) API_STATE = st;
+    const state = st && st.ok ? st : API_STATE || {};
+    const provider = API_PROVIDER_IDS.includes(selectedProvider) ? selectedProvider : (API_PROVIDER_IDS.includes(state.provider) ? state.provider : "openai");
+    const meta = API_PROVIDERS[provider];
+    const profile = state.profiles && state.profiles[provider] || (state.provider === provider ? state : {});
+    const providerEl = W.querySelector("[data-ig-api-provider]");
+    if (providerEl) providerEl.value = provider;
+    const baseEl = W.querySelector("[data-ig-api-base]"), modelEl = W.querySelector("[data-ig-api-model]");
+    const baseLabel = W.querySelector("[data-ig-api-base-label]"), keyLabel = W.querySelector("[data-ig-api-key-label]");
+    if (baseEl) { baseEl.value = profile.base == null ? meta.base : profile.base; baseEl.disabled = !meta.baseEditable; baseEl.placeholder = meta.base || "https://provider.example/v1"; }
+    if (modelEl) { modelEl.value = profile.model == null ? meta.model : profile.model; modelEl.placeholder = meta.model || "provider model id"; }
+    if (baseLabel) baseLabel.textContent = meta.baseEditable ? "Base URL" : "Provider endpoint (fixed)";
+    if (keyLabel) keyLabel.textContent = meta.keyLabel;
+    const note = W.querySelector("[data-ig-api-provider-note]");
+    if (note) note.textContent = meta.note;
+    const el = W.querySelector("[data-ig-api-state]");
+    if (el) el.textContent = profile.configured ? `configured · ${meta.label} · ${profile.model || "?"} · key ${profile.key_masked || "set"}` : `not configured · ${meta.label} (chat drawing + dropped files still work)`;
+  }
   async function refreshApi() {
     if (!W) return;
     const st = await apiStatus(HOOKS);
-    const el = W.querySelector("[data-ig-api-state]");
-    if (el) el.textContent = st.configured ? `configured · ${st.model || "?"} @ ${st.base || "?"} · key ${st.key_masked || "set"}` : "not configured (chat drawing + dropped files still work)";
-    try { const cfg = await storageGet("rs_image_api"); if (cfg) { W.querySelector("[data-ig-api-base]").value = cfg.base || ""; W.querySelector("[data-ig-api-model]").value = cfg.model || ""; } } catch {}
+    showApiStatus(st);
   }
-  function storageGet(k) { return new Promise((res) => { try { chrome.storage.local.get(k, (r) => res(r && r[k])); } catch { res(null); } }); }
-  function storageSet(k, v) { return new Promise((res, rej) => { try { chrome.storage.local.set({ [k]: v }, () => res(true)); } catch (e) { rej(e); } }); }
 
   const API = Object.freeze({
-    VERSION, KINDS, KIND_IDS, STYLES, STYLE_IDS, COMMANDS, SOURCES,
-    spec, buildPrompt, modelFamily, apiSizeFor, apiRequest, parseApiResponse,
+    VERSION, KINDS, KIND_IDS, STYLES, STYLE_IDS, COMMANDS, SOURCES, API_PROVIDERS, API_PROVIDER_IDS,
+    spec, buildPrompt, modelFamily, apiSizeFor, imageAspectFor, apiRequest, parseApiResponse, publicApiConfig,
     pickupCandidates, studioLuau,
     registry: { list: () => REG.list.map(regSummary), get: regGet, add: regAdd, clear: () => { REG.list.length = 0; } },
     run, open, close, isOpen,
