@@ -376,6 +376,41 @@ impl Hub {
         self.info.lock().await.as_ref().filter(|(_, at)| at.elapsed() < STALE_AFTER).map(|(i, _)| i.clone())
     }
 
+    /// Refresh the cached place identity from the live Studio DataModel. The
+    /// hello payload is only a heartbeat snapshot and can lag a rename.
+    pub async fn refresh_place_info(&self) -> anyhow::Result<PluginInfo> {
+        let snapshot = self.info().await.ok_or_else(|| anyhow::anyhow!("{NOT_CONNECTED}"))?;
+        let result = self.run("studio_place_info", json!({}), Duration::from_secs(15)).await?;
+        if !result.ok {
+            anyhow::bail!("{}", result.error.unwrap_or_else(|| "studio_place_info failed".to_string()));
+        }
+        let live = if result.text {
+            let text = result.result.as_str().ok_or_else(|| anyhow::anyhow!("live studio_place_info response was not text or JSON data"))?;
+            serde_json::from_str::<Value>(text).map_err(|e| anyhow::anyhow!("could not parse live studio_place_info response: {e}"))?
+        } else {
+            result.result
+        };
+        // Validate the current name before taking the lock or changing cached
+        // metadata, so a malformed/old plugin response can never masquerade as
+        // a fresh place identity.
+        let mut validated = snapshot.clone();
+        merge_live_place_info(&mut validated, &live)?;
+
+        let mut guard = self.info.lock().await;
+        let Some((current, at)) = guard.as_mut() else {
+            anyhow::bail!("Studio plugin disconnected while refreshing place info");
+        };
+        if current.client_id != snapshot.client_id {
+            anyhow::bail!("Studio plugin session changed while refreshing place info; retry for the current session");
+        }
+        validated.client_id = current.client_id.clone();
+        validated.version = current.version.clone();
+        validated.capabilities = current.capabilities.clone();
+        *current = validated;
+        *at = Instant::now();
+        Ok(current.clone())
+    }
+
     async fn touch(&self) {
         if let Some(entry) = self.info.lock().await.as_mut() {
             entry.1 = Instant::now();
@@ -444,6 +479,26 @@ fn num_u64(v: Option<&Value>) -> u64 {
 }
 fn str_of(v: &Value, key: &str) -> String {
     v.get(key).and_then(|x| x.as_str()).unwrap_or("").to_string()
+}
+
+/// Merge place metadata returned by the live Studio plugin query, leaving
+/// connection-scoped fields (client id, version and capabilities) untouched.
+fn merge_live_place_info(info: &mut PluginInfo, live: &Value) -> anyhow::Result<()> {
+    let place_name = live
+        .get("place_name")
+        .and_then(Value::as_str)
+        .filter(|name| !name.trim().is_empty())
+        .ok_or_else(|| anyhow::anyhow!("live studio_place_info response omitted a non-empty place_name"))?;
+    info.place_name = place_name.to_string();
+    if let Some(value) = live.get("place_id") { info.place_id = num_u64(Some(value)); }
+    if let Some(value) = live.get("universe_id") { info.universe_id = num_u64(Some(value)); }
+    if let Some(value) = live.get("creator_id") { info.creator_id = num_u64(Some(value)); }
+    if let Some(value) = live.get("creator_type").and_then(Value::as_str) { info.creator_type = value.to_string(); }
+    if let Some(value) = live.get("user_id") { info.user_id = num_u64(Some(value)); }
+    if let Some(value) = live.get("user_name").and_then(Value::as_str) { info.user_name = value.to_string(); }
+    if let Some(value) = live.get("studio_version").and_then(Value::as_str) { info.studio_version = value.to_string(); }
+    if let Some(value) = live.get("is_published").and_then(Value::as_bool) { info.is_published = value; }
+    Ok(())
 }
 
 // ───────────────────────── HTTP handlers ─────────────────────────
@@ -546,12 +601,45 @@ pub async fn status_json(state: &AppState) -> Value {
     json!({
         "connected": info.is_some(),
         "plugin": info,
+        "place_info_fresh": false,
+        "place_info_source": "plugin hello heartbeat snapshot (not a live place query)",
         "exec_via_plugin": exec_via_plugin_enabled(),
         "open_cloud_key_set": state.plugin.key().await.is_some(),
         "installed_file": &*state.plugin.installed.lock().await,
         "queue": state.plugin.queue.lock().await.len(),
         "how_to_connect": NOT_CONNECTED,
     })
+}
+
+/// The conversational status tool must not answer a place-name question from
+/// the periodic hello snapshot. Probe Studio now and clearly mark failures as
+/// stale instead of returning the cached name as if it were current.
+async fn live_plugin_status_json(state: &AppState) -> Value {
+    let mut status = status_json(state).await;
+    if !status.get("connected").and_then(Value::as_bool).unwrap_or(false) {
+        status["place_info_fresh"] = json!(false);
+        status["place_info_source"] = json!("unavailable");
+        status["place_info_error"] = json!("the TotalScript Studio plugin is not connected");
+        return status;
+    }
+    match state.plugin.refresh_place_info().await {
+        Ok(info) => {
+            status["plugin"] = serde_json::to_value(info).unwrap_or(Value::Null);
+            status["place_info_fresh"] = json!(true);
+            status["place_info_source"] = json!("live studio_place_info query");
+        }
+        Err(error) => {
+            let cached = status.get("plugin").cloned().unwrap_or(Value::Null);
+            status["cached_plugin"] = cached;
+            status["plugin"] = Value::Null;
+            let connected = state.plugin.connected().await;
+            status["connected"] = json!(connected);
+            status["place_info_fresh"] = json!(false);
+            status["place_info_source"] = json!("cached_plugin (stale; not current)");
+            status["place_info_error"] = json!(format!("{error:#}"));
+        }
+    }
+    status
 }
 
 // ───────────────────────── tool catalogue ─────────────────────────
@@ -626,7 +714,7 @@ pub fn is_plugin_tool(name: &str) -> bool {
 pub fn tools(connected: bool, key_set: bool) -> Vec<Value> {
     let mut v = vec![tool(
         "studio_plugin_status",
-        "Is the TotalScript Studio plugin connected? Returns place/universe/user info, the plugin's command list, whether execute_luau is routed through it, and whether an Open Cloud key is set.",
+        "Is the TotalScript Studio plugin connected? Probes studio_place_info live before reporting plugin.place_name/place_id; place_name is the current Roblox DataModel game.Name, not the Studio window or local filename. Check place_info_fresh: if false, plugin is null and cached_plugin is stale context only (do not report it as the current place). Also returns commands, execute_luau routing and Open Cloud key status.",
         json!({}),
         &[],
     )];
@@ -642,7 +730,7 @@ pub fn tools(connected: bool, key_set: bool) -> Vec<Value> {
             tool("studio_publish_selection", "Open the Publish-to-Roblox dialog for the selected model (or paths) - the user confirms name/description.", json!({"paths": {"type": "array", "items": {"type": "string"}}}), &[]),
             tool("studio_prompt_asset_id", "Ask the user to pick one of their existing assets (Model, Decal, Audio...) and return its id.", json!({"asset_type": {"type": "string"}}), &[]),
             tool("studio_insert_asset", "Insert a free/owned asset by id (InsertService:LoadAsset) under parent (default Workspace).", json!({"asset_id": {"type": "number"}, "parent": {"type": "string"}}), &["asset_id"]),
-            tool("studio_place_info", "Place name/id, universe id, creator, signed-in Studio user, Studio version, selection and active script.", json!({}), &[]),
+            tool("studio_place_info", "Live current place DataModel name (game.Name)/id, universe id, creator, signed-in Studio user, Studio version, selection and active script. This is not the local filename or Studio window title.", json!({}), &[]),
             tool("studio_select_tool", "Select a ribbon tool: select | move | scale | rotate | transform | none.", json!({"tool": {"type": "string"}}), &["tool"]),
             tool("studio_undo", "Undo the last N Studio changes (ChangeHistoryService).", json!({"steps": {"type": "number"}}), &[]),
             tool("studio_redo", "Redo N Studio changes.", json!({"steps": {"type": "number"}}), &[]),
@@ -749,7 +837,7 @@ pub async fn call(state: &AppState, name: &str, args: Value) -> anyhow::Result<M
     let bare = name.rsplit('/').next().unwrap_or(name).to_string();
     let args = if args.is_object() { args } else { json!({}) };
     match bare.as_str() {
-        "studio_plugin_status" => Ok(text_out(serde_json::to_string_pretty(&status_json(state).await).unwrap_or_default())),
+        "studio_plugin_status" => Ok(text_out(serde_json::to_string_pretty(&live_plugin_status_json(state).await).unwrap_or_default())),
         "pair_feed" => Ok(text_out(state.plugin.pair_feed_text().await)),
         "pair_watch" => {
             let want = args.get("enabled").and_then(|v| v.as_bool());
@@ -1315,5 +1403,53 @@ mod pair_tests {
 
         hub.set_pair_enabled(false).await;
         assert_eq!(hub.pair_summary().await.1, 0);
+    }
+}
+
+#[cfg(test)]
+mod live_place_info_tests {
+    use super::*;
+
+    #[test]
+    fn live_place_info_replaces_cached_name_and_ids_but_preserves_connection_fields() {
+        let mut info = PluginInfo {
+            client_id: "studio-session-1".into(),
+            version: "3.0.0".into(),
+            place_name: "place4".into(),
+            place_id: 4,
+            universe_id: 40,
+            capabilities: vec!["studio_place_info".into()],
+            ..PluginInfo::default()
+        };
+        let live = json!({
+            "place_name": "story2",
+            "place_id": 2,
+            "universe_id": 20,
+            "creator_id": 3,
+            "creator_type": "User",
+            "user_id": 5,
+            "user_name": "creator",
+            "studio_version": "0.1.0",
+            "is_published": true,
+            "selection": []
+        });
+
+        merge_live_place_info(&mut info, &live).unwrap();
+
+        assert_eq!(info.place_name, "story2");
+        assert_eq!(info.place_id, 2);
+        assert_eq!(info.universe_id, 20);
+        assert_eq!(info.client_id, "studio-session-1");
+        assert_eq!(info.version, "3.0.0");
+        assert_eq!(info.capabilities, vec!["studio_place_info".to_string()]);
+    }
+
+    #[test]
+    fn missing_or_blank_live_name_cannot_be_mistaken_for_fresh_data() {
+        for live in [json!({}), json!({"place_name": "  "})] {
+            let mut info = PluginInfo { place_name: "place4".into(), ..PluginInfo::default() };
+            assert!(merge_live_place_info(&mut info, &live).is_err());
+            assert_eq!(info.place_name, "place4");
+        }
     }
 }

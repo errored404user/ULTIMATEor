@@ -216,7 +216,13 @@ local function placeInfo()
 		is_published = game.GameId > 0,
 	}
 end
-placeLabel.Text = string.format("%s  ·  place %d  ·  universe %d", game.Name, game.PlaceId, game.GameId)
+local function updatePlaceLabel()
+	placeLabel.Text = string.format("%s  ·  place %d  ·  universe %d", game.Name, game.PlaceId, game.GameId)
+end
+updatePlaceLabel()
+pcall(function()
+	game:GetPropertyChangedSignal("Name"):Connect(updatePlaceLabel)
+end)
 
 local function resolve(p)
 	if p == nil or p == "" then return nil end
@@ -2453,6 +2459,7 @@ function H.pair_watch(a)
 end
 
 hello = function()
+	updatePlaceLabel()
 	local info = placeInfo()
 	info.client_id = CLIENT_ID
 	info.version = VERSION
