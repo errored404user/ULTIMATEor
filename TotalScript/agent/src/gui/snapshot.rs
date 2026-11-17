@@ -210,6 +210,23 @@ fn run_frame(ctx: &egui::Context, app: &mut App, size: Vec2, time: f64) -> egui:
 }
 
 #[test]
+fn captured_viewports_fit_their_bounds_without_stretching() {
+    let wide = fit_snapshot_size([1920, 1080], Vec2::new(900.0, 360.0));
+    assert!((wide.x - 640.0).abs() < 0.01 && (wide.y - 360.0).abs() < 0.01,
+        "a wide capture must fit the height cap without being stretched: {wide:?}");
+
+    let narrow = fit_snapshot_size([1920, 1080], Vec2::new(420.0, 360.0));
+    assert!((narrow.x - 420.0).abs() < 0.01 && (narrow.y - 236.25).abs() < 0.01,
+        "a landscape capture must fit the narrower width: {narrow:?}");
+
+    let portrait = fit_snapshot_size([1080, 1920], Vec2::new(420.0, 360.0));
+    assert!((portrait.x - 202.5).abs() < 0.01 && (portrait.y - 360.0).abs() < 0.01,
+        "a mobile capture must fit the height cap without being stretched: {portrait:?}");
+    assert_eq!(fit_snapshot_size([0, 0], Vec2::new(420.0, 360.0)), Vec2::ZERO,
+        "invalid image dimensions should not create a non-finite display size");
+}
+
+#[test]
 fn snapshot_every_page_at_three_sizes() {
     let out_dir = std::env::var("TOTAL_SNAPSHOTS").ok().map(PathBuf::from);
     if let Some(d) = &out_dir { let _ = std::fs::create_dir_all(d); }

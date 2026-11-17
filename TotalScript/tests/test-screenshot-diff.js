@@ -1,7 +1,7 @@
 // 2.3.0 — screenshot_compare / total_screenshot {compare:true}.
 // A: pure pixel maths of src/core/screenshot_diff.js on synthetic images
 //    (no browser, no decoder). B: capture memory + compare() with an injected
-//    decoder. C: wiring (manifest x11, codecraft.html, virtual tool, gate
+//    decoder. C: wiring (every manifest provider bundle, codecraft.html, virtual tool, gate
 //    proof, handler). D: jsdom boot of the real page - total_screenshot
 //    {target:"tab"} twice with a mocked tab capture, second call compare:true
 //    reports NO VISIBLE CHANGE / CHANGE through the real dispatcher.
@@ -73,7 +73,13 @@ ok("A12 describe(): CHANGE text carries %, scale words, bbox and regions; >= 60%
 
   // ── C. wiring ─────────────────────────────────────────────────────────────
   const main = fs.readFileSync("src/core/main.js", "utf8"), manifest = fs.readFileSync("manifest.json", "utf8"), cc = fs.readFileSync("codecraft.html", "utf8");
-  ok("C1 manifest lists screenshot_diff.js right after screenshot.js in all 10 bundles (2.21.0: Notion removed); codecraft.html loads it", (manifest.match(/"src\/core\/screenshot\.js",\n\s+"src\/core\/screenshot_diff\.js",/g) || []).length === 10 && /screenshot\.js"><\/script>\n\s*<script src="src\/core\/screenshot_diff\.js">/.test(cc));
+  const providerBundles = JSON.parse(manifest).content_scripts.filter((script) => (script.js || []).includes("src/core/main.js"));
+  const diffLoadedAfterCapture = providerBundles.length > 0 && providerBundles.every((script) => {
+    const files = script.js || [];
+    const captureIndex = files.indexOf("src/core/screenshot.js");
+    return captureIndex >= 0 && files[captureIndex + 1] === "src/core/screenshot_diff.js";
+  });
+  ok("C1 every provider bundle loads screenshot_diff.js immediately after screenshot.js; codecraft.html loads it", diffLoadedAfterCapture && /screenshot\.js"><\/script>\n\s*<script src="src\/core\/screenshot_diff\.js">/.test(cc));
   ok("C2 total_screenshot schema gained compare / label / threshold and a screenshot_compare virtual tool is injected", /compare: \{ type: "boolean", description: "2\.3\.0: also measure the pixel delta/.test(main) && /name: "screenshot_compare",/.test(main) && /op: \{ type: "string", enum: \["compare", "list"\]/.test(main));
   ok("C3 the handler remembers every capture and appends the compare note; screenshot_compare has its own handler", /TotalScreenshotDiff\.remember\(result\.images\[0\], args\.label \|\| ""\)/.test(main) && /return result\.text \+ compareNote;/.test(main) && /if \(name === "screenshot_compare"\) \{/.test(main));
   ok("C4 the LOOK gate accepts screenshot_compare as proof and the helper lists carry it next to total_screenshot", /proof: \/\^\(total_screenshot\|screenshot_compare\|gfx_capture/.test(main) && (main.match(/"total_screenshot", "screenshot_compare", "total_debug"/g) || []).length === 2);

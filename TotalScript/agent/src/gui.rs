@@ -991,6 +991,26 @@ struct ToolRun { receiver: Receiver<ToolReply>, started: Instant, name: String }
 
 struct Snapshot { texture: egui::TextureHandle, size: [usize; 2], taken_at: String, source: String }
 
+/// Fit a captured viewport image into a UI box without stretching it. Studio
+/// screenshots are usually landscape, but portrait/mobile previews and extra
+/// wide windows must keep the source aspect ratio as well.
+fn fit_snapshot_size(image: [usize; 2], bounds: Vec2) -> Vec2 {
+    let [width, height] = image;
+    if width == 0
+        || height == 0
+        || !bounds.x.is_finite()
+        || !bounds.y.is_finite()
+        || bounds.x <= 0.0
+        || bounds.y <= 0.0
+    {
+        return Vec2::ZERO;
+    }
+    let width = width as f32;
+    let height = height as f32;
+    let scale = (bounds.x / width).min(bounds.y / height);
+    Vec2::new(width * scale, height * scale)
+}
+
 // ── AI chat side panel state ──
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -2112,10 +2132,10 @@ impl App {
                     });
                     match &self.snapshot {
                         Some(snap) => {
-                            let avail = ui.available_width();
-                            let aspect = snap.size[1] as f32 / snap.size[0].max(1) as f32;
-                            let size = Vec2::new(avail, (avail * aspect).min(360.0));
-                            ui.add(egui::Image::from_texture(egui::load::SizedTexture::new(snap.texture.id(), size)).rounding(Rounding::same(8.0)));
+                            let size = fit_snapshot_size(snap.size, Vec2::new(ui.available_width(), 360.0));
+                            ui.vertical_centered(|ui| {
+                                ui.add(egui::Image::from_texture(egui::load::SizedTexture::new(snap.texture.id(), size)).rounding(Rounding::same(8.0)));
+                            });
                             ui.label(RichText::new(format!("{}×{} · {} · via {}", snap.size[0], snap.size[1], snap.taken_at, snap.source)).small().color(t.muted));
                         }
                         None => {

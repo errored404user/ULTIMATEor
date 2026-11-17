@@ -30,6 +30,7 @@ ok("card send preview uses the reserved expansion lane", /bar\.classList\.add\("
 ok("first-run setup uses the reserved expansion lane", /bar\.appendChild\(setupCard\)/.test(main) && /#rs-bar\.rs-setup-open #rs-setup/.test(css));
 
 ok("capture preview is an in-bar thumbnail", /className = "rs-shot-chip"/.test(main) && /right\.insertBefore\(wrap, cardsBtn/.test(main));
+ok("capture thumbnail preserves the full viewport instead of cropping its edges", /\.rs-shot-thumb\s*\{[^}]*object-fit:\s*contain/.test(css) && !/\.rs-shot-thumb\s*\{[^}]*object-fit:\s*cover/.test(css));
 ok("capture preview no longer creates a fixed page card", !/className = "rs-shot"/.test(main) && !/position: fixed; left: 18px; top: 72px/.test(css));
 ok("full capture opens only from thumbnail click", /open\.addEventListener\("click"[\s\S]*URL\.createObjectURL[\s\S]*window\.open/.test(main));
 
