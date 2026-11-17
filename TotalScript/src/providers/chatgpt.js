@@ -79,6 +79,11 @@ const RSProvider = (() => {
   function safeStyle(node) {
     return safeRead(() => getComputedStyle(node), {display:'none',visibility:'hidden',opacity:'0',overflow:'hidden',overflowY:'hidden'});
   }
+  function isVisible(node) {
+    if (!node || safeRead(() => node.hidden, false) || String(safeRead(() => node.getAttribute("aria-hidden"), "")).toLowerCase() === "true") return false;
+    const rect = safeRect(node), style = safeStyle(node);
+    return !rect.readFailed && rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+  }
   function safePredicate(predicate) {
     const before = domReadErrors;
     const result = safeRead(predicate, false);
@@ -498,12 +503,12 @@ const RSProvider = (() => {
     });
     return visible || nodes[0] || null;
   };
-  const editorText = () => {
-    const e = getEditor();
+  const textFromEditor = (e) => {
     if (!e) return "";
     if (safeRead(() => e.tagName, "") === "TEXTAREA" || safeRead(() => e.tagName, "") === "INPUT") return safeRead(() => e.value, "") || "";
     return safeRead(() => e.textContent, "") || "";
   };
+  const editorText = () => textFromEditor(getEditor());
 
   const lastAssistant = () => {
     const it = assistantItems();
@@ -663,7 +668,7 @@ const RSProvider = (() => {
         if (candidates.length > 1) break;
       }
     }
-    return candidates.find((b) => safeRead(() => b.offsetParent, null) !== null && (!form || safeRead(() => form.contains(b), false))) || null;
+    return candidates.find((b) => isVisible(b) && (!form || safeRead(() => form.contains(b), false))) || null;
   };
   const sendButton = () => {
     const b = submitButton();
@@ -673,6 +678,10 @@ const RSProvider = (() => {
     const b = submitButton();
     return b && isStopBtn(b) ? b : null;
   };
+  const buttonDisabled = (button) => !button ||
+    safeRead(() => button.disabled, true) ||
+    String(safeRead(() => button.getAttribute("aria-disabled"), "")).toLowerCase() === "true" ||
+    String(safeRead(() => button.getAttribute("data-disabled"), "")).toLowerCase() === "true";
 
   // ── Generation detection ──────────────────────────────────────────────────
   // The stop button is present for the ENTIRE generation, so detection is simple.
@@ -906,7 +915,7 @@ const RSProvider = (() => {
       const t0 = Date.now();
       const ok = document.execCommand("insertText", false, raw);
       await sleep(0);
-      const got = editorText().trim();
+      const got = textFromEditor(ed).trim();
       const tail = raw.trim().slice(-30);
       if (ok && got && (!tail || got.includes(tail))) {
         diag("send.bulkInsert", { lines: lines.length, chars: raw.length, ms: Date.now() - t0 });
@@ -932,15 +941,26 @@ const RSProvider = (() => {
   async function setEditorText(ed, text) {
     await typeEditorText(ed, text);
   }
+  function draftMatches(ed, text) {
+    const expected = String(text || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+    const actual = textFromEditor(ed).replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+    if (!expected) return !actual;
+    // ProseMirror may normalize paragraph/line-break whitespace, so verify a
+    // meaningful tail rather than demand byte-for-byte DOM serialization.
+    return actual.includes(expected.slice(-Math.min(48, expected.length)));
+  }
 
   async function typeAndSend(text, images) {
-    const ed = getEditor();
+    let ed = getEditor();
     if (!ed) throw new Error("ChatGPT input box not found");
     text = truncateForSend(text);
     const relock = _locked;
     const oldOpacity = safeRead(() => ed.style.opacity, "");
     const oldCaret = safeRead(() => ed.style.caretColor, "");
     try {
+      // Never overwrite the composer while a real generation still owns it.
+      // The core normally waits for this, but hand-off and direct callers do not.
+      if (stopButton()) { diag("send.busy", { phase: "preflight" }); return false; }
       try { document.documentElement.classList.add("rs-chatgpt-injecting"); } catch {}
       // Internal TotalScript messages are implementation detail. Keep the composer
       // visually blank while they are inserted so the user does not watch a huge
@@ -952,44 +972,133 @@ const RSProvider = (() => {
         else ed.setAttribute("contenteditable", "true");
       }
       await setEditorText(ed, text);
-      // Attach images LAST, right before the send click - see gemini.js/deepseek.js
-      // typeAndSend for why (attaching first and then retyping the text can sever
-      // the site's binding between the pending upload and the message sent).
+
+      // React can replace the composer while a large message is being inserted.
+      // Reacquire it and repair the draft once; never click Send for a stale editor
+      // or silently submit only a prefix of the intended message.
+      let live = getEditor();
+      if (!live) throw new Error("ChatGPT replaced its composer while the message was being prepared");
+      if (live !== ed) {
+        live.style.opacity = "0";
+        live.style.caretColor = "transparent";
+        if (relock) {
+          if (safeRead(() => live.tagName, "") === "TEXTAREA" || safeRead(() => live.tagName, "") === "INPUT") live.readOnly = false;
+          else live.setAttribute("contenteditable", "true");
+        }
+      }
+      if (!draftMatches(live, text)) {
+        diag("composer.recover", { remounted: live !== ed });
+        await setEditorText(live, text);
+        live = getEditor();
+      }
+      if (!live || !draftMatches(live, text)) {
+        diag("send.draftRejected", {});
+        throw new Error("ChatGPT did not retain the complete message in its composer; nothing was submitted.");
+      }
+      ed = live;
+
+      // Commit one native action and wait for independent evidence. A cleared
+      // composer or Stop appearing is positive evidence; a still-filled composer
+      // after the click is ambiguous, so report it but NEVER click again here.
+      const commitOnce = async (button, method) => {
+        let target = button;
+        if (!target || !safeRead(() => target.isConnected, true)) target = sendButton();
+        if (!target || isStopBtn(target) || buttonDisabled(target)) {
+          if (target && buttonDisabled(target)) diag("send.disabled", {});
+          return false;
+        }
+        try { target.click(); }
+        catch { diag("send.clickFailed", { method }); return false; }
+        await waitFor(() => editorText().trim() === "" || !!stopButton(), 2500);
+        const cleared = editorText().trim() === "";
+        const stopping = !!stopButton();
+        if (cleared || stopping) diag("send.landed", { method, proof: cleared ? "composer_cleared" : "stop_visible" });
+        else diag("send.unconfirmed", { method });
+        // true means the single submit action was issued. The core independently
+        // checks the conversation and composer before considering a retry.
+        return true;
+      };
+      const commitByEnter = async (editor, method) => {
+        if (!editor || !draftMatches(editor, text)) return false;
+        if (stopButton()) { diag("send.busy", { phase: method }); return false; }
+        const o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
+        try {
+          editor.dispatchEvent(new KeyboardEvent("keydown", o));
+          editor.dispatchEvent(new KeyboardEvent("keyup", o));
+        } catch { diag("send.enterFailed", {}); return false; }
+        await waitFor(() => editorText().trim() === "" || !!stopButton(), 2500);
+        const cleared = editorText().trim() === "";
+        const stopping = !!stopButton();
+        if (cleared || stopping) diag("send.landed", { method, proof: cleared ? "composer_cleared" : "stop_visible" });
+        else diag("send.unconfirmed", { method });
+        return true;
+      };
+
+      // Attach images LAST, immediately before submitting, so the site's pending
+      // upload stays bound to the prompt. Never fall back to Enter over a Stop
+      // control or over an upload whose preview was not confirmed.
       if (images && images.length) {
-        if (!await attachImages(images)) throw new Error('ChatGPT did not confirm the screenshot upload. Check its file/image quota or upload error; the message was not submitted.');
-        const ready = await waitFor(() => !!sendButton() && !safeRead(() => sendButton().disabled, true), 25000);
-        const button = ready && sendButton();
-        if (!button || safeRead(() => button.disabled, true)) throw new Error('ChatGPT is not ready to send the uploaded screenshot. The message was not submitted.');
-        // Commit exactly once. A delayed receipt never authorizes another click.
-        button.click();
-        await waitFor(() => editorText().trim() === "" || !!stopButton(), 15000);
-        return;
+        if (!await attachImages(images)) {
+          diag("send.imageUnconfirmed", {});
+          throw new Error("ChatGPT did not confirm the screenshot upload. Check its file/image quota or upload error; the message was not submitted.");
+        }
+        const removeInjectedAndThrow = async (message) => {
+          const removed = await clearInjectedAttachments();
+          throw new Error(removed ? message : message.replace(/the screenshot was removed/gi,
+            "remove the pending screenshot from ChatGPT's composer before retrying"));
+        };
+        if (stopButton()) {
+          diag("send.busy", { phase: "upload" });
+          await removeInjectedAndThrow("ChatGPT started another response while the screenshot uploaded; the screenshot was removed and the message was not submitted.");
+        }
+        let button = sendButton();
+        if (button && buttonDisabled(button)) {
+          diag("send.disabled", {});
+          await removeInjectedAndThrow("ChatGPT disabled Send after the screenshot uploaded; the screenshot was removed and the message was not submitted.");
+        }
+        await waitFor(() => !!sendButton() || !!stopButton(), 2000);
+        if (stopButton()) {
+          diag("send.busy", { phase: "upload" });
+          await removeInjectedAndThrow("ChatGPT started another response while the screenshot uploaded; the screenshot was removed and the message was not submitted.");
+        }
+        button = sendButton();
+        if (button && buttonDisabled(button)) {
+          diag("send.disabled", {});
+          await removeInjectedAndThrow("ChatGPT disabled Send after the screenshot uploaded; the screenshot was removed and the message was not submitted.");
+        }
+        if (!draftMatches(getEditor(), text)) {
+          diag("send.draftChanged", { phase: "upload" });
+          await removeInjectedAndThrow("ChatGPT changed the composer while the screenshot uploaded; the screenshot was removed and the message was not submitted.");
+        }
+        const submitted = button
+          ? await commitOnce(button, "image_button")
+          : await commitByEnter(getEditor(), "image_enter");
+        if (!submitted) await removeInjectedAndThrow("ChatGPT could not submit the uploaded screenshot; it was removed and the message was not submitted.");
+        _lastInjectedAttachments = null;
+        return true;
       }
-      // Wait for the control to be in its SEND role (proof ProseMirror registered
-      // the text, and that no generation is in flight).
-      await waitFor(() => !!sendButton(), 1500);
-      // Still not a send button? Either a generation really is running (in which
-      // case unwedge refuses and we fall through), or the control is stuck in its
-      // stop role with nothing generating - the case that stranded the result.
-      if (!sendButton()) await waitFor(() => !!sendButton() && !stopButton(), 4000);
-      const btn = sendButton();
-      // Disabled send = a quota wall, not a wedge. Clicking it does nothing and
-      // Enter is refused too, so return now and let scanError surface the reason
-      // instead of burning the caller's retries in silence.
-      if (btn && safeRead(() => btn.disabled, true)) { diag("send.disabled", {}); return; }
-      if (btn) {
-        btn.click();
-        await waitFor(() => editorText().trim() === "" || !!stopButton(), 1200);
-        return;
+
+      // Wait briefly for React/ProseMirror to expose its send state. Disabled is
+      // distinct from missing: it usually means a quota or paused-chat wall, and
+      // must not fall through to Enter.
+      await waitFor(() => !!sendButton() || !!stopButton(), 2000);
+      if (stopButton()) { diag("send.busy", { phase: "submit" }); return false; }
+      const button = sendButton();
+      if (button && buttonDisabled(button)) {
+        diag("send.disabled", {});
+        return false;
       }
-      // Stop can outlast the recovery wait during Work reasoning. Enter is
-      // not a safe send fallback while that control still owns the composer.
-      if (stopButton()) { diag("send.busy", {}); return; }
-      // Fallback: Enter sends in ChatGPT's composer.
-      const o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
-      ed.dispatchEvent(new KeyboardEvent("keydown", o));
-      ed.dispatchEvent(new KeyboardEvent("keyup", o));
-      await waitFor(() => editorText().trim() === "" || !!stopButton(), 1200);
+      if (button) return await commitOnce(button, "button");
+
+      // Some ChatGPT composer variants expose no submit button. Enter is a
+      // bounded, single fallback only when the draft is still intact and Stop is
+      // absent; a detached/replaced editor is never used for the keystroke.
+      const currentEditor = getEditor();
+      if (!currentEditor || !draftMatches(currentEditor, text)) {
+        diag("send.draftRejected", { method: "enter" });
+        return false;
+      }
+      return await commitByEnter(currentEditor, "enter");
     } finally {
       try { document.documentElement.classList.remove("rs-chatgpt-injecting"); } catch {}
       const e2 = getEditor();
@@ -1053,17 +1162,16 @@ const RSProvider = (() => {
   // and tell the user.
   const sendIsDisabled = () => {
     const b = submitButton();
-    return !!b && !isStopBtn(b) && safeRead(() => b.disabled, true);
+    return !!b && !isStopBtn(b) && buttonDisabled(b);
   };
-  // The nastier variant: the control is stuck in its STOP role AND disabled,
-  // while nothing is generating. unwedgeStop() cannot help - clicking a disabled
-  // button does nothing - and neither does any DOM-side nudge: an input event,
-  // blur+focus and a real edit were all tried live and left it at
-  // "stop-button (disabled)". Only reloading the page clears it, so the honest
-  // move is to say so instead of silently retrying forever.
+  // A disabled Stop control with no recent visible stream progress is the known
+  // stuck-composer state. genActive() alone cannot decide this: it intentionally
+  // treats every Stop button as active, including the wedged one.
   const composerWedged = () => {
     const b = submitButton();
-    return !!b && isStopBtn(b) && safeRead(() => b.disabled, true) && !genActive();
+    if (!b || !isStopBtn(b) || !buttonDisabled(b)) return false;
+    sampleStream();
+    return Date.now() - _streamAt >= timings.GEN_IDLE_MS;
   };
   function pausedNotice() {
     // Only walk the DOM once the cheap signal (a disabled send) already says
@@ -1101,6 +1209,9 @@ const RSProvider = (() => {
   const isBusyMsg = (text) => RE.busy.test(text);
 
   // ── Image attachment (best effort: paste + hidden file input) ─────────────
+  const ATTACHMENT_SELECTOR = "img, video, [class*='preview'], [class*='thumbnail'], [class*='attachment'], [class*='file-preview']";
+  const ATTACHMENT_OWNER_SELECTOR = "[class*='preview'], [class*='thumbnail'], [class*='attachment'], [class*='file-preview'], [data-testid*='attachment'], [data-testid*='preview']";
+  let _lastInjectedAttachments = null;
   function fileFromImage(img, i) {
     if (typeof TotalScriptMedia !== "undefined") return TotalScriptMedia.fileFrom(img, i);
     const mime = img.mimeType || "image/jpeg";
@@ -1110,14 +1221,28 @@ const RSProvider = (() => {
     const ext = mime.includes("png") ? "png" : "jpg";
     return new File([arr], `robloxscript_${Date.now()}_${i}.${ext}`, { type: mime });
   }
+  function newAttachmentNodes(box, existing) {
+    if (!box) return [];
+    return safeQueryAll(box, ATTACHMENT_SELECTOR).filter((node) => {
+      if (existing.has(node)) return false;
+      if (safeRead(() => node.tagName, "") === "IMG" || safeRead(() => node.tagName, "") === "VIDEO") {
+        const src = safeRead(() => node.getAttribute("src"), "") || "";
+        return /^(?:blob:|data:image\/)/.test(src) || !!safeClosest(node, ATTACHMENT_OWNER_SELECTOR);
+      }
+      return true;
+    });
+  }
   async function attachImages(images) {
+    _lastInjectedAttachments = null;
     const ed = getEditor(), box = composerFrame();
     if (!ed || !box || !images || !images.length || images.length > 4) return false;
-    const selector = "img, video, [class*='preview'], [class*='thumbnail'], [class*='attachment'], [class*='file-preview']";
-    const existing = new Set(safeQueryAll(box, selector));
-    const dt = new DataTransfer();
-    try { images.forEach((img, i) => dt.items.add(fileFromImage(img, i))); } catch { return false; }
-    if (dt.items.length !== images.length) return false;
+    const existing = new Set(safeQueryAll(box, ATTACHMENT_SELECTOR));
+    let dt;
+    try {
+      dt = new DataTransfer();
+      images.forEach((img, i) => dt.items.add(fileFromImage(img, i)));
+    } catch { return false; }
+    if (!dt || dt.items.length !== images.length) return false;
     const fileInput = safeQuery(document, 'input[data-testid="upload-photos-input"]') || safeQuery(box, 'input[type="file"][accept*="image"]');
     ed.focus();
     // Pick one upload transport. Sending both paste and file-change duplicates
@@ -1126,14 +1251,46 @@ const RSProvider = (() => {
       if (fileInput) { fileInput.files = dt.files; fileInput.dispatchEvent(new Event("change", { bubbles: true })); }
       else ed.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
     } catch { return false; }
-    return await waitFor(() => safeQueryAll(composerFrame(), selector).some(node => {
-      if (existing.has(node)) return false;
-      if (safeRead(() => node.tagName, "") === "IMG" || safeRead(() => node.tagName, "") === "VIDEO") {
-        const src = safeRead(() => node.getAttribute("src"), "") || "";
-        return /^(?:blob:|data:image\/)/.test(src) || !!safeClosest(node, "[class*='preview'], [class*='thumbnail'], [class*='attachment'], [class*='file-preview']");
+    const confirmed = await waitFor(() => newAttachmentNodes(composerFrame(), existing).length > 0, 15000);
+    if (confirmed) {
+      const liveBox = composerFrame() || box;
+      _lastInjectedAttachments = { box: liveBox, existing, nodes: newAttachmentNodes(liveBox, existing), expected: images.length };
+    }
+    return confirmed;
+  }
+  async function clearInjectedAttachments() {
+    const state = _lastInjectedAttachments;
+    _lastInjectedAttachments = null;
+    if (!state || !state.nodes.length) return false;
+    const box = composerFrame() || state.box;
+    const removeButtons = new Set();
+    const removeRe = /remove|delete|dismiss|supprimer|retirer/i;
+    for (const node of state.nodes) {
+      if (!safeRead(() => node.isConnected, false)) continue;
+      for (let owner = node; owner && owner !== box; owner = safeRead(() => owner.parentElement, null)) {
+        const marked = safeRead(() => owner.matches, null) && safeRead(() => owner.matches(ATTACHMENT_OWNER_SELECTOR), false);
+        if (!marked) continue;
+        // Never remove a container that also held an attachment before this
+        // upload; the user may have placed those files there themselves.
+        const containsOld = [...state.existing].some((old) => old === owner || safeRead(() => owner.contains(old), false));
+        if (containsOld) break;
+        const controls = [];
+        if (safeRead(() => owner.matches, null) && safeRead(() => owner.matches("button, [role='button']"), false)) controls.push(owner);
+        controls.push(...safeQueryAll(owner, "button, [role='button']"));
+        const removeButton = controls.find((control) => {
+          const label = [safeRead(() => control.getAttribute("aria-label"), null), safeRead(() => control.getAttribute("title"), null),
+            safeRead(() => control.getAttribute("data-testid"), null), safeRead(() => control.textContent, "")].filter(Boolean).join(" ");
+          return removeRe.test(label) && isVisible(control);
+        });
+        if (removeButton) { removeButtons.add(removeButton); break; }
       }
-      return true;
-    }), 15000);
+    }
+    for (const button of removeButtons) { try { button.click(); } catch {} }
+    const liveBox = composerFrame() || box;
+    const cleared = removeButtons.size >= state.expected && await waitFor(
+      () => newAttachmentNodes(composerFrame() || liveBox, state.existing).length === 0, 1500);
+    if (removeButtons.size) diag("send.imageCleanup", { removed: removeButtons.size, confirmed: cleared });
+    return cleared;
   }
   function clearAttachments() {
     try {
@@ -1146,18 +1303,29 @@ const RSProvider = (() => {
 
   // ── New chat navigation ───────────────────────────────────────────────────
   function findNewChatButton() {
-    return safeQuery(document, 'a[data-testid="create-new-chat-button"]') ||
-      [...safeQueryAll(document, 'a[href="/"], button')].find(
-        (a) => safeRead(() => a.offsetParent, null) !== null && /new chat|nouvelle discussion|nouveau chat/i.test(safeRead(() => a.getAttribute("aria-label"), null) || safeRead(() => a.textContent, "") || "")
-      ) || null;
+    const marked = safeQueryAll(document, '[data-testid="create-new-chat-button"]');
+    const fallback = safeQueryAll(document, 'a[href="/"], button').filter((node) =>
+      /new chat|nouvelle discussion|nouveau chat/i.test(
+        safeRead(() => node.getAttribute("aria-label"), null) || safeRead(() => node.textContent, "") || ""));
+    return [...marked, ...fallback].find((node) => isVisible(node) &&
+      String(safeRead(() => node.getAttribute("aria-disabled"), "")).toLowerCase() !== "true" &&
+      !safeRead(() => node.disabled, false)) || null;
   }
   async function openNewChat() {
+    if (isFreshChat()) return true;
     const btn = findNewChatButton();
-    if (!btn) return false;
-    const prevPath = location.pathname;
-    try { btn.click(); } catch {}
-    await waitFor(() => location.pathname !== prevPath && chatIsEmpty() && !!getEditor(), 6000);
-    await waitFor(() => chatIsEmpty() && !!getEditor(), 2000);
+    if (!btn) { diag("chat.newChatUnavailable", {}); return false; }
+    try { btn.click(); }
+    catch { diag("chat.newChatClickFailed", {}); return false; }
+    // Do not treat a click or an empty old conversation as success. ChatGPT's
+    // fresh-chat route is `/`; require that route, an empty transcript, and a
+    // mounted composer before exposing success to callers.
+    const ready = await waitFor(() => isFreshChat(), 8000);
+    if (!ready) {
+      diag("chat.newChatNotReady", { rootRoute: location.pathname === "/" });
+      return false;
+    }
+    diag("chat.newChatReady", {});
     return true;
   }
 
@@ -1376,7 +1544,7 @@ const RSProvider = (() => {
       if (d) diag = d;
       // Version beacon: stamp the loaded build onto <html> so a reload can be
       // confirmed from the page (read document.documentElement.dataset.rsGptVer).
-      try { document.documentElement.setAttribute("data-rs-gpt-ver", "2026-09-26_shared-turn-command-readiness"); } catch {}
+      try { document.documentElement.setAttribute("data-rs-gpt-ver", "2026-10-12_composer-send-recovery"); } catch {}
     },
     // turns
     allItems, isUserItem, isAssistantItem, itemText, classifyText, setActivityFolded,
