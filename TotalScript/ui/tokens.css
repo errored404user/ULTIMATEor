@@ -1,0 +1,117 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* TotalScript design tokens — 2.12.0 "Command Center".
+   One source of truth for every extension-owned page (popup, hello page,
+   CodeCraft chat) and for the in-page overlay's control layer. Colours are
+   deep charcoal with one aqua accent; the accent, theme (dark / light / system),
+   density and text scale are switched with data attributes on <html>, written
+   by popup.js from the `tsPopup` preference. Nothing here depends on JS. */
+
+:root {
+  /* ── colour: dark (default) ── */
+  --ts-bg: #0b0f14;            /* window */
+  --ts-bg-2: #0e131a;          /* header / nav strip */
+  --ts-surface: #121821;       /* cards */
+  --ts-surface-2: #182029;     /* hover / nested */
+  --ts-surface-3: #1f2933;     /* pressed / inputs */
+  --ts-line: rgba(255, 255, 255, 0.08);
+  --ts-line-strong: rgba(255, 255, 255, 0.16);
+  --ts-text: #e8edf3;
+  --ts-text-2: #a2adbb;        /* secondary */
+  --ts-text-3: #6c7785;        /* metadata */
+  --ts-ok: #34d399;
+  --ts-warn: #f3b544;
+  --ts-danger: #f06b6b;
+  --ts-info: #7aa2f7;
+  --ts-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --ts-shadow-2: 0 6px 18px rgba(0, 0, 0, 0.35);
+  --ts-shadow-3: 0 18px 48px rgba(0, 0, 0, 0.5);
+  --ts-scrim: rgba(4, 7, 10, 0.62);
+
+  /* ── accent (aqua = TotalScript identity) ── */
+  --ts-accent: #22d3ee;
+  --ts-accent-2: #0ea5c4;      /* pressed / gradient end */
+  --ts-accent-ink: #052a31;    /* text on accent */
+  --ts-accent-soft: rgba(34, 211, 238, 0.12);
+  --ts-accent-line: rgba(34, 211, 238, 0.38);
+  --ts-focus: 0 0 0 2px var(--ts-bg), 0 0 0 4px var(--ts-accent);
+
+  /* ── typography ── */
+  --ts-font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --ts-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --ts-fs-xs: 10.5px;  /* metadata, kbd */
+  --ts-fs-sm: 11.5px;  /* secondary descriptions */
+  --ts-fs-md: 12.5px;  /* body, button labels */
+  --ts-fs-lg: 14px;    /* section headings */
+  --ts-fs-xl: 17px;    /* page headings */
+  --ts-fs-2xl: 21px;   /* hero */
+  --ts-lh: 1.45;
+  --ts-lh-tight: 1.2;
+  --ts-scale: 1;       /* text size preference multiplier */
+
+  /* ── spacing ── */
+  --ts-s1: 4px; --ts-s2: 6px; --ts-s3: 8px; --ts-s4: 12px; --ts-s5: 16px; --ts-s6: 20px; --ts-s7: 28px;
+
+  /* ── radii ── */
+  --ts-r-sm: 6px; --ts-r-md: 8px; --ts-r-lg: 12px; --ts-r-xl: 16px; --ts-r-pill: 999px;
+
+  /* ── control sizes ── */
+  --ts-ctl-h: 32px;         /* default button / input */
+  --ts-ctl-h-sm: 26px;      /* compact */
+  --ts-ctl-h-xs: 22px;      /* chips */
+  --ts-ctl-px: 12px;
+  --ts-icon: 16px;
+  --ts-toggle-w: 34px; --ts-toggle-h: 20px;
+
+  /* ── motion ── */
+  --ts-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ts-dur-1: 120ms; --ts-dur-2: 180ms; --ts-dur-3: 260ms;
+
+  color-scheme: dark;
+}
+
+/* ── density ── */
+html[data-density="compact"] {
+  --ts-ctl-h: 28px; --ts-ctl-h-sm: 24px; --ts-ctl-px: 10px;
+  --ts-s3: 6px; --ts-s4: 10px; --ts-s5: 12px; --ts-s6: 16px;
+  --ts-lh: 1.35;
+}
+
+/* ── text scale ── */
+html[data-text="large"]  { --ts-scale: 1.1; }
+html[data-text="larger"] { --ts-scale: 1.2; }
+
+/* ── accents (same lightness family so contrast rules hold) ── */
+html[data-accent="aqua"]    { --ts-accent: #22d3ee; --ts-accent-2: #0ea5c4; --ts-accent-ink: #052a31; --ts-accent-soft: rgba(34,211,238,.12); --ts-accent-line: rgba(34,211,238,.38); } /* = :root defaults, explicit */
+html[data-accent="violet"]  { --ts-accent: #a78bfa; --ts-accent-2: #7c5ce6; --ts-accent-ink: #1b1040; --ts-accent-soft: rgba(167,139,250,.14); --ts-accent-line: rgba(167,139,250,.42); }
+html[data-accent="emerald"] { --ts-accent: #34d399; --ts-accent-2: #10b981; --ts-accent-ink: #052e1f; --ts-accent-soft: rgba(52,211,153,.13); --ts-accent-line: rgba(52,211,153,.4); }
+html[data-accent="amber"]   { --ts-accent: #f5b544; --ts-accent-2: #d99a1f; --ts-accent-ink: #2c1d02; --ts-accent-soft: rgba(245,181,68,.14); --ts-accent-line: rgba(245,181,68,.42); }
+html[data-accent="rose"]    { --ts-accent: #fb7185; --ts-accent-2: #e11d48; --ts-accent-ink: #3b0714; --ts-accent-soft: rgba(251,113,133,.14); --ts-accent-line: rgba(251,113,133,.42); }
+html[data-accent="slate"]   { --ts-accent: #cbd5e1; --ts-accent-2: #94a3b8; --ts-accent-ink: #0f172a; --ts-accent-soft: rgba(203,213,225,.12); --ts-accent-line: rgba(203,213,225,.36); }
+
+/* ── light theme ── */
+html[data-ts-theme="light"] {
+  --ts-bg: #f4f6f9; --ts-bg-2: #eef1f5; --ts-surface: #ffffff; --ts-surface-2: #f3f5f8; --ts-surface-3: #e9edf2;
+  --ts-line: rgba(15, 23, 42, 0.1); --ts-line-strong: rgba(15, 23, 42, 0.2);
+  --ts-text: #111827; --ts-text-2: #4b5563; --ts-text-3: #6b7280;
+  --ts-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.08); --ts-shadow-2: 0 6px 18px rgba(15, 23, 42, 0.1); --ts-shadow-3: 0 18px 48px rgba(15, 23, 42, 0.18);
+  --ts-scrim: rgba(15, 23, 42, 0.4);
+  --ts-accent-2: #0891b2; --ts-accent-ink: #03262c; --ts-focus: 0 0 0 2px var(--ts-bg), 0 0 0 4px var(--ts-accent-2);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  html[data-ts-theme="system"] {
+    --ts-bg: #f4f6f9; --ts-bg-2: #eef1f5; --ts-surface: #ffffff; --ts-surface-2: #f3f5f8; --ts-surface-3: #e9edf2;
+    --ts-line: rgba(15, 23, 42, 0.1); --ts-line-strong: rgba(15, 23, 42, 0.2);
+    --ts-text: #111827; --ts-text-2: #4b5563; --ts-text-3: #6b7280;
+    --ts-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.08); --ts-shadow-2: 0 6px 18px rgba(15, 23, 42, 0.1); --ts-shadow-3: 0 18px 48px rgba(15, 23, 42, 0.18);
+    --ts-scrim: rgba(15, 23, 42, 0.4);
+    --ts-accent-2: #0891b2; --ts-accent-ink: #03262c; --ts-focus: 0 0 0 2px var(--ts-bg), 0 0 0 4px var(--ts-accent-2);
+    color-scheme: light;
+  }
+}
+
+/* ── motion preferences: user switch or OS setting ── */
+html[data-motion="off"] { --ts-dur-1: 0ms; --ts-dur-2: 0ms; --ts-dur-3: 0ms; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --ts-dur-1: 0ms; --ts-dur-2: 0ms; --ts-dur-3: 0ms; }
+}

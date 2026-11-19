@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TotalScript Figma Bridge</title>
+  <style>
+    :root { color-scheme: dark; --bg:#101318; --surface:#191e25; --line:#2a323c; --text:#f0f4f8; --muted:#97a4b4; --accent:#a6f06d; --danger:#ff8a8a; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:13px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+    main { padding:18px; }
+    header { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+    .mark { display:grid; place-items:center; width:38px; height:38px; border-radius:12px; color:#101318; background:var(--accent); font-weight:900; font-size:17px; letter-spacing:-1px; }
+    h1 { margin:0; font-size:16px; line-height:1.2; letter-spacing:-.25px; }
+    .subtitle { color:var(--muted); margin-top:3px; font-size:11px; }
+    .status { display:flex; align-items:center; gap:8px; padding:10px 11px; margin:0 0 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
+    .dot { width:8px; height:8px; flex:none; border-radius:50%; background:#7b8794; box-shadow:0 0 0 3px #7b87941f; }
+    .dot.online { background:var(--accent); box-shadow:0 0 0 3px #a6f06d24; }
+    .dot.error { background:var(--danger); box-shadow:0 0 0 3px #ff8a8a24; }
+    #status-title { font-weight:650; }
+    #status-detail { color:var(--muted); font-size:11px; margin-top:1px; }
+    .card { padding:13px; border:1px solid var(--line); border-radius:11px; background:var(--surface); }
+    .card h2 { margin:0 0 5px; font-size:12px; font-weight:700; }
+    .copy { margin:0 0 12px; color:var(--muted); font-size:11px; }
+    label { display:block; margin:0 0 5px; color:#cbd4df; font-size:11px; font-weight:600; }
+    input { width:100%; min-height:39px; padding:9px 10px; border:1px solid #39434f; border-radius:8px; outline:0; background:#0e1116; color:var(--text); font:12px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    input:focus { border-color:var(--accent); box-shadow:0 0 0 2px #a6f06d20; }
+    .row { display:flex; gap:8px; margin-top:10px; }
+    button { display:inline-flex; justify-content:center; align-items:center; gap:7px; min-height:34px; padding:7px 11px; border:1px solid var(--line); border-radius:8px; background:#252d36; color:var(--text); font:600 11px/1.2 Inter,ui-sans-serif,system-ui,sans-serif; cursor:pointer; }
+    button.primary { border-color:var(--accent); background:var(--accent); color:#12170f; }
+    button.subtle { background:transparent; }
+    button:disabled { opacity:.55; cursor:wait; }
+    .message { min-height:18px; margin:8px 0 0; color:var(--muted); font-size:11px; }
+    .message.error { color:var(--danger); }
+    .message.ok { color:var(--accent); }
+    .fineprint { margin:13px 1px 0; color:#8995a3; font-size:10px; }
+    .fineprint b { color:#c5d0dc; font-weight:600; }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="mark" aria-hidden="true">TS</div>
+      <div><h1>TotalScript · Figma Design</h1><div class="subtitle">Local paired bridge · no Dev Mode or API key</div></div>
+    </header>
+    <section class="status" role="status" aria-live="polite">
+      <span class="dot" id="dot"></span>
+      <div><div id="status-title">Checking local bridge…</div><div id="status-detail">Only Figma operations you request are sent to TotalScript on this PC.</div></div>
+    </section>
+    <section class="card" id="pair-card">
+      <h2>Pair with TotalScript</h2>
+      <p class="copy">In TotalScript open Settings → Connections → Figma Design plugin, generate a code, then paste it here. The code expires after five minutes and works once.</p>
+      <label for="pairing-code">One-time pairing code</label>
+      <input id="pairing-code" type="password" inputmode="text" autocomplete="off" spellcheck="false" placeholder="Paste the 64-character code">
+      <div class="row"><button class="primary" id="pair" type="button">Pair Figma</button><button class="subtle" id="help" type="button">Help</button></div>
+      <p class="message" id="message" aria-live="polite"></p>
+    </section>
+    <section class="card" id="connected-card" hidden>
+      <h2>Paired to this TotalScript session</h2>
+      <p class="copy">The plugin stays active while this Figma plugin window is open. TotalScript will only run the specific canvas operation you ask for.</p>
+      <div class="row"><button class="subtle" id="check" type="button">Check connection</button><button class="subtle" id="disconnect" type="button">Disconnect</button></div>
+      <p class="message" id="connected-message" aria-live="polite"></p>
+    </section>
+    <p class="fineprint"><b>Privacy:</b> the session token is stored in Figma's local plugin storage. Requests go only to 127.0.0.1:3000; there is no cloud relay. Only data needed for the operation you request (or selected export layers) is returned to TotalScript and may be passed to your chosen AI provider in its tool workflow.</p>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    function send(type, extra) { parent.postMessage({ pluginMessage: Object.assign({ type }, extra || {}) }, "*"); }
+    function paint(state) {
+      const connected = state && state.state === "connected";
+      const unknown = state && state.state === "unknown";
+      $("dot").className = "dot" + (connected ? " online" : (!unknown && state && state.state === "disconnected" ? " error" : ""));
+      $("status-title").textContent = connected ? "Connected to TotalScript" : unknown ? "Checking the local bridge" : "Not paired";
+      $("status-detail").textContent = connected
+        ? `Verified live · ${Number(state.tools) || 0} Figma plugin tools ready`
+        : String((state && state.message) || (unknown ? "Waiting for a response from TotalScript on port 3000." : "Generate a one-time code in TotalScript Settings to pair."));
+      $("pair-card").hidden = connected;
+      $("connected-card").hidden = !connected;
+    }
+    function message(text, kind) {
+      const node = $("message"); node.textContent = String(text || ""); node.className = "message" + (kind ? " " + kind : "");
+    }
+    window.onmessage = (event) => {
+      const msg = event.data && event.data.pluginMessage;
+      if (!msg) return;
+      if (msg.type === "state") paint(msg);
+      if (msg.type === "message") {
+        const node = $(msg.connected ? "connected-message" : "message");
+        node.textContent = String(msg.text || "");
+        node.className = "message" + (msg.kind ? " " + msg.kind : "");
+      }
+      if (msg.type === "clear-code") $("pairing-code").value = "";
+    };
+    $("pair").addEventListener("click", () => {
+      const button = $("pair"); button.disabled = true;
+      message("Pairing securely…"); send("pair", { code: $("pairing-code").value });
+      setTimeout(() => { button.disabled = false; }, 5000);
+    });
+    $("help").addEventListener("click", () => send("help"));
+    $("check").addEventListener("click", () => { $("connected-message").textContent = "Checking…"; send("check"); });
+    $("disconnect").addEventListener("click", () => { $("disconnect").disabled = true; send("disconnect"); setTimeout(() => { $("disconnect").disabled = false; }, 2500); });
+    send("ready");
+  </script>
+</body>
+</html>
