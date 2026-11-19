@@ -195,7 +195,7 @@ if (!JSDOM) { console.log("skip jsdom walk (jsdom not installed)"); finish(); }
       case "studio_status": return { ok: true, studio: bridgeUp };
       case "tools": case "list_tools": return { ok: true, tools: TOOLS };
       case "call_tool": {
-        calls.push({ name: msg.name, args: msg.arguments });
+        calls.push({ name: msg.name, args: msg.arguments, timeout: msg.timeout });
         if (!bridgeUp) return { ok: false, kind: "bridge", error: "bridge offline", errorCode: "BRIDGE_OFFLINE" };
         const a = msg.arguments || {};
         if (msg.name === "write_file") {
@@ -251,10 +251,24 @@ if (!JSDOM) { console.log("skip jsdom walk (jsdom not installed)"); finish(); }
     const names = new Set((tools || []).map((t) => t.name));
     ok("walk C: catalogue fetched from the bridge (list_tools) carries the bridge tools plus the built-in virtual ones", names.has("write_file") && names.has("run_command") && names.has("execute_luau") && names.has("total_screenshot") && names.has("totalscript_help"), [...names].slice(0, 12).join(","));
     ok("walk C: an unknown command is refused with COMMAND_NOT_FOUND instead of being sent to the bridge", /COMMAND_NOT_FOUND/.test(await runTool({ tool: "make_everything", arguments: {} })));
+    let out;
+
+    // model_create is dispatched through the real runTool skill path; the fake
+    // bridge records the generated Luau payload but does not pretend to run Studio.
+    calls.length = 0;
+    out = await runTool({ tool: "model_create", arguments: { request: "a drivable car", name: "DispatchCar", position: [0, 0, 0], drivable: true, rotation_y: 15, scale: 1.25 } });
+    const carDispatch = calls.filter((c) => c.name === "execute_luau");
+    const carCode = carDispatch[0] && carDispatch[0].args && carDispatch[0].args.code || "";
+    ok("walk C: model_create routes a drivable car through runTool to one cached execute_luau build+critic payload", !/^ERROR/.test(out) && carDispatch.length === 1 && carDispatch[0].args.datamodel_type === "Edit" && carDispatch[0].timeout === 90000 && carCode.includes('builder="vehicle_build"') && carCode.includes('kind="car"') && carCode.includes("ScaleTo(1.25)") && carCode.includes("__checkModel(__modelPath)"), JSON.stringify({ out, calls: carDispatch.length, timeout: carDispatch[0] && carDispatch[0].args._totalTimeout, excerpt: carCode.slice(0, 300) }));
+    calls.length = 0;
+    out = await runTool({ tool: "model_create", arguments: { request: "a crystal sword", name: "DispatchTool", position: [10, 0, 0], as_tool: true, scale: 2 } });
+    const toolDispatch = calls.filter((c) => c.name === "execute_luau");
+    const toolCode = toolDispatch[0] && toolDispatch[0].args && toolDispatch[0].args.code || "";
+    ok("walk C: runTool carries the scaled wearable-Tool wrapper into Studio without exposing multiple commands", !/^ERROR/.test(out) && toolDispatch.length === 1 && toolCode.includes('builder="weapon_build"') && toolCode.includes("__scaleModel.PrimaryPart=__handle") && toolCode.includes("__scaleModel:ScaleTo(2)") && toolCode.includes("scale_applied=2"), { out, calls: toolDispatch.length, excerpt: toolCode.slice(0, 300) });
 
     // C1 plain workspace write goes straight to the bridge and the result is readable
     calls.length = 0;
-    let out = await runTool({ tool: "write_file", arguments: { path: "src/Shop.lua", content: "return {}" } });
+    out = await runTool({ tool: "write_file", arguments: { path: "src/Shop.lua", content: "return {}" } });
     ok("walk C1: write_file reaches the bridge as call_tool with the exact args and its text comes back", calls.length === 1 && calls[0].name === "write_file" && calls[0].args.path === "src/Shop.lua" && /Created src\/Shop\.lua/.test(out), out);
 
     // C2 malicious paths: the bridge refuses, the chat sees a clear ERROR (never a fake success)

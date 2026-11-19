@@ -93,7 +93,10 @@ assert(/Batch up to 4 independent commands per reply/.test(full) && /batch up to
 // every command cited in the prompts must exist somewhere in the source
 const src = ["src/core", "src/providers"].flatMap((d) => fs.readdirSync(d, { recursive: true }).filter((f) => f.endsWith(".js")).map((f) => fs.readFileSync(d + "/" + f, "utf8"))).join("\n");
 const cited = [...new Set([...(block + " " + RS.workModeChecklist(wm)).matchAll(/\b([a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b/g)].map((m) => m[1]))];
-const missing = cited.filter((n) => !new RegExp("[\"'`]" + n + "[\"'`:]|\\b" + n + "\\s*:").test(src));
+// The following are documented fields on studio_plugin_status results, not commands.
+const promptResultFields = new Set(["place_name", "place_info_fresh", "cached_plugin"]);
+assert(config.includes("PLACE IDENTITY:") && [...promptResultFields].every((field) => config.includes(field)), "place identity guidance documents the plugin result fields");
+const missing = cited.filter((n) => !promptResultFields.has(n) && !new RegExp("[\"'`]" + n + "[\"'`:]|\\b" + n + "\\s*:").test(src));
 assert.deepStrictEqual(missing, [], "prompts cite unknown commands: " + missing.join(", "));
 
 // main.js wiring (1.34): starters, light mode-switch rider, checklist in the reminder

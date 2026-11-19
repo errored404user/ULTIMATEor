@@ -55,6 +55,7 @@
     "local function fail(m) return HttpService:JSONEncode({ok=false,error=tostring(m)}) end",
     "local function resolve(p) if p==nil or p=='' then return nil end p=tostring(p):gsub('^game%.',''):gsub('^Game%.','') local cur=game for seg in p:gmatch('[^%.]+') do local nx=cur:FindFirstChild(seg) if not nx and cur==game then local okS,svc=pcall(game.GetService,game,seg) if okS then nx=svc end end if not nx then return nil end cur=nx end return cur end",
     "local function need(p,what) local i=resolve(p) if not i then error((what or 'instance')..' not found: '..tostring(p),0) end return i end",
+    "local function uniqueChildName(parent,base) base=tostring(base or 'Model'):gsub('%.','_') if base=='' then base='Model' end local candidate,suffix=base,2 while parent and parent:FindFirstChild(candidate) do candidate=base..'_'..suffix suffix=suffix+1 end return candidate end",
     "local function allParts(root) local out={} if root:IsA('BasePart') then out[1]=root end for _,d in ipairs(root:GetDescendants()) do if d:IsA('BasePart') then out[#out+1]=d end end return out end",
     "local function r2(x) return math.floor(x*100+0.5)/100 end",
     "local function v3(v) return {r2(v.X),r2(v.Y),r2(v.Z)} end",
@@ -161,10 +162,10 @@
       "local parentI=" + (a.parent ? "need(" + q(a.parent) + ",'parent')" : "workspace"),
       "local pos=" + vec(a.position, [0, 0, 0]) + " local rotY=math.rad(" + nn(a.rotation_y ?? a.rotation ?? 0) + ") local count=" + count + " local spacing=" + nn(a.spacing ?? 0),
       "local kind=" + q(kind) + " local baseName=" + q(name) + " local rec=wp('model_prefab '..kind) local out={} local total=0 local holder",
-      "if count>1 then holder=Instance.new('Model') holder.Name=baseName..'s' holder.Parent=parentI end",
+      "if count>1 then holder=Instance.new('Model') holder.Name=uniqueChildName(parentI,baseName..'s') holder.Parent=parentI end",
       "for i=1,count do",
       PF.replace(/\n/g, "\n "),
-      " local primary=Pf[kind]() M.Name=baseName if count>1 then M.Name=baseName..i end",
+      " local primary=Pf[kind]() M.Name=baseName if count>1 then M.Name=baseName..i else M.Name=uniqueChildName(parentI,baseName) end",
       " local prim=M:FindFirstChild(primary) if prim then M.PrimaryPart=prim end",
       // bottom-centre pivot: lowest point of the model, centred on its footprint
       " local mn,mx for _,p in ipairs(made) do local lo,hi=aabb(p) if not mn then mn,mx=lo,hi else mn=Vector3.new(math.min(mn.X,lo.X),math.min(mn.Y,lo.Y),math.min(mn.Z,lo.Z)) mx=Vector3.new(math.max(mx.X,hi.X),math.max(mx.Y,hi.Y),math.max(mx.Z,hi.Z)) end end",
@@ -208,8 +209,8 @@
       "if #slivers>0 then issue('medium','sliver',#slivers..' part(s) thinner than 0.05: '..names(slivers),'Roblox clamps parts to 0.05 minimum; use 0.1-0.25 for trims and panes',math.min(10,3*#slivers)) end",
       "if #giants>0 then issue('low','oversize',#giants..' part(s) larger than 2048 studs: '..names(giants),'split into tiles',5) end",
       // anchoring
-      "local loose={} for _,p in ipairs(parts) do if not p.Anchored then loose[#loose+1]=p.Name end end",
-      "if #loose>0 then issue('high','unanchored',#loose..' unanchored part(s): '..names(loose),'static props must be Anchored (model_anchor_fix)',10) end",
+      "local allowUnanchored=" + bb(a.allow_unanchored, false) + " local loose={} for _,p in ipairs(parts) do if not p.Anchored then loose[#loose+1]=p.Name end end",
+      "if #loose>0 and not allowUnanchored then issue('high','unanchored',#loose..' unanchored part(s): '..names(loose),'static props must be Anchored (model_anchor_fix); set allow_unanchored=true only for an intentional physics rig',10) end",
       // default look
       "local defaults={} local palette={} local paletteN=0 local plastic=0 for _,p in ipairs(parts) do local c=p.Color local key=math.floor(c.R*7+0.5)..','..math.floor(c.G*7+0.5)..','..math.floor(c.B*7+0.5) if not palette[key] then palette[key]=true paletteN=paletteN+1 end",
       " local grey=math.abs(c.R*255-163)<6 and math.abs(c.G*255-162)<6 and math.abs(c.B*255-165)<6 if p.Material==Enum.Material.Plastic then plastic=plastic+1 if grey then defaults[#defaults+1]=p.Name end end end",
@@ -237,17 +238,281 @@
     ].join("\n");
   };
 
+  const MODEL_CREATE_ALIASES = {
+    house: ["structure_build", "house"], hut: ["structure_build", "house"], cabin: ["structure_build", "house"],
+    castle: ["structure_build", "castle_wall"], fortress: ["structure_build", "castle_wall"], wall: ["structure_build", "castle_wall"],
+    watchtower: ["structure_build", "watchtower"], stairs: ["structure_build", "staircase"], spiral_stairs: ["structure_build", "spiral_staircase"],
+    cottage: ["model_prefab", "cottage"], tree: ["model_prefab", "tree"], oak: ["model_prefab", "tree"], oak_tree: ["model_prefab", "tree"], pine: ["model_prefab", "pine"],
+    bush: ["model_prefab", "bush"], shrub: ["model_prefab", "bush"], boulder: ["model_prefab", "rock"], stone: ["model_prefab", "rock"],
+    table: ["model_prefab", "table"], chair: ["model_prefab", "chair"], bench: ["model_prefab", "bench"], crate: ["model_prefab", "crate"], box: ["model_prefab", "crate"],
+    barrel: ["model_prefab", "barrel"], lamp: ["model_prefab", "lamp_post"], streetlight: ["model_prefab", "lamp_post"], lamp_post: ["model_prefab", "lamp_post"],
+    torch: ["model_prefab", "torch"], lantern: ["model_prefab", "torch"], door: ["model_prefab", "door"], window: ["model_prefab", "window"],
+    pillar: ["model_prefab", "pillar"], column: ["model_prefab", "pillar"], arch: ["model_prefab", "arch"], archway: ["structure_build", "archway"],
+    well: ["model_prefab", "well"], campfire: ["model_prefab", "campfire"], sign: ["model_prefab", "sign"], bed: ["model_prefab", "bed"],
+    bookshelf: ["model_prefab", "bookshelf"], bookcase: ["model_prefab", "bookshelf"], chest: ["model_prefab", "chest"], market: ["model_prefab", "market_stall"],
+    couch: ["furniture_build", "sofa"], sofa: ["furniture_build", "sofa"], wardrobe: ["furniture_build", "wardrobe"], desk: ["furniture_build", "desk"],
+    fridge: ["furniture_build", "fridge"], refrigerator: ["furniture_build", "fridge"], oven: ["furniture_build", "oven"], sink: ["furniture_build", "sink"],
+    bathtub: ["furniture_build", "bathtub"], tub: ["furniture_build", "bathtub"], toilet: ["furniture_build", "toilet"], piano: ["furniture_build", "piano"],
+    lampstand: ["furniture_build", "floor_lamp"], robot: ["generic", "robot"], mech: ["generic", "robot"], android: ["generic", "robot"], golem: ["generic", "robot"],
+    dragon: ["generic", "dragon"], dinosaur: ["generic", "dragon"], creature: ["generic", "dragon"], monster: ["generic", "dragon"],
+    spaceship: ["generic", "spaceship"], starship: ["generic", "spaceship"], spacecraft: ["generic", "spaceship"], rocket: ["generic", "spaceship"],
+    portal: ["generic", "portal"], gateway: ["generic", "portal"], rift: ["generic", "portal"], crystal: ["generic", "crystal"], relic: ["generic", "crystal"], artifact: ["generic", "crystal"],
+  };
+  const MODEL_TEXT_ALIASES = [
+    ["space ship", "spaceship"], ["star ship", "starship"], ["spacecraft", "spacecraft"], ["lamp post", "lamp_post"], ["street light", "streetlight"],
+    ["book shelf", "bookshelf"], ["book case", "bookcase"], ["spiral staircase", "spiral_staircase"], ["spiral stairs", "spiral_stairs"],
+    ["castle wall", "castle_wall"], ["gate house", "gatehouse"], ["market stall", "market"], ["floor lamp", "floor_lamp"], ["bar stool", "bar_stool"],
+    ["great sword", "greatsword"], ["battle axe", "battleaxe"], ["cross bow", "crossbow"], ["sci fi", "scifi"], ["sci-fi", "scifi"],
+  ];
+  const MODEL_COLOR_WORDS = { red: "#c83228", crimson: "#aa1e32", orange: "#e68228", yellow: "#ebd246", gold: "#dcaa3c", green: "#46823c", blue: "#326ec8", navy: "#243260", purple: "#7846aa", violet: "#7850c8", pink: "#e678aa", cyan: "#3cbed2", teal: "#288c8c", white: "#f0f0ec", black: "#202024", brown: "#704c30", wood: "#8c623c", stone: "#787670", silver: "#bec0c6" };
+  function modelToken(value) { return String(value == null ? "" : value).toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, ""); }
+  function modelPhraseIndex(text, phrase) {
+    const words = modelToken(phrase).replace(/_/g, " ").split(/\s+/).filter(Boolean);
+    if (!words.length) return -1;
+    const source = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[\\s_-]+");
+    const m = new RegExp("(^|[^a-z0-9])(" + source + ")(?:s)?(?=$|[^a-z0-9])", "i").exec(text);
+    return m ? m.index + m[1].length : -1;
+  }
+  function modelRecipe(args) {
+    const kit = RobloxScriptSkills.MODELKIT_ENUMS || {};
+    const normalize = modelToken;
+    const direct = (raw) => {
+      const k = normalize(raw);
+      if (!k) return null;
+      if (MODEL_CREATE_ALIASES[k]) return { builder: MODEL_CREATE_ALIASES[k][0], kind: MODEL_CREATE_ALIASES[k][1], matched: k };
+      if ((kit.STRUCTURES || []).includes(k)) return { builder: "structure_build", kind: k, matched: k };
+      if ((kit.VEHICLES || []).includes(k)) return { builder: "vehicle_build", kind: k, matched: k };
+      if ((kit.WEAPONS || []).includes(k)) return { builder: "weapon_build", kind: k, matched: k };
+      if ((kit.FURNITURE || []).includes(k)) return { builder: "furniture_build", kind: k, matched: k };
+      if ((kit.SHAPES || []).includes(k)) return { builder: "mesh_shape_create", kind: k, matched: k };
+      if ((RobloxScriptSkills.PREFAB_KINDS || KINDS).includes(k)) return { builder: "model_prefab", kind: k, matched: k };
+      return null;
+    };
+    const forcedBuilder = normalize(args.builder);
+    if (forcedBuilder && ["structure_build", "vehicle_build", "weapon_build", "furniture_build", "mesh_shape_create", "model_prefab"].includes(forcedBuilder)) {
+      const hinted = direct(args.kind || args.type || args.asset_kind);
+      if (hinted && hinted.builder === forcedBuilder) return hinted;
+      const defaults = { structure_build: "house", vehicle_build: "car", weapon_build: "sword", furniture_build: "sofa", mesh_shape_create: "crystal", model_prefab: "crate" };
+      return { builder: forcedBuilder, kind: (args.kind && normalize(args.kind)) || defaults[forcedBuilder], matched: "explicit builder" };
+    }
+    const explicit = direct(args.kind || args.type || args.asset_kind);
+    if (explicit) return explicit;
+    let text = [args.request, args.prompt, args.concept, args.description, args.task, args.name, args.kind].filter((x) => typeof x === "string").join(" ").toLowerCase();
+    for (const [phrase, replacement] of MODEL_TEXT_ALIASES) text = text.replace(new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), replacement.replace(/_/g, " "));
+    const candidates = [];
+    const add = (phrase, route) => { const at = modelPhraseIndex(text, phrase); if (at >= 0) candidates.push({ at, length: phrase.length, ...route, matched: phrase }); };
+    for (const [kind, route] of Object.entries(MODEL_CREATE_ALIASES)) add(kind.replace(/_/g, " "), { builder: route[0], kind: route[1] });
+    for (const [builder, kinds] of [["structure_build", kit.STRUCTURES || []], ["vehicle_build", kit.VEHICLES || []], ["weapon_build", kit.WEAPONS || []], ["furniture_build", kit.FURNITURE || []], ["mesh_shape_create", kit.SHAPES || []], ["model_prefab", RobloxScriptSkills.PREFAB_KINDS || KINDS]]) {
+      for (const kind of kinds) add(kind.replace(/_/g, " "), { builder, kind });
+    }
+    for (const [phrase, kind] of [["spaceship", "spaceship"], ["starship", "spaceship"], ["spacecraft", "spaceship"], ["rocket", "spaceship"], ["robot", "robot"], ["mech", "robot"], ["android", "robot"], ["golem", "robot"], ["dragon", "dragon"], ["dinosaur", "dragon"], ["creature", "dragon"], ["monster", "dragon"], ["portal", "portal"], ["gateway", "portal"], ["rift", "portal"], ["crystal", "crystal"], ["relic", "crystal"], ["artifact", "crystal"]]) add(phrase, { builder: "generic", kind });
+    const nonModifierCandidates = candidates.filter((c) => c.kind !== "crystal");
+    const pool = nonModifierCandidates.length ? nonModifierCandidates : candidates;
+    pool.sort((a, b) => a.at - b.at || b.length - a.length);
+    if (pool.length) return pool[0];
+    return { builder: "generic", kind: "hero_prop", matched: "safe fallback" };
+  }
+  function modelStyleFor(text, builder, explicit) {
+    const t = String(explicit || "").toLowerCase() + " " + text;
+    const find = (re) => re.test(t);
+    if (builder === "structure_build") {
+      if (find(/\b(scifi|sci[ -]?fi|cyberpunk|futuristic|space)\b/)) return "scifi";
+      if (find(/\b(desert|sandstone|dune)\b/)) return "desert";
+      if (find(/\b(industrial|factory|steampunk)\b/)) return "industrial";
+      if (find(/\b(stone|ruin|dungeon)\b/)) return "stone";
+      if (find(/\b(rustic|wooden|village)\b/)) return "rustic";
+      if (find(/\b(fantasy|magic|enchanted)\b/)) return "fantasy";
+      if (find(/\b(modern|minimal)\b/)) return "modern";
+      if (find(/\b(medieval|castle|knight)\b/)) return "medieval";
+      return "";
+    }
+    if (builder === "furniture_build") {
+      if (find(/\b(scifi|sci[ -]?fi|cyberpunk|futuristic)\b/)) return "scifi";
+      if (find(/\b(royal|king|queen|palace|regal)\b/)) return "royal";
+      if (find(/\b(cozy|soft|cottagecore)\b/)) return "cozy";
+      if (find(/\b(rustic|wooden|vintage)\b/)) return "rustic";
+      if (find(/\b(modern|minimal)\b/)) return "modern";
+      return "";
+    }
+    if (builder === "weapon_build") {
+      if (find(/\b(crystal|glowing|enchanted|magic|magical)\b/)) return "crystal";
+      if (find(/\b(scifi|sci[ -]?fi|cyberpunk|futuristic|laser)\b/)) return "scifi";
+      if (find(/\b(wooden|primitive)\b/)) return "wooden";
+      if (find(/\b(gold|golden|royal)\b/)) return "gold";
+      if (find(/\b(dark|shadow|obsidian|gothic)\b/)) return "dark";
+      if (find(/\biron\b/)) return "iron";
+      return "";
+    }
+    return "";
+  }
+  function genericModelParts(kind, text, args) {
+    const themeText = String(args.style || "") + " " + text;
+    const sciFiPalette = { base: [32, 43, 62], body: [74, 91, 115], trim: [154, 174, 190], glow: [50, 224, 240], material: "Metal" };
+    const fantasyPalette = { base: [56, 49, 88], body: [112, 79, 157], trim: [210, 179, 107], glow: [105, 229, 246], material: "Slate" };
+    const crystalPalette = { base: [34, 38, 76], body: [82, 91, 171], trim: [174, 121, 230], glow: [84, 229, 255], material: "Slate" };
+    let palette = kind === "spaceship" || kind === "robot" ? sciFiPalette : kind === "dragon" || kind === "portal" ? fantasyPalette : kind === "crystal" ? crystalPalette : { base: [86, 70, 54], body: [148, 112, 72], trim: [206, 169, 91], glow: [255, 184, 70], material: "Wood" };
+    if (/\b(scifi|sci[ -]?fi|cyberpunk|futuristic|space)\b/i.test(themeText)) palette = sciFiPalette;
+    else if (/\b(crystal|gem|ice|arcane)\b/i.test(themeText)) palette = crystalPalette;
+    else if (/\b(fantasy|magic|enchanted)\b/i.test(themeText)) palette = fantasyPalette;
+    else if (/\b(horror|dark|gothic|shadow)\b/i.test(themeText)) palette = { base: [35, 34, 40], body: [79, 43, 50], trim: [128, 79, 74], glow: [211, 43, 56], material: "Slate" };
+    else if (/\b(desert|sand|dune)\b/i.test(themeText)) palette = { base: [112, 83, 52], body: [194, 158, 100], trim: [226, 202, 150], glow: [219, 104, 56], material: "Sandstone" };
+    else if (/\b(modern|minimal|industrial)\b/i.test(themeText)) palette = { base: [54, 63, 72], body: [116, 128, 137], trim: [190, 197, 202], glow: [48, 190, 205], material: "Metal" };
+    else if (/\b(royal|gold|golden)\b/i.test(themeText)) palette = { base: [55, 39, 28], body: [142, 101, 45], trim: [230, 187, 82], glow: [255, 224, 140], material: "Metal" };
+    else if (/\b(rustic|wooden|medieval)\b/i.test(themeText)) palette = { base: [86, 70, 54], body: [148, 112, 72], trim: [206, 169, 91], glow: [255, 184, 70], material: "Wood" };
+    const customMain = parseColor(args.color), customTrim = parseColor(args.color2), customAccent = parseColor(args.accent);
+    const rgb255 = (c, fallback) => !c ? fallback : c.map((x) => Math.round(Math.max(0, Math.min(255, Math.max(...c) <= 1 ? x * 255 : x))));
+    if (customMain) palette.body = rgb255(customMain, palette.body);
+    if (customTrim) palette.trim = rgb255(customTrim, palette.trim);
+    if (customAccent) palette.glow = rgb255(customAccent, palette.glow);
+    const shape = (name, size, position, color, material = palette.material, form = "Block", collidable = true) => ({ name, size, position, color, material, shape: form, collidable });
+    let parts;
+    if (kind === "spaceship") parts = [
+      shape("Keel", [3.2, 1, 9], [0, 1.5, 0], palette.body), shape("Bow", [3.2, 1.5, 3.2], [0, 1.5, -5.5], palette.trim, "Metal", "Wedge"),
+      shape("Canopy", [1.8, 1.2, 2.5], [0, 2.5, -1.6], palette.glow, "Glass", "Ball", false),
+      shape("WingL", [4.4, 0.55, 2.2], [-3, 1.45, 0.4], palette.trim, "Metal", "Wedge"), shape("WingR", [4.4, 0.55, 2.2], [3, 1.45, 0.4], palette.trim, "Metal", "Wedge"),
+      shape("EngineL", [1.1, 1, 2.4], [-1, 1.3, 4.1], palette.base, "Metal", "Cylinder"), shape("EngineR", [1.1, 1, 2.4], [1, 1.3, 4.1], palette.base, "Metal", "Cylinder"),
+      shape("EngineGlowL", [0.45, 0.45, 0.2], [-1, 1.3, 5.35], palette.glow, "Neon", "Ball", false), shape("EngineGlowR", [0.45, 0.45, 0.2], [1, 1.3, 5.35], palette.glow, "Neon", "Ball", false),
+      shape("TailFin", [0.8, 1.8, 0.5], [0, 2.4, 3.8], palette.trim, "Metal", "Wedge"),
+    ];
+    else if (kind === "robot") parts = [
+      shape("FootL", [1.1, 0.6, 1.5], [-0.8, 0.3, -0.2], palette.base), shape("FootR", [1.1, 0.6, 1.5], [0.8, 0.3, -0.2], palette.base),
+      shape("LegL", [0.75, 1.2, 0.75], [-0.8, 1.1, -0.2], palette.trim, "Metal"), shape("LegR", [0.75, 1.2, 0.75], [0.8, 1.1, -0.2], palette.trim, "Metal"),
+      shape("Torso", [2.2, 1.7, 1.2], [0, 2.6, 0], palette.body, "Metal"), shape("ArmL", [0.65, 1.5, 0.75], [-1.45, 2.45, 0], palette.base, "Metal"), shape("ArmR", [0.65, 1.5, 0.75], [1.45, 2.45, 0], palette.base, "Metal"),
+      shape("ShoulderL", [0.9, 0.8, 1.35], [-1.25, 3.15, 0], palette.trim, "Metal"), shape("ShoulderR", [0.9, 0.8, 1.35], [1.25, 3.15, 0], palette.trim, "Metal"),
+      shape("Head", [1.3, 1.15, 1.15], [0, 4.0, 0], palette.body, "Metal"), shape("Visor", [0.9, 0.25, 0.16], [0, 4.0, -0.5], palette.glow, "Neon", "Block", false),
+    ];
+    else if (kind === "dragon") parts = [
+      shape("Body", [3, 1.9, 4], [0, 2.4, 0], palette.body, "Slate", "Ball"), shape("Neck", [1.4, 1.3, 1.6], [0, 2.8, -2], palette.body, "Slate"),
+      shape("Head", [1.6, 1.2, 1.5], [0, 3.1, -2.9], palette.body, "Slate", "Ball"), shape("Muzzle", [1.1, 0.5, 1], [0, 2.8, -3.95], palette.trim, "Slate", "Wedge"),
+      shape("TailBase", [1.4, 1.1, 1.7], [0, 2, 2.5], palette.body, "Slate", "Wedge"), shape("TailTip", [0.9, 0.7, 1.7], [0, 1.8, 3.95], palette.trim, "Slate", "Wedge"),
+      shape("LegFL", [0.65, 1.25, 0.7], [-1, 0.95, -1.1], palette.base, "Slate"), shape("LegFR", [0.65, 1.25, 0.7], [1, 0.95, -1.1], palette.base, "Slate"),
+      shape("LegBL", [0.65, 1.25, 0.7], [-1, 0.95, 1.1], palette.base, "Slate"), shape("LegBR", [0.65, 1.25, 0.7], [1, 0.95, 1.1], palette.base, "Slate"),
+      shape("WingL", [2.4, 0.2, 2.8], [-2.2, 2.9, 0.5], palette.trim, "Slate", "Wedge", false), shape("WingR", [2.4, 0.2, 2.8], [2.2, 2.9, 0.5], palette.trim, "Slate", "Wedge", false),
+    ];
+    else if (kind === "portal") parts = [
+      shape("Threshold", [6, 0.6, 1.2], [0, 0.3, 0], palette.base, "Slate"), shape("PillarL", [1, 6, 1], [-2.5, 3.3, 0], palette.body, "Slate"),
+      shape("PillarR", [1, 6, 1], [2.5, 3.3, 0], palette.body, "Slate"), shape("Header", [5.8, 1, 1], [0, 6.5, 0], palette.trim, "Metal"),
+      shape("PortalField", [4.1, 5.4, 0.16], [0, 3.4, 0], palette.glow, "Neon", "Block", false),
+    ];
+    else parts = [
+      shape("Plinth", [4, 0.6, 4], [0, 0.3, 0], palette.base, "Slate"), shape("Core", [2.6, 2.5, 2.6], [0, 1.95, 0], palette.body, palette.material),
+      shape("LowerBand", [3, 0.35, 3], [0, 3.2, 0], palette.trim, "Metal"), shape("Crown", [1.8, 0.9, 1.8], [0, 3.8, 0], palette.body, "Metal", kind === "crystal" ? "Wedge" : "Block"),
+      shape("Accent", [0.8, 0.8, 0.8], [0, 4.5, 0], palette.glow, "Neon", kind === "crystal" ? "Wedge" : "Ball", false),
+      shape("SideL", [0.55, 1.5, 0.55], [-1.5, 1.5, 0], palette.trim, "Metal"), shape("SideR", [0.55, 1.5, 0.55], [1.5, 1.5, 0], palette.trim, "Metal"),
+    ];
+    const scale = Math.max(0.1, Math.min(10, Number(args.scale) || 1));
+    const rawSize = Array.isArray(args.size) && args.size.length >= 3 ? args.size.slice(0, 3).map(Number) : [Number(args.width), Number(args.height), Number(args.depth)];
+    const ext = [0, 1, 2].map((axis) => Math.max(...parts.map((p) => p.position[axis] + p.size[axis] / 2)) - Math.min(...parts.map((p) => p.position[axis] - p.size[axis] / 2)));
+    const factors = rawSize.map((n, i) => Number.isFinite(n) && n > 0 ? Math.max(0.1, Math.min(10, n / ext[i])) : scale);
+    return parts.map((p) => ({ ...p, size: p.size.map((n, i) => Math.max(0.1, n * factors[i])), position: p.position.map((n, i) => n * factors[i]) }));
+  }
+  function modelCreateBuild(args) {
+    const request = [args.request, args.prompt, args.concept, args.description, args.task, args.name, args.kind].find((x) => typeof x === "string" && x.trim()) || "";
+    const text = String(request).slice(0, 2000).toLowerCase();
+    const recipe = modelRecipe(args);
+    const detailLevelRaw = String(args.detail_level || args.quality || "hero").toLowerCase();
+    const detailLevel = ["standard", "hero", "ultra"].includes(detailLevelRaw) ? detailLevelRaw : "hero";
+    const seedText = text + "|" + recipe.builder + "|" + recipe.kind;
+    let hash = 2166136261; for (let i = 0; i < seedText.length; i++) hash = Math.imul(hash ^ seedText.charCodeAt(i), 16777619);
+    const seed = Number.isFinite(Number(args.seed)) ? Number(args.seed) : ((hash >>> 0) % 2147483646) + 1;
+    const style = modelStyleFor(text, recipe.builder, args.style);
+    const buildArgs = Object.assign({}, args);
+    for (const k of ["request", "prompt", "concept", "description", "task", "builder", "category", "detail_level", "quality", "detail_ops", "expect_size"]) delete buildArgs[k];
+    buildArgs.position = args.position || [0, 0, 0]; buildArgs.name = args.name || recipe.kind.replace(/(^|_)([a-z])/g, (m, s, c) => c.toUpperCase()); buildArgs.seed = seed;
+    if (recipe.builder === "structure_build" || recipe.builder === "vehicle_build" || recipe.builder === "weapon_build" || recipe.builder === "furniture_build") buildArgs.kind = recipe.kind;
+    else if (recipe.builder === "mesh_shape_create") buildArgs.shape = recipe.kind;
+    else if (recipe.builder === "model_prefab") buildArgs.kind = recipe.kind;
+    if (style) buildArgs.style = style;
+    if (!args.color) {
+      const colorHit = Object.entries(MODEL_COLOR_WORDS).find(([word]) => modelPhraseIndex(text, word) >= 0);
+      if (colorHit) buildArgs.color = colorHit[1];
+    }
+    let dynamic = false;
+    if (recipe.builder === "weapon_build") { buildArgs.as_tool = args.as_tool === true; dynamic = buildArgs.as_tool; }
+    if (recipe.builder === "vehicle_build") { buildArgs.drivable = args.drivable === true || /\b(drivable|driveable|working vehicle|working car|can drive)\b/.test(text); dynamic = buildArgs.drivable; }
+    const rawScale = Number(args.scale);
+    const scaleFactor = Number.isFinite(rawScale) && rawScale > 0 ? Math.max(0.1, Math.min(10, rawScale)) : 1;
+    const rawRotation = Number(args.rotation_y ?? args.rotation);
+    const rotationY = Number.isFinite(rawRotation) ? Math.max(-3600, Math.min(3600, rawRotation)) : 0;
+    if (recipe.builder === "model_prefab") buildArgs.rotation_y = rotationY;
+    else if (recipe.builder !== "generic") buildArgs.rotation = rotationY;
+    const applyModelScale = scaleFactor !== 1 && ["structure_build", "vehicle_build", "weapon_build", "furniture_build"].includes(recipe.builder);
+    let build;
+    if (recipe.builder === "generic") {
+      const parts = genericModelParts(recipe.kind, text, buildArgs);
+      const json = JSON.stringify(parts);
+      if (json.includes("]==]")) throw new Error("generic recipe data contains an invalid delimiter");
+      const parent = args.parent || "";
+      const code = [
+        "local __record=wp('model_create') local __spec=HttpService:JSONDecode([==[" + json + "]==])",
+        "local __parent=" + (parent ? "need(" + q(parent) + ",'parent')" : "workspace") + " local __model=Instance.new('Model') __model.Name=uniqueChildName(__parent," + q(buildArgs.name) + ")",
+        "local __made={} for _,s in ipairs(__spec) do local p if s.shape=='Wedge' then p=Instance.new('WedgePart') else p=Instance.new('Part') if s.shape=='Ball' then p.Shape=Enum.PartType.Ball elseif s.shape=='Cylinder' then p.Shape=Enum.PartType.Cylinder end end",
+        "p.Name=s.name p.Size=Vector3.new(s.size[1],s.size[2],s.size[3]) p.CFrame=CFrame.new(s.position[1],s.position[2],s.position[3]) p.Anchored=true p.CanCollide=s.collidable~=false p.Color=Color3.fromRGB(s.color[1],s.color[2],s.color[3]) local okM,mt=pcall(function() return Enum.Material[s.material] end) p.Material=okM and mt or Enum.Material.SmoothPlastic p.TopSurface=Enum.SurfaceType.Smooth p.BottomSurface=Enum.SurfaceType.Smooth p.Parent=__model __made[#__made+1]=p end",
+        "__model.PrimaryPart=__made[1] local __cf,__size=__model:GetBoundingBox() local __foot=CFrame.new(__cf.Position-Vector3.new(0,__size.Y/2,0)) __model.PrimaryPart.PivotOffset=__model.PrimaryPart.CFrame:ToObjectSpace(__foot) __model.WorldPivot=__foot __model:PivotTo(CFrame.new(" + vec(buildArgs.position, [0, 0, 0]) + ")*CFrame.Angles(0,math.rad(" + rotationY + "),0)) __model.Parent=__parent __model:SetAttribute('TotalScriptRecipe'," + q(recipe.kind) + ") wpDone(__record)",
+        "return ok({path=__model:GetFullName(),parts=#__made,size=v3(__size),recipe=" + q(recipe.kind) + "},'built '.." + q(recipe.kind.replace(/_/g, " ")) + "..' model with '..#__made..' named parts')",
+      ].join("\n");
+      build = { lib: HEAD, body: code };
+    } else {
+      build = RobloxScriptSkills.buildLuau(recipe.builder, buildArgs);
+      if (!build || build.err || typeof build.lib !== "string" || typeof build.body !== "string") throw new Error(build && build.err || "no builder is available for " + recipe.builder);
+    }
+    const checkArgs = { path: "__TOTALSCRIPT_MODEL_PATH__", max_parts: 400, allow_unanchored: dynamic };
+    if (Array.isArray(args.expect_size)) checkArgs.expect_size = args.expect_size;
+    const check = RobloxScriptSkills.buildLuau("model_check", checkArgs);
+    if (!check || check.err || typeof check.body !== "string") throw new Error(check && check.err || "model_check is unavailable");
+    const detailOps = Array.isArray(args.detail_ops) ? args.detail_ops : detailLevel === "standard" ? [] : recipe.builder === "structure_build" ? (detailLevel === "ultra" ? ["trim", "rivets"] : ["trim"]) : recipe.builder === "furniture_build" ? (detailLevel === "ultra" ? ["bevel", "trim"] : ["bevel"]) : recipe.builder === "vehicle_build" && !dynamic ? (detailLevel === "ultra" ? ["rivets", "trim"] : ["rivets"]) : [];
+    let detail = null;
+    if (detailOps.length && !dynamic) {
+      detail = RobloxScriptSkills.buildLuau("model_detail", { path: "__TOTALSCRIPT_MODEL_PATH__", ops: detailOps, budget: detailLevel === "ultra" ? 160 : 90, seed });
+      if (!detail || detail.err || typeof detail.body !== "string") throw new Error(detail && detail.err || "model_detail is unavailable");
+    }
+    const detailBody = detail ? detail.body.replace('return MK.run("model_detail", __a)', '__a.path = __modelPath\nreturn MK.run("model_detail", __a)') : "";
+    const checkBody = check.body.replace('local root=need("__TOTALSCRIPT_MODEL_PATH__",\'model\')', 'local root=need(__modelPath,\'model\')');
+    if (checkBody === check.body) throw new Error("model_check path binding could not be composed safely");
+    const libraries = [HEAD, build.lib, detail && detail.lib, check.lib].filter((lib, i, all) => typeof lib === "string" && lib && all.indexOf(lib) === i);
+    if (libraries.length < 1) throw new Error("model_create could not assemble its local builders");
+    const lib = libraries.join("\n");
+    const scaleCode = applyModelScale
+      ? buildArgs.as_tool
+        ? " local __scaled=resolve(__modelPath) if not __scaled or not __scaled:IsA('Tool') then return fail('uniform scale requested but the builder returned no Tool') end local __handle=__scaled:FindFirstChild('Handle') if not __handle or not __handle:IsA('BasePart') then __scaled:Destroy() return fail('uniform scale requested but the Tool has no BasePart Handle') end local __scaleModel=Instance.new('Model') __scaleModel.Name='__TotalScriptScaleWrapper' __scaleModel.Parent=__scaled for _,__child in ipairs(__scaled:GetChildren()) do if __child~=__scaleModel then __child.Parent=__scaleModel end end __scaleModel.PrimaryPart=__handle local __scaleOk,__scaleErr=pcall(function() __scaleModel:ScaleTo(" + scaleFactor + ") local _,__scaledSize=__scaleModel:GetBoundingBox() __buildData.bounds={r2(__scaledSize.X),r2(__scaledSize.Y),r2(__scaledSize.Z)} end) for _,__child in ipairs(__scaleModel:GetChildren()) do __child.Parent=__scaled end __scaleModel:Destroy() if not __scaleOk then __scaled:Destroy() return fail('uniform scale failed: '..tostring(__scaleErr)) end __scaled:SetAttribute('TotalScriptScale'," + scaleFactor + ") __buildData.scale_applied=" + scaleFactor
+        : " local __scaled=resolve(__modelPath) if not __scaled or not __scaled:IsA('Model') then return fail('uniform scale requested but the builder returned no Model') end local __scaleOk,__scaleErr=pcall(function() __scaled:ScaleTo(" + scaleFactor + ") local _,__scaledSize=__scaled:GetBoundingBox() __buildData.bounds={r2(__scaledSize.X),r2(__scaledSize.Y),r2(__scaledSize.Z)} end) if not __scaleOk then __scaled:Destroy() return fail('uniform scale failed: '..tostring(__scaleErr)) end __scaled:SetAttribute('TotalScriptScale'," + scaleFactor + ") __buildData.scale_applied=" + scaleFactor
+      : "";
+    const body = [
+      "local function __buildModel()\n" + build.body + "\nend",
+      "local __buildRunOk,__buildRaw=pcall(__buildModel) if not __buildRunOk then return fail(tostring(__buildRaw)) end local __buildOk,__built=pcall(function() return HttpService:JSONDecode(__buildRaw) end)",
+      "if not __buildOk or type(__built)~='table' or __built.ok~=true then return __buildRaw end",
+      "local __buildData=__built.data or __built local __modelPath=__buildData.path if type(__modelPath)~='string' or __modelPath=='' then return fail('builder succeeded but returned no model path') end" + scaleCode,
+      detail ? "local function __detailModel(__modelPath)\n" + detailBody + "\nend local __detailRunOk,__detailRaw=pcall(__detailModel,__modelPath) local __detailParseOk,__details=false,nil if __detailRunOk then __detailParseOk,__details=pcall(function() return HttpService:JSONDecode(__detailRaw) end) end if not __detailParseOk or type(__details)~='table' then __details={ok=false,error=__detailRunOk and 'detail result was not JSON' or tostring(__detailRaw)} end local __detailOK=__detailRunOk and __detailParseOk and __details.ok==true" : "local __details=nil local __detailOK=true",
+      "local function __checkModel(__modelPath)\n" + checkBody + "\nend",
+      "local __checkRaw=__checkModel(__modelPath) local __checkOk,__quality=pcall(function() return HttpService:JSONDecode(__checkRaw) end) if not __checkOk or type(__quality)~='table' then __quality={ok=false,error='model_check returned invalid JSON'} end",
+      detail ? "local __detailRolledBack=false if not __detailOK or not __quality.ok or (__quality.score and __quality.score<80) then local __target=resolve(__modelPath) local __folder=__target and __target:FindFirstChild('Detail') if __folder then __folder:Destroy() __detailRolledBack=true __checkRaw=__checkModel(__modelPath) local __retryOk,__retry=pcall(function() return HttpService:JSONDecode(__checkRaw) end) if __retryOk and type(__retry)=='table' then __quality=__retry else __quality={ok=false,error='model_check retry failed after detail rollback'} end end end" : "local __detailRolledBack=false",
+      "local __route={builder=" + q(recipe.builder) + ",kind=" + q(recipe.kind) + ",matched=" + q(recipe.matched) + ",style=" + q(style || "project/default") + ",detail_level=" + q(detailLevel) + ",scale=" + scaleFactor + ",seed=" + seed + "}",
+      "local __scoreText=__quality.ok and (tostring(__quality.score)..'/100 '..tostring(__quality.verdict)) or 'score unavailable' local __text='Built '..tostring(__modelPath)..' with '..tostring(__route.builder)..' ('..tostring(__route.kind)..'); model_check '..__scoreText..(__detailRolledBack and '; optional details removed to preserve the score' or '')..'. Run total_screenshot to review the silhouette.'",
+      "return HttpService:JSONEncode({ok=true,data={path=__modelPath,recipe=__route,builder=__buildData,detail=__details,detail_rolled_back=__detailRolledBack,quality=__quality},text=__text})",
+    ].join("\n");
+    return { lib, body };
+  }
+  B.model_create = (a) => {
+    if (!RobloxScriptSkills.MODELKIT_LIB) throw new Error("the model kit is not loaded; update TotalScript and reload the page");
+    return modelCreateBuild(a || {});
+  };
+
   const S = (t, req, desc) => ({ type: t, req: !!req, desc });
   const C = [
+    { name: "model_create", description: "One-call cross-provider model builder. Forward the user's original request (or kind); it deterministically selects a typed recipe, applies proportion, palette, requested yaw and uniform scale, adds safe hero detail where appropriate, and runs model_check before returning the path and score. No hand-authored parts array needed. Static visual models by default.", params: { request: S("string", false, "Original user request; pass it verbatim so the local recipe router can choose the best builder"), kind: S("string", false, "catalog kind, e.g. tower, car, sword, sofa, tree, or an archetype such as dragon / spaceship / portal"), builder: S("string", false, "optional override; normally leave unset"), name: S("string", false), position: S("array", false, "[x,y,z] ground point; defaults to [0,0,0]"), rotation_y: S("number", false, "yaw in degrees; clamped to ±3600"), parent: S("string", false), style: S("string", false, "medieval|fantasy|scifi|rustic|modern|industrial|desert|stone|cozy|royal|crystal|wooden|gold|dark"), size: S("array", false, "[width,height,depth] for the built-in fallback or structure"), scale: S("number", false), width: S("number", false), height: S("number", false), depth: S("number", false), length: S("number", false), floors: S("number", false), roof: S("string", false), drivable: S("boolean", false, "default static; true requests a working vehicle rig"), as_tool: S("boolean", false, "default false; true only for a wearable weapon Tool"), color: S("string", false, "hex or named color"), color2: S("string", false), accent: S("string", false), detail_level: S("string", false, "standard|hero (default)|ultra"), detail_ops: S("array", false, "optional override: trim|rivets|planks|wear|bevel|moss"), seed: S("number", false, "same request + seed rebuilds the same variation"), expect_size: S("array", false, "[width,height,depth] critic target") } },
     { name: "model_prefab", description: "Place a hand-proportioned multi-part prop (anchored Model, bottom-centre pivot, PrimaryPart, palette + materials). Use instead of free-handing common props; count + spacing lay a row along local X. Then model_check + total_screenshot.", params: { kind: S("string", true, KINDS.join("|")), position: S("array", true, "[x,y,z] bottom-centre"), name: S("string", false), scale: S("number", false, "default 1"), rotation_y: S("number", false, "degrees"), color: S("string", false, "main (hex/rgb/name)"), color2: S("string", false, "trim"), accent: S("string", false, "glow / handle / awning"), material: S("string", false, "cottage walls"), roof_material: S("string", false), count: S("number", false), spacing: S("number", false, "default width+1"), seed: S("number", false), parent: S("string", false) } },
-    { name: "model_check", description: "Geometry critic: floating parts, parts buried inside others, slivers, unanchored, default grey Plastic, flat materials, palette sprawl, no PrimaryPart, size vs expectation, and since 1.98.0 default class names (Part/Model), pivot not at the bottom-centre, tiny colliding trims and the part budget. Score 0-100, pass>=80, issues with fixes. Run after every build and fix the high issues.", params: { path: S("string", true), expect_size: S("array", false, "[w,h,d]"), expect_parts: S("number", false, "minimum"), max_parts: S("number", false, "part budget (default 400)"), limit: S("number", false, "names per issue (12)") } },
+    { name: "model_check", description: "Geometry critic: floating / buried parts, slivers, unanchored, palette, pivot, scale, default names, collisions and part budget. Score 0-100; pass>=80. Use allow_unanchored=true only for intentional physics rigs such as a drivable vehicle; static props must remain anchored. Run after every non-automatic build.", params: { path: S("string", true), expect_size: S("array", false, "[w,h,d]"), expect_parts: S("number", false, "minimum"), max_parts: S("number", false, "part budget (default 400)"), allow_unanchored: S("boolean", false, "true only for intentionally dynamic rigs"), limit: S("number", false, "names per issue (12)") } },
   ];
 
   function buildModelcraft(op, args) {
     const fn = B[op];
     if (!fn) return null;
     try {
-      const body = fn(args || {});
+      const generated = fn(args || {});
+      if (generated && typeof generated === "object" && typeof generated.lib === "string" && typeof generated.body === "string") {
+        return { code: generated.lib + "\n" + generated.body, lib: generated.lib, body: generated.body };
+      }
+      const body = generated;
       const tailLuau = "\nlocal okRun,resRun=pcall(function()\n" + body + "\nend)\nif okRun then return resRun end\nreturn fail((tostring(resRun):gsub('^.-:%d+:%s*','')))";
       return { code: HEAD + "\n" + tailLuau, lib: HEAD, body: tailLuau };
     } catch (e) {

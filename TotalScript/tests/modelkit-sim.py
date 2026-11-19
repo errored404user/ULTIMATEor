@@ -65,9 +65,11 @@ WANT["s_fence_pts"] = ["structure_build", {"kind": "fence", "points": [[0, 0], [
 WANT["s_stairs_tall"] = ["structure_build", {"kind": "staircase", "height": 24, "position": [800, 0, 400], "name": "TallStairs"}]
 WANT["s_dungeon"] = ["structure_build", {"kind": "dungeon_room", "doors": ["north", "east"], "cells": True, "size": [30, 12, 30], "position": [1000, 0, 400]}]
 WANT["s_tower_sq"] = ["structure_build", {"kind": "tower", "sides": 4, "roof": "cone", "flag": "red", "style": "fantasy", "position": [1200, 0, 400]}]
+WANT["s_watchtower_check"] = ["model_check", {"path": "Workspace.Structure_watchtower"}]
 for i, k in enumerate(VEHICLES):
     WANT["v_" + k] = ["vehicle_build", {"kind": k, "position": [i * 100, 0, 800]}]
     WANT["vd_" + k] = ["vehicle_build", {"kind": k, "drivable": True, "position": [i * 100, 0, 1000], "name": "Drive_" + k}]
+    WANT["vcheck_" + k] = ["model_check", {"path": "Workspace.Drive_" + k, "allow_unanchored": True}]
 for k in WEAPONS:
     WANT["w_" + k] = ["weapon_build", {"kind": k}]
 WANT["w_model"] = ["weapon_build", {"kind": "sword", "as_tool": False, "style": "crystal", "name": "SwordModel"}]
@@ -208,7 +210,7 @@ for k in STRUCTURES:
     if not (r.get("ok") and inst is not None and inst.ClassName == "Model" and n > 0 and anchored_ok and d.get("parts") == n and inst.PrimaryPart is not None):
         bad.append((k, r.get("error") or r.get("text"), n, anch, d.get("parts")))
 ok("structure_build: all 18 kinds build an anchored Model at Workspace.Structure_<kind> with a PrimaryPart (only hinge-motor parts unanchored); reported part count == real part count", not bad, bad)
-for k in ["s_house_big", "s_bridge_rope", "s_bridge_susp", "s_fence_pts", "s_stairs_tall", "s_dungeon", "s_tower_sq"]:
+for k in ["s_house_big", "s_bridge_rope", "s_bridge_susp", "s_fence_pts", "s_stairs_tall", "s_dungeon", "s_tower_sq", "s_watchtower_check"]:
     go(k)
 sz = {k: size("workspace.Structure_" + k) for k in STRUCTURES}
 ok("structure_build: every structure fits in sane bounds (0.5 .. 120 studs per axis; fences are thin, lighthouse Z includes its beam)", all(s and all(0.5 <= v <= 120 for v in s) for s in sz.values()), {k: s for k, s in sz.items() if not s or not all(0.5 <= v <= 120 for v in s)})
@@ -237,6 +239,8 @@ r = R["s_dungeon"]; d = r.get("data", {})
 ok("dungeon_room {doors:['north','east'], cells:true, size:[30,12,30]}: 30x30 room with the door list and cells reported", r.get("ok") and d.get("parts", 0) > 20 and 28 <= d.get("bounds", [0])[0] <= 36 and d.get("doors", {}).get("north") and d.get("doors", {}).get("east"), d)
 r = R["s_tower_sq"]; d = r.get("data", {})
 ok("tower {sides:4, roof:'cone', flag:'red', style:'fantasy'}: square tower variant builds", r.get("ok") and d.get("parts", 0) > 10, d)
+r = R["s_watchtower_check"]
+ok("watchtower model_check: roof, lantern, bounds and bottom-centre pivot pass with no critic findings", r.get("ok") and r.get("score") == 100 and r.get("verdict") == "pass" and not r.get("issues"), r)
 
 # ── vehicles ───────────────────────────────────────────────────────────────────
 bad = []
@@ -263,6 +267,13 @@ ok("drivable car: hinge-motor wheels (HingeConstraints + Attachments), the body 
 ok("drive modes differ by kind: wheels for land vehicles, thrust/float for boat + raft, flight for plane + helicopter", modes.get("car") == "wheels" and modes.get("tank") == "wheels" and modes.get("boat") != "wheels" and modes.get("plane") != "wheels" and modes.get("helicopter") != "wheels", modes)
 d = R["vd_car"].get("data", {})
 ok("drivable car: honest physics note + tuning hint (MaxSpeed / TurnSpeed attributes)", "arcade" in str(d.get("note", "")).lower() and "MaxSpeed" in str(d.get("next", "")), d)
+bad = []
+for k in VEHICLES:
+    r = go("vcheck_" + k)
+    issues = r.get("issues", [])
+    if not (r.get("ok") and r.get("score") == 100 and r.get("verdict") == "pass" and not issues):
+        bad.append((k, r.get("score"), r.get("verdict"), [(x.get("kind"), x.get("message")) for x in issues]))
+ok("model_check: all 10 drivable vehicles (including the exposed plane/helicopter cockpits and wagon spokes) pass 100 with no geometry findings", not bad, bad)
 
 # ── weapons ────────────────────────────────────────────────────────────────────
 bad = []

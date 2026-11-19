@@ -154,15 +154,6 @@ end
 MK.segCF = segCF
 MK.newB = newB MK.mk = mk MK.box = box MK.wedge = wedge MK.cylY = cylY MK.cylX = cylX MK.cylZ = cylZ MK.ball = ball MK.at = at MK.light = light MK.attach = attach MK.weld = weld MK.hinge = hinge MK.motor = motor
 
-local function finish(b, name, parent, primary, pivot)
-  local m = b.m
-  m.Name = name
-  if primary then m.PrimaryPart = primary end
-  pcall(function() m.WorldPivot = pivot or b.R end)
-  m.Parent = parent
-  m:SetAttribute("TotalModelKit", MK.VERSION)
-  return m
-end
 local function parentOf(path)
   if path == nil or path == "" then return workspace end
   local node = game
@@ -175,6 +166,47 @@ local function parentOf(path)
   end
   return node
 end
+local function uniqueName(parent, raw)
+  local base = tostring(raw or "Model"):gsub("%.", "_")
+  if base == "" then base = "Model" end
+  local candidate, suffix = base, 2
+  while parent and parent:FindFirstChild(candidate) do candidate = base .. "_" .. suffix suffix = suffix + 1 end
+  return candidate
+end
+MK.uniqueName = uniqueName
+local function finish(b, name, parent, primary, pivot)
+  local m = b.m
+  m.Name = uniqueName(parent, name)
+  if primary then m.PrimaryPart = primary end
+  pcall(function()
+    local mn, mx
+    for _, part in ipairs(m:GetDescendants()) do
+      if part:IsA("BasePart") then
+        local cf, half = part.CFrame, part.Size / 2
+        local right, up, look = cf.RightVector, cf.UpVector, cf.LookVector
+        local ext = Vector3.new(
+          math.abs(right.X) * half.X + math.abs(up.X) * half.Y + math.abs(look.X) * half.Z,
+          math.abs(right.Y) * half.X + math.abs(up.Y) * half.Y + math.abs(look.Y) * half.Z,
+          math.abs(right.Z) * half.X + math.abs(up.Z) * half.Y + math.abs(look.Z) * half.Z)
+        local lo, hi = cf.Position - ext, cf.Position + ext
+        if not mn then mn, mx = lo, hi else
+          mn = Vector3.new(math.min(mn.X, lo.X), math.min(mn.Y, lo.Y), math.min(mn.Z, lo.Z))
+          mx = Vector3.new(math.max(mx.X, hi.X), math.max(mx.Y, hi.Y), math.max(mx.Z, hi.Z))
+        end
+      end
+    end
+    if mn then
+      local foot = Vector3.new((mn.X + mx.X) / 2, mn.Y, (mn.Z + mx.Z) / 2)
+      local facing = pivot or b.R
+      local target = CFrame.new(foot) * facing.Rotation
+      if primary then primary.PivotOffset = primary.CFrame:ToObjectSpace(target) end
+      m.WorldPivot = target
+    end
+  end)
+  m.Parent = parent
+  m:SetAttribute("TotalModelKit", MK.VERSION)
+  return m
+end
 local function findModel(path)
   if path == nil or path == "" then error("path is required") end
   local okP, node = pcall(parentOf, path)
@@ -183,7 +215,7 @@ local function findModel(path)
 end
 MK.parentOf = parentOf MK.findModel = findModel
 local function rootCF(a) local p = vec(a.position, 0, 0, 0) local ry = math.rad(num(a.rotation, 0)) return CFrame.new(p) * CFrame.Angles(0, ry, 0) end
-local function makeModel(a, prefix, kind) local m = Instance.new("Model") m.Name = tostring(a.name or (prefix .. "_" .. kind)) return m end
+local function makeModel(a, prefix, kind) local m = Instance.new("Model") m.Name = uniqueName(parentOf(a.parent), tostring(a.name or (prefix .. "_" .. kind))) return m end
 local function stats(b) return { parts = b.n } end
 local function unanchorAll(m) for _, d in ipairs(m:GetDescendants()) do if d:IsA("BasePart") then d.Anchored = false end end end
 
@@ -905,13 +937,29 @@ function K.watchtower(b, a, o, S)
     box(b, w + 3, 0.3, 0.3, o * at(0, h + 3.3, sz * (w / 2 + 1.35)), col, mat, "Rail") box(b, 0.3, 0.3, w + 3, o * at(sz * (w / 2 + 1.35), h + 3.3, 0), col, mat, "Rail")
     for _, sx in ipairs({ -1, 1 }) do box(b, 0.4, 3, 0.4, o * at(sx * (w / 2 + 1.35), h + 2, sz * (w / 2 + 1.35)), col, mat, "RailPost") end
   end
-  if a.roof ~= false and key(a.roof, "hip") ~= "none" then
+  local roofKind = key(a.roof, "hip")
+  local hasRoof = a.roof ~= false and roofKind ~= "none"
+  local roofBase, roofRise = h + 9.6, 0
+  if hasRoof then
     for _, sx in ipairs({ -1, 1 }) do for _, sz in ipairs({ -1, 1 }) do box(b, 0.5, 6, 0.5, o * at(sx * (w / 2 + 1), h + 3.6 + 3, sz * (w / 2 + 1)), col, mat, "RoofPost") end end
-    roofBuild(b, o, "hip", w + 2, w + 2, h + 9.6, S, 0.6, 1)
+    roofRise = roofBuild(b, o, roofKind, w + 2, w + 2, roofBase, S, 0.6, 1)
   end
   for i = 1, math.floor(h / 1.4) do box(b, 2, 0.25, 0.25, o * at(0, i * 1.4, -(w / 2 + 0.2)), shade(col, 0.75), mat, "LadderRung") end
   for _, sx in ipairs({ -1, 1 }) do box(b, 0.25, h + 2, 0.25, o * at(sx * 1, (h + 2) / 2, -(w / 2 + 0.2)), shade(col, 0.75), mat, "LadderRail") end
-  if a.lights ~= false then local lamp = box(b, 0.8, 0.8, 0.8, o * at(0, h + 5.5, 0), C(255, 200, 120), M.Neon, "Lantern", { CanCollide = false }) light(lamp, "PointLight", C(255, 190, 110), 1.6, 30) end
+  if a.lights ~= false then
+    local lampY = h + 5.5
+    local lampBottom = lampY - 0.4
+    if hasRoof then
+      local roofAnchor = roofKind == "flat" and roofBase or (roofBase + roofRise - 0.15)
+      local chainH = math.max(0.2, roofAnchor - lampBottom)
+      cylY(b, 0.08, chainH, o * at(0, lampBottom + chainH / 2, 0), S.trim, S.trimMat, "LanternChain", { CanCollide = false })
+    else
+      local mastH = math.max(0.2, lampBottom - (h + 0.6))
+      cylY(b, 0.1, mastH, o * at(0, h + 0.6 + mastH / 2, 0), S.trim, S.trimMat, "LanternMast", { CanCollide = false })
+    end
+    local lamp = box(b, 0.8, 0.8, 0.8, o * at(0, lampY, 0), C(255, 200, 120), M.Neon, "Lantern", { CanCollide = false })
+    light(lamp, "PointLight", C(255, 190, 110), 1.6, 30)
+  end
   return { height = h, width = w, legs = legs }
 end
 
@@ -1095,7 +1143,18 @@ function V.car(b, a)
   local by = r + 0.6
   local root = box(b, w, 1.6, L, at(0, by + 0.8, 0), col, mat, "Chassis")
   box(b, w - 0.4, 0.8, L * 0.3, at(0, by + 2, -L * 0.25), col, mat, "Hood")
-  glass(b, w - 1.2, 1.8, L * 0.42, at(0, by + 2.5, L * 0.05), C(140, 190, 220), "Cabin")
+  local cabinW, cabinH, cabinL = w - 1.2, 1.8, L * 0.42
+  local cabinY, cabinZ = by + 2.5, L * 0.05
+  local frontZ, rearZ = cabinZ - cabinL / 2, cabinZ + cabinL / 2
+  local glassCol, glassProps = C(140, 190, 220), { Transparency = 0.35, CanCollide = false }
+  box(b, cabinW, cabinH, 0.14, at(0, cabinY, frontZ), glassCol, M.Glass, "Windshield", glassProps)
+  box(b, cabinW, cabinH, 0.14, at(0, cabinY, rearZ), glassCol, M.Glass, "RearWindow", glassProps)
+  for _, sx in ipairs({ -1, 1 }) do
+    box(b, 0.14, cabinH, cabinL - 0.24, at(sx * cabinW / 2, cabinY, cabinZ), glassCol, M.Glass, "SideWindow", glassProps)
+    for _, sz in ipairs({ -1, 1 }) do
+      box(b, 0.24, cabinH + 0.1, 0.24, at(sx * (cabinW / 2 - 0.05), cabinY, cabinZ + sz * (cabinL / 2 - 0.08)), col, mat, "CabinPillar")
+    end
+  end
   box(b, w - 1.4, 0.2, L * 0.42, at(0, by + 3.5, L * 0.05), col, mat, "RoofPanel")
   box(b, w - 0.4, 1.0, L * 0.22, at(0, by + 2.1, L * 0.36), col, mat, "Trunk")
   box(b, w + 0.4, 0.5, 0.6, at(0, by + 0.6, -L / 2 - 0.2), C(60, 60, 66), M.Metal, "Bumper")
@@ -1115,22 +1174,33 @@ function V.truck(b, a)
   local by = r + 0.8
   local root = box(b, w, 1.4, L, at(0, by + 0.7, 0), C(50, 50, 56), M.Metal, "Chassis")
   local cabL = L * 0.3
-  box(b, w, 3.2, cabL, at(0, by + 1.4 + 1.6, -L / 2 + cabL / 2), col, mat, "Cab")
-  glass(b, w - 0.8, 1.8, 0.3, at(0, by + 4, -L / 2 + 0.2), C(140, 190, 220), "Windscreen")
-  box(b, w - 0.6, 1, 0.3, at(0, by + 5.6 + 0.5, -L / 2 + cabL / 2), col, mat, "CabRoofSign")
+  local cabZ = -L / 2 + cabL / 2
+  local glassCol, glassProps = C(140, 190, 220), { Transparency = 0.35, CanCollide = false }
+  box(b, w, 0.3, cabL, at(0, by + 1.55, cabZ), col, mat, "CabFloor")
+  box(b, w, 0.4, cabL, at(0, by + 4.4, cabZ), col, mat, "CabRoof")
+  local winY, winH = by + 3.2, 1.4
+  local cabFront, cabRear = -L / 2 + 0.15, -L / 2 + cabL - 0.15
+  box(b, w - 0.6, winH, 0.14, at(0, winY, cabFront), glassCol, M.Glass, "Windscreen", glassProps)
+  box(b, w - 0.6, winH, 0.14, at(0, winY, cabRear), glassCol, M.Glass, "RearWindow", glassProps)
+  for _, sx in ipairs({ -1, 1 }) do
+    box(b, 0.14, winH, cabL - 0.5, at(sx * (w / 2 - 0.05), winY, cabZ), glassCol, M.Glass, "SideWindow", glassProps)
+    box(b, 0.3, 0.8, cabL - 0.4, at(sx * (w / 2 - 0.15), by + 2.1, cabZ), col, mat, "CabDoor")
+    for _, sz in ipairs({ -1, 1 }) do box(b, 0.35, 2.7, 0.35, at(sx * (w / 2 - 0.2), by + 3.05, cabZ + sz * (cabL / 2 - 0.15)), col, mat, "CabPillar") end
+  end
+  box(b, w - 0.6, 0.5, 0.3, at(0, by + 4.9, cabZ), col, mat, "CabRoofSign")
   local bedL = L - cabL - 1
   local bedZ = -L / 2 + cabL + 1 + bedL / 2
   box(b, w, 0.4, bedL, at(0, by + 1.6, bedZ), C(110, 80, 50), M.WoodPlanks, "BedFloor")
   for _, sx in ipairs({ -1, 1 }) do box(b, 0.3, 2.2, bedL, at(sx * (w / 2 - 0.15), by + 2.9, bedZ), col, mat, "BedSide") end
-  box(b, w, 2.2, 0.3, at(0, by + 2.9, L / 2 - 0.15), col, mat, "Tailgate") box(b, w, 2.6, 0.3, at(0, by + 3.1, -L / 2 + cabL + 0.5), col, mat, "Headboard")
+  box(b, w, 2.2, 0.3, at(0, by + 2.9, L / 2 - 0.15), col, mat, "Tailgate") box(b, w, 2.6, 0.3, at(0, by + 3.1, -L / 2 + cabL + 0.1), col, mat, "Headboard")
   if a.covered then box(b, w, 3.5, bedL, at(0, by + 1.8 + 1.75 + 0.2, bedZ), rgb(a.color2, C(230, 230, 225)), M.Fabric, "Canopy") end
   box(b, w + 0.4, 0.6, 0.6, at(0, by + 0.8, -L / 2 - 0.2), C(60, 60, 66), M.Metal, "Bumper")
   headlights(b, root, w, by + 2.2, -L / 2 - 0.1) taillights(b, w, by + 2, L / 2 + 0.1)
-  cylY(b, 0.3, 3, at(w / 2 - 0.6, by + 5.6 + 1, -L / 2 + cabL - 0.5), C(60, 60, 66), M.Metal, "Exhaust")
+  cylY(b, 0.3, 3, at(w / 2 - 0.6, by + 6.1, -L / 2 + cabL - 0.5), C(60, 60, 66), M.Metal, "Exhaust")
   local d = a.drivable == true
   wheel(b, root, -(w / 2 + 0.3), r, -L * 0.36, r, 1.2, nil, "L", d) wheel(b, root, (w / 2 + 0.3), r, -L * 0.36, r, 1.2, nil, "R", d)
   for _, zf in ipairs({ 0.16, 0.36 }) do wheel(b, root, -(w / 2 + 0.3), r, L * zf, r, 1.2, nil, "L", d) wheel(b, root, (w / 2 + 0.3), r, L * zf, r, 1.2, nil, "R", d) end
-  a.__seat = at(-w / 5, by + 2.6, -L / 2 + cabL / 2 + 0.5)
+  a.__seat = at(-w / 5, by + 2.0, -L / 2 + cabL / 2 + 0.5)
   return root, "wheels", 6
 end
 function V.kart(b, a)
@@ -1168,7 +1238,7 @@ function V.buggy(b, a)
   cylX(b, 0.18, w - 1.6, at(0, by + 4.7, -L * 0.1), C(40, 40, 45), M.Metal, "CageCross") cylX(b, 0.18, w - 1.6, at(0, by + 4.7, L * 0.3), C(40, 40, 45), M.Metal, "CageCross")
   box(b, 1.8, 1.6, 0.4, at(-w / 6, by + 1.8, L * 0.12), C(40, 40, 45), M.Fabric, "SeatBack") box(b, 1.8, 1.6, 0.4, at(w / 6, by + 1.8, L * 0.12), C(40, 40, 45), M.Fabric, "SeatBack")
   cylX(b, 1, 1.4, at(0, by + 2.2, L / 2 - 0.2), C(30, 30, 32), M.Rubber, "SpareWheel")
-  headlights(b, root, w - 1, by + 2.3, -L / 2 - 0.05)
+  headlights(b, root, w - 1, by + 2.3, -L / 2 + 0.2)
   local d = a.drivable == true
   wheel(b, root, -(w / 2 + 0.5), r, -L * 0.32, r, 1.4, nil, "L", d) wheel(b, root, (w / 2 + 0.5), r, -L * 0.32, r, 1.4, nil, "R", d)
   wheel(b, root, -(w / 2 + 0.5), r, L * 0.32, r, 1.4, nil, "L", d) wheel(b, root, (w / 2 + 0.5), r, L * 0.32, r, 1.4, nil, "R", d)
@@ -1191,8 +1261,11 @@ function V.wagon(b, a)
   end
   local d = a.drivable == true
   local function spoked(x, z, side)
-    local wh = wheel(b, root, x, r, z, r, 0.5, C(110, 80, 50), side, d)
-    for k = 0, 3 do local sp = box(b, 0.3, r * 1.9, 0.3, at(x, r, z) * CFrame.Angles(k * PI / 4, 0, 0), shade(col, 0.7), M.Wood, "Spoke", { CanCollide = false }) if d then sp.Anchored = false weld(wh, sp) end end
+    local tireWidth = 0.5
+    local wh = wheel(b, root, x, r, z, r, tireWidth, C(110, 80, 50), side, d)
+    -- Put the wooden spokes on the outward wheel face; burying them in the solid tire hid the wheel detail.
+    local faceX = x + (x < 0 and -1 or 1) * (tireWidth / 2 + 0.06)
+    for k = 0, 3 do local sp = box(b, 0.12, r * 1.7, 0.2, at(faceX, r, z) * CFrame.Angles(k * PI / 4, 0, 0), shade(col, 0.7), M.Wood, "Spoke", { CanCollide = false }) if d then sp.Anchored = false weld(wh, sp) end end
   end
   spoked(-(w / 2 + 0.4), -L * 0.3, "L") spoked((w / 2 + 0.4), -L * 0.3, "R") spoked(-(w / 2 + 0.4), L * 0.3, "L") spoked((w / 2 + 0.4), L * 0.3, "R")
   a.__seat = at(0, by + 3.95, -L / 2 + 1.2)
@@ -1208,8 +1281,11 @@ function V.tank(b, a)
   local root = box(b, hullW, 2.6, L, at(0, by + 1.3, 0), col, mat, "Hull")
   wedge(b, hullW, 1.4, 3, at(0, by + 2.6 + 0.7, -L / 2 + 1.5) * CFrame.Angles(0, PI, 0), col, mat, "GlacisPlate")
   for _, sx in ipairs({ -1, 1 }) do
-    box(b, trackW, r * 2 + 0.6, L + 1, at(sx * (hullW / 2 + trackW / 2 + 0.2), by + 0.4, 0), col, mat, "TrackGuard", { CanCollide = false })
-    box(b, trackW - 0.2, 0.4, L + 1.2, at(sx * (hullW / 2 + trackW / 2 + 0.2), r * 2 + 0.3, 0), C(40, 40, 42), M.Rubber, "TrackTop", { CanCollide = false })
+    local tx = sx * (hullW / 2 + trackW / 2 + 0.2)
+    -- Narrow outer guards leave the wheel faces visible instead of burying the hubs.
+    box(b, 0.15, r * 2 + 0.6, L + 1, at(tx + sx * trackW / 2, by + 0.4, 0), col, mat, "TrackGuard", { CanCollide = false })
+    box(b, trackW - 0.2, 0.4, L + 1.2, at(tx, r * 2 + 0.3, 0), C(40, 40, 42), M.Rubber, "TrackTop", { CanCollide = false })
+    box(b, trackW - 0.2, 0.3, L + 1.2, at(tx, 0.15, 0), C(40, 40, 42), M.Rubber, "TrackBottom", { CanCollide = false })
   end
   local turret = cylY(b, hullW * 0.42, 1.8, at(0, by + 2.6 + 0.9, L * 0.05), col, mat, "Turret")
   box(b, 2, 1.6, 1.6, at(hullW * 0.2, by + 2.6 + 1.8 + 0.5, L * 0.12), col, mat, "Hatch")
@@ -1223,7 +1299,7 @@ function V.tank(b, a)
   for _, sx in ipairs({ -1, 1 }) do
     for i = 1, n do
       local z = -L / 2 + 1 + (i - 0.5) * ((L - 2) / n)
-      wheel(b, root, sx * (hullW / 2 + trackW / 2 + 0.2), r, z, r, trackW - 0.4, C(50, 50, 54), sx < 0 and "L" or "R", d)
+      wheel(b, root, sx * (hullW / 2 + trackW / 2 + 0.2), r, z, r, trackW, C(50, 50, 54), sx < 0 and "L" or "R", d)
       wheels = wheels + 1
     end
   end
@@ -1239,7 +1315,7 @@ function V.boat(b, a)
   local root = box(b, w, hullH, bodyL, at(0, hullH / 2, bowLen / 2), col, M.SmoothPlastic, "Hull")
   wedge(b, hullH, w / 2, bowLen, at(w / 4, hullH / 2, -L / 2 + bowLen / 2) * CFrame.Angles(0, 0, -PI / 2), col, M.SmoothPlastic, "Bow")
   wedge(b, hullH, w / 2, bowLen, at(-w / 4, hullH / 2, -L / 2 + bowLen / 2) * CFrame.Angles(0, 0, PI / 2), col, M.SmoothPlastic, "Bow")
-  box(b, w - 1, 0.3, bodyL - 1, at(0, hullH - 0.4, bowLen / 2), C(180, 140, 90), M.WoodPlanks, "Deck")
+  box(b, w - 1, 0.3, bodyL - 1, at(0, hullH + 0.15, bowLen / 2), C(180, 140, 90), M.WoodPlanks, "Deck")
   box(b, w + 0.2, 0.3, bodyL + 0.2, at(0, hullH * 0.45, bowLen / 2), trim, M.SmoothPlastic, "Stripe", { CanCollide = false })
   for _, sx in ipairs({ -1, 1 }) do box(b, 0.3, 0.9, bodyL - 1, at(sx * (w / 2 - 0.3), hullH + 0.35, bowLen / 2), col, M.SmoothPlastic, "Gunwale") end
   box(b, w - 1, 1.8, 1.6, at(0, hullH + 0.9, -L / 2 + bowLen + 1.6), col, M.SmoothPlastic, "Console")
@@ -1249,7 +1325,7 @@ function V.boat(b, a)
   cylZ(b, 0.3, 1.6, at(0, hullH * 0.4, L / 2 + 0.5), C(60, 60, 66), M.Metal, "Propshaft")
   box(b, 1.6, 1.4, 0.4, at(-w / 6, hullH + 0.9, -L / 2 + bowLen + 3.6), C(40, 40, 45), M.Fabric, "Bench") box(b, 1.6, 1.4, 0.4, at(w / 6, hullH + 0.9, -L / 2 + bowLen + 3.6), C(40, 40, 45), M.Fabric, "Bench")
   local lamp = ball(b, 0.3, at(0, hullH + 3.2, -L / 2 + bowLen + 1), C(255, 255, 255), M.Neon, "Lamp", { CanCollide = false }) light(lamp, "PointLight", C(255, 255, 255), 1, 20)
-  a.__seat = at(-w / 6, hullH + 0.25, -L / 2 + bowLen + 3.2)
+  a.__seat = at(-w / 6, hullH + 0.6, -L / 2 + bowLen + 4.2)
   return root, "float", 0
 end
 function V.raft(b, a)
@@ -1290,14 +1366,17 @@ function V.plane(b, a)
   for _, sx in ipairs({ -1, 1 }) do box(b, 0.3, by - 0.9, 0.3, at(sx * 1.6, (by - 0.9) / 2 + 0.9, -L * 0.15), C(60, 60, 66), M.Metal, "GearStrut") end
   box(b, 0.3, 1.6, 0.3, at(0, 0.8 + 0.6, L / 2 - 1.5), C(60, 60, 66), M.Metal, "TailStrut")
   wheel(b, root, -1.6, 0.9, -L * 0.15, 0.9, 0.5, nil, "L", d) wheel(b, root, 1.6, 0.9, -L * 0.15, 0.9, 0.5, nil, "R", d) wheel(b, root, 0, 0.6, L / 2 - 1.5, 0.6, 0.4, nil, nil, d)
-  a.__seat = at(0, by + r + 0.6, -L * 0.2)
+  -- Raise the seat clear of the solid fuselage and keep it just aft of the canopy edge.
+  a.__seat = at(0, by + r + 1.7, -L * 0.09 - 0.7)
   return root, "hover", 3
 end
 function V.helicopter(b, a)
   local L = num(a.length, 16, 8, 50)
   local col = rgb(a.color, C(50, 60, 80))
   local by = 2.2
-  local root = box(b, 4.4, 3.4, L * 0.45, at(0, by + 1.7, -L * 0.2), col, M.SmoothPlastic, "Fuselage")
+  -- A low floor + glass side panels leave an actual open cockpit around the VehicleSeat.
+  local root = box(b, 4.4, 1.2, L * 0.45, at(0, by + 0.6, -L * 0.2), col, M.SmoothPlastic, "Fuselage")
+  for _, sx in ipairs({ -1, 1 }) do glass(b, 0.16, 1.6, L * 0.28, at(sx * 2.05, by + 2.0, -L * 0.28), C(140, 190, 220), "CabinSide") end
   glass(b, 4.2, 2.6, 1.2, at(0, by + 1.9, -L * 0.2 - L * 0.225), C(140, 190, 220), "Canopy")
   cylZ(b, 0.8, L * 0.55, at(0, by + 2.4, L * 0.25), col, M.SmoothPlastic, "TailBoom")
   box(b, 0.3, 3, 2, at(0, by + 4.2, L / 2 - 0.6), col, M.SmoothPlastic, "TailFin")
@@ -1319,7 +1398,7 @@ function V.helicopter(b, a)
     tail.Anchored = false for _, p in ipairs(tb) do p.Anchored = false weld(tail, p) end
     motor(root, tail, root.CFrame:ToObjectSpace(tail.CFrame), CFrame.new(), "TailRotorMotor", 20, 1e4)
   end
-  a.__seat = at(-1, by + 0.5, -L * 0.32)
+  a.__seat = at(-1, by + 1.5, -L * 0.32)
   return root, "hover", 0
 end
 MK.V = V
@@ -2105,8 +2184,9 @@ function CMD.weapon_build(a)
   local S = wstyle(a)
   local asTool = a.as_tool ~= false
   local R = rootCF(a)
+  local parent = parentOf(a.parent)
   local holder = asTool and Instance.new("Tool") or Instance.new("Model")
-  holder.Name = tostring(a.name or (kind:sub(1, 1):upper() .. kind:sub(2)))
+  holder.Name = uniqueName(parent, tostring(a.name or (kind:sub(1, 1):upper() .. kind:sub(2))))
   local b = newB(holder, R, S)
   local handle, reach = fn(b, a, S)
   handle.Name = "Handle"
@@ -2118,10 +2198,9 @@ function CMD.weapon_build(a)
     local gripMode = key(a.grip, ranged and "up" or "forward")
     if gripMode == "forward" then holder.Grip = CFrame.Angles(-PI / 2, 0, 0) else holder.Grip = CFrame.new() end
     for _, p in ipairs(b.parts) do p.Anchored = false end
-    if a.parent == nil then holder.Parent = workspace else holder.Parent = parentOf(a.parent) end
+    holder.Parent = parent
   else
-    holder.PrimaryPart = handle
-    holder.Parent = parentOf(a.parent)
+    finish(b, holder.Name, parent, handle)
   end
   holder:SetAttribute("WeaponKind", kind) holder:SetAttribute("TotalModelKit", MK.VERSION)
   local tipA = handle:FindFirstChild("Tip") local muzzle = handle:FindFirstChild("Muzzle")
@@ -2148,6 +2227,7 @@ function CMD.furniture_build(a)
     ("%s built: %d parts at %s"):format(kind, b.n, m:GetFullName()))
 end
 function CMD.mesh_shape_create(a)
+  local parent = parentOf(a.parent)
   local shape = key(a.shape or a.kind, "sphere")
   local gen = G[shape]
   if not gen then error("unknown shape " .. tostring(a.shape)) end
@@ -2170,7 +2250,7 @@ function CMD.mesh_shape_create(a)
   else
     part.CFrame = CFrame.new(pos)
   end
-  part.Name = tostring(a.name or ("Mesh_" .. shape))
+  part.Name = uniqueName(parent, tostring(a.name or ("Mesh_" .. shape)))
   part.Anchored = a.anchored ~= false part.Color = col part.Material = mat
   if a.transparency then part.Transparency = num(a.transparency, 0, 0, 1) end
   if type(a.size) == "table" and not fallback then
@@ -2181,7 +2261,7 @@ function CMD.mesh_shape_create(a)
   end
   part:SetAttribute("MeshShape", shape) part:SetAttribute("TotalModelKit", MK.VERSION)
   if fallback then part:SetAttribute("MeshFallback", tostring(err)) end
-  part.Parent = parentOf(a.parent)
+  part.Parent = parent
   local data = { shape = shape, vertices = #m.v, faces = #m.f, shading = flat and "flat" or "smooth", path = part:GetFullName(), class = part.ClassName, fallback = fallback,
     natural_size = { math.floor(natural.X * 100) / 100, math.floor(natural.Y * 100) / 100, math.floor(natural.Z * 100) / 100 } }
   if fallback then data.error = tostring(err) data.note = "EditableMesh is not available here (needs the Studio EditableMesh beta / published-place permissions); a plain Part approximation was placed instead" end

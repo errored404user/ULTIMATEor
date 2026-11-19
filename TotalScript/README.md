@@ -127,6 +127,16 @@ There is no animation window any more. The AI animates straight from the chat: `
 
 ---
 
+## Cross-provider Roblox model creation
+
+For conversational and coding LLM providers using the Roblox engine, `model_create {request, position?, kind?, builder?, style?, scale?, rotation_y?, detail_level?, drivable?, as_tool?}` is the shared one-call front door for a single model. Pass the user's original description in `request`; a deterministic local router chooses the matching structure, vehicle, weapon, furniture, mesh, prefab, or named archetype builder, so the model does not have to invent a parts array or discover the builder first. This is shared extension-side code, not an image-generation API or a provider-specific adapter.
+
+The command applies the requested position, palette/style cues, yaw, scale and seed; optional hero detail is kept only when its critic result remains healthy. A vehicle or weapon stays static unless a drivable rig or wearable Tool was requested (`drivable:true` / `as_tool:true`). The result includes the chosen recipe, model path and `model_check` score/findings. Scores below 80 should be repaired using the listed findings and checked again. `model_check` is a geometry/style heuristic, not a visual-quality guarantee: use `total_screenshot` from multiple angles and iterate on anything that looks wrong. The multi-piece / whole-world routes remain the specialized builders and environment tools.
+
+Evidence: `node tests/test-model-craft.js` executes routed builds and critic checks in the Roblox simulator; `node tests/test-creation-mode.js` verifies the shared dispatcher sends one 90-second `execute_luau` payload; `python3 tests/modelkit-sim.py` includes 47 checks, including the watchtower and all 10 drivable vehicles passing the critic. These are simulator/fake-bridge tests only—no live Roblox Studio visual pass or provider-to-provider quality result is claimed.
+
+---
+
 ## Agent
 
 - Native crate: `agent/` (`total-agent` 3.0.0) — the total-core bridge plus the TotalScript Desktop window (eframe/egui) with, since 1.37.0, an **AI Chat side panel**: bring your own API key (CodeCraft, OpenAI, OpenRouter, Groq, DeepSeek, Gemini, xAI, Mistral, Together, local Ollama / LM Studio, custom URL), pick a model from `/models`, and the model drives Studio through the bridge's own tools (Studio MCP, plugin commands, workspace files) — see `agent/README.md`.
@@ -698,7 +708,7 @@ python3 tests/perf-sim.py          # 2.4.0: perf_audit scoring on a planted slow
 python3 tests/device-sim.py        # 2.9.0: device_audit on a planted bad HUD vs a clean one (phone/tablet/console/pc), device_fix default + scale_sizes, idempotency, path scoping, refusals
 python3 tests/retarget-sim.py      # 2.4.0: R15 <-> R6 retarget verified CFrame-by-CFrame + the clip library ops
 node tests/test-modelkit-pack.js   # 2.2.5: model kit - 7 commands (structure_build / vehicle_build / weapon_build / furniture_build / mesh_shape_create / model_detail / model_variant): registration, validation, contract, wiring, honesty
-python3 tests/modelkit-sim.py      # 2.2.5: the pack's real Luau in the mocked DataModel + EditableMesh (openings, stairs, fences, drivable rigs, Tools, mesh winding, fallback, detail budget, variants)
+python3 tests/modelkit-sim.py      # 2.2.5: 47 mocked-DataModel checks (openings, stairs, fences, drivable rigs, Tools, mesh winding, fallback, detail/variants; watchtower + all 10 drivable vehicles pass model_check)
 node tests/test-environment-pack.js # 2.2.4: environment pack - 9 commands (terrain_generate / shape / path / water / paint_biome / info, environment_scatter, road_build, map_generate): registration, validation, lib+body, contract, wiring
 python3 tests/environment-sim.py   # 2.2.4: the pack's real Luau in the mocked voxel Terrain (determinism, footprints, rivers, lakes, repaint, raycast-placed props, roads, map presets)
 node tests/test-public-packs.js    # Featured pack - 14 skills with docs references, validation against the live catalogue, install/skip/replace, pack file == packJson, wiring
@@ -741,7 +751,7 @@ node tests/test-collision-manager.js # host-overlay collision rules (a transpare
 node tests/test-agent-crew.js      # Multi-Agent crew: board, role guard, completion gate, wiring
 node tests/test-screenshot-fix.js  # screenshot module on every provider + studio_id resolution
 node tests/test-rebrand.js         # 1.71.0: ORscript → TotalScript rename (no old names left, legacy settings / file formats still load) + Aqua default skin
-node tests/test-model-craft.js     # 1.70.0: model_prefab (24 props) + model_check critic executed in the simulator, PivotOffset fix, prompt rewrite, dead-code removal pins
+node tests/test-model-craft.js     # model_create one-call routing / build / detail rollback / model_check + model_prefab regression suite in the simulator
 node tests/test-orchestrator.js    # task classifier / Layer C brief / error taxonomy + bounded retries / web research retrieval + citation verification / tool-arg validation / redaction + main.js, chat.rs, manifest wiring pins
 node tests/test-provider-contract.js # 1.69.0: every adapter on an empty page (read-side contract, timings keys, capability table) - offline
 node tests/test-creation-engine.js # 2.21.1: contextual domain cues + negations/Turkish, profiles, static review, tracker coverage / integration / bounded nudge / report, wiring pins, optional jsdom tray walk

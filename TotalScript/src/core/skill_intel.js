@@ -237,7 +237,7 @@
     intents: ["implement", "continue", "plan"],
     procedure: [
       "Set direction before geometry: `project_style {op:\"set\", preset}` once (every structure / weapon / furniture / vfx / ui builder then defaults to it), `brief_set` for the brief, `style_guide` for proportions; read `selection_info` for the site.",
-      "Block out at human scale (a door ≈ 7×12 studs, a floor ≈ 12-14 studs): `model_hollow_box` for rooms, `model_wall` for walls, `model_build` for a whole JSON parts spec (arches, roofs), `wedge_create` for slopes, `model_prefab` for hand-proportioned props, `model_pipe` for rails / cables, `model_array_radial` for pillars / seats.",
+      "For one asset, start with `model_create {request: the user's original description, position}`: its local router selects a typed builder / prefab / safe fallback, builds and runs `model_check`; static by default, dynamic only when asked. For larger work, block out at human scale (a door ≈ 7×12 studs, a floor ≈ 12-14 studs): `model_hollow_box` for rooms, `model_wall` for walls, `model_build` for exact JSON specs, `wedge_create` for slopes, `model_prefab` for hand-proportioned props, `model_pipe` for rails / cables, `model_array_radial` for pillars / seats.",
       "Group and pivot: `model_group`, `model_center_pivot`, `model_snap_to_ground`; repeated pieces: `kit_save` once, then `kit_place {name, grid | line | positions}` instead of rebuilding; `model_align` / `model_distribute` to tidy.",
       "Openings with CSG only where needed: `model_subtract` (doors, windows), `model_union` sparingly (unions cost more than parts).",
       "Materials and colour in one pass: `model_paint`; keep everything anchored (`model_anchor_fix` / `physics_anchor_all`).",

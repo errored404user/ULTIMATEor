@@ -2250,7 +2250,7 @@
   }
   // 1.38.0: skill programs that legitimately run long (whole-place scans, system
   // installs with self-tests). They get a 90 s execute budget instead of 20 s.
-  const SLOW_SKILL_RE = /^(project_index_(build|changes|summary|search|graph)|project_health_report|blueprint_(install|verify|remove|configure|status)|script_analysis|script_deprecations_fix|diagnostics_(audit|fix_common)|audit_(script_errors|unanchored_parts)|model_optimize|workspace_export|script_rename_symbol|script_find_usages|script_requires|script_todo|script_lint|structure_build|vehicle_build|mesh_shape_create|model_detail|model_variant|terrain_(generate|shape|path|water|paint_biome|info)|environment_scatter|road_build|map_generate|place_checkpoint|kit_place|perf_audit|perf_fix)$/;
+  const SLOW_SKILL_RE = /^(project_index_(build|changes|summary|search|graph)|project_health_report|blueprint_(install|verify|remove|configure|status)|script_analysis|script_deprecations_fix|diagnostics_(audit|fix_common)|audit_(script_errors|unanchored_parts)|model_optimize|workspace_export|script_rename_symbol|script_find_usages|script_requires|script_todo|script_lint|model_create|structure_build|vehicle_build|mesh_shape_create|model_detail|model_variant|terrain_(generate|shape|path|water|paint_biome|info)|environment_scatter|road_build|map_generate|place_checkpoint|kit_place|perf_audit|perf_fix)$/;
   const ALWAYS_BLOCKED_TOOLS = new Set([]);
   const VISION_TOOLS = new Set(["screen_capture"]);
   const bareToolName = (name) => (name && name.includes("/") ? name.split("/").pop() : name) || "";
@@ -5970,7 +5970,12 @@
         try {
           const v = ORCH.validateToolArgs(schemaTool.inputSchema, args);
           if (v.problems.length) { diag("tool.invalidArgs", { name: bareName, problems: v.problems.map((x) => x.key) }); return ORCH.argProblemsMessage(name, v, toolDetailLine(schemaTool)); }
-          if (v.coerced.length || v.dropped.length) { diag("tool.argsCoerced", { name: bareName, coerced: v.coerced, dropped: v.dropped }); args = v.args; }
+          if (v.coerced.length || v.dropped.length) {
+            diag("tool.argsCoerced", { name: bareName, coerced: v.coerced, dropped: v.dropped });
+            const internalArgs = {};
+            if (internalCall) for (const [k, v0] of Object.entries(args)) if (/^_total/.test(k)) internalArgs[k] = v0;
+            args = Object.assign({}, v.args, internalArgs);
+          }
         } catch {}
       }
     }
