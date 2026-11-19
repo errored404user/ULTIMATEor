@@ -18,7 +18,7 @@
 // DOM-free at top level (loaded in node by the tests).
 (function (root) {
   "use strict";
-  const VERSION = "2.21.0";
+  const VERSION = "2.21.1";
 
   // ───────────────────────── expert library ─────────────────────────
   // Fields: id, title, env (roblox | blender | general), summary (one line
@@ -101,7 +101,7 @@
   add({
     id: "gameplay_systems", title: "Gameplay systems (combat · NPC · inventory · quests · shop · rounds)", env: "roblox",
     summary: "Mechanics built as real systems: blueprints, weapons and hitboxes, NPC behaviour, pickups, monetisation.",
-    triggers: { combat: 5, weapon: 4, sword: 5, gun: 5, melee: 5, hitbox: 5, damage: 4, cooldown: 3, dps: 4, health: 2, npc: 4, npcs: 4, enemy: 4, enemies: 4, boss: 4, ai: 2, pathfinding: 5, patrol: 4, chase: 3, inventory: 4, quest: 5, quests: 5, mission: 3, shop: 3, store: 2, buy: 2, purchase: 3, gamepass: 5, "game pass": 5, "developer product": 5, devproduct: 5, robux: 4, round: 3, rounds: 3, wave: 3, waves: 3, lobby: 3, checkpoint: 4, obby: 4, tycoon: 4, simulator: 4, pet: 3, pets: 3, crafting: 4, loot: 3, pickup: 3, "proximity prompt": 4, dialog: 2, tool: 2, team: 2, teams: 3, spawn: 2, respawn: 3, mechanic: 4, system: 2, "game loop": 4, fight: 4, "boss fight": 6, phases: 3, "door that opens": 5, "comes near": 3, "walks up": 3, opens: 2, droppers: 5, dropper: 5, conveyor: 4, conveyors: 4, upgrades: 2, hotbar: 4, stackable: 3, multiplier: 2, "daily quests": 5, hunger: 5, thirst: 5, stamina: 5, sprint: 4, crouch: 3, trade: 4, trading: 5, rebirth: 5, prestige: 4, meter: 2, meters: 2, survival: 4, kills: 3, "kill feed": 5, ability: 4, abilities: 4, dash: 4, "double jump": 5, parry: 5, "player vs": 4, pvp: 5, pve: 5 },
+    triggers: { combat: 5, fishing: 5, "fishing minigame": 6, minigame: 5, catch: 3, catches: 4, spectator: 5, spectating: 5, "spectator mode": 6, "alive players": 4, "cycles through alive players": 6, weapon: 4, sword: 5, gun: 5, melee: 5, hitbox: 5, damage: 4, cooldown: 3, dps: 4, health: 2, npc: 4, npcs: 4, enemy: 4, enemies: 4, boss: 4, ai: 2, pathfinding: 5, patrol: 4, chase: 3, inventory: 4, quest: 5, quests: 5, mission: 3, shop: 3, store: 2, buy: 2, purchase: 3, gamepass: 5, "game pass": 5, "developer product": 5, devproduct: 5, robux: 4, round: 3, rounds: 3, wave: 3, waves: 3, lobby: 3, checkpoint: 4, obby: 4, tycoon: 4, simulator: 4, pet: 3, pets: 3, crafting: 4, loot: 3, pickup: 3, "proximity prompt": 4, dialog: 2, tool: 2, team: 2, teams: 3, spawn: 2, respawn: 3, mechanic: 4, system: 2, "game loop": 4, fight: 4, "boss fight": 6, phases: 3, "door that opens": 5, "comes near": 3, "walks up": 3, opens: 2, droppers: 5, dropper: 5, conveyor: 4, conveyors: 4, upgrades: 2, hotbar: 4, stackable: 3, multiplier: 2, "daily quests": 5, hunger: 5, thirst: 5, stamina: 5, sprint: 4, crouch: 3, trade: 4, trading: 5, rebirth: 5, prestige: 4, meter: 2, meters: 2, survival: 4, kills: 3, "kill feed": 5, ability: 4, abilities: 4, dash: 4, "double jump": 5, parry: 5, "player vs": 4, pvp: 5, pve: 5 },
     avoid: { blender: 4, essay: 4 },
     intents: [],
     procedure: [
@@ -123,7 +123,7 @@
   add({
     id: "ui_ux", title: "UI / UX (ScreenGui design & behaviour)", env: "roblox",
     summary: "Responsive, readable Roblox GUI built from specs and tokens, with real behaviour, controller support and design QA.",
-    triggers: { gui: 5, ui: 4, ux: 4, hud: 5, menu: 3, screengui: 5, "screen gui": 5, frame: 3, button: 3, textlabel: 4, textbutton: 4, imagelabel: 4, scrollingframe: 4, layout: 2, panel: 3, popup: 4, modal: 4, tooltip: 4, "health bar": 4, "shop ui": 5, "inventory ui": 5, "main menu": 5, "title screen": 5, "pause menu": 5, settings: 2, "loading screen": 5, notification: 3, toast: 2, responsive: 3, mobile: 2, gamepad: 4, controller: 2, font: 2, typography: 3, icon: 2, theme: 2, tabs: 4, tab: 3, toggle: 3, toggles: 3, slider: 4, dropdown: 4, checkbox: 4, "settings menu": 5, "dark theme": 4, "buy button": 5, overlap: 3, overlaps: 3, "on phones": 4, "on mobile": 4, "4k": 3, tiny: 2, huge: 1, minimap: 5, "mini map": 5, "top left": 4, "top right": 4, "bottom left": 4, "bottom right": 4, corner: 3, "on screen": 4, scoreboard: 5, "kill feed": 3, meters: 1, counter: 2, crosshair: 5, hotbar: 3, "confirm step": 3, confirm: 2 },
+    triggers: { gui: 5, ui: 4, ux: 4, hud: 5, menu: 3, "radial wheel": 6, radial: 4, wheel: 2, "timing bar": 5, screengui: 5, "screen gui": 5, frame: 3, button: 3, textlabel: 4, textbutton: 4, imagelabel: 4, scrollingframe: 4, layout: 2, panel: 3, popup: 4, modal: 4, tooltip: 4, "health bar": 4, "shop ui": 5, "inventory ui": 5, "main menu": 5, "title screen": 5, "pause menu": 5, settings: 2, "loading screen": 5, notification: 3, toast: 2, responsive: 3, mobile: 2, gamepad: 4, controller: 2, font: 2, typography: 3, icon: 2, theme: 2, tabs: 4, tab: 3, toggle: 3, toggles: 3, slider: 4, dropdown: 4, checkbox: 4, "settings menu": 5, "dark theme": 4, "buy button": 5, overlap: 3, overlaps: 3, "on phones": 4, "on mobile": 4, "4k": 3, tiny: 2, huge: 1, minimap: 5, "mini map": 5, "top left": 4, "top right": 4, "bottom left": 4, "bottom right": 4, corner: 3, "on screen": 4, scoreboard: 5, "kill feed": 3, meters: 1, counter: 2, crosshair: 5, hotbar: 3, "confirm step": 3, confirm: 2 },
     avoid: { blender: 4, "no gui": 6, "without ui": 6 },
     intents: [],
     procedure: [
@@ -146,7 +146,7 @@
   add({
     id: "animation", title: "Animation (rigs · KeyframeSequence · playback)", env: "roblox",
     summary: "Build, polish, validate and publish animations on R6 / R15 rigs, and play them correctly in game.",
-    triggers: { animation: 5, animations: 5, animate: 4, animator: 4, keyframe: 5, keyframes: 5, keyframesequence: 5, rig: 4, rigs: 4, r6: 5, r15: 5, motor6d: 5, pose: 4, "walk cycle": 5, idle: 3, emote: 5, dance: 4, "attack animation": 5, swing: 2, jump: 2, "run cycle": 5, easing: 3, "animation priority": 5, animationtrack: 5, "animation id": 4, tween: 3, tweens: 3, tweenservice: 5, "4 legged": 4, quadruped: 5, backflip: 4, flip: 3, anticipation: 5, "follow through": 5, breathes: 3, sways: 3, looped: 3, crouch: 4, crouching: 4, "is held": 3, "when the player presses": 2, wave: 2, waves: 1, "should wave": 5, bow: 2, sit: 2, sitting: 3, kneel: 4 },
+    triggers: { animation: 5, animations: 5, animate: 4, animator: 4, "blend from walking to running": 6, "walk to run": 5, transition: 4, transitions: 4, keyframe: 5, keyframes: 5, keyframesequence: 5, rig: 4, rigs: 4, r6: 5, r15: 5, motor6d: 5, pose: 4, "walk cycle": 5, idle: 3, emote: 5, dance: 4, "attack animation": 5, swing: 2, jump: 2, "run cycle": 5, easing: 3, "animation priority": 5, animationtrack: 5, "animation id": 4, tween: 3, tweens: 3, tweenservice: 5, "4 legged": 4, quadruped: 5, backflip: 4, flip: 3, anticipation: 5, "follow through": 5, breathes: 3, sways: 3, looped: 3, crouch: 4, crouching: 4, "is held": 3, "when the player presses": 2, wave: 2, waves: 1, "should wave": 5, bow: 2, sit: 2, sitting: 3, kneel: 4 },
     avoid: { blender: 2, "ui animation": 3 },
     intents: [],
     procedure: [
@@ -168,7 +168,7 @@
   add({
     id: "vfx", title: "VFX (particles · beams · lights · post-processing)", env: "roblox",
     summary: "Production-grade effects from the TotalVFX runtime or hand-built emitters, validated against performance rules.",
-    triggers: { vfx: 5, particle: 5, particles: 5, particleemitter: 5, effect: 3, effects: 3, explosion: 4, fire: 2, smoke: 4, sparkle: 4, sparkles: 4, aura: 5, glow: 3, neon: 2, beam: 4, trail: 3, bloom: 4, "sun rays": 4, "post processing": 4, "color correction": 4, "depth of field": 4, hit: 1, impact: 3, slash: 3, magic: 3, spell: 4, portal: 4, "lightning": 4, flicker: 3, pulse: 2, rain: 4, snow: 4, weather: 4, dust: 3, mist: 3, fog: 2, petals: 3, confetti: 4, sparks: 4, embers: 4, fireflies: 4, bubbles: 4, steam: 3, headlights: 4, "glow at night": 5, emissive: 2, shockwave: 5, debris: 3 },
+    triggers: { vfx: 5, particle: 5, particles: 5, particleemitter: 5, effect: 3, effects: 3, explosion: 4, fire: 2, smoke: 4, sparkle: 4, sparkles: 4, aura: 5, "glowing arc": 5, "glow arc": 5, glow: 3, neon: 2, beam: 4, trail: 3, bloom: 4, "sun rays": 4, "post processing": 4, "color correction": 4, "depth of field": 4, hit: 1, impact: 3, slash: 3, magic: 3, spell: 4, portal: 4, "lightning": 4, flicker: 3, pulse: 2, rain: 4, snow: 4, weather: 4, dust: 3, mist: 3, fog: 2, petals: 3, confetti: 4, sparks: 4, embers: 4, fireflies: 4, bubbles: 4, steam: 3, headlights: 4, "glow at night": 5, emissive: 2, shockwave: 5, debris: 3 },
     avoid: { blender: 3, "sound effect": 4, sfx: 3 },
     intents: [],
     procedure: [
@@ -210,7 +210,7 @@
   add({
     id: "cinematics", title: "Cinematics (cutscenes · sequences · camera)", env: "roblox",
     summary: "Real cutscenes and multi-domain sequences (camera, animation, VFX, SFX) with previews, triggers and validation.",
-    triggers: { cutscene: 6, cutscenes: 6, cinematic: 6, sequence: 4, camera: 3, "camera shake": 5, intro: 3, "boss intro": 5, "opening scene": 5, shot: 3, shots: 3, dolly: 5, orbit: 3, "fov": 4, "field of view": 4, trailer: 5, "trailer shot": 6, orbiting: 4, "flies over": 5, "fly over": 5, flythrough: 5, "zooms": 3, "slow motion": 4, "title sequence": 5, cinematics: 6, scene: 2, timeline: 3 },
+    triggers: { cutscene: 6, cutscenes: 6, cinematic: 6, sequence: 4, camera: 3, "camera shake": 5, intro: 3, "boss intro": 5, "opening scene": 5, "shot that follows": 6, "tracking shot": 6, "camera follows": 5, "follows the kart": 5, shot: 3, shots: 3, dolly: 5, orbit: 3, "fov": 4, "field of view": 4, trailer: 5, "trailer shot": 6, orbiting: 4, "flies over": 5, "fly over": 5, flythrough: 5, "zooms": 3, "slow motion": 4, "title sequence": 5, cinematics: 6, scene: 2, timeline: 3 },
     avoid: { blender: 3, "camera in blender": 6 },
     intents: [],
     procedure: [
@@ -254,7 +254,7 @@
   add({
     id: "debug_repair", title: "Debug & repair", env: "roblox",
     summary: "Reproduce, read the real error, find the root cause in the actual code, fix minimally, prove it is gone.",
-    triggers: { fix: 5, bug: 5, bugs: 5, broken: 5, error: 5, errors: 5, "doesn't work": 6, "doesnt work": 6, "not working": 6, "won't work": 6, "stopped working": 6, "nothing happens": 6, crash: 5, crashes: 5, debug: 6, issue: 3, fails: 4, failed: 4, exception: 5, "nil value": 6, "attempt to": 6, "stack trace": 6, output: 3, warning: 3, infinite: 3, "yield": 3, lag: 2, "why does": 3, "infinite yield": 8, waitforchild: 2, "worked yesterday": 6, "something is wrong": 6, "skipping": 3, "falls through": 5, "fall through": 5, freezing: 5, freezes: 5, freeze: 4, hangs: 5, "stuck": 3, "walk through": 4, "walks through": 4, wrong: 4, incorrect: 4, "not a valid member": 8, "invalid argument": 6, "wrong player": 3, "wrong value": 4 },
+    triggers: { fix: 5, bug: 5, bugs: 5, "fires twice": 8, "fires multiple times": 6, "runs twice": 6, duplicate: 5, duplicated: 5, broken: 5, error: 5, errors: 5, "doesn't work": 6, "doesnt work": 6, "not working": 6, "won't work": 6, "stopped working": 6, "nothing happens": 6, crash: 5, crashes: 5, debug: 6, issue: 3, fails: 4, failed: 4, exception: 5, "nil value": 6, "attempt to": 6, "stack trace": 6, output: 3, warning: 3, infinite: 3, "yield": 3, lag: 2, "why does": 3, "infinite yield": 8, waitforchild: 2, "worked yesterday": 6, "something is wrong": 6, "skipping": 3, "falls through": 5, "fall through": 5, freezing: 5, freezes: 5, freeze: 4, hangs: 5, "stuck": 3, "walk through": 4, "walks through": 4, wrong: 4, incorrect: 4, "not a valid member": 8, "invalid argument": 6, "wrong player": 3, "wrong value": 4 },
     avoid: { blender: 3 },
     intents: ["fix", "review", "inspect", "question"],
     procedure: [
@@ -276,7 +276,7 @@
   add({
     id: "performance", title: "Performance & optimisation", env: "roblox",
     summary: "Measure first, then fix the real cost: physics, rendering, scripts, memory, streaming.",
-    triggers: { performance: 5, optimise: 5, optimize: 5, optimization: 5, optimisation: 5, lag: 4, laggy: 5, fps: 5, "frame rate": 5, framerate: 5, slow: 3, memory: 4, "memory leak": 6, streaming: 4, streamingenabled: 6, "part count": 5, "triangle count": 5, tris: 3, "draw calls": 5, mobile: 2, "low end": 4, stutter: 5, ping: 3, "server lag": 5, lags: 5, lagging: 5, "server fps": 6, parts: 2, crashes: 2, "mobile crashes": 6, "players": 1, "40000": 2, meshes: 1, "too many parts": 6, overheat: 5, phones: 3, phone: 2, battery: 4, "too many": 2, "to load": 4, "load time": 5, "loading takes": 5, "minutes to load": 6, "slow to load": 6, "takes forever": 4, wifi: 3, bandwidth: 4, "frame drops": 5, "fps drops": 5, "drops to": 3 },
+    triggers: { performance: 5, optimise: 5, optimize: 5, optimization: 5, optimisation: 5, heartbeat: 5, "server heartbeat": 6, "tick rate": 5, tickrate: 5, lag: 4, laggy: 5, fps: 5, "frame rate": 5, framerate: 5, slow: 3, memory: 4, "memory leak": 6, streaming: 4, streamingenabled: 6, "part count": 5, "triangle count": 5, tris: 3, "draw calls": 5, mobile: 2, "low end": 4, stutter: 5, ping: 3, "server lag": 5, lags: 5, lagging: 5, "server fps": 6, parts: 2, crashes: 2, "mobile crashes": 6, "players": 1, "40000": 2, meshes: 1, "too many parts": 6, overheat: 5, phones: 3, phone: 2, battery: 4, "too many": 2, "to load": 4, "load time": 5, "loading takes": 5, "minutes to load": 6, "slow to load": 6, "takes forever": 4, wifi: 3, bandwidth: 4, "frame drops": 5, "fps drops": 5, "drops to": 3 },
     avoid: { blender: 3 },
     intents: [],
     procedure: [
@@ -323,7 +323,7 @@
     intents: [],
     procedure: [
       "Look before touching the user's scene: `get_scene_info`, then `blender_introspect` (version, objects, materials). The extension connects to Blender by itself on the first blender_ call - if that fails, say the Blender bridge is down instead of pretending.",
-      "Plan proportions and style BEFORE geometry: `blender_asset_plan` turns the brief into a spec (category, dimensions in metres, part roles, materials); choose `detail_level: hero` or `ultra` for showcase / close-up assets, review the larger budget, edit the spec, then `blender_asset_build`. Custom specs can use `shape: lathe` with a normalized `[radius,height]` profile, `shape: extrusion` with a normalized 0..1 2D polygon, or `shape: sweep` with a normalized profile/path and capped ends; keep `section_size` for a uniform section or give `section_sizes` (`[width,height]` metres) and `twist_degrees` per path station. Both build UV-mapped closed solids with bounds, tri estimates and manifold QA. Seeded generators include tree_procedural, terrain_tile, rock_cluster, crystal_cluster, stairs, building and fence.",
+      "Plan with `blender_asset_plan` (category, metres, parts, materials); use detail_level hero/ultra for showcase assets, review the budget, then `blender_asset_build`. Specs support `shape: lathe` (normalized radius/height), extrusion (closed 2D profile) and sweep (normalized profile/path). Preserve legacy `section_size: [width,height]` or set per-station `section_sizes: [[width,height], ...]` plus optional `twist_degrees: [angle, ...]`. Builders produce capped UV solids with bounds and manifold QA. Seeded generators cover trees, terrain, rocks, crystals, stairs, buildings and fences.",
       "Hand-modelling steps use named tools: primitives (`blender_add_cube`, `blender_add_cylinder` …), `blender_extrude` / `blender_inset` / `blender_bevel` / `blender_solidify`, `blender_boolean` sparingly, `blender_array` / `blender_mirror` for repetition, `blender_add_modifier` + `blender_apply_modifiers` when the shape is final.",
       "Materials: built assets carry procedural texture graphs (`texture: flat` opts out); `blender_asset_bake` writes PNG maps. Hand-made: `blender_principled_material` / `material_assign`; UVs via `blender_uv_unwrap`.",
       "Present: `blender_light_rig` + `blender_camera_rig` (presets fitted to the target), `blender_world_setup`, `blender_render_setup`, then `blender_render_shot` / `blender_turntable`; `blender_studio_clear` removes the rig.",
@@ -341,7 +341,7 @@
   add({
     id: "blender_to_roblox", title: "Blender → Roblox pipeline", env: "blender", envs: ["blender", "roblox"],
     summary: "Export clean FBX / glTF from Blender, import into Studio, verify the MeshPart and keep within Roblox limits.",
-    triggers: { "to roblox": 6, "into roblox": 6, "into studio": 6, "import into studio": 6, fbx: 6, gltf: 5, glb: 5, obj: 3, export: 4, import: 3, "send to studio": 6, meshpart: 5, "mesh part": 5, "roblox mesh": 6, "collision": 2, "triangle limit": 6, "10k": 2, "20k": 2, "to studio": 6, "from blender": 5, "blender to": 5, imported: 4, rotated: 3, "90 degrees": 3, "wrong size": 5, "too big": 4, "too small": 4, pivot: 3, landed: 2, "right scale": 4 },
+    triggers: { "to roblox": 6, "into roblox": 6, "into studio": 6, "import into studio": 6, fbx: 6, gltf: 5, glb: 5, obj: 3, export: 4, import: 3, "send to studio": 6, meshpart: 5, triangles: 5, "triangle count": 6, "bring it over": 6, "bring it into studio": 6, "mesh for roblox": 6, "mesh part": 5, "roblox mesh": 6, "collision": 2, "triangle limit": 6, "10k": 2, "20k": 2, "to studio": 6, "from blender": 5, "blender to": 5, imported: 4, rotated: 3, "90 degrees": 3, "wrong size": 5, "too big": 4, "too small": 4, pivot: 3, landed: 2, "right scale": 4 },
     avoid: { gui: 4, datastore: 5 },
     intents: [],
     procedure: [
@@ -361,7 +361,7 @@
   add({
     id: "creative_production", title: "Creative production (writing · concept · art direction)", env: "general", envs: ["general", "roblox"],
     summary: "Stories, scripts, concepts, lore, dialogue, names, art direction and briefs - audience, tone and format made explicit.",
-    triggers: { story: 5, stories: 5, lore: 5, dialogue: 4, poem: 5, song: 4, lyrics: 5, essay: 5, blog: 4, article: 4, email: 4, letter: 4, tweet: 4, post: 2, caption: 4, slogan: 5, tagline: 5, name: 1, names: 3, "game name": 5, concept: 4, "concept art": 5, "art direction": 5, "mood board": 5, moodboard: 5, pitch: 4, description: 2, backstory: 5, character: 2, worldbuilding: 5, "world building": 2, script: 1, brand: 4, logo: 4, design: 2, tone: 3, style: 2, creative: 4, "write me": 3, "game page": 6, "store page": 6, "game description": 6, "description for": 4, "write a": 2, marketing: 5, "makes people": 2, factions: 4, faction: 3, kingdom: 2, "mood": 2, references: 2, "names for": 5, "one line description": 5, catchy: 5, "name and tagline": 6, "update log": 6, changelog: 5, "patch notes": 6, announcement: 5, devlog: 5, "dev log": 5, "write the": 3, "write a": 2 },
+    triggers: { story: 5, stories: 5, lore: 5, dialogue: 4, poem: 5, song: 4, lyrics: 5, essay: 5, blog: 4, article: 4, email: 4, letter: 4, tweet: 4, post: 2, caption: 4, slogan: 5, tagline: 5, name: 1, names: 3, "game name": 5, concept: 4, "concept art": 5, "art direction": 5, "mood board": 5, moodboard: 5, pitch: 4, description: 2, backstory: 5, character: 2, worldbuilding: 5, "world building": 2, script: 1, brand: 4, logo: 4, design: 2, tone: 3, style: 2, creative: 4, "write me": 3, "game page": 6, "store page": 6, "game description": 6, "description for": 4, "write a": 2, marketing: 5, teaser: 5, "teaser text": 6, "event teaser": 5, blurb: 4, "makes people": 2, factions: 4, faction: 3, kingdom: 2, "mood": 2, references: 2, "names for": 5, "one line description": 5, catchy: 5, "name and tagline": 6, "update log": 6, changelog: 5, "patch notes": 6, announcement: 5, devlog: 5, "dev log": 5, "write the": 3, "write a": 2 },
     avoid: { luau: 4, datastore: 5, remote: 4, blender: 3, bug: 4 },
     intents: [],
     procedure: [
@@ -381,7 +381,7 @@
   add({
     id: "general_engineering", title: "General software engineering", env: "general",
     summary: "Non-Roblox code and systems: language / runtime pinned, interfaces, tests, edge cases, error handling.",
-    triggers: { python: 5, javascript: 5, typescript: 5, rust: 5, "c#": 5, java: 4, "c++": 5, go: 2, sql: 5, html: 4, css: 4, react: 5, node: 4, api: 3, rest: 3, endpoint: 4, database: 4, docker: 5, regex: 5, algorithm: 4, "data structure": 5, "unit test": 5, tests: 3, cli: 4, library: 3, package: 3, function: 1, class: 2, bug: 1, refactor: 2, script: 1, program: 3, app: 2, website: 4, "web app": 5, server: 1, json: 2, csv: 3, parse: 3, parser: 4, mutex: 5, semaphore: 5, thread: 3, threads: 3, concurrency: 5, async: 3, await: 3, recursion: 4, "big o": 5, compiler: 4, linux: 4, bash: 4, shell: 3, git: 4, github: 4, "github actions": 6, workflow: 3, ci: 3, "on push": 3, "difference between": 2, typeerror: 5, undefined: 3 },
+    triggers: { python: 5, javascript: 5, typescript: 5, rust: 5, "c#": 5, java: 4, "c++": 5, go: 2, sql: 5, html: 4, css: 4, react: 5, node: 4, api: 3, rest: 3, endpoint: 4, database: 4, docker: 5, regex: 5, url: 2, urls: 2, "asset url": 4, "asset urls": 4, algorithm: 4, "data structure": 5, "unit test": 5, tests: 3, cli: 4, library: 3, package: 3, function: 1, class: 2, bug: 1, refactor: 2, script: 1, program: 3, app: 2, website: 4, "web app": 5, server: 1, json: 2, csv: 3, parse: 3, parser: 4, mutex: 5, semaphore: 5, thread: 3, threads: 3, concurrency: 5, async: 3, await: 3, recursion: 4, "big o": 5, compiler: 4, linux: 4, bash: 4, shell: 3, git: 4, github: 4, "github actions": 6, workflow: 3, ci: 3, "on push": 3, "difference between": 2, typeerror: 5, undefined: 3 },
     avoid: { roblox: 5, luau: 5, studio: 4, blender: 4, datastore: 5 },
     intents: [],
     procedure: [
@@ -457,7 +457,8 @@
     else if (cr && (cr >= 2 || /\b(write|compose|draft)\b/i.test(prose) || !(ctx.engine === "roblox" || ctx.focus === "roblox"))) env = "general"; // 1.99.6: one stray creative word ("pitch", "letter") no longer pulls a Roblox request out of its environment
     else if (ctx.engine === "roblox" || ctx.focus === "roblox") env = "roblox";
     if (ctx.focus === "general" && !bl) env = "general";
-    if (ctx.engine === "local" && !bl && !rb) env = "general";
+    // Local code tasks may mention Roblox as a URL / data subject without using Studio APIs.
+    if (ctx.engine === "local" && !bl && (!rb || gc > 0)) env = "general";
     // Intent (reuse the orchestrator's verdict when given)
     let intent = task && task.intent ? task.intent : "";
     if (!intent) {
@@ -515,7 +516,7 @@
   // and their light stems (modules → module, flickering → flicker, required →
   // require), so plural / tense variants no longer miss; phrases and triggers
   // with punctuation (c#, task.wait, sci-fi) keep the exact regex. Stemming is
-  // only used for words of 5+ letters so short words stay exact.
+  // used for words of 5+ letters; four-letter roots ending in e also safely match their simple plural (save → saves).
   function stem(w) {
     if (w.length < 5) return w;
     if (/ies$/.test(w)) return w.slice(0, -3) + "y";
@@ -541,7 +542,8 @@
         if (!phrase && /^[a-z0-9]+$/.test(word)) {
           const st = stem(word);
           if (seenStem.has(st)) continue; // "ability" + "abilities" (or "kill" + "kills") count once
-          hit = toks.has(word) || (word.length >= 5 && stems.has(st));
+          const stemSafe = word.length >= 5 || (word.length === 4 && /e$/.test(word));
+          hit = toks.has(word) || (stemSafe && stems.has(st));
           if (hit) seenStem.add(st);
         } else {
           const re = new RegExp("(^|[^a-z0-9])" + word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+") + "(?=$|[^a-z0-9])", "i");
@@ -639,7 +641,11 @@
     L.push("", "PITFALLS:"); for (const p of x.pitfalls) L.push(`- ${p}`);
     L.push("", "VERIFY BEFORE REPORTING:"); for (const v of x.verify) L.push(`- ${v}`);
     const cmds = commandsOf(x);
-    if (cmds.length) L.push("", `COMMANDS THIS SKILL USES (all exist in this build): ${cmds.join(", ")}`);
+    if (cmds.length) {
+      const visible = cmds.slice(0, 8);
+      const more = cmds.length > visible.length ? `, … ${cmds.length - visible.length} more are named in the procedure` : "";
+      L.push("", `COMMANDS THIS SKILL USES (all exist in this build): ${visible.join(", ")}${more}`);
+    }
     if (x.complements && x.complements.length) L.push(`RELATED SKILLS: ${x.complements.map((c) => `skill {name: "${c}"}`).join(", ")}`);
     // 1.99.4: references - tested Luau patterns to copy the shape of, and the
     // official docs pages behind the procedure (skill_refs.js, loaded before us).

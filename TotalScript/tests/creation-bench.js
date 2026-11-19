@@ -1,5 +1,5 @@
 "use strict";
-// 2.21.0 — CREATION BENCHMARK: measures the Universal Creation Intelligence
+// 2.21.1 — CREATION BENCHMARK: measures the Universal Creation Intelligence
 // Engine (src/core/creation_engine.js) against a labelled corpus and against
 // the previous gate (the work-mode evidence gates in main.js), per provider.
 //
@@ -71,9 +71,10 @@ const CORPUS = [
   ["tr", "oyuncu için bir dükkan arayüzü ve coin sistemi yap, ses olmasın", ["gui", "gameplay"], ["ses"]],
 ];
 
-// HELD-OUT set: written after the engine was tuned on CORPUS and never used
-// to adjust a regex. Reported separately; the number is whatever it is.
-const HELD_OUT = [
+// The original 2.21.0 held-out set was opened during 2.21.1 error analysis.
+// It remains useful as a known regression set, but is no longer independent
+// validation. Do not describe its post-fix score as a fresh generalization test.
+const PRIOR_SET = [
   ["gameplay", "create a sprint system with a stamina bar", ["gameplay", "gui"]],
   ["gameplay", "make a lava floor that kills players and respawns them at the last checkpoint", ["gameplay"]],
   ["vfx", "add rain particles and thunder sounds to the map", ["vfx", "sfx"]],
@@ -83,6 +84,11 @@ const HELD_OUT = [
   ["environment", "generate a snowy mountain terrain with a frozen lake", ["environment"]],
   ["script", "write a typed ModuleScript for inventory management with unit tests", ["script"]],
   ["tr", "bana bir envanter sistemi ve kaydetme ekle", ["gameplay", "data"]],
+  ["gui", "make the shop prettier, no new features", ["gui"]],
+];
+const REGRESSION = [
+  ["model", "build a pirate ship model with cannons that fire cannonballs", ["model", "gameplay"]],
+  ["gameplay", "set up a daily reward system with a popup that shows the streak and saves it", ["gameplay", "gui", "data"]],
   ["gui", "make the shop prettier, no new features", ["gui"]],
 ];
 const specResults = [];
@@ -106,14 +112,23 @@ console.log(`   exact deliverable set: ${exact}/${CORPUS.length} (${pct(exact, C
 console.log("   per domain exact: " + Object.entries(perDomain).map(([d, r]) => `${d} ${r.exact}/${r.n}`).join(" · "));
 for (const r of specResults.filter((x) => !x.exact)) console.log(`   miss  [${r.domain}] "${r.text.slice(0, 70)}" want ${r.want.join("+")} got ${r.got.join("+") || "-"}`);
 ok("spec: exact deliverable set on ≥ 80% of the corpus", pct(exact, CORPUS.length) >= 80, { exact, n: CORPUS.length });
-let hoExact = 0; const hoMiss = [];
-for (const [domain, text, want] of HELD_OUT) {
-  const got = C.spec(text, { task: O.classifyTask(text) }).deliverables.map((d) => d.id);
-  if (got.length === want.length && want.every((w) => got.includes(w))) hoExact++; else hoMiss.push({ text, want, got });
+function evaluateSet(samples) {
+  let exact = 0; const misses = [];
+  for (const [domain, text, want] of samples) {
+    const got = C.spec(text, { task: O.classifyTask(text) }).deliverables.map((d) => d.id);
+    if (got.length === want.length && want.every((w) => got.includes(w))) exact++; else misses.push({ domain, text, want, got });
+  }
+  return { n: samples.length, exact, misses };
 }
-console.log(`   HELD-OUT (${HELD_OUT.length} requests written after tuning, never used to adjust the engine): exact ${hoExact}/${HELD_OUT.length} (${pct(hoExact, HELD_OUT.length)}%)`);
-for (const m of hoMiss) console.log(`   miss  "${m.text.slice(0, 70)}" want ${m.want.join("+")} got ${m.got.join("+") || "-"}`);
-ok("spec: held-out set is reported (no threshold - the number is the finding)", true);
+const priorSet = evaluateSet(PRIOR_SET), regressions = evaluateSet(REGRESSION);
+console.log(`   PRIOR 2.21.0 SET (opened for error analysis; not independent): exact ${priorSet.exact}/${priorSet.n} (${pct(priorSet.exact, priorSet.n)}%)`);
+for (const m of priorSet.misses) console.log(`   prior miss  "${m.text.slice(0, 70)}" want ${m.want.join("+")} got ${m.got.join("+") || "-"}`);
+console.log(`   PROMOTED REGRESSIONS: exact ${regressions.exact}/${regressions.n}`);
+for (const m of regressions.misses) console.log(`   regression miss  "${m.text.slice(0, 70)}" want ${m.want.join("+")} got ${m.got.join("+") || "-"}`);
+console.log("   independent held-out score: not claimed for this patch");
+ok("spec: all previously observed hold-out misses now pass as exact regressions", regressions.exact === regressions.n, regressions);
+ok("spec: the opened prior set has no regressions", priorSet.exact === priorSet.n, priorSet);
+ok("spec: no independent held-out score is claimed after using the prior set for error analysis", true);
 ok("spec: every negation in the corpus is recorded", specResults.every((r) => r.negOk), specResults.filter((r) => !r.negOk).map((r) => r.text));
 
 // ── 2. coverage detection: synthetic runs vs BEFORE (mode gates) / AFTER (creation engine) ──
@@ -236,7 +251,7 @@ for (const p of providers) {
 ok("providers: ≥ 10 real adapters loaded (2.21.0: Notion removed) and the brief + nudge fit every declared send budget", providers.length >= 10 && Object.values(provRows).every((r) => r.fits), Object.entries(provRows).filter(([, r]) => !r.fits).map(([k]) => k));
 ok("providers: every adapter keeps its full check budget (High 1 / Masterpiece 3) - 2.21.0 removed the DeepSeek gentle-mode cap", Object.entries(provRows).every(([id, r]) => r.rounds === 1 && r.masterpieceRounds === 3), provRows);
 
-const out = { version: C.VERSION, simulated: true, at: new Date().toISOString(), spec: { n: CORPUS.length, exact, precision, recall, perDomain, misses: specResults.filter((r) => !r.exact), heldOut: { n: HELD_OUT.length, exact: hoExact, misses: hoMiss } }, coverage: det, profiles: profRows, staticReview: { snippets: SNIPPETS.length, precision: pct(stp, stp + sfp), recall: pct(stp, stp + sfn), cleanFalsePositives: cleanFalse }, providers: provRows };
+const out = { version: C.VERSION, simulated: true, at: new Date().toISOString(), spec: { n: CORPUS.length, exact, precision, recall, perDomain, misses: specResults.filter((r) => !r.exact), priorSet, regressions, independentHeldOut: null }, coverage: det, profiles: profRows, staticReview: { snippets: SNIPPETS.length, precision: pct(stp, stp + sfp), recall: pct(stp, stp + sfn), cleanFalsePositives: cleanFalse }, providers: provRows };
 try { fs.writeFileSync("/tmp/totalscript-creation-bench.json", JSON.stringify(out, null, 2)); console.log("\nreport written to /tmp/totalscript-creation-bench.json"); } catch {}
 console.log(`\ncreation-bench: ${pass + fail} checks, ${fail} failed (SIMULATED — deterministic layer only)`);
 process.exit(fail ? 1 : 0);

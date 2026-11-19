@@ -33,7 +33,7 @@
 // content script (window.TotalOrchestrator).
 const TotalOrchestrator = (() => {
   "use strict";
-  const VERSION = "2.21.0";
+  const VERSION = "2.21.1";
 
   // ───────────────────────── 1. task understanding ─────────────────────────
   const CATEGORY_RE = {
@@ -50,6 +50,11 @@ const TotalOrchestrator = (() => {
     files: /\b(file|folder|read|export|import|rbxmx|rbxm|json|csv|download|upload|save as|open the|project files|workspace folder)\b/i,
     code: /\b(code|program|write|implement|function|class|algorithm|snippet|typescript|javascript|python|rust|api)\b/i,
   };
+  // Appearance requests on known interface surfaces should route to the UI
+  // specialist even when the word "shop" also matches the gameplay category.
+  const GUI_POLISH_RE = /\b(?:shop|storefront|inventory|leaderboard|scoreboard|hud|hotbar|menu|screen|panel|interface|gui|ui|popup|settings|notification|button)\b[^.;\n]{0,48}\b(?:prettier|polish(?:ed|ing)?|beautif(?:y|ul)|visual(?:ly)?|appearance|look|reskin|cleaner|sleeker|modern(?:ize|ise)?|aesthetic(?:s)?)\b|\b(?:prettier|polish(?:ed|ing)?|beautif(?:y|ul)|visual(?:ly)?|appearance|look|reskin|cleaner|sleeker|modern(?:ize|ise)?|aesthetic(?:s)?)\b[^.;\n]{0,48}\b(?:shop|storefront|inventory|leaderboard|scoreboard|hud|hotbar|menu|screen|panel|interface|gui|ui|popup|settings|notification|button)\b/i;
+  const GUI_SCOPE_ONLY_RE = /\b(?:no new features?|without (?:changing|altering) (?:(?:the|its) )?(?:behavior|functionality|logic)|keep (?:the )?(?:same|existing) (?:behavior|functionality)|(?:visual|appearance) only|just (?:the )?(?:look|appearance|style))\b/i;
+  const GUI_BEHAVIOR_CUE_RE = /\b(?:mechanic|system|logic|buy|purchase|sell|price|pricing|currency|coins?|balance|stock|transaction|checkout|remote)\b/i;
   // Order used to pick the PRIMARY category when several match.
   const PRIMARY_ORDER = ["debug", "animation", "gui", "vfx", "gameplay", "luau", "roblox_studio", "architecture", "review", "research", "files", "code"];
   const STRONG_IMPLEMENT_RE = /\b(create|make|build|add|write|implement|generate|fix|change|update|edit|modify|remove|delete|refactor|rewrite|replace|install|set ?up)\b/i;
@@ -69,7 +74,7 @@ const TotalOrchestrator = (() => {
   const NEGATED_VERB_RE = /\b(don'?t|do not|dont|without|never|no need to|not|avoid|instead of|rather than|before (you|we)|shouldn'?t|must not)\s+(\w+\s+)?(create|make|build|add|write|implement|generate|change|update|edit|modify|remove|delete|replace|touch|run|execute|rewrite|refactor|break|move|rename|changing|modifying|editing|deleting|removing|touching|running|breaking)\b/gi;
   // Inspect-only requests: read / show / list / find - tools yes, mutation no.
   const INSPECT_LEAD_RE = /^(read|show( me)?|list|find|where (is|are|does)|look at|look through|open and (read|show)|inspect|print|dump|search( for)?|check what|tell me what|what('s| is) (in|inside)|which (scripts?|parts?|instances?|files?)|summari[sz]e|count)\b/i;
-  const CONSTRAINT_RE = /\b(only|don'?t|do not|never|must|must not|without|keep|no more than|at most|at least|under|max(imum)?|min(imum)?|exactly|avoid|instead of|make sure|ensure|should not|shouldn'?t|not allowed|limit(ed)? to|in (one|a single) (script|file|part|command))\b[^.;\n]{0,90}?(?=[.;\n]|$|,? (and|but|also|plus) (only|don'?t|do not|never|must|without|keep|avoid|no more than|at most|at least|make sure|ensure|should not|shouldn'?t)\b)/gi;
+  const CONSTRAINT_RE = /\b(only|don'?t|do not|never|must|must not|without|keep|no (?:new |additional |extra )?features?|no more than|at most|at least|under|max(imum)?|min(imum)?|exactly|avoid|instead of|make sure|ensure|should not|shouldn'?t|not allowed|limit(ed)? to|in (one|a single) (script|file|part|command))\b[^.;\n]{0,90}?(?=[.;\n]|$|,? (and|but|also|plus) (only|don'?t|do not|never|must|without|keep|no (?:new |additional |extra )?features?|avoid|no more than|at most|at least|make sure|ensure|should not|shouldn'?t)\b)/gi;
   const VERIFY_HINT = {
     debug: "Reproduce or read the failing code first, apply the fix, then re-run / read the Output to prove the error is gone.",
     animation: "Preview or validate the clip (frame count, duration, rig type) and read the saved object back before you call it done.",
@@ -104,6 +109,12 @@ const TotalOrchestrator = (() => {
     const words = t ? t.split(" ").length : 0;
     const cats = [];
     for (const k of Object.keys(CATEGORY_RE)) if (CATEGORY_RE[k].test(t)) cats.push(k);
+    const visualUiPolish = GUI_POLISH_RE.test(t);
+    if (visualUiPolish && !cats.includes("gui")) cats.push("gui");
+    if (visualUiPolish && GUI_SCOPE_ONLY_RE.test(t) && !GUI_BEHAVIOR_CUE_RE.test(t)) {
+      const gameplayIndex = cats.indexOf("gameplay");
+      if (gameplayIndex >= 0) cats.splice(gameplayIndex, 1);
+    }
     const isContinue = CONTINUE_RE.test(t);
     const tNoNeg = t.replace(NEGATED_VERB_RE, " ");
     const implementVerb = IMPLEMENT_RE.test(tNoNeg);

@@ -20,6 +20,7 @@ const CASES = [
   ["explain how RemoteEvents work", { intent: "explain", explainOnly: true, mutates: false }],
   ["plan how to build an obby lobby, dont build yet", { intent: "plan", planOnly: true, mutates: false }],
   ["plan and then build a shop GUI", { intent: "implement", planOnly: false, mutates: true }],
+  ["make the shop prettier, no new features", { intent: "implement", primary: "gui", needsTools: true, mutates: true }],
   ["the door is broken", { intent: "fix", mutates: true, needsTools: true }],
   ["it doesnt work", { intent: "fix" }],
   ["review my DataStore code for bugs", { intent: "review", mutates: false, needsTools: true }],
@@ -37,6 +38,12 @@ for (const [text, want] of CASES) {
   const got = T(text, want.intent === "fix" || want.intent === "continue" ? T("script a door that opens") : undefined);
   const bad = Object.keys(want).filter((k) => got[k] !== want[k]);
   ok(`classifyTask(${JSON.stringify(text)}) → ${Object.entries(want).map(([k, v]) => k + "=" + v).join(" ")}`, bad.length === 0, bad.map((k) => k + "=" + got[k]));
+}
+{
+  const visual = T("make the shop prettier, no new features");
+  ok("visual-only shop polish selects UI/UX, preserves 'no new features', and produces a UI brief", visual.primary === "gui" && visual.categories.join() === "gui" && visual.constraints.some((c) => /no new features/i.test(c)) && /UI \/ UX implementation/.test(O.taskLayer(visual)) && /no new features/i.test(O.taskLayer(visual)));
+  const mixed = T("make the shop prettier and add a purchase flow");
+  ok("when shopping behavior is explicitly requested, visual polish keeps both UI and gameplay categories", mixed.primary === "gui" && mixed.categories.includes("gui") && mixed.categories.includes("gameplay"));
 }
 {
   const t = T("make a coin pickup system, only one script and don't touch the lighting");
@@ -177,7 +184,7 @@ ok("FEEDBACK.providerRetry(cls, attempt, seconds) tells the model the previous m
   ok("capabilities(): providers may still opt for a lower batch cap", O.capabilities({ id: "low", maxBatchCommands: 2 }).maxBatchCommands === 2);
   ok("capabilities(): nothing is invented for a bare adapter", (() => { const b = O.capabilities({ id: "y", displayName: "Y" }); return b.vision === false && b.streamTap === false && !b.sysMaxChars && b.tightPrompt === false && b.nativeContinue === false; })());
 }
-ok("orchestrator VERSION pinned", O.VERSION === "2.21.0", O.VERSION);
+ok("orchestrator VERSION pinned", O.VERSION === "2.21.1", O.VERSION);
 
 // ── wiring pins ──
 const bundles = manifest.content_scripts.filter((c) => c.world !== "MAIN" && c.js.some((j) => j.includes("src/core/main.js")));

@@ -1511,8 +1511,8 @@
       ]
     }
   ],
-  "_holdout": "Round 4, written AFTER all 1.99.6 tuning (rounds 1-3 were folded into `tasks` once they had been used). Never tuned against in 1.99.6 - this is the honest generalisation number; its floor is deliberately lower. When a later release tunes on it, fold it into `tasks` and write a new round.",
-  "holdout": [
+  "_regression_set": "Round 4 was held out during 1.99.6 and scored 52.6% before analysis. Its prompts were inspected for 2.21.1 and are now an opened regression set, not an independent estimate. Keep these cases as regressions; no fresh independent hold-out score is claimed.",
+  "regression_set": [
     {
       "id": "q01",
       "text": "my proximity prompt fires twice every time",

@@ -1,4 +1,4 @@
-// Skill Intelligence (1.88.0): the built-in expert library, deterministic
+// Skill Intelligence (2.21.1): the built-in expert library, deterministic
 // discovery / ranking / selection, the `skill` command answer, the expert rider,
 // and the Prompt Enhancer's deterministic layer (intent + constraints, modes,
 // must-keep list, expert excerpts, post-rewrite checks). Dependency-free; run
@@ -22,7 +22,7 @@ for (const f of bundle.js.filter((f) => /src\/core\/(skills\/|studio_bridge\.js|
 vm.runInThisContext(read("src/core/skill_intel.js"), { filename: "skill_intel.js" });
 vm.runInThisContext(read("src/core/public_skills.js"), { filename: "public_skills.js" });
 const SI = window.TotalSkillIntel, PS = window.PublicSkills, PACK = RobloxScriptSkills;
-ok("module exposes window.TotalSkillIntel (analyze / select / answer / rider / plan / validateEnhanced)", SI && ["analyze", "select", "answer", "rider", "plan", "validateEnhanced", "rankPublic", "expertText", "listText"].every((k) => typeof SI[k] === "function") && SI.VERSION === "2.21.0");
+ok("module exposes window.TotalSkillIntel (analyze / select / answer / rider / plan / validateEnhanced)", SI && ["analyze", "select", "answer", "rider", "plan", "validateEnhanced", "rankPublic", "expertText", "listText"].every((k) => typeof SI[k] === "function") && SI.VERSION === "2.21.1");
 ok("module is DOM-free at top level", !/^\s*(const|let|var)?\s*\w*\s*=?\s*document\./m.test(read("src/core/skill_intel.js")) && !/\bdocument\./.test(read("src/core/skill_intel.js")));
 
 // ── 1. catalogue integrity ──
@@ -52,7 +52,7 @@ ok("complements point at real ids", E.every((x) => (x.complements || []).every((
 // ── 2. analysis ──
 const A = (t, ctx) => SI.analyze(t, ctx || { engine: "roblox" });
 ok("env: Studio wording → roblox; Blender wording → blender; general code → general; creative → general; empty on the RS engine → roblox", A("make a shop gui").env === "roblox" && A("export my sword from blender as fbx").env === "blender" && A("write a python script that parses csv").env === "general" && A("write a poem about autumn").env === "general" && A("do the thing").env === "roblox");
-ok("env: focus=general overrides engine fallback; engine=local without Studio words → general", A("do the thing", { engine: "roblox", focus: "general" }).env === "general" && A("make a shop", { engine: "local" }).env === "general");
+ok("env: focus=general overrides engine fallback; local code stays general when Roblox is only the data subject", A("do the thing", { engine: "roblox", focus: "general" }).env === "general" && A("make a shop", { engine: "local" }).env === "general" && A("regex that matches roblox asset urls", { engine: "local" }).env === "general");
 ok("intent: fix / explain / plan / review / implement / question", A("fix the datastore script, attempt to index nil").intent === "fix" && A("what is a RemoteEvent?").intent === "explain" && A("plan the architecture for a tycoon, no code yet").intent === "plan" && A("review my shop script").intent === "review" && A("make a sword").intent === "implement" && A("is this ok?").intent === "explain" && A("banana?").intent === "question");
 ok("intent reuses the orchestrator task record when given (no second opinion)", A("make a sword", { engine: "roblox", task: { intent: "plan", categories: ["gameplay"] } }).intent === "plan" && A("x", { task: { intent: "fix", categories: ["debug", "luau"] } }).taskCategories.join(",") === "debug,luau");
 ok("complexity: short → simple; a few sentences / 'system' → standard; long multi-part → complex", A("make a sword").complexity === "simple" && A("make a shop system with coins. Add a daily reward. Save it.").complexity === "standard" && A("Build a complete multiplayer round system with a lobby, waves of enemies, a shop between waves, leaderstats and datastore saving, plus a HUD that shows wave number, timer and coins, and an end screen with rewards. Everything must be server authoritative and work on mobile. Also add a spectator camera.").complexity === "complex");
@@ -66,7 +66,7 @@ ok("malformed input never throws (null / number / object / huge)", (() => { try 
 
 // ── 3. selection ──
 const sel = (t, o) => SI.select(SI.analyze(t, { engine: "roblox" }), o);
-const primary = (t) => { const s = sel(t); return s.picked.length ? s.picked[0].id : ""; };
+const primary = (t, ctx) => { const s = SI.select(SI.analyze(t, ctx || { engine: "roblox" })); return s.picked.length ? s.picked[0].id : ""; };
 const CASES = [
   ["fix the datastore script, it says attempt to index nil", "debug_repair"],
   ["make an idle animation for my r15 rig", "animation"],
@@ -84,8 +84,19 @@ const CASES = [
   ["write a python script that parses a csv and prints totals", "general_engineering"],
   ["add a sword with 25 damage and a 0.8s cooldown", "gameplay_systems"],
   ["refactor my codebase: show the require graph and the architecture", "project_analysis"],
+  ["fishing minigame with a timing bar and rare catches", "gameplay_systems"],
+  ["migrate old player saves to the new format without losing anything", "data_persistence"],
+  ["a radial wheel for choosing emotes", "ui_ux"],
+  ["blend from walking to running smoothly instead of snapping", "animation"],
+  ["the sword should leave a glowing arc when swung", "vfx"],
+  ["a shot that follows the kart around the first corner", "cinematics"],
+  ["the server heartbeat is at 20 instead of 60", "performance"],
+  ["my mesh is 14k triangles, is that ok for roblox and how do i bring it over", "blender_to_roblox"],
+  ["a short teaser text for the halloween event", "creative_production"],
+  ["regex that matches roblox asset urls", "general_engineering", { engine: "local" }],
+  ["spectator mode after you die that cycles through alive players", "gameplay_systems"],
 ];
-const wrong = CASES.filter(([t, id]) => primary(t) !== id).map(([t, id]) => `${t.slice(0, 30)} → ${primary(t)} (want ${id})`);
+const wrong = CASES.filter(([t, id, ctx]) => primary(t, ctx) !== id).map(([t, id, ctx]) => `${t.slice(0, 30)} → ${primary(t, ctx)} (want ${id})`);
 ok("primary specialist per request (" + CASES.length + " cases)", wrong.length === 0, wrong.join(" | "));
 ok("deterministic: the same request ranks identically twice; ties break by library order", JSON.stringify(sel("make a sword")) === JSON.stringify(sel("make a sword")) && sel("nothing in particular").picked.length === 0);
 ok("irrelevant experts excluded: a poem gets no Roblox expert; a DataStore task gets no Blender expert; Blender work gets no Roblox UI expert", !sel("write a poem about autumn").picked.some((p) => SI.EXPERTS.find((x) => x.id === p.id).env === "roblox") && !sel("save player coins with a datastore").picked.some((p) => p.id.startsWith("blender")) && !sel("model a sci-fi crate in blender").picked.some((p) => p.id === "ui_ux"));

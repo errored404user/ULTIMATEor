@@ -1,5 +1,5 @@
 "use strict";
-// 2.21.0 — Universal Creation Intelligence Engine (src/core/creation_engine.js)
+// 2.21.1 — Universal Creation Intelligence Engine (src/core/creation_engine.js)
 // unit tests + wiring pins (manifest, codecraft.html, main.js, background.js,
 // popup). Pure-function tests; nothing here contacts a provider or Studio.
 // Run from the TotalScript root: node tests/test-creation-engine.js
@@ -40,6 +40,23 @@ const ids = (sp) => sp.deliverables.map((d) => d.id);
   ok("A18 Turkish question stays a question", S("neden kapı scriptim hata veriyor?").deliverables.length === 0);
   ok("A19 fix request on a GUI is tracked as that GUI (proof still required)", ids(S("fix the leaderboard gui")).join() === "gui");
   ok("A20 spec text is capped and never carries the whole prompt", S("x ".repeat(3000)).text.length <= 280);
+  {
+    const sp = S("build a pirate ship model with cannons that fire cannonballs");
+    ok("A21 an active weapon clause adds gameplay beside its model deliverable", ids(sp).length === 2 && ids(sp).includes("model") && ids(sp).includes("gameplay") && sp.integrations.some((i) => i.id === "model_gameplay"), ids(sp));
+  }
+  {
+    const sp = S("set up a daily reward system with a popup that shows the streak and saves it");
+    ok("A22 a save pronoun resolves to saved data when the request names a persistent reward / streak", ["gameplay", "gui", "data"].every((d) => ids(sp).includes(d)) && sp.integrations.some((i) => i.id === "gui_remote_data") && sp.integrations.some((i) => i.id === "data_pcall"), ids(sp));
+  }
+  {
+    const sp = S("make the shop prettier, no new features");
+    ok("A23 visual polish on a known interface surface is tracked as GUI work, not a gameplay feature", ids(sp).join() === "gui" && sp.text.includes("no new features"), { ids: ids(sp), text: sp.text });
+  }
+  ok("A24 a cannon requested only as a model is not mistaken for gameplay", ids(S("build a cannon model")).join() === "model");
+  ok("A25 visual polish of a physical house stays in the model domain, not GUI", ids(S("make the house prettier")).join() === "model");
+  ok("A26 an unrelated pronoun save does not invent a DataStore deliverable", ids(S("create a UI and save it")).join() === "gui");
+  ok("A27 mentioning players alone is not enough to infer persistence from 'save it'", ids(S("make a player avatar UI and save it")).join() === "gui");
+  ok("A28 an explicit no-DataStore choice prevents a pronoun-only data inference", (() => { const sp = S("make a reward popup, don't use a DataStore, and save it as a thumbnail"); return ids(sp).join() === "gui" && sp.negated.some((x) => /DataStore/i.test(x)); })());
 }
 
 // ── B. brief ──
@@ -212,7 +229,7 @@ const REQ = "Build a sword combat system with a shop GUI and a slash sound, save
   ok("G10 background.js: activity_note handler whitelists kind / level and caps text at 200", /case "activity_note":/.test(bg) && /\/\^\(creation\|tool\|server\)\$\//.test(bg) && /\/\^\(ok\|info\|warn\|error\)\$\//.test(bg) && /slice\(0, 200\)/.test(bg.slice(bg.indexOf('case "activity_note":'), bg.indexOf('case "activity_note":') + 900)));
   ok("G11 popup: Creation quality select in AI & Agents, key exported/imported, Activity filter chip", /key: "rsCreationProfile", type: "select", default: "high"/.test(popup) && /const CREATION_PROFILES = \[\["standard", "Standard"\], \["high", "High quality"\], \["professional", "Professional"\], \["masterpiece", "Masterpiece"\]\]/.test(popup) && /"rsPlanMode", "rsCreationProfile",/.test(popup) && /data-f="creation"/.test(popupHtml));
   ok("G12 orchestrator capabilities expose commandFormat / commandlessRetries from real adapter fields only (2.21.0: no pacing fields)", (() => { const c = O.capabilities({ id: "x" }); const v = O.capabilities({ id: "v", commandFormat: "plain", commandlessRetries: 2 }); return c.commandFormat === "json" && c.commandlessRetries === null && !("pacing" in c) && !("pacingNoResend" in c) && v.commandFormat === "plain" && v.commandlessRetries === 2; })());
-  ok("G13 versions: creation_engine 2.21.0, no numeric quality score anywhere in the module", C.VERSION === "2.21.0" && !/quality score|\/100|\b\d+ ?\/ ?10\b|score:/i.test(read("src/core/creation_engine.js")));
+  ok("G13 versions: creation_engine 2.21.1, no numeric quality score anywhere in the module", C.VERSION === "2.21.1" && !/quality score|\/100|\b\d+ ?\/ ?10\b|score:/i.test(read("src/core/creation_engine.js")));
 }
 
 // ── H. real page walk (codecraft.html bundle in jsdom): tray section + hooks ──
@@ -265,7 +282,7 @@ const REQ = "Build a sword combat system with a shop GUI and a slash sound, save
     try {
       await waitFor(() => d.getElementById("rs-bar"), 8000, "#rs-bar");
       await sleep(700);
-      ok("H1 page: TotalCreation is loaded in the bundle and the stored profile is restored", typeof w.TotalCreation === "object" && w.TotalCreation.VERSION === "2.21.0" && typeof w.__rsCreationProfile === "function" && w.__rsCreationProfile() === "professional", w.__rsCreationProfile && w.__rsCreationProfile());
+      ok("H1 page: TotalCreation is loaded in the bundle and the stored profile is restored", typeof w.TotalCreation === "object" && w.TotalCreation.VERSION === "2.21.1" && typeof w.__rsCreationProfile === "function" && w.__rsCreationProfile() === "professional", w.__rsCreationProfile && w.__rsCreationProfile());
       const supportBtn = d.getElementById("rs-support-btn") || d.getElementById("rs-settings-btn");
       if (supportBtn) { supportBtn.click(); await sleep(150); }
       const menu = d.getElementById("rs-menu");

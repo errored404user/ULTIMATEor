@@ -30,6 +30,7 @@ const background = read("background.js");
 const popup = read("popup.js");
 const mainRs = read("agent/src/main.rs");
 const pluginRs = read("agent/src/plugin.rs");
+const figmaPluginRs = read("agent/src/figma_plugin.rs");
 const wsRs = read("agent/src/workspace.rs");
 const chatRs = read("agent/src/chat.rs");
 const guiRs = read("agent/src/gui.rs");
@@ -111,10 +112,20 @@ ok("D: late bar lookups go through uiEl (bar → root → document) so the CREAT
 }
 
 // ───────────────────────── F. Rust bridge pins ─────────────────────────
-ok("F: bridge origin policy — extension schemes pass, web origins are refused, no Origin = local caller",
+ok("F: extension origin schemes are allowed, web origins rejected; no Origin means local caller",
   mainRs.includes("pub fn origin_allowed(origin: Option<&str>) -> bool") && mainRs.includes('["chrome-extension://", "moz-extension://", "safari-web-extension://", "ms-browser-extension://"]') && mainRs.includes("let Some(o) = origin.map(str::trim) else { return true };"));
+const figmaNullRouteMatch = /fn figma_plugin_null_origin_route\(path: &str\) -> bool\s*\{\s*matches!\(path,([\s\S]*?)\)\s*\}/.exec(mainRs);
+const figmaNullRoutes = figmaNullRouteMatch ? [...figmaNullRouteMatch[1].matchAll(/"([^\"]+)"/g)].map((m) => m[1]) : [];
+const figmaNullHandlerHasToken = (name) => {
+  const start = figmaPluginRs.indexOf(`pub async fn ${name}(`);
+  if (start < 0) return false;
+  const end = figmaPluginRs.indexOf("\npub async fn ", start + 1);
+  return /token_from\(&headers\)/.test(figmaPluginRs.slice(start, end < 0 ? undefined : end));
+};
+ok("F: Origin null exception is exactly four Figma plugin routes, and each handler requires a pairing/session token",
+  figmaNullRoutes.join(",") === "/api/figma-plugin/hello,/api/figma-plugin/poll,/api/figma-plugin/result,/api/figma-plugin/goodbye" && !figmaNullRoutes.includes("/api/figma-plugin/pair") && !figmaNullRoutes.includes("/api/figma-plugin/status") && !figmaNullRoutes.includes("/api/figma-plugin/revoke") && figmaPluginRs.includes("if !pairing_request_allowed(origin_from(&headers))") && ["hello_handler", "poll_handler", "result_handler", "goodbye_handler"].every(figmaNullHandlerHasToken));
 ok("F: every HTTP route sits behind origin_guard (403) and CORS only reflects allowed origins — allow_origin(Any) is gone",
-  mainRs.includes(".layer(axum::middleware::from_fn(origin_guard))") && mainRs.includes("AllowOrigin::predicate(|origin: &axum::http::HeaderValue, _parts: &axum::http::request::Parts| origin_allowed(origin.to_str().ok()))") && !mainRs.includes("allow_origin(Any)") && mainRs.includes("axum::http::StatusCode::FORBIDDEN"));
+  mainRs.includes(".layer(axum::middleware::from_fn(origin_guard))") && mainRs.includes("AllowOrigin::predicate(|origin: &axum::http::HeaderValue, parts: &axum::http::request::Parts| {") && mainRs.includes("origin_allowed_for_path(origin.to_str().ok(), parts.uri.path())") && mainRs.includes("if !origin_allowed_for_path(origin.as_deref(), &path)") && !mainRs.includes("allow_origin(Any)") && mainRs.includes("axum::http::StatusCode::FORBIDDEN"));
 ok("F: legacy WebSocket ports (17613 / 17615) check Origin at the handshake (accept_hdr_async → 403)",
   mainRs.includes("tokio_tungstenite::accept_hdr_async(stream, guard)") && mainRs.includes("*err.status_mut() = tokio_tungstenite::tungstenite::http::StatusCode::FORBIDDEN;") && !mainRs.includes("tokio_tungstenite::accept_async(stream)"));
 ok("F: origin policy has a cargo unit test", /mod origin_tests[\s\S]*fn extension_and_local_callers_pass_web_pages_do_not/.test(mainRs));

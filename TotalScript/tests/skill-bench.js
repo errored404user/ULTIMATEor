@@ -1,4 +1,4 @@
-// Skill benchmark (1.99.6): how well does the deterministic skill_intel ranking
+// Skill benchmark (2.21.1): how well does the deterministic skill_intel ranking
 // put the right expert first for real prompts, and does every expert it picks
 // reference the registry commands the task needs? Offline, dependency-free,
 // deterministic - the same prompts give the same numbers every run, so the
@@ -22,7 +22,7 @@ const ok = (name, cond, extra) => { if (cond) { pass++; console.log("PASS  " + n
 const FLOOR_TOP1 = 0.98;
 const FLOOR_TOP2 = 1.0;
 const FLOOR_SILENCE = 1.0;
-const FLOOR_HOLDOUT = 0.5; // round 4 reached 52.6% (10/19) untuned - oblique prompts without a domain word; misses are mostly silence, not a wrong expert
+const FLOOR_OPENED_REGRESSION_TOP1 = 1.0; // round 4 was opened for error analysis in 2.21.1; every labelled case must now pass
 
 global.window = global;
 global.chrome = { storage: { local: { get: (k, cb) => cb && cb({}), set: () => {} } }, runtime: { getURL: (p) => p } };
@@ -45,8 +45,10 @@ known.add("execute_luau");
 
 const fixture = JSON.parse(read("tests/fixtures/skill_bench_tasks.json"));
 const tasks = fixture.tasks;
+const regressionSet = fixture.regression_set || [];
 const ids = new Set(SI.EXPERTS.map((x) => x.id));
-ok("fixture: " + tasks.length + " tasks, unique ids, every expected / alternate expert exists", tasks.length >= 80 && new Set(tasks.map((t) => t.id)).size === tasks.length && tasks.every((t) => (t.expect === null || ids.has(t.expect)) && (t.alt || []).every((a) => ids.has(a))), tasks.filter((t) => t.expect !== null && !ids.has(t.expect)).map((t) => t.id).join());
+const allFixtureTasks = tasks.concat(regressionSet);
+ok("fixture: " + tasks.length + " tuning tasks + " + regressionSet.length + " opened regressions, unique ids and valid expert labels", tasks.length >= 80 && regressionSet.length >= 20 && new Set(allFixtureTasks.map((t) => t.id)).size === allFixtureTasks.length && allFixtureTasks.every((t) => (t.expect === null || ids.has(t.expect)) && (t.alt || []).every((a) => ids.has(a))), allFixtureTasks.filter((t) => t.expect !== null && !ids.has(t.expect)).map((t) => t.id).join());
 ok("fixture covers every expert at least twice", SI.EXPERTS.every((x) => tasks.filter((t) => t.expect === x.id || (t.alt || []).includes(x.id)).length >= 2), SI.EXPERTS.filter((x) => tasks.filter((t) => t.expect === x.id).length < 2).map((x) => x.id).join());
 ok("fixture names only registry commands", tasks.every((t) => (t.commands || []).every((c) => known.has(c))), tasks.flatMap((t) => (t.commands || []).filter((c) => !known.has(c))).join());
 
@@ -90,10 +92,10 @@ ok("top-2 accuracy >= " + FLOOR_TOP2 * 100 + "%", r2 >= FLOOR_TOP2, (r2 * 100).t
 ok("unrelated chatter gets no expert injected (" + silentWanted + " prompts)", rs >= FLOOR_SILENCE, misses.filter((m) => /silence/.test(m)).join("; "));
 ok("every task's required command is referenced by the picked experts", rc === 1, cmdMisses.join("; "));
 ok("ranking is deterministic (second pass identical)", tasks.every((t) => { const a = SI.select(SI.analyze(t.text, t.ctx || {}), { max: 3 }).picked.map((p) => p.id).join(); const b = SI.select(SI.analyze(t.text, t.ctx || {}), { max: 3 }).picked.map((p) => p.id).join(); return a === b; }));
-// Hold-out set: written after tuning, never tuned against (see fixture._holdout).
-const hold = fixture.holdout || [];
+// Round 4 was held out in 1.99.6, then opened for error analysis in 2.21.1. It is a regression set now, not an independent estimate.
+const prior = regressionSet;
 let h1 = 0, hs = 0, hScored = 0, hSilent = 0; const hMiss = [];
-for (const t of hold) {
+for (const t of prior) {
   const picked = SI.select(SI.analyze(t.text, t.ctx || {}), { max: 3 }).picked.map((p) => p.id);
   if (t.expect === null) { hSilent++; if (!picked.length) hs++; else hMiss.push(t.id + " noise " + picked.join(">")); continue; }
   hScored++;
@@ -102,10 +104,10 @@ for (const t of hold) {
   if (LIST) console.log("  " + t.id.padEnd(6) + (picked.length && accept.has(picked[0]) ? "ok    " : "MISS  ") + picked.join(">").padEnd(44) + "| " + t.text);
 }
 const hr = hScored ? h1 / hScored : 1;
-console.log("HOLD-OUT " + hold.length + " tasks: top-1 " + (hr * 100).toFixed(1) + "%  silence " + hs + "/" + hSilent + (hMiss.length ? "\n  " + hMiss.join("\n  ") : ""));
+console.log("OPENED PRIOR REGRESSION SET " + prior.length + " tasks: top-1 " + (hr * 100).toFixed(1) + "%  silence " + hs + "/" + hSilent + (hMiss.length ? "\n  " + hMiss.join("\n  ") : ""));
 const hWrong = hMiss.filter((m) => /got (?!nothing)[a-z]/.test(m)).length;
-console.log("HOLD-OUT wrong expert first: " + hWrong + "/" + hScored + " (the rest of the misses are silence - nothing injected)");
-ok("hold-out top-1 >= " + FLOOR_HOLDOUT * 100 + "% (never tuned against) and at most 2 wrong-expert picks", hr >= FLOOR_HOLDOUT && hs === hSilent && hWrong <= 2, (hr * 100).toFixed(1) + "% wrong=" + hWrong);
-ok("every pick comes with an explanation (deterministic, explainable ranking)", tasks.filter((t) => t.expect !== null).every((t) => { const s = SI.select(SI.analyze(t.text, t.ctx || {}), { max: 3 }); return s.picked.every((p) => p.why || p.reason || p.score != null) && Array.isArray(s.explain) ? true : s.explain != null; }));
+console.log("PRIOR SET wrong expert first: " + hWrong + "/" + hScored + "; independent hold-out score: NOT CLAIMED");
+ok("every opened prior case is retained as a regression: 100% accepted top-1, no noise on silence cases; no independent score is claimed", hr >= FLOOR_OPENED_REGRESSION_TOP1 && hs === hSilent && hWrong === 0, (hr * 100).toFixed(1) + "% wrong=" + hWrong);
+ok("every tuning and regression pick comes with an explanation (deterministic, explainable ranking)", tasks.concat(regressionSet).filter((t) => t.expect !== null).every((t) => { const s = SI.select(SI.analyze(t.text, t.ctx || {}), { max: 3 }); return s.picked.every((p) => p.why || p.reason || p.score != null) && Array.isArray(s.explain) ? true : s.explain != null; }));
 
 console.log("\n" + (fail ? "FAILED  " : "OK    ") + "skill-bench: " + pass + " passed, " + fail + " failed");

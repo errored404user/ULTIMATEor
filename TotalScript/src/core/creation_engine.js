@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// src/core/creation_engine.js — TotalCreation (2.21.0): the shared creation
+// src/core/creation_engine.js — TotalCreation (2.21.1): the shared creation
 // intelligence layer that every provider's agent loop runs through.
 //
 // What it adds on top of TotalOrchestrator.classifyTask (intent / category)
@@ -54,7 +54,7 @@
 // WHEN things are sent; this module only decides WHAT is true about the run.
 const TotalCreation = (() => {
   "use strict";
-  const VERSION = "2.21.0";
+  const VERSION = "2.21.1";
 
   // ───────────────────────── domains ─────────────────────────
   // did   = command families that BUILD the deliverable
@@ -174,6 +174,28 @@ const TotalCreation = (() => {
   const LOOKS_TURKISH_RE = /[çğıöşüÇĞİÖŞÜ]|(?:^|\s)(bir|ve|için|yap|ekle|olsun|ile|bana|lütfen|istiyorum)(?:\s|$)/;
   let trMode = false; // set per spec() call
   const asks = (id, text) => DOMAINS[id].ask.test(text) || (trMode && ASK_TR[id] && ASK_TR[id].test(text));
+
+  // A clause often carries intent through a relation or a pronoun rather than
+  // repeating the noun: "cannons that fire cannonballs", "the popup ... and
+  // saves it", or "make the shop prettier". Keep these contextual cues
+  // bounded to the named clause so one domain does not leak into every clause.
+  const SAVE_ANAPHORA_RE = /\b(?:save|saves|saved|saving|persist|persists|persisted|persisting)\s+(?:it|them|this|that|these|those)\b/i;
+  const PERSISTENCE_CONTEXT_RE = /\b(?:data|coins?|currency|rewards?|streaks?|progress|inventory|items?|stats?|levels?|profile|save data)\b/i;
+  const GUI_SURFACE_RE = /\b(?:shop|inventory|leaderboard|scoreboard|hud|hotbar|menu|screen|panel|interface|gui|ui|popup|settings|notification|button)\b/i;
+  const GUI_POLISH_RE = /\b(?:prettier|polish(?:ed|ing)?|beautif(?:y|ul)|visual(?:ly)?|appearance|look|reskin|cleaner|sleeker|modern(?:ize|ise)?|aesthetic(?:s)?)\b/i;
+  const ACTIVE_WEAPON_RE = /\b(?:cannons?|guns?|turrets?|launchers?|ballistas?|bows?|crossbows?)\b[^.!?;]{0,48}\b(?:fire|fires|shoot|shoots|launch|launches)\b|\b(?:fire|fires|shoot|shoots|launch|launches)\b[^.!?;]{0,48}\b(?:cannonballs?|projectiles?|arrows?|bullets?|rockets?|missiles?|bolts?|lasers?)\b/i;
+  function asksInClause(id, text, request, excluded) {
+    if (asks(id, text)) return true;
+    const clause = String(text || "");
+    const whole = String(request || "");
+    if (id === "data" && SAVE_ANAPHORA_RE.test(clause) && PERSISTENCE_CONTEXT_RE.test(whole)) {
+      const dataWasExcluded = Array.isArray(excluded) && excluded.some((phrase) => DOMAINS.data.ask.test(phrase));
+      if (!dataWasExcluded) return true;
+    }
+    if (id === "gui" && GUI_SURFACE_RE.test(clause) && GUI_POLISH_RE.test(clause)) return true;
+    if (id === "gameplay" && ACTIVE_WEAPON_RE.test(clause)) return true;
+    return false;
+  }
   // A prepositional phrase names the CONTEXT of a deliverable, not a second
   // one: "a trail for the sword", "an explosion when the barrel is hit",
   // "fly over the castle". It is removed before the domain lookup.
@@ -258,7 +280,7 @@ const TotalCreation = (() => {
       if (NEGATED_CLAUSE_RE.test(clause) || NEGATED_TAIL_RE.test(clause) || INSPECT_CLAUSE_RE.test(clause)) continue;
       const clean = clause.replace(new RegExp(NEGATED_INLINE_RE.source, "gi"), " ").replace(CONTEXT_PP_RE, (m) => (/script|module|gui\b|remote/i.test(m) ? m : " ")).replace(CONTEXT_IO_RE, " ");
       for (const id of DOMAIN_IDS) {
-        if (!asks(id, clean)) continue;
+        if (!asksInClause(id, clean, raw, negated)) continue;
         // "save the player's coins" is data, not a coin system: gameplay reached
         // only through currency words yields to data / gui in the same clause
         if (id === "gameplay" && !asks("gameplay", clean.replace(WEAK_GAMEPLAY_RE, " ")) && DOMAIN_IDS.some((o) => o !== "gameplay" && o !== "script" && asks(o, clean))) continue;
