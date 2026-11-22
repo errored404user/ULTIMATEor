@@ -999,6 +999,8 @@
     { name: "CodeCraft API", url: CODECRAFT_PAGE_URL, host: "codecraftapi.com · in TotalScript", extensionPage: "codecraft.html" },
     { name: "HuggingChat", url: "https://huggingface.co/chat/" },
     { name: "OpenRouter Chat", url: "https://openrouter.ai/chat" },
+    { name: "AI Free Forever", url: "https://aifreeforever.com/chat/deepseek-v4-flash" },
+    { name: "Langdock", url: "https://app.langdock.com/chat" },
   ];
 
   const A = {
@@ -1137,7 +1139,7 @@
     workmode:{title:"Work mode: Totality",summary:"There is ONE built-in work mode, Totality (named Creation until 1.73): the former Ultimate (Luau engineering + modeling), Visualizer (VFX / lighting / UI) and Animator (rigs, keyframes, tweens, camera) merged into a single creator profile with four equal-weight mandates. (Custom Public-Skill work modes were retired in 2.21.0 - Public Skills are skills only; their knowledge rides along when the request matches.)",details:["Totality runs on the shared OPERATING LOOP (assess → read before you write → execute continuously with batches of up to 4 independent commands → approval only for risk → verify deeply → recover → finish with evidence) and carries the LUAU ENGINEERING, MODELING, VISUAL and MOTION mandates plus twelve playbooks (new system, bug fix, refactor, build, mood pass, hero VFX, UI screen, thumbnail, combat clip, locomotion loop, prop motion, cutscene).","Three verification gates run per task: scripts changed → read back + script_check + console; look changed → total_screenshot + polish; motion created → animation_preview. Failing gates are merged into one system note before the final answer.","Legacy stored modes (Ultimate / Visualizer / Animator) migrate to Totality automatically; custom modes created on an old base keep working on Totality.","The mode card has Quick starts: one-click prompts (index this place, shop + currency, build a house, fix my errors, cinematic mood, hero spell VFX, game HUD, sword swing) pasted into the composer for you to edit and send.","Two more built-in modes sit next to Totality: Blender (1.95.0, stored id blender - Blender-first 3D asset pipeline -> Studio) and Animator (1.99.4, stored id animate - rig -> clip -> animation_preview on the actual rig -> playback code through the Animator -> play-test, on R6 and R15; its RIG and PLAYBACK gates demand a preview and a play-tested playback script). The old pre-1.39 Animator id still migrates to Totality; the new mode is a different id."],howTo:["TotalScript menu → Work mode → Totality (custom Public-Skill modes appear next to it)","Click a Quick start pill under the mode card, adjust the text, press Enter"]},
     projects:{title:"Roblox project references",summary:"Analyze a .rbxl/.rbxlx on your PC (nothing is uploaded) and attach a compact, searchable index to a template so the agent knows the real place structure.",details:["Templates → Roblox project (toolbar) or the Project tab inside the editor: drop the file, watch progress, cancel any time.","Binary .rbxl gives metadata only (ATTACHED_LIMITED); save as .rbxlx in Studio for a full index of services, scripts, UI and remotes.","The agent queries it in bounded chunks with project.find / project.findScripts / project.getService; Export Reference writes a .totalscript-project-reference.json you can re-import."],howTo:["TotalScript menu → Templates → Roblox project","Pick the .rbxlx, review the summary","Create Template from Project or Save"]},
     permissions:{title:"Access: Sandbox only / Full PC",summary:"Two states since 1.99.5. Sandbox only (default) = Studio + the workspace folder; commands that leave it (run_command, process_kill, delete_path, move_path, download_file, open_path, execute_blender_code, blender_export_fbx) are refused with ERROR ACCESS_SANDBOX - no approval card. Full PC = those run directly and total-core's FULL PC ACCESS is switched on with it.",details:["Sandbox only never asks and never runs anything on the PC - ideal for Studio-only work; the refusal tells you which step needs Full PC and offers a one-click switch.","Full PC is one switch in two places: Settings → Access and the Session panel's Danger zone. Picking it persists rsPermMode and pushes FULL PC ACCESS to total-core (the agent's own state is mirrored back into the Session panel).","The old Ask state (confirm every write) was removed; a stored 'ask' reads as Sandbox only.","Publishing / marketplace changes always show a confirmation card unless the 'Allow publish automation' switch is on; it auto-denies after 120 s so a hidden card cannot stall the agent."],howTo:["TotalScript menu → Access → Sandbox only / Full PC","Session panel → Danger zone → FULL PC (same switch)"]},
-    providers:{title:"Chat providers",summary:"TotalScript runs inside ChatGPT, Claude, Gemini, Google AI Studio, DeepSeek, Qwen, Kimi, GLM, Arena, Vani, HuggingChat, OpenRouter Chat and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["CodeCraft API (codecraftapi.com) has no web chat, so TotalScript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","Compact composers (Vani, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Vani guest mode is text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the TotalScript bar appears above the composer"]},
+    providers:{title:"Chat providers",summary:"TotalScript runs inside ChatGPT, Claude, Gemini, Google AI Studio, DeepSeek, Qwen, Kimi, GLM, Arena, Vani, HuggingChat, OpenRouter Chat, AI Free Forever, Langdock and CodeCraft API - same commands everywhere, the bar adapts to each composer.",details:["AI Free Forever and Langdock use the shared text-chat adapter; composer, transcript, stream format and login behavior on those sites have not been verified live. Image attachment is disabled until their upload controls are checked.","CodeCraft API (codecraftapi.com) has no web chat, so TotalScript hosts one: popup → CodeCraft API chat, paste your own cc_ key, pick a model; replies stream straight from the API and every token is billed to that key.","Compact composers (Vani, CodeCraft) receive a shorter catalogue with signatures instead of full schemas; the agent can still call get_command for details.","Vani guest mode is text-only, so screenshots are described in text instead of attached as images.","Switch sites freely: work mode, permissions, theme and templates are stored in the extension, not the site."],howTo:["Open any supported chat site - the TotalScript bar appears above the composer"]},
     plugins:{title:"Other plugins & full Studio control",summary:"Since 1.24.0 the TotalScript Studio plugin controls everything a plugin may touch (run/pause/stop, settings(), selection, camera, script editor tabs, history, any service method, toolbar macros, Save-to-Roblox, TestService, Output) and talks to other plugins - including Eclipse Animator.",details:["studio_service_call {service, method|property, args|value} reaches any Studio API with plugin security; studio_macro creates persistent toolbar buttons that run Luau; studio_playtest runs/pauses/stops the simulation.","plugins_list discovers installed plugins (widgets, save folders, PluginDebugService, shared/_G APIs) and commands other plugins registered on the TotalScript bus (shared.TotalScript.register / CoreGui.TotalScriptBus). plugin_invoke calls them, plugin_widget shows/hides/reads their panels, plugin_source_read reads their code when Plugin Debugging is enabled.","Studio never lets one plugin press another plugin's buttons - TotalScript reports the exact button and asks the user, or drives the plugin through its saves/exports.","Eclipse Animator: eclipse_status detects it, eclipse_handoff sends a TotalScript clip to <rig>.AnimSaves and opens Eclipse, eclipse_import converts Eclipse saves / Module Exporter tables back into AnimLib KeyframeSequences, eclipse_play previews any clip in edit mode."],howTo:["Make sure total-core and the TotalScript Studio plugin are connected (studio_plugin_status)","Ask e.g. 'open Eclipse on this rig', 'list my plugins', 'add a toolbar button that aligns the selection'"]},
     troubleshooting:{title:"Troubleshooting",summary:"Most stalls are a disconnected total-core/Studio, a pending approval card, or a provider that reformatted the command block.",details:["Red status pill: start total-core, then check Studio → Plugins → TotalScript is enabled and the MCP helper is running (total_status shows both).","Agent waiting: look for a publish confirmation card (it auto-denies after 120 s). A PC command refused in Sandbox only is not a wait - the chat gets ERROR ACCESS_SANDBOX at once and a banner offers Switch to Full PC.","'Failed to parse command code': the site added code-block chrome; 1.23.1 strips it automatically - update if you still see it.","Use total_debug for the Studio Output log, restart_mcp from the TotalScript menu to heal the MCP helper, and reload the tab after updating the extension."],howTo:["Check total_status","Reload the chat tab","Restart total-core / Studio if the plugin shows disconnected"]},
     tasklist:{title:"Task list",summary:"A persistent per-project checklist (Settings → Task list → Enable). You or the AI add tasks; the AI works them in order with task_next and ticks them with task_update only after verifying; the bar shows a progress pill.",details:["Enable/disable it in the TotalScript menu (Settings) under Modes: 'Task list'. When disabled nothing is shown to the AI and the Tasks tab is hidden; tasks stay saved (chrome.storage key rsTaskList).","Tasks tab (cards panel): add one task per Enter or paste a whole list, drag order with ↑/↓, tick/skip, inline-edit the text, Run (one task) / Run next / Run all with AI, Plan with AI (the agent proposes 4-12 verifiable steps via task_add), Export/Import JSON or plain lines.","Agent commands while enabled: task_list, task_next (marks it doing), task_add {text}, task_update {id|'#n', status: todo|doing|done|skipped, notes}. The SYSTEM_STATE line carries TASKS done/total and the next task; the system prompt carries the full list and the rules."],howTo:["TotalScript menu → Modes → Task list → on","Cards panel → Tasks → type tasks or Plan with AI","Press Run next / Run all, or just tell the AI 'do the next task'"]},
@@ -1349,12 +1351,15 @@
       // below is count-independent); without background mode we still park.
       let tries = 0;
       let messageSent = false;
+      let noSubmissionConfirmed = false;
       // Fingerprint of what we typed: if the composer no longer contains this
       // tail, the send DID land even when counts/textarea signals are flaky
       // (virtualised lists, slow clearing). Prevents blind resends.
       const sentTail = String(text).slice(-80);
-      // Max ONE resend: with the tail-fingerprint above, a second attempt only
-      // happens when our text is verifiably still sitting in the composer.
+      const providerGenerating = () => { try { return !!(P.isGenerating && P.isGenerating()); } catch { return false; } };
+      // Max ONE resend after an issued submit: retry only when the outgoing text
+      // is verifiably still sitting in the composer. A provider may separately
+      // opt in with typeAndSendFalseMeansNoSubmit when no submit action ran.
       while (!messageSent && !landed() && tries < 2 && !A.stop) {
         if (document.hidden && !bgMode) {
           diag("send.waitVisible", { tries });
@@ -1362,7 +1367,38 @@
         }
         await jitterBeforeSend();
         diag("submit.typeAndSend", { hasImages: !!(images && images.length) });
-        await P.typeAndSend(text, images);
+        const sendResult = await P.typeAndSend(text, images);
+        if (sendResult === false && P.typeAndSendFalseMeansNoSubmit === true) {
+          // ChatGPT can decline before clicking Send (busy Stop / disabled
+          // quota button). Its blank composer is NOT evidence this message was
+          // accepted, and a visible draft is NOT permission to click a disabled
+          // control again. Handle the provider's explicit no-submit signal before
+          // the normal composer/turn proof below.
+          noSubmissionConfirmed = true;
+          tries++;
+          diag("send.providerNotSubmitted", { tries, busy: providerGenerating() });
+          let detail = "";
+          try { detail = P.scanError ? String(P.scanError() || "") : ""; } catch {}
+          if (detail) {
+            if (A._lastSubmit) A._lastSubmit.answered = true;
+            ui.banner("warn", `${P.displayName} refused the message`, detail);
+            throw new SendAbortedError("provider refused the send");
+          }
+          if (tries < 2 && !A.stop) {
+            if (providerGenerating()) {
+              diag("send.waitProviderIdle", { tries });
+              const idle = await waitFor(() => A.stop || !providerGenerating(), 12000);
+              if (!idle && !A.stop) {
+                diag("send.providerStillBusy", { tries });
+                break; // never try to type/submit again while Stop still owns the composer
+              }
+            } else {
+              await sleep(250); // let a remounted/disabled composer settle before one safe retry
+            }
+          }
+          continue;
+        }
+        noSubmissionConfirmed = false;
         // Re-arm the pre-hide window NOW that typeAndSend has returned (the send
         // was just clicked, so our result turn is about to render). The initial
         // arm above can EXPIRE during an image upload - typeAndSend blocks ~3-6s
@@ -1384,6 +1420,18 @@
         tries++;
       }
       if (messageSent) diag("send.cleared", { tries });
+      // A provider with the explicit no-submit contract has proved that no
+      // request reached the site. Re-arm same-text submission so the user can
+      // retry immediately; never let an unrelated turn count disguise this as a
+      // landed message.
+      if (noSubmissionConfirmed && A._lastSubmit) A._lastSubmit.answered = true;
+      if (noSubmissionConfirmed && !A.stop) {
+        diag("send.failed", { tries, providerNotSubmitted: true });
+        ui.banner("warn", "Message didn't send",
+          `${P.displayName} did not submit the message after ${tries} attempts. ` +
+          `Just send something short yourself — like "continue" — and it'll pick back up.`);
+        throw new SendAbortedError("provider did not submit the message");
+      }
       // All retries exhausted with NO evidence the message landed (textarea never
       // cleared, no new turn). Silently returning here left the loop waiting for
       // a reply that will never come (~60s "empty" timeout) with zero explanation

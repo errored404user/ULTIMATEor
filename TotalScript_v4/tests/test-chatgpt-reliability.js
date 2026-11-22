@@ -32,6 +32,7 @@ function makePage({
   newChat = "none",
   hiddenNewChat = false,
   preexistingAttachment = false,
+  appendLineByLine = false,
 } = {}) {
   const newChatMarkup = newChat === "none" ? "" :
     (hiddenNewChat ? '<a data-testid="create-new-chat-button" href="/" hidden>Hidden new chat</a>' : "") +
@@ -68,7 +69,7 @@ function makePage({
   let editor = d.getElementById("prompt-textarea");
   const form = d.getElementById("composer");
   const button = d.getElementById("composer-submit-button");
-  let clickCount = 0, enterCount = 0, didReplace = false;
+  let clickCount = 0, enterCount = 0, didReplace = false, lineInsertStarted = false;
   d.execCommand = (command, _showUi, value) => {
     if (command === "insertText") {
       if (replaceComposerOnInsert && !didReplace) {
@@ -80,6 +81,11 @@ function makePage({
         // Simulate the original React-managed node accepting the edit just as
         // React swaps it out. The provider must detect and restore this draft.
         stale.textContent = String(value);
+      } else if (appendLineByLine) {
+        // ChatGPT's insertLineBreak path writes separate text nodes and <br>s.
+        // Re-start when the fixture's first line is seen, mirroring select-all.
+        if (!lineInsertStarted || String(value) === "line-0") { editor.textContent = ""; lineInsertStarted = true; }
+        editor.appendChild(d.createTextNode(String(value)));
       } else editor.textContent = String(value);
       return true;
     }
@@ -225,6 +231,19 @@ function makePage({
     const p = makePage({ pathname: "/", newChat: "navigates" });
     const result = await p.P.openNewChat();
     ok("an already-empty root chat is ready without another navigation click", result === true);
+    p.dom.window.close();
+  }
+  {
+    const p = makePage({ acceptClick: false, appendLineByLine: true });
+    const lines = Array.from({ length: 605 }, (_, i) => `line-${i}`);
+    lines[603] = "previous-" + "p".repeat(24);
+    lines[604] = "end-" + "z".repeat(12);
+    const text = lines.join("\n");
+    let result, error = "";
+    try { result = await p.P.typeAndSend(text); } catch (e) { error = e.message; }
+    ok("a truncated multiline draft survives verification and issues one bounded submit action", result === true && p.clickCount() === 1 && !error && p.diagnostics.some((d) => d.event === "send.unconfirmed"), error || `${p.clickCount()} clicks`);
+    ok("ChatGPT truncates the oversized middle while preserving the exact outgoing suffix", p.P.editorText().includes("truncated (5 of 605 lines omitted") && !p.P.editorText().includes("line-512") && p.P.editorText().endsWith(text.slice(-40)));
+    ok("ChatGPT opts into the core's explicit false-means-no-submit contract", p.P.typeAndSendFalseMeansNoSubmit === true);
     p.dom.window.close();
   }
 

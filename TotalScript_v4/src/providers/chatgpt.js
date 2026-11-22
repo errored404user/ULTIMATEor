@@ -506,7 +506,11 @@ const RSProvider = (() => {
   const textFromEditor = (e) => {
     if (!e) return "";
     if (safeRead(() => e.tagName, "") === "TEXTAREA" || safeRead(() => e.tagName, "") === "INPUT") return safeRead(() => e.value, "") || "";
-    return safeRead(() => e.textContent, "") || "";
+    // Contenteditable breaks are often <br> or block boundaries: textContent
+    // drops those separators, making multiline drafts fail verification and the
+    // core misclassify a still-present truncated draft as already sent.
+    const rendered = safeRead(() => e.innerText, null);
+    return typeof rendered === "string" ? rendered : (safeRead(() => e.textContent, "") || "");
   };
   const editorText = () => textFromEditor(getEditor());
 
@@ -1563,6 +1567,10 @@ const RSProvider = (() => {
     setFollowupMode,
     followupPlaceholderTargets() {const ed=getEditor();return ed ? [ed,...safeQueryAll(ed, '[data-placeholder], [placeholder], [aria-placeholder]')] : [];},
     setInputLock, writeDraft, typeAndSend, clearEditor, stopGeneration,
+    // Unlike several older adapters, ChatGPT returns false only when it proved
+    // that no submit action was issued; the shared core uses this opt-in to avoid
+    // treating its untouched (often blank) composer as a landed send.
+    typeAndSendFalseMeansNoSubmit: true,
     isGenerating, isBusyNow, isHardGenerating, turnComplete,
     enforceComposer, ensureComposerReady,
     turnHalted, findContinueBtn, clickContinueBtn,

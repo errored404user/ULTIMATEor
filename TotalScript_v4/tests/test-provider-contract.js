@@ -64,7 +64,7 @@ const seenProviders = new Set();
 for (const b of bundles) {
   const providerFile = b.js.find((j) => /src\/providers\//.test(j) && !/stream-reader\.js$/.test(j));
   const host = hostOf(b.matches[0]);
-  const pathname = host === "huggingface.co" ? "/chat/" : "/";
+  const pathname = host === "huggingface.co" ? "/chat/" : host === "aifreeforever.com" ? "/chat/deepseek-v4-flash" : host === "app.langdock.com" ? "/chat" : "/";
   const win = mockWindow(host, pathname);
   const ctx = vm.createContext(win);
   let P = null, loadErr = null;

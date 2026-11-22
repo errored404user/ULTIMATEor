@@ -218,6 +218,8 @@ html[data-rs-glass="true"][data-rs-engine="anim"] #rs-bar { border-color: rgba(2
 #rs-bar.rs-bar-inline.rs-prov-codecraft,
 #rs-bar.rs-bar-inline.rs-prov-huggingchat,
 #rs-bar.rs-bar-inline.rs-prov-openrouter,
+#rs-bar.rs-bar-inline.rs-prov-aifreeforever,
+#rs-bar.rs-bar-inline.rs-prov-langdock,
 #rs-bar.rs-bar-anchored.rs-prov-deepseek,
 #rs-bar.rs-bar-anchored.rs-prov-chatgpt,
 #rs-bar.rs-bar-anchored.rs-prov-claude,
@@ -229,7 +231,9 @@ html[data-rs-glass="true"][data-rs-engine="anim"] #rs-bar { border-color: rgba(2
 #rs-bar.rs-bar-anchored.rs-prov-qwen,
 #rs-bar.rs-bar-anchored.rs-prov-vani,
 #rs-bar.rs-bar-anchored.rs-prov-huggingchat,
-#rs-bar.rs-bar-anchored.rs-prov-openrouter {
+#rs-bar.rs-bar-anchored.rs-prov-openrouter,
+#rs-bar.rs-bar-anchored.rs-prov-aifreeforever,
+#rs-bar.rs-bar-anchored.rs-prov-langdock {
   background: transparent;
   border: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -255,6 +259,8 @@ html.rs-light #rs-bar.rs-bar-inline.rs-prov-vani,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-codecraft,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-huggingchat,
 html.rs-light #rs-bar.rs-bar-inline.rs-prov-openrouter,
+html.rs-light #rs-bar.rs-bar-inline.rs-prov-aifreeforever,
+html.rs-light #rs-bar.rs-bar-inline.rs-prov-langdock,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-deepseek,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-chatgpt,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-claude,
@@ -266,7 +272,9 @@ html.rs-light #rs-bar.rs-bar-anchored.rs-prov-arena,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-qwen,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-vani,
 html.rs-light #rs-bar.rs-bar-anchored.rs-prov-huggingchat,
-html.rs-light #rs-bar.rs-bar-anchored.rs-prov-openrouter {
+html.rs-light #rs-bar.rs-bar-anchored.rs-prov-openrouter,
+html.rs-light #rs-bar.rs-bar-anchored.rs-prov-aifreeforever,
+html.rs-light #rs-bar.rs-bar-anchored.rs-prov-langdock {
   background: transparent;
   border-bottom-color: rgba(0, 0, 0, 0.08);
 }

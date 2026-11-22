@@ -403,3 +403,14 @@ Paths are relative to the extracted archive roots (`ORscript/` or `PlazCode/`).
 | **Architectural risk** | High | Security policy lives only in a content script on a hostile page; the bridge trusts whoever connects; the AI is an unauthenticated principal. |
 
 **Bottom line:** the codebase is feature-rich and shows real operational hardening around Studio/MCP reliability, but it rests on two unsafe assumptions — that loopback is private and that the AI is trustworthy. Fixing bridge authentication (F-01) and making dangerous tools fail-closed (F-02/F-03/F-05) are the first changes to make; converting the repository from ZIP uploads into a real source tree with CI is the prerequisite for everything else.
+
+---
+
+## N. Post-audit provider package update (2026-10-12)
+
+This addendum records changes made after the audit snapshot at base commit `38b6c30`; findings above remain historical and were not re-audited by this provider integration.
+
+- **Provider registration:** the tracked `TotalScript_v4/` package (manifest 4.0.0) and the working-tree `TotalScript/` package (manifest 3.0.0) now include AI Free Forever's DeepSeek V4 Flash chat (`https://aifreeforever.com/chat/deepseek-v4-flash`) and Langdock (`https://app.langdock.com/chat`) through the shared MultiChat text-chat adapter. Both packages wire their manifest host/content-script and MAIN-world stream-tap matches, background status routing, popup recognition/launch entries, Switch AI list, overlay styling, help/docs and offline tests. The launcher targets the requested DeepSeek V4 Flash route; injection remains host-wide so the site can navigate among chat routes.
+- **Conservative capability:** image attachment remains disabled for these two sites pending upload-control verification. Authentication is not bypassed. Composer, transcript, stream format, login gates and account requirements remain **live-unverified**; the adapter tests use synthetic/offline pages.
+- **Distributions:** `TotalScript_v4.zip` was rebuilt from `TotalScript_v4/` and byte-checked (459 files; archive root remains `TotalScript/`; CRC OK). The working-tree `TotalScript.zip` was also rebuilt from `TotalScript/` and byte-checked (482 files; CRC OK).
+- **Offline validation:** v4 `provider-inventory.js --check` — 15 providers, 177 checks, 0 failures; `test-multichat.js` passed (including the exact DeepSeek V4 Flash and Langdock launch URLs); `test-provider-wiring.js` passed for 21 website hosts plus the extension chat page; `test-provider-contract.js` 16/16; `test-stream-net.js` 47/47; provider scan includes both new sites; simulated provider benchmark 14/14; JavaScript syntax and manifest JSON checks passed. These results establish registration/plumbing only, not live provider compatibility.

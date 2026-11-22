@@ -23,7 +23,7 @@ module.exports = function loadProviders(root) {
   for (const b of manifest.content_scripts.filter((c) => c.world !== "MAIN" && c.js.some((j) => j.includes("src/core/main.js")))) {
     const file = b.js.find((j) => /src\/providers\//.test(j) && !/stream-reader\.js$/.test(j));
     const host = hostOf(b.matches[0]);
-    const pathname = host === "huggingface.co" ? "/chat/" : "/";
+    const pathname = host === "huggingface.co" ? "/chat/" : host === "aifreeforever.com" ? "/chat/deepseek-v4-flash" : host === "app.langdock.com" ? "/chat" : "/";
     const win = mockWindow(host, pathname), ctx = vm.createContext(win);
     try {
       if (b.js.includes("src/providers/stream-reader.js")) vm.runInContext(read("src/providers/stream-reader.js"), ctx);

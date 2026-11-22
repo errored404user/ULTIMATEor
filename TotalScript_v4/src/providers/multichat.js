@@ -11,7 +11,9 @@ const RSProvider = (() => {
     // never asks for or stores provider credentials; API-only pages fail visibly
     // with the adapter's normal "open a text chat" warning.
     "openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"},
-    "www.openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"}
+    "www.openrouter.ai":{id:"openrouter",name:"OpenRouter Chat",chat:"https://openrouter.ai/chat"},
+    "aifreeforever.com":{id:"aifreeforever",name:"AI Free Forever",chat:"https://aifreeforever.com/chat/deepseek-v4-flash"},
+    "app.langdock.com":{id:"langdock",name:"Langdock",chat:"https://app.langdock.com/chat"}
   };
   const SITE=HOSTS[location.hostname]||{id:"multichat",name:"AI Chat",chat:location.origin};
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -546,7 +548,8 @@ const RSProvider = (() => {
   return {
     id: SITE.id,
     displayName: SITE.name,
-    supportsVision: true,
+    // Keep image capability conservative until a host's upload surface is verified.
+    supportsVision: SITE.id === "huggingchat" || SITE.id === "openrouter",
     timings,
     maxBatchCommands: 4,
     commandlessRetries: 2,

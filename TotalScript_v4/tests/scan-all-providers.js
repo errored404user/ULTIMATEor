@@ -4,11 +4,13 @@ const vm = require('vm');
 
 const providerFiles = [
   'src/providers/arena.js', 'src/providers/chatgpt.js', 'src/providers/claude.js',
-  'src/providers/deepseek.js', 'src/providers/gemini.js', 'src/providers/glm.js',
+  'src/providers/deepseek.js', 'src/providers/gemini.js', 'src/providers/aistudio.js', 'src/providers/glm.js',
   'src/providers/kimi.js', 'src/providers/vani.js',
   'src/providers/qwen.js',
   ['src/providers/multichat.js','huggingface.co'],
   ['src/providers/multichat.js','openrouter.ai'],
+  ['src/providers/multichat.js','aifreeforever.com'],
+  ['src/providers/multichat.js','app.langdock.com'],
   // Extension-hosted chat page (no content_scripts entry: loaded by codecraft.html).
   ['src/providers/codecraft.js', 'codecraftapi.com', 'codecraft.html'],
 ];
@@ -98,7 +100,7 @@ for (const providerEntry of providerFiles) {
   }
 
   const { win, doc } = createMockDom();
-  if (testHost) win.location = { href: `https://${testHost}/`, hostname: testHost, origin: `https://${testHost}`, pathname: testHost === "huggingface.co" ? "/chat/" : "/" };
+  if (testHost) { const pathname = testHost === "huggingface.co" ? "/chat/" : testHost === "aifreeforever.com" ? "/chat/deepseek-v4-flash" : testHost === "app.langdock.com" ? "/chat" : "/"; win.location = { href: `https://${testHost}${pathname}`, hostname: testHost, origin: `https://${testHost}`, pathname }; }
   let code = fs.readFileSync(pPath, 'utf8');
 
   // append window.RSProvider assignment for test evaluation if missing

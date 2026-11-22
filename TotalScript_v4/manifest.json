@@ -3,7 +3,7 @@
   "name": "TotalScript",
   "version": "4.0.0",
   "minimum_chrome_version": "111",
-  "description": "Turn ChatGPT, Claude, DeepSeek, Gemini, Google AI Studio, Kimi, GLM, Qwen, Arena, Vani, HuggingChat or OpenRouter Chat into a Roblox Studio / AgentScript agent. Two engines (RS/AS), work modes, image-to-model, auto-fix playtest errors, and Extra Thinking.",
+  "description": "AI agent for Roblox Studio + AgentScript across 14+ chats, including AI Free Forever and Langdock.",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -42,7 +42,9 @@
     "https://users.roblox.com/*",
     "https://huggingface.co/chat/*",
     "https://openrouter.ai/*",
-    "https://www.openrouter.ai/*"
+    "https://www.openrouter.ai/*",
+    "https://aifreeforever.com/*",
+    "https://app.langdock.com/*"
   ],
   "content_security_policy": {
     "extension_pages": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://* ws://127.0.0.1:* http://127.0.0.1:* http://localhost:*"
@@ -86,7 +88,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "TotalScript — RS/AS",
+    "default_title": "TotalScript \u2014 RS/AS",
     "default_icon": {
       "16": "assets/icon16.png",
       "32": "assets/icon32.png",
@@ -883,7 +885,9 @@
         "https://c.vani.ai/*",
         "https://huggingface.co/chat/*",
         "https://openrouter.ai/*",
-        "https://www.openrouter.ai/*"
+        "https://www.openrouter.ai/*",
+        "https://aifreeforever.com/*",
+        "https://app.langdock.com/chat*"
       ],
       "js": [
         "src/providers/stream-net.js"
@@ -990,7 +994,9 @@
       "matches": [
         "https://huggingface.co/chat/*",
         "https://openrouter.ai/*",
-        "https://www.openrouter.ai/*"
+        "https://www.openrouter.ai/*",
+        "https://aifreeforever.com/*",
+        "https://app.langdock.com/chat*"
       ],
       "js": [
         "src/core/config.js",

@@ -16,6 +16,7 @@ const SUPPORTED_HOSTS = [
   "c.vani.ai",
   "huggingface.co", "www.huggingface.co",
   "openrouter.ai", "www.openrouter.ai",
+  "aifreeforever.com", "app.langdock.com",
 ];
 const DEFAULT_AI_URL = "https://chat.deepseek.com/";
 // CodeCraft API (codecraftapi.com) is API-only; TotalScript hosts its chat page.
@@ -97,6 +98,7 @@ const SITE_NAMES = {
   "arena.ai": "Arena",
   "c.vani.ai": "Vani Chat",
   "huggingface.co": "HuggingChat", "openrouter.ai": "OpenRouter",
+  "aifreeforever.com": "AI Free Forever", "app.langdock.com": "Langdock",
 };
 const PROVIDER_SITES = [
   ["DeepSeek", "https://chat.deepseek.com/", "chat.deepseek.com"],
@@ -111,6 +113,8 @@ const PROVIDER_SITES = [
   ["Vani Chat", "https://c.vani.ai/", "c.vani.ai"],
   ["HuggingChat", "https://huggingface.co/chat/", "huggingface.co/chat"],
   ["OpenRouter", "https://openrouter.ai/chat", "openrouter.ai"],
+  ["AI Free Forever", "https://aifreeforever.com/chat/deepseek-v4-flash", "aifreeforever.com"],
+  ["Langdock", "https://app.langdock.com/chat", "app.langdock.com"],
 ];
 
 // ── tiny DOM / message helpers ─────────────────────────────────────────────
