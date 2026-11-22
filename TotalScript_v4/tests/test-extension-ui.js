@@ -17,6 +17,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const popupHtml = read("popup.html");
 const popupJs = read("popup.js");
 const shim = read("tools/popup-shots/chrome-shim.js");
+const manifest = JSON.parse(read("manifest.json"));
 
 const TAB_DS = { id: 1, active: true, url: "https://chat.deepseek.com/a/chat/s/1", title: "DeepSeek" };
 const CONNECTED = { connected: true, mcpAlive: true, studio: true, studioApp: true, studioProc: true, roblox_connected: true, lifecycle: "READY", tools: 25, servers: [{ id: "roblox", alive: true, tools: 4 }, { id: "local", alive: true, tools: 21 }] };
@@ -37,7 +38,7 @@ const TOOLS = [
 async function boot(shot) {
   const dom = new JSDOM(popupHtml.replace('<script src="popup.js"></script>', ""), { url: "chrome-extension://harness/popup.html", runScripts: "outside-only", pretendToBeVisual: true });
   const w = dom.window;
-  w.__SHOT = shot || {};
+  w.__SHOT = Object.assign({ version: manifest.version }, shot || {});
   // jsdom gaps: <dialog> methods, scrollIntoView, clipboard, URL.createObjectURL.
   if (!w.HTMLDialogElement.prototype.showModal) { w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); }; w.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); }; }
   if (!w.Element.prototype.scrollIntoView) w.Element.prototype.scrollIntoView = () => {};
@@ -148,6 +149,10 @@ const visible = (el) => { for (let n = el; n; n = n.parentElement) if (n.hidden 
     ok("C2 search finds the setting with its category", !d.getElementById("set-results").hidden && /Auto-fix playtest errors/.test(d.getElementById("set-results-list").textContent) && /AI & Agents/.test(d.getElementById("set-results-list").textContent));
     d.querySelector("#set-results-list .set-result").click(); await sleep(40);
     ok("C3 picking a result opens the category panel with that row", !d.getElementById("set-panel").hidden && d.getElementById("set-title").textContent === "AI & Agents" && d.querySelector('#set-panel [data-item="autofix"]'));
+    const saverRow = d.querySelector('#set-panel [data-item="tokensaver"]');
+    ok("C3a Token Saver is in AI & Agents and defaults off", !!saverRow && saverRow.getAttribute("aria-checked") === "false");
+    saverRow.click(); await sleep(10);
+    ok("C3b Token Saver toggle persists rsTokenSaver=true", (await w.chrome.storage.local.get(["rsTokenSaver"])).rsTokenSaver === true && saverRow.getAttribute("aria-checked") === "true");
     // toggle in panel writes the real key
     const row = d.querySelector('#set-panel [data-item="plan"]'); row.click(); await sleep(10);
     ok("C4 Plan mode switch writes rsPlanMode=true", (await w.chrome.storage.local.get(["rsPlanMode"])).rsPlanMode === true && row.getAttribute("aria-checked") === "true");
@@ -160,8 +165,8 @@ const visible = (el) => { for (let n = el; n; n = n.parentElement) if (n.hidden 
     d.getElementById("set-reset").click(); await sleep(10);
     ok("C7 per-category Reset confirms first", d.getElementById("dlg").hasAttribute("open") && /Reset AI & Agents/.test(d.getElementById("dlg-title").textContent));
     d.querySelector("#dlg-foot .danger").click(); await sleep(40);
-    const after = await w.chrome.storage.local.get(["rsPlanMode", "rsThinkingLevel", "rsCustomPrompt"]);
-    ok("C8 reset removes only that category's keys", after.rsPlanMode === undefined && after.rsThinkingLevel === undefined && after.rsCustomPrompt === undefined);
+    const after = await w.chrome.storage.local.get(["rsPlanMode", "rsThinkingLevel", "rsTokenSaver", "rsCustomPrompt"]);
+    ok("C8 reset removes only that category's keys, including Token Saver", after.rsPlanMode === undefined && after.rsThinkingLevel === undefined && after.rsTokenSaver === undefined && after.rsCustomPrompt === undefined);
     // appearance writes tsPopup and applies attributes
     d.getElementById("set-back").click(); await sleep(5);
     d.querySelector('.cat[data-cat="appearance"]').click(); await sleep(30);
@@ -186,17 +191,17 @@ const visible = (el) => { for (let n = el; n; n = n.parentElement) if (n.hidden 
     // export / import round trip
     d.getElementById("set-back").click(); await sleep(5);
     d.querySelector('.cat[data-cat="advanced"]').click(); await sleep(30);
-    await w.chrome.storage.local.set({ rsBrand: { name: "Benim", logo: "data:image/png;base64,AAAA" } });
+    await w.chrome.storage.local.set({ rsBrand: { name: "Benim", logo: "data:image/png;base64,AAAA" }, rsTokenSaver: true });
     let exported = null; const origBlob = w.Blob; w.Blob = function (parts, o) { exported = parts.join(""); return new origBlob(parts, o); };
     d.querySelector('#set-panel [data-item="export"] .ts-btn').click(); await sleep(20);
     const ex = JSON.parse(exported);
-    ok("C15 export carries settings but strips the brand logo and the learned image tools", ex.settings.rsBrand.name === "Benim" && ex.settings.rsBrand.logo === undefined && !("rsImageTools" in ex.settings) && ex.totalscript === "4.0.0");
+    ok("C15 export carries Token Saver, strips the brand logo and learned image tools, and reports the manifest version", ex.settings.rsBrand.name === "Benim" && ex.settings.rsBrand.logo === undefined && ex.settings.rsTokenSaver === true && !("rsImageTools" in ex.settings) && ex.totalscript === manifest.version);
     // reset all confirms + removes keys
     d.querySelector('#set-panel [data-item="resetAll"] .ts-btn').click(); await sleep(10);
     ok("C16 Reset everything confirms first", d.getElementById("dlg").hasAttribute("open") && /Reset every TotalScript setting/.test(d.getElementById("dlg-title").textContent));
     d.querySelector("#dlg-foot .danger").click(); await sleep(60);
-    const gone = await w.chrome.storage.local.get(["rsBrand", "rsKeybinds", "tsPopup", "rs-engine"]);
-    ok("C17 reset-all removes agent, shortcut, popup and engine keys and resets Full PC on the worker", gone.rsBrand === undefined && gone.rsKeybinds === undefined && gone.tsPopup === undefined && gone["rs-engine"] === undefined && w.__shotCalls.some((c) => c.type === "rs-set-full" && c.enabled === false) && d.documentElement.getAttribute("data-ts-theme") === "dark");
+    const gone = await w.chrome.storage.local.get(["rsBrand", "rsKeybinds", "rsTokenSaver", "tsPopup", "rs-engine"]);
+    ok("C17 reset-all removes Token Saver, agent, shortcut, popup and engine keys and resets Full PC on the worker", gone.rsBrand === undefined && gone.rsKeybinds === undefined && gone.rsTokenSaver === undefined && gone.tsPopup === undefined && gone["rs-engine"] === undefined && w.__shotCalls.some((c) => c.type === "rs-set-full" && c.enabled === false) && d.documentElement.getAttribute("data-ts-theme") === "dark");
     // support: donate card (pinned markup) is live
     d.getElementById("set-back").click(); await sleep(5);
     d.querySelector('.cat[data-cat="support"]').click(); await sleep(30);

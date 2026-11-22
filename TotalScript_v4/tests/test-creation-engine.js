@@ -263,6 +263,7 @@ const REQ = "Build a sword combat system with a shop GUI and a slash sound, save
     w.URL.createObjectURL = () => "blob:harness"; w.URL.revokeObjectURL = () => {};
     w.open = () => null; w.alert = () => {}; w.confirm = () => true; w.prompt = () => null;
     const storage = {};
+    const storageChangeListeners = [];
     const storageApi = () => ({
       get(keys, cb) { const out = {}; const ks = keys == null ? Object.keys(storage) : typeof keys === "string" ? [keys] : Array.isArray(keys) ? keys : Object.keys(keys); for (const k of ks) { if (k in storage) out[k] = storage[k]; else if (keys && typeof keys === "object" && !Array.isArray(keys)) out[k] = keys[k]; } if (cb) setTimeout(() => cb(out), 0); return Promise.resolve(out); },
       set(obj, cb) { Object.assign(storage, obj); if (cb) setTimeout(cb, 0); return Promise.resolve(); },
@@ -271,10 +272,11 @@ const REQ = "Build a sword combat system with a shop GUI and a slash sound, save
     const TOOLS = [{ name: "execute_luau", description: "Run Luau", inputSchema: { type: "object", properties: { code: { type: "string" } } } }];
     const notes = [];
     const background = (msg) => { switch (msg && msg.type) { case "status": return { ok: true, type: "rs-status", connected: true, mcpAlive: true, studio: true, roblox_connected: true }; case "studio_status": return { ok: true, studio: true }; case "call_tool": return { ok: true, text: "ok" }; case "activity_note": notes.push(msg); return { ok: true }; default: return { ok: true, tools: TOOLS }; } };
-    w.chrome = { runtime: { id: "harness-ext", getURL: (p) => "chrome-extension://harness-ext/" + p, sendMessage(msg, cb) { const r = background(msg); if (typeof cb === "function") setTimeout(() => cb(r), 0); return Promise.resolve(r); }, onMessage: { addListener() {} }, lastError: null, getManifest: () => manifest }, storage: { local: storageApi(), sync: storageApi(), session: storageApi(), onChanged: { addListener() {} } }, tabs: { create() {} } };
+    w.chrome = { runtime: { id: "harness-ext", getURL: (p) => "chrome-extension://harness-ext/" + p, sendMessage(msg, cb) { const r = background(msg); if (typeof cb === "function") setTimeout(() => cb(r), 0); return Promise.resolve(r); }, onMessage: { addListener() {} }, lastError: null, getManifest: () => manifest }, storage: { local: storageApi(), sync: storageApi(), session: storageApi(), onChanged: { addListener(fn) { storageChangeListeners.push(fn); } } }, tabs: { create() {} } };
     storage.rsCodeCraft = { key: "cc_" + "a".repeat(48), model: "kimi-k3" };
     storage.rsSettingsAdvanced = true;
     storage.rsCreationProfile = "professional"; // stored choice must be restored
+    storage.rsTokenSaver = true; // Token Saver preference must hydrate from chrome.storage.local
     w.fetch = async (url) => { if (String(url).endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "kimi-k3" }] }), { status: 200, headers: { "content-type": "application/json" } }); return new Response("{}", { status: 200, headers: { "content-type": "application/json" } }); };
     const pageErrors = []; w.onerror = (m) => { pageErrors.push(String(m)); };
     for (const sc of scripts) { const el = d.createElement("script"); el.textContent = read(sc) + "\n//# sourceURL=" + sc; d.body.appendChild(el); }
@@ -282,7 +284,15 @@ const REQ = "Build a sword combat system with a shop GUI and a slash sound, save
     try {
       await waitFor(() => d.getElementById("rs-bar"), 8000, "#rs-bar");
       await sleep(700);
-      ok("H1 page: TotalCreation is loaded in the bundle and the stored profile is restored", typeof w.TotalCreation === "object" && w.TotalCreation.VERSION === "2.21.1" && typeof w.__rsCreationProfile === "function" && w.__rsCreationProfile() === "professional", w.__rsCreationProfile && w.__rsCreationProfile());
+      ok("H1 page: TotalCreation and stored creation / Token Saver settings are restored", typeof w.TotalCreation === "object" && w.TotalCreation.VERSION === "2.21.1" && typeof w.__rsCreationProfile === "function" && w.__rsCreationProfile() === "professional" && typeof w.__rsTokenSaver === "function" && w.__rsTokenSaver() === true, { profile: w.__rsCreationProfile && w.__rsCreationProfile(), tokenSaver: w.__rsTokenSaver && w.__rsTokenSaver() });
+      const changeSaver = (value) => {
+        const oldValue = storage.rsTokenSaver; storage.rsTokenSaver = value;
+        for (const fn of storageChangeListeners) { try { fn({ rsTokenSaver: { oldValue, newValue: value } }, "local"); } catch {} }
+      };
+      changeSaver(false);
+      ok("H1a live storage change turns Token Saver off in the active content script", w.__rsTokenSaver() === false);
+      changeSaver(true);
+      ok("H1b live storage change turns Token Saver back on", w.__rsTokenSaver() === true);
       const supportBtn = d.getElementById("rs-support-btn") || d.getElementById("rs-settings-btn");
       if (supportBtn) { supportBtn.click(); await sleep(150); }
       const menu = d.getElementById("rs-menu");

@@ -840,7 +840,8 @@ const CATEGORIES = [
     { id: "motion", pref: "motion", type: "toggle", label: "Animations", sub: "Transitions, pulses and toasts. Off also follows your system's reduced-motion setting." },
     { id: "brand", type: "action", label: "On-page bar look", sub: "Name, logo, colours, button style, typeface and size of the bar on AI pages — edited on the page itself.", button: "Customize on the AI page", run: () => $("settings").click() },
   ] },
-  { id: "agents", title: "AI & Agents", sub: "Reasoning effort, creation quality, plan mode, auto-fix, debugger, Multi-Agent, custom prompt", icon: "brain", items: [
+  { id: "agents", title: "AI & Agents", sub: "Token Saver, reasoning effort, creation quality, plan mode, auto-fix, debugger, Multi-Agent, custom prompt", icon: "brain", items: [
+    { id: "tokensaver", key: "rsTokenSaver", type: "toggle", default: false, live: true, label: "Token Saver", sub: "Uses a shorter system prompt, smaller command catalogue and reminders. Your messages, custom instructions, command format and safety rules are preserved; active sessions use it on their next prompt refresh." },
     { id: "effort", key: "rsThinkingLevel", type: "select", default: "mid", live: true, label: "Reasoning effort", sub: "How hard the AI thinks before it acts — through the prompt only; the site's model is never switched.", options: EFFORT_LEVELS },
     { id: "cprofile", key: "rsCreationProfile", type: "select", default: "high", live: true, label: "Creation quality", sub: "How strictly a build is checked against your request: Standard = one reminder for missing parts; High = every part must be read back + integration checks; Professional = audits + a second round; Masterpiece = three rounds. Always capped by the provider's limits.", options: CREATION_PROFILES },
     { id: "extra", key: "rsExtraThinking", type: "toggle", default: false, live: true, label: "Extra thinking", sub: "The AI questions every assumption before acting (the Think button on the bar)." },
@@ -894,7 +895,7 @@ const CATEGORIES = [
     { id: "donate", type: "donate", label: "Donate" },
   ] },
 ];
-const RS_KEYS_ALL = ["rsWorkMode", "rsPermMode", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsAutoFixStopPlay", "rsAutoDebug", "rsBgMode", "rsSounds", VOLUME_KEY, "rsSettingsAdvanced", "rsThinkingLevel", "rsReasoningModes", "rsEffortExtras", "rsPlanMode", "rsCreationProfile", "rsGuiBrief", "rsMultiAgent", "rsCustomPrompt", "rsKeybinds", "rsBrand", "rsDebugDiagnostics", "rsAllowPublishAutomation", "rsImageTools", "rs-engine", PREF_KEY];
+const RS_KEYS_ALL = ["rsWorkMode", "rsPermMode", "rsExtraThinking", "rsForgeMode", "rsAutoFix", "rsAutoFixStopPlay", "rsAutoDebug", "rsBgMode", "rsSounds", VOLUME_KEY, "rsSettingsAdvanced", "rsThinkingLevel", "rsTokenSaver", "rsReasoningModes", "rsEffortExtras", "rsPlanMode", "rsCreationProfile", "rsGuiBrief", "rsMultiAgent", "rsCustomPrompt", "rsKeybinds", "rsBrand", "rsDebugDiagnostics", "rsAllowPublishAutomation", "rsImageTools", "rs-engine", PREF_KEY];
 const EXPORT_KEYS = RS_KEYS_ALL.filter((k) => k !== "rsImageTools");
 let currentCat = null;
 const catById = (id) => CATEGORIES.find((c) => c.id === id);

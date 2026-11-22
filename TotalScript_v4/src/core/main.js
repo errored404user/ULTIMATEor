@@ -22,6 +22,12 @@
   const TOTAL_BOOT_AT=performance.now();
   const P = RSProvider;
   const T = P.timings;
+  const TOKEN_SAVER_CATALOGUE_CHARS = 9000;
+  const TOKEN_SAVER_CATALOGUE_LINES = 200;
+  const TOKEN_SAVER_REMINDER_CHARS = 5000;
+  let tokenSaverEnabled = false;
+  function isTokenSaverEnabled() { return tokenSaverEnabled; }
+  try { window.__rsTokenSaver = () => tokenSaverEnabled; } catch {}
   // 1.69: provider orchestration layer (task understanding, error taxonomy,
   // argument validation, capability record, redaction). Optional: every use
   // below degrades to the pre-1.69 behaviour when the module is missing.
@@ -3623,7 +3629,8 @@
   }
   try { chrome.storage.local.get("rsProjectMap", (r) => { if (r && r.rsProjectMap && r.rsProjectMap.text && !window.__rsProjectMap) window.__rsProjectMap = r.rsProjectMap; }); } catch {}
   function compactToolsReminder(tools) {
-    const limit = Math.max(2000, Number(P.commandListMaxChars) || 6000);
+    const baseLimit = Math.max(2000, Number(P.commandListMaxChars) || 6000);
+    const limit = isTokenSaverEnabled() ? Math.min(baseLimit, TOKEN_SAVER_REMINDER_CHARS) : baseLimit;
     let focus = [];
     try { focus = workModeFocusNames(normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()), (tools || []).map((t) => t.name)); } catch {}
     const byName = new Map((tools || []).filter((t) => t && t.name).map((t) => [t.name, t]));
@@ -5600,10 +5607,13 @@
         if (focusNames.length) focusBlock = `━━━ ${WORK_MODES[focusMode].badge} WORK MODE FOCUS — ${focusNames.length} commands you are expected to use heavily (the UNIVERSAL set above plus this mode's families, which come FIRST in SIGNATURES BY FAMILY below) ━━━\n${P.compactCommandList || focusNames.length > 240 ? "" : focusNames.join(", ") + "\n"}\n`; // 1.39.0: Creation focus ≈ 425 names - the families below list them
       }
       const compact = !!P.compactCommandList;
-      const limit = compact
+      const baseLimit = compact
         ? Math.max(2500, Number(P.commandListMaxChars) || 9000)
         : Math.max(12000, Number(P.commandListMaxChars) || 32000);
-      const lineLimit = Math.max(40, Number(P.commandListMaxLines) || (compact ? 400 : 700));
+      const saverCatalogue = isTokenSaverEnabled() && !commandQuery;
+      const limit = saverCatalogue ? Math.min(baseLimit, TOKEN_SAVER_CATALOGUE_CHARS) : baseLimit;
+      const baseLineLimit = Math.max(40, Number(P.commandListMaxLines) || (compact ? 400 : 700));
+      const lineLimit = saverCatalogue ? Math.min(baseLineLimit, TOKEN_SAVER_CATALOGUE_LINES) : baseLineLimit;
       if (commandQuery) {
         const matched = scoped.length + animLines.length + skillLines.length + agentLines.length;
         // Keyword searches with many hits come back as signatures (callable),
@@ -7150,7 +7160,7 @@
               // them the same bounded name index list_commands gave them.
               let modeCheck = "";
               try { modeCheck = RS.workModeChecklist(normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode())); } catch {}
-              toSend += (P.compactCommandList ? compactToolsReminder(roblox) : RS.toolsReminder(roblox)) + (modeCheck ? "\n" + modeCheck : "") + "\n" + RS.memoryNudge() + projectMapReminder();
+              toSend += (P.compactCommandList ? compactToolsReminder(roblox) : RS.toolsReminder(roblox, isTokenSaverEnabled() ? TOKEN_SAVER_REMINDER_CHARS : undefined)) + (modeCheck ? "\n" + modeCheck : "") + "\n" + RS.memoryNudge() + projectMapReminder();
               diag("tools.reminder", { after: REMIND_TOOLS_EVERY, projectMap: !!(window.__rsProjectMap && window.__rsProjectMap.text) });
             }
           }
@@ -7458,7 +7468,9 @@
     function embeddedCatalogue(engine) {
       try {
         if (P.compactCommandList || P.embedCatalogue === false) return "";
-        const budget = Math.max(0, Number(P.embedCatalogueChars) || EMBED_CATALOGUE_DEFAULT_CHARS);
+        const baseBudget = Math.max(0, Number(P.embedCatalogueChars) || EMBED_CATALOGUE_DEFAULT_CHARS);
+        const tokenSaver = isTokenSaverEnabled();
+        const budget = tokenSaver ? Math.min(baseBudget, TOKEN_SAVER_CATALOGUE_CHARS) : baseBudget;
         if (!budget || !A.toolList || !A.toolList.length) return "";
         const requested = engine === "local" ? "local" : "roblox";
         const allScoped = A.toolList.filter((t) => t && (t.server || requested) === requested && !t.hidden);
@@ -7485,7 +7497,9 @@
           nativeTools: [...allScoped, ...helperTools],
           virtualLines: [...animLines, ...skillLines, ...agentLines],
           webLines: headers,
-          focusBlock, focusNames, compact: true, limit: budget, lineLimit: Math.max(120, Number(P.embedCatalogueLines) || 420), modeId: focusMode,
+          focusBlock, focusNames, compact: true, limit: budget,
+          lineLimit: tokenSaver ? Math.min(TOKEN_SAVER_CATALOGUE_LINES, Math.max(120, Number(P.embedCatalogueLines) || 420)) : Math.max(120, Number(P.embedCatalogueLines) || 420),
+          modeId: focusMode,
         });
         diag("sys.embeddedCatalogue", { chars: text.length, lines: text.split("\n").length, budget, engine: requested });
         return text;
@@ -7495,8 +7509,9 @@
       opts = opts || {};
       let engine = "roblox";
       try { if (typeof window.__rsEngine === "function") engine = window.__rsEngine(); } catch {}
+      const tokenSaver = isTokenSaverEnabled();
       const catalogue = opts.embedCatalogue === false ? "" : embeddedCatalogue(engine);
-      const tight = !!(P.sysMaxChars && P.sysMaxChars < 16000) || !!P.compactCommandList;
+      const tight = tokenSaver || !!(P.sysMaxChars && P.sysMaxChars < 16000) || !!P.compactCommandList;
       let boostNotes = "";
       try {
         if (PBOOST) {
@@ -7520,6 +7535,7 @@
         engine,
         fullAccess: !!(typeof window.__rsFullAccess === "function" && window.__rsFullAccess()),
         maxChars: P.sysMaxChars || 0,
+        tokenSaver,
         catalogue,
       });
       A.sysEmbeddedCatalogue = !!catalogue && text.includes("COMMAND CATALOGUE (embedded");
@@ -7693,7 +7709,7 @@
       // keeps its own schedule.
       let mode = "creation";
       try { mode = normalizeWorkMode(window.__rsWorkMode && window.__rsWorkMode()); } catch {}
-      const tight = !!(P.sysMaxChars && P.sysMaxChars < 16000) || !!P.compactCommandList;
+      const tight = isTokenSaverEnabled() || !!(P.sysMaxChars && P.sysMaxChars < 16000) || !!P.compactCommandList;
       const rider = "\n\n────────────────────────────────\n" + RS.RESEND_MARKER + "\n"
         + RS.workModeSwitchNote(mode, { tight })
         + "\n\n" + workModeFocusSignatures(tight ? 2500 : 6000);
@@ -9605,8 +9621,9 @@
     try { window.__rsAutoDebug = () => autoDebugEnabled; } catch {}
     try { window.__rsMultiAgent = () => multiAgent; } catch {}
     try {
-      chrome.storage.local.get(["rsAutoFix", "rsExtraThinking", "rsPlanMode", "rsForgeMode", "rsAutoFixStopPlay", "rsWorkMode", "rsAutoDebug", "rsMultiAgent"], (r) => {
+      chrome.storage.local.get(["rsAutoFix", "rsExtraThinking", "rsPlanMode", "rsForgeMode", "rsAutoFixStopPlay", "rsWorkMode", "rsAutoDebug", "rsMultiAgent", "rsTokenSaver"], (r) => {
         if (!r) return;
+        if (typeof r.rsTokenSaver === "boolean") tokenSaverEnabled = r.rsTokenSaver;
         if (typeof r.rsAutoFix === "boolean") autoFixEnabled = r.rsAutoFix;
         if (typeof r.rsExtraThinking === "boolean") {
           extraThinking = r.rsExtraThinking;
@@ -9735,6 +9752,10 @@
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area !== "local" || !changes) return;
         let dirty = false;
+        if (Object.prototype.hasOwnProperty.call(changes, "rsTokenSaver")) {
+          tokenSaverEnabled = changes.rsTokenSaver.newValue === true;
+          dirty = true;
+        }
         if (changes.rsExtraThinking && typeof changes.rsExtraThinking.newValue === "boolean") {
           extraThinking = changes.rsExtraThinking.newValue;
           try { window.__rsExtraThinking = () => extraThinking; } catch {}

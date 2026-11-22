@@ -45,8 +45,8 @@ assert(main.includes('const failing = gates.filter((g) => bare.some((b) => g.did
 
 // prompt layers: one shared OPERATING LOOP + ONE profile (full + tight)
 assert(config.includes("const WORK_MODE_LOOP = {") && config.includes("const WORK_MODE_PROMPTS = {") && config.includes("function workModePrompt(wm, opts)"), "mode prompt module");
-assert(config.includes('modeExtra += "\\n\\n" + workModePrompt(wm, { tight: !!tightBudget });'), "system prompt uses the module (tight variant on small budgets)");
-assert(config.includes("const tightBudget = maxChars && maxChars < 16000;"), "condensed mandate for providers with a small system-prompt budget");
+assert(config.includes('modeExtra += "\\n\\n" + workModePrompt(wm, { tight: tightBudget });'), "system prompt uses the tight profile for Token Saver and small provider budgets");
+assert(config.includes("const tightPrompt = tokenSaver || !!(maxChars && maxChars < 16000);") && config.includes("const tightBudget = tightPrompt;"), "Token Saver selects the condensed mandate without changing the provider-budget default");
 assert(!/adaptive/i.test(config), "no adaptive wording left in prompts");
 assert(config.includes('function normalizeModeId(wm) { return WORK_MODE_PROMPTS[wm] ? wm : "creation"; }'), "config normalises legacy ids to creation");
 for (const k of ["workModePrompt,", "workModeChecklist,", "workModeSwitchNote,", "WORK_MODE_PROMPTS,"]) assert(config.includes(k), "RS exports " + k);
