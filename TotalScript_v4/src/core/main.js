@@ -1352,6 +1352,7 @@
       let tries = 0;
       let messageSent = false;
       let noSubmissionConfirmed = false;
+      let providerCommitted = false;
       // Fingerprint of what we typed: if the composer no longer contains this
       // tail, the send DID land even when counts/textarea signals are flaky
       // (virtualised lists, slow clearing). Prevents blind resends.
@@ -1360,7 +1361,10 @@
       // Max ONE resend after an issued submit: retry only when the outgoing text
       // is verifiably still sitting in the composer. A provider may separately
       // opt in with typeAndSendFalseMeansNoSubmit when no submit action ran.
-      while (!messageSent && !landed() && tries < 2 && !A.stop) {
+      // A provider may opt into a single-commit contract: after it issues one
+      // native submit action, an ambiguous landing is never permission to click
+      // again. Only a provider-confirmed no-submit result may be retried.
+      while (!messageSent && !landed() && tries < 2 && !A.stop && !providerCommitted) {
         if (document.hidden && !bgMode) {
           diag("send.waitVisible", { tries });
           if (!(await waitVisible()) || A.stop) break; // park (no cap) until foreground; break only on user stop
@@ -1399,6 +1403,7 @@
           continue;
         }
         noSubmissionConfirmed = false;
+        providerCommitted = P.typeAndSendSingleCommit === true;
         // Re-arm the pre-hide window NOW that typeAndSend has returned (the send
         // was just clicked, so our result turn is about to render). The initial
         // arm above can EXPIRE during an image upload - typeAndSend blocks ~3-6s
@@ -1431,6 +1436,13 @@
           `${P.displayName} did not submit the message after ${tries} attempts. ` +
           `Just send something short yourself — like "continue" — and it'll pick back up.`);
         throw new SendAbortedError("provider did not submit the message");
+      }
+      if (providerCommitted && !messageSent && !landed() && !A.stop) {
+        diag("send.unconfirmedSingleCommit", { tries });
+        ui.banner("warn", "Send acceptance is unclear",
+          `${P.displayName} received one send action, but TotalScript could not confirm that it landed. ` +
+          `It will not submit this message again automatically; check the chat before retrying to avoid a duplicate.`);
+        throw new SendAbortedError("single provider send could not be confirmed");
       }
       // All retries exhausted with NO evidence the message landed (textarea never
       // cleared, no new turn). Silently returning here left the loop waiting for

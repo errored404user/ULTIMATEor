@@ -8,15 +8,17 @@
 // commandless retries, and consistent CMD_SHAPE masking (###CMD / ###LUA / JSON).
 //
 // Part 2 (jsdom, adapter-level): the SEND contract under three conditions that
-// broke the pre-1.85 adapters -
+// broke the pre-1.85 adapters, plus AI Free Forever / Langdock profile-specific
+// composer discovery and scoped-send checks -
 //   * slow acceptance: the site clears the box 1.2 s after the click and adds
 //     the user row at 1.5 s → exactly ONE submit (the old ≤5-click loop fired
 //     again at 900 ms), text delivered byte-for-byte (multiline, indentation,
 //     code, Turkish + Chinese), `*.send.landed` diag with a proof,
-//   * disabled send button: the adapter falls back to the form / Enter path -
-//     still one attempt,
-//   * never accepted: typeAndSend returns within a bounded time, at most TWO
-//     attempts (click + ONE alternate mechanism), `*.send.unconfirmed` diag.
+//   * disabled send button: legacy adapters may use a safe alternate; MultiChat
+//     site profiles instead report a guaranteed no-submit so the core can retry
+//     only after the provider is ready,
+//   * never accepted: typeAndSend returns within a bounded time, commits at most
+//     once for opt-in single-commit profiles, and emits `*.send.unconfirmed`.
 //
 // OFFLINE / SIMULATED: no site is contacted. Run from the TotalScript root:
 //   npm i --no-save jsdom && node tests/test-provider-parity.js
@@ -56,11 +58,33 @@ const PAGES = {
     editorIsTextarea: true, userRow: null,
   },
   multichat: {
+    adapter: "multichat.js", providerId: "huggingchat", noSubmitOnDisabled: true,
     host: "huggingface.co", path: "/chat/", diagPrefix: "huggingchat.send", landed: "huggingchat.send.landed", unconfirmed: "huggingchat.send.unconfirmed",
-    html: `<main data-rect="0,0,1280,800"><div id="thread" data-rect="300,0,900,640"></div>
-      <form data-rect="300,660,900,120"><textarea id="ed" placeholder="Ask anything" data-rect="310,670,800,80"></textarea>
-      <button id="send" type="submit" aria-label="Send message" data-rect="1140,690,40,40"></button></form></main>`,
+    html: `<main data-rect="0,0,1280,800"><div id="thread" data-rect="300,0,900,640"></div><textarea id="search" placeholder="Search conversations" data-rect="10,20,180,30"></textarea>
+      <form data-testid="composer" data-rect="300,660,900,120"><textarea id="ed" placeholder="Ask anything" data-rect="310,670,800,80"></textarea>
+      <button id="send" type="submit" aria-label="Send message" data-rect="1140,690,40,40"></button></form>
+      <form id="other-form"><button id="other-send" type="submit" aria-label="Send message">Send message</button></form></main>`,
     editorIsTextarea: true,
+    userRow(d, text) { const r = d.createElement("div"); r.setAttribute("data-message-role", "user"); r.setAttribute("data-rect", "700,100,480,40"); r.textContent = text; d.getElementById("thread").appendChild(r); },
+  },
+  aifreeforever: {
+    adapter: "multichat.js", providerId: "aifreeforever", noSubmitOnDisabled: true,
+    host: "aifreeforever.com", path: "/chat/deepseek-v4-flash", diagPrefix: "aifreeforever.send", landed: "aifreeforever.send.landed", unconfirmed: "aifreeforever.send.unconfirmed",
+    html: `<main data-rect="0,0,1280,800"><div id="thread" role="log" data-rect="300,0,900,640"></div><textarea id="search" placeholder="Search conversations" data-rect="10,20,180,30"></textarea>
+      <form data-testid="composer" data-rect="300,660,900,120"><textarea id="ed" placeholder="Ask a question" aria-label="Message" data-rect="310,670,800,80"></textarea>
+      <button id="send" type="submit" aria-label="Send message" data-rect="1140,690,40,40"></button></form>
+      <form id="other-form"><button id="other-send" type="submit" aria-label="Send message">Send message</button></form></main>`,
+    editorIsTextarea: true,
+    userRow(d, text) { const r = d.createElement("div"); r.setAttribute("data-message-role", "user"); r.setAttribute("data-rect", "700,100,480,40"); r.textContent = text; d.getElementById("thread").appendChild(r); },
+  },
+  langdock: {
+    adapter: "multichat.js", providerId: "langdock", noSubmitOnDisabled: true,
+    host: "app.langdock.com", path: "/chat", diagPrefix: "langdock.send", landed: "langdock.send.landed", unconfirmed: "langdock.send.unconfirmed",
+    html: `<main data-rect="0,0,1280,800"><div id="thread" role="log" data-rect="300,0,900,640"></div><textarea id="search" placeholder="Search conversations" data-rect="10,20,180,30"></textarea>
+      <form data-testid="composer" data-rect="300,660,900,120"><div id="ed" data-lexical-editor="true" contenteditable="true" role="textbox" aria-label="Message" data-rect="310,670,800,80"></div>
+      <button id="send" type="submit" data-testid="send-button" aria-label="Send message" data-rect="1140,690,40,40"></button></form>
+      <form id="other-form"><button id="other-send" type="submit" aria-label="Send message">Send message</button></form></main>`,
+    editorIsTextarea: false,
     userRow(d, text) { const r = d.createElement("div"); r.setAttribute("data-message-role", "user"); r.setAttribute("data-rect", "700,100,480,40"); r.textContent = text; d.getElementById("thread").appendChild(r); },
   },
 };
@@ -72,7 +96,7 @@ function loadAdapter(id) {
   installDomShims(w);
   w.__rsDiag = [];
   w.eval(read("src/providers/stream-reader.js"));
-  w.eval(read(`src/providers/${id}.js`));
+  w.eval(read(`src/providers/${spec.adapter || `${id}.js`}`));
   const P = w.RSProvider;
   // main.js hands every adapter its diag sink at init - same here.
   try { P.init({ diag: (event, data) => w.__rsDiag.push({ event, data: data || null }) }); } catch (e) { w.__rsDiag.push({ event: "init.throw", data: String(e && e.message) }); }
@@ -83,9 +107,10 @@ function loadAdapter(id) {
 const SEND_PATH_FNS = ["getEditor", "typeAndSend", "ensureComposerReady", "enforceComposer", "installSendHooks", "readAssistant", "lastAssistant", "isGenerating", "isHardGenerating", "isBusyNow", "userCount", "assistantCount", "allItems", "chatIsEmpty", "conversationKey", "scanError", "findToolBlockSpot", "classifyText", "snapshot", "stopGeneration", "isTooLongMsg", "findContinueBtn", "clickContinueBtn", "editorText"];
 const base = loadAdapter("gemini").P;
 const table = [];
-const REPAIRED = ["vani", "arena", "multichat", "aistudio"]; // 1.89.0: mimo / clickup / oxalpha providers removed; 2.21.0: meta removed; AI Studio added
+const REPAIRED = ["vani", "arena", "multichat", "aifreeforever", "langdock", "aistudio"]; // target MultiChat profiles are exercised on synthetic AI Free Forever / Langdock DOMs
 for (const id of REPAIRED) {
   const { P } = loadAdapter(id);
+  if (PAGES[id].providerId) ok(`${id}: host selects its intended profile id`, P.id === PAGES[id].providerId, P.id);
   const missing = SEND_PATH_FNS.filter((f) => typeof base[f] === "function" && typeof P[f] !== "function");
   ok(`${id}: every send/read method of the Gemini baseline exists with the same name`, missing.length === 0, missing);
   const typeMismatch = [];
@@ -101,9 +126,10 @@ for (const id of REPAIRED) {
   if (["vani"].includes(id)) ok(`${id}: promptExtra teaches the fenced command protocol`, typeof P.promptExtra === "string" && /###LUA###|###CMD/.test(P.promptExtra));
   ok(`${id}: commandlessRetries is unset (core default 1) or a small bounded integer (no endless nudging)`, P.commandlessRetries == null || (Number.isInteger(P.commandlessRetries) && P.commandlessRetries >= 1 && P.commandlessRetries <= 3), P.commandlessRetries);
   ok(`${id}: timings carry the four keys the core waits on, all finite`, ["WARMUP_MS", "REASON_NOREPLY_MS", "STABLE_MS", "RESPONSE_TIMEOUT_MS"].every((k) => Number.isFinite(P.timings[k])));
-  const src = read(`src/providers/${id}.js`);
+  const src = read(`src/providers/${PAGES[id].adapter || `${id}.js`}`);
   const tas = src.slice(src.indexOf("async function typeAndSend"), src.indexOf("async function typeAndSend") + 4000);
-  ok(`${id}: no multi-click resend loop left in typeAndSend (one commit + one alternate is the only submit path)`, !/for \(let i = 0; i < \d+ && !sent; i\+\+\)/.test(tas) && /proof\(\)/.test(src));
+  const hasCommitProof = /proof\(\)/.test(src) || (/async function commitSend/.test(src) && /typeAndSendSingleCommit:\s*true/.test(src));
+  ok(`${id}: no multi-click resend loop left in typeAndSend (one commit + one alternate is the only submit path)`, !/for \(let i = 0; i < \d+ && !sent; i\+\+\)/.test(tas) && hasCommitProof);
   table.push({ id, methods: SEND_PATH_FNS.filter((f) => typeof P[f] === "function").length + "/" + SEND_PATH_FNS.length, promptExtra: (P.promptExtra || "").length, commandlessRetries: P.commandlessRetries, reliableCounts: !!P.reliableCounts });
 }
 console.table(table);
@@ -124,7 +150,7 @@ const TEXT = "Output of 'part_create':\n{\"ok\": true}\n\n```lua\nlocal p = Inst
 function wireSite({ d, w, spec }, mode) {
   const ed = d.getElementById("ed"), send = d.getElementById("send");
   const state = { attempts: 0, captured: [], rows: 0 };
-  const text = () => spec.editorIsTextarea ? ed.value : ed.innerText;
+  const text = () => spec.editorIsTextarea ? ed.value : (ed.innerText || ed.textContent || "");
   const clear = () => { if (spec.editorIsTextarea) { ed.value = ""; ed.dispatchEvent(new w.Event("input", { bubbles: true })); } else { ed.innerHTML = "<p><br></p>"; ed.dispatchEvent(new w.Event("input", { bubbles: true })); } };
   const accept = () => {
     const t = text();
@@ -143,6 +169,12 @@ function wireSite({ d, w, spec }, mode) {
   else send.addEventListener("click", () => { if (send.disabled) return; accept(); });
   ed.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (form) form.requestSubmit(); else accept(); } });
   if (mode === "disabled-button") send.disabled = true;
+  if (mode === "busy") {
+    const stop = d.createElement("button");
+    stop.setAttribute("aria-label", "Stop generating");
+    stop.setAttribute("data-rect", "1150,690,40,40");
+    (ed.closest("form") || d.body).appendChild(stop);
+  }
   return state;
 }
 
@@ -167,23 +199,37 @@ function wireSite({ d, w, spec }, mode) {
       await sleep(1700);
       if (spec.userRow) ok(`${id}: the user row that arrived late was counted once (userCount=1)`, P.userCount() === 1 && site.rows === 1, P.userCount());
     }
-    // (b) disabled send button → alternate mechanism, still one attempt
+    // (b) disabled send control: MultiChat must not press Enter behind a
+    // disabled site's back; providers with established fallback behavior retain it.
     {
       const page = loadAdapter(id); const { w, spec, P } = page;
       const site = wireSite(page, "disabled-button");
-      await P.typeAndSend("second message\nwith two lines");
-      ok(`${id}: disabled send button → form/Enter fallback, still exactly one submit`, site.attempts === 1 && /second message\s+with two lines/.test(site.captured[0] || ""), { attempts: site.attempts, got: site.captured[0] });
-      const landed = landedOf(w, spec);
-      ok(`${id}: fallback send still reports a landing proof`, landed.length === 1 && landed[0].data && landed[0].data.how !== "click", landed.map((e) => e.data));
+      const result = await P.typeAndSend("second message\nwith two lines");
+      if (spec.noSubmitOnDisabled) {
+        ok(`${id}: disabled send control → explicit no-submit, no hidden Enter/form submit`, result === false && site.attempts === 0, { result, attempts: site.attempts });
+        ok(`${id}: disabled control emits an actionable diagnostic`, w.__rsDiag.some((e) => e.event === `${P.id}.send.control.disabled`));
+      } else {
+        ok(`${id}: disabled send button → form/Enter fallback, still exactly one submit`, site.attempts === 1 && /second message\s+with two lines/.test(site.captured[0] || ""), { attempts: site.attempts, got: site.captured[0] });
+        const landed = landedOf(w, spec);
+        ok(`${id}: fallback send still reports a landing proof`, landed.length === 1 && landed[0].data && landed[0].data.how !== "click", landed.map((e) => e.data));
+      }
     }
-    // (c) never accepted → bounded, at most two attempts, honest diag
+    if (PAGES[id].noSubmitOnDisabled) {
+      // (c) active Stop/busy control: never overwrite the draft or force-submit.
+      const page = loadAdapter(id); const { w, P, spec } = page;
+      const site = wireSite(page, "busy");
+      const result = await P.typeAndSend("wait until the active turn ends");
+      ok(`${id}: active Stop control → confirmed no-submit before typing`, result === false && site.attempts === 0 && P.editorText() === "");
+      ok(`${id}: busy refusal reports the safe pre-type phase`, w.__rsDiag.some((e) => e.event === `${P.id}.send.busy` && e.data && e.data.phase === "before-type"));
+    }
+    // (d) never accepted → bounded, at most two attempts, honest diag
     {
       const page = loadAdapter(id); const { w, spec, P } = page;
       const site = wireSite(page, "never");
       const t0 = Date.now();
       await P.typeAndSend("hello?");
       const dt = Date.now() - t0;
-      ok(`${id}: a send the site swallows → at most 2 attempts (click + ONE alternate), never a loop`, site.attempts >= 1 && site.attempts <= 2, site.attempts);
+      ok(`${id}: a send the site swallows → bounded submit count with no internal retry loop`, site.attempts >= 1 && site.attempts <= (P.typeAndSendSingleCommit ? 1 : 2), site.attempts);
       ok(`${id}: typeAndSend returns within the bounded window (~5 s) instead of hanging`, dt < 7000, dt + " ms");
       ok(`${id}: '${spec.unconfirmed}' diag emitted and no false 'landed'`, unconfirmedOf(w, spec).length >= 1 && landedOf(w, spec).length === 0, w.__rsDiag.filter((e) => /send|tas/.test(e.event)).map((e) => e.event + ":" + JSON.stringify(e.data)));
     }

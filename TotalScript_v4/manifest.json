@@ -44,6 +44,7 @@
     "https://openrouter.ai/*",
     "https://www.openrouter.ai/*",
     "https://aifreeforever.com/*",
+    "https://www.aifreeforever.com/*",
     "https://app.langdock.com/*"
   ],
   "content_security_policy": {
@@ -887,6 +888,7 @@
         "https://openrouter.ai/*",
         "https://www.openrouter.ai/*",
         "https://aifreeforever.com/*",
+        "https://www.aifreeforever.com/*",
         "https://app.langdock.com/chat*"
       ],
       "js": [
@@ -996,6 +998,7 @@
         "https://openrouter.ai/*",
         "https://www.openrouter.ai/*",
         "https://aifreeforever.com/*",
+        "https://www.aifreeforever.com/*",
         "https://app.langdock.com/chat*"
       ],
       "js": [

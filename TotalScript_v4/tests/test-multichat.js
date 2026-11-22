@@ -17,11 +17,19 @@ const cases = [
 ];
 const adapterBundle = manifest.content_scripts.find((x) => x.js && x.js.includes("src/providers/multichat.js"));
 const streamTap = manifest.content_scripts.find((x) => x.world === "MAIN" && x.js.includes("src/providers/stream-net.js"));
+assert(code.includes('function deepRoots(scope = document)'), "shadow-root traversal is shared across selector queries");
+assert(code.includes("Date.now() - _shadowRootsCache.at < 160"), "document shadow-root traversal is briefly cached");
 assert(adapterBundle, "MultiChat adapter bundle is registered");
 assert(streamTap && streamTap.run_at === "document_start", "generic stream tap runs at document_start");
 for (const required of ["src/core/config.js", "src/core/parser.js", "src/core/command_registry.js", "src/core/project_worker.js", "src/core/template_registry.js", "src/core/main.js", "src/providers/stream-reader.js"]) assert(adapterBundle.js.includes(required), required);
 assert(adapterBundle.js.indexOf("src/providers/stream-reader.js") < adapterBundle.js.indexOf("src/providers/multichat.js"));
 assert(adapterBundle.js.indexOf("src/providers/multichat.js") < adapterBundle.js.indexOf("src/core/main.js"));
+const wwwAIFreePattern = "https://www.aifreeforever.com/*";
+assert(adapterBundle.matches.includes(wwwAIFreePattern), "www AI Free Forever redirect receives the provider adapter");
+assert(streamTap.matches.includes(wwwAIFreePattern), "www AI Free Forever redirect receives the MAIN-world stream tap");
+assert(manifest.host_permissions.includes("https://www.aifreeforever.com/*"), "www AI Free Forever redirect is covered by host permissions");
+assert(background.includes(wwwAIFreePattern), "www AI Free Forever redirect receives status broadcasts");
+assert(popup.includes("www.aifreeforever.com"), "popup recognizes the www AI Free Forever redirect");
 
 function load(site) {
   const editable = {
@@ -68,8 +76,20 @@ function load(site) {
     assert(P, site.host);
     assert.equal(P.id, site.id, `${site.host} provider id`);
     assert.equal(P.displayName, site.name, `${site.host} display name`);
-    assert(code.includes(`chat:"${site.url}"`), `${site.id} fallback chat URL matches its launch route`);
+    const routeDefinition = site.id === "aifreeforever"
+      ? `const AI_FREE_URL = "${site.url}";`
+      : site.id === "langdock"
+        ? `const LANGDOCK_URL = "${site.url}";`
+        : site.id === "huggingchat"
+          ? `"huggingface.co": { id: "huggingchat", name: "HuggingChat", chat: "${site.url}" }`
+          : `"openrouter.ai": { id: "openrouter", name: "OpenRouter Chat", chat: "${site.url}" }`;
+    assert(code.includes(routeDefinition), `${site.id} fallback chat URL matches its launch route`);
     assert.equal(P.supportsVision, site.id === "huggingchat" || site.id === "openrouter", `${site.id} image capability is conservative until verified`);
+    assert.equal(P.typeAndSendFalseMeansNoSubmit, true, `${site.id} false return guarantees no submit action was issued`);
+    assert.equal(P.typeAndSendSingleCommit, true, `${site.id} never lets the core re-submit an ambiguous commit`);
+    assert.equal(P.commandlessRetries, 2, `${site.id} preserves the shared adapter's bounded commandless retry policy`);
+    assert.equal(P.resendSystemEvery, 10, `${site.id} preserves periodic system-prompt reinforcement`);
+    assert.match(P.promptExtra, /###LUA###.*###END_LUA###/s, `${site.id} preserves the provider command-format guidance`);
     for (const fn of ["getEditor", "typeAndSend", "allItems", "readAssistant", "ensureComposerReady", "scanError", "modeWarning", "installSendHooks"]) assert.equal(typeof P[fn], "function", `${site.id}.${fn}`);
     assert.strictEqual(P.getEditor(), editable, `${site.id} generic composer selector finds the synthetic ${site.composer} surface`);
     assert.equal(P.modeWarning(), "", `${site.id} does not warn when a visible chat composer exists`);
@@ -88,6 +108,10 @@ function load(site) {
     assert(css.includes(`rs-prov-${site.id}`), `${site.id} transparent bar styling`);
     assert(readme.includes(site.name), `${site.id} is listed in the README`);
   }
+  const auth = load({ host: "aifreeforever.com", path: "/login", composer: "none" }).P;
+  assert.equal(auth.loginGatePresent(), true, "an auth route is reported instead of guessed around");
+  assert.equal((await auth.ensureComposerReady("test")).ready, false, "a login gate never reports the provider ready");
+  assert.match(auth.modeWarning(), /sign in/i, "login warning tells the user to authenticate on the site");
   assert.deepEqual(cases.slice(2).map((x) => [x.id, x.name]), [["aifreeforever", "AI Free Forever"], ["langdock", "Langdock"]]);
-  console.log("PASS  HuggingChat, OpenRouter Chat, AI Free Forever, and Langdock registration + generic composer contracts (offline mocks)");
+  console.log("PASS  MultiChat registrations, redirects, auth gates, composer selection, and single-commit/no-submit contracts (offline mocks)");
 })().catch((error) => { console.error(error); process.exitCode = 1; });

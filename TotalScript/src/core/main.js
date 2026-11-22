@@ -1284,20 +1284,48 @@
       // below is count-independent); without background mode we still park.
       let tries = 0;
       let messageSent = false;
+      let noSubmissionConfirmed = false;
+      let providerCommitted = false;
       // Fingerprint of what we typed: if the composer no longer contains this
       // tail, the send DID land even when counts/textarea signals are flaky
       // (virtualised lists, slow clearing). Prevents blind resends.
       const sentTail = String(text).slice(-80);
-      // Max ONE resend: with the tail-fingerprint above, a second attempt only
-      // happens when our text is verifiably still sitting in the composer.
-      while (!messageSent && !landed() && tries < 2 && !A.stop) {
+      // Legacy adapters retain one bounded retry while our text is still typed.
+      // A provider that promises a single commit is never submitted twice after
+      // an ambiguous landing; only a confirmed no-submit result may be retried.
+      while (!messageSent && !landed() && tries < 2 && !A.stop && !providerCommitted) {
         if (document.hidden && !bgMode) {
           diag("send.waitVisible", { tries });
           if (!(await waitVisible()) || A.stop) break; // park (no cap) until foreground; break only on user stop
         }
         await jitterBeforeSend();
         diag("submit.typeAndSend", { hasImages: !!(images && images.length) });
-        await P.typeAndSend(text, images);
+        const sendResult = await P.typeAndSend(text, images);
+        if (sendResult === false && P.typeAndSendFalseMeansNoSubmit === true) {
+          noSubmissionConfirmed = true;
+          tries++;
+          diag("send.providerNotSubmitted", { tries });
+          let detail = "";
+          try { detail = P.scanError ? String(P.scanError() || "") : ""; } catch {}
+          if (detail) {
+            if (A._lastSubmit) A._lastSubmit.answered = true;
+            ui.banner("warn", `${P.displayName} refused the message`, detail);
+            throw new SendAbortedError("provider refused the send");
+          }
+          if (tries < 2 && !A.stop) {
+            const active = () => { try { return !!(P.isGenerating && P.isGenerating()); } catch { return false; } };
+            if (active()) {
+              diag("send.waitProviderIdle", { tries });
+              const idle = await waitFor(() => A.stop || !active(), 12000);
+              if (!idle && !A.stop) { diag("send.providerStillBusy", { tries }); break; }
+            } else {
+              await sleep(250);
+            }
+          }
+          continue;
+        }
+        noSubmissionConfirmed = false;
+        providerCommitted = P.typeAndSendSingleCommit === true;
         // Re-arm the pre-hide window NOW that typeAndSend has returned (the send
         // was just clicked, so our result turn is about to render). The initial
         // arm above can EXPIRE during an image upload - typeAndSend blocks ~3-6s
@@ -1319,6 +1347,21 @@
         tries++;
       }
       if (messageSent) diag("send.cleared", { tries });
+      if (noSubmissionConfirmed && A._lastSubmit) A._lastSubmit.answered = true;
+      if (noSubmissionConfirmed && !A.stop) {
+        diag("send.failed", { tries, providerNotSubmitted: true });
+        ui.banner("warn", "Message didn't send",
+          `${P.displayName} did not submit the message after ${tries} attempts. ` +
+          `Check the provider notice and retry after resolving it.`);
+        throw new SendAbortedError("provider did not submit the message");
+      }
+      if (providerCommitted && !messageSent && !landed() && !A.stop) {
+        diag("send.unconfirmedSingleCommit", { tries });
+        ui.banner("warn", "Send acceptance is unclear",
+          `${P.displayName} received one send action, but TotalScript could not confirm that it landed. ` +
+          `It will not submit this message again automatically; check the chat before retrying to avoid a duplicate.`);
+        throw new SendAbortedError("single provider send could not be confirmed");
+      }
       // All retries exhausted with NO evidence the message landed (textarea never
       // cleared, no new turn). Silently returning here left the loop waiting for
       // a reply that will never come (~60s "empty" timeout) with zero explanation

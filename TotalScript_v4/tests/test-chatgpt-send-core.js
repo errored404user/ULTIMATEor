@@ -21,7 +21,7 @@ const maxLines = Number(chatgpt.match(/const SEND_MAX_LINES = (\d+)/)?.[1]);
 const truncateForSend = new Function("window", "SEND_MAX_CHARS", "SEND_MAX_LINES", "diag", `${truncateSource}\nreturn truncateForSend;`)({ __rsLimitOutgoing: null }, maxChars, maxLines, () => {});
 class SendAbortedError extends Error {}
 
-function makeHarness({ typeAndSend, scanError = () => null, isGenerating = () => false, onWaitPoll = () => {}, id = "chatgpt", typeAndSendFalseMeansNoSubmit = true } = {}) {
+function makeHarness({ typeAndSend, scanError = () => null, isGenerating = () => false, onWaitPoll = () => {}, id = "chatgpt", typeAndSendFalseMeansNoSubmit = true, typeAndSendSingleCommit = false } = {}) {
   let editor = "";
   let userCount = 0;
   let calls = 0;
@@ -32,6 +32,7 @@ function makeHarness({ typeAndSend, scanError = () => null, isGenerating = () =>
     id,
     displayName: id === "chatgpt" ? "ChatGPT" : "Legacy provider",
     typeAndSendFalseMeansNoSubmit,
+    typeAndSendSingleCommit,
     isBusyNow: () => false,
     lastAssistant: () => null,
     streamLen: () => 0,
@@ -162,6 +163,37 @@ function makeHarness({ typeAndSend, scanError = () => null, isGenerating = () =>
   }
 
   {
+    const h = makeHarness({
+      id: "multichat",
+      typeAndSendSingleCommit: true,
+      typeAndSend({ text, setEditor }) { setEditor(text); return true; },
+    });
+    let error;
+    try { await h.submit("ambiguous site-specific send"); } catch (e) { error = e; }
+    assert(error instanceof SendAbortedError, "an ambiguous single commit ends promptly instead of being clicked twice");
+    assert.strictEqual(h.calls(), 1, "typeAndSendSingleCommit forbids the core's normal second send attempt");
+    assert(h.diagnostics.some((x) => x.event === "send.unconfirmedSingleCommit"));
+    assert(h.banners.some((b) => String(b[2]).includes("check the chat before retrying")));
+  }
+
+  {
+    let settle;
+    const h = makeHarness({
+      id: "multichat",
+      typeAndSendSingleCommit: true,
+      onWaitPoll(i) { if (i === 0 && settle) settle(); },
+      typeAndSend({ text, setEditor, addUser }) {
+        setEditor(text);
+        settle = () => { setEditor(""); addUser(); };
+        return true;
+      },
+    });
+    await h.submit("single commit with delayed landing proof");
+    assert.strictEqual(h.calls(), 1, "a delayed clearing/user row proves the single send without retrying");
+    assert(h.diagnostics.some((x) => x.event === "send.cleared"));
+  }
+
+  {
     const lines = Array.from({ length: 605 }, (_, i) => `line-${i}`);
     lines[603] = "previous-" + "p".repeat(24);
     lines[604] = "end-" + "z".repeat(12);
@@ -180,7 +212,7 @@ function makeHarness({ typeAndSend, scanError = () => null, isGenerating = () =>
     assert.strictEqual(h.calls(), 2, "the core recognizes ChatGPT's preserved tail after line-count truncation and retries only while it remains typed");
   }
 
-  console.log("test-chatgpt-send-core: 7 scenarios passed (extracted core function; mocked providers)");
+  console.log("test-chatgpt-send-core: 9 scenarios passed (extracted core function; mocked providers)");
 })().catch((error) => {
   console.error(error && error.stack || error);
   process.exitCode = 1;
