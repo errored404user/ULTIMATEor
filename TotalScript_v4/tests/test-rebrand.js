@@ -43,7 +43,14 @@ ok("no ORscript-era brand token left in shipped files (outside historical change
 
 // ── 2. renamed artefacts ──────────────────────────────────────────────────────
 ok("plugin file renamed", exists("plugin/TotalScript.lua") && !exists("plugin/ORscript.lua"));
-ok("build scripts renamed", exists("Build-TotalScript-Desktop.cmd") && exists("build-totalscript-desktop.sh") && !exists("Build-ORscript-Desktop.cmd"));
+ok("desktop build instructions match the packaged Rust crate", (() => {
+  const top = read("README.md"), desktop = read("agent/README.md");
+  const setup = top.split("\n").find((l) => l.includes("2. Start the bridge")) || "";
+  return setup.includes("cargo build --release --locked") && setup.includes("`bin/total-core`") &&
+    setup.includes("total-core-macos-arm64") && desktop.includes("cd agent") &&
+    desktop.includes("cargo build --release --locked") && !desktop.includes("TotalScript\\agent") &&
+    !desktop.includes("Build-TotalScript-Desktop.cmd") && !desktop.includes("build-totalscript-desktop.sh");
+})());
 ok("bundled executable renamed", exists("bin/total-core.exe") && !exists("bin/or-core.exe"));
 const cargo = read("agent/Cargo.toml"), lock = read("agent/Cargo.lock");
 ok("crate is total-agent, binary total-core", /^name = "total-agent"/m.test(cargo) && /\[\[bin\]\]\nname = "total-core"/.test(cargo));
@@ -58,7 +65,15 @@ ok("product name + APP_NAME", main.includes('totalTheme==="void"?"VoidScript":"T
 ok("plugin toolbar + kind id", lua.includes('plugin:CreateToolbar("TotalScript")') && lua.includes('{ id = "totalscript", name = "TotalScript", match = { "totalscript" }, kind = "agent" }'));
 ok("module globals renamed", ["TotalVideoStudio", "TotalOrchestrator", "TotalTaskList", "TotalReasoning", "TotalAgentCrew", "TotalAnimEngine"].every((g) => main.includes(g)));
 ok("internal-arg prefix is _total (wire filter + validator agree)", main.includes("if (!/^_total/.test(k)) o[k] = args[k];") && read("src/core/orchestrator.js").includes("if (/^_total/.test(k)) continue;") && main.includes("_totalInternal"));
-ok("workflow builds TotalScript/agent and uploads total-core artefacts", (() => { const w = fs.readFileSync(path.join(root, "..", ".github", "workflows", "desktop.yml"), "utf8"); return w.includes("working-directory: TotalScript/agent") && w.includes("total-core-windows-x64") && w.includes("./target/release/total-core.exe --help") && !/ORscript|or-core/.test(w); })());
+ok("workflow builds TotalScript_v4/agent and uploads total-core artefacts", (() => { const w = fs.readFileSync(path.join(root, "..", ".github", "workflows", "desktop.yml"), "utf8"); return w.includes("working-directory: TotalScript_v4/agent") && w.includes("total-core-windows-x64") && w.includes("./target/release/total-core.exe --help") && !/ORscript|or-core/.test(w); })());
+ok("release workflow builds v4 source but packages a Load-unpacked TotalScript folder", (() => {
+  const w = fs.readFileSync(path.join(root, "..", ".github", "workflows", "release.yml"), "utf8");
+  return w.includes('open("TotalScript_v4/manifest.json")') && w.includes("TotalScript_v4/agent/Cargo.toml") && w.includes("TotalScript_v4/ stage/TotalScript/") && w.includes("TotalScript/manifest.json") && w.includes("TotalScript/agent/target/") && w.includes("TotalScript/agent/snapshots/") && w.includes("--exclude 'agent/snapshots'") && w.includes("stage/TotalScript/bin/total-core") && w.includes("bins/mac-arm64/total-core-macos-arm64 out/total-core-macos-arm64") && w.includes("sha256sum TotalScript.zip total-core-* > SHA256SUMS.txt") && w.includes("gh release upload");
+})());
+ok("release notes select the 4.0.0 What's New block", (() => {
+  const w = fs.readFileSync(path.join(root, "..", ".github", "workflows", "release.yml"), "utf8");
+  return w.includes('^## What\'s New in ') && read("README.md").includes("## What's New in 4.0.0");
+})());
 ok("mesh marker parsing is length-based, not a hard-coded 13", read("background.js").includes('lines[i].slice("TOTAL_MESH_JSON:".length)') && main.includes('textOut.slice(mark + "TOTAL_MESH_JSON:".length)'));
 
 // ── 3. nothing saved is lost ──────────────────────────────────────────────────

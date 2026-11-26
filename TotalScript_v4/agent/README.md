@@ -30,27 +30,26 @@ The chat requests skill excerpts on demand through the existing `reference_searc
 
 Requirements: Rust stable from <https://rustup.rs> (MSVC toolchain on Windows, Xcode command line tools on macOS).
 
+Run these commands from the extension root. Both builds require Rust stable; Windows also needs the MSVC build tools, and macOS needs the Xcode command line tools (`xcode-select --install`).
+
 **Windows**
 
 ```powershell
-cd TotalScript\agent
-cargo build --release
+cd agent
+cargo build --release --locked
 # -> target\release\total-core.exe
 copy target\release\total-core.exe ..\bin\total-core.exe
 ```
 
-Or double-click `TotalScript\Build-TotalScript-Desktop.cmd`, which runs the same steps.
-
 **macOS**
 
 ```sh
-cd TotalScript/agent
-cargo build --release
+cd agent
+cargo build --release --locked
 # -> target/release/total-core
 cp target/release/total-core ../bin/total-core
+chmod +x ../bin/total-core
 ```
-
-Or run `TotalScript/build-totalscript-desktop.sh` (same steps). Needs the Xcode command line tools (`xcode-select --install`).
 
 TotalScript Desktop supports **Windows and macOS only** — the two platforms Roblox Studio ships for. Building for any other target stops with a `compile_error!`.
 
