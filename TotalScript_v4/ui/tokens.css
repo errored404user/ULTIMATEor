@@ -1,0 +1,230 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* TotalScript Design System Tokens — Sleek Obsidian & Electric Aqua (3.0.0)
+   Single source of truth for popup.html, welcome.html, codecraft.html, and
+   ui/components.css. Dark obsidian is the default; light and system modes opt
+   in via html[data-ts-theme]. Legacy html[data-theme="aqua"] stays untouched. */
+
+:root {
+  color-scheme: dark;
+
+  /* ── Obsidian surface hierarchy ── */
+  --ts-bg: #070a0f;
+  --ts-bg-2: #0c1118;
+  --ts-surface: #101620;
+  --ts-surface-2: #161f2d;
+  --ts-surface-3: #1c2738;
+  --ts-scrim: rgba(3, 6, 12, 0.72);
+
+  /* ── Typography & ink ── */
+  --ts-text: #f1f5f9;
+  --ts-text-2: #94a3b8;
+  --ts-text-3: #64748b;
+
+  /* ── Electric Aqua default accent ── */
+  --ts-accent: #22d3ee;
+  --ts-accent-2: #06b6d4;
+  --ts-accent-ink: #03151c;
+  --ts-accent-soft: color-mix(in srgb, var(--ts-accent) 14%, transparent);
+  --ts-accent-line: color-mix(in srgb, var(--ts-accent) 42%, transparent);
+
+  /* ── Semantic status tones ── */
+  --ts-ok: #34d399;
+  --ts-warn: #fbbf24;
+  --ts-danger: #f87171;
+  --ts-info: #38bdf8;
+
+  /* ── Crisp hairline borders ── */
+  --ts-line: rgba(148, 163, 184, 0.13);
+  --ts-line-strong: rgba(148, 163, 184, 0.24);
+
+  /* ── Restrained structural depth (no cheap glow) ── */
+  --ts-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --ts-shadow-2: 0 8px 24px rgba(0, 0, 0, 0.44), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --ts-shadow-3: 0 20px 48px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  /* ── Focus ring ── */
+  --ts-focus: 0 0 0 2px var(--ts-bg), 0 0 0 4px var(--ts-accent);
+
+  /* ── Font stacks ── */
+  --ts-font: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+  --ts-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* ── Type scale ── */
+  --ts-scale: 1;
+  --ts-fs-xs: 11px;
+  --ts-fs-sm: 12px;
+  --ts-fs-md: 13px;
+  --ts-fs-lg: 15px;
+  --ts-fs-xl: 18px;
+  --ts-lh: 1.45;
+  --ts-lh-tight: 1.2;
+
+  /* ── Spacing scale ── */
+  --ts-s1: 4px;
+  --ts-s2: 6px;
+  --ts-s3: 10px;
+  --ts-s4: 14px;
+  --ts-s5: 18px;
+  --ts-s6: 24px;
+
+  /* ── Radii ── */
+  --ts-r-sm: 7px;
+  --ts-r-md: 10px;
+  --ts-r-lg: 13px;
+  --ts-r-xl: 16px;
+  --ts-r-pill: 999px;
+
+  /* ── Controls & switches ── */
+  --ts-ctl-h: 34px;
+  --ts-ctl-h-sm: 28px;
+  --ts-ctl-h-xs: 22px;
+  --ts-ctl-px: 12px;
+  --ts-icon: 15px;
+  --ts-toggle-w: 36px;
+  --ts-toggle-h: 20px;
+
+  /* ── Motion ── */
+  --ts-dur-1: 110ms;
+  --ts-dur-2: 160ms;
+  --ts-dur-3: 220ms;
+  --ts-dur-4: 300ms;
+  --ts-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ── Accent presets (6) ── */
+html[data-accent="aqua"] {
+  --ts-accent: #22d3ee;
+  --ts-accent-2: #06b6d4;
+  --ts-accent-ink: #03151c;
+}
+html[data-accent="violet"] {
+  --ts-accent: #a78bfa;
+  --ts-accent-2: #8b5cf6;
+  --ts-accent-ink: #130926;
+}
+html[data-accent="emerald"] {
+  --ts-accent: #34d399;
+  --ts-accent-2: #10b981;
+  --ts-accent-ink: #041d14;
+}
+html[data-accent="amber"] {
+  --ts-accent: #f5b544;
+  --ts-accent-2: #e69d1e;
+  --ts-accent-ink: #1f1302;
+}
+html[data-accent="rose"] {
+  --ts-accent: #fb7185;
+  --ts-accent-2: #f43f5e;
+  --ts-accent-ink: #24060d;
+}
+html[data-accent="slate"] {
+  --ts-accent: #cbd5e1;
+  --ts-accent-2: #94a3b8;
+  --ts-accent-ink: #0b111b;
+}
+
+/* ── Light theme (explicit) ── */
+html[data-ts-theme="light"] {
+  color-scheme: light;
+  --ts-bg: #f4f7fb;
+  --ts-bg-2: #ffffff;
+  --ts-surface: #ffffff;
+  --ts-surface-2: #f1f5f9;
+  --ts-surface-3: #e8eef6;
+  --ts-scrim: rgba(15, 23, 42, 0.42);
+  --ts-text: #0f172a;
+  --ts-text-2: #475569;
+  --ts-text-3: #64748b;
+  --ts-ok: #059669;
+  --ts-warn: #d97706;
+  --ts-danger: #dc2626;
+  --ts-info: #0284c7;
+  --ts-line: rgba(15, 23, 42, 0.1);
+  --ts-line-strong: rgba(15, 23, 42, 0.18);
+  --ts-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --ts-shadow-2: 0 8px 20px rgba(15, 23, 42, 0.1);
+  --ts-shadow-3: 0 20px 44px rgba(15, 23, 42, 0.16);
+  --ts-accent: #0891b2;
+  --ts-accent-2: #0e7490;
+  --ts-accent-ink: #ffffff;
+  --ts-accent-soft: color-mix(in srgb, var(--ts-accent) 12%, transparent);
+  --ts-accent-line: color-mix(in srgb, var(--ts-accent) 36%, transparent);
+}
+html[data-ts-theme="light"][data-accent="aqua"] { --ts-accent: #0891b2; --ts-accent-2: #0e7490; --ts-accent-ink: #ffffff; }
+html[data-ts-theme="light"][data-accent="violet"] { --ts-accent: #7c3aed; --ts-accent-2: #6d28d9; --ts-accent-ink: #ffffff; }
+html[data-ts-theme="light"][data-accent="emerald"] { --ts-accent: #059669; --ts-accent-2: #047857; --ts-accent-ink: #ffffff; }
+html[data-ts-theme="light"][data-accent="amber"] { --ts-accent: #d97706; --ts-accent-2: #b45309; --ts-accent-ink: #ffffff; }
+html[data-ts-theme="light"][data-accent="rose"] { --ts-accent: #e11d48; --ts-accent-2: #be123c; --ts-accent-ink: #ffffff; }
+html[data-ts-theme="light"][data-accent="slate"] { --ts-accent: #334155; --ts-accent-2: #1e293b; --ts-accent-ink: #ffffff; }
+
+/* ── System light mode ── */
+@media (prefers-color-scheme: light) {
+  html[data-ts-theme="system"] {
+    color-scheme: light;
+    --ts-bg: #f4f7fb;
+    --ts-bg-2: #ffffff;
+    --ts-surface: #ffffff;
+    --ts-surface-2: #f1f5f9;
+    --ts-surface-3: #e8eef6;
+    --ts-scrim: rgba(15, 23, 42, 0.42);
+    --ts-text: #0f172a;
+    --ts-text-2: #475569;
+    --ts-text-3: #64748b;
+    --ts-ok: #059669;
+    --ts-warn: #d97706;
+    --ts-danger: #dc2626;
+    --ts-info: #0284c7;
+    --ts-line: rgba(15, 23, 42, 0.1);
+    --ts-line-strong: rgba(15, 23, 42, 0.18);
+    --ts-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --ts-shadow-2: 0 8px 20px rgba(15, 23, 42, 0.1);
+    --ts-shadow-3: 0 20px 44px rgba(15, 23, 42, 0.16);
+    --ts-accent: #0891b2;
+    --ts-accent-2: #0e7490;
+    --ts-accent-ink: #ffffff;
+    --ts-accent-soft: color-mix(in srgb, var(--ts-accent) 12%, transparent);
+    --ts-accent-line: color-mix(in srgb, var(--ts-accent) 36%, transparent);
+  }
+  html[data-ts-theme="system"][data-accent="aqua"] { --ts-accent: #0891b2; --ts-accent-2: #0e7490; --ts-accent-ink: #ffffff; }
+  html[data-ts-theme="system"][data-accent="violet"] { --ts-accent: #7c3aed; --ts-accent-2: #6d28d9; --ts-accent-ink: #ffffff; }
+  html[data-ts-theme="system"][data-accent="emerald"] { --ts-accent: #059669; --ts-accent-2: #047857; --ts-accent-ink: #ffffff; }
+  html[data-ts-theme="system"][data-accent="amber"] { --ts-accent: #d97706; --ts-accent-2: #b45309; --ts-accent-ink: #ffffff; }
+  html[data-ts-theme="system"][data-accent="rose"] { --ts-accent: #e11d48; --ts-accent-2: #be123c; --ts-accent-ink: #ffffff; }
+  html[data-ts-theme="system"][data-accent="slate"] { --ts-accent: #334155; --ts-accent-2: #1e293b; --ts-accent-ink: #ffffff; }
+}
+
+/* ── Density ── */
+html[data-density="compact"] {
+  --ts-s1: 3px;
+  --ts-s2: 5px;
+  --ts-s3: 8px;
+  --ts-s4: 11px;
+  --ts-s5: 14px;
+  --ts-s6: 18px;
+  --ts-ctl-h: 30px;
+  --ts-ctl-h-sm: 24px;
+  --ts-ctl-h-xs: 20px;
+  --ts-ctl-px: 10px;
+  --ts-toggle-w: 32px;
+  --ts-toggle-h: 18px;
+}
+
+/* ── Text scale ── */
+html[data-text="large"] { --ts-scale: 1.08; }
+html[data-text="larger"] { --ts-scale: 1.16; }
+
+/* ── Reduced motion ── */
+html[data-motion="off"] {
+  --ts-dur-1: 0ms;
+  --ts-dur-2: 0ms;
+  --ts-dur-3: 0ms;
+  --ts-dur-4: 0ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ts-dur-1: 0ms;
+    --ts-dur-2: 0ms;
+    --ts-dur-3: 0ms;
+    --ts-dur-4: 0ms;
+  }
+}

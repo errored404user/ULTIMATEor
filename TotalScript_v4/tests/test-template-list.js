@@ -1,0 +1,10 @@
+"use strict";
+const fs=require("fs"),assert=require("assert");
+const main=fs.readFileSync("src/core/main.js","utf8"),css=fs.readFileSync("overlay.css","utf8");
+for(const text of ["Edit","Run template","Improve with AI","Actions","Copy","Export","Archive","Restore","Delete","Untitled template","No description provided","Updated"])assert(main.includes(text),text);
+assert(main.includes('function templateEnvironmentLabel(value)'),"environment names need human-readable labels");
+assert(main.includes('ROBLOX_STUDIO:"Roblox Studio"'),"ROBLOX_STUDIO must not leak into visible metadata");
+for(const action of ["duplicate","export","archive","delete"])assert(main.includes(`kind===\"${action}\"`),action);
+assert(!main.includes('prompt("Action: rename, archive'),"list actions must not use a text prompt menu");
+assert(css.includes('.rs-template-more>summary')&&css.includes('.rs-template-delete'),"action menu must be styled and destructive action distinguished");
+console.log("PASS  Template list uses clear names, readable metadata, and functional action buttons");

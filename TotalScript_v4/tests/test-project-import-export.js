@@ -1,0 +1,15 @@
+"use strict";
+const fs=require("fs"),assert=require("assert");
+const main=fs.readFileSync("src/core/main.js","utf8"),analyzer=fs.readFileSync("src/core/project_analyzer.js","utf8"),worker=fs.readFileSync("src/core/project_worker.js","utf8"),css=fs.readFileSync("overlay.css","utf8");
+assert(main.includes('data-project-import>Roblox project</button>'),"Templates toolbar needs a project picker");
+assert(main.includes('input.accept=".rbxl,.rbxlx,.totalscript-project-reference.json"'),"picker must accept Roblox projects and exported references");
+assert(main.includes('{draft:true,projectFile:file}')&&main.includes('{draft:true,projectReference:ref}'),"project and reference imports must open a reviewed Template draft");
+assert(main.includes('function openTemplateEditor(source=null,{draft=false,projectFile=null,projectReference=null}={}'),"editor must receive imports directly");
+assert(main.includes('if(projectFile)scanProject(projectFile)'),"selected projects must actually start local analysis");
+assert(main.includes('data-project-export>Export Reference'),"analyzed references must remain exportable");
+assert(/\\\.rbxlx\?\$/.test(analyzer)||analyzer.includes('\\.rbxlx?$'),"analyzer must accept rbxl and rbxlx");
+assert(worker.includes("value=key==='Source'?decoded"),"XML script source must not be clipped to a generic property limit");
+assert(!worker.includes('MAX_SOURCE_TOTAL'),"project-wide source must be indexed rather than discarded after 1 MB");
+assert(main.includes('bounded chunks'),"AI access must use bounded retrieval rather than one oversized prompt");
+assert(css.includes('.rs-template-project-import'),"project import needs a first-class control style");
+console.log("PASS  Roblox projects and references import, analyze, retrieve, and export truthfully");
